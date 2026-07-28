@@ -1,12 +1,12 @@
-import type { JSX, ReactNode } from 'react';
+import type { JSX, ReactNode } from "react";
 
-import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
-import type { InsightsBridgeProps } from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { Icon } from '../ui/index.js';
-import ResourceReceiptPanel from './ResourceReceiptPanel.js';
+import { insK, insKindLabel, insUsd, relativeTime } from "../format.js";
+import type { InsightsBridgeProps } from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
+import ResourceReceiptPanel from "./ResourceReceiptPanel.js";
 
-import styles from './InsightsScreen.module.css';
+import styles from "./InsightsScreen.module.css";
 
 const WINDOW_OPTIONS = [7, 30, 90] as const;
 
@@ -19,16 +19,23 @@ function LineChart({ values }: { values: readonly number[] }): JSX.Element {
   const min = Math.min(...values);
   const span = max - min || 1;
   const px = (i: number): number => (n <= 1 ? 0 : (i / (n - 1)) * W);
-  const py = (v: number): number => H - PAD - ((v - min) / span) * (H - PAD * 2);
+  const py = (v: number): number =>
+    H - PAD - ((v - min) / span) * (H - PAD * 2);
   const pts = values.map((v, i) => [px(i), py(v)] as const);
-  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+  const line = pts
+    .map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
+    .join(" ");
   const area = `${line} L${W} ${H} L0 ${H} Z`;
   const peakIdx = values.indexOf(max);
   const peak = pts[peakIdx] ?? ([0, 0] as const);
   return (
     <div className={styles.chartPlot}>
       <div className={styles.chartSvgWrap}>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className={styles.chartSvg}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className={styles.chartSvg}
+        >
           <defs>
             <linearGradient id="insArea" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.32" />
@@ -55,7 +62,10 @@ function LineChart({ values }: { values: readonly number[] }): JSX.Element {
           />
         </svg>
       </div>
-      <div className={styles.chartPeak} style={{ left: `${((peak[0] / W) * 100).toFixed(2)}%` }}>
+      <div
+        className={styles.chartPeak}
+        style={{ left: `${((peak[0] / W) * 100).toFixed(2)}%` }}
+      >
         {insK(max)}
       </div>
     </div>
@@ -82,8 +92,18 @@ function Panel({
   );
 }
 
-function PanelEmpty({ message, compact }: { message: string; compact?: boolean }): JSX.Element {
-  return <div className={compact ? styles.panelEmptyCompact : styles.panelEmpty}>{message}</div>;
+function PanelEmpty({
+  message,
+  compact,
+}: {
+  message: string;
+  compact?: boolean;
+}): JSX.Element {
+  return (
+    <div className={compact ? styles.panelEmptyCompact : styles.panelEmpty}>
+      {message}
+    </div>
+  );
 }
 
 function ChartEmpty({ message }: { message: string }): JSX.Element {
@@ -123,15 +143,21 @@ export default function InsightsScreen({
 
   const series = summary.daily.map((d) => d.tokens);
   const hasDaily = series.length > 0;
-  const sourceMax = Math.max(1, ...summary.bySource.map((r) => r.costUsd || r.tokens));
-  const runnerMax = Math.max(1, ...summary.byRunner.map((r) => r.costUsd || r.tokens));
+  const sourceMax = Math.max(
+    1,
+    ...summary.bySource.map((r) => r.costUsd || r.tokens)
+  );
+  const runnerMax = Math.max(
+    1,
+    ...summary.byRunner.map((r) => r.costUsd || r.tokens)
+  );
   const modelTotal = Math.max(
     1,
-    summary.byModel.reduce((s, m) => s + (m.costUsd || m.tokens), 0),
+    summary.byModel.reduce((s, m) => s + (m.costUsd || m.tokens), 0)
   );
   const effortTotal = Math.max(
     1,
-    summary.byEffort.reduce((s, e) => s + (e.costUsd || e.tokens), 0),
+    summary.byEffort.reduce((s, e) => s + (e.costUsd || e.tokens), 0)
   );
 
   const honestyParts: string[] = [];
@@ -148,9 +174,9 @@ export default function InsightsScreen({
     honestyParts.push(`${kpis.unreportedRuns} no usage reported`);
   }
   if (honestyParts.length === 0 && kpis.generations === 0) {
-    honestyParts.push('no completed runs in this window');
+    honestyParts.push("no completed runs in this window");
   } else if (honestyParts.length === 0) {
-    honestyParts.push('all priced runs included');
+    honestyParts.push("all priced runs included");
   }
 
   return (
@@ -167,7 +193,10 @@ export default function InsightsScreen({
             <button
               key={d}
               type="button"
-              className={cx(styles.filter, windowDays === d && styles.filterActive)}
+              className={cx(
+                styles.filter,
+                windowDays === d && styles.filterActive
+              )}
               onClick={() => onWindowDays(d)}
               aria-pressed={windowDays === d}
             >
@@ -180,17 +209,21 @@ export default function InsightsScreen({
       <div className={styles.hero} data-testid="insights-hero">
         <div className={styles.heroSpend}>
           <div className={styles.heroLabel}>
-            {incomplete ? 'At least' : 'Spend'} · {windowDays} days
+            {incomplete ? "At least" : "Spend"} · {windowDays} days
           </div>
           <div className={styles.heroValue}>{insUsd(kpis.totalCostUsd)}</div>
-          <div className={styles.heroHonesty}>{honestyParts.join(' · ')}</div>
+          <div className={styles.heroHonesty}>{honestyParts.join(" · ")}</div>
         </div>
         <div className={styles.heroMeta}>
           <div className={styles.heroStat}>
             <span className={styles.heroStatLabel}>Tokens</span>
-            <span className={styles.heroStatValue}>{insK(kpis.totalTokens)}</span>
+            <span className={styles.heroStatValue}>
+              {insK(kpis.totalTokens)}
+            </span>
             {kpis.hydrationTokens > 0 ? (
-              <span className={styles.heroStatSub}>{insK(kpis.hydrationTokens)} hydration</span>
+              <span className={styles.heroStatSub}>
+                {insK(kpis.hydrationTokens)} hydration
+              </span>
             ) : null}
           </div>
           <div className={styles.heroStat}>
@@ -202,14 +235,18 @@ export default function InsightsScreen({
           </div>
           <div className={styles.heroStat}>
             <span className={styles.heroStatLabel}>Forecast</span>
-            <span className={styles.heroStatValue}>{insUsd(kpis.forecastCostUsd)}</span>
+            <span className={styles.heroStatValue}>
+              {insUsd(kpis.forecastCostUsd)}
+            </span>
             <span className={styles.heroStatSub}>30-day run rate</span>
           </div>
           {kpis.failedRuns > 0 ? (
             <div className={styles.heroStat}>
               <span className={styles.heroStatLabel}>Failed</span>
               <span className={styles.heroStatValue}>{kpis.failedRuns}</span>
-              <span className={styles.heroStatSub}>{insUsd(kpis.failedCostUsd)} spent</span>
+              <span className={styles.heroStatSub}>
+                {insUsd(kpis.failedCostUsd)} spent
+              </span>
             </div>
           ) : null}
         </div>
@@ -219,7 +256,8 @@ export default function InsightsScreen({
         <div className={styles.attention} data-testid="insights-attention">
           <Icon name="Sparkle" size={14} />
           <span>
-            <strong>{summary.attention.label}</strong> ({summary.attention.kindLabel}) is{' '}
+            <strong>{summary.attention.label}</strong> (
+            {summary.attention.kindLabel}) is{" "}
             {Math.round(summary.attention.share * 100)}% of spend (
             {insUsd(summary.attention.costUsd)})
           </span>
@@ -228,8 +266,9 @@ export default function InsightsScreen({
 
       {!hasSpend && kpis.generations === 0 ? (
         <div className={styles.firstUse}>
-          Run a chat, build, or automation — usage shows up here. Costs are agent-reported when the
-          runner provides them, otherwise estimated from public rates.
+          Run a chat, build, or automation — usage shows up here. Costs are
+          agent-reported when the runner provides them, otherwise estimated from
+          public rates.
         </div>
       ) : null}
 
@@ -241,7 +280,10 @@ export default function InsightsScreen({
 
       <div className={styles.grid}>
         <div className={styles.col}>
-          <Panel title="Where it went" meta={`${summary.bySource.length} · sorted by $`}>
+          <Panel
+            title="Where it went"
+            meta={`${summary.bySource.length} · sorted by $`}
+          >
             <div className={styles.table}>
               <div className={cx(styles.tr, styles.trHead)}>
                 <span className={cx(styles.th, styles.cApp)}>Source</span>
@@ -259,31 +301,49 @@ export default function InsightsScreen({
                   <span className={cx(styles.td, styles.cNum, styles.mono)}>
                     {insUsd(r.costUsd)}
                   </span>
-                  <span className={cx(styles.td, styles.cNum, styles.mono)}>{insK(r.tokens)}</span>
-                  <span className={styles.td}>
-                    <MixBar pct={Math.round(((r.costUsd || r.tokens) / sourceMax) * 100)} />
+                  <span className={cx(styles.td, styles.cNum, styles.mono)}>
+                    {insK(r.tokens)}
                   </span>
-                  <span className={cx(styles.td, styles.cRuns, styles.mono)}>{String(r.runs)}</span>
+                  <span className={styles.td}>
+                    <MixBar
+                      pct={Math.round(
+                        ((r.costUsd || r.tokens) / sourceMax) * 100
+                      )}
+                    />
+                  </span>
+                  <span className={cx(styles.td, styles.cRuns, styles.mono)}>
+                    {String(r.runs)}
+                  </span>
                 </div>
               ))}
-              {summary.bySource.length === 0 ? <PanelEmpty compact message="No runs yet." /> : null}
+              {summary.bySource.length === 0 ? (
+                <PanelEmpty compact message="No runs yet." />
+              ) : null}
             </div>
           </Panel>
 
-          <Panel title="Daily activity" meta={`${summary.windowDays} days · tokens`}>
+          <Panel
+            title="Daily activity"
+            meta={`${summary.windowDays} days · tokens`}
+          >
             {hasDaily ? (
               <div className={styles.chart}>
                 {summary.peakDay ? (
                   <div className={styles.peakNote}>
-                    Peak {summary.peakDay.date}: {insUsd(summary.peakDay.costUsd)} ·{' '}
+                    Peak {summary.peakDay.date}:{" "}
+                    {insUsd(summary.peakDay.costUsd)} ·{" "}
                     {insK(summary.peakDay.tokens)} tokens
                     {summary.peakDay.topSources[0]
                       ? ` · top: ${summary.peakDay.topSources[0].label}`
-                      : ''}
+                      : ""}
                   </div>
                 ) : null}
                 <LineChart
-                  values={series.length === 1 ? [series[0] ?? 0, series[0] ?? 0] : series}
+                  values={
+                    series.length === 1
+                      ? [series[0] ?? 0, series[0] ?? 0]
+                      : series
+                  }
                 />
                 <div className={styles.chartAxis}>
                   <span>{summary.daily[0]?.date}</span>
@@ -300,12 +360,17 @@ export default function InsightsScreen({
           <Panel title="By agent" meta="runner · sorted by $">
             <div className={styles.models}>
               {summary.byRunner.map((r) => {
-                const pct = Math.round(((r.costUsd || r.tokens) / runnerMax) * 100);
+                const pct = Math.round(
+                  ((r.costUsd || r.tokens) / runnerMax) * 100
+                );
                 return (
                   <div key={r.provider} className={styles.model}>
                     <div className={styles.modelName}>{r.provider}</div>
                     <div className={styles.bar}>
-                      <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                      <div
+                        className={styles.barFill}
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                     <div className={styles.modelFoot}>
                       <span className={styles.mono}>
@@ -325,12 +390,17 @@ export default function InsightsScreen({
           <Panel title="By model" meta="last window">
             <div className={styles.models}>
               {summary.byModel.map((m) => {
-                const pct = Math.round(((m.costUsd || m.tokens) / modelTotal) * 100);
+                const pct = Math.round(
+                  ((m.costUsd || m.tokens) / modelTotal) * 100
+                );
                 return (
                   <div key={m.model} className={styles.model}>
                     <div className={styles.modelName}>{m.model}</div>
                     <div className={styles.bar}>
-                      <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                      <div
+                        className={styles.barFill}
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                     <div className={styles.modelFoot}>
                       <span className={styles.mono}>
@@ -350,12 +420,17 @@ export default function InsightsScreen({
           <Panel title="By effort" meta="runner-confirmed thought level">
             <div className={styles.models}>
               {summary.byEffort.map((e) => {
-                const pct = Math.round(((e.costUsd || e.tokens) / effortTotal) * 100);
+                const pct = Math.round(
+                  ((e.costUsd || e.tokens) / effortTotal) * 100
+                );
                 return (
                   <div key={e.effort} className={styles.model}>
                     <div className={styles.modelName}>{e.effort}</div>
                     <div className={styles.bar}>
-                      <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                      <div
+                        className={styles.barFill}
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                     <div className={styles.modelFoot}>
                       <span className={styles.mono}>
@@ -383,18 +458,27 @@ export default function InsightsScreen({
                     </span>
                     <div className={styles.actBody}>
                       <div className={styles.actApp}>
-                        <span className={styles.tag}>{insKindLabel(a.kind)}</span>
-                        <span>{a.ok ? '' : ' · failed'}</span>
+                        <span className={styles.tag}>
+                          {insKindLabel(a.kind)}
+                        </span>
+                        <span>{a.ok ? "" : " · failed"}</span>
                         {a.provider ? (
-                          <span className={styles.actProv}> · {a.provider}</span>
+                          <span className={styles.actProv}>
+                            {" "}
+                            · {a.provider}
+                          </span>
                         ) : null}
-                        {a.effort ? <span className={styles.actProv}> · {a.effort}</span> : null}
+                        {a.effort ? (
+                          <span className={styles.actProv}> · {a.effort}</span>
+                        ) : null}
                       </div>
                       <div className={styles.actNote}>{a.label}</div>
                     </div>
                     <div className={styles.actCost}>
                       <span className={styles.mono}>{insUsd(a.costUsd)}</span>
-                      <span className={cx(styles.mono, styles.actUsd)}>{insK(a.tokens)}</span>
+                      <span className={cx(styles.mono, styles.actUsd)}>
+                        {insK(a.tokens)}
+                      </span>
                     </div>
                   </>
                 );
@@ -413,7 +497,9 @@ export default function InsightsScreen({
                   </div>
                 );
               })}
-              {summary.recent.length === 0 ? <PanelEmpty message="No activity yet." /> : null}
+              {summary.recent.length === 0 ? (
+                <PanelEmpty message="No activity yet." />
+              ) : null}
             </div>
           </Panel>
         </div>
@@ -422,8 +508,9 @@ export default function InsightsScreen({
       <ResourceReceiptPanel usage={resourceUsage} />
 
       <p className={styles.footnote}>
-        Completed runs in this vault only. Agent-reported costs come from the runner; estimates use
-        public model rates. Incomplete data is never treated as free.
+        Completed runs in this vault only. Agent-reported costs come from the
+        runner; estimates use public model rates. Incomplete data is never
+        treated as free.
       </p>
     </div>
   );

@@ -1,39 +1,45 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createSpace, deleteSpace, saveSpace } from './spaceModals.js';
+import { createSpace, deleteSpace, saveSpace } from "./spaceModals.js";
 
-const updateVault = vi.fn<typeof import('../../../gateway-client.js').updateVault>((_input) =>
-  Promise.resolve({ vaultId: 'v1', name: 'Work', ownerPartyId: 'party-1' }),
+const updateVault = vi.fn<
+  typeof import("../../../gateway-client.js").updateVault
+>((_input) =>
+  Promise.resolve({ vaultId: "v1", name: "Work", ownerPartyId: "party-1" })
 );
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
 // before spaceModals.js pulls gateway-client-core's load-time side-effect.
-vi.mock(import('../../../gateway-client.js'), () => ({
+vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () =>
     Promise.resolve([
       {
-        vaultId: 'v1',
-        name: 'Work',
-        ownerPartyId: 'party-1',
-        color: '#222',
-        icon: 'Folder',
-        blurb: 'real',
+        vaultId: "v1",
+        name: "Work",
+        ownerPartyId: "party-1",
+        color: "#222",
+        icon: "Folder",
+        blurb: "real",
       },
     ]),
-  updateVault: (input: Parameters<typeof import('../../../gateway-client.js').updateVault>[0]) =>
-    updateVault(input),
+  updateVault: (
+    input: Parameters<
+      typeof import("../../../gateway-client.js").updateVault
+    >[0]
+  ) => updateVault(input),
 }));
 
-const createVault = vi.fn<NonNullable<typeof window.CentraidApi.createVault>>(() =>
-  Promise.resolve({ vaultId: 'new1' }),
+const createVault = vi.fn<NonNullable<typeof window.CentraidApi.createVault>>(
+  () => Promise.resolve({ vaultId: "new1" })
 );
-const deleteVault = vi.fn<NonNullable<typeof window.CentraidApi.deleteVault>>(() =>
-  Promise.resolve({ deleted: true }),
+const deleteVault = vi.fn<NonNullable<typeof window.CentraidApi.deleteVault>>(
+  () => Promise.resolve({ deleted: true })
 );
-const setActiveVault = vi.fn<NonNullable<typeof window.CentraidApi.setActiveVault>>();
+const setActiveVault =
+  vi.fn<NonNullable<typeof window.CentraidApi.setActiveVault>>();
 const notifyVaultMetadataChanged =
   vi.fn<NonNullable<typeof window.CentraidApi.notifyVaultMetadataChanged>>();
 
-describe('spaceModals', () => {
+describe("spaceModals", () => {
   beforeEach(() => {
     updateVault.mockClear();
     createVault.mockClear();
@@ -48,37 +54,37 @@ describe('spaceModals', () => {
     };
   });
 
-  describe('spaceModals', () => {
-    it('createSpace creates a vault, paints it, and switches to it', async () => {
+  describe("spaceModals", () => {
+    it("createSpace creates a vault, paints it, and switches to it", async () => {
       await createSpace({
-        name: 'Play',
-        icon: 'Star',
-        color: '#0f0',
-        blurb: '',
+        name: "Play",
+        icon: "Star",
+        color: "#0f0",
+        blurb: "",
       });
-      expect(createVault).toHaveBeenCalledWith({ name: 'Play' });
+      expect(createVault).toHaveBeenCalledWith({ name: "Play" });
       expect(updateVault).toHaveBeenCalledWith({
-        vaultId: 'new1',
-        color: '#0f0',
-        icon: 'Star',
+        vaultId: "new1",
+        color: "#0f0",
+        icon: "Star",
         blurb: null,
       });
-      expect(setActiveVault).toHaveBeenCalledWith({ vaultId: 'new1' });
+      expect(setActiveVault).toHaveBeenCalledWith({ vaultId: "new1" });
     });
 
-    it('saveSpace renames the vault without switching, then notifies listeners to refresh', async () => {
-      await saveSpace('v1', {
-        name: 'Work HQ',
-        icon: 'Folder',
-        color: '#111',
-        blurb: 'hq',
+    it("saveSpace renames the vault without switching, then notifies listeners to refresh", async () => {
+      await saveSpace("v1", {
+        name: "Work HQ",
+        icon: "Folder",
+        color: "#111",
+        blurb: "hq",
       });
       expect(updateVault).toHaveBeenCalledWith({
-        vaultId: 'v1',
-        name: 'Work HQ',
-        color: '#111',
-        icon: 'Folder',
-        blurb: 'hq',
+        vaultId: "v1",
+        name: "Work HQ",
+        color: "#111",
+        icon: "Folder",
+        blurb: "hq",
       });
       expect(setActiveVault).not.toHaveBeenCalled();
       // updateVault is a direct HTTP call, not IPC, so it never broadcasts
@@ -87,11 +93,11 @@ describe('spaceModals', () => {
       expect(notifyVaultMetadataChanged).toHaveBeenCalledOnce();
     });
 
-    it('deleteSpace removes the vault', async () => {
-      await deleteSpace('v1', 'Personal');
+    it("deleteSpace removes the vault", async () => {
+      await deleteSpace("v1", "Personal");
       expect(deleteVault).toHaveBeenCalledWith({
-        vaultId: 'v1',
-        name: 'Personal',
+        vaultId: "v1",
+        name: "Personal",
       });
     });
   });

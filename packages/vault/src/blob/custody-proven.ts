@@ -6,8 +6,8 @@
 // doubt a segment stays UN-proven, so its raw rows are never pruned and history
 // is never the sole copy of itself mid-flight.
 
-import type { VaultDb } from '../db.js';
-import { readBlobStoreSettings } from '../db.js';
+import type { VaultDb } from "../db.js";
+import { readBlobStoreSettings } from "../db.js";
 
 /**
  * Whether an archive segment's bytes are durable enough to prune its raw rows:
@@ -22,12 +22,14 @@ import { readBlobStoreSettings } from '../db.js';
  * keeps the sha un-proven forever — raw rows simply persist, which is safe.
  */
 export function blobCustodyProven(db: VaultDb, sha: string): boolean {
-  const remoteConfigured = readBlobStoreSettings(db.vault).kind === 's3';
+  const remoteConfigured = readBlobStoreSettings(db.vault).kind === "s3";
   if (!remoteConfigured) return db.blobs.hasSync(sha);
   const replicated =
-    db.vault.prepare('SELECT 1 FROM blob_replica WHERE sha256 = ?').get(sha) !== undefined;
+    db.vault.prepare("SELECT 1 FROM blob_replica WHERE sha256 = ?").get(sha) !==
+    undefined;
   if (!replicated) return false;
   const pending =
-    db.vault.prepare('SELECT 1 FROM blob_outbox WHERE sha256 = ?').get(sha) !== undefined;
+    db.vault.prepare("SELECT 1 FROM blob_outbox WHERE sha256 = ?").get(sha) !==
+    undefined;
   return !pending;
 }

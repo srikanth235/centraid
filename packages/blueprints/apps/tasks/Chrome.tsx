@@ -5,9 +5,9 @@
 // app-inline.tsx renders one tree instead of four imperative roots. Classes come
 // from Chrome.module.css (scoped chrome) + the global kit-* vocabulary
 // (kit.css, loaded once by the route host).
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { KeyboardEvent, ReactNode } from "react";
 
-import styles from './Chrome.module.css';
+import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
@@ -53,11 +53,11 @@ export function Chrome(props: ChromeProps): ReactNode {
 
   const shellClass = [
     styles.shell,
-    props.narrow ? styles.isNarrow : '',
-    props.sideOpen ? styles.sideOpen : '',
+    props.narrow ? styles.isNarrow : "",
+    props.sideOpen ? styles.sideOpen : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
   return (
     <div className={shellClass}>
       <aside className={styles.side} aria-label="Tasks navigation">
@@ -167,7 +167,9 @@ export function Chrome(props: ChromeProps): ReactNode {
                 placeholder="Find tasks ( / )"
                 aria-label="Search tasks"
                 autoComplete="off"
-                onInput={(event) => props.onSearchInput(event.currentTarget.value)}
+                onInput={(event) =>
+                  props.onSearchInput(event.currentTarget.value)
+                }
                 onKeyDown={props.onSearchKeyDown}
               />
             </label>
@@ -187,7 +189,8 @@ export function Chrome(props: ChromeProps): ReactNode {
           // served islands exposed the same id). Without it, a refocus after a
           // revoke would be throttled and never retry the read (#505).
           <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong> <span>{props.consent.message}</span>
+            <strong>No vault access yet.</strong>{" "}
+            <span>{props.consent.message}</span>
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
@@ -208,7 +211,13 @@ export function Chrome(props: ChromeProps): ReactNode {
 
       {props.detail}
 
-      <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to a task" />
+      <input
+        id="attachInput"
+        type="file"
+        multiple
+        hidden
+        aria-label="Attach a file to a task"
+      />
     </div>
   );
 }

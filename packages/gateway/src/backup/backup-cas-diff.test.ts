@@ -1,28 +1,28 @@
 // CAS inventory diff primitive unit tests (issue #545 B7).
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { baseStore, reconcileCasInventory } from './backup-cas-diff.js';
-import type { CollectedInventory } from './backup-provider-observability.js';
+import { baseStore, reconcileCasInventory } from "./backup-cas-diff.js";
+import type { CollectedInventory } from "./backup-provider-observability.js";
 
-const SHA_A = 'a'.repeat(64);
-const SHA_B = 'b'.repeat(64);
-const SHA_C = 'c'.repeat(64);
+const SHA_A = "a".repeat(64);
+const SHA_B = "b".repeat(64);
+const SHA_C = "c".repeat(64);
 
 function collection(
-  objects: CollectedInventory['objects'],
-  over: Partial<CollectedInventory> = {},
+  objects: CollectedInventory["objects"],
+  over: Partial<CollectedInventory> = {}
 ): CollectedInventory {
   return {
-    source: 'provider',
+    source: "provider",
     providerAttested: true,
     objects,
     ...over,
   };
 }
 
-describe('backup-cas-diff', () => {
-  test('baseStore aggregates live vs soft-deleted object counts and bytes', () => {
+describe("backup-cas-diff", () => {
+  test("baseStore aggregates live vs soft-deleted object counts and bytes", () => {
     const state = baseStore(
       collection([
         {
@@ -30,22 +30,22 @@ describe('backup-cas-diff', () => {
           sizeBytes: 10,
           etagOrHash: SHA_A,
           storedAt: 1,
-          state: 'live',
+          state: "live",
         },
         {
           key: `blobs/sha256/${SHA_B}`,
           sizeBytes: 5,
           etagOrHash: SHA_B,
           storedAt: 1,
-          state: 'soft-deleted',
+          state: "soft-deleted",
         },
       ]),
       [SHA_C],
-      ['orphan-key'],
+      ["orphan-key"]
     );
     expect(state).toMatchObject({
       configured: true,
-      source: 'provider',
+      source: "provider",
       providerAttested: true,
       objectCount: 2,
       bytes: 15,
@@ -53,11 +53,11 @@ describe('backup-cas-diff', () => {
       softDeletedCount: 1,
       softDeletedBytes: 5,
       missing: { count: 1, sample: [SHA_C] },
-      orphans: { count: 1, sample: ['orphan-key'] },
+      orphans: { count: 1, sample: ["orphan-key"] },
     });
   });
 
-  test('reconcileCasInventory unmarks missing indexed shas and reports orphans', () => {
+  test("reconcileCasInventory unmarks missing indexed shas and reports orphans", () => {
     const unmarked: string[] = [];
     const state = reconcileCasInventory({
       collection: collection([
@@ -66,21 +66,21 @@ describe('backup-cas-diff', () => {
           sizeBytes: 1,
           etagOrHash: SHA_A,
           storedAt: 1,
-          state: 'live',
+          state: "live",
         },
         {
           key: `blobs/sha256/${SHA_B}`,
           sizeBytes: 1,
           etagOrHash: SHA_B,
           storedAt: 1,
-          state: 'live',
+          state: "live",
         },
         {
-          key: 'not-a-cas-key',
+          key: "not-a-cas-key",
           sizeBytes: 3,
-          etagOrHash: 'x',
+          etagOrHash: "x",
           storedAt: 1,
-          state: 'live',
+          state: "live",
         },
       ]),
       live: new Set([SHA_A]),
@@ -91,10 +91,12 @@ describe('backup-cas-diff', () => {
     expect(state.missing).toStrictEqual({ count: 1, sample: [SHA_C] });
     // SHA_B is remote but not live → orphan; unknown key also folds in.
     expect(state.orphans.count).toBe(2);
-    expect(state.orphans.sample.sort()).toStrictEqual([SHA_B, 'not-a-cas-key'].sort());
+    expect(state.orphans.sample.sort()).toStrictEqual(
+      [SHA_B, "not-a-cas-key"].sort()
+    );
   });
 
-  test('reconcileCasInventory ignores recently indexed shas and pins snapshot roots', () => {
+  test("reconcileCasInventory ignores recently indexed shas and pins snapshot roots", () => {
     const unmarked: string[] = [];
     const state = reconcileCasInventory({
       collection: collection([]),

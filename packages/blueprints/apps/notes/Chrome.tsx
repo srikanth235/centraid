@@ -6,16 +6,16 @@
 // one tree instead of five imperative roots. Classes come from Chrome.module.css
 // (scoped chrome) + the global kit-* vocabulary (kit.css, loaded once by the
 // route host).
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { KeyboardEvent, ReactNode } from "react";
 
-import type { AppState } from './types.ts';
+import type { AppState } from "./types.ts";
 
-import styles from './Chrome.module.css';
+import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
   sideOpen: boolean;
-  view: AppState['view'];
+  view: AppState["view"];
   consent: { message: string } | null;
   onOpenSide: () => void;
   onCloseSide: () => void;
@@ -23,7 +23,7 @@ export interface ChromeProps {
   onSearchInput: (value: string) => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSearchClear: () => void;
-  onSelectView: (view: AppState['view']) => void;
+  onSelectView: (view: AppState["view"]) => void;
   searchRef: (el: HTMLInputElement | null) => void;
   themeButtonRef: (el: HTMLButtonElement | null) => void;
   sidebarNav: ReactNode;
@@ -57,19 +57,19 @@ export function Chrome(props: ChromeProps): ReactNode {
 
   const shellClass = [
     styles.shell,
-    props.narrow ? styles.isNarrow : '',
-    props.sideOpen ? styles.sideOpen : '',
+    props.narrow ? styles.isNarrow : "",
+    props.sideOpen ? styles.sideOpen : "",
     // Global classes the reused Editor/Toolbar/Wall .module.css
     // `:global(.nt-shell.is-narrow)` rules key on — the module-scoped .isNarrow
     // above can't be seen from another module, so mirror the served app's static
     // #shell classes here. `id="shell"` lets logic.ts's selectNav close the
     // drawer via getElementById('shell') exactly as it does served.
-    'nt-shell',
-    props.narrow ? 'is-narrow' : '',
-    props.sideOpen ? 'side-open' : '',
+    "nt-shell",
+    props.narrow ? "is-narrow" : "",
+    props.sideOpen ? "side-open" : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   return (
     <div className={shellClass} id="shell">
@@ -173,7 +173,9 @@ export function Chrome(props: ChromeProps): ReactNode {
               placeholder="Search notes — title and contents"
               aria-label="Search notes"
               autoComplete="off"
-              onInput={(event) => props.onSearchInput(event.currentTarget.value)}
+              onInput={(event) =>
+                props.onSearchInput(event.currentTarget.value)
+              }
               onKeyDown={props.onSearchKeyDown}
             />
             <button
@@ -200,8 +202,8 @@ export function Chrome(props: ChromeProps): ReactNode {
               <button
                 type="button"
                 aria-label="Card view"
-                aria-pressed={props.view === 'masonry'}
-                onClick={() => props.onSelectView('masonry')}
+                aria-pressed={props.view === "masonry"}
+                onClick={() => props.onSelectView("masonry")}
               >
                 <svg
                   width="17"
@@ -222,8 +224,8 @@ export function Chrome(props: ChromeProps): ReactNode {
               <button
                 type="button"
                 aria-label="List view"
-                aria-pressed={props.view === 'list'}
-                onClick={() => props.onSelectView('list')}
+                aria-pressed={props.view === "list"}
+                onClick={() => props.onSelectView("list")}
               >
                 <svg
                   width="17"
@@ -255,7 +257,8 @@ export function Chrome(props: ChromeProps): ReactNode {
           // served islands exposed the same id). Without it, a refocus after a
           // revoke would be throttled and never retry the read (#505).
           <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong> <span>{props.consent.message}</span>
+            <strong>No vault access yet.</strong>{" "}
+            <span>{props.consent.message}</span>
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
@@ -276,7 +279,13 @@ export function Chrome(props: ChromeProps): ReactNode {
 
       {props.editor}
 
-      <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to a note" />
+      <input
+        id="attachInput"
+        type="file"
+        multiple
+        hidden
+        aria-label="Attach a file to a note"
+      />
     </div>
   );
 }

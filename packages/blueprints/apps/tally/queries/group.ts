@@ -5,11 +5,11 @@
  * read). All balances come from the shared engine in dashboard.ts.
  */
 
-import { groupNet, ledgerRow, loadTally, personOf } from './dashboard.ts';
+import { groupNet, ledgerRow, loadTally, personOf } from "./dashboard.ts";
 
 export default async function groupHandler({ input, ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
-  const groupId = String(input?.group_id ?? '');
+  const purpose = "dpv:ServiceProvision";
+  const groupId = String(input?.group_id ?? "");
   try {
     const data = await loadTally(ctx, purpose);
     const g = data.groups.find((x) => x.group_id === groupId);
@@ -52,7 +52,7 @@ export default async function groupHandler({ input, ctx }: HandlerArgs) {
     const e = err as { code?: string; message?: string };
     return {
       me: null,
-      currency: 'USD',
+      currency: "USD",
       group: null,
       members: [],
       ledger: [],

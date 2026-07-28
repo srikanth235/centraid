@@ -28,12 +28,12 @@
  *     one pass; the surplus stays approved for later passes, logged.
  */
 
-import type { RuntimeLogger } from '@centraid/app-engine';
-import type { ConnectionAuth } from '@centraid/automation';
+import type { RuntimeLogger } from "@centraid/app-engine";
+import type { ConnectionAuth } from "@centraid/automation";
 
-import type { ConnectionBroker } from './connection-broker.js';
-import { timeoutSignal } from './fetch-timeout.js';
-import type { VaultPlane } from './vault-plane.js';
+import type { ConnectionBroker } from "./connection-broker.js";
+import { timeoutSignal } from "./fetch-timeout.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
 const BODY_SNIPPET_CHARS = 300;
@@ -70,11 +70,11 @@ interface ApprovedRow {
  */
 function drainApprovedRowsInOrder(
   rows: readonly ApprovedRow[],
-  drain: (row: ApprovedRow) => void | PromiseLike<void>,
+  drain: (row: ApprovedRow) => void | PromiseLike<void>
 ): Promise<void> {
   return rows.reduce<Promise<void>>(
     (sequence, row) => sequence.then(() => drain(row)),
-    Promise.resolve(),
+    Promise.resolve()
   );
 }
 
@@ -118,11 +118,13 @@ export class OutboxExecutor {
     private readonly broker: ConnectionBroker,
     private readonly logger: RuntimeLogger,
     private readonly fetchImpl: typeof fetch = fetch,
-    options: OutboxExecutorOptions = {},
+    options: OutboxExecutorOptions = {}
   ) {
     this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
-    this.maxItemsPerDrain = options.maxItemsPerDrain ?? DEFAULT_MAX_ITEMS_PER_DRAIN;
-    this.maxItemsPerActor = options.maxItemsPerActor ?? DEFAULT_MAX_ITEMS_PER_ACTOR;
+    this.maxItemsPerDrain =
+      options.maxItemsPerDrain ?? DEFAULT_MAX_ITEMS_PER_DRAIN;
+    this.maxItemsPerActor =
+      options.maxItemsPerActor ?? DEFAULT_MAX_ITEMS_PER_ACTOR;
     this.writeTimeoutMs = options.writeTimeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS;
   }
 
@@ -141,7 +143,7 @@ export class OutboxExecutor {
     const rows = plane.db.vault
       .prepare(
         `SELECT item_id, connection_id, actor_id, verb, target, request_json, decided_at
-           FROM outbox_item WHERE status = 'approved' ORDER BY staged_at`,
+           FROM outbox_item WHERE status = 'approved' ORDER BY staged_at`
       )
       .all() as unknown as ApprovedRow[];
     const report: DrainReport = {
@@ -158,12 +160,17 @@ export class OutboxExecutor {
       // A stale approval never drains (issue #308 A7): the owner said yes to
       // a send NOW, not to whenever the provider recovers. Repark first so
       // staleness is judged even when the caps would have deferred the item.
-      const decidedAtMs = row.decided_at ? Date.parse(row.decided_at) : Number.NaN;
-      if (Number.isFinite(decidedAtMs) && now - decidedAtMs > this.staleAfterMs) {
+      const decidedAtMs = row.decided_at
+        ? Date.parse(row.decided_at)
+        : Number.NaN;
+      if (
+        Number.isFinite(decidedAtMs) &&
+        now - decidedAtMs > this.staleAfterMs
+      ) {
         await this.repark(
           plane,
           row.item_id,
-          `approval expired undrained after ${Math.round(this.staleAfterMs / 3_600_000)}h — approve again to send`,
+          `approval expired undrained after ${Math.round(this.staleAfterMs / 3_600_000)}h — approve again to send`
         );
         report.reparked += 1;
         return;
@@ -172,7 +179,10 @@ export class OutboxExecutor {
       // next pass (event kick or the 60s clock) continues — no silent drop,
       // but no unbounded flush under a standing grant either.
       const actorCount = perActor.get(row.actor_id) ?? 0;
-      if (drained >= this.maxItemsPerDrain || actorCount >= this.maxItemsPerActor) {
+      if (
+        drained >= this.maxItemsPerDrain ||
+        actorCount >= this.maxItemsPerActor
+      ) {
         report.deferred += 1;
         return;
       }
@@ -185,41 +195,45 @@ export class OutboxExecutor {
         report.deferred += 1;
         this.logger.warn(
           `outbox: drain of ${row.item_id} (${row.verb}) errored, deferring: ` +
-            (err instanceof Error ? err.message : String(err)),
+            (err instanceof Error ? err.message : String(err))
         );
       }
     });
     if (report.approved > 0) {
       this.logger.info(
         `outbox: drained vault ${plane.boot.vaultId} — sent=${report.sent} failed=${report.failed} ` +
-          `deferred=${report.deferred} reparked=${report.reparked}`,
+          `deferred=${report.deferred} reparked=${report.reparked}`
       );
     }
     return report;
   }
 
   /** Park a stale approval back to pending via the typed command (one door). */
-  private async repark(plane: VaultPlane, itemId: string, note: string): Promise<void> {
+  private async repark(
+    plane: VaultPlane,
+    itemId: string,
+    note: string
+  ): Promise<void> {
     const outcome = await plane.invoke(plane.ownerCredential, {
-      command: 'outbox.repark',
+      command: "outbox.repark",
       input: { item_id: itemId, note },
     });
-    if (outcome.status !== 'executed') {
+    if (outcome.status !== "executed") {
       this.logger.warn(
-        `outbox: stale item ${itemId} did not repark (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})`,
+        `outbox: stale item ${itemId} did not repark (${outcome.status}: ${"reason" in outcome ? outcome.reason : "unknown"})`
       );
     }
   }
 
   private async drainItem(
     plane: VaultPlane,
-    row: ApprovedRow,
-  ): Promise<'sent' | 'failed' | 'deferred'> {
+    row: ApprovedRow
+  ): Promise<"sent" | "failed" | "deferred"> {
     const auth = await this.broker.resolveForDrain(plane, row.connection_id);
-    if ('refused' in auth) {
+    if ("refused" in auth) {
       // needs-auth (or unpinned) — the item waits for the owner's reconnect.
       this.logger.warn(`outbox: ${row.item_id} deferred — ${auth.refused}`);
-      return 'deferred';
+      return "deferred";
     }
     let spec: StagedRequest;
     let injectedSpec: StagedRequest;
@@ -230,19 +244,25 @@ export class OutboxExecutor {
     } catch (err) {
       // Structural refusals (bad request row, host outside the pin) are
       // terminal: waiting will not move the pin.
-      await this.recordResult(plane, row.item_id, 'failed', undefined, errText(err, auth));
-      return 'failed';
+      await this.recordResult(
+        plane,
+        row.item_id,
+        "failed",
+        undefined,
+        errText(err, auth)
+      );
+      return "failed";
     }
     let refreshed = false;
-    const send = async (): Promise<'sent' | 'failed' | 'deferred'> => {
+    const send = async (): Promise<"sent" | "failed" | "deferred"> => {
       let response: { status: number; text: string };
       try {
         response = await this.fetchOnce(injectedSpec, auth);
       } catch (err) {
         this.logger.warn(
-          `outbox: ${row.item_id} network failure, deferring: ${errText(err, auth)}`,
+          `outbox: ${row.item_id} network failure, deferring: ${errText(err, auth)}`
         );
-        return 'deferred';
+        return "deferred";
       }
       if (response.status === 401 && auth.refresh && !refreshed) {
         refreshed = true;
@@ -253,37 +273,41 @@ export class OutboxExecutor {
           assertDrainable(injectedSpec.url, auth);
           return send();
         } catch (err) {
-          this.logger.warn(`outbox: ${row.item_id} token refresh refused: ${errText(err, auth)}`);
-          return 'deferred';
+          this.logger.warn(
+            `outbox: ${row.item_id} token refresh refused: ${errText(err, auth)}`
+          );
+          return "deferred";
         }
       }
       if (
         response.status === 401 ||
         (response.status === 403 &&
-          /insufficient.{0,4}(?:scope|permission)|invalid_scope/iu.test(response.text))
+          /insufficient.{0,4}(?:scope|permission)|invalid_scope/iu.test(
+            response.text
+          ))
       ) {
         await auth
           .onAuthDead?.(
-            `outbox drain rejected (${response.status}) — reconnect to authorize external writes`,
+            `outbox drain rejected (${response.status}) — reconnect to authorize external writes`
           )
           .catch(() => undefined);
-        return 'deferred';
+        return "deferred";
       }
       if (response.status === 429 || response.status >= 500) {
         this.logger.warn(
-          `outbox: ${row.item_id} upstream ${response.status}, deferring to next drain`,
+          `outbox: ${row.item_id} upstream ${response.status}, deferring to next drain`
         );
-        return 'deferred';
+        return "deferred";
       }
-      const disposition = response.status < 300 ? 'sent' : 'failed';
+      const disposition = response.status < 300 ? "sent" : "failed";
       await this.recordResult(
         plane,
         row.item_id,
         disposition,
         response.status,
-        disposition === 'failed'
+        disposition === "failed"
           ? scrub(response.text.slice(0, BODY_SNIPPET_CHARS), auth)
-          : undefined,
+          : undefined
       );
       return disposition;
     };
@@ -292,7 +316,7 @@ export class OutboxExecutor {
 
   private async fetchOnce(
     spec: StagedRequest,
-    auth: ConnectionAuth,
+    auth: ConnectionAuth
   ): Promise<{ status: number; text: string }> {
     const run = async (): Promise<{ status: number; text: string }> => {
       const response = await this.fetchImpl(spec.url, {
@@ -301,7 +325,7 @@ export class OutboxExecutor {
         ...(spec.body === undefined ? {} : { body: spec.body }),
         // Injected requests never auto-follow: a cross-host Location would
         // carry the Authorization header past the pin (issue #304).
-        redirect: 'manual',
+        redirect: "manual",
         signal: timeoutSignal(this.writeTimeoutMs),
       });
       return { status: response.status, text: await response.text() };
@@ -312,12 +336,12 @@ export class OutboxExecutor {
   private async recordResult(
     plane: VaultPlane,
     itemId: string,
-    disposition: 'sent' | 'failed',
+    disposition: "sent" | "failed",
     statusCode?: number,
-    detail?: string,
+    detail?: string
   ): Promise<void> {
     const outcome = await plane.invoke(plane.ownerCredential, {
-      command: 'outbox.record_result',
+      command: "outbox.record_result",
       input: {
         item_id: itemId,
         disposition,
@@ -325,9 +349,9 @@ export class OutboxExecutor {
         ...(detail === undefined ? {} : { detail }),
       },
     });
-    if (outcome.status !== 'executed') {
+    if (outcome.status !== "executed") {
       this.logger.warn(
-        `outbox: result for ${itemId} did not record (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})`,
+        `outbox: result for ${itemId} did not record (${outcome.status}: ${"reason" in outcome ? outcome.reason : "unknown"})`
       );
     }
   }
@@ -335,14 +359,17 @@ export class OutboxExecutor {
 
 function parseRequest(json: string): StagedRequest {
   const parsed = JSON.parse(json) as Partial<StagedRequest>;
-  if (typeof parsed.method !== 'string' || typeof parsed.url !== 'string') {
-    throw new Error('outbox request row is missing method/url');
+  if (typeof parsed.method !== "string" || typeof parsed.url !== "string") {
+    throw new Error("outbox request row is missing method/url");
   }
   return parsed as StagedRequest;
 }
 
 /** `{{connection:name}}` → plaintext, url + headers + body. Unknown names throw. */
-function substitute(spec: StagedRequest, values: Readonly<Record<string, string>>): StagedRequest {
+function substitute(
+  spec: StagedRequest,
+  values: Readonly<Record<string, string>>
+): StagedRequest {
   const sub = (text: string): string =>
     text.replace(CONNECTION_REF_RE, (_, name: string) => {
       const value = values[name];
@@ -365,18 +392,23 @@ function substitute(spec: StagedRequest, values: Readonly<Record<string, string>
 function assertDrainable(rawUrl: string, auth: ConnectionAuth): void {
   const url = new URL(rawUrl);
   const loopback =
-    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
-  if (url.protocol !== 'https:' && !loopback) {
-    throw new Error(`outbox drain refuses non-https destination ${url.hostname}`);
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "::1";
+  if (url.protocol !== "https:" && !loopback) {
+    throw new Error(
+      `outbox drain refuses non-https destination ${url.hostname}`
+    );
   }
   const allowed = auth.allowedHosts.some((entry) =>
-    entry.startsWith('*.')
-      ? url.hostname.endsWith(entry.slice(1)) && url.hostname.length > entry.length - 1
-      : url.hostname === entry,
+    entry.startsWith("*.")
+      ? url.hostname.endsWith(entry.slice(1)) &&
+        url.hostname.length > entry.length - 1
+      : url.hostname === entry
   );
   if (!allowed) {
     throw new Error(
-      `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${auth.allowedHosts.join(', ')}`,
+      `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${auth.allowedHosts.join(", ")}`
     );
   }
 }
@@ -385,7 +417,7 @@ function assertDrainable(rawUrl: string, auth: ConnectionAuth): void {
 function scrub(text: string, auth: ConnectionAuth): string {
   let out = text;
   for (const value of Object.values(auth.values)) {
-    if (value) out = out.replaceAll(value, '«secret»');
+    if (value) out = out.replaceAll(value, "«secret»");
   }
   return out;
 }

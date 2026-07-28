@@ -1,17 +1,17 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { tempDir } from "@centraid/test-kit/temp-dir";
 // governance: allow-repo-hygiene file-size-limit unit tests for one module — splitting by topic would scatter the shared helpers
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { run } from './git.js';
-import { WorktreeStoreError } from './types.js';
-import { WorktreeStore } from './worktree-store.js';
+import { run } from "./git.js";
+import { WorktreeStoreError } from "./types.js";
+import { WorktreeStore } from "./worktree-store.js";
 
 async function makeTempRoot(): Promise<string> {
-  const dir = await tempDir('apps-store-');
+  const dir = await tempDir("apps-store-");
   return dir;
 }
 
@@ -20,7 +20,10 @@ async function rmTempRoot(root: string): Promise<void> {
 }
 
 /** Assert that `op` rejects with a WorktreeStoreError carrying the given code. */
-async function expectRejectsWithCode(op: () => Promise<unknown>, code: string): Promise<void> {
+async function expectRejectsWithCode(
+  op: () => Promise<unknown>,
+  code: string
+): Promise<void> {
   let err: unknown;
   try {
     await op();
@@ -36,36 +39,45 @@ async function expectRejectsWithCode(op: () => Promise<unknown>, code: string): 
  * worktree — `app.json` + one action handler. Tests use this to give
  * `publish()` something non-empty to stage.
  */
-async function seedApp(sessionWorktree: string, appId: string, marker: string): Promise<void> {
-  const appDir = path.join(sessionWorktree, 'apps', appId);
-  await fs.mkdir(path.join(appDir, 'actions'), { recursive: true });
+async function seedApp(
+  sessionWorktree: string,
+  appId: string,
+  marker: string
+): Promise<void> {
+  const appDir = path.join(sessionWorktree, "apps", appId);
+  await fs.mkdir(path.join(appDir, "actions"), { recursive: true });
   await fs.writeFile(
-    path.join(appDir, 'app.json'),
-    JSON.stringify({ id: appId, name: appId, marker }, null, 2),
+    path.join(appDir, "app.json"),
+    JSON.stringify({ id: appId, name: appId, marker }, null, 2)
   );
   await fs.writeFile(
-    path.join(appDir, 'actions', 'noop.js'),
-    `// marker: ${marker}\nexport default async () => ({ status: 200, body: {} });\n`,
+    path.join(appDir, "actions", "noop.js"),
+    `// marker: ${marker}\nexport default async () => ({ status: 200, body: {} });\n`
   );
 }
 
-describe('worktree-store', () => {
-  test('init creates the layout and is idempotent', async () => {
+describe("worktree-store", () => {
+  test("init creates the layout and is idempotent", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
 
       const mainDir = store.getActiveMainDir();
-      expect(mainDir).toBeTypeOf('string');
+      expect(mainDir).toBeTypeOf("string");
       expect(mainDir!.length).toBeGreaterThan(0);
-      expect(mainDir!.startsWith(path.join(root, 'worktrees', 'main') + path.sep)).toBe(true);
+      expect(
+        mainDir!.startsWith(path.join(root, "worktrees", "main") + path.sep)
+      ).toBe(true);
 
       // Bare repo exists with the `main` ref planted.
-      const head = await fs.readFile(path.join(root, 'apps.git', 'HEAD'), 'utf8');
+      const head = await fs.readFile(
+        path.join(root, "apps.git", "HEAD"),
+        "utf8"
+      );
       expect(head).toMatch(/refs\/heads\/main/u);
-      const mainSha = await run(['rev-parse', 'refs/heads/main'], {
-        cwd: path.join(root, 'apps.git'),
+      const mainSha = await run(["rev-parse", "refs/heads/main"], {
+        cwd: path.join(root, "apps.git"),
       });
       expect(mainSha).toHaveLength(40);
 
@@ -78,7 +90,7 @@ describe('worktree-store', () => {
     }
   });
 
-  test('active-main symlink stays pinned across publish + rollback', async () => {
+  test("active-main symlink stays pinned across publish + rollback", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
@@ -87,86 +99,99 @@ describe('worktree-store', () => {
       // The stable link path never changes and resolves to the live main
       // worktree after init.
       const link = store.getActiveMainLink();
-      expect(link).toBe(path.join(root, 'active-main'));
-      await expect(fs.realpath(link)).resolves.toBe(await fs.realpath(store.getActiveMainDir()!));
+      expect(link).toBe(path.join(root, "active-main"));
+      await expect(fs.realpath(link)).resolves.toBe(
+        await fs.realpath(store.getActiveMainDir()!)
+      );
 
       // Publish rotates the materialized main dir; the link follows it so
       // an external reader that baked `<link>/apps` once stays correct.
-      const s1 = await store.openSession('s1');
-      await seedApp(s1.worktreePath, 'todo', 'one');
+      const s1 = await store.openSession("s1");
+      await seedApp(s1.worktreePath, "todo", "one");
       const r1 = await store.publish({
-        sessionId: 's1',
-        appId: 'todo',
-        message: 'v1',
+        sessionId: "s1",
+        appId: "todo",
+        message: "v1",
       });
-      await store.closeSession('s1');
-      await expect(fs.realpath(link)).resolves.toBe(await fs.realpath(r1.materializedMainDir));
+      await store.closeSession("s1");
+      await expect(fs.realpath(link)).resolves.toBe(
+        await fs.realpath(r1.materializedMainDir)
+      );
       // Reading code through the stable link resolves the published app.
       const viaLink = JSON.parse(
-        await fs.readFile(path.join(link, 'apps', 'todo', 'app.json'), 'utf8'),
+        await fs.readFile(path.join(link, "apps", "todo", "app.json"), "utf8")
       ) as { marker: string };
-      expect(viaLink.marker).toBe('one');
+      expect(viaLink.marker).toBe("one");
 
-      const s2 = await store.openSession('s2');
-      await seedApp(s2.worktreePath, 'todo', 'two');
+      const s2 = await store.openSession("s2");
+      await seedApp(s2.worktreePath, "todo", "two");
       const r2 = await store.publish({
-        sessionId: 's2',
-        appId: 'todo',
-        message: 'v2',
+        sessionId: "s2",
+        appId: "todo",
+        message: "v2",
       });
-      await store.closeSession('s2');
-      await expect(fs.realpath(link)).resolves.toBe(await fs.realpath(r2.materializedMainDir));
+      await store.closeSession("s2");
+      await expect(fs.realpath(link)).resolves.toBe(
+        await fs.realpath(r2.materializedMainDir)
+      );
 
       // Rollback repoints the link again — and never leaves it dangling.
-      const rb = await store.rollback({ appId: 'todo', versionTag: 'todo/v1' });
-      await expect(fs.realpath(link)).resolves.toBe(await fs.realpath(rb.materializedMainDir));
+      const rb = await store.rollback({ appId: "todo", versionTag: "todo/v1" });
+      await expect(fs.realpath(link)).resolves.toBe(
+        await fs.realpath(rb.materializedMainDir)
+      );
       const afterRollback = JSON.parse(
-        await fs.readFile(path.join(link, 'apps', 'todo', 'app.json'), 'utf8'),
+        await fs.readFile(path.join(link, "apps", "todo", "app.json"), "utf8")
       ) as { marker: string };
-      expect(afterRollback.marker).toBe('one');
+      expect(afterRollback.marker).toBe("one");
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('openSession creates a worktree branched off main; multiple sessions coexist', async () => {
+  test("openSession creates a worktree branched off main; multiple sessions coexist", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
 
-      const a = await store.openSession('alpha');
-      const b = await store.openSession('beta');
+      const a = await store.openSession("alpha");
+      const b = await store.openSession("beta");
 
-      expect(a.id).toBe('alpha');
-      expect(a.branch).toBe('sessions/alpha');
-      expect(a.worktreePath.endsWith(path.join('worktrees', 'sessions', 'alpha'))).toBe(true);
+      expect(a.id).toBe("alpha");
+      expect(a.branch).toBe("sessions/alpha");
+      expect(
+        a.worktreePath.endsWith(path.join("worktrees", "sessions", "alpha"))
+      ).toBe(true);
       await expect(
         fs
           .stat(a.worktreePath)
           .then((s) => s.isDirectory())
-          .catch(() => false),
+          .catch(() => false)
       ).resolves.toBe(true);
 
-      expect(b.id).toBe('beta');
+      expect(b.id).toBe("beta");
       expect(a.worktreePath).not.toBe(b.worktreePath);
 
       // Both branches show up in the bare repo.
       const sessions = await store.listSessions();
-      expect([...sessions].sort()).toStrictEqual(['alpha', 'beta']);
+      expect([...sessions].sort()).toStrictEqual(["alpha", "beta"]);
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('openSession twice for the same id throws session_exists', async () => {
+  test("openSession twice for the same id throws session_exists", async () => {
     expect.assertions(2);
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
-      await store.openSession('alpha');
-      await expectRejectsWithCode(() => store.openSession('alpha'), 'session_exists');
+      await store.openSession("alpha");
+      await expectRejectsWithCode(
+        () => store.openSession("alpha"),
+        "session_exists"
+      );
     } finally {
       await rmTempRoot(root);
     }
@@ -181,33 +206,39 @@ describe('worktree-store', () => {
       // App ids are plain slugs again — automation apps are marked by the
       // manifest `kind` field, not a dotted `auto.` prefix (issue #98). A
       // slug id must round-trip through sessions, publish, and listing.
-      const s = await store.openSession('desktop-brief');
-      await seedApp(s.worktreePath, 'brief', 'one');
+      const s = await store.openSession("desktop-brief");
+      await seedApp(s.worktreePath, "brief", "one");
       const r = await store.publish({
-        sessionId: 'desktop-brief',
-        appId: 'brief',
-        message: 'v1',
+        sessionId: "desktop-brief",
+        appId: "brief",
+        message: "v1",
       });
-      expect(r.versionTag).toBe('brief/v1');
-      expect((await store.listApps()).sort()).toStrictEqual(['brief']);
+      expect(r.versionTag).toBe("brief/v1");
+      expect((await store.listApps()).sort()).toStrictEqual(["brief"]);
 
       // Dots are no longer part of the id grammar, so a dotted id is rejected
       // (and a tree-traversing `..` is impossible by construction).
-      await expectRejectsWithCode(() => store.openSession('auto.brief'), 'invalid_session_id');
-      await expectRejectsWithCode(() => store.openSession('bad..id'), 'invalid_session_id');
+      await expectRejectsWithCode(
+        () => store.openSession("auto.brief"),
+        "invalid_session_id"
+      );
+      await expectRejectsWithCode(
+        () => store.openSession("bad..id"),
+        "invalid_session_id"
+      );
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('closeSession removes worktree + branch and is idempotent', async () => {
+  test("closeSession removes worktree + branch and is idempotent", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
-      const handle = await store.openSession('alpha');
+      const handle = await store.openSession("alpha");
 
-      await store.closeSession('alpha');
+      await store.closeSession("alpha");
       const stillThere = await fs
         .access(handle.worktreePath)
         .then(() => true)
@@ -216,43 +247,49 @@ describe('worktree-store', () => {
       await expect(store.listSessions()).resolves.toStrictEqual([]);
 
       // Second close on a vanished session is a no-op.
-      await store.closeSession('alpha');
+      await store.closeSession("alpha");
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('publish of a brand-new app tags v1 and materializes new main', async () => {
+  test("publish of a brand-new app tags v1 and materializes new main", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
       const mainBefore = store.getActiveMainDir()!;
 
-      const session = await store.openSession('s1');
-      await seedApp(session.worktreePath, 'todo', 'first');
+      const session = await store.openSession("s1");
+      await seedApp(session.worktreePath, "todo", "first");
 
       const result = await store.publish({
-        sessionId: 's1',
-        appId: 'todo',
-        message: 'initial',
+        sessionId: "s1",
+        appId: "todo",
+        message: "initial",
       });
 
-      expect(result.versionTag).toBe('todo/v1');
+      expect(result.versionTag).toBe("todo/v1");
       expect(result.sha).toHaveLength(40);
       expect(
-        result.materializedMainDir.startsWith(path.join(root, 'worktrees', 'main') + path.sep),
+        result.materializedMainDir.startsWith(
+          path.join(root, "worktrees", "main") + path.sep
+        )
       ).toBe(true);
       expect(result.materializedMainDir).not.toBe(mainBefore);
       expect(store.getActiveMainDir()).toBe(result.materializedMainDir);
 
       // resolveActiveAppDir now points at the new main's app subtree.
-      const appDir = await store.resolveActiveAppDir('todo');
-      expect(appDir).toBe(path.join(result.materializedMainDir, 'apps', 'todo'));
-      const appJson = JSON.parse(await fs.readFile(path.join(appDir!, 'app.json'), 'utf8')) as {
+      const appDir = await store.resolveActiveAppDir("todo");
+      expect(appDir).toBe(
+        path.join(result.materializedMainDir, "apps", "todo")
+      );
+      const appJson = JSON.parse(
+        await fs.readFile(path.join(appDir!, "app.json"), "utf8")
+      ) as {
         marker: string;
       };
-      expect(appJson.marker).toBe('first');
+      expect(appJson.marker).toBe("first");
 
       // Old main dir is gone after the swap.
       const oldExists = await fs
@@ -265,33 +302,33 @@ describe('worktree-store', () => {
     }
   });
 
-  test('publish increments to v2 on the next publish of the same app', async () => {
+  test("publish increments to v2 on the next publish of the same app", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
 
-      const s1 = await store.openSession('s1');
-      await seedApp(s1.worktreePath, 'todo', 'first');
+      const s1 = await store.openSession("s1");
+      await seedApp(s1.worktreePath, "todo", "first");
       const r1 = await store.publish({
-        sessionId: 's1',
-        appId: 'todo',
-        message: 'v1',
+        sessionId: "s1",
+        appId: "todo",
+        message: "v1",
       });
-      expect(r1.versionTag).toBe('todo/v1');
-      await store.closeSession('s1');
+      expect(r1.versionTag).toBe("todo/v1");
+      await store.closeSession("s1");
 
-      const s2 = await store.openSession('s2');
-      await seedApp(s2.worktreePath, 'todo', 'second');
+      const s2 = await store.openSession("s2");
+      await seedApp(s2.worktreePath, "todo", "second");
       const r2 = await store.publish({
-        sessionId: 's2',
-        appId: 'todo',
-        message: 'v2',
+        sessionId: "s2",
+        appId: "todo",
+        message: "v2",
       });
-      expect(r2.versionTag).toBe('todo/v2');
+      expect(r2.versionTag).toBe("todo/v2");
 
-      const versions = await store.listVersions('todo');
-      expect(versions.map((v) => v.tag)).toStrictEqual(['todo/v2', 'todo/v1']);
+      const versions = await store.listVersions("todo");
+      expect(versions.map((v) => v.tag)).toStrictEqual(["todo/v2", "todo/v1"]);
       // The freshly published v2 is the active subtree on main.
       expect(versions.map((v) => v.active)).toStrictEqual([true, false]);
     } finally {
@@ -299,86 +336,86 @@ describe('worktree-store', () => {
     }
   });
 
-  test('publish is path-scoped: a session that edits two apps publishes only one', async () => {
+  test("publish is path-scoped: a session that edits two apps publishes only one", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
 
-      const session = await store.openSession('multi');
-      await seedApp(session.worktreePath, 'todo', 'todo-1');
-      await seedApp(session.worktreePath, 'notes', 'notes-1');
+      const session = await store.openSession("multi");
+      await seedApp(session.worktreePath, "todo", "todo-1");
+      await seedApp(session.worktreePath, "notes", "notes-1");
 
       await store.publish({
-        sessionId: 'multi',
-        appId: 'todo',
-        message: 'todo only',
+        sessionId: "multi",
+        appId: "todo",
+        message: "todo only",
       });
 
       // `notes` stays in the session worktree but isn't on main yet.
-      const notesActive = await store.resolveActiveAppDir('notes');
+      const notesActive = await store.resolveActiveAppDir("notes");
       expect(notesActive).toBeUndefined();
       const notesInSession = await fs
-        .stat(path.join(session.worktreePath, 'apps', 'notes', 'app.json'))
+        .stat(path.join(session.worktreePath, "apps", "notes", "app.json"))
         .then((s) => s.isFile())
         .catch(() => false);
       expect(notesInSession).toBe(true);
 
-      const todoActive = await store.resolveActiveAppDir('todo');
-      expect(todoActive).toBeTypeOf('string');
+      const todoActive = await store.resolveActiveAppDir("todo");
+      expect(todoActive).toBeTypeOf("string");
       expect(todoActive!.length).toBeGreaterThan(0);
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('publish with no staged changes under apps/<appId>/ throws no_changes', async () => {
+  test("publish with no staged changes under apps/<appId>/ throws no_changes", async () => {
     expect.assertions(2);
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
-      await store.openSession('empty');
+      await store.openSession("empty");
       await expectRejectsWithCode(
         () =>
           store.publish({
-            sessionId: 'empty',
-            appId: 'todo',
-            message: 'nothing to ship',
+            sessionId: "empty",
+            appId: "todo",
+            message: "nothing to ship",
           }),
-        'no_changes',
+        "no_changes"
       );
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('concurrent publishes on the same store serialize and both succeed', async () => {
+  test("concurrent publishes on the same store serialize and both succeed", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
 
-      const a = await store.openSession('a');
-      const b = await store.openSession('b');
-      await seedApp(a.worktreePath, 'todo', 'from-a');
-      await seedApp(b.worktreePath, 'notes', 'from-b');
+      const a = await store.openSession("a");
+      const b = await store.openSession("b");
+      await seedApp(a.worktreePath, "todo", "from-a");
+      await seedApp(b.worktreePath, "notes", "from-b");
 
       const [ra, rb] = await Promise.all([
-        store.publish({ sessionId: 'a', appId: 'todo', message: 'from a' }),
-        store.publish({ sessionId: 'b', appId: 'notes', message: 'from b' }),
+        store.publish({ sessionId: "a", appId: "todo", message: "from a" }),
+        store.publish({ sessionId: "b", appId: "notes", message: "from b" }),
       ]);
 
       // Both publishes minted v1 tags for distinct apps.
-      expect(ra.versionTag).toBe('todo/v1');
-      expect(rb.versionTag).toBe('notes/v1');
+      expect(ra.versionTag).toBe("todo/v1");
+      expect(rb.versionTag).toBe("notes/v1");
 
       // Both apps are reachable from the final main worktree.
-      const todoDir = await store.resolveActiveAppDir('todo');
-      const notesDir = await store.resolveActiveAppDir('notes');
-      expect(todoDir).toBeTypeOf('string');
+      const todoDir = await store.resolveActiveAppDir("todo");
+      const notesDir = await store.resolveActiveAppDir("notes");
+      expect(todoDir).toBeTypeOf("string");
       expect(todoDir!.length).toBeGreaterThan(0);
-      expect(notesDir).toBeTypeOf('string');
+      expect(notesDir).toBeTypeOf("string");
       expect(notesDir!.length).toBeGreaterThan(0);
 
       // Active main was swapped exactly to the second publish's
@@ -389,47 +426,52 @@ describe('worktree-store', () => {
     }
   });
 
-  test('rollback overlays the old subtree onto main without minting a tag', async () => {
+  test("rollback overlays the old subtree onto main without minting a tag", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
 
-      const s1 = await store.openSession('s1');
-      await seedApp(s1.worktreePath, 'todo', 'one');
-      await store.publish({ sessionId: 's1', appId: 'todo', message: 'v1' });
-      await store.closeSession('s1');
+      const s1 = await store.openSession("s1");
+      await seedApp(s1.worktreePath, "todo", "one");
+      await store.publish({ sessionId: "s1", appId: "todo", message: "v1" });
+      await store.closeSession("s1");
 
-      const s2 = await store.openSession('s2');
-      await seedApp(s2.worktreePath, 'todo', 'two');
-      await store.publish({ sessionId: 's2', appId: 'todo', message: 'v2' });
-      await store.closeSession('s2');
+      const s2 = await store.openSession("s2");
+      await seedApp(s2.worktreePath, "todo", "two");
+      await store.publish({ sessionId: "s2", appId: "todo", message: "v2" });
+      await store.closeSession("s2");
 
-      const tagsBefore = await store.listVersions('todo');
-      expect(tagsBefore.map((t) => t.tag)).toStrictEqual(['todo/v2', 'todo/v1']);
+      const tagsBefore = await store.listVersions("todo");
+      expect(tagsBefore.map((t) => t.tag)).toStrictEqual([
+        "todo/v2",
+        "todo/v1",
+      ]);
 
-      const rb = await store.rollback({ appId: 'todo', versionTag: 'todo/v1' });
+      const rb = await store.rollback({ appId: "todo", versionTag: "todo/v1" });
       expect(rb.sha).toHaveLength(40);
 
       // Active app dir reflects v1's content.
-      const appDir = await store.resolveActiveAppDir('todo');
-      expect(appDir).toBeTypeOf('string');
+      const appDir = await store.resolveActiveAppDir("todo");
+      expect(appDir).toBeTypeOf("string");
       expect(appDir!.length).toBeGreaterThan(0);
-      const appJson = JSON.parse(await fs.readFile(path.join(appDir!, 'app.json'), 'utf8')) as {
+      const appJson = JSON.parse(
+        await fs.readFile(path.join(appDir!, "app.json"), "utf8")
+      ) as {
         marker: string;
       };
-      expect(appJson.marker).toBe('one');
+      expect(appJson.marker).toBe("one");
 
       // No new tag minted — listVersions still shows v1 and v2 only.
-      const tagsAfter = await store.listVersions('todo');
-      expect(tagsAfter.map((t) => t.tag)).toStrictEqual(['todo/v2', 'todo/v1']);
+      const tagsAfter = await store.listVersions("todo");
+      expect(tagsAfter.map((t) => t.tag)).toStrictEqual(["todo/v2", "todo/v1"]);
       // Active subtree flipped from v2 to v1 — the older tag is live
       // again, the newer one is preserved but inactive.
       expect(tagsAfter.map((t) => t.active)).toStrictEqual([false, true]);
 
       // main log includes the rollback commit (chronological audit).
-      const log = await run(['log', '--format=%s', 'refs/heads/main'], {
-        cwd: path.join(root, 'apps.git'),
+      const log = await run(["log", "--format=%s", "refs/heads/main"], {
+        cwd: path.join(root, "apps.git"),
       });
       expect(log).toMatch(/rollback: todo -> todo\/v1/u);
     } finally {
@@ -437,90 +479,92 @@ describe('worktree-store', () => {
     }
   });
 
-  test('rollback to a tag that matches current main throws no_changes', async () => {
+  test("rollback to a tag that matches current main throws no_changes", async () => {
     expect.assertions(2);
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
-      const session = await store.openSession('s1');
-      await seedApp(session.worktreePath, 'todo', 'one');
-      await store.publish({ sessionId: 's1', appId: 'todo', message: 'v1' });
+      const session = await store.openSession("s1");
+      await seedApp(session.worktreePath, "todo", "one");
+      await store.publish({ sessionId: "s1", appId: "todo", message: "v1" });
 
       await expectRejectsWithCode(
-        () => store.rollback({ appId: 'todo', versionTag: 'todo/v1' }),
-        'no_changes',
+        () => store.rollback({ appId: "todo", versionTag: "todo/v1" }),
+        "no_changes"
       );
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('rollback to a missing tag throws tag_missing', async () => {
+  test("rollback to a missing tag throws tag_missing", async () => {
     expect.assertions(2);
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
       await expectRejectsWithCode(
-        () => store.rollback({ appId: 'todo', versionTag: 'todo/v9' }),
-        'tag_missing',
+        () => store.rollback({ appId: "todo", versionTag: "todo/v9" }),
+        "tag_missing"
       );
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('resolveActiveAppDir returns undefined for an app never published', async () => {
+  test("resolveActiveAppDir returns undefined for an app never published", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
-      await expect(store.resolveActiveAppDir('ghost')).resolves.toBeUndefined();
+      await expect(store.resolveActiveAppDir("ghost")).resolves.toBeUndefined();
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('listVersions returns [] for an app with no tags', async () => {
+  test("listVersions returns [] for an app with no tags", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
-      await expect(store.listVersions('ghost')).resolves.toStrictEqual([]);
+      await expect(store.listVersions("ghost")).resolves.toStrictEqual([]);
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('deleteApp removes the app from main and reaps its version tags', async () => {
+  test("deleteApp removes the app from main and reaps its version tags", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
 
-      const s1 = await store.openSession('s1');
-      await seedApp(s1.worktreePath, 'todo', 'first');
-      await store.publish({ sessionId: 's1', appId: 'todo', message: 'v1' });
-      await store.closeSession('s1');
+      const s1 = await store.openSession("s1");
+      await seedApp(s1.worktreePath, "todo", "first");
+      await store.publish({ sessionId: "s1", appId: "todo", message: "v1" });
+      await store.closeSession("s1");
 
       // Before: app is live + has a tag.
-      const liveDir = await store.resolveActiveAppDir('todo');
-      expect(liveDir).toBeTypeOf('string');
+      const liveDir = await store.resolveActiveAppDir("todo");
+      expect(liveDir).toBeTypeOf("string");
       expect(liveDir!.length).toBeGreaterThan(0);
-      expect((await store.listVersions('todo')).map((v) => v.tag)).toStrictEqual(['todo/v1']);
+      expect(
+        (await store.listVersions("todo")).map((v) => v.tag)
+      ).toStrictEqual(["todo/v1"]);
 
-      const out = await store.deleteApp('todo');
+      const out = await store.deleteApp("todo");
       expect(out.sha).toHaveLength(40);
 
       // After: app gone from main, all tags reaped, listVersions empty.
-      await expect(store.resolveActiveAppDir('todo')).resolves.toBeUndefined();
-      await expect(store.listVersions('todo')).resolves.toStrictEqual([]);
+      await expect(store.resolveActiveAppDir("todo")).resolves.toBeUndefined();
+      await expect(store.listVersions("todo")).resolves.toStrictEqual([]);
       await expect(store.listApps()).resolves.toStrictEqual([]);
 
       // The delete commit is on main as a forward audit entry.
-      const log = await run(['log', '--format=%s', 'refs/heads/main'], {
-        cwd: path.join(root, 'apps.git'),
+      const log = await run(["log", "--format=%s", "refs/heads/main"], {
+        cwd: path.join(root, "apps.git"),
       });
       expect(log).toMatch(/delete: todo/u);
     } finally {
@@ -528,19 +572,19 @@ describe('worktree-store', () => {
     }
   });
 
-  test('deleteApp throws no_changes for an app that was never on main', async () => {
+  test("deleteApp throws no_changes for an app that was never on main", async () => {
     expect.assertions(2);
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
-      await expectRejectsWithCode(() => store.deleteApp('ghost'), 'no_changes');
+      await expectRejectsWithCode(() => store.deleteApp("ghost"), "no_changes");
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('snapshotSessionAppDir refuses to create phantom dirs without a worktree', async () => {
+  test("snapshotSessionAppDir refuses to create phantom dirs without a worktree", async () => {
     // Guards against a stray PUT files arriving with a sessionId that
     // was never openSession()'d, materializing
     // `worktrees/sessions/<id>/apps/<app>/` from thin air. A later
@@ -552,11 +596,11 @@ describe('worktree-store', () => {
       const store = new WorktreeStore({ root });
       await store.init();
       await expectRejectsWithCode(
-        () => store.snapshotSessionAppDir('phantom', 'todo'),
-        'session_missing',
+        () => store.snapshotSessionAppDir("phantom", "todo"),
+        "session_missing"
       );
       // And no phantom dir was left behind.
-      const phantomDir = path.join(root, 'worktrees', 'sessions', 'phantom');
+      const phantomDir = path.join(root, "worktrees", "sessions", "phantom");
       const exists = await fs
         .stat(phantomDir)
         .then(() => true)
@@ -567,25 +611,25 @@ describe('worktree-store', () => {
     }
   });
 
-  test('init replants main if the ref went missing between runs', async () => {
+  test("init replants main if the ref went missing between runs", async () => {
     const root = await makeTempRoot();
     try {
       const first = new WorktreeStore({ root });
       await first.init();
 
       // Simulate a corrupted-ref recovery: blow away refs/heads/main.
-      await fs.rm(path.join(root, 'apps.git', 'refs', 'heads', 'main'), {
+      await fs.rm(path.join(root, "apps.git", "refs", "heads", "main"), {
         force: true,
       });
       // packed-refs may still be there; nuke too to make sure rev-parse fails.
-      await fs.rm(path.join(root, 'apps.git', 'packed-refs'), { force: true });
+      await fs.rm(path.join(root, "apps.git", "packed-refs"), { force: true });
 
       const second = new WorktreeStore({ root });
       await second.init();
 
       // After recovery init, main resolves again.
-      const sha = await run(['rev-parse', 'refs/heads/main'], {
-        cwd: path.join(root, 'apps.git'),
+      const sha = await run(["rev-parse", "refs/heads/main"], {
+        cwd: path.join(root, "apps.git"),
       });
       expect(sha).toHaveLength(40);
     } finally {
@@ -593,29 +637,41 @@ describe('worktree-store', () => {
     }
   });
 
-  test('every method except init throws not_initialized before init()', async () => {
+  test("every method except init throws not_initialized before init()", async () => {
     expect.assertions(6);
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
-      await expectRejectsWithCode(() => store.resolveActiveAppDir('todo'), 'not_initialized');
-      await expectRejectsWithCode(() => store.openSession('s1'), 'not_initialized');
-      await expectRejectsWithCode(() => store.listSessions(), 'not_initialized');
+      await expectRejectsWithCode(
+        () => store.resolveActiveAppDir("todo"),
+        "not_initialized"
+      );
+      await expectRejectsWithCode(
+        () => store.openSession("s1"),
+        "not_initialized"
+      );
+      await expectRejectsWithCode(
+        () => store.listSessions(),
+        "not_initialized"
+      );
     } finally {
       await rmTempRoot(root);
     }
   });
 
-  test('app ids are validated', async () => {
+  test("app ids are validated", async () => {
     const root = await makeTempRoot();
     try {
       const store = new WorktreeStore({ root });
       await store.init();
       await expectRejectsWithCode(
-        () => store.resolveActiveAppDir('../etc/passwd'),
-        'invalid_app_id',
+        () => store.resolveActiveAppDir("../etc/passwd"),
+        "invalid_app_id"
       );
-      await expectRejectsWithCode(() => store.openSession('bad/name'), 'invalid_session_id');
+      await expectRejectsWithCode(
+        () => store.openSession("bad/name"),
+        "invalid_session_id"
+      );
     } finally {
       // Make the linter happy that crypto is used (id collisions
       // matter in a tempdir suite running under `--test`).

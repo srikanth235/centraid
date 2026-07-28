@@ -22,16 +22,16 @@
 // Following scripts/lint-types.sh: a silent no-op FAILS rather than passing —
 // if this ever scans zero files or resolves zero modules, the check is broken,
 // not clean.
-import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import path from 'node:path';
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import path from "node:path";
 
-const ROOT = path.resolve(import.meta.dirname, '..');
+const ROOT = path.resolve(import.meta.dirname, "..");
 // Every *.module.css in the repo lives under here. If that changes, add the
 // root — an unlisted directory is unchecked, exactly like lint-types.sh's
 // TARGETS list.
-const TARGETS = ['packages/client/src/react', 'packages/blueprints/apps'];
+const TARGETS = ["packages/client/src/react", "packages/blueprints/apps"];
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.turbo']);
+const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
 
 function walk(dir, out = []) {
   for (const entry of readdirSync(dir)) {
@@ -45,12 +45,12 @@ function walk(dir, out = []) {
 
 /** Strip CSS comments so a class named only inside one isn't counted as defined. */
 function definedClasses(css) {
-  const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, '');
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, "");
   // Leading [a-zA-Z] excludes `0.5px` / `11.5px` numerics; `-` and `_` are
   // legal in idents but cannot start one here (authored camelCase per
   // CSS-CONVENTIONS "Component modules").
   const matches = [...stripped.matchAll(/\.(?<className>[a-zA-Z][\w-]*)/gu)];
-  return new Set(matches.map((m) => m.groups?.className ?? ''));
+  return new Set(matches.map((m) => m.groups?.className ?? ""));
 }
 
 /**
@@ -60,9 +60,9 @@ function definedClasses(css) {
  */
 function scannableBody(src) {
   return src
-    .split('\n')
+    .split("\n")
     .filter((l) => !/^\s*import\s/u.test(l) && !/^\s*(?:\/\/|\/\*|\*)/u.test(l))
-    .join('\n');
+    .join("\n");
 }
 
 const findings = [];
@@ -78,34 +78,40 @@ for (const target of TARGETS) {
   }
   for (const file of walk(dir)) {
     filesScanned += 1;
-    const src = readFileSync(file, 'utf8');
+    const src = readFileSync(file, "utf8");
     const imports = [
-      ...src.matchAll(/^import\s+(?<alias>\w+)\s+from\s+['"](?<spec>[^'"]+\.module\.css)['"]/gmu),
+      ...src.matchAll(
+        /^import\s+(?<alias>\w+)\s+from\s+['"](?<spec>[^'"]+\.module\.css)['"]/gmu
+      ),
     ];
     if (imports.length === 0) continue;
     const body = scannableBody(src);
     const rel = path.relative(ROOT, file);
 
     for (const imported of imports) {
-      const alias = imported.groups?.alias ?? '';
-      const spec = imported.groups?.spec ?? '';
+      const alias = imported.groups?.alias ?? "";
+      const spec = imported.groups?.spec ?? "";
       const cssPath = path.resolve(path.dirname(file), spec);
       if (!existsSync(cssPath)) {
         findings.push(`${rel} — import '${spec}' does not resolve`);
         continue;
       }
       modulesResolved += 1;
-      const defined = definedClasses(readFileSync(cssPath, 'utf8'));
+      const defined = definedClasses(readFileSync(cssPath, "utf8"));
 
       // Dynamic access defeats static analysis. Report it so the check can
       // never quietly become partial; there are zero today.
-      if (new RegExp(`\\b${alias}\\[`, 'u').test(body)) {
+      if (new RegExp(`\\b${alias}\\[`, "u").test(body)) {
         dynamic.push(`${rel} — ${alias}[…] computed access is unverifiable`);
       }
 
-      for (const [, name] of body.matchAll(new RegExp(`\\b${alias}\\.([a-zA-Z][\\w]*)`, 'gu'))) {
+      for (const [, name] of body.matchAll(
+        new RegExp(`\\b${alias}\\.([a-zA-Z][\\w]*)`, "gu")
+      )) {
         if (!defined.has(name)) {
-          findings.push(`${rel}:${alias}.${name} — no .${name} rule in ${path.basename(cssPath)}`);
+          findings.push(
+            `${rel}:${alias}.${name} — no .${name} rule in ${path.basename(cssPath)}`
+          );
         }
       }
     }
@@ -116,7 +122,7 @@ for (const target of TARGETS) {
 if (filesScanned === 0 || modulesResolved === 0) {
   console.error(
     `FAIL — scanned ${filesScanned} file(s), resolved ${modulesResolved} CSS module(s). ` +
-      `The check matched nothing; its import pattern or TARGETS are stale.`,
+      `The check matched nothing; its import pattern or TARGETS are stale.`
   );
   process.exit(1);
 }
@@ -124,15 +130,17 @@ if (filesScanned === 0 || modulesResolved === 0) {
 for (const d of [...new Set(dynamic)].sort()) console.warn(`warn  ${d}`);
 
 if (findings.length > 0) {
-  console.error(`\nFAIL — ${findings.length} className(s) with no backing CSS rule:\n`);
+  console.error(
+    `\nFAIL — ${findings.length} className(s) with no backing CSS rule:\n`
+  );
   for (const f of [...new Set(findings)].sort()) console.error(`  ${f}`);
   console.error(
     `\nEach renders as class="" at runtime. Either write the rule, or drop the\n` +
-      `reference if the intended layout already comes from elsewhere.\n`,
+      `reference if the intended layout already comes from elsewhere.\n`
   );
   process.exit(1);
 }
 
 console.log(
-  `ok   css-classes — ${modulesResolved} module import(s) across ${filesScanned} file(s), no dead classNames`,
+  `ok   css-classes — ${modulesResolved} module import(s) across ${filesScanned} file(s), no dead classNames`
 );

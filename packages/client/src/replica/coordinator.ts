@@ -1,14 +1,14 @@
-import type { VaultChangeMessage } from '../vault-change-sse.js';
+import type { VaultChangeMessage } from "../vault-change-sse.js";
 import {
   OnlineOnlyGuard,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
-} from './errors.js';
-import { replicaIntentInvalidations } from './intent-invalidations.js';
-import { IntentQueue, type IntentQueueOptions } from './intents.js';
-import { LiveQueryRegistry } from './live-query-registry.js';
-import { LiveQuery } from './live-query.js';
-import type { ReplicaStore } from './store.js';
+} from "./errors.js";
+import { replicaIntentInvalidations } from "./intent-invalidations.js";
+import { IntentQueue, type IntentQueueOptions } from "./intents.js";
+import { LiveQueryRegistry } from "./live-query-registry.js";
+import { LiveQuery } from "./live-query.js";
+import type { ReplicaStore } from "./store.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
@@ -26,7 +26,7 @@ import type {
   ReplicaShape,
   ReplicaSnapshot,
   ReplicaStatus,
-} from './types.js';
+} from "./types.js";
 
 export interface ReplicaChangeFeedAdapter {
   /** Pass `subscribeVaultChanges` from the shell-owned singleton feed. */
@@ -39,7 +39,7 @@ export interface ReplicaChangeFeedAdapter {
 
 export type ReplicaChangePuller = (
   cursor: ReplicaCursor,
-  signal: AbortSignal,
+  signal: AbortSignal
 ) => Promise<ReplicaChangeBatch | undefined>;
 
 export interface ReplicaCoordinatorOptions extends IntentQueueOptions {
@@ -66,7 +66,9 @@ export class ReplicaCoordinator {
   readonly #pullChanges: ReplicaChangePuller | undefined;
   readonly #feedRetryDelayMs: number;
   readonly #onRebootstrapRequired: ((detail: unknown) => void) | undefined;
-  readonly #onCursorAdvanced: ((cursor: ReplicaCursor, schemaEpoch: string) => void) | undefined;
+  readonly #onCursorAdvanced:
+    | ((cursor: ReplicaCursor, schemaEpoch: string) => void)
+    | undefined;
   #unsubscribeFeed: (() => void) | undefined;
   #feedTarget: ReplicaCursor | undefined;
   #feedSync: Promise<void> | undefined;
@@ -82,22 +84,25 @@ export class ReplicaCoordinator {
     readonly intents: IntentQueue,
     options: Pick<
       ReplicaCoordinatorOptions,
-      | 'changeFeed'
-      | 'pullChanges'
-      | 'feedRetryDelayMs'
-      | 'onRebootstrapRequired'
-      | 'onCursorAdvanced'
-    > = {},
+      | "changeFeed"
+      | "pullChanges"
+      | "feedRetryDelayMs"
+      | "onRebootstrapRequired"
+      | "onCursorAdvanced"
+    > = {}
   ) {
     if (options.changeFeed && !options.pullChanges) {
-      throw new ReplicaProtocolError('A replica change feed requires a change puller');
+      throw new ReplicaProtocolError(
+        "A replica change feed requires a change puller"
+      );
     }
     this.#feed = options.changeFeed;
     this.#pullChanges = options.pullChanges;
     this.#feedRetryDelayMs = options.feedRetryDelayMs ?? 1_000;
     this.#onRebootstrapRequired = options.onRebootstrapRequired;
     this.#onCursorAdvanced = options.onCursorAdvanced;
-    if (this.#feed) this.#unsubscribeFeed = this.#feed.subscribe(this.onFeedMessage);
+    if (this.#feed)
+      this.#unsubscribeFeed = this.#feed.subscribe(this.onFeedMessage);
   }
 
   async bootstrap(snapshot: ReplicaSnapshot): Promise<ReplicaCursor> {
@@ -105,11 +110,13 @@ export class ReplicaCoordinator {
     // Reconcile durable IDB before advancing SQLite, matching incremental apply.
     const resolved = await this.intents.applyOutcomes(snapshot.outcomes ?? []);
     const cursor = await this.worker.bootstrap(snapshot);
-    await this.#feed?.setShapeIds(snapshot.shapes.map((shape) => shape.shapeId));
+    await this.#feed?.setShapeIds(
+      snapshot.shapes.map((shape) => shape.shapeId)
+    );
     await this.#feed?.resume(cursor);
     this.#onCursorAdvanced?.(cursor, snapshot.schemaEpoch);
     this.emitInvalidations([
-      { shapeId: '*', entity: '*', source: 'purge' },
+      { shapeId: "*", entity: "*", source: "purge" },
       ...replicaIntentInvalidations(resolved),
     ]);
     return cursor;
@@ -123,7 +130,7 @@ export class ReplicaCoordinator {
   async bootstrapBegin(header: ReplicaBootstrapHeader): Promise<void> {
     this.resetFeedGeneration();
     await this.worker.bootstrapBegin(header);
-    this.emitInvalidations([{ shapeId: '*', entity: '*', source: 'purge' }]);
+    this.emitInvalidations([{ shapeId: "*", entity: "*", source: "purge" }]);
   }
 
   async bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<void> {
@@ -138,7 +145,7 @@ export class ReplicaCoordinator {
   async bootstrapCommit(
     cursor: ReplicaCursor,
     header: ReplicaBootstrapHeader,
-    outcomes: IntentOutcome[] = [],
+    outcomes: IntentOutcome[] = []
   ): Promise<ReplicaCursor> {
     const resolved = await this.intents.applyOutcomes(outcomes);
     const committed = await this.worker.bootstrapCommit(cursor);
@@ -146,7 +153,7 @@ export class ReplicaCoordinator {
     await this.#feed?.resume(committed);
     this.#onCursorAdvanced?.(committed, header.schemaEpoch);
     this.emitInvalidations([
-      { shapeId: '*', entity: '*', source: 'purge' },
+      { shapeId: "*", entity: "*", source: "purge" },
       ...replicaIntentInvalidations(resolved),
     ]);
     return committed;
@@ -159,7 +166,10 @@ export class ReplicaCoordinator {
       const resolved = await this.intents.applyOutcomes(batch.outcomes ?? []);
       const applied = await this.worker.applyChanges(batch);
       this.#onCursorAdvanced?.(applied.cursor, batch.schemaEpoch);
-      this.emitInvalidations([...applied.invalidations, ...replicaIntentInvalidations(resolved)]);
+      this.emitInvalidations([
+        ...applied.invalidations,
+        ...replicaIntentInvalidations(resolved),
+      ]);
       return applied.cursor;
     } catch (error) {
       if (error instanceof ReplicaRebootstrapRequiredError) {
@@ -171,31 +181,43 @@ export class ReplicaCoordinator {
 
   async read(
     request: ReplicaReadRequest,
-    guard: OnlineOnlyGuard = new OnlineOnlyGuard(),
+    guard: OnlineOnlyGuard = new OnlineOnlyGuard()
   ): Promise<ReplicaReadResult> {
-    const optimistic = await this.intents.overlayMutations(request.shapeId, request.entity);
+    const optimistic = await this.intents.overlayMutations(
+      request.shapeId,
+      request.entity
+    );
     return this.worker.read(request, optimistic, guard);
   }
 
   /** Clone-safe equivalent used by the shell's MessagePort transport. */
   async readWire(request: ReplicaReadRequest): Promise<ReplicaReadWireResult> {
-    const optimistic = await this.intents.overlayMutations(request.shapeId, request.entity);
+    const optimistic = await this.intents.overlayMutations(
+      request.shapeId,
+      request.entity
+    );
     return this.worker.readWire(request, optimistic);
   }
 
   /** Clone-safe local search used by the shell's MessagePort transport. */
-  async searchWire(request: ReplicaSearchRequest): Promise<ReplicaSearchWireResult> {
-    const optimistic = await this.intents.overlayMutations(request.shapeId, request.entity);
+  async searchWire(
+    request: ReplicaSearchRequest
+  ): Promise<ReplicaSearchWireResult> {
+    const optimistic = await this.intents.overlayMutations(
+      request.shapeId,
+      request.entity
+    );
     return this.worker.searchWire(request, optimistic);
   }
 
   liveRead(request: ReplicaReadRequest): LiveQuery<ReplicaReadResult> {
     return this.#live.track(
       new LiveQuery(async (signal) => {
-        if (signal.aborted) throw (signal as { reason?: unknown }).reason ?? new Error('aborted');
+        if (signal.aborted)
+          throw (signal as { reason?: unknown }).reason ?? new Error("aborted");
         const value = await this.read(request);
         return { value, dependencies: [value.dependency] };
-      }),
+      })
     );
   }
 
@@ -209,7 +231,10 @@ export class ReplicaCoordinator {
     return this.intents.claimNext();
   }
 
-  markIntentTransportFailed(intentId: string, reason?: string): Promise<ReplicaIntent> {
+  markIntentTransportFailed(
+    intentId: string,
+    reason?: string
+  ): Promise<ReplicaIntent> {
     return this.intents.transportFailed(intentId, reason);
   }
 
@@ -217,7 +242,9 @@ export class ReplicaCoordinator {
     return this.intents.awaitingChange(intentId);
   }
 
-  async applyIntentOutcome(outcome: IntentOutcome): Promise<ReplicaIntent | undefined> {
+  async applyIntentOutcome(
+    outcome: IntentOutcome
+  ): Promise<ReplicaIntent | undefined> {
     const [intent] = await this.intents.applyOutcomes([outcome]);
     if (intent) this.emitInvalidations(replicaIntentInvalidations([intent]));
     return intent;
@@ -240,7 +267,7 @@ export class ReplicaCoordinator {
   }
 
   subscribeInvalidations(
-    listener: (invalidations: readonly ReplicaInvalidation[]) => void,
+    listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ): () => void {
     this.#invalidationListeners.add(listener);
     return () => this.#invalidationListeners.delete(listener);
@@ -261,25 +288,34 @@ export class ReplicaCoordinator {
     if (this.#closed) return;
     this.#closed = true;
     this.detachFeed();
-    this.emitInvalidations([{ shapeId: '*', entity: '*', source: 'purge' }]);
+    this.emitInvalidations([{ shapeId: "*", entity: "*", source: "purge" }]);
     this.#invalidationListeners.clear();
     this.#live.dispose();
     await Promise.all([this.worker.purge(), this.intents.purge()]);
   }
 
   private readonly onFeedMessage = (message: VaultChangeMessage): void => {
-    if (message.type === 'centraid:vault-rebootstrap') {
+    if (message.type === "centraid:vault-rebootstrap") {
       void this.requireRebootstrap(message.detail);
       return;
     }
     const cursor =
-      message.type === 'centraid:vault-cursor' ? message.cursor : message.detail.cursor;
-    if (!this.#feedTarget || cursorAfter(cursor, this.#feedTarget)) this.#feedTarget = cursor;
+      message.type === "centraid:vault-cursor"
+        ? message.cursor
+        : message.detail.cursor;
+    if (!this.#feedTarget || cursorAfter(cursor, this.#feedTarget))
+      this.#feedTarget = cursor;
     this.startFeedSync();
   };
 
   private startFeedSync(): void {
-    if (this.#feedSync || this.#feedRetryTimer || this.#closed || !this.#feedTarget) return;
+    if (
+      this.#feedSync ||
+      this.#feedRetryTimer ||
+      this.#closed ||
+      !this.#feedTarget
+    )
+      return;
     this.#feedSync = this.syncFromFeed()
       .then((caughtUp) => {
         if (!caughtUp) this.scheduleFeedRetry();
@@ -318,12 +354,13 @@ export class ReplicaCoordinator {
         throw error;
       }
       if (!batch) return false;
-      if (abort.signal.aborted || generation !== this.#feedGeneration) return true;
+      if (abort.signal.aborted || generation !== this.#feedGeneration)
+        return true;
       const cursor = await this.applyChanges(batch);
       if (!cursorAfter(cursor, status.cursor)) {
-        if (this.recordFeedFailure('non-progress')) {
+        if (this.recordFeedFailure("non-progress")) {
           await this.requireRebootstrap({
-            reason: 'replica feed made no cursor progress',
+            reason: "replica feed made no cursor progress",
           });
           return true;
         }
@@ -366,7 +403,7 @@ export class ReplicaCoordinator {
   private async requireRebootstrap(detail: unknown): Promise<void> {
     this.resetFeedGeneration();
     await this.worker.wipe().catch(() => undefined);
-    this.emitInvalidations([{ shapeId: '*', entity: '*', source: 'purge' }]);
+    this.emitInvalidations([{ shapeId: "*", entity: "*", source: "purge" }]);
     this.#onRebootstrapRequired?.(detail);
   }
 

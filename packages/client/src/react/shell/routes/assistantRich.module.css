@@ -84,7 +84,7 @@
   line-height: 1.5;
   cursor: default;
 }
-.asstRef[data-state='missing'] {
+.asstRef[data-state="missing"] {
   opacity: 0.55;
   text-decoration: line-through;
 }
@@ -199,7 +199,7 @@
 .asstCopyBtn:focus-visible {
   opacity: 1;
 }
-.asstCopyBtn[data-copied='true'] {
+.asstCopyBtn[data-copied="true"] {
   opacity: 1;
   color: var(--accent);
 }

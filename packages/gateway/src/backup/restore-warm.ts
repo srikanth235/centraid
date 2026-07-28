@@ -16,11 +16,11 @@
  * usable grid, which is the §5 acceptance metric.
  */
 
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import type { EngineLogger } from '@centraid/backup';
-import { BlobCustody, FsBlobStore, type RemoteTier } from '@centraid/vault';
+import type { EngineLogger } from "@centraid/backup";
+import { BlobCustody, FsBlobStore, type RemoteTier } from "@centraid/vault";
 
 export interface PreviewsWarmResult {
   /** Distinct `thumb` shas the restored vault references (the target set). */
@@ -64,14 +64,14 @@ const DEFAULT_WARM_CONCURRENCY = 6;
  * WAL-replayed) vault.db, read-only; mediums/originals are deliberately NOT
  * collected here (issue #405 §5 keeps them remote-only). */
 function collectThumbShas(destDir: string): string[] {
-  const db = new DatabaseSync(path.join(destDir, 'vault.db'), {
+  const db = new DatabaseSync(path.join(destDir, "vault.db"), {
     readOnly: true,
   });
   try {
     const rows = db
       .prepare(
         `SELECT DISTINCT sha256 FROM core_content_derivative
-          WHERE variant = 'thumb' AND sha256 IS NOT NULL`,
+          WHERE variant = 'thumb' AND sha256 IS NOT NULL`
       )
       .all() as { sha256: string }[];
     return rows.map((r) => r.sha256);
@@ -83,7 +83,9 @@ function collectThumbShas(destDir: string): string[] {
 /** Pull the tinies from `remote` into the restored local spool with bounded
  * parallelism, so a fresh device's grid becomes usable without materializing
  * the whole library. Returns the §5 time-to-usable-grid metric. */
-export async function warmPreviewTinies(opts: WarmPreviewOptions): Promise<PreviewsWarmResult> {
+export async function warmPreviewTinies(
+  opts: WarmPreviewOptions
+): Promise<PreviewsWarmResult> {
   const now = opts.now ?? (() => Date.now());
   const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_WARM_CONCURRENCY);
   const shas = collectThumbShas(opts.destDir);
@@ -93,8 +95,8 @@ export async function warmPreviewTinies(opts: WarmPreviewOptions): Promise<Previ
   // budget precheck (which guards fresh INGEST) is irrelevant, and `open`'s
   // read-through promotes each tiny into `<destDir>/blobs` on the way through.
   const custody = new BlobCustody(
-    new FsBlobStore(path.join(opts.destDir, 'blobs')),
-    () => opts.remote,
+    new FsBlobStore(path.join(opts.destDir, "blobs")),
+    () => opts.remote
   );
 
   let warmed = 0;
@@ -110,24 +112,28 @@ export async function warmPreviewTinies(opts: WarmPreviewOptions): Promise<Previ
       if (got) warmed += 1;
       else {
         failed += 1;
-        opts.log?.warn?.(`restore warm-pass: remote CAS has no tiny ${sha} — grid slot degraded`);
+        opts.log?.warn?.(
+          `restore warm-pass: remote CAS has no tiny ${sha} — grid slot degraded`
+        );
       }
     } catch (err) {
       failed += 1;
       opts.log?.warn?.(
-        `restore warm-pass: tiny ${sha} failed to warm: ${err instanceof Error ? err.message : String(err)}`,
+        `restore warm-pass: tiny ${sha} failed to warm: ${err instanceof Error ? err.message : String(err)}`
       );
     }
     return worker();
   };
   await Promise.all(
-    Array.from({ length: Math.min(concurrency, shas.length || 1) }, () => worker()),
+    Array.from({ length: Math.min(concurrency, shas.length || 1) }, () =>
+      worker()
+    )
   );
 
   const timeToUsableGridMs = now() - opts.startedAtMs;
   opts.log?.info?.(
     `restore warm-pass: ${warmed}/${shas.length} tinies warmed in ${timeToUsableGridMs}ms` +
-      (failed > 0 ? ` (${failed} degraded)` : ''),
+      (failed > 0 ? ` (${failed} degraded)` : "")
   );
   return {
     tiniesTotal: shas.length,

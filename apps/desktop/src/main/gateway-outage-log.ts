@@ -13,10 +13,10 @@
  * the cap exact instead of approximate.
  */
 
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
-import { app } from 'electron';
+import { app } from "electron";
 
 import {
   capOutageLog,
@@ -24,12 +24,12 @@ import {
   OUTAGE_LOG_CAP,
   parseOutageLogLines,
   type OutageLogEvent,
-} from './gateway-outage-log-core.js';
+} from "./gateway-outage-log-core.js";
 
-const OUTAGE_LOG_FILE = 'gateway-outage-log.jsonl';
+const OUTAGE_LOG_FILE = "gateway-outage-log.jsonl";
 
 function outageLogPath(): string {
-  return path.join(app.getPath('userData'), OUTAGE_LOG_FILE);
+  return path.join(app.getPath("userData"), OUTAGE_LOG_FILE);
 }
 
 /**
@@ -39,10 +39,12 @@ function outageLogPath(): string {
  */
 export function loadOutageLog(): OutageLogEvent[] {
   try {
-    return parseOutageLogLines(readFileSync(outageLogPath(), 'utf8'));
+    return parseOutageLogLines(readFileSync(outageLogPath(), "utf8"));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      process.stdout.write(`[gateway-outage-log] failed to read: ${String(err)}\n`);
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      process.stdout.write(
+        `[gateway-outage-log] failed to read: ${String(err)}\n`
+      );
     }
     return [];
   }
@@ -58,17 +60,19 @@ export function loadOutageLog(): OutageLogEvent[] {
  */
 export function persistOutageEvents(
   existing: OutageLogEvent[],
-  events: OutageLogEvent[],
+  events: OutageLogEvent[]
 ): OutageLogEvent[] {
   if (events.length === 0) return existing;
   const next = capOutageLog([...existing, ...events], OUTAGE_LOG_CAP);
   try {
     const file = outageLogPath();
     const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-    writeFileSync(tmp, next.map(formatOutageLogLine).join(''), { mode: 0o600 });
+    writeFileSync(tmp, next.map(formatOutageLogLine).join(""), { mode: 0o600 });
     renameSync(tmp, file);
   } catch (err) {
-    process.stdout.write(`[gateway-outage-log] failed to persist: ${String(err)}\n`);
+    process.stdout.write(
+      `[gateway-outage-log] failed to persist: ${String(err)}\n`
+    );
   }
   return next;
 }

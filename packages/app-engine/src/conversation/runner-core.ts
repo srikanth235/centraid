@@ -27,23 +27,35 @@
  * this spine never imports a concrete agent backend.
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
-import type { ConversationRunnerCoreOptions, TurnContext } from './runner-core-types.js';
+import type {
+  ConversationRunnerCoreOptions,
+  TurnContext,
+} from "./runner-core-types.js";
 import type {
   AgentFailureClass,
   ConversationRunner,
   ConversationTurnInput,
   ConversationTurnResult,
   TurnStreamEvent,
-} from './runner.js';
-import type { RunnerKind, RunnerPrefs, ToolContext, TurnInput, TurnResult } from './turn.js';
+} from "./runner.js";
+import type {
+  RunnerKind,
+  RunnerPrefs,
+  ToolContext,
+  TurnInput,
+  TurnResult,
+} from "./turn.js";
 
-export type { ConversationRunnerCoreOptions, TurnContext } from './runner-core-types.js';
+export type {
+  ConversationRunnerCoreOptions,
+  TurnContext,
+} from "./runner-core-types.js";
 
 /** Build a `ConversationRunner` from injected host seams. */
 export function makeConversationRunnerCore(
-  opts: ConversationRunnerCoreOptions,
+  opts: ConversationRunnerCoreOptions
 ): ConversationRunner {
   const runTurn = opts.runTurn;
 
@@ -57,11 +69,11 @@ export function makeConversationRunnerCore(
         : await opts.prefsLoader(opts.subsystem);
       if (!loadedPrefs) {
         input.onEvent({
-          type: 'error',
+          type: "error",
           message:
-            'No coding agent configured. Open Settings → Agents and pick Codex or Claude Code.',
+            "No coding agent configured. Open Settings → Agents and pick Codex or Claude Code.",
         });
-        throw new Error('no coding agent configured');
+        throw new Error("no coding agent configured");
       }
       // A host that predates the runnerKind loader argument may still return
       // another runner's launch settings. Keep the requested kind but discard
@@ -77,7 +89,7 @@ export function makeConversationRunnerCore(
         appId: input.appId,
         dispatcher: opts.getDispatcher(),
         turnId: randomUUID(),
-        ...(typeof opts.cwdIsDraftWorktree === 'function'
+        ...(typeof opts.cwdIsDraftWorktree === "function"
           ? opts.cwdIsDraftWorktree(input, cwd)
             ? { overrideCodeDir: cwd }
             : {}
@@ -96,11 +108,12 @@ export function makeConversationRunnerCore(
         if (!ladder.includes(kind)) ladder.push(kind);
       }
       const healthContext = opts.runnerHealthContext?.(input, cwd) ?? cwd;
-      let lastError: Extract<TurnStreamEvent, { type: 'error' }> | undefined;
+      let lastError: Extract<TurnStreamEvent, { type: "error" }> | undefined;
       let lastResult: TurnResult | undefined;
       let completedCtx: TurnContext | undefined;
       let consumedHydrationTokens: number | undefined;
-      const activeAdapterKind = input.activeAdapterKind ?? input.prevAdapterKind;
+      const activeAdapterKind =
+        input.activeAdapterKind ?? input.prevAdapterKind;
       // Kinds this turn actually consulted, and why the last one was refused —
       // so an all-rungs-unavailable turn can name them instead of blaming
       // "every configured agent" with an anonymous 'unknown' failure class.
@@ -109,23 +122,29 @@ export function makeConversationRunnerCore(
       const consented: readonly RunnerKind[] =
         input.providerConsent === undefined
           ? []
-          : typeof input.providerConsent === 'string'
+          : typeof input.providerConsent === "string"
             ? [input.providerConsent]
             : input.providerConsent;
 
       // Ladder rungs are turn boundaries, not parallel retries: each can
       // authorize egress, resume a distinct session, and emit ledger events.
-      const attemptRung = async (rung: number): Promise<ConversationTurnResult | undefined> => {
+      const attemptRung = async (
+        rung: number
+      ): Promise<ConversationTurnResult | undefined> => {
         const kind = ladder[rung];
         if (kind === undefined) return;
         consulted.push(kind);
-        const consentSource = rung === 0 ? 'direct' : 'ladder';
+        const consentSource = rung === 0 ? "direct" : "ladder";
         if (
           opts.providerEgressConsent &&
-          !opts.providerEgressConsent.has(input.conversationId, kind, opts.subsystem)
+          !opts.providerEgressConsent.has(
+            input.conversationId,
+            kind,
+            opts.subsystem
+          )
         ) {
           if (
-            consentSource === 'ladder' ||
+            consentSource === "ladder" ||
             activeAdapterKind === undefined ||
             activeAdapterKind === kind ||
             consented.includes(kind)
@@ -137,21 +156,25 @@ export function makeConversationRunnerCore(
               input.conversationId,
               kind,
               consentSource,
-              opts.subsystem,
+              opts.subsystem
             );
           }
         }
         if (
           opts.providerEgressConsent &&
-          !opts.providerEgressConsent.has(input.conversationId, kind, opts.subsystem)
+          !opts.providerEgressConsent.has(
+            input.conversationId,
+            kind,
+            opts.subsystem
+          )
         ) {
           input.onEvent({
-            type: 'consent.required',
-            consentKind: 'provider-egress',
+            type: "consent.required",
+            consentKind: "provider-egress",
             provider: kind,
             reason: consentSource,
             message:
-              consentSource === 'ladder'
+              consentSource === "ladder"
                 ? `${kind} is the next failover provider. Allow this conversation to be sent to it?`
                 : `Allow this conversation to be sent to ${kind}?`,
           });
@@ -161,23 +184,23 @@ export function makeConversationRunnerCore(
         if (breaker && !breaker.allowed) {
           if (breaker.failureClass) lastBreakerClass = breaker.failureClass;
           input.onEvent({
-            type: 'notice',
-            level: 'warn',
-            code: 'runner_breaker_open',
+            type: "notice",
+            level: "warn",
+            code: "runner_breaker_open",
             message:
               `${kind} is temporarily paused for this workspace after a ` +
-              `${breaker.failureClass ?? 'runner'} failure; trying the next configured agent.`,
+              `${breaker.failureClass ?? "runner"} failure; trying the next configured agent.`,
           });
           return attemptRung(rung + 1);
         }
         if (rung > 0) {
           input.onEvent({
-            type: 'notice',
-            level: 'warn',
-            code: 'runner_failover',
+            type: "notice",
+            level: "warn",
+            code: "runner_failover",
             message:
               `${ladder[0]} is unavailable at the turn boundary. Using ${kind}; ` +
-              'provider-specific model and effort pins were cleared.',
+              "provider-specific model and effort pins were cleared.",
           });
           opts.onFailover?.({
             conversationId: input.conversationId,
@@ -216,8 +239,12 @@ export function makeConversationRunnerCore(
           : resumeId
             ? input.prevAdapterUsageSnapshot
             : undefined;
-        const hydrationContext = plan ? plan.hydrationContext : input.hydrationContext;
-        const hydrationAttachments = plan ? plan.hydrationAttachments : input.hydrationAttachments;
+        const hydrationContext = plan
+          ? plan.hydrationContext
+          : input.hydrationContext;
+        const hydrationAttachments = plan
+          ? plan.hydrationAttachments
+          : input.hydrationAttachments;
         const recoveryHydrationContext = plan
           ? plan.recoveryHydrationContext
           : input.recoveryHydrationContext;
@@ -236,11 +263,13 @@ export function makeConversationRunnerCore(
           ...prefs.configPins,
           ...(rung === 0 ? input.configPins : {}),
           ...(rung === 0 && input.model ? { model: input.model } : {}),
-          ...(rung === 0 && input.thinking ? { thought_level: input.thinking } : {}),
+          ...(rung === 0 && input.thinking
+            ? { thought_level: input.thinking }
+            : {}),
         };
-        let failure: Extract<TurnStreamEvent, { type: 'error' }> | undefined;
+        let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
         const onEvent = (event: TurnStreamEvent): void => {
-          if (event.type === 'error') {
+          if (event.type === "error") {
             failure = event;
             return;
           }
@@ -250,7 +279,9 @@ export function makeConversationRunnerCore(
           conversationId: input.conversationId,
           cwd,
           message: input.message,
-          ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+          ...(input.attachments?.length
+            ? { attachments: input.attachments }
+            : {}),
           extraSystemPrompt,
           toolContext,
           abortSignal: input.abortSignal,
@@ -258,7 +289,9 @@ export function makeConversationRunnerCore(
           ...(opts.extraPath ? { extraPath: opts.extraPath } : {}),
           ...(rung === 0 && input.model ? { model: input.model } : {}),
           ...(Object.keys(configPins).length > 0 ? { configPins } : {}),
-          ...(input.permissionPolicy ? { permissionPolicy: input.permissionPolicy } : {}),
+          ...(input.permissionPolicy
+            ? { permissionPolicy: input.permissionPolicy }
+            : {}),
           ...(input.additionalDirectories?.length
             ? { additionalDirectories: input.additionalDirectories }
             : {}),
@@ -274,16 +307,18 @@ export function makeConversationRunnerCore(
           ...(recoveryHydrationContext
             ? { recoveryHydrationContext: recoveryHydrationContext.prompt }
             : {}),
-          ...(recoveryHydrationAttachments?.length ? { recoveryHydrationAttachments } : {}),
+          ...(recoveryHydrationAttachments?.length
+            ? { recoveryHydrationAttachments }
+            : {}),
         };
 
         try {
           lastResult = await runTurn(turnInput, { prefs });
         } catch (error) {
           failure = {
-            type: 'error',
+            type: "error",
             message: error instanceof Error ? error.message : String(error),
-            failureClass: 'unknown',
+            failureClass: "unknown",
           };
         }
 
@@ -294,15 +329,21 @@ export function makeConversationRunnerCore(
           // plan — a failover rung carries a different prompt and cost.
           if (lastResult?.hydrated) {
             consumedHydrationTokens =
-              lastResult.hydrationKind === 'recovery'
+              lastResult.hydrationKind === "recovery"
                 ? recoveryHydrationContext?.estimatedTokens
                 : hydrationContext?.estimatedTokens;
           }
           return;
         }
 
-        const failureClass: AgentFailureClass = failure.failureClass ?? 'unknown';
-        opts.runnerHealth?.reportFailure(healthContext, kind, failureClass, failure.message);
+        const failureClass: AgentFailureClass =
+          failure.failureClass ?? "unknown";
+        opts.runnerHealth?.reportFailure(
+          healthContext,
+          kind,
+          failureClass,
+          failure.message
+        );
         lastError = failure;
         // A failed turn is never silently replayed through another stateful
         // session. The breaker affects the next turn boundary, where the next
@@ -317,13 +358,14 @@ export function makeConversationRunnerCore(
         // failure class. "Every configured agent" reads as a fleet-wide
         // outage when the ladder was one rung, and 'unknown' hides the
         // auth/quota reason the breaker already knows.
-        const unavailable: Extract<TurnStreamEvent, { type: 'error' }> = lastError ?? {
-          type: 'error',
-          message:
-            `${consulted.join(', ')} ${consulted.length === 1 ? 'is' : 'are'} temporarily ` +
-            'paused for this workspace after a recent failure.',
-          failureClass: lastBreakerClass ?? 'unknown',
-        };
+        const unavailable: Extract<TurnStreamEvent, { type: "error" }> =
+          lastError ?? {
+            type: "error",
+            message:
+              `${consulted.join(", ")} ${consulted.length === 1 ? "is" : "are"} temporarily ` +
+              "paused for this workspace after a recent failure.",
+            failureClass: lastBreakerClass ?? "unknown",
+          };
         if (!lastError) input.onEvent(unavailable);
         return { adapterKind: primaryPrefs.kind };
       }
@@ -342,11 +384,15 @@ export function makeConversationRunnerCore(
       return {
         adapterKind: result.adapterKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
-        ...(result.usageSnapshot ? { adapterUsageSnapshot: result.usageSnapshot } : {}),
+        ...(result.usageSnapshot
+          ? { adapterUsageSnapshot: result.usageSnapshot }
+          : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
         // Surfaced so the driver can retire a binding whose resume handle the
         // adapter had to abandon (`'recovery'`).
-        ...(result.hydrationKind ? { hydrationKind: result.hydrationKind } : {}),
+        ...(result.hydrationKind
+          ? { hydrationKind: result.hydrationKind }
+          : {}),
         ...(consumedHydrationTokens === undefined
           ? {}
           : { hydrationTokens: consumedHydrationTokens }),

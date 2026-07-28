@@ -1,5 +1,5 @@
-import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Feather } from "@expo/vector-icons";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Alert,
@@ -10,21 +10,28 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
-import OptionSheet, { type SheetOption } from '../../kit/components/OptionSheet';
-import { useTheme } from '../../kit/theme';
-import type { AssistantScreenProps } from '../../navigation';
-import { makeStyles } from './Assistant.styles';
-import { useAssistant, type Bubble } from './useAssistant';
+import OptionSheet, {
+  type SheetOption,
+} from "../../kit/components/OptionSheet";
+import { useTheme } from "../../kit/theme";
+import type { AssistantScreenProps } from "../../navigation";
+import { makeStyles } from "./Assistant.styles";
+import { useAssistant, type Bubble } from "./useAssistant";
 
 // The vault assistant chat — a full-page cover over Home (springboard model).
 // Chrome mirrors the other covers: a serif title and the teal leave key. The
 // cover exits via that key (full-screen modal, no pull-down). The composer rises
 // with the keyboard; v0 sends a buffered turn (no incremental streaming — see
 // src/lib/assistant.ts for the expo/fetch upgrade path).
-export default function AssistantScreen({ navigation }: AssistantScreenProps): React.JSX.Element {
+export default function AssistantScreen({
+  navigation,
+}: AssistantScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -49,13 +56,17 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
     selectModel,
     selectEffort,
   } = useAssistant();
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const [keyboardUp, setKeyboardUp] = useState(false);
   const listRef = useRef<FlatList<Bubble>>(null);
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardWillShow', () => setKeyboardUp(true));
-    const hide = Keyboard.addListener('keyboardWillHide', () => setKeyboardUp(false));
+    const show = Keyboard.addListener("keyboardWillShow", () =>
+      setKeyboardUp(true)
+    );
+    const hide = Keyboard.addListener("keyboardWillHide", () =>
+      setKeyboardUp(false)
+    );
     return () => {
       show.remove();
       hide.remove();
@@ -65,26 +76,27 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
   useEffect(() => {
     if (!pendingConsent) return;
     Alert.alert(
-      'Share with another provider?',
+      "Share with another provider?",
       pendingConsent.message,
       [
-        { text: 'Cancel', style: 'cancel', onPress: declineConsent },
+        { text: "Cancel", style: "cancel", onPress: declineConsent },
         { text: `Allow ${pendingConsent.provider}`, onPress: approveConsent },
       ],
       // Android's back gesture dismisses without pressing a button. Silence is
       // not consent — and without this the turn stays wedged on pendingConsent.
-      { cancelable: true, onDismiss: declineConsent },
+      { cancelable: true, onDismiss: declineConsent }
     );
   }, [approveConsent, declineConsent, pendingConsent]);
 
   const submit = (): void => {
     const text = draft.trim();
     if ((!text && attachments.length === 0) || sending) return;
-    send(text || 'Please review the attached file.');
-    setDraft('');
+    send(text || "Please review the attached file.");
+    setDraft("");
   };
 
-  const canSend = (draft.trim().length > 0 || attachments.length > 0) && !sending;
+  const canSend =
+    (draft.trim().length > 0 || attachments.length > 0) && !sending;
   // With the back key up in the header, the composer owns the bottom edge: when
   // the keyboard is up it rides just above it, otherwise it only clears the
   // home-indicator safe area.
@@ -93,7 +105,9 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
   // single-choice list (#567 D12) — the user picks the agent they want instead
   // of cycling through the dead ones. `selectRunner` still preflights and
   // reverts, so a chosen-but-unready runner surfaces as a selection error.
-  const [picker, setPicker] = useState<'runner' | 'model' | 'effort' | null>(null);
+  const [picker, setPicker] = useState<"runner" | "model" | "effort" | null>(
+    null
+  );
   const pickerSpec: {
     title: string;
     options: SheetOption[];
@@ -102,9 +116,9 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
   } | null =
     !config || picker === null
       ? null
-      : picker === 'runner'
+      : picker === "runner"
         ? {
-            title: 'Agent',
+            title: "Agent",
             options: config.runners.map((runner) => ({
               id: runner.kind,
               label: runner.label,
@@ -114,23 +128,27 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
             ...(config.runnerKind ? { selectedId: config.runnerKind } : {}),
             onSelect: selectRunner,
           }
-        : picker === 'model'
+        : picker === "model"
           ? {
-              title: 'Model',
+              title: "Model",
               options: config.models.map((model) => ({
                 id: model.id,
                 label: model.name,
               })),
-              ...(config.selectedModel ? { selectedId: config.selectedModel } : {}),
+              ...(config.selectedModel
+                ? { selectedId: config.selectedModel }
+                : {}),
               onSelect: selectModel,
             }
           : {
-              title: 'Effort',
+              title: "Effort",
               options: config.efforts.map((effort) => ({
                 id: effort.id,
                 label: effort.name,
               })),
-              ...(config.selectedEffort ? { selectedId: config.selectedEffort } : {}),
+              ...(config.selectedEffort
+                ? { selectedId: config.selectedEffort }
+                : {}),
               onSelect: selectEffort,
             };
   const contextRatio =
@@ -139,7 +157,7 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
       : 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -155,74 +173,90 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
         </View>
       </View>
 
-      {phase === 'offline' ? (
+      {phase === "offline" ? (
         <View style={styles.emptyWrap}>
           <Feather name="cpu" size={30} color={colors.accent} />
           <Text style={styles.emptyTitle}>Not connected</Text>
           <Text style={styles.emptyBody}>
-            Connect your desktop to chat with your assistant. Pair it in Settings.
+            Connect your desktop to chat with your assistant. Pair it in
+            Settings.
           </Text>
         </View>
       ) : (
         <KeyboardAvoidingView
           style={styles.safe}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <FlatList
             ref={listRef}
             data={bubbles}
             keyExtractor={(b) => b.key}
             contentContainerStyle={styles.list}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={() =>
+              listRef.current?.scrollToEnd({ animated: true })
+            }
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
-                {phase === 'connecting' ? (
+                {phase === "connecting" ? (
                   <Text style={styles.emptyBody}>Opening your assistant…</Text>
                 ) : (
                   <>
-                    <Feather name="message-circle" size={28} color={colors.accent} />
+                    <Feather
+                      name="message-circle"
+                      size={28}
+                      color={colors.accent}
+                    />
                     <Text style={styles.emptyTitle}>
-                      {loadError ? "Couldn't load history" : 'Say hello'}
+                      {loadError ? "Couldn't load history" : "Say hello"}
                     </Text>
                     <Text style={styles.emptyBody}>
-                      {loadError ?? 'Ask your assistant anything about your space to get started.'}
+                      {loadError ??
+                        "Ask your assistant anything about your space to get started."}
                     </Text>
                   </>
                 )}
               </View>
             }
-            renderItem={({ item }) => <BubbleRow bubble={item} styles={styles} />}
+            renderItem={({ item }) => (
+              <BubbleRow bubble={item} styles={styles} />
+            )}
           />
 
           <View style={[styles.composerWrap, { paddingBottom: composerPad }]}>
             <View style={styles.statusStrip}>
-              <View style={[styles.activityDot, sending && styles.activityDotBusy]} />
+              <View
+                style={[styles.activityDot, sending && styles.activityDotBusy]}
+              />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Change assistant runner"
-                onPress={() => setPicker('runner')}
+                onPress={() => setPicker("runner")}
                 disabled={!config?.runners.length || sending}
                 style={styles.statusChip}
               >
                 <Text numberOfLines={1} style={styles.statusText}>
-                  {config?.runners.find((runner) => runner.kind === config.runnerKind)?.label ??
+                  {config?.runners.find(
+                    (runner) => runner.kind === config.runnerKind
+                  )?.label ??
                     config?.runnerKind ??
-                    'Agent'}
+                    "Agent"}
                 </Text>
               </Pressable>
               {config?.models.length ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Change assistant model"
-                  onPress={() => setPicker('model')}
+                  onPress={() => setPicker("model")}
                   disabled={sending}
                   style={styles.statusChip}
                 >
                   <Text numberOfLines={1} style={styles.statusText}>
-                    {config.models.find((model) => model.id === config.selectedModel)?.name ??
+                    {config.models.find(
+                      (model) => model.id === config.selectedModel
+                    )?.name ??
                       config.selectedModel ??
-                      'Default model'}
+                      "Default model"}
                   </Text>
                 </Pressable>
               ) : null}
@@ -230,14 +264,16 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Change assistant effort"
-                  onPress={() => setPicker('effort')}
+                  onPress={() => setPicker("effort")}
                   disabled={sending}
                   style={styles.statusChip}
                 >
                   <Text numberOfLines={1} style={styles.statusText}>
-                    {config.efforts.find((effort) => effort.id === config.selectedEffort)?.name ??
+                    {config.efforts.find(
+                      (effort) => effort.id === config.selectedEffort
+                    )?.name ??
                       config.selectedEffort ??
-                      'Default effort'}
+                      "Default effort"}
                   </Text>
                 </Pressable>
               ) : null}
@@ -252,11 +288,18 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
                   }}
                   style={styles.contextTrack}
                 >
-                  <View style={[styles.contextFill, { width: `${contextRatio * 100}%` }]} />
+                  <View
+                    style={[
+                      styles.contextFill,
+                      { width: `${contextRatio * 100}%` },
+                    ]}
+                  />
                 </View>
               ) : null}
             </View>
-            {selectionError ? <Text style={styles.selectionError}>{selectionError}</Text> : null}
+            {selectionError ? (
+              <Text style={styles.selectionError}>{selectionError}</Text>
+            ) : null}
             {attachments.length ? (
               <View style={styles.attachmentRow}>
                 {attachments.map((attachment) => (
@@ -295,19 +338,22 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
                 placeholderTextColor={colors.ink3}
                 style={styles.input}
                 multiline
-                editable={phase === 'ready'}
+                editable={phase === "ready"}
                 onSubmitEditing={submit}
                 blurOnSubmit={false}
               />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={sending ? 'Stop response' : 'Send message'}
+                accessibilityLabel={sending ? "Stop response" : "Send message"}
                 disabled={!sending && !canSend}
                 onPress={sending ? stop : submit}
-                style={[styles.sendButton, !sending && !canSend && styles.sendButtonDisabled]}
+                style={[
+                  styles.sendButton,
+                  !sending && !canSend && styles.sendButtonDisabled,
+                ]}
               >
                 <Feather
-                  name={sending ? 'square' : 'arrow-up'}
+                  name={sending ? "square" : "arrow-up"}
                   size={sending ? 16 : 20}
                   color={sending || canSend ? colors.inkInv : colors.ink3}
                 />
@@ -321,7 +367,9 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
           visible
           title={pickerSpec.title}
           options={pickerSpec.options}
-          {...(pickerSpec.selectedId ? { selectedId: pickerSpec.selectedId } : {})}
+          {...(pickerSpec.selectedId
+            ? { selectedId: pickerSpec.selectedId }
+            : {})}
           onSelect={(id) => pickerSpec.onSelect(id)}
           onClose={() => setPicker(null)}
         />
@@ -337,7 +385,7 @@ function BubbleRow({
   bubble: Bubble;
   styles: ReturnType<typeof makeStyles>;
 }): React.JSX.Element {
-  if (bubble.role === 'user') {
+  if (bubble.role === "user") {
     return (
       <View style={styles.rowRight}>
         <View style={styles.userBubble}>
@@ -352,7 +400,9 @@ function BubbleRow({
         {bubble.pending ? (
           <Text style={styles.pendingText}>Thinking…</Text>
         ) : (
-          <Text style={bubble.error ? styles.errorText : styles.assistantText}>{bubble.text}</Text>
+          <Text style={bubble.error ? styles.errorText : styles.assistantText}>
+            {bubble.text}
+          </Text>
         )}
       </View>
     </View>

@@ -2,15 +2,15 @@
 // of AssistantScreen so that screen stays under the file-size cap while gaining
 // copy / feedback / regenerate / retry / retry-pager / timestamp affordances.
 
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from "react";
 
-import type { AsstAttachmentDTO, AsstMsgDTO } from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import { formatUsageLabel, formatUsageTitle } from './assistantUsage.js';
+import type { AsstAttachmentDTO, AsstMsgDTO } from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { formatUsageLabel, formatUsageTitle } from "./assistantUsage.js";
 
-import asstPreCss from '../styles/asstPre.module.css';
-import styles from './AssistantScreen.module.css';
+import asstPreCss from "../styles/asstPre.module.css";
+import styles from "./AssistantScreen.module.css";
 
 // Thumbs glyphs — not in the design-tokens icon set, so small local SVGs.
 function ThumbUpGlyph(): JSX.Element {
@@ -55,11 +55,11 @@ function formatBytes(n: number): string {
 function formatTime(ms: number): string {
   try {
     return new Date(ms).toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
+      hour: "numeric",
+      minute: "2-digit",
     });
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -68,7 +68,7 @@ export interface MessageCallbacks {
   wireCodeCopy: (node: HTMLElement) => void;
   loadAttachmentImage: (hash: string, mime: string) => Promise<string>;
   onCopyMessage: (text: string) => void;
-  onFeedback: (turnId: string, value: 'up' | 'down') => void;
+  onFeedback: (turnId: string, value: "up" | "down") => void;
   onRegenerate: () => void;
   onRetryError: (messageIndex: number) => void;
   onPagerNav: (messageIndex: number, delta: number) => void;
@@ -76,7 +76,13 @@ export interface MessageCallbacks {
 
 /** A collapsible streaming reasoning row (issue #420, Wave 2). Open while the
  *  model reasons, auto-collapses once the answer starts, expandable after. */
-function ThinkingRow({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
+function ThinkingRow({
+  text,
+  streaming,
+}: {
+  text: string;
+  streaming: boolean;
+}): JSX.Element {
   // Open while the model reasons; collapses the moment the answer starts. The
   // collapse is an adjustment during render, not an effect, so a finished row
   // never paints expanded for a frame — and a row mounted after the fact starts
@@ -92,11 +98,11 @@ function ThinkingRow({ text, streaming }: { text: string; streaming: boolean }):
       <details
         className={styles.thinking}
         open={open}
-        data-streaming={streaming ? 'true' : undefined}
+        data-streaming={streaming ? "true" : undefined}
       >
         <summary className={styles.thinkingSummary}>
           <span className={styles.thinkingDot} />
-          {streaming ? 'Thinking…' : 'Thought process'}
+          {streaming ? "Thinking…" : "Thought process"}
         </summary>
         <div className={styles.thinkingBody}>{text}</div>
       </details>
@@ -127,20 +133,21 @@ function AttachmentImage({
           URL.revokeObjectURL(u);
         }
       },
-      () => live && setFailed(true),
+      () => live && setFailed(true)
     );
     return () => {
       live = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [attachment.hash, attachment.mime, load]);
-  if (failed) return <span className={styles.attachName}>{attachment.filename}</span>;
+  if (failed)
+    return <span className={styles.attachName}>{attachment.filename}</span>;
   return (
     <img
       className={styles.msgAttachThumb}
       src={url ?? undefined}
       alt={attachment.filename}
-      data-loading={url ? undefined : 'true'}
+      data-loading={url ? undefined : "true"}
     />
   );
 }
@@ -166,8 +173,14 @@ function ToolsMsg({
         <div className={styles.toolsBody}>
           {calls.map((c, i) => (
             <div key={i} className={styles.tool} data-state={c.state}>
-              {c.sql ? <pre className={asstPreCss.asstPre}>{c.sql}</pre> : <span>{c.tool}</span>}
-              {c.outputText ? <pre className={asstPreCss.asstPre}>{c.outputText}</pre> : null}
+              {c.sql ? (
+                <pre className={asstPreCss.asstPre}>{c.sql}</pre>
+              ) : (
+                <span>{c.tool}</span>
+              )}
+              {c.outputText ? (
+                <pre className={asstPreCss.asstPre}>{c.outputText}</pre>
+              ) : null}
               {c.artifacts?.length ? (
                 <div className={styles.toolArtifacts}>
                   {c.artifacts.map((artifact, artifactIndex) => (
@@ -176,7 +189,9 @@ function ToolsMsg({
                       className={styles.toolArtifact}
                       title={
                         artifact.workspacePath ??
-                        (artifact.hash ? `sha256 ${artifact.hash}` : artifact.label)
+                        (artifact.hash
+                          ? `sha256 ${artifact.hash}`
+                          : artifact.label)
                       }
                     >
                       <Icon name="FileEdit" size={12} />
@@ -200,7 +215,7 @@ function AiActions({
   index,
   cb,
 }: {
-  m: Extract<AsstMsgDTO, { kind: 'ai'; streaming: false }>;
+  m: Extract<AsstMsgDTO, { kind: "ai"; streaming: false }>;
   index: number;
   cb: MessageCallbacks;
 }): JSX.Element | null {
@@ -213,10 +228,13 @@ function AiActions({
           aria-label="Retry"
           onClick={() => cb.onRetryError(index)}
         >
-          <Icon name="Refresh" size={13} /> {m.offline ? 'Resend' : 'Retry'}
+          <Icon name="Refresh" size={13} /> {m.offline ? "Resend" : "Retry"}
         </button>
         {m.offline ? (
-          <span className={styles.offlineHint} title="Your device appears to be offline">
+          <span
+            className={styles.offlineHint}
+            title="Your device appears to be offline"
+          >
             offline
           </span>
         ) : null}
@@ -263,19 +281,25 @@ function AiActions({
         <>
           <button
             type="button"
-            className={cx(styles.msgActionBtn, m.feedback === 'up' && styles.feedbackOn)}
+            className={cx(
+              styles.msgActionBtn,
+              m.feedback === "up" && styles.feedbackOn
+            )}
             aria-label="Good response"
-            aria-pressed={m.feedback === 'up'}
-            onClick={() => cb.onFeedback(m.turnId as string, 'up')}
+            aria-pressed={m.feedback === "up"}
+            onClick={() => cb.onFeedback(m.turnId as string, "up")}
           >
             <ThumbUpGlyph />
           </button>
           <button
             type="button"
-            className={cx(styles.msgActionBtn, m.feedback === 'down' && styles.feedbackOn)}
+            className={cx(
+              styles.msgActionBtn,
+              m.feedback === "down" && styles.feedbackOn
+            )}
             aria-label="Bad response"
-            aria-pressed={m.feedback === 'down'}
-            onClick={() => cb.onFeedback(m.turnId as string, 'down')}
+            aria-pressed={m.feedback === "down"}
+            onClick={() => cb.onFeedback(m.turnId as string, "down")}
           >
             <ThumbDownGlyph />
           </button>
@@ -297,7 +321,9 @@ function AiActions({
           {formatUsageLabel(m.usage)}
         </span>
       ) : null}
-      {m.createdAt ? <span className={styles.msgTime}>{formatTime(m.createdAt)}</span> : null}
+      {m.createdAt ? (
+        <span className={styles.msgTime}>{formatTime(m.createdAt)}</span>
+      ) : null}
     </div>
   );
 }
@@ -311,26 +337,38 @@ export default function Message({
   index: number;
   cb: MessageCallbacks;
 }): JSX.Element {
-  if (m.kind === 'user') {
+  if (m.kind === "user") {
     return (
       <div className={cx(styles.msg, styles.msgUser)}>
         {m.attachments?.length ? (
           <div className={styles.msgAttachments}>
             {m.attachments.map((a, i) =>
-              a.mime.startsWith('image/') ? (
+              a.mime.startsWith("image/") ? (
                 <div
                   key={`${a.hash}-${i}`}
-                  className={cx(styles.msgAttachChip, styles.msgAttachChipImage)}
+                  className={cx(
+                    styles.msgAttachChip,
+                    styles.msgAttachChipImage
+                  )}
                   title={a.filename}
                 >
-                  <AttachmentImage attachment={a} load={cb.loadAttachmentImage} />
+                  <AttachmentImage
+                    attachment={a}
+                    load={cb.loadAttachmentImage}
+                  />
                 </div>
               ) : (
-                <div key={`${a.hash}-${i}`} className={styles.msgAttachChip} title={a.filename}>
+                <div
+                  key={`${a.hash}-${i}`}
+                  className={styles.msgAttachChip}
+                  title={a.filename}
+                >
                   <span className={styles.attachName}>{a.filename}</span>
-                  <span className={styles.attachSize}>{formatBytes(a.sizeBytes)}</span>
+                  <span className={styles.attachSize}>
+                    {formatBytes(a.sizeBytes)}
+                  </span>
                 </div>
-              ),
+              )
             )}
           </div>
         ) : null}
@@ -347,17 +385,23 @@ export default function Message({
               <Icon name="Copy" size={13} />
             </button>
           ) : null}
-          {m.createdAt ? <span className={styles.msgTime}>{formatTime(m.createdAt)}</span> : null}
+          {m.createdAt ? (
+            <span className={styles.msgTime}>{formatTime(m.createdAt)}</span>
+          ) : null}
         </div>
       </div>
     );
   }
-  if (m.kind === 'tools') return <ToolsMsg label={m.label} calls={m.calls} />;
-  if (m.kind === 'thinking') return <ThinkingRow text={m.text} streaming={m.streaming} />;
-  if (m.kind === 'notice') {
+  if (m.kind === "tools") return <ToolsMsg label={m.label} calls={m.calls} />;
+  if (m.kind === "thinking")
+    return <ThinkingRow text={m.text} streaming={m.streaming} />;
+  if (m.kind === "notice") {
     return (
       <output className={styles.notice} data-level={m.level}>
-        <Icon name={m.level === 'warn' ? 'AlertTriangle' : 'AlertCircle'} size={14} />
+        <Icon
+          name={m.level === "warn" ? "AlertTriangle" : "AlertCircle"}
+          size={14}
+        />
         <span>{m.text}</span>
       </output>
     );
@@ -384,7 +428,10 @@ export default function Message({
     );
   }
   return (
-    <div className={cx(styles.msg, styles.msgAi)} data-error={m.error ? 'true' : undefined}>
+    <div
+      className={cx(styles.msg, styles.msgAi)}
+      data-error={m.error ? "true" : undefined}
+    >
       <div
         ref={(node) => {
           if (node) {

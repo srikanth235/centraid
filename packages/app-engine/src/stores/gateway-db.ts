@@ -104,7 +104,7 @@
  * gateway's own journal handle via WAL + busy_timeout.
  */
 
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from "node:sqlite";
 
 /**
  * Lazy provider for a `DatabaseSync` handle. Stores call this once on
@@ -630,36 +630,39 @@ export function ensureConversationLedger(db: DatabaseSync): void {
   // the source tables first on an existing vault, otherwise SQLite rejects
   // CREATE VIEW run_summary when it encounters the new `items.effort` column.
   const existingTable = (name: string): boolean =>
-    db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name) !==
-    undefined;
-  if (existingTable('items')) {
+    db
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`)
+      .get(name) !== undefined;
+  if (existingTable("items")) {
     const existingItemCols = (
       db.prepare(`PRAGMA table_info(items)`).all() as { name: string }[]
     ).map((column) => column.name);
-    if (!existingItemCols.includes('effort')) {
+    if (!existingItemCols.includes("effort")) {
       db.exec(`ALTER TABLE items ADD COLUMN effort TEXT`);
     }
   }
-  if (existingTable('conversation_digest')) {
+  if (existingTable("conversation_digest")) {
     const existingDigestCols = (
       db.prepare(`PRAGMA table_info(conversation_digest)`).all() as {
         name: string;
       }[]
     ).map((column) => column.name);
-    if (!existingDigestCols.includes('efforts_json')) {
-      db.exec(`ALTER TABLE conversation_digest ADD COLUMN efforts_json TEXT NOT NULL DEFAULT '[]'`);
-    }
-    if (!existingDigestCols.includes('total_hydration_tokens')) {
+    if (!existingDigestCols.includes("efforts_json")) {
       db.exec(
-        `ALTER TABLE conversation_digest ADD COLUMN total_hydration_tokens INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE conversation_digest ADD COLUMN efforts_json TEXT NOT NULL DEFAULT '[]'`
+      );
+    }
+    if (!existingDigestCols.includes("total_hydration_tokens")) {
+      db.exec(
+        `ALTER TABLE conversation_digest ADD COLUMN total_hydration_tokens INTEGER NOT NULL DEFAULT 0`
       );
     }
   }
-  if (existingTable('turns')) {
+  if (existingTable("turns")) {
     const existingTurnCols = (
       db.prepare(`PRAGMA table_info(turns)`).all() as { name: string }[]
     ).map((column) => column.name);
-    if (!existingTurnCols.includes('hydration_tokens')) {
+    if (!existingTurnCols.includes("hydration_tokens")) {
       db.exec(`ALTER TABLE turns ADD COLUMN hydration_tokens INTEGER`);
     }
   }
@@ -667,8 +670,10 @@ export function ensureConversationLedger(db: DatabaseSync): void {
   const conversationCols = (
     db.prepare(`PRAGMA table_info(conversations)`).all() as { name: string }[]
   ).map((c) => c.name);
-  if (!conversationCols.includes('item_count')) {
-    db.exec(`ALTER TABLE conversations ADD COLUMN item_count INTEGER NOT NULL DEFAULT 0`);
+  if (!conversationCols.includes("item_count")) {
+    db.exec(
+      `ALTER TABLE conversations ADD COLUMN item_count INTEGER NOT NULL DEFAULT 0`
+    );
     db.exec(`
       UPDATE conversations
          SET item_count = (
@@ -679,45 +684,51 @@ export function ensureConversationLedger(db: DatabaseSync): void {
          )
     `);
   }
-  if (!conversationCols.includes('hydration_count')) {
-    db.exec(`ALTER TABLE conversations ADD COLUMN hydration_count INTEGER NOT NULL DEFAULT 0`);
+  if (!conversationCols.includes("hydration_count")) {
+    db.exec(
+      `ALTER TABLE conversations ADD COLUMN hydration_count INTEGER NOT NULL DEFAULT 0`
+    );
   }
-  if (!conversationCols.includes('last_hydrated_at')) {
+  if (!conversationCols.includes("last_hydrated_at")) {
     db.exec(`ALTER TABLE conversations ADD COLUMN last_hydrated_at INTEGER`);
   }
   // Issue #514: cost provenance on existing vaults created before cost_source.
-  const itemCols = (db.prepare(`PRAGMA table_info(items)`).all() as { name: string }[]).map(
-    (c) => c.name,
-  );
-  if (!itemCols.includes('cost_source')) {
+  const itemCols = (
+    db.prepare(`PRAGMA table_info(items)`).all() as { name: string }[]
+  ).map((c) => c.name);
+  if (!itemCols.includes("cost_source")) {
     db.exec(`ALTER TABLE items ADD COLUMN cost_source TEXT`);
   }
-  if (existingTable('attachments')) {
+  if (existingTable("attachments")) {
     const attachmentCols = (
       db.prepare(`PRAGMA table_info(attachments)`).all() as { name: string }[]
     ).map((c) => c.name);
-    if (!attachmentCols.includes('workspace_path')) {
+    if (!attachmentCols.includes("workspace_path")) {
       db.exec(`ALTER TABLE attachments ADD COLUMN workspace_path TEXT`);
     }
   }
-  if (existingTable('runner_health')) {
+  if (existingTable("runner_health")) {
     const healthCols = (
       db.prepare(`PRAGMA table_info(runner_health)`).all() as { name: string }[]
     ).map((c) => c.name);
-    if (!healthCols.includes('half_open_claimed_at')) {
-      db.exec(`ALTER TABLE runner_health ADD COLUMN half_open_claimed_at INTEGER`);
+    if (!healthCols.includes("half_open_claimed_at")) {
+      db.exec(
+        `ALTER TABLE runner_health ADD COLUMN half_open_claimed_at INTEGER`
+      );
     }
   }
-  if (existingTable('conversation_workspace_selection')) {
+  if (existingTable("conversation_workspace_selection")) {
     const workspaceCols = (
-      db.prepare(`PRAGMA table_info(conversation_workspace_selection)`).all() as {
+      db
+        .prepare(`PRAGMA table_info(conversation_workspace_selection)`)
+        .all() as {
         name: string;
       }[]
     ).map((c) => c.name);
-    if (!workspaceCols.includes('additional_directories_json')) {
+    if (!workspaceCols.includes("additional_directories_json")) {
       db.exec(
         `ALTER TABLE conversation_workspace_selection
-           ADD COLUMN additional_directories_json TEXT NOT NULL DEFAULT '[]'`,
+           ADD COLUMN additional_directories_json TEXT NOT NULL DEFAULT '[]'`
       );
     }
   }
@@ -798,10 +809,13 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // held and no other connection is on the file yet at open. The WAL shipper
   // (issue #408) treats this whole-file rewrite as a foreign checkpoint and heals
   // via a generation break — a one-time base re-upload, acceptable at small size.
-  const autoVacuum = (db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number })
-    .auto_vacuum;
-  const pageCount = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
-  if (autoVacuum === 0 && pageCount > 0) db.exec('VACUUM');
+  const autoVacuum = (
+    db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
+  ).auto_vacuum;
+  const pageCount = (
+    db.prepare("PRAGMA page_count").get() as { page_count: number }
+  ).page_count;
+  if (autoVacuum === 0 && pageCount > 0) db.exec("VACUUM");
   ensureConversationLedger(db);
   return db;
 }

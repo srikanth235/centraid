@@ -89,7 +89,7 @@
   color: var(--ink-2);
   outline: none;
 }
-.switch[data-open='true'] {
+.switch[data-open="true"] {
   background: color-mix(in srgb, var(--ink) 10%, transparent);
   color: var(--ink);
 }

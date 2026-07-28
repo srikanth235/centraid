@@ -1,13 +1,13 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { nowIso } from '../ids.js';
-import type { SerializableSha256State } from './incremental-sha256.js';
-import type { MultipartPart } from './remote-transfer.js';
+import { nowIso } from "../ids.js";
+import type { SerializableSha256State } from "./incremental-sha256.js";
+import type { MultipartPart } from "./remote-transfer.js";
 
 export interface IngressSessionRow {
   session_id: string;
-  kind: 'fallback' | 'stream-through' | 'direct';
-  state: 'open' | 'committing' | 'complete' | 'aborted';
+  kind: "fallback" | "stream-through" | "direct";
+  state: "open" | "committing" | "complete" | "aborted";
   expected_sha256: string | null;
   expected_size: number | null;
   received_bytes: number;
@@ -31,7 +31,7 @@ export interface IngressSessionRow {
 export interface OutboxRow {
   sha256: string;
   byte_size: number;
-  state: 'pending' | 'uploading';
+  state: "pending" | "uploading";
   temp_id: string | null;
   upload_id: string | null;
   parts_json: string;
@@ -44,7 +44,7 @@ export interface OutboxRow {
 
 export interface CreateIngressSession {
   sessionId: string;
-  kind: 'fallback' | 'stream-through' | 'direct';
+  kind: "fallback" | "stream-through" | "direct";
   expectedSha256?: string;
   expectedSize?: number;
   tempPath?: string;
@@ -72,7 +72,7 @@ export class BlobTransferState {
             hash_state_json, temp_path, remote_temp_id, remote_upload_id,
             remote_parts_json, media_type, original_name, meta_json, staged_by,
             sealed_size, part_count, device_id, created_at, updated_at, expires_at)
-         VALUES (?, ?, 'open', ?, ?, 0, ?, ?, ?, ?, '[]', ?, ?, '{}', ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, 'open', ?, ?, 0, ?, ?, ?, ?, '[]', ?, ?, '{}', ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.sessionId,
@@ -91,36 +91,43 @@ export class BlobTransferState {
         input.deviceId ?? null,
         now,
         now,
-        input.expiresAt,
+        input.expiresAt
       );
     return this.session(input.sessionId)!;
   }
 
   session(sessionId: string): IngressSessionRow | null {
     return (
-      (this.db.prepare('SELECT * FROM blob_ingress_session WHERE session_id = ?').get(sessionId) as
-        | IngressSessionRow
-        | undefined) ?? null
+      (this.db
+        .prepare("SELECT * FROM blob_ingress_session WHERE session_id = ?")
+        .get(sessionId) as IngressSessionRow | undefined) ?? null
     );
   }
 
   recordAppend(
     sessionId: string,
     receivedBytes: number,
-    hashState?: SerializableSha256State,
+    hashState?: SerializableSha256State
   ): void {
     this.db
       .prepare(
         `UPDATE blob_ingress_session
             SET received_bytes = ?, hash_state_json = ?, updated_at = ?
-          WHERE session_id = ? AND state = 'open'`,
+          WHERE session_id = ? AND state = 'open'`
       )
-      .run(receivedBytes, hashState ? JSON.stringify(hashState) : null, nowIso(), sessionId);
+      .run(
+        receivedBytes,
+        hashState ? JSON.stringify(hashState) : null,
+        nowIso(),
+        sessionId
+      );
   }
 
-  setSessionState(sessionId: string, state: IngressSessionRow['state']): void {
+  setSessionState(sessionId: string, state: IngressSessionRow["state"]): void {
     this.db
-      .prepare('UPDATE blob_ingress_session SET state = ?, updated_at = ? WHERE session_id = ?')
+      .prepare(
+        "UPDATE blob_ingress_session SET state = ?, updated_at = ? WHERE session_id = ?"
+      )
       .run(state, nowIso(), sessionId);
   }
 
@@ -137,11 +144,13 @@ export class BlobTransferState {
                 updated_at = ?
           WHERE session_id = ? AND kind = 'fallback'
             AND state IN ('open','committing')
-            AND (expected_sha256 IS NULL OR expected_sha256 = ?)`,
+            AND (expected_sha256 IS NULL OR expected_sha256 = ?)`
       )
       .run(sha256, nowIso(), sessionId, sha256);
     if (result.changes !== 1) {
-      throw new Error(`fallback upload session ${sessionId} cannot begin commit`);
+      throw new Error(
+        `fallback upload session ${sessionId} cannot begin commit`
+      );
     }
     return this.session(sessionId)!;
   }
@@ -150,7 +159,7 @@ export class BlobTransferState {
     this.db
       .prepare(
         `UPDATE blob_ingress_session SET remote_upload_id = ?, updated_at = ?
-          WHERE session_id = ? AND state = 'open'`,
+          WHERE session_id = ? AND state = 'open'`
       )
       .run(uploadId, nowIso(), sessionId);
   }
@@ -159,7 +168,7 @@ export class BlobTransferState {
     this.db
       .prepare(
         `UPDATE blob_ingress_session SET temp_path = ?, updated_at = ?
-          WHERE session_id = ?`,
+          WHERE session_id = ?`
       )
       .run(tempPath, nowIso(), sessionId);
   }
@@ -168,7 +177,7 @@ export class BlobTransferState {
     this.db
       .prepare(
         `UPDATE blob_ingress_session SET state = 'complete', expected_sha256 = ?,
-           updated_at = ? WHERE session_id = ?`,
+           updated_at = ? WHERE session_id = ?`
       )
       .run(sha256, nowIso(), sessionId);
   }
@@ -176,7 +185,7 @@ export class BlobTransferState {
   setDirectParts(sessionId: string, parts: readonly MultipartPart[]): void {
     this.db
       .prepare(
-        'UPDATE blob_ingress_session SET remote_parts_json = ?, updated_at = ? WHERE session_id = ?',
+        "UPDATE blob_ingress_session SET remote_parts_json = ?, updated_at = ? WHERE session_id = ?"
       )
       .run(JSON.stringify(parts), nowIso(), sessionId);
   }
@@ -193,7 +202,7 @@ export class BlobTransferState {
         `UPDATE blob_ingress_session
             SET received_bytes = ?, hash_state_json = ?, remote_parts_json = ?,
                 meta_json = ?, updated_at = ?
-          WHERE session_id = ? AND state = 'open' AND kind = 'stream-through'`,
+          WHERE session_id = ? AND state = 'open' AND kind = 'stream-through'`
       )
       .run(
         input.receivedBytes,
@@ -201,23 +210,23 @@ export class BlobTransferState {
         JSON.stringify(input.parts),
         JSON.stringify(input.meta),
         nowIso(),
-        input.sessionId,
+        input.sessionId
       );
   }
 
-  recordProbe(sessionId: string, kind: 'head' | 'tail', bytes: Buffer): void {
-    if (kind === 'head') {
+  recordProbe(sessionId: string, kind: "head" | "tail", bytes: Buffer): void {
+    if (kind === "head") {
       this.db
         .prepare(
           `INSERT INTO blob_ingress_probe (session_id, head_bytes) VALUES (?, ?)
-           ON CONFLICT (session_id) DO UPDATE SET head_bytes = excluded.head_bytes`,
+           ON CONFLICT (session_id) DO UPDATE SET head_bytes = excluded.head_bytes`
         )
         .run(sessionId, bytes);
     } else {
       this.db
         .prepare(
           `INSERT INTO blob_ingress_probe (session_id, tail_bytes) VALUES (?, ?)
-           ON CONFLICT (session_id) DO UPDATE SET tail_bytes = excluded.tail_bytes`,
+           ON CONFLICT (session_id) DO UPDATE SET tail_bytes = excluded.tail_bytes`
         )
         .run(sessionId, bytes);
     }
@@ -225,7 +234,9 @@ export class BlobTransferState {
 
   probes(sessionId: string): { head: Buffer; tail: Buffer } {
     const row = this.db
-      .prepare('SELECT head_bytes, tail_bytes FROM blob_ingress_probe WHERE session_id = ?')
+      .prepare(
+        "SELECT head_bytes, tail_bytes FROM blob_ingress_probe WHERE session_id = ?"
+      )
       .get(sessionId) as
       | { head_bytes: Uint8Array | null; tail_bytes: Uint8Array | null }
       | undefined;
@@ -247,7 +258,7 @@ export class BlobTransferState {
             WHERE ((kind = 'fallback' AND state IN ('open','committing'))
                 OR (kind = 'stream-through' AND state IN ('open','committing')))
               AND expected_sha256 = ? AND expected_size = ? AND staged_by IS ?
-            ORDER BY created_at DESC LIMIT 1`,
+            ORDER BY created_at DESC LIMIT 1`
         )
         .get(input.sha256, input.expectedSize, input.stagedBy ?? null) as
         | IngressSessionRow
@@ -269,20 +280,22 @@ export class BlobTransferState {
             WHERE kind = 'direct' AND state IN ('open','committing')
               AND expected_sha256 = ? AND expected_size = ? AND sealed_size = ?
               AND part_count = ? AND device_id = ?
-            ORDER BY created_at DESC LIMIT 1`,
+            ORDER BY created_at DESC LIMIT 1`
         )
         .get(
           input.sha256,
           input.plaintextSize,
           input.sealedSize,
           input.partCount,
-          input.deviceId,
+          input.deviceId
         ) as IngressSessionRow | undefined) ?? null
     );
   }
 
   deleteSession(sessionId: string): void {
-    this.db.prepare('DELETE FROM blob_ingress_session WHERE session_id = ?').run(sessionId);
+    this.db
+      .prepare("DELETE FROM blob_ingress_session WHERE session_id = ?")
+      .run(sessionId);
   }
 
   expiredSessions(at = nowIso()): IngressSessionRow[] {
@@ -290,12 +303,14 @@ export class BlobTransferState {
       .prepare(
         `SELECT * FROM blob_ingress_session
           WHERE expires_at <= ?
-          ORDER BY expires_at`,
+          ORDER BY expires_at`
       )
       .all(at) as unknown as IngressSessionRow[];
   }
 
-  activeMultipartUploads(at = nowIso()): { tempId: string; uploadId: string }[] {
+  activeMultipartUploads(
+    at = nowIso()
+  ): { tempId: string; uploadId: string }[] {
     const rows = this.db
       .prepare(
         `SELECT remote_temp_id AS temp_id, remote_upload_id AS upload_id
@@ -305,7 +320,7 @@ export class BlobTransferState {
           UNION ALL
          SELECT temp_id, upload_id
            FROM blob_outbox
-          WHERE temp_id IS NOT NULL AND upload_id IS NOT NULL`,
+          WHERE temp_id IS NOT NULL AND upload_id IS NOT NULL`
       )
       .all(at) as unknown as { temp_id: string; upload_id: string }[];
     return rows.map((row) => ({
@@ -322,7 +337,7 @@ export class BlobTransferState {
          ), 0) AS bytes
            FROM blob_ingress_session
           WHERE kind = 'fallback' AND state IN ('open','committing')
-            AND (? IS NULL OR session_id <> ?)`,
+            AND (? IS NULL OR session_id <> ?)`
       )
       .get(exceptSessionId ?? null, exceptSessionId ?? null) as {
       bytes: number;
@@ -340,7 +355,7 @@ export class BlobTransferState {
          ), 0) AS bytes
            FROM blob_ingress_session
           WHERE kind = 'fallback' AND state IN ('open','committing')
-            AND (? IS NULL OR session_id <> ?)`,
+            AND (? IS NULL OR session_id <> ?)`
       )
       .get(exceptSessionId ?? null, exceptSessionId ?? null) as {
       bytes: number;
@@ -360,16 +375,16 @@ export class BlobTransferState {
            state = 'pending',
            next_retry_at = NULL,
            last_error = NULL,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at`
       )
       .run(sha256, byteSize, now, now);
   }
 
   outbox(sha256: string): OutboxRow | null {
     return (
-      (this.db.prepare('SELECT * FROM blob_outbox WHERE sha256 = ?').get(sha256) as
-        | OutboxRow
-        | undefined) ?? null
+      (this.db
+        .prepare("SELECT * FROM blob_outbox WHERE sha256 = ?")
+        .get(sha256) as OutboxRow | undefined) ?? null
     );
   }
 
@@ -378,7 +393,7 @@ export class BlobTransferState {
       .prepare(
         `SELECT * FROM blob_outbox
           WHERE next_retry_at IS NULL OR next_retry_at <= ?
-          ORDER BY created_at LIMIT ?`,
+          ORDER BY created_at LIMIT ?`
       )
       .all(at, limit) as unknown as OutboxRow[];
   }
@@ -387,7 +402,7 @@ export class BlobTransferState {
     this.db
       .prepare(
         `UPDATE blob_outbox SET state = 'uploading', temp_id = ?,
-           upload_id = COALESCE(?, upload_id), updated_at = ? WHERE sha256 = ?`,
+           upload_id = COALESCE(?, upload_id), updated_at = ? WHERE sha256 = ?`
       )
       .run(tempId, uploadId ?? null, nowIso(), sha256);
   }
@@ -396,20 +411,24 @@ export class BlobTransferState {
     this.db
       .prepare(
         `UPDATE blob_outbox SET state = 'uploading', temp_id = NULL,
-           upload_id = COALESCE(?, upload_id), updated_at = ? WHERE sha256 = ?`,
+           upload_id = COALESCE(?, upload_id), updated_at = ? WHERE sha256 = ?`
       )
       .run(uploadId ?? null, nowIso(), sha256);
   }
 
   setOutboxUpload(sha256: string, uploadId: string): void {
     this.db
-      .prepare('UPDATE blob_outbox SET upload_id = ?, updated_at = ? WHERE sha256 = ?')
+      .prepare(
+        "UPDATE blob_outbox SET upload_id = ?, updated_at = ? WHERE sha256 = ?"
+      )
       .run(uploadId, nowIso(), sha256);
   }
 
   setOutboxParts(sha256: string, parts: readonly MultipartPart[]): void {
     this.db
-      .prepare('UPDATE blob_outbox SET parts_json = ?, updated_at = ? WHERE sha256 = ?')
+      .prepare(
+        "UPDATE blob_outbox SET parts_json = ?, updated_at = ? WHERE sha256 = ?"
+      )
       .run(JSON.stringify(parts), nowIso(), sha256);
   }
 
@@ -417,18 +436,20 @@ export class BlobTransferState {
     this.db
       .prepare(
         `UPDATE blob_outbox SET state = 'pending', attempt_count = attempt_count + 1,
-           last_error = ?, next_retry_at = ?, updated_at = ? WHERE sha256 = ?`,
+           last_error = ?, next_retry_at = ?, updated_at = ? WHERE sha256 = ?`
       )
       .run(message, retryAt, nowIso(), sha256);
   }
 
   completeOutbox(sha256: string): void {
-    this.db.prepare('DELETE FROM blob_outbox WHERE sha256 = ?').run(sha256);
+    this.db.prepare("DELETE FROM blob_outbox WHERE sha256 = ?").run(sha256);
   }
 
   pendingShas(): string[] {
     return (
-      this.db.prepare('SELECT sha256 FROM blob_outbox ORDER BY sha256').all() as {
+      this.db
+        .prepare("SELECT sha256 FROM blob_outbox ORDER BY sha256")
+        .all() as {
         sha256: string;
       }[]
     ).map((row) => row.sha256);
@@ -444,7 +465,7 @@ export class BlobTransferState {
       .prepare(
         `SELECT COUNT(*) AS pending_count, COALESCE(SUM(byte_size), 0) AS pending_bytes,
                 COALESCE(SUM(CASE WHEN state = 'uploading' THEN 1 ELSE 0 END), 0) AS uploading_count
-           FROM blob_outbox`,
+           FROM blob_outbox`
       )
       .get() as {
       pending_count: number;
@@ -454,7 +475,7 @@ export class BlobTransferState {
     const failure = this.db
       .prepare(
         `SELECT last_error FROM blob_outbox WHERE last_error IS NOT NULL
-          ORDER BY updated_at DESC LIMIT 1`,
+          ORDER BY updated_at DESC LIMIT 1`
       )
       .get() as { last_error: string } | undefined;
     return {

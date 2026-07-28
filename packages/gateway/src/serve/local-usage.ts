@@ -27,8 +27,8 @@
  * smaller number with no explanation.
  */
 
-import { promises as fs, statfsSync, type Dirent } from 'node:fs';
-import path from 'node:path';
+import { promises as fs, statfsSync, type Dirent } from "node:fs";
+import path from "node:path";
 
 /**
  * The vocabulary of local components. These are stable identifiers the UI
@@ -48,14 +48,14 @@ import path from 'node:path';
  *   templates    — `templatesCacheDir`: the pulled template cache.
  */
 export type LocalComponentId =
-  | 'ledger'
-  | 'vault-db'
-  | 'attachments'
-  | 'apps'
-  | 'code'
-  | 'logs'
-  | 'cache'
-  | 'templates';
+  | "ledger"
+  | "vault-db"
+  | "attachments"
+  | "apps"
+  | "code"
+  | "logs"
+  | "cache"
+  | "templates";
 
 export interface LocalComponentUsage {
   component: LocalComponentId;
@@ -113,13 +113,15 @@ export interface LocalUsageOptions {
   /** Clock override (tests). */
   now?: () => number;
   /** Injectable for tests — defaults to `fs.statfsSync`, `null` on any error. */
-  statfs?: (dir: string) => { bavail: number; bsize: number; blocks: number } | null;
+  statfs?: (
+    dir: string
+  ) => { bavail: number; bsize: number; blocks: number } | null;
 }
 
 /** One directory's recursive apparent size. Never throws: an unreadable
  *  subtree contributes what it could read and names itself in `unreadable`. */
 export async function walkDirBytes(
-  dir: string,
+  dir: string
 ): Promise<{ bytes: number; files: number; unreadable?: string }> {
   let bytes = 0;
   let files = 0;
@@ -137,7 +139,8 @@ export async function walkDirBytes(
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       // A component directory that was never created is 0 bytes, not an error.
-      if (code !== 'ENOENT') unreadable ??= `${currentDir}: ${code ?? 'unreadable'}`;
+      if (code !== "ENOENT")
+        unreadable ??= `${currentDir}: ${code ?? "unreadable"}`;
       return walkNextDirectory();
     }
     async function inspectNextEntry(index: number): Promise<void> {
@@ -155,7 +158,8 @@ export async function walkDirBytes(
           files += 1;
         } catch (err) {
           const code = (err as NodeJS.ErrnoException).code;
-          if (code !== 'ENOENT') unreadable ??= `${full}: ${code ?? 'unreadable'}`;
+          if (code !== "ENOENT")
+            unreadable ??= `${full}: ${code ?? "unreadable"}`;
         }
       }
       return inspectNextEntry(index + 1);
@@ -168,26 +172,33 @@ export async function walkDirBytes(
 }
 
 /** Sum of a fixed set of sibling files, missing ones counting zero. */
-async function fileBytes(dir: string, names: readonly string[]): Promise<number> {
+async function fileBytes(
+  dir: string,
+  names: readonly string[]
+): Promise<number> {
   const sizes = await Promise.all(
     names.map((name) =>
       fs
         .stat(path.join(dir, name))
         .then((stat) => stat.size)
-        .catch(() => 0),
-    ),
+        .catch(() => 0)
+    )
   );
   return sizes.reduce((total, size) => total + size, 0);
 }
 
 /** `journal.db` and `vault.db` each carry a `-wal` and a `-shm` sibling; the
  *  `-shm` is a fixed-size shared-memory index, counted for honesty. */
-const LEDGER_FILES = ['journal.db', 'journal.db-wal', 'journal.db-shm'] as const;
-const VAULT_DB_FILES = ['vault.db', 'vault.db-wal', 'vault.db-shm'] as const;
+const LEDGER_FILES = [
+  "journal.db",
+  "journal.db-wal",
+  "journal.db-shm",
+] as const;
+const VAULT_DB_FILES = ["vault.db", "vault.db-wal", "vault.db-shm"] as const;
 
 async function dirComponent(
   component: LocalComponentId,
-  dir: string,
+  dir: string
 ): Promise<LocalComponentUsage> {
   const walked = await walkDirBytes(dir);
   return {
@@ -198,23 +209,26 @@ async function dirComponent(
   };
 }
 
-async function scanVault(entry: LocalUsageVaultEntry): Promise<LocalVaultUsage> {
+async function scanVault(
+  entry: LocalUsageVaultEntry
+): Promise<LocalVaultUsage> {
   const components: LocalComponentUsage[] = [
     {
-      component: 'ledger',
+      component: "ledger",
       bytes: await fileBytes(entry.dir, LEDGER_FILES),
       files: null,
     },
     {
-      component: 'vault-db',
+      component: "vault-db",
       bytes: await fileBytes(entry.dir, VAULT_DB_FILES),
       files: null,
     },
-    await dirComponent('attachments', path.join(entry.dir, 'blobs')),
-    await dirComponent('apps', path.join(entry.dir, 'apps')),
-    await dirComponent('code', path.join(entry.dir, 'code')),
+    await dirComponent("attachments", path.join(entry.dir, "blobs")),
+    await dirComponent("apps", path.join(entry.dir, "apps")),
+    await dirComponent("code", path.join(entry.dir, "code")),
   ];
-  if (entry.cacheDir) components.push(await dirComponent('cache', entry.cacheDir));
+  if (entry.cacheDir)
+    components.push(await dirComponent("cache", entry.cacheDir));
   return {
     vaultId: entry.vaultId,
     ...(entry.name ? { name: entry.name } : {}),
@@ -223,7 +237,9 @@ async function scanVault(entry: LocalUsageVaultEntry): Promise<LocalVaultUsage> 
   };
 }
 
-const defaultStatfs = (dir: string): { bavail: number; bsize: number; blocks: number } | null => {
+const defaultStatfs = (
+  dir: string
+): { bavail: number; bsize: number; blocks: number } | null => {
   try {
     return statfsSync(dir);
   } catch {
@@ -241,7 +257,7 @@ export class LocalUsageScanner {
   private readonly ttlMs: number;
   private readonly now: () => number;
   private readonly statfs: (
-    dir: string,
+    dir: string
   ) => { bavail: number; bsize: number; blocks: number } | null;
   private cached: LocalUsageReport | null = null;
   private refreshing: Promise<LocalUsageReport> | null = null;
@@ -306,13 +322,17 @@ export class LocalUsageScanner {
   }
 
   private async scan(): Promise<LocalUsageReport> {
-    const vaults = await Promise.all(this.options.vaults().map((entry) => scanVault(entry)));
+    const vaults = await Promise.all(
+      this.options.vaults().map((entry) => scanVault(entry))
+    );
 
     const gatewayDirs = this.options.gatewayDirs();
     const components = await Promise.all(
-      (Object.entries(gatewayDirs) as [LocalComponentId, string | undefined][]).flatMap(
-        ([component, dir]) => (dir ? [dirComponent(component, dir)] : []),
-      ),
+      (
+        Object.entries(gatewayDirs) as [LocalComponentId, string | undefined][]
+      ).flatMap(([component, dir]) =>
+        dir ? [dirComponent(component, dir)] : []
+      )
     );
 
     const stat = this.statfs(this.options.rootDir);

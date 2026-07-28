@@ -1,23 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
 
-import { isRevokedDevice } from '../../device-roster.js';
+import { isRevokedDevice } from "../../device-roster.js";
 import type {
   CentraidGatewayDevice,
   GatewayDeviceTicket,
   GatewayDeviceTicketInput,
   GatewayDeviceWorkDepth,
   GatewayMember,
-} from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import { groupDevicesByMember, spacesFromGroups } from './device-groups.js';
-import DeviceMemberGroup from './DeviceMemberGroup.js';
-import DevicePairPanel from './DevicePairPanel.js';
+} from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { groupDevicesByMember, spacesFromGroups } from "./device-groups.js";
+import DeviceMemberGroup from "./DeviceMemberGroup.js";
+import DevicePairPanel from "./DevicePairPanel.js";
 
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './DevicesCard.module.css';
-import gwStyles from './GatewayScreen.module.css';
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./DevicesCard.module.css";
+import gwStyles from "./GatewayScreen.module.css";
 
 // Gateway → Overview → People & devices: the owner surface over the daemon's
 // member roster + `EnrollmentStore` (issues #392, #599).
@@ -44,7 +51,7 @@ export interface DevicesCardProps {
   loadDevices: () => Promise<CentraidGatewayDevice[]>;
   onRevokeDevice: (
     deviceId: string,
-    options?: { confirmLastAdmin?: string },
+    options?: { confirmLastAdmin?: string }
   ) => Promise<{ removed: boolean }>;
   /** Eager local cleanup after this renderer successfully revokes itself. */
   onCurrentDeviceRevoked?: () => Promise<void>;
@@ -56,16 +63,18 @@ export interface DevicesCardProps {
   /** Remove a PERSON. Absent = the card offers only per-device revocation. */
   onRemoveMember?: (
     memberId: string,
-    options?: { confirmLastAdmin?: string },
+    options?: { confirmLastAdmin?: string }
   ) => Promise<{ removed: boolean }>;
   /**
    * Mint a one-time pairing ticket (`POST _gateway/devices/ticket`). Optional
    * so a host that can't mint (or a test) simply hides "Pair a device".
    */
-  onCreateTicket?: (input?: GatewayDeviceTicketInput) => Promise<GatewayDeviceTicket>;
+  onCreateTicket?: (
+    input?: GatewayDeviceTicketInput
+  ) => Promise<GatewayDeviceTicket>;
   onUpdateCompute?: (
     device: CentraidGatewayDevice,
-    contributeWhileCharging: boolean,
+    contributeWhileCharging: boolean
   ) => Promise<CentraidGatewayDevice>;
   loadWorkStatus?: () => Promise<GatewayDeviceWorkDepth[]>;
 }
@@ -128,20 +137,25 @@ export default function DevicesCard({
   }, [refresh]);
 
   const revoke = useCallback(
-    async (device: CentraidGatewayDevice, confirmLastAdmin?: string): Promise<void> => {
+    async (
+      device: CentraidGatewayDevice,
+      confirmLastAdmin?: string
+    ): Promise<void> => {
       await onRevokeDevice(
         device.deviceId,
-        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin },
+        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
       );
       if (device.current) await onCurrentDeviceRevoked?.();
       // Optimistically drop the row; a background refresh reconciles (and
       // brings the tombstone back under the group's revoked disclosure).
       if (mountedRef.current) {
-        setDevices((prev) => prev?.filter((d) => d.deviceId !== device.deviceId) ?? prev);
+        setDevices(
+          (prev) => prev?.filter((d) => d.deviceId !== device.deviceId) ?? prev
+        );
       }
       refresh();
     },
-    [onCurrentDeviceRevoked, onRevokeDevice, refresh],
+    [onCurrentDeviceRevoked, onRevokeDevice, refresh]
   );
 
   const removeMember = useCallback(
@@ -149,15 +163,20 @@ export default function DevicesCard({
       if (!onRemoveMember) return;
       await onRemoveMember(
         memberId,
-        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin },
+        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
       );
       if (mountedRef.current) {
-        setMembers((prev) => prev.filter((member) => member.memberId !== memberId));
-        setDevices((prev) => prev?.filter((device) => device.memberId !== memberId) ?? prev);
+        setMembers((prev) =>
+          prev.filter((member) => member.memberId !== memberId)
+        );
+        setDevices(
+          (prev) =>
+            prev?.filter((device) => device.memberId !== memberId) ?? prev
+        );
       }
       refresh();
     },
-    [onRemoveMember, refresh],
+    [onRemoveMember, refresh]
   );
 
   const updateCompute = useCallback(
@@ -167,18 +186,24 @@ export default function DevicesCard({
       if (!mountedRef.current) return;
       setDevices(
         (previous) =>
-          previous?.map((row) => (row.deviceId === updated.deviceId ? updated : row)) ?? previous,
+          previous?.map((row) =>
+            row.deviceId === updated.deviceId ? updated : row
+          ) ?? previous
       );
     },
-    [onUpdateCompute],
+    [onUpdateCompute]
   );
 
-  const groups = useMemo(() => groupDevicesByMember(devices ?? [], members), [devices, members]);
+  const groups = useMemo(
+    () => groupDevicesByMember(devices ?? [], members),
+    [devices, members]
+  );
   const spaces = useMemo(() => spacesFromGroups(groups), [groups]);
   const selfMemberId = groups.find((group) => group.isSelf)?.memberId;
 
   const people = groups.length;
-  const liveCount = devices?.filter((device) => !isRevokedDevice(device)).length ?? 0;
+  const liveCount =
+    devices?.filter((device) => !isRevokedDevice(device)).length ?? 0;
   const queued = workDepth.reduce((sum, depth) => sum + depth.available, 0);
   const leased = workDepth.reduce((sum, depth) => sum + depth.leased, 0);
 
@@ -189,12 +214,15 @@ export default function DevicesCard({
         <div className={styles.headRight}>
           {devices && people > 0 ? (
             <span className={gwStyles.panelMeta}>
-              {people} {people === 1 ? 'person' : 'people'} · {liveCount} device
-              {liveCount === 1 ? '' : 's'}
+              {people} {people === 1 ? "person" : "people"} · {liveCount} device
+              {liveCount === 1 ? "" : "s"}
             </span>
           ) : null}
           {loadWorkStatus ? (
-            <span className={gwStyles.panelMeta} data-testid="device-work-depth">
+            <span
+              className={gwStyles.panelMeta}
+              data-testid="device-work-depth"
+            >
               {queued} queued · {leased} leased
             </span>
           ) : null}
@@ -221,17 +249,22 @@ export default function DevicesCard({
               refresh();
             }}
             members={members}
-            {...(selfMemberId === undefined ? {} : { currentMemberId: selfMemberId })}
+            {...(selfMemberId === undefined
+              ? {}
+              : { currentMemberId: selfMemberId })}
             spaces={spaces}
           />
         ) : null}
         {loadError ? (
-          <div className={styles.loadError}>Couldn’t list paired devices: {loadError}</div>
+          <div className={styles.loadError}>
+            Couldn’t list paired devices: {loadError}
+          </div>
         ) : devices ? (
           groups.length === 0 ? (
             <div className={gwStyles.panelEmpty}>
-              No devices are paired with this gateway yet. Pair a browser or phone with a one-time
-              ticket, and it will show up here — revocable in one click.
+              No devices are paired with this gateway yet. Pair a browser or
+              phone with a one-time ticket, and it will show up here — revocable
+              in one click.
             </div>
           ) : (
             <div className={styles.groups}>
@@ -245,7 +278,9 @@ export default function DevicesCard({
                   isSelf={group.isSelf}
                   now={now}
                   onRevokeDevice={revoke}
-                  {...(onUpdateCompute ? { onUpdateCompute: updateCompute } : {})}
+                  {...(onUpdateCompute
+                    ? { onUpdateCompute: updateCompute }
+                    : {})}
                   {...(onRemoveMember
                     ? {
                         onRemoveMember: (confirmLastAdmin?: string) =>

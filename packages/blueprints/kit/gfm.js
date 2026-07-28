@@ -13,7 +13,7 @@
 
 /** Join truthy class names (a tiny `cx`). */
 export function cx(...names) {
-  return names.filter(Boolean).join(' ');
+  return names.filter(Boolean).join(" ");
 }
 
 /** DOM helper — string/element children; `trustedHtml` sets innerHTML. */
@@ -24,7 +24,7 @@ export function el(tag, attrs = {}, children = []) {
   if (attrs.style) Object.assign(node.style, attrs.style);
   for (const c of Array.isArray(children) ? children : [children]) {
     if (c == null || c === false) continue;
-    node.append(typeof c === 'string' ? document.createTextNode(c) : c);
+    node.append(typeof c === "string" ? document.createTextNode(c) : c);
   }
   return node;
 }
@@ -35,8 +35,8 @@ export function escapeHtml(s) {
 }
 
 /** Sentinel wrapping an extracted inline-code span (control chars: never in escaped text). */
-const CODE_OPEN = '\u0000';
-const CODE_CLOSE = '\u0001';
+const CODE_OPEN = "\u0000";
+const CODE_CLOSE = "\u0001";
 
 /**
  * Allowlist a link/image URL drawn from ALREADY-ESCAPED markdown. Returns the
@@ -50,13 +50,13 @@ const CODE_CLOSE = '\u0001';
  */
 export function sanitizeUrl(url, isImage) {
   // Strip control + whitespace chars browsers ignore during scheme detection.
-  const cleaned = String(url).replace(/[\p{Cc}\s]+/gu, '');
+  const cleaned = String(url).replace(/[\p{Cc}\s]+/gu, "");
   if (!cleaned) return null;
-  if (cleaned.startsWith('//')) return null; // protocol-relative → external
+  if (cleaned.startsWith("//")) return null; // protocol-relative → external
   const scheme = cleaned.match(/^(?<scheme>[a-z][a-z0-9+.-]*):/iu);
   if (scheme) {
-    const s = (scheme.groups?.scheme ?? '').toLowerCase();
-    const ok = s === 'http' || s === 'https' || (!isImage && s === 'mailto');
+    const s = (scheme.groups?.scheme ?? "").toLowerCase();
+    const ok = s === "http" || s === "https" || (!isImage && s === "mailto");
     return ok ? cleaned : null;
   }
   return cleaned; // scheme-less → relative gateway path / fragment / query
@@ -82,28 +82,44 @@ export function inlineHtml(raw, C) {
   s = s.replace(
     /@\[(?<label>[^\]]+)\]\(ref:(?<type>[a-z_]+\.[a-z_]+)\/(?<id>[A-Za-z0-9_-]+)\)/gu,
     (_m, label, type, id) =>
-      `<button type="button" class="${C.asstRef}" data-ref-type="${type}" data-ref-id="${id}">${label}</button>`,
+      `<button type="button" class="${C.asstRef}" data-ref-type="${type}" data-ref-id="${id}">${label}</button>`
   );
   // Images ![alt](url) — before links (the leading `!` disambiguates).
-  s = s.replace(/!\[(?<alt>[^\]]*)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu, (_m, alt, url) => {
-    const safe = sanitizeUrl(url, true);
-    return safe ? `<img class="${C.asstImg}" src="${safe}" alt="${alt}" loading="lazy" />` : alt;
-  });
+  s = s.replace(
+    /!\[(?<alt>[^\]]*)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu,
+    (_m, alt, url) => {
+      const safe = sanitizeUrl(url, true);
+      return safe
+        ? `<img class="${C.asstImg}" src="${safe}" alt="${alt}" loading="lazy" />`
+        : alt;
+    }
+  );
   // Links [text](url).
-  s = s.replace(/\[(?<text>[^\]]+)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu, (_m, text, url) => {
-    const safe = sanitizeUrl(url, false);
-    if (!safe) return text;
-    const attrs = /^https?:/iu.test(safe) ? ' target="_blank" rel="noopener noreferrer"' : '';
-    return `<a class="${C.asstA}" href="${safe}"${attrs}>${text}</a>`;
-  });
+  s = s.replace(
+    /\[(?<text>[^\]]+)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu,
+    (_m, text, url) => {
+      const safe = sanitizeUrl(url, false);
+      if (!safe) return text;
+      const attrs = /^https?:/iu.test(safe)
+        ? ' target="_blank" rel="noopener noreferrer"'
+        : "";
+      return `<a class="${C.asstA}" href="${safe}"${attrs}>${text}</a>`;
+    }
+  );
   // Strikethrough, bold, italic.
-  s = s.replace(/~~(?<struck>[^~]+)~~/gu, `<del class="${C.asstDel}">$<struck></del>`);
-  s = s.replace(/\*\*(?<bold>[^*]+)\*\*/gu, '<strong>$<bold></strong>');
-  s = s.replace(/(?<lead>^|[\s(>])\*(?<italic>[^*\n]+)\*/gu, '$<lead><em>$<italic></em>');
+  s = s.replace(
+    /~~(?<struck>[^~]+)~~/gu,
+    `<del class="${C.asstDel}">$<struck></del>`
+  );
+  s = s.replace(/\*\*(?<bold>[^*]+)\*\*/gu, "<strong>$<bold></strong>");
+  s = s.replace(
+    /(?<lead>^|[\s(>])\*(?<italic>[^*\n]+)\*/gu,
+    "$<lead><em>$<italic></em>"
+  );
   // Restore inline code.
   s = s.replace(
-    new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, 'gu'),
-    (_m, i) => `<code>${codes[Number(i)]}</code>`,
+    new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, "gu"),
+    (_m, i) => `<code>${codes[Number(i)]}</code>`
   );
   return s;
 }
@@ -115,15 +131,20 @@ const HEADING_RE = /^(?<hashes>#{1,6})\s+(?<text>.*)$/u;
 /** Cells of a pipe-table row, trimmed, outer pipes stripped. */
 function tableCells(row) {
   return row
-    .replace(/^\s*\|/u, '')
-    .replace(/\|\s*$/u, '')
-    .split('|')
+    .replace(/^\s*\|/u, "")
+    .replace(/\|\s*$/u, "")
+    .split("|")
     .map((c) => c.trim());
 }
 
 /** Is `sep` a table delimiter row (dashes/colons/pipes, at least one dash + pipe/colon)? */
 function isTableSep(sep) {
-  return sep !== undefined && /-/u.test(sep) && /^[\s|:-]+$/u.test(sep) && /[|:]/u.test(sep);
+  return (
+    sep !== undefined &&
+    /-/u.test(sep) &&
+    /^[\s|:-]+$/u.test(sep) &&
+    /[|:]/u.test(sep)
+  );
 }
 
 function buildTable(lines, start, C) {
@@ -132,51 +153,55 @@ function buildTable(lines, start, C) {
   if (!header || !/\|/u.test(header) || !isTableSep(sep)) return null;
   const cols = tableCells(header);
   const aligns = tableCells(sep).map((s) =>
-    s.startsWith(':') && s.endsWith(':')
-      ? 'center'
-      : s.endsWith(':')
-        ? 'right'
-        : s.startsWith(':')
-          ? 'left'
-          : '',
+    s.startsWith(":") && s.endsWith(":")
+      ? "center"
+      : s.endsWith(":")
+        ? "right"
+        : s.startsWith(":")
+          ? "left"
+          : ""
   );
-  const table = el('table', { class: C.asstTable });
+  const table = el("table", { class: C.asstTable });
   table.append(
     el(
-      'thead',
+      "thead",
       {},
       el(
-        'tr',
+        "tr",
         {},
         cols.map((c, i) =>
-          el('th', {
+          el("th", {
             ...(aligns[i] ? { style: { textAlign: aligns[i] } } : {}),
             trustedHtml: inlineHtml(c, C),
-          }),
-        ),
-      ),
-    ),
+          })
+        )
+      )
+    )
   );
-  const body = el('tbody');
+  const body = el("tbody");
   let i = start + 2;
-  for (; i < lines.length && /\|/u.test(lines[i]) && lines[i].trim() !== ''; i += 1) {
+  for (
+    ;
+    i < lines.length && /\|/u.test(lines[i]) && lines[i].trim() !== "";
+    i += 1
+  ) {
     const cells = tableCells(lines[i]);
     body.append(
       el(
-        'tr',
+        "tr",
         {},
         cols.map((_c, ci) =>
-          el('td', {
+          el("td", {
             ...(aligns[ci] ? { style: { textAlign: aligns[ci] } } : {}),
-            trustedHtml: inlineHtml(cells[ci] ?? '', C),
-          }),
-        ),
-      ),
+            trustedHtml: inlineHtml(cells[ci] ?? "", C),
+          })
+        )
+      )
     );
   }
   table.append(body);
   return {
-    node: el('div', { class: cx(C.asstBlock, C.asstTableWrap) }, table),
+    node: el("div", { class: cx(C.asstBlock, C.asstTableWrap) }, table),
     next: i,
   };
 }
@@ -186,7 +211,7 @@ function buildList(items, C) {
   let idx = 0;
   const build = (indent) => {
     const ordered = items[idx].ordered;
-    const listEl = el(ordered ? 'ol' : 'ul', {
+    const listEl = el(ordered ? "ol" : "ul", {
       class: ordered ? C.asstOl : C.asstUl,
     });
     while (idx < items.length) {
@@ -197,7 +222,7 @@ function buildList(items, C) {
         (listEl.lastElementChild ?? listEl).append(child);
         continue;
       }
-      listEl.append(el('li', { trustedHtml: inlineHtml(it.content, C) }));
+      listEl.append(el("li", { trustedHtml: inlineHtml(it.content, C) }));
       idx += 1;
     }
     return listEl;
@@ -214,17 +239,19 @@ function buildList(items, C) {
  * @returns {HTMLElement[]} The rendered block nodes.
  */
 export function blockNodes(text, C) {
-  const lines = text.split('\n');
+  const lines = text.split("\n");
   const out = [];
   let para = [];
   const flushPara = () => {
     if (para.length)
-      out.push(el('p', { class: C.asstP, trustedHtml: inlineHtml(para.join(' '), C) }));
+      out.push(
+        el("p", { class: C.asstP, trustedHtml: inlineHtml(para.join(" "), C) })
+      );
     para = [];
   };
   for (let i = 0; i < lines.length;) {
-    const line = lines[i].replace(/\s+$/u, '');
-    if (line.trim() === '') {
+    const line = lines[i].replace(/\s+$/u, "");
+    if (line.trim() === "") {
       flushPara();
       i += 1;
       continue;
@@ -242,7 +269,7 @@ export function blockNodes(text, C) {
     // Horizontal rule.
     if (HR_RE.test(line)) {
       flushPara();
-      out.push(el('hr', { class: C.asstHr }));
+      out.push(el("hr", { class: C.asstHr }));
       i += 1;
       continue;
     }
@@ -251,10 +278,10 @@ export function blockNodes(text, C) {
     if (heading) {
       flushPara();
       out.push(
-        el(`h${Math.min((heading.groups?.hashes ?? '').length + 2, 6)}`, {
+        el(`h${Math.min((heading.groups?.hashes ?? "").length + 2, 6)}`, {
           class: C.asstH,
-          trustedHtml: inlineHtml(heading.groups?.text ?? '', C),
-        }),
+          trustedHtml: inlineHtml(heading.groups?.text ?? "", C),
+        })
       );
       i += 1;
       continue;
@@ -264,10 +291,16 @@ export function blockNodes(text, C) {
       flushPara();
       const inner = [];
       while (i < lines.length && /^\s*>/u.test(lines[i])) {
-        inner.push(lines[i].replace(/^\s*>\s?/u, ''));
+        inner.push(lines[i].replace(/^\s*>\s?/u, ""));
         i += 1;
       }
-      out.push(el('blockquote', { class: C.asstQuote }, blockNodes(inner.join('\n'), C)));
+      out.push(
+        el(
+          "blockquote",
+          { class: C.asstQuote },
+          blockNodes(inner.join("\n"), C)
+        )
+      );
       continue;
     }
     // List (collect the contiguous run, build nested).
@@ -278,9 +311,9 @@ export function blockNodes(text, C) {
         const mm = lines[i].match(LIST_RE);
         if (!mm) break;
         items.push({
-          indent: (mm.groups?.indent ?? '').length,
-          ordered: /\d/u.test(mm.groups?.marker ?? ''),
-          content: mm.groups?.content ?? '',
+          indent: (mm.groups?.indent ?? "").length,
+          ordered: /\d/u.test(mm.groups?.marker ?? ""),
+          content: mm.groups?.content ?? "",
         });
         i += 1;
       }

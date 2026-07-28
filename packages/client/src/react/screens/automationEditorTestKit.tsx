@@ -8,20 +8,25 @@
  * against a shape the screen no longer receives.
  */
 
-import { act } from 'react';
-import { vi } from 'vitest';
+import { act } from "react";
+import { vi } from "vitest";
 
-import type { AutomationEditorBridgeProps, AutomationEditorData } from '../screen-contracts.js';
-import { button } from './domTestKit.js';
+import type {
+  AutomationEditorBridgeProps,
+  AutomationEditorData,
+} from "../screen-contracts.js";
+import { button } from "./domTestKit.js";
 
-export function makeData(over: Partial<AutomationEditorData> = {}): AutomationEditorData {
+export function makeData(
+  over: Partial<AutomationEditorData> = {}
+): AutomationEditorData {
   return {
     automationId: null,
     consent: { grants: [], outbox: [], parked: [] },
     enabled: false,
-    instructions: '',
-    mode: 'create',
-    name: '',
+    instructions: "",
+    mode: "create",
+    name: "",
     triggers: [],
     webhook: null,
     ...over,
@@ -29,39 +34,51 @@ export function makeData(over: Partial<AutomationEditorData> = {}): AutomationEd
 }
 
 export function makeProps(
-  over: Partial<AutomationEditorBridgeProps> = {},
+  over: Partial<AutomationEditorBridgeProps> = {}
 ): AutomationEditorBridgeProps {
   return {
-    loadData: vi.fn<AutomationEditorBridgeProps['loadData']>().mockResolvedValue(makeData()),
-    onCancel: vi.fn<AutomationEditorBridgeProps['onCancel']>(),
-    onCompile: vi.fn<AutomationEditorBridgeProps['onCompile']>().mockResolvedValue(null),
-    onCopyWebhook: vi.fn<AutomationEditorBridgeProps['onCopyWebhook']>(),
+    loadData: vi
+      .fn<AutomationEditorBridgeProps["loadData"]>()
+      .mockResolvedValue(makeData()),
+    onCancel: vi.fn<AutomationEditorBridgeProps["onCancel"]>(),
+    onCompile: vi
+      .fn<AutomationEditorBridgeProps["onCompile"]>()
+      .mockResolvedValue(null),
+    onCopyWebhook: vi.fn<AutomationEditorBridgeProps["onCopyWebhook"]>(),
     onDecideConsent: vi
-      .fn<AutomationEditorBridgeProps['onDecideConsent']>()
+      .fn<AutomationEditorBridgeProps["onDecideConsent"]>()
       .mockResolvedValue(true),
-    onDelete: vi.fn<AutomationEditorBridgeProps['onDelete']>().mockResolvedValue(false),
-    onOpenRun: vi.fn<AutomationEditorBridgeProps['onOpenRun']>(),
-    onOpenRuns: vi.fn<AutomationEditorBridgeProps['onOpenRuns']>(),
+    onDelete: vi
+      .fn<AutomationEditorBridgeProps["onDelete"]>()
+      .mockResolvedValue(false),
+    onOpenRun: vi.fn<AutomationEditorBridgeProps["onOpenRun"]>(),
+    onOpenRuns: vi.fn<AutomationEditorBridgeProps["onOpenRuns"]>(),
     loadCompileAttempts: vi
-      .fn<AutomationEditorBridgeProps['loadCompileAttempts']>()
+      .fn<AutomationEditorBridgeProps["loadCompileAttempts"]>()
       .mockResolvedValue([]),
-    loadTurnSteps: vi.fn<AutomationEditorBridgeProps['loadTurnSteps']>().mockResolvedValue([]),
+    loadTurnSteps: vi
+      .fn<AutomationEditorBridgeProps["loadTurnSteps"]>()
+      .mockResolvedValue([]),
     watchTurnSteps: vi
-      .fn<AutomationEditorBridgeProps['watchTurnSteps']>()
+      .fn<AutomationEditorBridgeProps["watchTurnSteps"]>()
       .mockResolvedValue({ settled: true, ok: true }),
-    onTestRun: vi.fn<AutomationEditorBridgeProps['onTestRun']>().mockResolvedValue(null),
+    onTestRun: vi
+      .fn<AutomationEditorBridgeProps["onTestRun"]>()
+      .mockResolvedValue(null),
     onReadSource: vi
-      .fn<AutomationEditorBridgeProps['onReadSource']>()
+      .fn<AutomationEditorBridgeProps["onReadSource"]>()
       .mockResolvedValue({ handler: null, manifest: null }),
     onRotateWebhook: vi
-      .fn<AutomationEditorBridgeProps['onRotateWebhook']>()
+      .fn<AutomationEditorBridgeProps["onRotateWebhook"]>()
       .mockResolvedValue(true),
     onSearchEntities: vi
-      .fn<AutomationEditorBridgeProps['onSearchEntities']>()
+      .fn<AutomationEditorBridgeProps["onSearchEntities"]>()
       .mockResolvedValue([]),
-    onSave: vi.fn<AutomationEditorBridgeProps['onSave']>().mockResolvedValue(true),
+    onSave: vi
+      .fn<AutomationEditorBridgeProps["onSave"]>()
+      .mockResolvedValue(true),
     onToggleEnabled: vi
-      .fn<AutomationEditorBridgeProps['onToggleEnabled']>()
+      .fn<AutomationEditorBridgeProps["onToggleEnabled"]>()
       .mockResolvedValue(true),
     ...over,
   };
@@ -70,15 +87,17 @@ export function makeProps(
 /** Create layout: dashed "+ Add Trigger" then a menu item. */
 export async function addTrigger(
   el: HTMLElement,
-  kind: 'Schedule' | 'Data change' | 'Connector event',
+  kind: "Schedule" | "Data change" | "Connector event"
 ): Promise<void> {
   await act(async () => {
-    button(el, '+ Add Trigger').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    button(el, "+ Add Trigger").dispatchEvent(
+      new MouseEvent("click", { bubbles: true })
+    );
   });
   await act(async () => {
     const item = [...el.querySelectorAll('[role="menuitem"]')].find(
-      (b) => b.textContent === kind,
+      (b) => b.textContent === kind
     ) as HTMLButtonElement;
-    item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }

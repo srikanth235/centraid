@@ -7,15 +7,24 @@
 // title, floating Home key. Both surfaces load independently (useInsights), so a
 // gateway serving one but not the other still shows what it has.
 
-import { palette } from '@centraid/design-tokens';
-import { Feather } from '@expo/vector-icons';
-import React, { useMemo } from 'react';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg';
+import { palette } from "@centraid/design-tokens";
+import { Feather } from "@expo/vector-icons";
+import React, { useMemo } from "react";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  Path,
+  Stop,
+} from "react-native-svg";
 
-import HomeKey from '../../kit/components/HomeKey';
-import { useTheme, type ThemeColors } from '../../kit/theme';
+import HomeKey from "../../kit/components/HomeKey";
+import { useTheme, type ThemeColors } from "../../kit/theme";
 import {
   formatBytes,
   formatCount,
@@ -27,10 +36,10 @@ import {
   type ComponentStatus,
   type GatewayHealth,
   type InsightsSummary,
-} from '../../lib/insights';
-import type { InsightsScreenProps } from '../../navigation';
-import { makeStyles } from './Insights.styles';
-import { useInsights, type InsightsState } from './useInsights';
+} from "../../lib/insights";
+import type { InsightsScreenProps } from "../../navigation";
+import { makeStyles } from "./Insights.styles";
+import { useInsights, type InsightsState } from "./useInsights";
 
 type Styles = ReturnType<typeof makeStyles>;
 type Colors = ThemeColors;
@@ -38,30 +47,39 @@ type Colors = ThemeColors;
 // Semantic status scale, deliberately separate from the teal accent: a healthy
 // green, an amber degrade, the theme's own red for error.
 function statusColor(status: ComponentStatus, colors: Colors): string {
-  return status === 'ok' ? palette.forest : status === 'degraded' ? palette.amber : colors.danger;
+  return status === "ok"
+    ? palette.forest
+    : status === "degraded"
+      ? palette.amber
+      : colors.danger;
 }
 
 const STATUS_WORD: Record<ComponentStatus, string> = {
-  ok: 'All systems healthy',
-  degraded: 'Running degraded',
-  error: 'Needs attention',
+  ok: "All systems healthy",
+  degraded: "Running degraded",
+  error: "Needs attention",
 };
 
-export default function InsightsScreen({ navigation }: InsightsScreenProps): React.JSX.Element {
+export default function InsightsScreen({
+  navigation,
+}: InsightsScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { state, refreshing, refresh } = useInsights();
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Text style={styles.title}>Insights</Text>
         <Text style={styles.subtitle}>Your gateway and space, at a glance</Text>
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 84 }]}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingBottom: insets.bottom + 84 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -88,14 +106,14 @@ function Body({
   styles: Styles;
   colors: Colors;
 }): React.JSX.Element {
-  if (state.kind === 'loading') {
+  if (state.kind === "loading") {
     return (
       <View style={styles.emptyWrap}>
         <Text style={styles.emptyCopy}>Gathering insights…</Text>
       </View>
     );
   }
-  if (state.kind === 'no-gateway') {
+  if (state.kind === "no-gateway") {
     return (
       <View style={styles.emptyWrap}>
         <Feather name="bar-chart-2" size={30} color={colors.accent} />
@@ -106,7 +124,7 @@ function Body({
       </View>
     );
   }
-  if (state.kind === 'error') {
+  if (state.kind === "error") {
     return (
       <View style={styles.emptyWrap}>
         <Feather name="alert-circle" size={30} color={colors.accent} />
@@ -123,14 +141,18 @@ function Body({
       {state.health ? (
         <HealthHero health={state.health} styles={styles} colors={colors} />
       ) : (
-        <Text style={styles.note}>{state.healthError ?? 'Gateway health is unavailable.'}</Text>
+        <Text style={styles.note}>
+          {state.healthError ?? "Gateway health is unavailable."}
+        </Text>
       )}
 
       <Text style={styles.sectionLabel}>USAGE · LAST 30 DAYS</Text>
       {state.summary ? (
         <UsageSection summary={state.summary} styles={styles} colors={colors} />
       ) : (
-        <Text style={styles.note}>{state.summaryError ?? 'Usage insights are unavailable.'}</Text>
+        <Text style={styles.note}>
+          {state.summaryError ?? "Usage insights are unavailable."}
+        </Text>
       )}
     </>
   );
@@ -150,7 +172,7 @@ function HealthHero({
   const tone = statusColor(health.status, colors);
   const { metrics } = health;
   const p99 = metrics.eventLoopLagP99Ms;
-  const errored = health.components.filter((c) => c.status !== 'ok');
+  const errored = health.components.filter((c) => c.status !== "ok");
   const okCount = health.components.length - errored.length;
 
   return (
@@ -161,21 +183,39 @@ function HealthHero({
           <Text style={styles.heroStatus}>{STATUS_WORD[health.status]}</Text>
           <Text style={styles.heroSub}>
             {`${okCount}/${health.components.length} components ok · up ${formatUptime(
-              health.uptimeMs,
+              health.uptimeMs
             )}`}
           </Text>
         </View>
       </View>
 
       <View style={styles.chips}>
-        <Chip label="MEMORY" value={formatBytes(metrics.rssBytes)} styles={styles} />
-        <Chip label="OUTBOX" value={formatCount(metrics.outboxPending)} styles={styles} />
-        {p99 === undefined ? null : <Chip label="LOOP p99" value={formatMs(p99)} styles={styles} />}
+        <Chip
+          label="MEMORY"
+          value={formatBytes(metrics.rssBytes)}
+          styles={styles}
+        />
+        <Chip
+          label="OUTBOX"
+          value={formatCount(metrics.outboxPending)}
+          styles={styles}
+        />
+        {p99 === undefined ? null : (
+          <Chip label="LOOP p99" value={formatMs(p99)} styles={styles} />
+        )}
         {metrics.storageFsyncMs === undefined ? null : (
-          <Chip label="FSYNC" value={formatMs(metrics.storageFsyncMs)} styles={styles} />
+          <Chip
+            label="FSYNC"
+            value={formatMs(metrics.storageFsyncMs)}
+            styles={styles}
+          />
         )}
         {metrics.sseClients === undefined ? null : (
-          <Chip label="STREAMS" value={formatCount(metrics.sseClients)} styles={styles} />
+          <Chip
+            label="STREAMS"
+            value={formatCount(metrics.sseClients)}
+            styles={styles}
+          />
         )}
       </View>
 
@@ -200,7 +240,8 @@ function HealthHero({
                 style={[
                   styles.eventBadge,
                   {
-                    backgroundColor: e.level === 'error' ? colors.danger : palette.amber,
+                    backgroundColor:
+                      e.level === "error" ? colors.danger : palette.amber,
                   },
                 ]}
               />
@@ -208,7 +249,9 @@ function HealthHero({
                 <Text style={styles.eventMsg} numberOfLines={2}>
                   {e.message}
                 </Text>
-                <Text style={styles.eventMeta}>{`${e.component} · ${relativeTime(e.at)}`}</Text>
+                <Text
+                  style={styles.eventMeta}
+                >{`${e.component} · ${relativeTime(e.at)}`}</Text>
               </View>
             </View>
           ))}
@@ -250,7 +293,12 @@ function ComponentRow({
     <View>
       {first ? null : <View style={styles.divider} />}
       <View style={styles.compRow}>
-        <View style={[styles.compDot, { backgroundColor: statusColor(comp.status, colors) }]} />
+        <View
+          style={[
+            styles.compDot,
+            { backgroundColor: statusColor(comp.status, colors) },
+          ]}
+        />
         <Text style={styles.compName} numberOfLines={1}>
           {comp.component}
         </Text>
@@ -260,7 +308,7 @@ function ComponentRow({
           </Text>
         ) : null}
       </View>
-      {comp.status !== 'ok' && comp.lastError ? (
+      {comp.status !== "ok" && comp.lastError ? (
         <Text style={styles.compError} numberOfLines={2}>
           {comp.lastError}
         </Text>
@@ -321,7 +369,7 @@ function UsageSection({
             <Text style={styles.kpiFoot}>
               {kpis.hydrationTokens > 0
                 ? `${formatCount(kpis.hydrationTokens)} hydration`
-                : 'this window'}
+                : "this window"}
             </Text>
           )}
         </Kpi>
@@ -333,7 +381,9 @@ function UsageSection({
           colors={colors}
         >
           <Text style={styles.kpiFoot}>
-            {kpis.unpricedRuns > 0 ? `${kpis.unpricedRuns} unpriced` : 'last 30 days'}
+            {kpis.unpricedRuns > 0
+              ? `${kpis.unpricedRuns} unpriced`
+              : "last 30 days"}
           </Text>
         </Kpi>
         <Kpi
@@ -352,14 +402,18 @@ function UsageSection({
           styles={styles}
           colors={colors}
         >
-          <Text style={styles.kpiFoot}>{`≈ ${formatUsd(kpis.forecastCostUsd)} forecast`}</Text>
+          <Text
+            style={styles.kpiFoot}
+          >{`≈ ${formatUsd(kpis.forecastCostUsd)} forecast`}</Text>
         </Kpi>
       </View>
 
       <View style={styles.panel}>
         <View style={styles.panelHead}>
           <Text style={styles.panelTitle}>Daily consumption</Text>
-          <Text style={styles.panelMeta}>{`${summary.windowDays} DAYS · TOKENS`}</Text>
+          <Text
+            style={styles.panelMeta}
+          >{`${summary.windowDays} DAYS · TOKENS`}</Text>
         </View>
         {hasDaily ? (
           <>
@@ -409,7 +463,9 @@ function UsageSection({
                 />
               </View>
               <View style={styles.modelFoot}>
-                <Text style={styles.modelFootText}>{formatCount(m.tokens)}</Text>
+                <Text style={styles.modelFootText}>
+                  {formatCount(m.tokens)}
+                </Text>
                 <Text style={styles.modelFootText}>{formatUsd(m.costUsd)}</Text>
               </View>
             </View>
@@ -440,8 +496,12 @@ function UsageSection({
                 />
               </View>
               <View style={styles.modelFoot}>
-                <Text style={styles.modelFootText}>{formatCount(e.tokens)}</Text>
-                <Text style={styles.modelFootText}>{`${e.runs} · ${formatUsd(e.costUsd)}`}</Text>
+                <Text style={styles.modelFootText}>
+                  {formatCount(e.tokens)}
+                </Text>
+                <Text
+                  style={styles.modelFootText}
+                >{`${e.runs} · ${formatUsd(e.costUsd)}`}</Text>
               </View>
             </View>
           ))}
@@ -452,7 +512,9 @@ function UsageSection({
         <View style={styles.panel}>
           <View style={styles.panelHead}>
             <Text style={styles.panelTitle}>Recent activity</Text>
-            <Text style={styles.panelMeta}>{`${summary.recent.length} RUNS`}</Text>
+            <Text
+              style={styles.panelMeta}
+            >{`${summary.recent.length} RUNS`}</Text>
           </View>
           {summary.recent.slice(0, 6).map((a, i) => (
             <View key={a.runId}>
@@ -464,7 +526,7 @@ function UsageSection({
                     {a.label}
                   </Text>
                   <Text style={styles.actKind}>
-                    {`${a.kind.toUpperCase()}${a.effort ? ` · ${a.effort.toUpperCase()}` : ''}${a.ok ? '' : ' · FAILED'}`}
+                    {`${a.kind.toUpperCase()}${a.effort ? ` · ${a.effort.toUpperCase()}` : ""}${a.ok ? "" : " · FAILED"}`}
                   </Text>
                 </View>
                 <View style={styles.actNums}>
@@ -488,7 +550,7 @@ function Kpi({
   styles,
   colors,
 }: {
-  icon: React.ComponentProps<typeof Feather>['name'];
+  icon: React.ComponentProps<typeof Feather>["name"];
   label: string;
   value: string;
   children: React.ReactNode;
@@ -526,17 +588,23 @@ function Sparkline({
   const min = Math.min(...pts);
   const span = max - min || 1;
   const px = (i: number): number => (n <= 1 ? 0 : (i / (n - 1)) * W);
-  const py = (v: number): number => H - PAD - ((v - min) / span) * (H - PAD * 2);
+  const py = (v: number): number =>
+    H - PAD - ((v - min) / span) * (H - PAD * 2);
   const coords = pts.map((v, i) => [px(i), py(v)] as const);
   const line = coords
-    .map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
-    .join(' ');
+    .map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
+    .join(" ");
   const area = `${line} L${W} ${H} L0 ${H} Z`;
   const peakIdx = pts.indexOf(max);
   const peak = coords[peakIdx] ?? ([0, 0] as const);
 
   return (
-    <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+    <Svg
+      width="100%"
+      height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+    >
       <Defs>
         <LinearGradient id="insArea" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0%" stopColor={colors.accent} stopOpacity={0.28} />

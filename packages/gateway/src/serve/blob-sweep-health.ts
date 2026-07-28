@@ -19,14 +19,14 @@
  * same way `broker`'s probe treats "no broker-carried connections" as ok.
  */
 
-import type { HealthProbe } from './health-registry.js';
+import type { HealthProbe } from "./health-registry.js";
 
 /** One custody-state bucket count, as `custodyStateCounts` returns it. */
 export interface BlobCustodyCounts {
-  readonly 'pending-offsite'?: number;
-  readonly 'local-only': number;
+  readonly "pending-offsite"?: number;
+  readonly "local-only": number;
   readonly replicated: number;
-  readonly 'remote-only': number;
+  readonly "remote-only": number;
   readonly missing: number;
 }
 
@@ -58,7 +58,9 @@ const DEFAULT_STREAK = 3;
 const DEFAULT_STALE_MS = 60 * 60 * 1000;
 
 /** Builds the `blob-sweep` component's `HealthProbe` (registered in `build-gateway.ts`). */
-export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): HealthProbe {
+export function createBlobSweepHealthProbe(
+  options: BlobSweepHealthOptions
+): HealthProbe {
   const now = options.now ?? Date.now;
   const streak = options.persistentFailureStreak ?? DEFAULT_STREAK;
   const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_MS;
@@ -74,8 +76,8 @@ export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): Hea
 
     for (const vault of vaults) {
       const counts = vault.counts();
-      localOnlyTotal += counts['local-only'];
-      pendingOffsiteTotal += counts['pending-offsite'] ?? 0;
+      localOnlyTotal += counts["local-only"];
+      pendingOffsiteTotal += counts["pending-offsite"] ?? 0;
       replicatedTotal += counts.replicated;
       if (!vault.s3Configured()) continue;
       s3VaultCount += 1;
@@ -83,8 +85,9 @@ export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): Hea
       const status = vault.sweepStatus();
 
       if (status.consecutiveFailures > 0) {
-        const note = `${tag} (${status.consecutiveFailures}x: ${status.lastError ?? 'unknown error'})`;
-        if (status.consecutiveFailures >= streak) persistentlyFailing.push(note);
+        const note = `${tag} (${status.consecutiveFailures}x: ${status.lastError ?? "unknown error"})`;
+        if (status.consecutiveFailures >= streak)
+          persistentlyFailing.push(note);
         else recentlyFailingOrStale.push(note);
         continue;
       }
@@ -95,10 +98,12 @@ export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): Hea
         continue;
       }
       const age = now() - Date.parse(status.lastCompletedAt);
-      const backlog = counts['local-only'] + (counts['pending-offsite'] ?? 0);
+      const backlog = counts["local-only"] + (counts["pending-offsite"] ?? 0);
       if (Number.isFinite(age) && age > staleAfterMs && backlog > 0) {
         const ageS = Math.round(age / 1000);
-        recentlyFailingOrStale.push(`${tag} (last swept ${ageS}s ago, backlog ${backlog})`);
+        recentlyFailingOrStale.push(
+          `${tag} (last swept ${ageS}s ago, backlog ${backlog})`
+        );
       }
     }
 
@@ -107,28 +112,28 @@ export function createBlobSweepHealthProbe(options: BlobSweepHealthOptions): Hea
       `${replicatedTotal} replicated`;
     if (persistentlyFailing.length > 0) {
       return {
-        status: 'error',
+        status: "error",
         detail:
           `${s3VaultCount} vault(s) with s3 configured — persistently failing: ` +
-          `${persistentlyFailing.join(', ')}; ${backlogDetail}`,
+          `${persistentlyFailing.join(", ")}; ${backlogDetail}`,
       };
     }
     if (recentlyFailingOrStale.length > 0) {
       return {
-        status: 'degraded',
+        status: "degraded",
         detail:
-          `${s3VaultCount} vault(s) with s3 configured — ${recentlyFailingOrStale.join(', ')}; ` +
+          `${s3VaultCount} vault(s) with s3 configured — ${recentlyFailingOrStale.join(", ")}; ` +
           backlogDetail,
       };
     }
     if (s3VaultCount === 0) {
       return {
-        status: 'ok',
+        status: "ok",
         detail: `no s3 tier configured — ${localOnlyTotal} local-only blob(s)`,
       };
     }
     return {
-      status: 'ok',
+      status: "ok",
       detail: `${s3VaultCount} vault(s) with s3 configured — ${backlogDetail}`,
     };
   };

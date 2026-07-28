@@ -1,23 +1,23 @@
-import crypto from 'node:crypto';
-import http from 'node:http';
-import path from 'node:path';
+import crypto from "node:crypto";
+import http from "node:http";
+import path from "node:path";
 
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
+import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   createTunnelClient,
   DeviceStore,
   parsePairQrPayload,
   startDesktopTunnel,
   startLocalProxy,
-} from '@centraid/tunnel';
-import { describe, expect, onTestFinished, test } from 'vitest';
+} from "@centraid/tunnel";
+import { describe, expect, onTestFinished, test } from "vitest";
 
-const OWNER = 'tests/perf/tunnel-throughput.perf.test.ts';
+const OWNER = "tests/perf/tunnel-throughput.perf.test.ts";
 
-describe('tunnel-throughput.perf', () => {
-  test('a paired local QUIC tunnel stays above the nightly payload throughput floor', async () => {
-    const token = crypto.randomBytes(16).toString('hex');
+describe("tunnel-throughput.perf", () => {
+  test("a paired local QUIC tunnel stays above the nightly payload throughput floor", async () => {
+    const token = crypto.randomBytes(16).toString("hex");
     const payload = Buffer.alloc(16 * 1024 * 1024, 0x5a);
     const gateway = http.createServer((req, res) => {
       if (req.headers.authorization !== `Bearer ${token}`) {
@@ -25,34 +25,39 @@ describe('tunnel-throughput.perf', () => {
         res.end();
         return;
       }
-      res.setHeader('content-type', 'application/octet-stream');
-      res.setHeader('content-length', String(payload.length));
+      res.setHeader("content-type", "application/octet-stream");
+      res.setHeader("content-length", String(payload.length));
       res.end(payload);
     });
-    await new Promise<void>((resolve) => gateway.listen(0, '127.0.0.1', resolve));
-    onTestFinished(() => new Promise<void>((resolve) => gateway.close(() => resolve())));
+    await new Promise<void>((resolve) =>
+      gateway.listen(0, "127.0.0.1", resolve)
+    );
+    onTestFinished(
+      () => new Promise<void>((resolve) => gateway.close(() => resolve()))
+    );
     const address = gateway.address();
-    if (!address || typeof address === 'string') throw new Error('perf gateway did not bind');
+    if (!address || typeof address === "string")
+      throw new Error("perf gateway did not bind");
 
-    const root = await tempDir('tunnel-throughput-');
-    const store = DeviceStore.open(path.join(root, 'devices.json'));
+    const root = await tempDir("tunnel-throughput-");
+    const store = DeviceStore.open(path.join(root, "devices.json"));
     const desktop = await startDesktopTunnel({
       upstream: () => ({ baseUrl: `http://127.0.0.1:${address.port}`, token }),
       deviceStore: store,
-      desktopName: 'Perf desktop',
-      relays: 'disabled',
+      desktopName: "Perf desktop",
+      relays: "disabled",
     });
     onTestFinished(() => desktop.close());
-    const phone = await createTunnelClient({ relays: 'disabled' });
+    const phone = await createTunnelClient({ relays: "disabled" });
     onTestFinished(() => phone.close());
     const pairing = parsePairQrPayload(desktop.beginPairing().qrPayload);
-    if (!pairing) throw new Error('invalid pairing payload');
+    if (!pairing) throw new Error("invalid pairing payload");
     await expect(
       phone.pair(pairing.ticket, {
         code: pairing.code,
-        deviceName: 'Perf phone',
-        platform: 'test',
-      }),
+        deviceName: "Perf phone",
+        platform: "test",
+      })
     ).resolves.toMatchObject({ ok: true });
 
     const connection = await phone.connect(desktop.ticket());
@@ -84,26 +89,28 @@ describe('tunnel-throughput.perf', () => {
     // headroom. The native fast path is NOT measured by this lane.
     const throughputFloor = 1.5;
     const passed =
-      response.status === 200 && received === payload.length && mibPerSecond >= throughputFloor;
+      response.status === 200 &&
+      received === payload.length &&
+      mibPerSecond >= throughputFloor;
     await recordQualityResult({
-      lane: 'perf',
+      lane: "perf",
       owner: OWNER,
-      name: 'Tunnel payload throughput',
-      status: passed ? 'passed' : 'failed',
+      name: "Tunnel payload throughput",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
-          name: 'throughput',
+          name: "throughput",
           value: mibPerSecond,
-          unit: 'MiB/s',
+          unit: "MiB/s",
           budget: throughputFloor,
         },
         {
-          name: 'payload',
+          name: "payload",
           value: received,
-          unit: 'bytes',
+          unit: "bytes",
           budget: payload.length,
         },
-        { name: 'wall clock', value: durationMs, unit: 'ms' },
+        { name: "wall clock", value: durationMs, unit: "ms" },
       ],
     });
     expect(response.status).toBe(200);

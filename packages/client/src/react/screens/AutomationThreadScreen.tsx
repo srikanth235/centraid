@@ -1,4 +1,4 @@
-import type { IconName } from '@centraid/design-tokens';
+import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#539) single cohesive screen component (header/consent-strip/chat-turn spine/steering composer of one thread surface); splitting would fragment one visual unit
 import {
   type Dispatch,
@@ -8,7 +8,7 @@ import {
   useEffect,
   useRef,
   useState,
-} from 'react';
+} from "react";
 
 import type {
   AsstModelPickerDTO,
@@ -24,15 +24,15 @@ import type {
   OutboxItemDTO,
   ParkedItemDTO,
   ThreadRunDTO,
-} from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { Icon } from '../ui/index.js';
-import Message, { type MessageCallbacks } from './AssistantMessage.js';
-import { EffortPicker, ModelPicker, RunnerPicker } from './AssistantScreen.js';
-import ChatComposer from './ChatComposer.js';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
+import Message, { type MessageCallbacks } from "./AssistantMessage.js";
+import { EffortPicker, ModelPicker, RunnerPicker } from "./AssistantScreen.js";
+import ChatComposer from "./ChatComposer.js";
 
-import au from '../styles/automation.module.css';
-import styles from './AutomationThreadScreen.module.css';
+import au from "../styles/automation.module.css";
+import styles from "./AutomationThreadScreen.module.css";
 
 // The RUN SCREEN — one of the two automation surfaces, and the one that
 // changes nothing.
@@ -93,17 +93,20 @@ export interface AutomationThreadDataEx extends AutomationThreadData {
   runnerConfig?: AsstModelPickerDTO;
 }
 
-export interface AutomationThreadScreenProps extends Omit<AutomationThreadBridgeProps, 'loadData'> {
+export interface AutomationThreadScreenProps extends Omit<
+  AutomationThreadBridgeProps,
+  "loadData"
+> {
   loadData: () => Promise<AutomationThreadDataEx | null>;
 }
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
-  active: 'Power',
-  paused: 'Pause',
-  draft: 'Pencil',
-  running: 'Loader',
-  success: 'CheckCircle',
-  failed: 'AlertTriangle',
+  active: "Power",
+  paused: "Pause",
+  draft: "Pencil",
+  running: "Loader",
+  success: "CheckCircle",
+  failed: "AlertTriangle",
 };
 
 /**
@@ -120,23 +123,29 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function withoutId(current: ReadonlySet<string>, id: string): ReadonlySet<string> {
+function withoutId(
+  current: ReadonlySet<string>,
+  id: string
+): ReadonlySet<string> {
   if (!current.has(id)) return current;
   const next = new Set(current);
   next.delete(id);
   return next;
 }
 
-function pauseWatchRejoin(controller: AbortController, ms: number): Promise<void> {
+function pauseWatchRejoin(
+  controller: AbortController,
+  ms: number
+): Promise<void> {
   return new Promise((resolve) => {
     const timer = window.setTimeout(resolve, ms);
     controller.signal.addEventListener(
-      'abort',
+      "abort",
       () => {
         window.clearTimeout(timer);
         resolve();
       },
-      { once: true },
+      { once: true }
     );
   });
 }
@@ -145,20 +154,21 @@ async function watchNativeTurnWithBackoff(
   turnId: string,
   controller: AbortController,
   io: {
-    watchTurn: AutomationThreadBridgeProps['watchTurn'];
+    watchTurn: AutomationThreadBridgeProps["watchTurn"];
     reload: () => Promise<void>;
     setTraces: Dispatch<SetStateAction<Record<string, AsstMsgDTO[]>>>;
     setLostWatches: Dispatch<SetStateAction<ReadonlySet<string>>>;
   },
-  attempt = 0,
+  attempt = 0
 ): Promise<void> {
   if (controller.signal.aborted) return;
   let settled = false;
   try {
     settled = await io.watchTurn(
       turnId,
-      (messages) => io.setTraces((current) => ({ ...current, [turnId]: messages })),
-      controller.signal,
+      (messages) =>
+        io.setTraces((current) => ({ ...current, [turnId]: messages })),
+      controller.signal
     );
   } catch {
     settled = false;
@@ -191,7 +201,7 @@ function fetchTurnTrace(
     setTraces: Dispatch<SetStateAction<Record<string, AsstMsgDTO[]>>>;
     setTraceErrors: Dispatch<SetStateAction<ReadonlySet<string>>>;
     setLoadingTraces: Dispatch<SetStateAction<ReadonlySet<string>>>;
-  },
+  }
 ): Promise<void> {
   const { loadTurnTrace, setTraces, setTraceErrors, setLoadingTraces } = io;
   setLoadingTraces((current) => new Set(current).add(turnId));
@@ -207,7 +217,7 @@ function fetchTurnTrace(
         // spinner and the Done/Failed footer at once and lose "Show trace".
         // Leave `traces` untouched and flag the turn so it offers a retry.
         setTraceErrors((current) => new Set(current).add(turnId));
-      },
+      }
     )
     .finally(() => {
       setLoadingTraces((current) => withoutId(current, turnId));
@@ -230,7 +240,7 @@ function fmtTokens(n: number): string {
 }
 function relTime(iso: string): string {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return 'just now';
+  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.round(mins / 60);
   if (hours < 24) return `${hours}h ago`;
@@ -262,8 +272,8 @@ function TriggerChips({
   onCopyWebhook,
   onRegenerate,
 }: {
-  header: AutomationThreadData['header'];
-  triggerDetail: AutomationThreadDataEx['triggerDetail'];
+  header: AutomationThreadData["header"];
+  triggerDetail: AutomationThreadDataEx["triggerDetail"];
   regenBusy: boolean;
   onCopyWebhook: (url: string) => void;
   onRegenerate: () => void;
@@ -272,17 +282,20 @@ function TriggerChips({
   const dataDetail = triggerDetail?.dataDetail ?? null;
   const conditionDetail = triggerDetail?.conditionDetail ?? null;
   const hasStructured =
-    cronExprs.length > 0 || !!header.webhook || !!dataDetail || !!conditionDetail;
+    cronExprs.length > 0 ||
+    !!header.webhook ||
+    !!dataDetail ||
+    !!conditionDetail;
   const triggerKind =
     cronExprs.length > 0
-      ? 'cron'
+      ? "cron"
       : header.webhook
-        ? 'webhook'
+        ? "webhook"
         : dataDetail
-          ? 'data'
+          ? "data"
           : conditionDetail
-            ? 'condition'
-            : 'manual';
+            ? "condition"
+            : "manual";
 
   return (
     <div className={styles.chips} data-trigger-kind={triggerKind}>
@@ -310,7 +323,10 @@ function TriggerChips({
             <span className={styles.chipIc} aria-hidden="true">
               <Icon name="Webhook" size={12} />
             </span>
-            <code className={styles.chipUrl} data-testid="automation-webhook-url">
+            <code
+              className={styles.chipUrl}
+              data-testid="automation-webhook-url"
+            >
               {header.webhook.url}
             </code>
             <button
@@ -318,7 +334,9 @@ function TriggerChips({
               className={styles.chipIconBtn}
               aria-label="Copy webhook URL"
               title="Copy webhook URL"
-              onClick={() => header.webhook?.url && onCopyWebhook(header.webhook.url)}
+              onClick={() =>
+                header.webhook?.url && onCopyWebhook(header.webhook.url)
+              }
             >
               <Icon name="Copy" size={12} />
             </button>
@@ -341,8 +359,10 @@ function TriggerChips({
             <Icon name="Folder" size={12} />
           </span>
           <span>
-            watches <code>{dataDetail.entities.join(', ')}</code>
-            {dataDetail.everyLabel ? ` · ${dataDetail.everyLabel.toLowerCase()}` : ''}
+            watches <code>{dataDetail.entities.join(", ")}</code>
+            {dataDetail.everyLabel
+              ? ` · ${dataDetail.everyLabel.toLowerCase()}`
+              : ""}
           </span>
         </span>
       ) : null}
@@ -353,11 +373,15 @@ function TriggerChips({
           </span>
           <span>
             watches <code>{conditionDetail.entity}</code>
-            {conditionDetail.everyLabel ? ` · ${conditionDetail.everyLabel.toLowerCase()}` : ''}
+            {conditionDetail.everyLabel
+              ? ` · ${conditionDetail.everyLabel.toLowerCase()}`
+              : ""}
           </span>
         </span>
       ) : null}
-      {hasStructured ? null : <span className={styles.chip}>{header.triggerSummary}</span>}
+      {hasStructured ? null : (
+        <span className={styles.chip}>{header.triggerSummary}</span>
+      )}
     </div>
   );
 }
@@ -387,7 +411,7 @@ function ParkedCard({
           type="button"
           className={cx(au.auBtn, au.auBtnGhost, styles.consentBtnSm)}
           disabled={busy}
-          onClick={() => onDecide('discard')}
+          onClick={() => onDecide("discard")}
         >
           Dismiss
         </button>
@@ -395,7 +419,7 @@ function ParkedCard({
           type="button"
           className={cx(au.auBtn, au.auBtnPrimary, styles.consentBtnSm)}
           disabled={busy}
-          onClick={() => onDecide('approve')}
+          onClick={() => onDecide("approve")}
         >
           Approve
         </button>
@@ -414,15 +438,20 @@ function OutboxCard({
   onDecide: (decision: ConsentDecision, alwaysAllow?: boolean) => void;
 }): JSX.Element {
   const [alwaysAllow, setAlwaysAllow] = useState(false);
-  const pending = item.status === 'pending';
+  const pending = item.status === "pending";
   return (
-    <div className={styles.consentCard} data-kind="outbox" data-status={item.status}>
+    <div
+      className={styles.consentCard}
+      data-kind="outbox"
+      data-status={item.status}
+    >
       <span className={styles.consentIc} aria-hidden="true">
         <Icon name="Send" size={14} />
       </span>
       <div className={styles.consentBody}>
         <div className={styles.consentTitle}>
-          Staged: {item.verb} {item.connectionLabel} to <code>{item.target}</code>
+          Staged: {item.verb} {item.connectionLabel} to{" "}
+          <code>{item.target}</code>
         </div>
         <div className={styles.consentMeta}>
           {item.connectionLabel} · {relTime(item.stagedAt)}
@@ -446,7 +475,7 @@ function OutboxCard({
             type="button"
             className={cx(au.auBtn, au.auBtnGhost, styles.consentBtnSm)}
             disabled={busy}
-            onClick={() => onDecide('discard')}
+            onClick={() => onDecide("discard")}
           >
             Reject
           </button>
@@ -454,7 +483,7 @@ function OutboxCard({
             type="button"
             className={cx(au.auBtn, au.auBtnPrimary, styles.consentBtnSm)}
             disabled={busy}
-            onClick={() => onDecide('approve', alwaysAllow)}
+            onClick={() => onDecide("approve", alwaysAllow)}
           >
             Approve
           </button>
@@ -476,7 +505,7 @@ function GrantsLine({
   return (
     <details className={styles.grantsLine}>
       <summary>
-        {grants.length} standing grant{grants.length === 1 ? '' : 's'}
+        {grants.length} standing grant{grants.length === 1 ? "" : "s"}
       </summary>
       <div className={styles.grantsList}>
         {grants.map((g) => (
@@ -508,17 +537,17 @@ function GrantsLine({
 // origin signal `ThreadRunDTO` carries — to distinguish a scheduled fire from
 // a manual/webhook/data one. Keeps the chip honest without a DTO change.
 function nodeIconFor(run: ThreadRunDTO): IconName {
-  if (run.status === 'running') return 'Loader';
-  if (run.status === 'fail') return 'AlertTriangle';
+  if (run.status === "running") return "Loader";
+  if (run.status === "fail") return "AlertTriangle";
   // An ask is the reader's own question sitting in the history — it must not
   // wear an execution's trigger glyph.
-  if (run.entryKind === 'ask') return 'Send';
+  if (run.entryKind === "ask") return "Send";
   const origin = run.originLabel.toLowerCase();
-  if (origin.includes('manual')) return 'Play';
-  if (origin.includes('webhook')) return 'Webhook';
-  if (origin.includes('data') || origin.includes('watch')) return 'Folder';
-  if (origin.includes('replay')) return 'Refresh';
-  return 'Clock';
+  if (origin.includes("manual")) return "Play";
+  if (origin.includes("webhook")) return "Webhook";
+  if (origin.includes("data") || origin.includes("watch")) return "Folder";
+  if (origin.includes("replay")) return "Refresh";
+  return "Clock";
 }
 
 // One run = one chat turn. The automation "speaks" each time it fires: the
@@ -557,21 +586,21 @@ function RunTurn({
   loadAttachmentImage?: (hash: string, mime: string) => Promise<string>;
 }): JSX.Element {
   const time = new Date(run.startedAt).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
+    hour: "numeric",
+    minute: "2-digit",
   });
-  const running = run.status === 'running';
-  const failed = run.status === 'fail';
+  const running = run.status === "running";
+  const failed = run.status === "fail";
   const hasTrace = messages !== undefined;
   // "Run again" re-fires the automation. Offering it on an ask would re-run
   // the automation in answer to a question — never what the reader meant.
-  const rerunnable = run.entryKind === 'run';
+  const rerunnable = run.entryKind === "run";
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs: () => undefined,
     wireCodeCopy: () => undefined,
     loadAttachmentImage:
       loadAttachmentImage ??
-      (() => Promise.reject(new Error('automation attachments unavailable'))),
+      (() => Promise.reject(new Error("automation attachments unavailable"))),
     onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
     onFeedback: () => undefined,
     onRegenerate: () => undefined,
@@ -583,12 +612,12 @@ function RunTurn({
       className={styles.turn}
       data-run-status={run.status}
       data-entry-kind={run.entryKind}
-      data-testid={run.entryKind === 'ask' ? 'ask-entry' : 'run-entry'}
+      data-testid={run.entryKind === "ask" ? "ask-entry" : "run-entry"}
     >
       <span
         className={styles.node}
         data-run-status={run.status}
-        data-spin={running ? 'true' : undefined}
+        data-spin={running ? "true" : undefined}
         aria-hidden="true"
       >
         <Icon name={nodeIconFor(run)} size={12} />
@@ -598,7 +627,12 @@ function RunTurn({
         <span className={styles.turnTime}>{time}</span>
         <span className={styles.turnHeadSpacer} />
         {!running && rerunnable ? (
-          <button type="button" className={styles.turnRerun} disabled={rerunBusy} onClick={onRerun}>
+          <button
+            type="button"
+            className={styles.turnRerun}
+            disabled={rerunBusy}
+            onClick={onRerun}
+          >
             <Icon name="Refresh" size={12} />
             <span>Run again</span>
           </button>
@@ -661,7 +695,9 @@ function RunTurn({
               <span>Done</span>
             </span>
             <span className={styles.turnTelem}>
-              {run.durationMs === null ? null : <span>{fmtDuration(run.durationMs)}</span>}
+              {run.durationMs === null ? null : (
+                <span>{fmtDuration(run.durationMs)}</span>
+              )}
               {run.costUsd ? <span>{fmtCost(run.costUsd)}</span> : null}
               {tokens ? <span>{fmtTokens(tokens)}</span> : null}
             </span>
@@ -673,7 +709,7 @@ function RunTurn({
               disabled={traceLoading}
               onClick={onLoadTrace}
             >
-              <span>{traceLoading ? 'Loading…' : 'Show trace'}</span>
+              <span>{traceLoading ? "Loading…" : "Show trace"}</span>
             </button>
             <button
               type="button"
@@ -689,7 +725,9 @@ function RunTurn({
       )}
       {!hasTrace && traceFailed ? (
         <div className={styles.turnNotice} data-testid="turn-trace-error">
-          <div className={styles.turnErrorBody}>Couldn’t load this turn’s transcript.</div>
+          <div className={styles.turnErrorBody}>
+            Couldn’t load this turn’s transcript.
+          </div>
           <div className={styles.turnErrorActions}>
             <button
               type="button"
@@ -698,7 +736,7 @@ function RunTurn({
               disabled={traceLoading}
               onClick={onLoadTrace}
             >
-              {traceLoading ? 'Retrying…' : 'Try again'}
+              {traceLoading ? "Retrying…" : "Try again"}
             </button>
           </div>
         </div>
@@ -722,12 +760,17 @@ function RunTurn({
       ) : null}
       {hasTrace && !running ? (
         <div className={styles.turnFoot}>
-          <span className={styles.turnOutcome} data-ok={failed ? undefined : 'true'}>
-            <Icon name={failed ? 'AlertTriangle' : 'CheckCircle'} size={13} />
-            <span>{failed ? 'Failed' : 'Done'}</span>
+          <span
+            className={styles.turnOutcome}
+            data-ok={failed ? undefined : "true"}
+          >
+            <Icon name={failed ? "AlertTriangle" : "CheckCircle"} size={13} />
+            <span>{failed ? "Failed" : "Done"}</span>
           </span>
           <span className={styles.turnTelem}>
-            {run.durationMs === null ? null : <span>{fmtDuration(run.durationMs)}</span>}
+            {run.durationMs === null ? null : (
+              <span>{fmtDuration(run.durationMs)}</span>
+            )}
             {run.costUsd ? <span>{fmtCost(run.costUsd)}</span> : null}
             {tokens ? <span>{fmtTokens(tokens)}</span> : null}
           </span>
@@ -764,26 +807,36 @@ function PlanBanner({
   plan: AuPlanStatusDTO;
   onOpenCompiler: () => void;
 }): JSX.Element | null {
-  if (plan.state === 'ready') return null;
+  if (plan.state === "ready") return null;
   return (
-    <div className={styles.planBanner} data-state={plan.state} data-testid="plan-banner">
-      <span className={styles.planIc} aria-hidden="true" data-spin={plan.state === 'compiling'}>
+    <div
+      className={styles.planBanner}
+      data-state={plan.state}
+      data-testid="plan-banner"
+    >
+      <span
+        className={styles.planIc}
+        aria-hidden="true"
+        data-spin={plan.state === "compiling"}
+      >
         <Icon
           name={
-            plan.state === 'compiling'
-              ? 'Loader'
-              : plan.state === 'failed'
-                ? 'AlertTriangle'
-                : 'Braces'
+            plan.state === "compiling"
+              ? "Loader"
+              : plan.state === "failed"
+                ? "AlertTriangle"
+                : "Braces"
           }
           size={14}
         />
       </span>
       <div className={styles.planBody}>
         <div className={styles.planTitle}>{plan.label}</div>
-        {plan.detail ? <p className={styles.planDetail}>{plan.detail}</p> : null}
+        {plan.detail ? (
+          <p className={styles.planDetail}>{plan.detail}</p>
+        ) : null}
       </div>
-      {plan.state === 'compiling' ? null : (
+      {plan.state === "compiling" ? null : (
         <button
           type="button"
           className={cx(au.auBtn, au.auBtnGhost, styles.planBtn)}
@@ -824,7 +877,7 @@ function Composer({
       runnerKind?: string;
       model?: string;
       thinking?: string;
-    },
+    }
   ) => void;
   onStop: () => void;
   onOpenCompiler: () => void;
@@ -834,15 +887,17 @@ function Composer({
   onSetRunner?: (runnerKind: string) => Promise<AsstModelPickerDTO>;
   onRunnerSwitch?: () => void;
 }): JSX.Element {
-  const [draft, setDraft] = useState('');
-  const [pickerOverride, setPickerOverride] = useState<AsstModelPickerDTO | undefined>(undefined);
+  const [draft, setDraft] = useState("");
+  const [pickerOverride, setPickerOverride] = useState<
+    AsstModelPickerDTO | undefined
+  >(undefined);
   const [pickerLoaded, setPickerLoaded] = useState(true);
   const [pending, setPending] = useState<
     Array<{
       localId: string;
       filename: string;
       sizeBytes: number;
-      state: 'uploading' | 'ready' | 'error';
+      state: "uploading" | "ready" | "error";
       ref?: BuilderAttachmentRef;
     }>
   >([]);
@@ -850,18 +905,24 @@ function Composer({
   const activePicker = pickerOverride ?? picker;
   const trimmed = draft.trim();
   const ready = pending.flatMap((attachment) =>
-    attachment.state === 'ready' && attachment.ref ? [attachment.ref] : [],
+    attachment.state === "ready" && attachment.ref ? [attachment.ref] : []
   );
   const submit = (): void => {
     if (!trimmed && ready.length === 0) return;
-    if (pending.some((attachment) => attachment.state === 'uploading')) return;
+    if (pending.some((attachment) => attachment.state === "uploading")) return;
     onSend(trimmed, {
       ...(ready.length ? { attachments: ready } : {}),
-      ...(activePicker?.selectedRunnerKind ? { runnerKind: activePicker.selectedRunnerKind } : {}),
-      ...(activePicker?.selectedModelId ? { model: activePicker.selectedModelId } : {}),
-      ...(activePicker?.selectedEffortId ? { thinking: activePicker.selectedEffortId } : {}),
+      ...(activePicker?.selectedRunnerKind
+        ? { runnerKind: activePicker.selectedRunnerKind }
+        : {}),
+      ...(activePicker?.selectedModelId
+        ? { model: activePicker.selectedModelId }
+        : {}),
+      ...(activePicker?.selectedEffortId
+        ? { thinking: activePicker.selectedEffortId }
+        : {}),
     });
-    setDraft('');
+    setDraft("");
     setPending([]);
   };
   const attachFiles = (files: File[]): void => {
@@ -874,22 +935,26 @@ function Composer({
           localId,
           filename: file.name,
           sizeBytes: file.size,
-          state: 'uploading',
+          state: "uploading",
         },
       ]);
       void onUploadAttachment(file).then(
         (ref) =>
           setPending((current) =>
             current.map((attachment) =>
-              attachment.localId === localId ? { ...attachment, state: 'ready', ref } : attachment,
-            ),
+              attachment.localId === localId
+                ? { ...attachment, state: "ready", ref }
+                : attachment
+            )
           ),
         () =>
           setPending((current) =>
             current.map((attachment) =>
-              attachment.localId === localId ? { ...attachment, state: 'error' } : attachment,
-            ),
-          ),
+              attachment.localId === localId
+                ? { ...attachment, state: "error" }
+                : attachment
+            )
+          )
       );
     }
   };
@@ -921,7 +986,7 @@ function Composer({
         busy={busy}
         canSend={
           (Boolean(trimmed) || ready.length > 0) &&
-          !pending.some((attachment) => attachment.state === 'uploading')
+          !pending.some((attachment) => attachment.state === "uploading")
         }
         placeholder="Ask about these runs — what failed, what changed, why…"
         ariaLabel="Ask about this automation's runs"
@@ -937,14 +1002,18 @@ function Composer({
                 >
                   <span>{attachment.filename}</span>
                   <span>
-                    {attachment.state === 'uploading' ? '…' : formatBytes(attachment.sizeBytes)}
+                    {attachment.state === "uploading"
+                      ? "…"
+                      : formatBytes(attachment.sizeBytes)}
                   </span>
                   <button
                     type="button"
                     aria-label={`Remove ${attachment.filename}`}
                     onClick={() =>
                       setPending((current) =>
-                        current.filter((entry) => entry.localId !== attachment.localId),
+                        current.filter(
+                          (entry) => entry.localId !== attachment.localId
+                        )
                       )
                     }
                   >
@@ -974,7 +1043,7 @@ function Composer({
                 onChange={(event) => {
                   const files = Array.from(event.target.files ?? []);
                   if (files.length) attachFiles(files);
-                  event.target.value = '';
+                  event.target.value = "";
                 }}
               />
             </>
@@ -995,7 +1064,9 @@ function Composer({
                 busy={busy}
                 onSelect={(model) =>
                   setPickerOverride(
-                    activePicker ? { ...activePicker, selectedModelId: model } : undefined,
+                    activePicker
+                      ? { ...activePicker, selectedModelId: model }
+                      : undefined
                   )
                 }
               />
@@ -1010,7 +1081,9 @@ function Composer({
               busy={busy}
               onSelect={(effort) =>
                 setPickerOverride(
-                  activePicker ? { ...activePicker, selectedEffortId: effort } : undefined,
+                  activePicker
+                    ? { ...activePicker, selectedEffortId: effort }
+                    : undefined
                 )
               }
             />
@@ -1018,11 +1091,15 @@ function Composer({
         }
         hint={
           <>
-            Answers only — nothing here changes the automation. Switching agents uses a bounded
-            handoff and may ask for provider consent.{' '}
-            <button type="button" className={styles.composerLink} onClick={onOpenCompiler}>
+            Answers only — nothing here changes the automation. Switching agents
+            uses a bounded handoff and may ask for provider consent.{" "}
+            <button
+              type="button"
+              className={styles.composerLink}
+              onClick={onOpenCompiler}
+            >
               Open the compiler
-            </button>{' '}
+            </button>{" "}
             to change what it does.
           </>
         }
@@ -1049,18 +1126,24 @@ export default function AutomationThreadScreen({
   onRotateWebhook,
   onDelete,
 }: AutomationThreadScreenProps): JSX.Element {
-  const [state, setState] = useState<AutomationThreadDataEx | 'loading' | 'error' | 'missing'>(
-    'loading',
-  );
+  const [state, setState] = useState<
+    AutomationThreadDataEx | "loading" | "error" | "missing"
+  >("loading");
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
   const [sending, setSending] = useState(false);
   const [traces, setTraces] = useState<Record<string, AsstMsgDTO[]>>({});
-  const [loadingTraces, setLoadingTraces] = useState<ReadonlySet<string>>(new Set());
+  const [loadingTraces, setLoadingTraces] = useState<ReadonlySet<string>>(
+    new Set()
+  );
   /** Turns whose cold trace read failed — distinct from "no messages yet". */
-  const [traceErrors, setTraceErrors] = useState<ReadonlySet<string>>(new Set());
+  const [traceErrors, setTraceErrors] = useState<ReadonlySet<string>>(
+    new Set()
+  );
   /** Running turns whose live stream is gone and stayed gone after rejoins. */
-  const [lostWatches, setLostWatches] = useState<ReadonlySet<string>>(new Set());
+  const [lostWatches, setLostWatches] = useState<ReadonlySet<string>>(
+    new Set()
+  );
   const [pendingTrace, setPendingTrace] = useState<AsstMsgDTO[] | null>(null);
   const [composerContext, setComposerContext] = useState<{
     used: number;
@@ -1079,9 +1162,9 @@ export default function AutomationThreadScreen({
   const reload = useCallback(
     (): Promise<void> =>
       loadData()
-        .then((d) => setState(d ?? 'missing'))
-        .catch(() => setState('error')),
-    [loadData],
+        .then((d) => setState(d ?? "missing"))
+        .catch(() => setState("error")),
+    [loadData]
   );
 
   useEffect(() => {
@@ -1096,7 +1179,7 @@ export default function AutomationThreadScreen({
         setTraceErrors,
         setTraces,
       }),
-    [loadTurnTrace],
+    [loadTurnTrace]
   );
 
   /**
@@ -1129,7 +1212,7 @@ export default function AutomationThreadScreen({
         }
       });
     },
-    [reload, watchTurn],
+    [reload, watchTurn]
   );
 
   const retryWatch = useCallback(
@@ -1138,14 +1221,14 @@ export default function AutomationThreadScreen({
       watchedTurnsRef.current.delete(turnId);
       watchNativeTurn(turnId);
     },
-    [watchNativeTurn],
+    [watchNativeTurn]
   );
 
   // Latest history is warm; older turns stay collapsed until the reader asks
   // for their trace. If the latest turn is still open (including one fired by
   // an external trigger), join its event stream instead of polling.
   useEffect(() => {
-    if (state === 'loading' || state === 'error' || state === 'missing') return;
+    if (state === "loading" || state === "error" || state === "missing") return;
     const latest = state.runs[0];
     if (!latest) return;
     if (
@@ -1155,15 +1238,16 @@ export default function AutomationThreadScreen({
     ) {
       void loadTrace(latest.runId);
     }
-    if (latest.status === 'running') watchNativeTurn(latest.runId);
+    if (latest.status === "running") watchNativeTurn(latest.runId);
   }, [loadTrace, loadingTraces, state, traceErrors, traces, watchNativeTurn]);
 
   useEffect(
     () => () => {
-      for (const controller of streamControllersRef.current.values()) controller.abort();
+      for (const controller of streamControllersRef.current.values())
+        controller.abort();
       streamControllersRef.current.clear();
     },
-    [],
+    []
   );
 
   // Dismiss the overflow menu on Escape or an outside click. Listeners live
@@ -1171,20 +1255,20 @@ export default function AutomationThreadScreen({
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === "Escape") setMenuOpen(false);
     };
     const onClick = (e: MouseEvent): void => {
       if (!menuWrapRef.current?.contains(e.target as Node)) setMenuOpen(false);
     };
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('mousedown', onClick);
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
     return () => {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
     };
   }, [menuOpen]);
 
-  if (state === 'loading' || state === 'error' || state === 'missing') {
+  if (state === "loading" || state === "error" || state === "missing") {
     return (
       <div className={au.auLoading}>
         <div className={au.auCrumb}>
@@ -1195,15 +1279,19 @@ export default function AutomationThreadScreen({
             <Icon name="ArrowRight" size={12} />
           </span>
           <span>
-            {state === 'loading' ? 'Loading…' : state === 'missing' ? 'Not found' : 'Error'}
+            {state === "loading"
+              ? "Loading…"
+              : state === "missing"
+                ? "Not found"
+                : "Error"}
           </span>
         </div>
         <div className={styles.loadingBody}>
-          {state === 'loading'
-            ? 'Loading automation…'
-            : state === 'missing'
-              ? 'Automation not found.'
-              : 'Could not load automation.'}
+          {state === "loading"
+            ? "Loading automation…"
+            : state === "missing"
+              ? "Automation not found."
+              : "Could not load automation."}
         </div>
       </div>
     );
@@ -1225,22 +1313,27 @@ export default function AutomationThreadScreen({
         if (!turnId) return;
         const startedAt = Date.now();
         setState((current) => {
-          if (current === 'loading' || current === 'error' || current === 'missing') return current;
+          if (
+            current === "loading" ||
+            current === "error" ||
+            current === "missing"
+          )
+            return current;
           if (current.runs.some((run) => run.runId === turnId)) return current;
           return {
             ...current,
             runs: [
               {
                 runId: turnId,
-                entryKind: 'run',
-                status: 'running',
-                originLabel: 'Manual',
+                entryKind: "run",
+                status: "running",
+                originLabel: "Manual",
                 startedAt,
                 endedAt: null,
                 durationMs: null,
-                summary: 'Working through your instructions…',
+                summary: "Working through your instructions…",
                 costUsd: null,
-                dateGroup: 'Today',
+                dateGroup: "Today",
               },
               ...current.runs,
             ],
@@ -1264,7 +1357,7 @@ export default function AutomationThreadScreen({
     kind: ConsentKind,
     id: string,
     decision: ConsentDecision,
-    alwaysAllow?: boolean,
+    alwaysAllow?: boolean
   ): void => {
     setDecidingId(id);
     void onDecideConsent(kind, id, decision, alwaysAllow).then((ok) => {
@@ -1279,26 +1372,26 @@ export default function AutomationThreadScreen({
       runnerKind?: string;
       model?: string;
       thinking?: string;
-    },
+    }
   ): void => {
     setSending(true);
     setPendingTrace([
       {
-        kind: 'user',
+        kind: "user",
         text,
         ...(options.attachments?.length
           ? {
               attachments: options.attachments.map((attachment) => ({
                 ...attachment,
-                filename: attachment.filename ?? 'attachment',
+                filename: attachment.filename ?? "attachment",
               })),
             }
           : {}),
       },
-      { kind: 'ai', streaming: true, text: '' },
+      { kind: "ai", streaming: true, text: "" },
     ]);
     const controller = new AbortController();
-    streamControllersRef.current.set('composer', controller);
+    streamControllersRef.current.set("composer", controller);
     void onAskAboutRuns(
       text,
       {
@@ -1306,7 +1399,7 @@ export default function AutomationThreadScreen({
         onContext: setComposerContext,
       },
       setPendingTrace,
-      controller.signal,
+      controller.signal
     )
       .then(async (turnId) => {
         if (!turnId || controller.signal.aborted) return;
@@ -1315,19 +1408,23 @@ export default function AutomationThreadScreen({
       })
       .catch(() => undefined)
       .finally(() => {
-        streamControllersRef.current.delete('composer');
+        streamControllersRef.current.delete("composer");
         setPendingTrace(null);
         setSending(false);
       });
   };
 
   const activeGrants = consent.grants.filter((g) => !g.revokedAt);
-  const pendingOutbox = consent.outbox.filter((o) => o.status === 'pending');
+  const pendingOutbox = consent.outbox.filter((o) => o.status === "pending");
   const hasPending = consent.parked.length > 0 || pendingOutbox.length > 0;
   const groups = groupRuns(runs);
 
   return (
-    <div className={styles.screen} data-hue={header.hue} data-testid="automation-thread">
+    <div
+      className={styles.screen}
+      data-hue={header.hue}
+      data-testid="automation-thread"
+    >
       <div className={styles.head}>
         <div className={styles.headMain}>
           <span className={au.auGlyph} data-hue={header.hue} data-size="lg">
@@ -1335,7 +1432,9 @@ export default function AutomationThreadScreen({
           </span>
           <div className={styles.headText}>
             <h1>{header.name}</h1>
-            {header.description ? <p className={styles.headSub}>{header.description}</p> : null}
+            {header.description ? (
+              <p className={styles.headSub}>{header.description}</p>
+            ) : null}
             {header.entityTags.length > 0 ? (
               <div className={styles.chips} aria-label="Tagged data">
                 {header.entityTags.map((tag) => (
@@ -1352,7 +1451,7 @@ export default function AutomationThreadScreen({
               enable/disable is in the ⋯ menu. Only "Paused" earns a persistent
               header badge, since nothing else signals a stopped automation at
               a glance. */}
-          {header.statusKind === 'paused' ? (
+          {header.statusKind === "paused" ? (
             <output
               className={au.auStatus}
               data-tone={header.statusKind}
@@ -1382,7 +1481,7 @@ export default function AutomationThreadScreen({
               onClick={doRun}
             >
               <Icon name="Play" size={14} />
-              <span>{running ? 'Starting…' : 'Run now'}</span>
+              <span>{running ? "Starting…" : "Run now"}</span>
             </button>
             <div className={styles.menuWrap} ref={menuWrapRef}>
               <button
@@ -1422,8 +1521,8 @@ export default function AutomationThreadScreen({
                       doToggle(!header.enabled);
                     }}
                   >
-                    <Icon name={header.enabled ? 'Pause' : 'Play'} size={15} />
-                    <span>{header.enabled ? 'Pause' : 'Resume'}</span>
+                    <Icon name={header.enabled ? "Pause" : "Play"} size={15} />
+                    <span>{header.enabled ? "Pause" : "Resume"}</span>
                   </button>
                   <hr className={styles.menuDivider} />
                   <button
@@ -1462,7 +1561,9 @@ export default function AutomationThreadScreen({
               key={item.invocationId}
               item={item}
               busy={decidingId === item.invocationId}
-              onDecide={(decision) => doDecide('parked', item.invocationId, decision)}
+              onDecide={(decision) =>
+                doDecide("parked", item.invocationId, decision)
+              }
             />
           ))}
           {pendingOutbox.map((item) => (
@@ -1471,7 +1572,7 @@ export default function AutomationThreadScreen({
               item={item}
               busy={decidingId === item.itemId}
               onDecide={(decision, alwaysAllow) =>
-                doDecide('outbox', item.itemId, decision, alwaysAllow)
+                doDecide("outbox", item.itemId, decision, alwaysAllow)
               }
             />
           ))}
@@ -1481,7 +1582,7 @@ export default function AutomationThreadScreen({
         <GrantsLine
           grants={activeGrants}
           busyId={decidingId}
-          onRevoke={(grantId) => doDecide('grant', grantId, 'revoke')}
+          onRevoke={(grantId) => doDecide("grant", grantId, "revoke")}
         />
       ) : null}
 
@@ -1493,9 +1594,9 @@ export default function AutomationThreadScreen({
             </span>
             <div className={styles.emptyTitle}>No runs yet</div>
             <p className={styles.emptyHint}>
-              {d.plan.state === 'ready'
-                ? 'Run now, or wait for the trigger.'
-                : 'Nothing has run yet — this automation needs a working plan first.'}
+              {d.plan.state === "ready"
+                ? "Run now, or wait for the trigger."
+                : "Nothing has run yet — this automation needs a working plan first."}
             </p>
           </div>
         ) : (
@@ -1525,7 +1626,10 @@ export default function AutomationThreadScreen({
           ))
         )}
         {pendingTrace ? (
-          <div className={styles.pendingConversation} data-testid="automation-pending-turn">
+          <div
+            className={styles.pendingConversation}
+            data-testid="automation-pending-turn"
+          >
             {pendingTrace.map((message, index) => (
               <Message
                 key={message.msgId ?? `${message.kind}:${index}`}
@@ -1536,8 +1640,12 @@ export default function AutomationThreadScreen({
                   wireCodeCopy: () => undefined,
                   loadAttachmentImage:
                     loadAttachmentImage ??
-                    (() => Promise.reject(new Error('automation attachments unavailable'))),
-                  onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
+                    (() =>
+                      Promise.reject(
+                        new Error("automation attachments unavailable")
+                      )),
+                  onCopyMessage: (text) =>
+                    void navigator.clipboard?.writeText(text),
                   onFeedback: () => undefined,
                   onRegenerate: () => undefined,
                   onRetryError: () => undefined,
@@ -1553,7 +1661,7 @@ export default function AutomationThreadScreen({
         <Composer
           busy={sending}
           onSend={doSend}
-          onStop={() => streamControllersRef.current.get('composer')?.abort()}
+          onStop={() => streamControllersRef.current.get("composer")?.abort()}
           onOpenCompiler={onOpenCompiler}
           picker={d.runnerConfig}
           context={composerContext}

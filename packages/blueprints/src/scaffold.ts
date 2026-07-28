@@ -1,16 +1,19 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { rewriteAutomationManifestNames, rewriteIndexHtmlTitle } from './app-rewrites.js';
-import { scaffoldAppFiles, validateAppId } from './scaffold-files.js';
-import type { AppInfo } from './scaffold-types.js';
-import { AppScaffoldError } from './scaffold-types.js';
+import {
+  rewriteAutomationManifestNames,
+  rewriteIndexHtmlTitle,
+} from "./app-rewrites.js";
+import { scaffoldAppFiles, validateAppId } from "./scaffold-files.js";
+import type { AppInfo } from "./scaffold-types.js";
+import { AppScaffoldError } from "./scaffold-types.js";
 
 // `validateAppId` + the content templates now live in `scaffold-files.ts`
 // (the filesystem-free scaffolder used by the git-store/HTTP path, issue
 // #141). Re-exported here so existing importers (`clone.ts`, the CLI) are
 // unaffected.
-export { validateAppId } from './scaffold-files.js';
+export { validateAppId } from "./scaffold-files.js";
 
 /**
  * Scaffold a new app folder under `<appsDir>/<id>/` with the
@@ -21,12 +24,15 @@ export { validateAppId } from './scaffold-files.js';
 export async function scaffoldApp(
   appsDir: string,
   id: string,
-  opts: { name?: string; description?: string; version?: string } = {},
+  opts: { name?: string; description?: string; version?: string } = {}
 ): Promise<AppInfo> {
   validateAppId(id);
   const dir = path.join(appsDir, id);
   if (await exists(dir)) {
-    throw new AppScaffoldError('already_exists', `App "${id}" already exists at ${dir}.`);
+    throw new AppScaffoldError(
+      "already_exists",
+      `App "${id}" already exists at ${dir}.`
+    );
   }
   await fs.mkdir(dir, { recursive: true });
 
@@ -35,13 +41,15 @@ export async function scaffoldApp(
       const dest = path.join(dir, file.path);
       await fs.mkdir(path.dirname(dest), { recursive: true });
       await fs.writeFile(dest, file.content);
-    }),
+    })
   );
   // Empty canonical subdirs the file map can't carry (queries/ and
   // actions/ start empty; the builder agent fills them in). `automations/`
   // already exists from its seeded README.
   await Promise.all(
-    ['queries', 'actions'].map(async (sub) => fs.mkdir(path.join(dir, sub), { recursive: true })),
+    ["queries", "actions"].map(async (sub) =>
+      fs.mkdir(path.join(dir, sub), { recursive: true })
+    )
   );
 
   const stat = await fs.stat(dir);
@@ -55,9 +63,14 @@ export async function scaffoldApp(
 
 /** List existing apps under appsDir. */
 export async function listAppsOnDisk(appsDir: string): Promise<AppInfo[]> {
-  const entries = await fs.readdir(appsDir, { withFileTypes: true }).catch(() => []);
+  const entries = await fs
+    .readdir(appsDir, { withFileTypes: true })
+    .catch(() => []);
   const candidates = entries.filter(
-    (entry) => entry.isDirectory() && !entry.name.startsWith('_') && !entry.name.startsWith('.'),
+    (entry) =>
+      entry.isDirectory() &&
+      !entry.name.startsWith("_") &&
+      !entry.name.startsWith(".")
   );
   const out = await Promise.all(
     candidates.map(async (entry): Promise<AppInfo> => {
@@ -66,7 +79,7 @@ export async function listAppsOnDisk(appsDir: string): Promise<AppInfo[]> {
         fs.stat(dir),
         hasAnyBuiltJs(dir),
         readAppMeta(dir),
-        fileExists(path.join(dir, 'index.html')),
+        fileExists(path.join(dir, "index.html")),
       ]);
       return {
         id: entry.name,
@@ -78,7 +91,7 @@ export async function listAppsOnDisk(appsDir: string): Promise<AppInfo[]> {
         ...(meta.kind ? { kind: meta.kind } : {}),
         hasIndex,
       };
-    }),
+    })
   );
   out.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
   return out;
@@ -96,16 +109,17 @@ export async function listAppsOnDisk(appsDir: string): Promise<AppInfo[]> {
 export async function updateAppMeta(
   appsDir: string,
   id: string,
-  patch: { name?: string; description?: string },
+  patch: { name?: string; description?: string }
 ): Promise<void> {
   validateAppId(id);
   const dir = path.join(appsDir, id);
-  const appJsonPath = path.join(dir, 'app.json');
+  const appJsonPath = path.join(dir, "app.json");
   let parsed: Record<string, unknown> = {};
   try {
-    const raw = await fs.readFile(appJsonPath, 'utf8');
+    const raw = await fs.readFile(appJsonPath, "utf8");
     const decoded = JSON.parse(raw) as unknown;
-    if (decoded && typeof decoded === 'object') parsed = decoded as Record<string, unknown>;
+    if (decoded && typeof decoded === "object")
+      parsed = decoded as Record<string, unknown>;
   } catch {
     /* fall through: write a fresh app.json */
   }
@@ -116,7 +130,7 @@ export async function updateAppMeta(
   const renameTo = patch.name === undefined ? undefined : patch.name.trim();
   if (patch.name !== undefined) {
     if (!renameTo) {
-      throw new AppScaffoldError('invalid_id', 'App name cannot be empty.');
+      throw new AppScaffoldError("invalid_id", "App name cannot be empty.");
     }
     // Reject duplicates against any sibling app's display name
     // (case-insensitive, trimmed). Directory ids stay immutable; only the
@@ -130,7 +144,7 @@ export async function updateAppMeta(
     if (trimmed) parsed.description = trimmed;
     else delete parsed.description;
   }
-  await fs.writeFile(appJsonPath, JSON.stringify(parsed, null, 2) + '\n');
+  await fs.writeFile(appJsonPath, JSON.stringify(parsed, null, 2) + "\n");
 
   // Propagate the rename to the app's subordinate files so the
   // browser-tab title and Automations row title don't drift from
@@ -155,18 +169,21 @@ export async function updateAppMeta(
 export async function isDisplayNameTaken(
   appsDir: string,
   name: string,
-  opts: { excludeId?: string } = {},
+  opts: { excludeId?: string } = {}
 ): Promise<boolean> {
   const target = name.trim().toLowerCase();
   if (!target) return false;
-  const entries = await fs.readdir(appsDir, { withFileTypes: true }).catch(() => []);
+  const entries = await fs
+    .readdir(appsDir, { withFileTypes: true })
+    .catch(() => []);
   const findMatchingName = async (index: number): Promise<boolean> => {
     const e = entries[index];
     if (!e) return false;
     if (!e.isDirectory()) return findMatchingName(index + 1);
     if (opts.excludeId !== undefined && e.name === opts.excludeId)
       return findMatchingName(index + 1);
-    if (e.name.startsWith('_') || e.name.startsWith('.')) return findMatchingName(index + 1);
+    if (e.name.startsWith("_") || e.name.startsWith("."))
+      return findMatchingName(index + 1);
     const meta = await readAppMeta(path.join(appsDir, e.name));
     if (meta.name && meta.name.trim().toLowerCase() === target) return true;
     return findMatchingName(index + 1);
@@ -182,10 +199,13 @@ export async function isDisplayNameTaken(
 async function assertDisplayNameUnique(
   appsDir: string,
   selfId: string,
-  name: string,
+  name: string
 ): Promise<void> {
   if (await isDisplayNameTaken(appsDir, name, { excludeId: selfId })) {
-    throw new AppScaffoldError('already_exists', `An app named "${name}" already exists.`);
+    throw new AppScaffoldError(
+      "already_exists",
+      `An app named "${name}" already exists.`
+    );
   }
 }
 
@@ -193,22 +213,27 @@ async function assertDisplayNameUnique(
 async function readAppMeta(appDir: string): Promise<{
   name?: string;
   description?: string;
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
 }> {
   try {
-    const raw = await fs.readFile(path.join(appDir, 'app.json'), 'utf8');
+    const raw = await fs.readFile(path.join(appDir, "app.json"), "utf8");
     const parsed = JSON.parse(raw) as {
       name?: unknown;
       description?: unknown;
       kind?: unknown;
     };
     const name =
-      typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : undefined;
+      typeof parsed.name === "string" && parsed.name.length > 0
+        ? parsed.name
+        : undefined;
     const description =
-      typeof parsed.description === 'string' && parsed.description.length > 0
+      typeof parsed.description === "string" && parsed.description.length > 0
         ? parsed.description
         : undefined;
-    const kind = parsed.kind === 'automation' || parsed.kind === 'app' ? parsed.kind : undefined;
+    const kind =
+      parsed.kind === "automation" || parsed.kind === "app"
+        ? parsed.kind
+        : undefined;
     return { name, description, kind };
   } catch {
     return {};
@@ -233,10 +258,13 @@ export async function deleteApp(appsDir: string, id: string): Promise<void> {
   const appsRoot = path.resolve(appsDir);
   const target = path.resolve(appsRoot, id);
   if (!target.startsWith(appsRoot + path.sep) && target !== appsRoot) {
-    throw new AppScaffoldError('no_app', `Refusing to delete path outside apps dir: ${target}`);
+    throw new AppScaffoldError(
+      "no_app",
+      `Refusing to delete path outside apps dir: ${target}`
+    );
   }
   if (target === appsRoot) {
-    throw new AppScaffoldError('no_app', `Refusing to delete the apps root.`);
+    throw new AppScaffoldError("no_app", `Refusing to delete the apps root.`);
   }
   await fs.rm(target, { recursive: true, force: true });
 }
@@ -246,10 +274,12 @@ async function hasAnyBuiltJs(appDir: string): Promise<boolean> {
   // already covered by the actions scan below. The `automations/` folder
   // itself only holds manifests, not executable code — no need to scan it.
   const entriesByDirectory = await Promise.all(
-    ['queries', 'actions'].map(async (sub) => fs.readdir(path.join(appDir, sub)).catch(() => [])),
+    ["queries", "actions"].map(async (sub) =>
+      fs.readdir(path.join(appDir, sub)).catch(() => [])
+    )
   );
   return entriesByDirectory.some((entries) =>
-    entries.some((n) => n.endsWith('.js') || n.endsWith('.mjs')),
+    entries.some((n) => n.endsWith(".js") || n.endsWith(".mjs"))
   );
 }
 

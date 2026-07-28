@@ -1,58 +1,65 @@
 // Reconciliation state pure helpers (issue #545 B7).
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
 import {
   driftSummary,
   failedReconciliation,
   unavailableStore,
-} from './backup-reconciliation-state.js';
+} from "./backup-reconciliation-state.js";
 
-describe('backup-reconciliation-state', () => {
-  test('driftSummary dedupes, sorts, and caps the sample at 25', () => {
+describe("backup-reconciliation-state", () => {
+  test("driftSummary dedupes, sorts, and caps the sample at 25", () => {
     expect(driftSummary([])).toStrictEqual({ count: 0, sample: [] });
-    expect(driftSummary(['b', 'a', 'b'])).toStrictEqual({
+    expect(driftSummary(["b", "a", "b"])).toStrictEqual({
       count: 2,
-      sample: ['a', 'b'],
+      sample: ["a", "b"],
     });
-    const many = Array.from({ length: 40 }, (_, i) => `k${String(i).padStart(2, '0')}`);
+    const many = Array.from(
+      { length: 40 },
+      (_, i) => `k${String(i).padStart(2, "0")}`
+    );
     const summary = driftSummary(many);
     expect(summary.count).toBe(40);
     expect(summary.sample).toHaveLength(25);
-    expect(summary.sample[0]).toBe('k00');
+    expect(summary.sample[0]).toBe("k00");
   });
 
-  test('unavailableStore marks not-configured vs unavailable', () => {
+  test("unavailableStore marks not-configured vs unavailable", () => {
     expect(unavailableStore(false)).toMatchObject({
       configured: false,
-      source: 'not-configured',
+      source: "not-configured",
       providerAttested: false,
       objectCount: 0,
       missing: { count: 0 },
       orphans: { count: 0 },
     });
-    expect(unavailableStore(true, 'boom')).toMatchObject({
+    expect(unavailableStore(true, "boom")).toMatchObject({
       configured: true,
-      source: 'unavailable',
-      error: 'boom',
+      source: "unavailable",
+      error: "boom",
     });
   });
 
-  test('failedReconciliation builds an error shell with empty cas/wal/audit', () => {
-    const state = failedReconciliation('2026-07-25T00:00:00.000Z', 'scheduled', 'provider down');
+  test("failedReconciliation builds an error shell with empty cas/wal/audit", () => {
+    const state = failedReconciliation(
+      "2026-07-25T00:00:00.000Z",
+      "scheduled",
+      "provider down"
+    );
     expect(state).toMatchObject({
-      checkedAt: '2026-07-25T00:00:00.000Z',
-      mode: 'scheduled',
-      status: 'error',
+      checkedAt: "2026-07-25T00:00:00.000Z",
+      mode: "scheduled",
+      status: "error",
       backup: {
         configured: true,
-        source: 'unavailable',
-        error: 'provider down',
+        source: "unavailable",
+        error: "provider down",
       },
-      cas: { configured: false, source: 'not-configured' },
+      cas: { configured: false, source: "not-configured" },
       walGaps: { count: 0 },
       snapshots: { live: 0, pruned: 0, recent: [] },
-      audit: { source: 'unavailable', eventCount: 0, recent: [] },
+      audit: { source: "unavailable", eventCount: 0, recent: [] },
     });
   });
 });

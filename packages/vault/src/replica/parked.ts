@@ -1,12 +1,12 @@
-import type { VaultDb } from '../db.js';
-import { writeExplanation, writeReceipt } from '../gateway/evidence.js';
-import type { Identity, InvokeRequest } from '../gateway/types.js';
-import { sealAad, sealValue, unsealValue } from '../schema/sealed.js';
+import type { VaultDb } from "../db.js";
+import { writeExplanation, writeReceipt } from "../gateway/evidence.js";
+import type { Identity, InvokeRequest } from "../gateway/types.js";
+import { sealAad, sealValue, unsealValue } from "../schema/sealed.js";
 import {
   transitionReplicaIntentOutcomeInTransaction,
   type ReplicaIntentOutcome,
   type TransitionReplicaIntentOutcomeInput,
-} from './intents.js';
+} from "./intents.js";
 
 export interface DurableParkedPayload {
   invocationId: string;
@@ -33,12 +33,12 @@ interface ParkedRow {
 }
 
 function aad(invocationId: string): string {
-  return sealAad('replica_parked_payload', 'request_sealed', invocationId);
+  return sealAad("replica_parked_payload", "request_sealed", invocationId);
 }
 
 function payloadOf(db: VaultDb, row: ParkedRow): DurableParkedPayload {
   const request = JSON.parse(
-    unsealValue(db.sealKey, aad(row.invocation_id), row.request_sealed),
+    unsealValue(db.sealKey, aad(row.invocation_id), row.request_sealed)
   ) as InvokeRequest;
   return {
     invocationId: row.invocation_id,
@@ -60,7 +60,7 @@ const SELECT = `SELECT invocation_id, intent_id, identity_json, request_sealed,
 /** Persist the encrypted resumption payload before returning `parked`. */
 export function saveDurableParkedPayload(
   db: VaultDb,
-  payload: DurableParkedPayload,
+  payload: DurableParkedPayload
 ): DurableParkedPayload {
   const requestJson = JSON.stringify(payload.request);
   const identityJson = JSON.stringify(payload.identity);
@@ -78,7 +78,7 @@ export function saveDurableParkedPayload(
          command_id=excluded.command_id,
          command_name=excluded.command_name,
          reason=excluded.reason,
-         parked_at=excluded.parked_at`,
+         parked_at=excluded.parked_at`
     )
     .run(
       payload.invocationId,
@@ -89,18 +89,18 @@ export function saveDurableParkedPayload(
       payload.commandId,
       payload.commandName,
       payload.reason,
-      payload.parkedAt,
+      payload.parkedAt
     );
   return payload;
 }
 
 export function readDurableParkedPayload(
   db: VaultDb,
-  invocationId: string,
+  invocationId: string
 ): DurableParkedPayload | undefined {
-  const row = db.vault.prepare(`${SELECT} WHERE invocation_id = ?`).get(invocationId) as
-    | ParkedRow
-    | undefined;
+  const row = db.vault
+    .prepare(`${SELECT} WHERE invocation_id = ?`)
+    .get(invocationId) as ParkedRow | undefined;
   return row ? payloadOf(db, row) : undefined;
 }
 
@@ -111,10 +111,14 @@ export function listDurableParkedPayloads(db: VaultDb): DurableParkedPayload[] {
   return rows.map((row) => payloadOf(db, row));
 }
 
-export function deleteDurableParkedPayload(db: VaultDb, invocationId: string): boolean {
+export function deleteDurableParkedPayload(
+  db: VaultDb,
+  invocationId: string
+): boolean {
   return (
-    db.vault.prepare('DELETE FROM replica_parked_payload WHERE invocation_id = ?').run(invocationId)
-      .changes > 0
+    db.vault
+      .prepare("DELETE FROM replica_parked_payload WHERE invocation_id = ?")
+      .run(invocationId).changes > 0
   );
 }
 
@@ -137,18 +141,20 @@ interface ParkedDenialReceiptRow {
  */
 export function readDurableParkedDenial(
   db: VaultDb,
-  invocationId: string,
+  invocationId: string
 ): DurableParkedDenial | undefined {
   const invocation = db.journal
-    .prepare('SELECT status FROM agent_command_invocation WHERE invocation_id = ?')
+    .prepare(
+      "SELECT status FROM agent_command_invocation WHERE invocation_id = ?"
+    )
     .get(invocationId) as { status: string } | undefined;
-  if (invocation?.status !== 'failed') return undefined;
+  if (invocation?.status !== "failed") return undefined;
   const receipts = db.journal
     .prepare(
       `SELECT receipt_id, detail_json
          FROM consent_receipt
         WHERE invocation_id = ? AND decision = 'deny'
-        ORDER BY receipt_id`,
+        ORDER BY receipt_id`
     )
     .all(invocationId) as unknown as ParkedDenialReceiptRow[];
   const confirmed = receipts.filter((receipt) => {
@@ -157,17 +163,20 @@ export function readDurableParkedDenial(
       confirmedAt?: unknown;
       confirmedBy?: unknown;
     };
-    return typeof detail.confirmedAt === 'string' && 'confirmedBy' in detail;
+    return typeof detail.confirmedAt === "string" && "confirmedBy" in detail;
   });
   if (confirmed.length > 1) {
-    throw new Error(`parked invocation ${invocationId} has multiple confirmation denial receipts`);
+    throw new Error(
+      `parked invocation ${invocationId} has multiple confirmation denial receipts`
+    );
   }
   const receipt = confirmed[0];
   if (!receipt) return undefined;
-  let reason = 'owner denied confirmation';
+  let reason = "owner denied confirmation";
   if (receipt.detail_json) {
     const detail = JSON.parse(receipt.detail_json) as { failing?: unknown };
-    if (typeof detail.failing === 'string' && detail.failing.length > 0) reason = detail.failing;
+    if (typeof detail.failing === "string" && detail.failing.length > 0)
+      reason = detail.failing;
   }
   return { invocationId, receiptId: receipt.receipt_id, reason };
 }
@@ -187,33 +196,41 @@ export interface RecordDurableParkedDenialInput {
  */
 export function recordDurableParkedDenial(
   db: VaultDb,
-  input: RecordDurableParkedDenialInput,
+  input: RecordDurableParkedDenialInput
 ): DurableParkedDenial {
   const { payload } = input;
-  db.journal.exec('BEGIN IMMEDIATE');
+  db.journal.exec("BEGIN IMMEDIATE");
   try {
     const existing = readDurableParkedDenial(db, payload.invocationId);
     if (existing) {
-      db.journal.exec('COMMIT');
+      db.journal.exec("COMMIT");
       return existing;
     }
     const invocation = db.journal
-      .prepare('SELECT status, command_id FROM agent_command_invocation WHERE invocation_id = ?')
-      .get(payload.invocationId) as { status: string; command_id: string } | undefined;
+      .prepare(
+        "SELECT status, command_id FROM agent_command_invocation WHERE invocation_id = ?"
+      )
+      .get(payload.invocationId) as
+      | { status: string; command_id: string }
+      | undefined;
     if (!invocation || invocation.command_id !== payload.commandId) {
-      throw new Error(`parked invocation ${payload.invocationId} conflicts with its journal row`);
+      throw new Error(
+        `parked invocation ${payload.invocationId} conflicts with its journal row`
+      );
     }
-    if (invocation.status === 'executed' || invocation.status === 'failed') {
-      throw new Error(`parked invocation ${payload.invocationId} is already ${invocation.status}`);
+    if (invocation.status === "executed" || invocation.status === "failed") {
+      throw new Error(
+        `parked invocation ${payload.invocationId} is already ${invocation.status}`
+      );
     }
     const receiptId = writeReceipt(db.journal, {
       grantId: payload.grantId,
       invocationId: payload.invocationId,
       action: `act ${payload.commandName}`,
-      objectType: 'agent.command',
+      objectType: "agent.command",
       objectId: payload.commandId,
       purpose: payload.request.purpose,
-      decision: 'deny',
+      decision: "deny",
       detail: {
         failing: input.reason,
         confirmedBy: input.confirmedBy,
@@ -223,25 +240,25 @@ export function recordDurableParkedDenial(
     writeExplanation(
       db.journal,
       payload.invocationId,
-      input.reason === 'owner denied confirmation'
+      input.reason === "owner denied confirmation"
         ? `Owner denied ${payload.commandName} at confirmation.`
-        : `${payload.commandName} could not be confirmed: ${input.reason}.`,
+        : `${payload.commandName} could not be confirmed: ${input.reason}.`
     );
     db.journal
       .prepare(
         `UPDATE agent_command_invocation
             SET status = 'failed', receipt_id = ?
-          WHERE invocation_id = ?`,
+          WHERE invocation_id = ?`
       )
       .run(receiptId, payload.invocationId);
-    db.journal.exec('COMMIT');
+    db.journal.exec("COMMIT");
     return {
       invocationId: payload.invocationId,
       receiptId,
       reason: input.reason,
     };
   } catch (error) {
-    db.journal.exec('ROLLBACK');
+    db.journal.exec("ROLLBACK");
     throw error;
   }
 }
@@ -259,31 +276,38 @@ export interface DurableParkedIntentSettlement {
 export function settleDurableParkedPayload(
   db: VaultDb,
   invocationId: string,
-  settlement?: DurableParkedIntentSettlement,
+  settlement?: DurableParkedIntentSettlement
 ): { deleted: boolean; outcome?: ReplicaIntentOutcome } {
-  db.vault.exec('BEGIN IMMEDIATE');
+  db.vault.exec("BEGIN IMMEDIATE");
   try {
     const deleted = deleteDurableParkedPayload(db, invocationId);
     const outcome = settlement
       ? transitionReplicaIntentOutcomeInTransaction(
           db.vault,
           settlement.intentId,
-          settlement.outcome,
+          settlement.outcome
         )
       : undefined;
-    db.vault.exec('COMMIT');
+    db.vault.exec("COMMIT");
     return { deleted, ...(outcome ? { outcome } : {}) };
   } catch (error) {
-    db.vault.exec('ROLLBACK');
+    db.vault.exec("ROLLBACK");
     throw error;
   }
 }
 
 /** Delete every pending payload riding a revoked grant; returns invocation ids. */
-export function deleteDurableParkedPayloadsForGrant(db: VaultDb, grantId: string): string[] {
+export function deleteDurableParkedPayloadsForGrant(
+  db: VaultDb,
+  grantId: string
+): string[] {
   const rows = db.vault
-    .prepare('SELECT invocation_id FROM replica_parked_payload WHERE grant_id = ?')
+    .prepare(
+      "SELECT invocation_id FROM replica_parked_payload WHERE grant_id = ?"
+    )
     .all(grantId) as unknown as { invocation_id: string }[];
-  db.vault.prepare('DELETE FROM replica_parked_payload WHERE grant_id = ?').run(grantId);
+  db.vault
+    .prepare("DELETE FROM replica_parked_payload WHERE grant_id = ?")
+    .run(grantId);
   return rows.map((row) => row.invocation_id);
 }

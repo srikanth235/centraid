@@ -60,11 +60,11 @@
     0 1px 2px rgba(0, 0, 0, 0.35);
   transition: transform 150ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
-.switch[data-on='true'] {
+.switch[data-on="true"] {
   background: var(--accent);
   box-shadow: none;
 }
-.switch[data-on='true'] .switchThumb {
+.switch[data-on="true"] .switchThumb {
   transform: translateX(14px);
 }
 .input {

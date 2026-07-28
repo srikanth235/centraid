@@ -7,7 +7,7 @@
  * `AgentRunsStore` reference.
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
 import type {
   ConversationStore,
@@ -16,10 +16,10 @@ import type {
   AutomationTriggerKind,
   TurnStreamEvent,
   AutomationTurnStreamEvent,
-} from '@centraid/app-engine';
-import { resolveItemCost } from '@centraid/app-engine';
+} from "@centraid/app-engine";
+import { resolveItemCost } from "@centraid/app-engine";
 
-import type { HistoryConfig } from '../manifest/manifest.js';
+import type { HistoryConfig } from "../manifest/manifest.js";
 
 /**
  * Sink for live run-stream events (issue #158). The host wires this to its
@@ -44,7 +44,7 @@ export function truncateForAudit(value: unknown): string | undefined {
   try {
     json = JSON.stringify(value);
   } catch {
-    return JSON.stringify({ _truncated: true, reason: 'unserializable' });
+    return JSON.stringify({ _truncated: true, reason: "unserializable" });
   }
   if (json.length <= AUDIT_FIELD_BYTE_CAP) return json;
   return JSON.stringify({
@@ -73,7 +73,11 @@ export interface RunRef {
  * (it's no longer the conversation id); `inputText` is the turn's ordinal-0
  * `message_in` payload, fetched by the caller.
  */
-export function rowToRunRef(row: Turn, automationRef: string, inputText?: string): RunRef {
+export function rowToRunRef(
+  row: Turn,
+  automationRef: string,
+  inputText?: string
+): RunRef {
   const ref: RunRef = {
     runId: row.turnId,
     automationId: automationRef,
@@ -104,20 +108,20 @@ export function rowToRunRef(row: Turn, automationRef: string, inputText?: string
 export function applyRetention(
   store: ConversationStore,
   automationRef: string,
-  history: HistoryConfig | undefined,
+  history: HistoryConfig | undefined
 ): void {
   if (!history) return;
   const keep = history.keep;
-  if (keep === 'all') return;
-  if (keep === 'errors') {
+  if (keep === "all") return;
+  if (keep === "errors") {
     store.pruneAutomation(automationRef, { errorsOnly: true });
     return;
   }
-  if ('count' in keep) {
+  if ("count" in keep) {
     store.pruneAutomation(automationRef, { count: keep.count });
     return;
   }
-  if ('days' in keep) store.pruneAutomation(automationRef, { days: keep.days });
+  if ("days" in keep) store.pruneAutomation(automationRef, { days: keep.days });
 }
 
 export interface HandlerReturnEnvelope {
@@ -133,11 +137,11 @@ export interface HandlerReturnEnvelope {
  * picked up from a returned object.
  */
 export function extractReturnEnvelope(value: unknown): HandlerReturnEnvelope {
-  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     const v = value as Record<string, unknown>;
     const env: HandlerReturnEnvelope = { value };
-    if (typeof v.summary === 'string') env.summary = v.summary;
-    if ('output' in v) env.output = v.output;
+    if (typeof v.summary === "string") env.summary = v.summary;
+    if ("output" in v) env.output = v.output;
     return env;
   }
   return { value };
@@ -173,7 +177,8 @@ export interface OpenRunNodeArgs {
  */
 export function openRunNode(args: OpenRunNodeArgs): string {
   const nodeId = makeNodeId(args.runId, args.ordinal);
-  const argsJson = args.args === undefined ? undefined : (truncateForAudit(args.args) ?? '');
+  const argsJson =
+    args.args === undefined ? undefined : (truncateForAudit(args.args) ?? "");
   try {
     args.store.openItem({
       itemId: nodeId,
@@ -192,7 +197,7 @@ export function openRunNode(args: OpenRunNodeArgs): string {
   }
   try {
     args.emit({
-      type: 'item.start',
+      type: "item.start",
       itemId: nodeId,
       ordinal: args.ordinal,
       ...(args.callId === undefined ? {} : { callId: args.callId }),
@@ -214,20 +219,29 @@ export function openRunNode(args: OpenRunNodeArgs): string {
  * still on the collect-on-exit path).
  */
 export function usageCloseFields(
-  usage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined,
+  usage: Extract<TurnStreamEvent, { type: "usage" }> | undefined
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
   // Prefer agent cost when present; catalog fill happens in closeRunNode when
   // tokens exist but cost does not (issue #514).
   const costSource =
-    usage.costSource ?? (usage.costUsd === undefined ? undefined : ('agent' as const));
+    usage.costSource ??
+    (usage.costUsd === undefined ? undefined : ("agent" as const));
   return {
     ...(usage.model === undefined ? {} : { model: usage.model }),
     ...(usage.provider === undefined ? {} : { provider: usage.provider }),
-    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
-    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
-    ...(usage.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }),
-    ...(usage.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: usage.cacheWriteTokens }),
+    ...(usage.inputTokens === undefined
+      ? {}
+      : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined
+      ? {}
+      : { outputTokens: usage.outputTokens }),
+    ...(usage.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: usage.cacheReadTokens }),
+    ...(usage.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: usage.cacheWriteTokens }),
     ...(usage.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
     ...(costSource === undefined ? {} : { costSource }),
   };
@@ -259,7 +273,7 @@ export interface CloseRunNodeArgs {
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   costUsd?: number;
-  costSource?: 'agent' | 'estimated';
+  costSource?: "agent" | "estimated";
 }
 
 /**
@@ -271,20 +285,32 @@ export interface CloseRunNodeArgs {
 export function closeRunNode(args: CloseRunNodeArgs): void {
   const durationMs = args.ended - args.started;
   const outputJson =
-    args.ok && args.result !== undefined ? (truncateForAudit(args.result) ?? '') : undefined;
+    args.ok && args.result !== undefined
+      ? (truncateForAudit(args.result) ?? "")
+      : undefined;
   const usage = {
-    ...(args.inputTokens === undefined ? {} : { inputTokens: args.inputTokens }),
-    ...(args.outputTokens === undefined ? {} : { outputTokens: args.outputTokens }),
-    ...(args.cacheReadTokens === undefined ? {} : { cacheReadTokens: args.cacheReadTokens }),
-    ...(args.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: args.cacheWriteTokens }),
+    ...(args.inputTokens === undefined
+      ? {}
+      : { inputTokens: args.inputTokens }),
+    ...(args.outputTokens === undefined
+      ? {}
+      : { outputTokens: args.outputTokens }),
+    ...(args.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: args.cacheReadTokens }),
+    ...(args.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: args.cacheWriteTokens }),
   };
   const priced =
-    args.costSource === 'agent' && args.costUsd !== undefined
-      ? { costUsd: args.costUsd, costSource: 'agent' as const }
-      : args.costSource === 'estimated' && args.costUsd !== undefined
-        ? { costUsd: args.costUsd, costSource: 'estimated' as const }
+    args.costSource === "agent" && args.costUsd !== undefined
+      ? { costUsd: args.costUsd, costSource: "agent" as const }
+      : args.costSource === "estimated" && args.costUsd !== undefined
+        ? { costUsd: args.costUsd, costSource: "estimated" as const }
         : resolveItemCost({
-            ...(args.costUsd === undefined ? {} : { agentCostUsd: args.costUsd }),
+            ...(args.costUsd === undefined
+              ? {}
+              : { agentCostUsd: args.costUsd }),
             model: args.model,
             usage,
           });
@@ -295,24 +321,36 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       ...(outputJson === undefined ? {} : { outputJson }),
       ...(args.rawJson === undefined ? {} : { rawJson: args.rawJson }),
       ...(args.error === undefined ? {} : { error: args.error }),
-      ...(args.childTurnId === undefined ? {} : { childTurnId: args.childTurnId }),
+      ...(args.childTurnId === undefined
+        ? {}
+        : { childTurnId: args.childTurnId }),
       endedAt: args.ended,
       durationMs,
       ...(args.model === undefined ? {} : { model: args.model }),
       ...(args.provider === undefined ? {} : { provider: args.provider }),
-      ...(args.inputTokens === undefined ? {} : { inputTokens: args.inputTokens }),
-      ...(args.outputTokens === undefined ? {} : { outputTokens: args.outputTokens }),
-      ...(args.cacheReadTokens === undefined ? {} : { cacheReadTokens: args.cacheReadTokens }),
-      ...(args.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: args.cacheWriteTokens }),
+      ...(args.inputTokens === undefined
+        ? {}
+        : { inputTokens: args.inputTokens }),
+      ...(args.outputTokens === undefined
+        ? {}
+        : { outputTokens: args.outputTokens }),
+      ...(args.cacheReadTokens === undefined
+        ? {}
+        : { cacheReadTokens: args.cacheReadTokens }),
+      ...(args.cacheWriteTokens === undefined
+        ? {}
+        : { cacheWriteTokens: args.cacheWriteTokens }),
       ...(priced.costUsd === undefined ? {} : { costUsd: priced.costUsd }),
-      ...(priced.costSource === undefined ? {} : { costSource: priced.costSource }),
+      ...(priced.costSource === undefined
+        ? {}
+        : { costSource: priced.costSource }),
     });
   } catch {
     /* swallow */
   }
   try {
     args.emit({
-      type: 'item.end',
+      type: "item.end",
       itemId: args.nodeId,
       ordinal: args.ordinal,
       ...(args.callId === undefined ? {} : { callId: args.callId }),

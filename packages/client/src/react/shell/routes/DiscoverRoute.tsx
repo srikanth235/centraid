@@ -1,28 +1,31 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX } from "react";
 
-import type { AppearancePrefs, TemplateEntry } from '../../../app-shell-context.js';
-import type { DiscoverTemplate } from '../../screen-contracts.js';
-import DiscoverScreen from '../../screens/DiscoverScreen.js';
-import { useShellActions } from '../actions.js';
-import { openAutomationTemplatePreview } from '../automationTemplatePreview.js';
-import { openMenu } from '../contextMenu.js';
-import PageScroll from '../PageScroll.js';
-import { PageEmpty, PageLoading } from '../status.js';
-import { Store } from '../store.js';
-import { openTemplatePreview } from '../templatePreview.js';
-import { useAsyncData } from '../useAsyncData.js';
-import { useMemberScopes } from '../useMemberScopes.js';
-import { openWebhookReveal } from '../webhookReveal.js';
-import ScopePicker from './ScopePicker.js';
+import type {
+  AppearancePrefs,
+  TemplateEntry,
+} from "../../../app-shell-context.js";
+import type { DiscoverTemplate } from "../../screen-contracts.js";
+import DiscoverScreen from "../../screens/DiscoverScreen.js";
+import { useShellActions } from "../actions.js";
+import { openAutomationTemplatePreview } from "../automationTemplatePreview.js";
+import { openMenu } from "../contextMenu.js";
+import PageScroll from "../PageScroll.js";
+import { PageEmpty, PageLoading } from "../status.js";
+import { Store } from "../store.js";
+import { openTemplatePreview } from "../templatePreview.js";
+import { useAsyncData } from "../useAsyncData.js";
+import { useMemberScopes } from "../useMemberScopes.js";
+import { openWebhookReveal } from "../webhookReveal.js";
+import ScopePicker from "./ScopePicker.js";
 import {
   cloneAutomationTemplate,
   installAppTemplate,
   loadAppTemplates,
   loadAutomationTemplates,
   surfaceMintedWebhook,
-} from './templatesData.js';
+} from "./templatesData.js";
 
-import scopeBarCss from './ScopePicker.module.css';
+import scopeBarCss from "./ScopePicker.module.css";
 
 export interface DiscoverRouteProps {
   userApps: readonly UserAppMeta[];
@@ -45,7 +48,9 @@ export default function DiscoverRoute({
   // this ambient — an app quietly installed into whichever space the sidebar
   // pointed at. The picker names it, defaulting to the member's own space.
   const memberScopes = useMemberScopes();
-  const [installScope, setInstallScope] = useState<string | undefined>(undefined);
+  const [installScope, setInstallScope] = useState<string | undefined>(
+    undefined
+  );
   const targetScopeId = installScope ?? memberScopes.primary?.id;
   // Bumped after an install so the catalog re-fetches and its per-vault
   // `installed` flags flip Install → Open (no gateway push for the catalog).
@@ -58,9 +63,10 @@ export default function DiscoverRoute({
     return { appTemplates, automationTemplates };
   }, [reloadTick]);
   const tileVariant =
-    Store.get<Partial<AppearancePrefs>>('appearance', {}).tileVariant ?? 'gradient';
+    Store.get<Partial<AppearancePrefs>>("appearance", {}).tileVariant ??
+    "gradient";
 
-  const openApp = (id: string): void => navigate({ kind: 'app', id });
+  const openApp = (id: string): void => navigate({ kind: "app", id });
 
   // Install a bundled app in place (issue #434): registration + consent grants,
   // no code copy. Pin it to the Home shelf, refresh the shelf + catalog against
@@ -76,7 +82,9 @@ export default function DiscoverRoute({
         openApp(pin.id);
       })
       .catch((err: unknown) =>
-        showToast(`Install failed: ${err instanceof Error ? err.message : String(err)}`),
+        showToast(
+          `Install failed: ${err instanceof Error ? err.message : String(err)}`
+        )
       );
   };
   // Clone an automation template → surface once-only webhook secrets → open
@@ -97,21 +105,24 @@ export default function DiscoverRoute({
         await revealNext(0);
         // The thread route keys on the row's `ref`; if the fresh clone can't
         // be resolved, land on the fleet instead of a not-found thread.
-        if (ref) navigate({ kind: 'automation-view', automationId: ref });
-        else navigate({ kind: 'automations' });
+        if (ref) navigate({ kind: "automation-view", automationId: ref });
+        else navigate({ kind: "automations" });
       })
       .catch((err: unknown) =>
-        showToast(`Could not adopt template: ${err instanceof Error ? err.message : String(err)}`),
+        showToast(
+          `Could not adopt template: ${err instanceof Error ? err.message : String(err)}`
+        )
       );
   };
 
-  const asEntry = (t: DiscoverTemplate): TemplateEntry => t as unknown as TemplateEntry;
+  const asEntry = (t: DiscoverTemplate): TemplateEntry =>
+    t as unknown as TemplateEntry;
 
   return (
     <PageScroll flush>
-      {state.status === 'loading' ? (
+      {state.status === "loading" ? (
         <PageLoading label="Loading templates…" />
-      ) : state.status === 'error' ? (
+      ) : state.status === "error" ? (
         <PageEmpty message={`Couldn’t load templates: ${state.error}`} />
       ) : (
         <>
@@ -126,55 +137,65 @@ export default function DiscoverRoute({
             </div>
           ) : null}
           <DiscoverScreen
-            appTemplates={state.data.appTemplates as unknown as DiscoverTemplate[]}
-            automationTemplates={state.data.automationTemplates as unknown as DiscoverTemplate[]}
+            appTemplates={
+              state.data.appTemplates as unknown as DiscoverTemplate[]
+            }
+            automationTemplates={
+              state.data.automationTemplates as unknown as DiscoverTemplate[]
+            }
             tileVariant={tileVariant}
             onOpenTemplate={(t) =>
               // Tapping an app card: an installed app opens; an uninstalled one
               // shows its install/consent sheet first (issue #434).
-              t.installed ? openApp(t.id) : openTemplatePreview(asEntry(t), applyAppTemplate)
+              t.installed
+                ? openApp(t.id)
+                : openTemplatePreview(asEntry(t), applyAppTemplate)
             }
             onOpenAutomationTemplate={(t) =>
               openAutomationTemplatePreview(asEntry(t), applyAutoTemplate)
             }
             onTemplateContext={(t, anchor) => {
-              const auto = t.kind === 'automation';
+              const auto = t.kind === "automation";
               // App-template verbs (issue #434): Install (or Open when already
               // installed) — "Use this template" is gone. Automations keep their
               // clone-into-builder wording.
               const items = auto
                 ? [
                     {
-                      id: 'use',
-                      label: 'Use this template',
-                      icon: 'Sparkle' as const,
+                      id: "use",
+                      label: "Use this template",
+                      icon: "Sparkle" as const,
                     },
-                    { id: 'preview', label: 'Preview', icon: 'Eye' as const },
+                    { id: "preview", label: "Preview", icon: "Eye" as const },
                   ]
                 : t.installed
                   ? [
-                      { id: 'open', label: 'Open', icon: 'Eye' as const },
+                      { id: "open", label: "Open", icon: "Eye" as const },
                       {
-                        id: 'preview',
-                        label: 'App details',
-                        icon: 'Eye' as const,
+                        id: "preview",
+                        label: "App details",
+                        icon: "Eye" as const,
                       },
                     ]
                   : [
                       {
-                        id: 'install',
-                        label: 'Install',
-                        icon: 'Plus' as const,
+                        id: "install",
+                        label: "Install",
+                        icon: "Plus" as const,
                       },
-                      { id: 'preview', label: 'Preview', icon: 'Eye' as const },
+                      { id: "preview", label: "Preview", icon: "Eye" as const },
                     ];
               openMenu(items, anchor, (id) => {
                 if (auto) {
-                  if (id === 'use') applyAutoTemplate(asEntry(t));
-                  else openAutomationTemplatePreview(asEntry(t), applyAutoTemplate);
-                } else if (id === 'open') {
+                  if (id === "use") applyAutoTemplate(asEntry(t));
+                  else
+                    openAutomationTemplatePreview(
+                      asEntry(t),
+                      applyAutoTemplate
+                    );
+                } else if (id === "open") {
                   openApp(t.id);
-                } else if (id === 'install') {
+                } else if (id === "install") {
                   applyAppTemplate(asEntry(t));
                 } else {
                   openTemplatePreview(asEntry(t), applyAppTemplate);

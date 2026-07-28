@@ -39,7 +39,7 @@ export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
  * next step after this in every caller — is unchanged.
  */
 export function skipOnboarding(platform, timeoutMs) {
-  if (platform !== 'android') return '';
+  if (platform !== "android") return "";
   return `- extendedWaitUntil:
     visible: "Skip"
     timeout: ${timeoutMs}

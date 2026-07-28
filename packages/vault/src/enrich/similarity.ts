@@ -13,13 +13,15 @@
 // vault holds thousands of rows, not billions, and an exact scan keeps the
 // index additive (issue #299 phase 5 — nothing else may depend on it).
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-const POPCOUNT_NIBBLE = [0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4] as const;
+const POPCOUNT_NIBBLE = [
+  0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+] as const;
 
 /** Hamming distance between two equal-length hex strings, else null. */
 export function hexHamming(a: unknown, b: unknown): number | null {
-  if (typeof a !== 'string' || typeof b !== 'string') return null;
+  if (typeof a !== "string" || typeof b !== "string") return null;
   if (a.length === 0 || a.length !== b.length) return null;
   let distance = 0;
   for (let i = 0; i < a.length; i++) {
@@ -33,7 +35,7 @@ export function hexHamming(a: unknown, b: unknown): number | null {
 
 /** Register `vault_hamming` on a vault connection. */
 export function registerHammingFn(db: DatabaseSync): void {
-  db.function('vault_hamming', { deterministic: true }, hexHamming);
+  db.function("vault_hamming", { deterministic: true }, hexHamming);
 }
 
 /** Little-endian float32 encode — the `enrich_embedding.vector` BLOB shape. */
@@ -44,7 +46,11 @@ export function encodeVector(values: readonly number[]): Buffer {
 }
 
 export function decodeVector(blob: Buffer): Float32Array {
-  return new Float32Array(blob.buffer, blob.byteOffset, Math.floor(blob.byteLength / 4));
+  return new Float32Array(
+    blob.buffer,
+    blob.byteOffset,
+    Math.floor(blob.byteLength / 4)
+  );
 }
 
 /** Cosine similarity of a query against one stored vector; NaN-safe. */
@@ -77,14 +83,16 @@ export function scanEmbeddings(
   vault: DatabaseSync,
   model: string,
   query: readonly number[],
-  options: { entityTypes?: readonly string[]; limit?: number } = {},
+  options: { entityTypes?: readonly string[]; limit?: number } = {}
 ): SemanticHit[] {
   const q = Float32Array.from(query);
   const types = options.entityTypes?.length
-    ? ` AND target_type IN (${options.entityTypes.map(() => '?').join(',')})`
-    : '';
+    ? ` AND target_type IN (${options.entityTypes.map(() => "?").join(",")})`
+    : "";
   const rows = vault
-    .prepare(`SELECT target_type, target_id, vector FROM enrich_embedding WHERE model = ?${types}`)
+    .prepare(
+      `SELECT target_type, target_id, vector FROM enrich_embedding WHERE model = ?${types}`
+    )
     .all(model, ...(options.entityTypes ?? [])) as {
     target_type: string;
     target_id: string;

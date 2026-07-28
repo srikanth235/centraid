@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-import { buildActivity } from '../activity.ts';
-import { restoreAsset } from '../assets-actions.ts';
-import { renderFaces } from '../faces.ts';
-import { custodyMeta, exifRows, toLocalInputValue } from '../format.ts';
+import { buildActivity } from "../activity.ts";
+import { restoreAsset } from "../assets-actions.ts";
+import { renderFaces } from "../faces.ts";
+import { custodyMeta, exifRows, toLocalInputValue } from "../format.ts";
 // The lightbox's right-side info panel (bottom sheet on phone): editable
 // caption, an EXIF-extended Details grid, the real editable place picker,
 // custody/backup status, People chips (faces), Album chips, free-form Tag
@@ -14,18 +14,18 @@ import { custodyMeta, exifRows, toLocalInputValue } from '../format.ts';
 // 500-line cap), not a behavior change.
 // CSS split: own bits in LightboxInfo.module.css; `.ph-faces` (faces.ts's
 // imperative host) + `lightbox-note`/`kit-*` stay global strings.
-import { armConfirm, toast } from '../kit.ts';
+import { armConfirm, toast } from "../kit.ts";
 // Every command on this panel edits the OPEN asset, so each is addressed at
 // the scope that asset is shown from (issue #599) rather than the chip
 // selection — including the album/tag/place ones, whose collection ids are only
 // meaningful inside that same scope.
-import { act, narrate } from '../outcomes.ts';
-import type { Album, Asset, CustodyMeta, Place } from '../types.ts';
+import { act, narrate } from "../outcomes.ts";
+import type { Album, Asset, CustodyMeta, Place } from "../types.ts";
 
-import styles from './LightboxInfo.module.css';
+import styles from "./LightboxInfo.module.css";
 
 // Explicit tone → module-class map (never a computed `styles['custody-' + tone]`).
-const custodyCls: Record<CustodyMeta['tone'], string | undefined> = {
+const custodyCls: Record<CustodyMeta["tone"], string | undefined> = {
   ok: styles.custodyOk,
   warn: styles.custodyWarn,
   danger: styles.custodyDanger,
@@ -54,7 +54,9 @@ function DetailsGrid({ asset }: { asset: Asset }) {
       {custody ? (
         <div className="ph-details-row">
           <span className={styles.detailsK}>Backup</span>
-          <span className={`${styles.detailsV} ${custodyCls[custody.tone] ?? ''}`}>
+          <span
+            className={`${styles.detailsV} ${custodyCls[custody.tone] ?? ""}`}
+          >
             {custody.label}
           </span>
         </div>
@@ -80,7 +82,7 @@ export function LightboxInfo({
   const facesHostRef = useRef<HTMLDivElement | null>(null);
   const [placeEditorOpen, setPlaceEditorOpen] = useState(false);
   const [addingTag, setAddingTag] = useState(false);
-  const [tagText, setTagText] = useState('');
+  const [tagText, setTagText] = useState("");
 
   useEffect(() => {
     renderFaces(facesHostRef.current!, asset.asset_id, noteRef.current!);
@@ -92,19 +94,19 @@ export function LightboxInfo({
       <input
         type="text"
         className={styles.captionInput}
-        defaultValue={asset.title ?? ''}
+        defaultValue={asset.title ?? ""}
         placeholder="Add a caption…"
         aria-label="Caption"
         onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
+          if (e.key === "Enter") e.currentTarget.blur();
         }}
         onChange={async (e) => {
           const title = e.currentTarget.value.trim();
-          if (title === (asset.title ?? '')) return;
+          if (title === (asset.title ?? "")) return;
           const outcome = await act(
-            'update-asset',
+            "update-asset",
             { asset_id: asset.asset_id, title },
-            asset.scope_id,
+            asset.scope_id
           );
           if (narrate(outcome, noteRef.current)) await refresh();
         }}
@@ -122,9 +124,9 @@ export function LightboxInfo({
             const d = new Date(e.currentTarget.value);
             if (Number.isNaN(d.getTime())) return;
             const outcome = await act(
-              'update-asset',
+              "update-asset",
               { asset_id: asset.asset_id, captured_at: d.toISOString() },
-              asset.scope_id,
+              asset.scope_id
             );
             if (narrate(outcome, noteRef.current)) await refresh();
           }}
@@ -138,15 +140,15 @@ export function LightboxInfo({
           <select
             className="kit-input"
             aria-label="Set place"
-            defaultValue={asset.place?.place_id ?? ''}
+            defaultValue={asset.place?.place_id ?? ""}
             onChange={async (e) => {
               const placeId = e.currentTarget.value;
               const outcome = await act(
-                'set-place',
+                "set-place",
                 placeId
                   ? { asset_id: asset.asset_id, place_id: placeId }
                   : { asset_id: asset.asset_id },
-                asset.scope_id,
+                asset.scope_id
               );
               setPlaceEditorOpen(false);
               if (narrate(outcome, noteRef.current)) await refresh();
@@ -169,13 +171,18 @@ export function LightboxInfo({
           </button>
           {places.length === 0 ? (
             <p className={`kit-muted kit-small ${styles.placeEmpty}`}>
-              No known places yet — places are linked automatically from a photo's GPS data.
+              No known places yet — places are linked automatically from a
+              photo's GPS data.
             </p>
           ) : null}
         </div>
       ) : (
-        <button type="button" className={styles.placeChip} onClick={() => setPlaceEditorOpen(true)}>
-          {asset.place?.name ?? 'Add place'}
+        <button
+          type="button"
+          className={styles.placeChip}
+          onClick={() => setPlaceEditorOpen(true)}
+        >
+          {asset.place?.name ?? "Add place"}
         </button>
       )}
 
@@ -195,17 +202,19 @@ export function LightboxInfo({
                   key={album.album_id}
                   type="button"
                   className={styles.albumChip}
-                  data-active={member ? 'true' : 'false'}
+                  data-active={member ? "true" : "false"}
                   onClick={async () => {
                     const outcome = await act(
-                      member ? 'remove-from-album' : 'add-to-album',
+                      member ? "remove-from-album" : "add-to-album",
                       { album_id: album.album_id, asset_id: asset.asset_id },
-                      asset.scope_id,
+                      asset.scope_id
                     );
                     if (narrate(outcome, noteRef.current)) await refresh();
                   }}
                 >
-                  {member ? `✓ ${album.title ?? 'Album'}` : (album.title ?? 'Album')}
+                  {member
+                    ? `✓ ${album.title ?? "Album"}`
+                    : (album.title ?? "Album")}
                 </button>
               );
             })}
@@ -222,7 +231,11 @@ export function LightboxInfo({
             className={styles.tagChipX}
             aria-label={`Remove tag ${tag.label}`}
             onClick={async () => {
-              const outcome = await act('untag-asset', { tag_id: tag.tag_id }, asset.scope_id);
+              const outcome = await act(
+                "untag-asset",
+                { tag_id: tag.tag_id },
+                asset.scope_id
+              );
               if (narrate(outcome, noteRef.current)) await refresh();
             }}
           >
@@ -239,33 +252,37 @@ export function LightboxInfo({
             autoFocus
             onChange={(e) => setTagText(e.currentTarget.value)}
             onKeyDown={async (e) => {
-              if (e.key === 'Escape') {
+              if (e.key === "Escape") {
                 setAddingTag(false);
-                setTagText('');
+                setTagText("");
                 return;
               }
-              if (e.key !== 'Enter') return;
+              if (e.key !== "Enter") return;
               const label = e.currentTarget.value.trim();
               if (!label) {
                 setAddingTag(false);
                 return;
               }
               const outcome = await act(
-                'tag-asset',
+                "tag-asset",
                 { asset_id: asset.asset_id, label },
-                asset.scope_id,
+                asset.scope_id
               );
               setAddingTag(false);
-              setTagText('');
+              setTagText("");
               if (narrate(outcome, noteRef.current)) await refresh();
             }}
             onBlur={() => {
               setAddingTag(false);
-              setTagText('');
+              setTagText("");
             }}
           />
         ) : (
-          <button type="button" className={styles.tagChipNew} onClick={() => setAddingTag(true)}>
+          <button
+            type="button"
+            className={styles.tagChipNew}
+            onClick={() => setAddingTag(true)}
+          >
             ＋ Tag
           </button>
         )}
@@ -291,12 +308,17 @@ export function LightboxInfo({
         type="button"
         className={styles.deleteLink}
         onClick={async (e) => {
-          if (!armConfirm(e.currentTarget, { armedLabel: 'Delete photo?' })) return;
-          const outcome = await act('delete-asset', { asset_id: asset.asset_id }, asset.scope_id);
+          if (!armConfirm(e.currentTarget, { armedLabel: "Delete photo?" }))
+            return;
+          const outcome = await act(
+            "delete-asset",
+            { asset_id: asset.asset_id },
+            asset.scope_id
+          );
           if (narrate(outcome, noteRef.current)) {
             onClose();
-            toast('Moved to trash — it leaves every album it was in.', {
-              undoLabel: 'Undo',
+            toast("Moved to trash — it leaves every album it was in.", {
+              undoLabel: "Undo",
               onUndo: () =>
                 restoreAsset(asset.asset_id, refresh, {
                   scope: asset.scope_id,

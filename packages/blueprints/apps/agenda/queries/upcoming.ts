@@ -100,11 +100,11 @@ interface ParsedRule {
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
-  contentById: Map<string, RawContent>,
+  contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
   // Blob-backed bytes serve as same-origin URLs (issue #296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
-    typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+    typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
       : c?.content_uri;
   const bySubject = new Map<string, DecoratedAttachment[]>();
@@ -117,9 +117,9 @@ function attachmentsBySubject(
       content_id: a.content_id,
       role: a.role,
       is_primary: a.is_primary,
-      media_type: content?.media_type ?? 'application/octet-stream',
+      media_type: content?.media_type ?? "application/octet-stream",
       title: content?.title ?? null,
-      content_uri: srcOf(content) ?? '',
+      content_uri: srcOf(content) ?? "",
       byte_size: content?.byte_size ?? 0,
     });
   }
@@ -140,7 +140,7 @@ function attachmentsBySubject(
 function attendeesByEvent(
   attendees: RawAttendee[],
   nameById: Map<string, unknown>,
-  mePartyId: string | null,
+  mePartyId: string | null
 ): Map<string, DecoratedAttendee[]> {
   const byEvent = new Map<string, DecoratedAttendee[]>();
   for (const a of attendees) {
@@ -148,7 +148,7 @@ function attendeesByEvent(
     byEvent.get(a.event_id)!.push({
       attendee_id: a.attendee_id,
       party_id: a.party_id,
-      name: (nameById.get(a.party_id) as string | undefined) ?? 'Guest',
+      name: (nameById.get(a.party_id) as string | undefined) ?? "Guest",
       partstat: a.partstat,
       role: a.role,
       is_you: mePartyId != null && a.party_id === mePartyId,
@@ -157,7 +157,8 @@ function attendeesByEvent(
   for (const list of byEvent.values()) {
     list.sort(
       (x, y) =>
-        (y.is_you ? 1 : 0) - (x.is_you ? 1 : 0) || String(x.name).localeCompare(String(y.name)),
+        (y.is_you ? 1 : 0) - (x.is_you ? 1 : 0) ||
+        String(x.name).localeCompare(String(y.name))
     );
   }
   return byEvent;
@@ -198,7 +199,7 @@ function cachedStarts(ev: RawEvent, rangeFrom: Date, rangeTo: Date): string[] {
     EXPANSION_CACHE.set(key, hit);
     return hit;
   }
-  const starts = expandRrule(ev.rrule ?? '', ev.dtstart, rangeFrom, rangeTo);
+  const starts = expandRrule(ev.rrule ?? "", ev.dtstart, rangeFrom, rangeTo);
   EXPANSION_CACHE.set(key, starts);
   if (EXPANSION_CACHE.size > EXPANSION_CACHE_MAX) {
     EXPANSION_CACHE.delete(EXPANSION_CACHE.keys().next().value!);
@@ -212,25 +213,31 @@ function cachedStarts(ev: RawEvent, rangeFrom: Date, rangeTo: Date): string[] {
 // Self-contained on purpose: query handlers are standalone modules, so this
 // mirrors (rather than imports) @centraid/vault's recurrence/rrule.ts. Keep
 // the two in sync if the supported subset changes.
-const DAY_TOKENS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+const DAY_TOKENS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
 function parseRrule(rrule: string): ParsedRule | null {
   const parts = new Map<string, string>();
-  for (const seg of String(rrule).split(';')) {
-    const eq = seg.indexOf('=');
+  for (const seg of String(rrule).split(";")) {
+    const eq = seg.indexOf("=");
     if (eq < 0) continue;
     parts.set(seg.slice(0, eq).trim().toUpperCase(), seg.slice(eq + 1).trim());
   }
-  const freq = parts.get('FREQ');
-  if (!freq || !['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return null;
-  const interval = Math.max(1, Math.trunc(Number(parts.get('INTERVAL') ?? '1')) || 1);
-  const countRaw = parts.get('COUNT');
-  const count = countRaw ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined : undefined;
-  const until = parts.get('UNTIL') || undefined;
-  const byDayRaw = parts.get('BYDAY');
+  const freq = parts.get("FREQ");
+  if (!freq || !["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq))
+    return null;
+  const interval = Math.max(
+    1,
+    Math.trunc(Number(parts.get("INTERVAL") ?? "1")) || 1
+  );
+  const countRaw = parts.get("COUNT");
+  const count = countRaw
+    ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined
+    : undefined;
+  const until = parts.get("UNTIL") || undefined;
+  const byDayRaw = parts.get("BYDAY");
   const byDay = byDayRaw
     ? byDayRaw
-        .split(',')
+        .split(",")
         .map((d) => d.trim().toUpperCase())
         .filter((d) => DAY_TOKENS.includes(d))
     : undefined;
@@ -252,18 +259,18 @@ function parseIcalInstant(value: string): Date | null {
   if (!Number.isNaN(direct)) return new Date(direct);
   const match =
     /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})(?:T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2}))?Z?$/u.exec(
-      String(value).trim(),
+      String(value).trim()
     );
   if (!match) return null;
   const parts: Record<string, string | undefined> = match.groups ?? {};
-  const { year, month, day, hour = '00', minute = '00', second = '00' } = parts;
+  const { year, month, day, hour = "00", minute = "00", second = "00" } = parts;
   const ms = Date.UTC(
     Number(year),
     Number(month) - 1,
     Number(day),
     Number(hour),
     Number(minute),
-    Number(second),
+    Number(second)
   );
   return Number.isNaN(ms) ? null : new Date(ms);
 }
@@ -280,7 +287,7 @@ function addMonths(d: Date, n: number): Date {
   next.setUTCDate(1);
   next.setUTCMonth(next.getUTCMonth() + n);
   const daysInMonth = new Date(
-    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)
   ).getUTCDate();
   next.setUTCDate(Math.min(day, daysInMonth));
   return next;
@@ -292,7 +299,7 @@ function expandRrule(
   dtstartIso: string,
   rangeFrom: Date,
   rangeTo: Date,
-  maxInstances = 200,
+  maxInstances = 200
 ): string[] {
   const parsed = parseRrule(rrule);
   const dtstart = new Date(dtstartIso);
@@ -302,13 +309,15 @@ function expandRrule(
   let occurrenceIndex = 0;
 
   const cursorAt = (k: number): Date => {
-    if (parsed.freq === 'DAILY') return addDays(dtstart, k * parsed.interval);
-    if (parsed.freq === 'WEEKLY') return addDays(dtstart, k * 7 * parsed.interval);
-    if (parsed.freq === 'MONTHLY') return addMonths(dtstart, k * parsed.interval);
+    if (parsed.freq === "DAILY") return addDays(dtstart, k * parsed.interval);
+    if (parsed.freq === "WEEKLY")
+      return addDays(dtstart, k * 7 * parsed.interval);
+    if (parsed.freq === "MONTHLY")
+      return addMonths(dtstart, k * parsed.interval);
     return addMonths(dtstart, k * 12 * parsed.interval);
   };
 
-  if (parsed.freq === 'WEEKLY' && parsed.byDay) {
+  if (parsed.freq === "WEEKLY" && parsed.byDay) {
     const weekStart = addDays(dtstart, -dtstart.getUTCDay());
     let week = weekStart;
     let guard = 0;
@@ -318,9 +327,13 @@ function expandRrule(
         const d = addDays(week, DAY_TOKENS.indexOf(token));
         if (d.getTime() < dtstart.getTime()) continue;
         if (until && d.getTime() > until.getTime()) continue;
-        if (parsed.count !== undefined && occurrenceIndex >= parsed.count) continue;
+        if (parsed.count !== undefined && occurrenceIndex >= parsed.count)
+          continue;
         occurrenceIndex += 1;
-        if (d.getTime() >= rangeFrom.getTime() && d.getTime() < rangeTo.getTime())
+        if (
+          d.getTime() >= rangeFrom.getTime() &&
+          d.getTime() < rangeTo.getTime()
+        )
           out.push(d.toISOString());
       }
       if (
@@ -363,7 +376,7 @@ function expandRrule(
 function expandRecurringEvents(
   rows: EventRow[],
   rangeFrom: string | Date,
-  rangeTo: string | Date,
+  rangeTo: string | Date
 ): EventRow[] {
   // `rangeFrom`/`rangeTo` arrive as ISO strings from the caller; expandRrule
   // (and the memo key) compare via `.getTime()`, so normalize to Date once
@@ -382,7 +395,9 @@ function expandRecurringEvents(
       });
       continue;
     }
-    const durationMs = ev.dtend ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime() : 0;
+    const durationMs = ev.dtend
+      ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime()
+      : 0;
     const starts = cachedStarts(ev, fromDate, toDate);
     if (starts.length === 0) continue;
     for (const startIso of starts) {
@@ -404,42 +419,44 @@ function expandRecurringEvents(
 }
 
 export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   try {
     const from =
-      typeof query?.from === 'string' && query.from
+      typeof query?.from === "string" && query.from
         ? query.from
         : `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
-    const to = typeof query?.to === 'string' && query.to ? query.to : null;
+    const to = typeof query?.to === "string" && query.to ? query.to : null;
     const fromMs = new Date(from).getTime();
-    const fromLower = Number.isNaN(fromMs) ? from : new Date(fromMs - SPAN_BUFFER_MS).toISOString();
+    const fromLower = Number.isNaN(fromMs)
+      ? from
+      : new Date(fromMs - SPAN_BUFFER_MS).toISOString();
     // A recurring series is one row anchored (maybe years) in the past — the
     // dtstart>=fromLower filter below would drop it even though its next
     // occurrence lands inside the visible window. It is fetched separately,
     // unbounded by date, and merged before the range check happens on
     // per-instance dtstarts instead of the anchor's.
     const where: VaultWhere[] = [
-      { column: 'status', op: 'ne', value: 'cancelled' },
-      { column: 'dtstart', op: 'gte', value: fromLower },
+      { column: "status", op: "ne", value: "cancelled" },
+      { column: "dtstart", op: "gte", value: fromLower },
     ];
-    if (to) where.push({ column: 'dtstart', op: 'lt', value: to });
+    if (to) where.push({ column: "dtstart", op: "lt", value: to });
     const [events, recurring, calendars] = await Promise.all([
-      ctx.vault.read({ entity: 'core.event', where, purpose }),
+      ctx.vault.read({ entity: "core.event", where, purpose }),
       ctx.vault.read({
-        entity: 'core.event',
+        entity: "core.event",
         where: [
-          { column: 'status', op: 'ne', value: 'cancelled' },
-          { column: 'rrule', op: 'not-null' },
+          { column: "status", op: "ne", value: "cancelled" },
+          { column: "rrule", op: "not-null" },
         ],
         // Cannot date-bound (a series anchors in the past); cap the row count.
-        orderBy: { column: 'dtstart', dir: 'desc' },
+        orderBy: { column: "dtstart", dir: "desc" },
         limit: RECURRING_ANCHOR_CAP,
         purpose,
       }),
-      ctx.vault.read({ entity: 'schedule.calendar', purpose }),
+      ctx.vault.read({ entity: "schedule.calendar", purpose }),
     ]);
     const windowedById = new Map<string, RawEvent>(
-      ((events.rows ?? []) as unknown as RawEvent[]).map((e) => [e.event_id, e]),
+      ((events.rows ?? []) as unknown as RawEvent[]).map((e) => [e.event_id, e])
     );
     for (const e of (recurring.rows ?? []) as unknown as RawEvent[])
       windowedById.set(e.event_id, e);
@@ -456,65 +473,83 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     // that IS you gets the RSVP controls (issue #337).
     const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
       ctx.vault.read({
-        entity: 'schedule.event_ext',
-        where: [{ column: 'event_id', op: 'in', value: eventIds }],
+        entity: "schedule.event_ext",
+        where: [{ column: "event_id", op: "in", value: eventIds }],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.attachment',
+        entity: "core.attachment",
         where: [
-          { column: 'target_type', op: 'eq', value: 'core.event' },
-          { column: 'target_id', op: 'in', value: eventIds },
+          { column: "target_type", op: "eq", value: "core.event" },
+          { column: "target_id", op: "in", value: eventIds },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'schedule.attendee',
-        where: [{ column: 'event_id', op: 'in', value: eventIds }],
+        entity: "schedule.attendee",
+        where: [{ column: "event_id", op: "in", value: eventIds }],
         purpose,
       }),
-      ctx.vault.read({ entity: 'core.vault', purpose }),
+      ctx.vault.read({ entity: "core.vault", purpose }),
     ]);
     const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
-    const mePartyId = ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
+    const mePartyId =
+      ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
     // One bounded pull resolves only the guests' display names.
-    const attendeePartyIds = [...new Set(attendeeRows.map((a) => a.party_id))].filter(Boolean);
+    const attendeePartyIds = [
+      ...new Set(attendeeRows.map((a) => a.party_id)),
+    ].filter(Boolean);
     const partiesRes =
       attendeePartyIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.party',
-            where: [{ column: 'party_id', op: 'in', value: attendeePartyIds }],
+            entity: "core.party",
+            where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
             purpose,
           })
         : { rows: [] };
     const partyNameById = new Map<string, unknown>(
-      (partiesRes.rows ?? []).map((p) => [p.party_id as string, p.display_name]),
+      (partiesRes.rows ?? []).map((p) => [p.party_id as string, p.display_name])
     );
-    const guestsByEvent = attendeesByEvent(attendeeRows, partyNameById, mePartyId);
+    const guestsByEvent = attendeesByEvent(
+      attendeeRows,
+      partyNameById,
+      mePartyId
+    );
     // One bounded pull covers only the bytes those attachments reference.
-    const attachmentRows = (attachments.rows ?? []) as unknown as RawAttachment[];
-    const contentIds = [...new Set(attachmentRows.map((a) => a.content_id))].filter(Boolean);
+    const attachmentRows = (attachments.rows ??
+      []) as unknown as RawAttachment[];
+    const contentIds = [
+      ...new Set(attachmentRows.map((a) => a.content_id)),
+    ].filter(Boolean);
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] };
     const contentById = new Map<string, RawContent>(
-      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [c.content_id, c]),
+      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [
+        c.content_id,
+        c,
+      ])
     );
-    const attByEvent = attachmentsBySubject('core.event', attachmentRows, contentById);
+    const attByEvent = attachmentsBySubject(
+      "core.event",
+      attachmentRows,
+      contentById
+    );
     const extByEvent = new Map<string, Record<string, unknown>>(
-      (exts.rows ?? []).map((x) => [x.event_id as string, x]),
+      (exts.rows ?? []).map((x) => [x.event_id as string, x])
     );
     const enriched: EventRow[] = windowed.map((e) => {
       const ext = extByEvent.get(e.event_id);
       return {
         ...e,
         calendar_id: (ext?.calendar_id as string | null | undefined) ?? null,
-        conferencing_uri: (ext?.conferencing_uri as string | null | undefined) ?? null,
+        conferencing_uri:
+          (ext?.conferencing_uri as string | null | undefined) ?? null,
         attachments: attByEvent.get(e.event_id) ?? [],
         attendees: guestsByEvent.get(e.event_id) ?? [],
       };

@@ -111,7 +111,7 @@ export interface PerfBudgets {
 // re-baseline would have needed. `maxTransferBytes` tightens 1,250,000 ->
 // 470,000 in the same edit — a genuine tightening against both measurements.
 export const approvedDeviation =
-  'Vite 8 (rolldown) re-baseline in #565. Like-for-like vs main (051658de): cold shell 8 -> 15 requests unmitigated; a shell-common chunk group in apps/web/vite.config.ts recovers that to 12, with transfer 402,997 -> 387,990 B (-3.7%). Going below 12 needs a source change (web-host.ts assigns window.CentraidApi at module-eval time, so wider grouping ships a blank page) and is tracked separately. maxRequests widens 10 -> 13, not the 18 an unmitigated re-baseline needed; maxTransferBytes tightens 1,250,000 -> 470,000 in the same change.';
+  "Vite 8 (rolldown) re-baseline in #565. Like-for-like vs main (051658de): cold shell 8 -> 15 requests unmitigated; a shell-common chunk group in apps/web/vite.config.ts recovers that to 12, with transfer 402,997 -> 387,990 B (-3.7%). Going below 12 needs a source change (web-host.ts assigns window.CentraidApi at module-eval time, so wider grouping ships a blank page) and is tracked separately. maxRequests widens 10 -> 13, not the 18 an unmitigated re-baseline needed; maxTransferBytes tightens 1,250,000 -> 470,000 in the same change.";
 
 export const perfBudgets: PerfBudgets = {
   shell: {

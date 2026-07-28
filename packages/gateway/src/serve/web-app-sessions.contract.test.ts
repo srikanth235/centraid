@@ -1,67 +1,76 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { describe, afterEach, beforeEach, expect, test } from 'vitest';
-import crypto from 'node:crypto';
-import path from 'node:path';
-import { Readable } from 'node:stream';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { WorktreeStore } from '../worktree-store/index.js';
-import type { GatewayPaths } from '../paths.js';
-import { serve, type GatewayServeHandle } from './serve.js';
-import { WebAppSessions } from './web-app-sessions.js';
-import { WebControlSessionStore, hashControlToken } from './web-session-store.js';
-import { runWithVaultContext } from './vault-context.js';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+import { Readable } from "node:stream";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
+import type { GatewayPaths } from "../paths.js";
+import type { WorktreeStore } from "../worktree-store/index.js";
+import { serve, type GatewayServeHandle } from "./serve.js";
+import { runWithVaultContext } from "./vault-context.js";
+import { WebAppSessions } from "./web-app-sessions.js";
+import {
+  WebControlSessionStore,
+  hashControlToken,
+} from "./web-session-store.js";
 
 let dataDir: string;
 let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
-  return { vaultDir: path.join(dir, 'vault') };
+  return { vaultDir: path.join(dir, "vault") };
 }
 
 async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   const sessionId = `seed-${appId}`;
   const session = await store.openSession(sessionId);
-  const appDir = path.join(session.worktreePath, 'apps', appId);
-  await fs.mkdir(path.join(appDir, 'queries'), { recursive: true });
+  const appDir = path.join(session.worktreePath, "apps", appId);
+  await fs.mkdir(path.join(appDir, "queries"), { recursive: true });
   await fs.writeFile(
-    path.join(appDir, 'app.json'),
+    path.join(appDir, "app.json"),
     JSON.stringify({
       manifestVersion: 1,
       id: appId,
       name: appId,
-      version: '0.1.0',
+      version: "0.1.0",
       tables: [],
       actions: [],
       queries: [
         {
-          name: 'ping',
-          description: 'ping',
-          input: { type: 'object', properties: {}, additionalProperties: false },
+          name: "ping",
+          description: "ping",
+          input: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
         },
       ],
-    }),
+    })
   );
   await fs.writeFile(
-    path.join(appDir, 'index.html'),
-    `<!doctype html><html><head></head><body>${appId}</body></html>`,
+    path.join(appDir, "index.html"),
+    `<!doctype html><html><head></head><body>${appId}</body></html>`
   );
   await fs.writeFile(
-    path.join(appDir, 'queries', 'ping.js'),
-    `export default async () => ({ app: '${appId}' });\n`,
+    path.join(appDir, "queries", "ping.js"),
+    `export default async () => ({ app: '${appId}' });\n`
   );
-  await store.publish({ sessionId, appId, message: 'seed' });
+  await store.publish({ sessionId, appId, message: "seed" });
   await store.closeSession(sessionId);
 }
 
-describe('web-app-sessions.contract scenarios', () => {
+describe("web-app-sessions.contract scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`web-session-${crypto.randomUUID()}-`);
     handle = await serve({ paths: pathsUnder(dataDir) });
     const store = await handle.appsStore();
-    await seedApp(store, 'alpha');
-    await seedApp(store, 'beta');
+    await seedApp(store, "alpha");
+    await seedApp(store, "beta");
     await handle.syncApps();
   });
 
@@ -70,40 +79,47 @@ describe('web-app-sessions.contract scenarios', () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  async function launch(appId: string): Promise<{ cookie: string; location: string }> {
-    const minted = await fetch(`${handle.url}/centraid/_apps/${appId}/web-session`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${handle.token}`,
-        Origin: 'http://127.0.0.1:4173',
-        'content-type': 'application/json',
-      },
-      body: '{}',
-    });
+  async function launch(
+    appId: string
+  ): Promise<{ cookie: string; location: string }> {
+    const minted = await fetch(
+      `${handle.url}/centraid/_apps/${appId}/web-session`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${handle.token}`,
+          Origin: "http://127.0.0.1:4173",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      }
+    );
     expect(minted.status).toBe(200);
     const { launchPath } = (await minted.json()) as { launchPath: string };
-    const redeemed = await fetch(new URL(launchPath, handle.url), { redirect: 'manual' });
+    const redeemed = await fetch(new URL(launchPath, handle.url), {
+      redirect: "manual",
+    });
     expect(redeemed.status).toBe(303);
-    const setCookie = redeemed.headers.get('set-cookie') ?? '';
-    expect(setCookie).toContain('HttpOnly');
-    expect(setCookie).toContain('SameSite=Strict');
+    const setCookie = redeemed.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Strict");
     return {
-      cookie: setCookie.split(';')[0] ?? '',
-      location: redeemed.headers.get('location') ?? '',
+      cookie: setCookie.split(";")[0] ?? "",
+      location: redeemed.headers.get("location") ?? "",
     };
   }
 
-  test('one-time launch establishes a cookie session that can load only its app', async () => {
-    const session = await launch('alpha');
-    expect(session.location).toBe('/centraid/alpha/');
+  test("one-time launch establishes a cookie session that can load only its app", async () => {
+    const session = await launch("alpha");
+    expect(session.location).toBe("/centraid/alpha/");
 
     const alpha = await fetch(new URL(session.location, handle.url), {
       headers: { Cookie: session.cookie },
     });
     expect(alpha.status).toBe(200);
-    await expect(alpha.text()).resolves.toContain('alpha');
-    expect(alpha.headers.get('content-security-policy')).toContain(
-      "frame-ancestors 'self' http://127.0.0.1:4173",
+    await expect(alpha.text()).resolves.toContain("alpha");
+    expect(alpha.headers.get("content-security-policy")).toContain(
+      "frame-ancestors 'self' http://127.0.0.1:4173"
     );
 
     const beta = await fetch(`${handle.url}/centraid/beta/`, {
@@ -117,44 +133,53 @@ describe('web-app-sessions.contract scenarios', () => {
     expect(admin.status).toBe(401);
   });
 
-  test('app-session RPC calls are forced to the session app', async () => {
-    const session = await launch('alpha');
+  test("app-session RPC calls are forced to the session app", async () => {
+    const session = await launch("alpha");
     const correct = await fetch(`${handle.url}/centraid/alpha/queries/ping`, {
-      method: 'POST',
-      headers: { Cookie: session.cookie, 'content-type': 'application/json' },
+      method: "POST",
+      headers: { Cookie: session.cookie, "content-type": "application/json" },
       body: JSON.stringify({ input: {} }),
     });
     expect(correct.status).toBe(200);
-    await expect(correct.json()).resolves.toStrictEqual({ app: 'alpha' });
+    await expect(correct.json()).resolves.toStrictEqual({ app: "alpha" });
 
     // App RPC now rides under the app's own prefix (issue #505), so a cross-app
     // path fails the session's path gate outright — it never reaches the runtime.
     const crossApp = await fetch(`${handle.url}/centraid/beta/queries/ping`, {
-      method: 'POST',
-      headers: { Cookie: session.cookie, 'content-type': 'application/json' },
+      method: "POST",
+      headers: { Cookie: session.cookie, "content-type": "application/json" },
       body: JSON.stringify({ input: {} }),
     });
     expect(crossApp.status).toBe(401);
   });
 
-  test('app sessions permit blob staging but not the wider vault surface', async () => {
-    const session = await launch('alpha');
-    const staged = await fetch(`${handle.url}/centraid/_vault/blobs?filename=sample.txt`, {
-      method: 'POST',
-      headers: { Cookie: session.cookie, 'content-type': 'text/plain' },
-      body: 'sample document',
-    });
+  test("app sessions permit blob staging but not the wider vault surface", async () => {
+    const session = await launch("alpha");
+    const staged = await fetch(
+      `${handle.url}/centraid/_vault/blobs?filename=sample.txt`,
+      {
+        method: "POST",
+        headers: { Cookie: session.cookie, "content-type": "text/plain" },
+        body: "sample document",
+      }
+    );
     expect(staged.status).toBe(200);
-    await expect(staged.json()).resolves.toMatchObject({ byteSize: 15, mediaType: 'text/plain' });
-
-    const otherVaultRoute = await fetch(`${handle.url}/centraid/_vault/anything`, {
-      headers: { Cookie: session.cookie },
+    await expect(staged.json()).resolves.toMatchObject({
+      byteSize: 15,
+      mediaType: "text/plain",
     });
+
+    const otherVaultRoute = await fetch(
+      `${handle.url}/centraid/_vault/anything`,
+      {
+        headers: { Cookie: session.cookie },
+      }
+    );
     expect(otherVaultRoute.status).toBe(401);
   });
 
-  test('active app session rejects a foreign Origin but still passes on shell/same/no origin', async () => {
-    const session = await launch('alpha');
+  test("active app session rejects a foreign Origin but still passes on shell/same/no origin", async () => {
+    const session = await launch("alpha");
 
     // Same-origin as the gateway/API (app-iframe direct-HTTP mode): Origin host
     // equals the request host. Must pass.
@@ -165,7 +190,7 @@ describe('web-app-sessions.contract scenarios', () => {
 
     // The PWA shell origin (shellOrigin) must pass.
     const shellOrigin = await fetch(new URL(session.location, handle.url), {
-      headers: { Cookie: session.cookie, Origin: 'http://127.0.0.1:4173' },
+      headers: { Cookie: session.cookie, Origin: "http://127.0.0.1:4173" },
     });
     expect(shellOrigin.status).toBe(200);
 
@@ -178,19 +203,22 @@ describe('web-app-sessions.contract scenarios', () => {
     // A foreign origin — e.g. another port on the same host riding the cookie
     // through credentialed CORS — must be rejected.
     const foreign = await fetch(new URL(session.location, handle.url), {
-      headers: { Cookie: session.cookie, Origin: 'http://127.0.0.1:9999' },
+      headers: { Cookie: session.cookie, Origin: "http://127.0.0.1:9999" },
     });
     expect(foreign.status).toBe(401);
   });
 
-  test('pairing a second control session does not invalidate the first', async () => {
+  test("pairing a second control session does not invalidate the first", async () => {
     async function establish(): Promise<string> {
       const res = await fetch(`${handle.url}/centraid/_web/control`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${handle.token}`, Origin: 'http://127.0.0.1:4173' },
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${handle.token}`,
+          Origin: "http://127.0.0.1:4173",
+        },
       });
       expect(res.status).toBe(200);
-      return (res.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+      return (res.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
     }
 
     const first = await establish();
@@ -200,89 +228,101 @@ describe('web-app-sessions.contract scenarios', () => {
     // Both control cookies remain live after the second pairing.
     await forEachSequentially([first, second], async (cookie) => {
       const proxied = await fetch(
-        `${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
-        { headers: { Cookie: cookie, Origin: 'http://127.0.0.1:4173' } },
+        `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
+        { headers: { Cookie: cookie, Origin: "http://127.0.0.1:4173" } }
       );
       expect(proxied.status).toBe(200);
     });
   });
 
-  test('launch codes are single-use and forged scope headers do not authenticate', async () => {
-    const minted = await fetch(`${handle.url}/centraid/_apps/alpha/web-session`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${handle.token}`, Origin: 'http://127.0.0.1:4173' },
-    });
+  test("launch codes are single-use and forged scope headers do not authenticate", async () => {
+    const minted = await fetch(
+      `${handle.url}/centraid/_apps/alpha/web-session`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${handle.token}`,
+          Origin: "http://127.0.0.1:4173",
+        },
+      }
+    );
     const { launchPath } = (await minted.json()) as { launchPath: string };
-    expect((await fetch(new URL(launchPath, handle.url), { redirect: 'manual' })).status).toBe(303);
-    expect((await fetch(new URL(launchPath, handle.url), { redirect: 'manual' })).status).toBe(403);
+    expect(
+      (await fetch(new URL(launchPath, handle.url), { redirect: "manual" }))
+        .status
+    ).toBe(303);
+    expect(
+      (await fetch(new URL(launchPath, handle.url), { redirect: "manual" }))
+        .status
+    ).toBe(403);
 
     const forged = await fetch(`${handle.url}/centraid/alpha/`, {
       headers: {
-        'x-centraid-web-app': 'alpha',
-        'x-centraid-web-shell-origin': 'http://127.0.0.1:4173',
+        "x-centraid-web-app": "alpha",
+        "x-centraid-web-shell-origin": "http://127.0.0.1:4173",
       },
     });
     expect(forged.status).toBe(401);
   });
 
-  test('control session keeps the bearer out of browser storage and enforces its shell Origin', async () => {
+  test("control session keeps the bearer out of browser storage and enforces its shell Origin", async () => {
     const established = await fetch(`${handle.url}/centraid/_web/control`, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${handle.token}`,
-        Origin: 'http://127.0.0.1:4173',
+        Origin: "http://127.0.0.1:4173",
       },
     });
     expect(established.status).toBe(200);
-    const setCookie = established.headers.get('set-cookie') ?? '';
-    expect(setCookie).toContain('HttpOnly');
-    expect(setCookie).toContain('Path=/centraid/_web/control');
-    const cookie = setCookie.split(';')[0] ?? '';
+    const setCookie = established.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("Path=/centraid/_web/control");
+    const cookie = setCookie.split(";")[0] ?? "";
 
     const proxied = await fetch(
-      `${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
-      { headers: { Cookie: cookie, Origin: 'http://127.0.0.1:4173' } },
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
+      { headers: { Cookie: cookie, Origin: "http://127.0.0.1:4173" } }
     );
     expect(proxied.status).toBe(200);
     expect((await proxied.json()) as Array<{ id: string }>).toStrictEqual(
-      expect.arrayContaining([expect.objectContaining({ id: 'alpha' })]),
+      expect.arrayContaining([expect.objectContaining({ id: "alpha" })])
     );
 
     const wrongOrigin = await fetch(
-      `${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
-      { headers: { Cookie: cookie, Origin: handle.url } },
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
+      { headers: { Cookie: cookie, Origin: handle.url } }
     );
     expect(wrongOrigin.status).toBe(401);
 
     const noOrigin = await fetch(
-      `${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
-      { headers: { Cookie: cookie } },
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
+      { headers: { Cookie: cookie } }
     );
     expect(noOrigin.status).toBe(401);
   });
 
-  const SHELL = 'http://127.0.0.1:4173';
+  const SHELL = "http://127.0.0.1:4173";
 
   async function establishControl(): Promise<string> {
     const res = await fetch(`${handle.url}/centraid/_web/control`, {
-      method: 'POST',
+      method: "POST",
       headers: { Authorization: `Bearer ${handle.token}`, Origin: SHELL },
     });
     expect(res.status).toBe(200);
-    return (res.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+    return (res.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
   }
 
   function proxyControl(cookie: string): Promise<Response> {
     return fetch(
-      `${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
       {
         headers: { Cookie: cookie, Origin: SHELL },
-      },
+      }
     );
   }
 
-  test('a persisted control session still authorizes after a gateway restart', async () => {
-    const controlsFile = path.join(dataDir, 'web-sessions.json');
+  test("a persisted control session still authorizes after a gateway restart", async () => {
+    const controlsFile = path.join(dataDir, "web-sessions.json");
     // Re-serve the same dataDir WITH persistence wired.
     await handle.close();
     handle = await serve({
@@ -304,30 +344,30 @@ describe('web-app-sessions.contract scenarios', () => {
     expect((await proxyControl(cookie)).status).toBe(200);
   });
 
-  test('logout drops the control session server-side and expires the cookie', async () => {
+  test("logout drops the control session server-side and expires the cookie", async () => {
     const cookie = await establishControl();
     expect((await proxyControl(cookie)).status).toBe(200);
 
     // An unauthenticated DELETE is rejected like any other.
     const noCookie = await fetch(`${handle.url}/centraid/_web/control`, {
-      method: 'DELETE',
+      method: "DELETE",
       headers: { Origin: SHELL },
     });
     expect(noCookie.status).toBe(401);
 
     // A DELETE with the cookie + matching Origin logs out: 200 + expiring cookie.
     const out = await fetch(`${handle.url}/centraid/_web/control`, {
-      method: 'DELETE',
+      method: "DELETE",
       headers: { Cookie: cookie, Origin: SHELL },
     });
     expect(out.status).toBe(200);
-    expect(out.headers.get('set-cookie') ?? '').toContain('Max-Age=0');
+    expect(out.headers.get("set-cookie") ?? "").toContain("Max-Age=0");
 
     // The cookie no longer authorizes.
     expect((await proxyControl(cookie)).status).toBe(401);
   });
 
-  test('a proxied DELETE (with ?path) is forwarded, not treated as a logout', async () => {
+  test("a proxied DELETE (with ?path) is forwarded, not treated as a logout", async () => {
     const cookie = await establishControl();
     expect((await proxyControl(cookie)).status).toBe(200);
 
@@ -335,19 +375,19 @@ describe('web-app-sessions.contract scenarios', () => {
     // shell revoking a device), NOT a control-session logout. It must reach the
     // inner route — and, critically, must NOT expire the control cookie.
     const del = await fetch(
-      `${handle.url}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
-      { method: 'DELETE', headers: { Cookie: cookie, Origin: SHELL } },
+      `${handle.url}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
+      { method: "DELETE", headers: { Cookie: cookie, Origin: SHELL } }
     );
     // Whatever the inner route answers (here _apps has no DELETE), it is not the
     // logout's cookie-expiring response.
-    expect(del.headers.get('set-cookie') ?? '').not.toContain('Max-Age=0');
+    expect(del.headers.get("set-cookie") ?? "").not.toContain("Max-Age=0");
 
     // The session survived: the cookie still authorizes.
     expect((await proxyControl(cookie)).status).toBe(200);
   });
 
-  test('a control session without a proved device identity fails closed', async () => {
-    const controlsFile = path.join(dataDir, 'web-sessions.json');
+  test("a control session without a proved device identity fails closed", async () => {
+    const controlsFile = path.join(dataDir, "web-sessions.json");
     await handle.close();
     // There is no shared-bearer admin wildcard: a session without a device key
     // cannot survive the enrollment check.
@@ -372,19 +412,18 @@ describe('web-app-sessions.contract scenarios', () => {
     headers?: Record<string, string>;
     body?: string;
   }): IncomingMessage {
-    const stream = Readable.from(init.body === undefined ? [] : [init.body]) as unknown as Record<
-      string,
-      unknown
-    >;
+    const stream = Readable.from(
+      init.body === undefined ? [] : [init.body]
+    ) as unknown as Record<string, unknown>;
     stream.url = init.url;
-    stream.method = init.method ?? 'GET';
+    stream.method = init.method ?? "GET";
     stream.headers = init.headers ?? {};
     return stream as unknown as IncomingMessage;
   }
 
   class MockRes {
     statusCode = 200;
-    body = '';
+    body = "";
     private readonly outHeaders = new Map<string, string>();
     setHeader(name: string, value: string): void {
       this.outHeaders.set(name.toLowerCase(), value);
@@ -397,28 +436,34 @@ describe('web-app-sessions.contract scenarios', () => {
     }
   }
 
-  test('a revoked device key kills a live CONTROL cookie and evicts its row', async () => {
-    const token = 'control-secret-token';
+  test("a revoked device key kills a live CONTROL cookie and evicts its row", async () => {
+    const token = "control-secret-token";
     const hash = hashControlToken(token);
     const controlStore = WebControlSessionStore.open();
     // Seed a persisted control row bound to a device key.
     controlStore.establish({
       tokenHash: hash,
-      vaultId: 'v1',
-      deviceKey: 'dev-1',
+      vaultId: "v1",
+      deviceKey: "dev-1",
       shellOrigin: SHELL,
     });
 
     let enrolled = true;
-    const sessions = new WebAppSessions({ controlStore, isDeviceValid: () => enrolled });
+    const sessions = new WebAppSessions({
+      controlStore,
+      isDeviceValid: () => enrolled,
+    });
     const control = (): IncomingMessage =>
       req({
-        url: `/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
+        url: `/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
         headers: { cookie: `__centraid_control=${token}`, origin: SHELL },
       });
 
     // Enrolled → authorizes as the device plane.
-    expect(sessions.authorize(control())).toStrictEqual({ plane: 'device', deviceKey: 'dev-1' });
+    expect(sessions.authorize(control())).toStrictEqual({
+      plane: "device",
+      deviceKey: "dev-1",
+    });
 
     // Revoke the enrollment → the very next authorize fails and drops the row.
     enrolled = false;
@@ -426,7 +471,7 @@ describe('web-app-sessions.contract scenarios', () => {
     expect(controlStore.find(hash)).toBeUndefined();
   });
 
-  test('a revoked device key kills a live ACTIVE app session', async () => {
+  test("a revoked device key kills a live ACTIVE app session", async () => {
     let enrolled = true;
     const sessions = new WebAppSessions({ isDeviceValid: () => enrolled });
 
@@ -434,31 +479,35 @@ describe('web-app-sessions.contract scenarios', () => {
     // for an app cookie — mirrors the mint→redeem HTTP flow, but lets us inject
     // the deviceKey the serve() rig can't.
     const mintRes = new MockRes();
-    await runWithVaultContext({ vaultId: 'v1', deviceKey: 'dev-1' }, () =>
+    await runWithVaultContext({ vaultId: "v1", deviceKey: "dev-1" }, () =>
       sessions.handler(
         req({
-          url: '/centraid/_apps/alpha/web-session',
-          method: 'POST',
+          url: "/centraid/_apps/alpha/web-session",
+          method: "POST",
           headers: { origin: SHELL },
-          body: '{}',
+          body: "{}",
         }),
-        mintRes as unknown as ServerResponse,
-      ),
+        mintRes as unknown as ServerResponse
+      )
     );
     const { launchPath } = JSON.parse(mintRes.body) as { launchPath: string };
 
     const redeemRes = new MockRes();
     await sessions.handler(
-      req({ url: launchPath, method: 'GET' }),
-      redeemRes as unknown as ServerResponse,
+      req({ url: launchPath, method: "GET" }),
+      redeemRes as unknown as ServerResponse
     );
-    const appCookie = (redeemRes.getHeader('set-cookie') ?? '').split(';')[0] ?? '';
-    expect(appCookie).toContain('__centraid_app_');
+    const appCookie =
+      (redeemRes.getHeader("set-cookie") ?? "").split(";")[0] ?? "";
+    expect(appCookie).toContain("__centraid_app_");
 
     const appReq = (): IncomingMessage =>
-      req({ url: '/centraid/alpha/', headers: { cookie: appCookie } });
+      req({ url: "/centraid/alpha/", headers: { cookie: appCookie } });
     // Enrolled → authorizes.
-    expect(sessions.authorize(appReq())).toStrictEqual({ plane: 'device', deviceKey: 'dev-1' });
+    expect(sessions.authorize(appReq())).toStrictEqual({
+      plane: "device",
+      deviceKey: "dev-1",
+    });
     // Revoked → the live app cookie is dead.
     enrolled = false;
     expect(sessions.authorize(appReq())).toBeUndefined();

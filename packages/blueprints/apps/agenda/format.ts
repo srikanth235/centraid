@@ -3,8 +3,8 @@
 // text-highlight segmentation. No app state, no vault IO — every function is
 // a plain projection of its arguments so app.tsx and the components can both
 // call them without a circular import.
-import { localDayKey } from './kit.ts';
-import type { AgEvent, Calendar, DaySegment, LaidSegment } from './types.ts';
+import { localDayKey } from "./kit.ts";
+import type { AgEvent, Calendar, DaySegment, LaidSegment } from "./types.ts";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -13,14 +13,14 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 export function toIsoUtc(local: string): string {
   // datetime-local gives "YYYY-MM-DDTHH:MM" in the viewer's zone.
   const d = new Date(local);
-  return Number.isNaN(d.getTime()) ? '' : d.toISOString();
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
 export function fmtTime(iso: string): string {
   try {
     return new Date(iso).toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
+      hour: "numeric",
+      minute: "2-digit",
     });
   } catch {
     return iso;
@@ -29,12 +29,12 @@ export function fmtTime(iso: string): string {
 
 export function fmtDay(key: string): string {
   const today = localDayKey(new Date());
-  if (key === today) return 'Today';
+  if (key === today) return "Today";
   try {
     return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
+      weekday: "long",
+      month: "short",
+      day: "numeric",
     });
   } catch {
     return key;
@@ -44,21 +44,26 @@ export function fmtDay(key: string): string {
 /** ISO or Date → the value a datetime-local input wants, in local time. */
 export function toLocalInput(dateish: string | number | Date): string {
   const d = dateish instanceof Date ? dateish : new Date(dateish);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** "Thu, Jul 3 · 10:00 AM – 11:00 AM" (or spanning both dates). */
-export function fmtRange(ev: { dtstart: string; dtend?: string | null }): string {
+export function fmtRange(ev: {
+  dtstart: string;
+  dtend?: string | null;
+}): string {
   const s = new Date(ev.dtstart);
   const e = ev.dtend ? new Date(ev.dtend) : null;
   const opts: Intl.DateTimeFormatOptions = {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   };
-  const sd = Number.isNaN(s.getTime()) ? String(ev.dtstart) : s.toLocaleDateString(undefined, opts);
+  const sd = Number.isNaN(s.getTime())
+    ? String(ev.dtstart)
+    : s.toLocaleDateString(undefined, opts);
   if (!e || Number.isNaN(e.getTime())) return `${sd} · ${fmtTime(ev.dtstart)}`;
   if (localDayKey(s) === localDayKey(e)) {
     return `${sd} · ${fmtTime(ev.dtstart)} – ${fmtTime(ev.dtend as string)}`;
@@ -84,19 +89,29 @@ export function nextHalfHour(): Date {
 export function nextRoundHourOn(date: Date): Date {
   const now = new Date();
   const h = Math.min(
-    now.getMinutes() > 0 || now.getSeconds() > 0 ? now.getHours() + 1 : now.getHours(),
-    23,
+    now.getMinutes() > 0 || now.getSeconds() > 0
+      ? now.getHours() + 1
+      : now.getHours(),
+    23
   );
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, 0, 0, 0);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    h,
+    0,
+    0,
+    0
+  );
 }
 
 export function initials(name: string | null | undefined): string {
-  return String(name ?? '?')
+  return String(name ?? "?")
     .trim()
     .split(/\s+/u)
     .slice(0, 2)
     .map((w) => w[0])
-    .join('')
+    .join("")
     .toUpperCase();
 }
 
@@ -106,14 +121,22 @@ export function initials(name: string | null | undefined): string {
 export function monthGridRange(d: Date): { from: string; to: string } {
   const first = new Date(d.getFullYear(), d.getMonth(), 1);
   const gridStart = startOfWeek(first);
-  const gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 42);
+  const gridEnd = new Date(
+    gridStart.getFullYear(),
+    gridStart.getMonth(),
+    gridStart.getDate() + 42
+  );
   return { from: gridStart.toISOString(), to: gridEnd.toISOString() };
 }
 
 /** The Monday-first 7-day range around `d`'s week. */
 export function weekRange(d: Date): { from: string; to: string } {
   const start = startOfWeek(d);
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+  const end = new Date(
+    start.getFullYear(),
+    start.getMonth(),
+    start.getDate() + 7
+  );
   return { from: start.toISOString(), to: end.toISOString() };
 }
 
@@ -166,7 +189,12 @@ export function bucketByDay(list: AgEvent[]): Map<string, DaySegment[]> {
     // per-day math above it, or a multi-day span's final day would lose its
     // spansAll flag by exactly the same minute.
     let boundaryEnd = end;
-    if (end > start && end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0) {
+    if (
+      end > start &&
+      end.getHours() === 0 &&
+      end.getMinutes() === 0 &&
+      end.getSeconds() === 0
+    ) {
       boundaryEnd = new Date(end.getTime() - 60000);
     }
     const lastKey = localDayKey(boundaryEnd);
@@ -192,9 +220,9 @@ export function bucketByDay(list: AgEvent[]): Map<string, DaySegment[]> {
 }
 
 export function segTimeText(seg: DaySegment): string {
-  if (seg.spansAll) return 'All day';
+  if (seg.spansAll) return "All day";
   if (seg.startsHere && seg.endsHere) {
-    return `${fmtTime(seg.ev.dtstart)}${seg.ev.dtend ? `–${fmtTime(seg.ev.dtend)}` : ''}`;
+    return `${fmtTime(seg.ev.dtstart)}${seg.ev.dtend ? `–${fmtTime(seg.ev.dtend)}` : ""}`;
   }
   if (seg.startsHere) return `${fmtTime(seg.ev.dtstart)} →`;
   return `→ ${fmtTime(new Date(seg.segEnd).toISOString())}`;
@@ -236,14 +264,14 @@ export function layoutDay(items: DaySegment[]): LaidSegment[] {
 
 // GCal-adjacent palette used when a calendar has no color of its own.
 const PALETTE = [
-  '#4285f4',
-  '#0b8043',
-  '#8e24aa',
-  '#f4511e',
-  '#f6bf26',
-  '#039be5',
-  '#d81b60',
-  '#33b679',
+  "#4285f4",
+  "#0b8043",
+  "#8e24aa",
+  "#f4511e",
+  "#f6bf26",
+  "#039be5",
+  "#d81b60",
+  "#33b679",
 ];
 
 function hashStr(s: string): number {
@@ -255,7 +283,7 @@ function hashStr(s: string): number {
 /** Stable calendar → color: the calendar's own color, else a palette hash. */
 export function colorForCalendar(
   cal: Calendar | undefined,
-  calendarId: string | null | undefined,
+  calendarId: string | null | undefined
 ): string | null {
   if (cal?.color) return cal.color;
   if (!calendarId) return null;
@@ -266,8 +294,10 @@ export function colorForCalendar(
 
 /** Split a vault FTS `⟦hit⟧`-marked snippet into `[{ text, hit }]` segments. */
 export function snippetSegments(
-  snippet: string | null | undefined,
+  snippet: string | null | undefined
 ): { text: string; hit: boolean }[] {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
-  return parts.map((text, i) => ({ text, hit: i % 2 === 1 })).filter((s) => s.text !== '');
+  const parts = String(snippet ?? "").split(/[⟦⟧]/u);
+  return parts
+    .map((text, i) => ({ text, hit: i % 2 === 1 }))
+    .filter((s) => s.text !== "");
 }

@@ -5,12 +5,12 @@
  */
 export function applyInOrder<T>(
   values: Iterable<T>,
-  apply: (value: T, index: number) => void | PromiseLike<void>,
+  apply: (value: T, index: number) => void | PromiseLike<void>
 ): Promise<void> {
   let index = 0;
   return Array.from(values).reduce<Promise<void>>(
     (sequence, value) => sequence.then(() => apply(value, index++)),
-    Promise.resolve(),
+    Promise.resolve()
   );
 }
 
@@ -20,7 +20,7 @@ export function applyInOrder<T>(
  */
 export async function applyAvailableInOrder<T>(
   values: AsyncIterable<T>,
-  apply: (value: T, index: number) => void | PromiseLike<void>,
+  apply: (value: T, index: number) => void | PromiseLike<void>
 ): Promise<void> {
   const iterator = values[Symbol.asyncIterator]();
 
@@ -46,10 +46,12 @@ export async function applyAvailableInOrder<T>(
 export async function mapWithConcurrency<T, R>(
   values: Iterable<T>,
   limit: number,
-  map: (value: T, index: number) => R | PromiseLike<R>,
+  map: (value: T, index: number) => R | PromiseLike<R>
 ): Promise<R[]> {
   if (!Number.isSafeInteger(limit) || limit < 1) {
-    throw new Error(`mapWithConcurrency: limit must be a positive integer (received ${limit})`);
+    throw new Error(
+      `mapWithConcurrency: limit must be a positive integer (received ${limit})`
+    );
   }
   const input = Array.from(values);
   const results = Array.from<R>({ length: input.length });
@@ -62,6 +64,8 @@ export async function mapWithConcurrency<T, R>(
     return runWorker();
   }
 
-  await Promise.all(Array.from({ length: Math.min(limit, input.length) }, runWorker));
+  await Promise.all(
+    Array.from({ length: Math.min(limit, input.length) }, runWorker)
+  );
   return results;
 }

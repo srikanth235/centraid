@@ -28,10 +28,10 @@
   border-radius: 50%;
   background: var(--accent);
 }
-.run[data-ok='true'] .status {
+.run[data-ok="true"] .status {
   background: var(--success);
 }
-.run[data-ok='false'] .status {
+.run[data-ok="false"] .status {
   background: var(--danger);
 }
 
@@ -85,6 +85,6 @@
 .pin:hover {
   color: color-mix(in oklab, var(--ink) 55%, transparent);
 }
-.pin[data-pinned='true'] {
+.pin[data-pinned="true"] {
   color: var(--accent);
 }

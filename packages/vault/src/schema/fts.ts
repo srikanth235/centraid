@@ -11,21 +11,26 @@
 // migrations run. Only the gateway holds connections (§10), so the function
 // is always present when a trigger fires.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { sealedColumnsOf } from './sealed.js';
+import { sealedColumnsOf } from "./sealed.js";
 
 /** Decoded text of a canonical body, or null for anything non-text. */
-export function contentText(mediaType: unknown, contentUri: unknown): string | null {
-  if (typeof mediaType !== 'string' || !mediaType.startsWith('text/')) return null;
-  if (typeof contentUri !== 'string' || !contentUri.startsWith('data:')) return null;
-  const comma = contentUri.indexOf(',');
+export function contentText(
+  mediaType: unknown,
+  contentUri: unknown
+): string | null {
+  if (typeof mediaType !== "string" || !mediaType.startsWith("text/"))
+    return null;
+  if (typeof contentUri !== "string" || !contentUri.startsWith("data:"))
+    return null;
+  const comma = contentUri.indexOf(",");
   if (comma < 0) return null;
   const meta = contentUri.slice(0, comma);
   const payload = contentUri.slice(comma + 1);
   try {
-    return meta.includes(';base64')
-      ? Buffer.from(payload, 'base64').toString('utf8')
+    return meta.includes(";base64")
+      ? Buffer.from(payload, "base64").toString("utf8")
       : decodeURIComponent(payload);
   } catch {
     return null;
@@ -34,16 +39,16 @@ export function contentText(mediaType: unknown, contentUri: unknown): string | n
 
 /** Register `vault_content_text` on a vault connection (triggers call it). */
 export function registerContentTextFn(db: DatabaseSync): void {
-  db.function('vault_content_text', { deterministic: true }, contentText);
+  db.function("vault_content_text", { deterministic: true }, contentText);
 }
 
 type FtsColumn =
   /** A text column of the base table itself. */
-  | { name: string; kind: 'column' }
+  | { name: string; kind: "column" }
   /** Decoded body of the core.content_item the base row references via `fk`. */
-  | { name: string; kind: 'content'; fk: string }
+  | { name: string; kind: "content"; fk: string }
   /** core.content_item indexing its own uri (text media only). */
-  | { name: string; kind: 'self-content' };
+  | { name: string; kind: "self-content" };
 
 export interface FtsEntitySpec {
   /** Logical entity, e.g. `knowledge.note`. */
@@ -60,19 +65,19 @@ const SPECS: readonly FtsEntitySpec[] = [
     // Photo captions are stored as the content item's title. Keeping this a
     // direct-column surface makes the Photos grid search complete without
     // indexing blob bytes; soft-deleted content leaves the index immediately.
-    entity: 'core.content_item',
-    idColumn: 'content_id',
-    columns: [{ name: 'title', kind: 'column' }],
-    deletedColumn: 'deleted_at',
+    entity: "core.content_item",
+    idColumn: "content_id",
+    columns: [{ name: "title", kind: "column" }],
+    deletedColumn: "deleted_at",
   },
   {
-    entity: 'knowledge.note',
-    idColumn: 'note_id',
+    entity: "knowledge.note",
+    idColumn: "note_id",
     columns: [
-      { name: 'title', kind: 'column' },
-      { name: 'body', kind: 'content', fk: 'body_content_id' },
+      { name: "title", kind: "column" },
+      { name: "body", kind: "content", fk: "body_content_id" },
     ],
-    deletedColumn: 'deleted_at',
+    deletedColumn: "deleted_at",
   },
   {
     // Documents are searched under their OWN identity, not the raw content
@@ -80,105 +85,105 @@ const SPECS: readonly FtsEntitySpec[] = [
     // whichever content item is current. blob.ts overrides this spec's
     // triggers to be derivative-aware (extracted PDF/scan text wins over the
     // raw decode), same as it always did for the parent row.
-    entity: 'core.document',
-    idColumn: 'document_id',
+    entity: "core.document",
+    idColumn: "document_id",
     columns: [
-      { name: 'title', kind: 'column' },
-      { name: 'body', kind: 'content', fk: 'current_content_id' },
+      { name: "title", kind: "column" },
+      { name: "body", kind: "content", fk: "current_content_id" },
     ],
-    deletedColumn: 'deleted_at',
+    deletedColumn: "deleted_at",
   },
   {
-    entity: 'social.thread',
-    idColumn: 'thread_id',
-    columns: [{ name: 'subject', kind: 'column' }],
+    entity: "social.thread",
+    idColumn: "thread_id",
+    columns: [{ name: "subject", kind: "column" }],
   },
   {
-    entity: 'social.message',
-    idColumn: 'message_id',
-    columns: [{ name: 'body', kind: 'content', fk: 'body_content_id' }],
+    entity: "social.message",
+    idColumn: "message_id",
+    columns: [{ name: "body", kind: "content", fk: "body_content_id" }],
   },
   {
-    entity: 'core.party',
-    idColumn: 'party_id',
+    entity: "core.party",
+    idColumn: "party_id",
     columns: [
-      { name: 'display_name', kind: 'column' },
-      { name: 'sort_name', kind: 'column' },
+      { name: "display_name", kind: "column" },
+      { name: "sort_name", kind: "column" },
     ],
   },
   {
-    entity: 'social.contact_card',
-    idColumn: 'card_id',
+    entity: "social.contact_card",
+    idColumn: "card_id",
     columns: [
-      { name: 'nickname', kind: 'column' },
-      { name: 'org_title', kind: 'column' },
+      { name: "nickname", kind: "column" },
+      { name: "org_title", kind: "column" },
     ],
   },
   {
     // Owner memos (issue #274): the running note about a person, the remark
     // on a workout — annotations on canonical entities, searchable as text.
-    entity: 'knowledge.annotation',
-    idColumn: 'annotation_id',
-    columns: [{ name: 'body_text', kind: 'column' }],
+    entity: "knowledge.annotation",
+    idColumn: "annotation_id",
+    columns: [{ name: "body_text", kind: "column" }],
   },
   {
-    entity: 'schedule.task',
-    idColumn: 'task_id',
+    entity: "schedule.task",
+    idColumn: "task_id",
     columns: [
-      { name: 'title', kind: 'column' },
-      { name: 'description', kind: 'column' },
+      { name: "title", kind: "column" },
+      { name: "description", kind: "column" },
     ],
   },
   {
-    entity: 'core.event',
-    idColumn: 'event_id',
+    entity: "core.event",
+    idColumn: "event_id",
     columns: [
-      { name: 'summary', kind: 'column' },
-      { name: 'description', kind: 'column' },
+      { name: "summary", kind: "column" },
+      { name: "description", kind: "column" },
     ],
   },
   {
-    entity: 'core.transaction',
-    idColumn: 'txn_id',
-    columns: [{ name: 'description', kind: 'column' }],
+    entity: "core.transaction",
+    idColumn: "txn_id",
+    columns: [{ name: "description", kind: "column" }],
   },
   {
     // Disposed items stay in the index — disposal keeps the row as history,
     // and "where did that old dehumidifier go" is exactly a search question.
-    entity: 'home.asset_item',
-    idColumn: 'item_id',
+    entity: "home.asset_item",
+    idColumn: "item_id",
     columns: [
-      { name: 'name', kind: 'column' },
-      { name: 'serial_no', kind: 'column' },
+      { name: "name", kind: "column" },
+      { name: "serial_no", kind: "column" },
     ],
   },
   {
     // The CRM person's role line ("Eng lead · Portland") — the third search
     // surface People folds in beyond the party's name (core.party) and the
     // owner's running notes (knowledge.annotation).
-    entity: 'people.profile',
-    idColumn: 'profile_id',
-    columns: [{ name: 'role', kind: 'column' }],
+    entity: "people.profile",
+    idColumn: "profile_id",
+    columns: [{ name: "role", kind: "column" }],
   },
   {
     // The locker's non-secret face (issue #310 C6): title, username, url.
     // Sealed columns structurally cannot feed the index — the gate below
     // throws at DDL-build time (issue #293) — and `notes` stays out
     // deliberately: it routinely carries recovery codes.
-    entity: 'locker.item',
-    idColumn: 'item_id',
+    entity: "locker.item",
+    idColumn: "item_id",
     columns: [
-      { name: 'title', kind: 'column' },
-      { name: 'username', kind: 'column' },
-      { name: 'url', kind: 'column' },
+      { name: "title", kind: "column" },
+      { name: "username", kind: "column" },
+      { name: "url", kind: "column" },
     ],
-    deletedColumn: 'deleted_at',
+    deletedColumn: "deleted_at",
   },
   {
     // "That dinner at Olive we split" is a search question (issue #310 C6).
-    entity: 'tally.expense',
-    idColumn: 'expense_id',
-    columns: [{ name: 'description', kind: 'column' }],
+    entity: "tally.expense",
+    idColumn: "expense_id",
+    columns: [{ name: "description", kind: "column" }],
   },
 ];
 
@@ -202,27 +207,30 @@ export interface SearchableEntity {
 }
 
 function physical(entity: string): string {
-  return entity.replace('.', '_');
+  return entity.replace(".", "_");
 }
 
 function maskColumnsOf(spec: FtsEntitySpec): string[] {
   return spec.columns.map((c) =>
-    c.kind === 'column' ? c.name : c.kind === 'content' ? c.fk : 'content_uri',
+    c.kind === "column" ? c.name : c.kind === "content" ? c.fk : "content_uri"
   );
 }
 
 /** Logical entity → its search surface. Absence = not text-searchable. */
-export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> = Object.fromEntries(
-  SPECS.map((spec) => [
-    spec.entity,
-    {
-      fts: `fts_${physical(spec.entity)}`,
-      idColumn: spec.idColumn,
-      maskColumns: maskColumnsOf(spec),
-      alsoConsent: spec.columns.some((c) => c.kind === 'content') ? ['core.content_item'] : [],
-    },
-  ]),
-);
+export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> =
+  Object.fromEntries(
+    SPECS.map((spec) => [
+      spec.entity,
+      {
+        fts: `fts_${physical(spec.entity)}`,
+        idColumn: spec.idColumn,
+        maskColumns: maskColumnsOf(spec),
+        alsoConsent: spec.columns.some((c) => c.kind === "content")
+          ? ["core.content_item"]
+          : [],
+      },
+    ])
+  );
 
 /**
  * Per-document index budget (issue #367 §E3): a body can be arbitrarily
@@ -235,7 +243,7 @@ export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> = Object.fro
  */
 export const FTS_BODY_INDEX_BUDGET_CHARS = 256 * 1024;
 
-const TRUNCATION_MARKER = ' ...(truncated for search index)';
+const TRUNCATION_MARKER = " ...(truncated for search index)";
 
 /**
  * Wrap a body-text SQL expression so it never feeds more than `budgetChars`
@@ -245,7 +253,7 @@ const TRUNCATION_MARKER = ' ...(truncated for search index)';
  */
 export function truncateForIndex(
   expr: string,
-  budgetChars: number = FTS_BODY_INDEX_BUDGET_CHARS,
+  budgetChars: number = FTS_BODY_INDEX_BUDGET_CHARS
 ): string {
   return `(CASE WHEN ${expr} IS NULL THEN NULL
                  WHEN length(${expr}) > ${budgetChars}
@@ -255,9 +263,11 @@ export function truncateForIndex(
 
 /** Value expression for one indexed column, `prefix` = `new` or a base alias. */
 function valueExpr(column: FtsColumn, prefix: string): string {
-  if (column.kind === 'column') return `${prefix}."${column.name}"`;
-  if (column.kind === 'self-content') {
-    return truncateForIndex(`vault_content_text(${prefix}."media_type", ${prefix}."content_uri")`);
+  if (column.kind === "column") return `${prefix}."${column.name}"`;
+  if (column.kind === "self-content") {
+    return truncateForIndex(
+      `vault_content_text(${prefix}."media_type", ${prefix}."content_uri")`
+    );
   }
   return truncateForIndex(`(SELECT vault_content_text(media_type, content_uri) FROM core_content_item
             WHERE content_id = ${prefix}."${column.fk}")`);
@@ -272,17 +282,24 @@ export function assertNoSealedFtsColumns(spec: FtsEntitySpec): void {
   const sealed = sealedColumnsOf(spec.entity);
   if (sealed.length === 0) return;
   for (const col of spec.columns) {
-    const name = col.kind === 'column' ? col.name : col.kind === 'content' ? col.fk : 'content_uri';
+    const name =
+      col.kind === "column"
+        ? col.name
+        : col.kind === "content"
+          ? col.fk
+          : "content_uri";
     if (sealed.includes(name)) {
       throw new Error(
-        `fts spec for ${spec.entity} names sealed column "${name}" — sealed columns are never indexed (issue #293)`,
+        `fts spec for ${spec.entity} names sealed column "${name}" — sealed columns are never indexed (issue #293)`
       );
     }
   }
 }
 
 function insertColumnsOf(spec: FtsEntitySpec): string {
-  return ['rowid', spec.idColumn, ...spec.columns.map((c) => c.name)].join(', ');
+  return ["rowid", spec.idColumn, ...spec.columns.map((c) => c.name)].join(
+    ", "
+  );
 }
 
 function valuesOf(spec: FtsEntitySpec, prefix: string): string {
@@ -290,12 +307,14 @@ function valuesOf(spec: FtsEntitySpec, prefix: string): string {
     `${prefix}.rowid`,
     `${prefix}."${spec.idColumn}"`,
     ...spec.columns.map((c) => valueExpr(c, prefix)),
-  ].join(', ');
+  ].join(", ");
 }
 
 /** Soft-deleted rows leave the index — the WHERE guard shared by every path that (re)builds it. */
 function liveGuardOf(spec: FtsEntitySpec, prefix: string): string {
-  return spec.deletedColumn ? ` WHERE ${prefix}."${spec.deletedColumn}" IS NULL` : '';
+  return spec.deletedColumn
+    ? ` WHERE ${prefix}."${spec.deletedColumn}" IS NULL`
+    : "";
 }
 
 /**
@@ -308,16 +327,19 @@ function backfillStatement(spec: FtsEntitySpec): string {
   const base = physical(spec.entity);
   const fts = `fts_${base}`;
   return `INSERT INTO ${fts}(${insertColumnsOf(spec)})
-SELECT ${valuesOf(spec, 'b')} FROM ${base} b${liveGuardOf(spec, 'b')};`;
+SELECT ${valuesOf(spec, "b")} FROM ${base} b${liveGuardOf(spec, "b")};`;
 }
 
 function entityDdl(spec: FtsEntitySpec): string {
   assertNoSealedFtsColumns(spec);
   const base = physical(spec.entity);
   const fts = `fts_${base}`;
-  const ftsColumns = [`${spec.idColumn} UNINDEXED`, ...spec.columns.map((c) => c.name)];
+  const ftsColumns = [
+    `${spec.idColumn} UNINDEXED`,
+    ...spec.columns.map((c) => c.name),
+  ];
   const insertColumns = insertColumnsOf(spec);
-  const insertRow = `INSERT INTO ${fts}(${insertColumns}) SELECT ${valuesOf(spec, 'new')}${liveGuardOf(spec, 'new')};`;
+  const insertRow = `INSERT INTO ${fts}(${insertColumns}) SELECT ${valuesOf(spec, "new")}${liveGuardOf(spec, "new")};`;
   // detail= tuning (issue #367 §E3): left at the FTS5 default, detail=full.
   // detail=column/none shrink the index by dropping per-term POSITION data,
   // but snippet()/highlight() degrade to whole-column matches without it —
@@ -331,7 +353,7 @@ function entityDdl(spec: FtsEntitySpec): string {
   // bodies feeding it) is the dominant cost.
   return `
 CREATE VIRTUAL TABLE ${fts} USING fts5(
-  ${ftsColumns.join(', ')},
+  ${ftsColumns.join(", ")},
   tokenize = "unicode61 remove_diacritics 2"
 );
 CREATE TRIGGER ${fts}_ai AFTER INSERT ON ${base} BEGIN
@@ -352,9 +374,11 @@ ${backfillStatement(spec)}
  * Migration rung: shadow tables, sync triggers, and a backfill of whatever
  * rows a pre-index vault already holds (a no-op on fresh files).
  */
-export const FTS_DDL: string = SPECS.map(entityDdl).join('\n');
+export const FTS_DDL: string = SPECS.map(entityDdl).join("\n");
 
-const SPEC_BY_ENTITY: ReadonlyMap<string, FtsEntitySpec> = new Map(SPECS.map((s) => [s.entity, s]));
+const SPEC_BY_ENTITY: ReadonlyMap<string, FtsEntitySpec> = new Map(
+  SPECS.map((s) => [s.entity, s])
+);
 
 /**
  * Rebuild path (issue #367 §E3): the index is derived and rebuildable — if
@@ -370,9 +394,9 @@ const SPEC_BY_ENTITY: ReadonlyMap<string, FtsEntitySpec> = new Map(SPECS.map((s)
  * over the raw decode); use `rebuildDocumentFtsIndex` (blob.ts) for it.
  */
 export function rebuildFtsIndex(vault: DatabaseSync, entity: string): void {
-  if (entity === 'core.document') {
+  if (entity === "core.document") {
     throw new Error(
-      'core.document has a derivative-aware FTS rebuild — use rebuildDocumentFtsIndex from schema/blob.js',
+      "core.document has a derivative-aware FTS rebuild — use rebuildDocumentFtsIndex from schema/blob.js"
     );
   }
   const spec = SPEC_BY_ENTITY.get(entity);

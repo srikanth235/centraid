@@ -15,11 +15,15 @@
  * plus receipts-after-commit makes it structurally impossible.
  */
 
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import { loadSealKey, readSealKeyFingerprint, sealKeyFingerprint } from './schema/sealed.js';
-import { resolveEntity } from './schema/tables.js';
+import {
+  loadSealKey,
+  readSealKeyFingerprint,
+  sealKeyFingerprint,
+} from "./schema/sealed.js";
+import { resolveEntity } from "./schema/tables.js";
 
 /**
  * Seal-key custody verdict for a restored pair (issue #439 R5). FORMAT.md calls
@@ -33,7 +37,7 @@ import { resolveEntity } from './schema/tables.js';
  *   - `mismatch`: the supplied key is not the DEK those secrets were sealed
  *     with (regenerated/foreign/corrupt) — GCM garbage on every reveal.
  */
-export type SealKeyVerdict = 'not-sealed' | 'ok' | 'missing' | 'mismatch';
+export type SealKeyVerdict = "not-sealed" | "ok" | "missing" | "mismatch";
 
 export interface RestoredPairReport {
   vault: { integrity: string; foreignKeyViolations: number };
@@ -54,26 +58,26 @@ export interface RestoredPairReport {
 function checkSealKey(
   destDir: string,
   vault: DatabaseSync,
-  recoveryKey: Buffer | null | undefined,
-): RestoredPairReport['sealKey'] {
+  recoveryKey: Buffer | null | undefined
+): RestoredPairReport["sealKey"] {
   const expected = readSealKeyFingerprint(vault);
-  if (expected === null) return { verdict: 'not-sealed' };
+  if (expected === null) return { verdict: "not-sealed" };
   let key: Buffer | null;
   if (recoveryKey === undefined) {
     // Compatibility for callers verifying an older snapshot that carried the
     // now-retired loose seal.key entry. New recovery paths always supply the
     // DEK from KeyStore/recovery-kit custody.
     try {
-      key = loadSealKey(path.join(destDir, 'seal.key'));
+      key = loadSealKey(path.join(destDir, "seal.key"));
     } catch {
-      return { verdict: 'mismatch', expected };
+      return { verdict: "mismatch", expected };
     }
   } else {
     key = recoveryKey;
   }
-  if (!key) return { verdict: 'missing', expected };
+  if (!key) return { verdict: "missing", expected };
   return {
-    verdict: sealKeyFingerprint(key) === expected ? 'ok' : 'mismatch',
+    verdict: sealKeyFingerprint(key) === expected ? "ok" : "mismatch",
     expected,
   };
 }
@@ -84,13 +88,13 @@ function checkFile(file: string): {
   foreignKeyViolations: number;
 } {
   const db = new DatabaseSync(file, { readOnly: true });
-  const integ = db.prepare('PRAGMA integrity_check').get() as
+  const integ = db.prepare("PRAGMA integrity_check").get() as
     | { integrity_check: string }
     | undefined;
-  const fks = db.prepare('PRAGMA foreign_key_check').all();
+  const fks = db.prepare("PRAGMA foreign_key_check").all();
   return {
     db,
-    integrity: integ?.integrity_check ?? 'no result',
+    integrity: integ?.integrity_check ?? "no result",
     foreignKeyViolations: fks.length,
   };
 }
@@ -106,18 +110,18 @@ function pkOf(db: DatabaseSync, physical: string): string | undefined {
 /** Verify a restored vault directory (both files + the G8 cross-check). */
 export function verifyRestoredPair(
   destDir: string,
-  recoveryKey?: Buffer | null,
+  recoveryKey?: Buffer | null
 ): RestoredPairReport {
-  const vault = checkFile(path.join(destDir, 'vault.db'));
-  const journal = checkFile(path.join(destDir, 'journal.db'));
+  const vault = checkFile(path.join(destDir, "vault.db"));
+  const journal = checkFile(path.join(destDir, "journal.db"));
   const sealKey = checkSealKey(destDir, vault.db, recoveryKey);
-  const danglingReceipts: RestoredPairReport['danglingReceipts'] = [];
+  const danglingReceipts: RestoredPairReport["danglingReceipts"] = [];
   let receiptsChecked = 0;
   try {
     const rows = journal.db
       .prepare(
         `SELECT receipt_id, action, object_type, object_id FROM consent_receipt
-         WHERE object_id IS NOT NULL AND decision = 'allow'`,
+         WHERE object_id IS NOT NULL AND decision = 'allow'`
       )
       .all() as {
       receipt_id: string;
@@ -125,10 +129,13 @@ export function verifyRestoredPair(
       object_type: string;
       object_id: string;
     }[];
-    const existsStmt = new Map<string, { pk: string; physical: string } | null>();
+    const existsStmt = new Map<
+      string,
+      { pk: string; physical: string } | null
+    >();
     for (const row of rows) {
       const ref = resolveEntity(row.object_type, vault.db);
-      if (!ref || ref.file !== 'vault') continue; // journal-side or abstract object
+      if (!ref || ref.file !== "vault") continue; // journal-side or abstract object
       receiptsChecked++;
       let target = existsStmt.get(ref.physical);
       if (target === undefined) {
@@ -138,7 +145,9 @@ export function verifyRestoredPair(
       }
       if (!target) continue;
       const live = vault.db
-        .prepare(`SELECT 1 AS x FROM "${target.physical}" WHERE "${target.pk}" = ?`)
+        .prepare(
+          `SELECT 1 AS x FROM "${target.physical}" WHERE "${target.pk}" = ?`
+        )
         .get(row.object_id);
       if (!live) {
         danglingReceipts.push({

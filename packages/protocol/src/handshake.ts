@@ -7,17 +7,17 @@
  */
 
 import {
+  DEFAULT_GATEWAY_CAPABILITIES,
+  isGatewayCapabilities,
+  type GatewayCapabilities,
+} from "./capabilities.js";
+import { ROUTES } from "./routes.js";
+import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
-} from './version.js';
-import {
-  DEFAULT_GATEWAY_CAPABILITIES,
-  isGatewayCapabilities,
-  type GatewayCapabilities,
-} from './capabilities.js';
-import { ROUTES } from './routes.js';
+} from "./version.js";
 
 export interface GatewayInfo {
   /** Product version (display only). */
@@ -69,7 +69,7 @@ export type HandshakeResult =
   | { ok: true; info: GatewayInfo }
   | {
       ok: false;
-      reason: 'unreachable' | 'malformed' | 'protocol_mismatch';
+      reason: "unreachable" | "malformed" | "protocol_mismatch";
       detail: string;
     };
 
@@ -83,10 +83,14 @@ export function readProtocolFromInfo(info: Record<string, unknown>): {
 } {
   const protocolRaw = info.protocolVersion ?? info.schemaEpoch;
   const protocolVersion =
-    typeof protocolRaw === 'number' && Number.isSafeInteger(protocolRaw) ? protocolRaw : null;
+    typeof protocolRaw === "number" && Number.isSafeInteger(protocolRaw)
+      ? protocolRaw
+      : null;
   const minRaw = info.minSupportedProtocol;
   const minSupportedProtocol =
-    typeof minRaw === 'number' && Number.isSafeInteger(minRaw) ? minRaw : protocolVersion; // old gateways: only speak current protocol
+    typeof minRaw === "number" && Number.isSafeInteger(minRaw)
+      ? minRaw
+      : protocolVersion; // old gateways: only speak current protocol
   return { protocolVersion, minSupportedProtocol };
 }
 
@@ -101,28 +105,34 @@ export function protocolsCompatible(opts: {
   peerProtocol: number;
   peerMin: number;
 }): boolean {
-  return opts.peerProtocol >= opts.localMin && opts.localProtocol >= opts.peerMin;
+  return (
+    opts.peerProtocol >= opts.localMin && opts.localProtocol >= opts.peerMin
+  );
 }
 
 /** Parse + judge a `/centraid/_gateway/info` payload against the local protocol floor. */
 export function judgeGatewayInfo(raw: unknown): HandshakeResult {
-  if (raw === null || typeof raw !== 'object') {
-    return { ok: false, reason: 'malformed', detail: 'gateway info was not an object' };
-  }
-  const info = raw as Record<string, unknown>;
-  if (typeof info.version !== 'string') {
+  if (raw === null || typeof raw !== "object") {
     return {
       ok: false,
-      reason: 'malformed',
-      detail: 'gateway info missing version string',
+      reason: "malformed",
+      detail: "gateway info was not an object",
+    };
+  }
+  const info = raw as Record<string, unknown>;
+  if (typeof info.version !== "string") {
+    return {
+      ok: false,
+      reason: "malformed",
+      detail: "gateway info missing version string",
     };
   }
   const { protocolVersion, minSupportedProtocol } = readProtocolFromInfo(info);
   if (protocolVersion === null || minSupportedProtocol === null) {
     return {
       ok: false,
-      reason: 'malformed',
-      detail: 'gateway info missing protocolVersion (or schemaEpoch fallback)',
+      reason: "malformed",
+      detail: "gateway info missing protocolVersion (or schemaEpoch fallback)",
     };
   }
 
@@ -135,12 +145,12 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
   if (!ok) {
     return {
       ok: false,
-      reason: 'protocol_mismatch',
+      reason: "protocol_mismatch",
       detail:
         `protocol incompatible: gateway protocol ${protocolVersion} ` +
         `(minSupported ${minSupportedProtocol}); this client is protocol ` +
         `${GATEWAY_PROTOCOL_VERSION} (minSupported ${GATEWAY_MIN_PROTOCOL_VERSION}). ` +
-        'Update the older side. Product version is not used for this check.',
+        "Update the older side. Product version is not used for this check.",
     };
   }
 
@@ -148,7 +158,8 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
     ? info.capabilities
     : { ...DEFAULT_GATEWAY_CAPABILITIES };
   const schemaEpoch =
-    typeof info.schemaEpoch === 'number' && Number.isSafeInteger(info.schemaEpoch)
+    typeof info.schemaEpoch === "number" &&
+    Number.isSafeInteger(info.schemaEpoch)
       ? info.schemaEpoch
       : protocolVersion;
 
@@ -160,12 +171,22 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
       minSupportedProtocol,
       schemaEpoch,
       capabilities,
-      ...(typeof info.instanceId === 'string' ? { instanceId: info.instanceId } : {}),
-      ...(typeof info.startedAt === 'number' ? { startedAt: info.startedAt } : {}),
-      ...(typeof info.uptimeMs === 'number' ? { uptimeMs: info.uptimeMs } : {}),
-      ...(typeof info.authenticated === 'boolean' ? { authenticated: info.authenticated } : {}),
-      ...(typeof info.endpointId === 'string' ? { endpointId: info.endpointId } : {}),
-      ...(typeof info.endpointTicket === 'string' ? { endpointTicket: info.endpointTicket } : {}),
+      ...(typeof info.instanceId === "string"
+        ? { instanceId: info.instanceId }
+        : {}),
+      ...(typeof info.startedAt === "number"
+        ? { startedAt: info.startedAt }
+        : {}),
+      ...(typeof info.uptimeMs === "number" ? { uptimeMs: info.uptimeMs } : {}),
+      ...(typeof info.authenticated === "boolean"
+        ? { authenticated: info.authenticated }
+        : {}),
+      ...(typeof info.endpointId === "string"
+        ? { endpointId: info.endpointId }
+        : {}),
+      ...(typeof info.endpointTicket === "string"
+        ? { endpointTicket: info.endpointTicket }
+        : {}),
     },
   };
 }
@@ -182,28 +203,35 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
 export async function handshakeGateway(
   baseUrl: string,
   token: string | undefined,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<HandshakeResult> {
   let res: Response;
   try {
-    res = await fetchImpl(new URL(ROUTES.gatewayInfo, `${baseUrl}/`).toString(), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    res = await fetchImpl(
+      new URL(ROUTES.gatewayInfo, `${baseUrl}/`).toString(),
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
   } catch (err) {
     return {
       ok: false,
-      reason: 'unreachable',
+      reason: "unreachable",
       detail: err instanceof Error ? err.message : String(err),
     };
   }
   if (!res.ok) {
-    return { ok: false, reason: 'unreachable', detail: `HTTP ${res.status}` };
+    return { ok: false, reason: "unreachable", detail: `HTTP ${res.status}` };
   }
   let body: unknown;
   try {
     body = await res.json();
   } catch {
-    return { ok: false, reason: 'malformed', detail: 'gateway info was not JSON' };
+    return {
+      ok: false,
+      reason: "malformed",
+      detail: "gateway info was not JSON",
+    };
   }
   return judgeGatewayInfo(body);
 }
@@ -229,7 +257,9 @@ export function buildGatewayInfoPayload(input: {
     uptimeMs: input.uptimeMs,
     authenticated: input.authenticated,
     ...(input.endpointId === undefined ? {} : { endpointId: input.endpointId }),
-    ...(input.endpointTicket === undefined ? {} : { endpointTicket: input.endpointTicket }),
+    ...(input.endpointTicket === undefined
+      ? {}
+      : { endpointTicket: input.endpointTicket }),
     capabilities: input.capabilities ?? { ...DEFAULT_GATEWAY_CAPABILITIES },
   };
 }

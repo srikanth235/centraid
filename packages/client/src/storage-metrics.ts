@@ -47,7 +47,7 @@ export interface FreshnessInput {
   clocks: FreshnessClocks;
 }
 
-export type FreshnessStatus = 'green' | 'yellow' | 'red' | 'unknown';
+export type FreshnessStatus = "green" | "yellow" | "red" | "unknown";
 
 export interface FreshnessMetric {
   /** green ≤ 1× cadence, yellow past 1×, red past 2×; `unknown` when any clock
@@ -75,7 +75,7 @@ function deriveFreshness(input: FreshnessInput, now: number): FreshnessMetric {
   const anyMissing = values.some((v) => v === null);
   if (anyMissing) {
     return {
-      status: 'unknown',
+      status: "unknown",
       tMs: null,
       ageMs: null,
       declaredCadenceMs,
@@ -85,9 +85,9 @@ function deriveFreshness(input: FreshnessInput, now: number): FreshnessMetric {
   const tMs = Math.min(...(values as number[]));
   const ageMs = now - tMs;
   let status: FreshnessStatus;
-  if (ageMs <= declaredCadenceMs) status = 'green';
-  else if (ageMs <= declaredCadenceMs * 2) status = 'yellow';
-  else status = 'red';
+  if (ageMs <= declaredCadenceMs) status = "green";
+  else if (ageMs <= declaredCadenceMs * 2) status = "yellow";
+  else status = "red";
   return { status, tMs, ageMs, declaredCadenceMs, clocks };
 }
 
@@ -100,12 +100,12 @@ function deriveFreshness(input: FreshnessInput, now: number): FreshnessMetric {
  *  local so this module stays dependency-free. */
 export type RetentionInput =
   | {
-      kind: 'ladder';
+      kind: "ladder";
       keepAllDays: number;
       dailyDays: number;
       weeklyDays: number;
     }
-  | { kind: 'none' };
+  | { kind: "none" };
 
 export interface RecoveryWindowMetric {
   /** N days: the ladder's daily rung — the honest flat "you can restore any day
@@ -115,7 +115,7 @@ export interface RecoveryWindowMetric {
 }
 
 function deriveRecoveryWindow(retention: RetentionInput): RecoveryWindowMetric {
-  if (retention.kind === 'none') return { days: null, retention };
+  if (retention.kind === "none") return { days: null, retention };
   return { days: retention.dailyDays, retention };
 }
 
@@ -127,15 +127,15 @@ export interface PrivacyMetric {
   /** Every remote object is a sealed CBSF envelope. */
   readonly sealedBytes: true;
   /** The provider holds no keys — custody never leaves the client. */
-  readonly keyCustody: 'client-only';
+  readonly keyCustody: "client-only";
   readonly description: string;
 }
 
 const PRIVACY_METRIC: PrivacyMetric = Object.freeze({
   sealedBytes: true,
-  keyCustody: 'client-only',
+  keyCustody: "client-only",
   description:
-    'Every byte is sealed client-side before it leaves the device; the provider stores ciphertext and holds no keys.',
+    "Every byte is sealed client-side before it leaves the device; the provider stores ciphertext and holds no keys.",
 });
 
 // ---------------------------------------------------------------------------
@@ -151,7 +151,9 @@ export interface StoreUsageInput {
 
 /** The provider-reported usage, keyed by store class. Absent keys contribute
  *  zero bytes. */
-export type UsageInput = Partial<Record<'backup' | 'cas' | 'derived', StoreUsageInput>>;
+export type UsageInput = Partial<
+  Record<"backup" | "cas" | "derived", StoreUsageInput>
+>;
 
 export interface CostMetric {
   /** X — aggregate bytes stored across ALL store classes. */
@@ -175,7 +177,7 @@ function deriveCost(usage: UsageInput | null): CostMetric {
   }
   let bytesStored = 0;
   let quotaBytes: number | null = null;
-  for (const store of ['backup', 'cas', 'derived'] as const) {
+  for (const store of ["backup", "cas", "derived"] as const) {
     const report = usage[store];
     if (!report) continue;
     bytesStored += report.bytesStored;
@@ -184,11 +186,14 @@ function deriveCost(usage: UsageInput | null): CostMetric {
     // (equal in practice; robust if a provider reports only one store's cap).
     if (report.quotaBytes !== null) {
       quotaBytes =
-        quotaBytes === null ? report.quotaBytes : Math.max(quotaBytes, report.quotaBytes);
+        quotaBytes === null
+          ? report.quotaBytes
+          : Math.max(quotaBytes, report.quotaBytes);
     }
   }
   const metered = quotaBytes !== null;
-  const fractionUsed = quotaBytes !== null && quotaBytes > 0 ? bytesStored / quotaBytes : null;
+  const fractionUsed =
+    quotaBytes !== null && quotaBytes > 0 ? bytesStored / quotaBytes : null;
   return { bytesStored, quotaBytes, fractionUsed, metered };
 }
 
@@ -200,10 +205,12 @@ export interface ExitMetric {
   /** Export is a structural guarantee — always available, no provider gate. */
   readonly exportAlwaysAvailable: true;
   /** Passed through honestly from discovery `backup.restoreCostClass`. */
-  restoreCostClass: 'free-egress' | 'metered-egress';
+  restoreCostClass: "free-egress" | "metered-egress";
 }
 
-function deriveExit(restoreCostClass: 'free-egress' | 'metered-egress'): ExitMetric {
+function deriveExit(
+  restoreCostClass: "free-egress" | "metered-egress"
+): ExitMetric {
   return { exportAlwaysAvailable: true, restoreCostClass };
 }
 
@@ -218,7 +225,7 @@ export interface StorageMetricsInput {
   retention: RetentionInput;
   /** Provider-reported per-store usage, or `null` before the first poll. */
   usage: UsageInput | null;
-  restoreCostClass: 'free-egress' | 'metered-egress';
+  restoreCostClass: "free-egress" | "metered-egress";
 }
 
 export interface StorageMetrics {
@@ -234,7 +241,9 @@ export interface StorageMetrics {
  * Pure: given the same inputs it always returns the same metrics, with no
  * ambient clock or IO. See each metric's helper above for its rule.
  */
-export function deriveStorageMetrics(input: StorageMetricsInput): StorageMetrics {
+export function deriveStorageMetrics(
+  input: StorageMetricsInput
+): StorageMetrics {
   return {
     freshness: deriveFreshness(input.freshness, input.now),
     recoveryWindow: deriveRecoveryWindow(input.retention),

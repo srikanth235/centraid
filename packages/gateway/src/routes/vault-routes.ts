@@ -47,9 +47,9 @@
  * call is a receipted deny — per vault.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { ROUTES } from '@centraid/protocol';
+import { ROUTES } from "@centraid/protocol";
 import {
   atlasCensus,
   atlasGraph,
@@ -72,28 +72,36 @@ import {
   updateEnrichSettings,
   type KeyStore,
   type EnrichTier,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
-import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import type { StorageConnectionStore } from '../backup/storage-connections.js';
-import { ensureProviderCasTarget } from '../backup/storage-credentials.js';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { EnrollmentStore } from '../serve/enrollment-store.js';
-import type { GatewayDatabase } from '../serve/gateway-db.js';
+import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
+import type { StorageConnectionStore } from "../backup/storage-connections.js";
+import { ensureProviderCasTarget } from "../backup/storage-credentials.js";
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { EnrollmentStore } from "../serve/enrollment-store.js";
+import type { GatewayDatabase } from "../serve/gateway-db.js";
 import {
   assertArtifactShapeUnchanged,
   outboxVerbIsEditable,
   rebuilderForVerb,
   type OutboxWireRequest,
-} from '../serve/outbox-edit.js';
-import { vaultContext, type DeviceAccess } from '../serve/vault-context.js';
-import type { AnchorSelector } from '../serve/vault-picker.js';
-import type { GrantRequest, OutboxItemSummary, VaultPlane } from '../serve/vault-plane.js';
-import { VaultRegistryError, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
-import { COMPANION_MODULES, companionModuleState } from './companion-grants.js';
-import { readJson, sendJson } from './route-helpers.js';
+} from "../serve/outbox-edit.js";
+import { vaultContext, type DeviceAccess } from "../serve/vault-context.js";
+import type { AnchorSelector } from "../serve/vault-picker.js";
+import type {
+  GrantRequest,
+  OutboxItemSummary,
+  VaultPlane,
+} from "../serve/vault-plane.js";
+import {
+  VaultRegistryError,
+  type VaultInfo,
+  type VaultRegistry,
+} from "../serve/vault-registry.js";
+import { COMPANION_MODULES, companionModuleState } from "./companion-grants.js";
+import { readJson, sendJson } from "./route-helpers.js";
 
-const PREFIX = '/centraid/_vault';
+const PREFIX = "/centraid/_vault";
 
 export interface VaultRouteOptions {
   /**
@@ -115,7 +123,9 @@ export interface VaultRouteOptions {
    * scheduler reconcile has run) still gets the automation's real name
    * instead of `ensureAgentEnrolled`'s bare `humanizeSlug(appId)` fallback.
    */
-  resolveAutomationName?: (appId: string) => Promise<string | undefined> | string | undefined;
+  resolveAutomationName?: (
+    appId: string
+  ) => Promise<string | undefined> | string | undefined;
   /**
    * The gateway-level storage-connections entity (issue #367 §C1). When
    * set, `PUT /centraid/_vault/blob-store` resolves a `connectionId` in the
@@ -146,7 +156,7 @@ export interface VaultRouteOptions {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**
@@ -156,7 +166,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * the plane free of an import on the gateway's verb registry.
  */
 function withCanEdit(
-  items: readonly OutboxItemSummary[],
+  items: readonly OutboxItemSummary[]
 ): Array<OutboxItemSummary & { canEdit: boolean }> {
   return items.map((item) => ({
     ...item,
@@ -166,7 +176,7 @@ function withCanEdit(
 
 export function makeVaultRouteHandler(
   vaults: VaultRegistry,
-  options: VaultRouteOptions = {},
+  options: VaultRouteOptions = {}
 ): RouteHandler {
   /** The vaults the calling device may see — all of them for keyless transports. */
   const visibleVaults = (): VaultInfo[] => {
@@ -176,12 +186,16 @@ export function makeVaultRouteHandler(
     return vaults.list().filter((v) => enrolled.has(v.vaultId));
   };
 
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
-    if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
-    const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
-    const method = req.method ?? 'GET';
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
+    if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`))
+      return false;
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, "");
+    const segments = rest === "" ? [] : rest.split("/").map(decodeURIComponent);
+    const method = req.method ?? "GET";
 
     // Every per-vault route answers for the vault the request is addressed
     // to — resolved once by the composed handler, read here (#289).
@@ -194,10 +208,10 @@ export function makeVaultRouteHandler(
 
     try {
       if (url.pathname === ROUTES.vaultErase) {
-        if (method !== 'POST') {
+        if (method !== "POST") {
           return sendJson(res, 405, {
-            error: 'method_not_allowed',
-            message: 'POST only',
+            error: "method_not_allowed",
+            message: "POST only",
           });
         }
         const deviceKey = vaultContext()?.deviceKey;
@@ -205,30 +219,31 @@ export function makeVaultRouteHandler(
           deviceKey && options.enrollments
             ? options.enrollments.get(deviceKey, plane.boot.vaultId)
             : undefined;
-        if (enrollment?.role !== 'admin') {
+        if (enrollment?.role !== "admin") {
           return sendJson(res, 403, {
-            error: 'admin_required',
-            message: 'only an admin device can erase this vault',
+            error: "admin_required",
+            message: "only an admin device can erase this vault",
           });
         }
         if (!options.gatewayDatabase || !options.keys || !options.recoveryKit) {
           return sendJson(res, 503, {
-            error: 'erase_unavailable',
-            message: 'this gateway host has no erase custody wiring',
+            error: "erase_unavailable",
+            message: "this gateway host has no erase custody wiring",
           });
         }
         const body = await readJson(req);
         if (body.name !== plane.name) {
           return sendJson(res, 409, {
-            error: 'typed_name_required',
+            error: "typed_name_required",
             message: `type the vault name exactly (${JSON.stringify(plane.name)}) to erase it`,
           });
         }
         const kit = await options.recoveryKit.status();
         if (kit.confirmedAt === null) {
           return sendJson(res, 409, {
-            error: 'recovery_kit_not_verified',
-            message: 'verify and retain the recovery kit before erasing this vault',
+            error: "recovery_kit_not_verified",
+            message:
+              "verify and retain the recovery kit before erasing this vault",
           });
         }
         const vaultId = plane.boot.vaultId;
@@ -237,7 +252,7 @@ export function makeVaultRouteHandler(
           options
             .gatewayDatabase!.db.prepare(
               `INSERT INTO erase_intents (vault_id, created_at) VALUES (?, ?)
-               ON CONFLICT(vault_id) DO NOTHING`,
+               ON CONFLICT(vault_id) DO NOTHING`
             )
             .run(vaultId, new Date().toISOString());
           // Authority for an erased vault is the `member_roles` row (#599);
@@ -245,13 +260,19 @@ export function makeVaultRouteHandler(
           // here while their other vaults are untouched. Web sessions and
           // replica checkpoints are vault-keyed, so they go explicitly.
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM member_roles WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare(
+              "DELETE FROM member_roles WHERE vault_id = ?"
+            )
             .run(vaultId);
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM device_checkpoints WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare(
+              "DELETE FROM device_checkpoints WHERE vault_id = ?"
+            )
             .run(vaultId);
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM web_sessions WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare(
+              "DELETE FROM web_sessions WHERE vault_id = ?"
+            )
             .run(vaultId);
           // An invitation naming this vault can no longer be honoured.
           options
@@ -260,14 +281,18 @@ export function makeVaultRouteHandler(
                 WHERE EXISTS (
                   SELECT 1 FROM json_each(tickets.grants_json)
                    WHERE json_extract(json_each.value, '$.vaultId') = ?
-                )`,
+                )`
             )
             .run(vaultId);
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM backup_targets WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare(
+              "DELETE FROM backup_targets WHERE vault_id = ?"
+            )
             .run(vaultId);
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM cas_reconciliations WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare(
+              "DELETE FROM cas_reconciliations WHERE vault_id = ?"
+            )
             .run(vaultId);
         });
         options.afterEraseStateCommitted?.(vaultId);
@@ -275,7 +300,9 @@ export function makeVaultRouteHandler(
         options.keys.destroy(`${vaultId}.sealkey`);
         options.gatewayDatabase.transaction(() => {
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM erase_intents WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare(
+              "DELETE FROM erase_intents WHERE vault_id = ?"
+            )
             .run(vaultId);
         });
         return sendJson(res, 200, {
@@ -285,7 +312,10 @@ export function makeVaultRouteHandler(
         });
       }
 
-      if (method === 'GET' && (segments.length === 0 || segments[0] === 'status')) {
+      if (
+        method === "GET" &&
+        (segments.length === 0 || segments[0] === "status")
+      ) {
         return sendJson(res, 200, {
           vaultId: plane.boot.vaultId,
           name: plane.name,
@@ -294,8 +324,16 @@ export function makeVaultRouteHandler(
         });
       }
 
-      if (segments[0] === 'vaults') {
-        return handleVaultsRoute(vaults, visibleVaults, options, req, res, method, segments);
+      if (segments[0] === "vaults") {
+        return handleVaultsRoute(
+          vaults,
+          visibleVaults,
+          options,
+          req,
+          res,
+          method,
+          segments
+        );
       }
 
       // Byte-custody settings (issue #296, extended #367 §C1/§C4/§C10):
@@ -305,13 +343,13 @@ export function makeVaultRouteHandler(
       // gateway-level `StorageConnectionStore`, the legacy harness-ambient
       // env-var lane still works without one) and the GPS extraction policy
       // (`media.location`: keep | strip).
-      if (segments[0] === 'blob-store' && segments.length === 1) {
-        if (method === 'GET') {
+      if (segments[0] === "blob-store" && segments.length === 1) {
+        if (method === "GET") {
           const settings = readBlobStoreSettings(plane.db.vault);
           return sendJson(res, 200, {
             blob_store: {
               ...settings,
-              ...(settings.kind === 's3' && settings.bucket
+              ...(settings.kind === "s3" && settings.bucket
                 ? {
                     allowedUploadPrefix: s3TemporaryUploadPrefix({
                       bucket: settings.bucket,
@@ -323,7 +361,7 @@ export function makeVaultRouteHandler(
             media_location: mediaLocationPolicy(plane.db),
           });
         }
-        if (method === 'PUT') {
+        if (method === "PUT") {
           const priorBlobStore = readBlobStoreSettings(plane.db.vault);
           const body = await readJson(req);
           const blobStore = body.blob_store;
@@ -332,16 +370,16 @@ export function makeVaultRouteHandler(
             throttleBytesPerSec?: number | null;
           } = {};
           if (blobStore !== undefined && blobStore !== null) {
-            if (typeof blobStore !== 'object' || Array.isArray(blobStore)) {
+            if (typeof blobStore !== "object" || Array.isArray(blobStore)) {
               return sendJson(res, 400, {
-                error: 'bad_request',
-                message: 'blob_store must be an object or null',
+                error: "bad_request",
+                message: "blob_store must be an object or null",
               });
             }
             const kind = (blobStore as Record<string, unknown>).kind;
-            if (kind !== 'fs' && kind !== 's3') {
+            if (kind !== "fs" && kind !== "s3") {
               return sendJson(res, 400, {
-                error: 'bad_request',
+                error: "bad_request",
                 message: 'blob_store.kind must be "fs" or "s3"',
               });
             }
@@ -352,30 +390,41 @@ export function makeVaultRouteHandler(
             // implicit class, and clawgnition may grow `derived`/IA-style
             // tiers per clawgnition#118), so the endpoint, not this route, is
             // the authority on which names it accepts.
-            const storageClass = (blobStore as Record<string, unknown>).storageClass;
+            const storageClass = (blobStore as Record<string, unknown>)
+              .storageClass;
             if (storageClass === null) {
               policyPatch.storageClass = null;
               delete (blobStore as Record<string, unknown>).storageClass;
             } else if (storageClass !== undefined) {
-              if (typeof storageClass !== 'string' || storageClass.trim() === '') {
+              if (
+                typeof storageClass !== "string" ||
+                storageClass.trim() === ""
+              ) {
                 return sendJson(res, 400, {
-                  error: 'bad_request',
-                  message: 'blob_store.storageClass must be a non-empty string',
+                  error: "bad_request",
+                  message: "blob_store.storageClass must be a non-empty string",
                 });
               }
-              (blobStore as Record<string, unknown>).storageClass = storageClass.trim();
+              (blobStore as Record<string, unknown>).storageClass =
+                storageClass.trim();
               policyPatch.storageClass = storageClass.trim();
               delete (blobStore as Record<string, unknown>).storageClass;
             }
-            const throttle = (blobStore as Record<string, unknown>).throttleBytesPerSec;
+            const throttle = (blobStore as Record<string, unknown>)
+              .throttleBytesPerSec;
             if (throttle === null) {
               policyPatch.throttleBytesPerSec = null;
               delete (blobStore as Record<string, unknown>).throttleBytesPerSec;
             } else if (throttle !== undefined) {
-              if (typeof throttle !== 'number' || !Number.isFinite(throttle) || throttle <= 0) {
+              if (
+                typeof throttle !== "number" ||
+                !Number.isFinite(throttle) ||
+                throttle <= 0
+              ) {
                 return sendJson(res, 400, {
-                  error: 'bad_request',
-                  message: 'blob_store.throttleBytesPerSec must be a positive number',
+                  error: "bad_request",
+                  message:
+                    "blob_store.throttleBytesPerSec must be a positive number",
                 });
               }
               policyPatch.throttleBytesPerSec = throttle;
@@ -386,11 +435,11 @@ export function makeVaultRouteHandler(
           if (
             mediaLocation !== undefined &&
             mediaLocation !== null &&
-            mediaLocation !== 'keep' &&
-            mediaLocation !== 'strip'
+            mediaLocation !== "keep" &&
+            mediaLocation !== "strip"
           ) {
             return sendJson(res, 400, {
-              error: 'bad_request',
+              error: "bad_request",
               message: 'media_location must be "keep" or "strip"',
             });
           }
@@ -400,23 +449,27 @@ export function makeVaultRouteHandler(
           // row so the caller only ever names a `connectionId`, and gate on
           // the recovery-kit nudge before this vault starts replicating
           // off-box.
-          let blobStorePatch = blobStore as Record<string, unknown> | null | undefined;
+          let blobStorePatch = blobStore as
+            | Record<string, unknown>
+            | null
+            | undefined;
           let recoveryKitConfirmed: boolean | undefined;
-          if (blobStorePatch?.['encrypt'] === false) {
+          if (blobStorePatch?.["encrypt"] === false) {
             return sendJson(res, 400, {
-              error: 'bad_request',
-              message: 'remote CAS encryption cannot be disabled',
+              error: "bad_request",
+              message: "remote CAS encryption cannot be disabled",
             });
           }
           const connectionId =
-            blobStorePatch && typeof blobStorePatch['connectionId'] === 'string'
-              ? (blobStorePatch['connectionId'] as string)
+            blobStorePatch && typeof blobStorePatch["connectionId"] === "string"
+              ? (blobStorePatch["connectionId"] as string)
               : undefined;
           if (connectionId && options.storageConnections) {
-            const connection = await options.storageConnections.get(connectionId);
+            const connection =
+              await options.storageConnections.get(connectionId);
             if (!connection) {
               return sendJson(res, 400, {
-                error: 'bad_request',
+                error: "bad_request",
                 message: `unknown storage connection "${connectionId}"`,
               });
             }
@@ -425,10 +478,10 @@ export function makeVaultRouteHandler(
               status?.confirmedAt !== null && status?.confirmedAt !== undefined;
             if (options.recoveryKit && !recoveryKitConfirmed) {
               return sendJson(res, 409, {
-                error: 'recovery_kit_not_confirmed',
+                error: "recovery_kit_not_confirmed",
                 recoveryKitConfirmed: false,
                 message:
-                  'export, re-select, and verify the recovery kit before enabling a remote storage tier',
+                  "export, re-select, and verify the recovery kit before enabling a remote storage tier",
               });
             }
             // A provider connection's S3 coordinates aren't known until a
@@ -436,8 +489,13 @@ export function makeVaultRouteHandler(
             // `endpoint`/`bucket` never rotate per-grant for one target, so
             // this only round-trips once, at attach time.
             const target =
-              connection.kind === 'provider' && !connection.endpoint && options.storageConnections
-                ? await ensureProviderCasTarget(options.storageConnections, connectionId)
+              connection.kind === "provider" &&
+              !connection.endpoint &&
+              options.storageConnections
+                ? await ensureProviderCasTarget(
+                    options.storageConnections,
+                    connectionId
+                  )
                 : connection;
             blobStorePatch = {
               ...blobStorePatch,
@@ -451,30 +509,37 @@ export function makeVaultRouteHandler(
               // The `derived` store prefix (issue #425 Wave 2), present only when
               // the provider advertised + granted the store; absent ⇒ derivatives
               // stay on cas (graceful degradation).
-              ...('derivedPrefix' in target && target.derivedPrefix
+              ...("derivedPrefix" in target && target.derivedPrefix
                 ? { derivedPrefix: target.derivedPrefix }
                 : {}),
               // Declared storage classes (issue #425 Wave 3): the vault's direct-to-cold heuristic engages only when STANDARD_IA is here.
-              ...('supportedStorageClasses' in target && target.supportedStorageClasses
+              ...("supportedStorageClasses" in target &&
+              target.supportedStorageClasses
                 ? { supportedStorageClasses: target.supportedStorageClasses }
                 : {}),
             };
           }
-          if (blobStorePatch?.['kind'] === 's3') {
+          if (blobStorePatch?.["kind"] === "s3") {
             blobStorePatch = { ...blobStorePatch, encrypt: true };
           }
 
           const remoteIdentity = (value: Record<string, unknown>): string =>
             JSON.stringify(
-              ['connectionId', 'endpoint', 'region', 'bucket', 'prefix', 'derivedPrefix'].map(
-                (key) => value[key],
-              ),
+              [
+                "connectionId",
+                "endpoint",
+                "region",
+                "bucket",
+                "prefix",
+                "derivedPrefix",
+              ].map((key) => value[key])
             );
           const attachingRemote =
-            blobStorePatch?.['kind'] === 's3' &&
-            (priorBlobStore.kind !== 's3' ||
-              remoteIdentity(priorBlobStore as unknown as Record<string, unknown>) !==
-                remoteIdentity(blobStorePatch));
+            blobStorePatch?.["kind"] === "s3" &&
+            (priorBlobStore.kind !== "s3" ||
+              remoteIdentity(
+                priorBlobStore as unknown as Record<string, unknown>
+              ) !== remoteIdentity(blobStorePatch));
           // Seed the outbox first: a crash before the settings write merely
           // leaves harmless obligations; a crash after it can never omit old
           // local bytes from remote-primary custody/snapshots.
@@ -486,28 +551,35 @@ export function makeVaultRouteHandler(
             plane.db.blobTransfers.enqueueExistingLocal();
           }
           updateBlobStoreSettings(plane.db, {
-            ...(blobStorePatch === undefined ? {} : { blob_store: blobStorePatch }),
+            ...(blobStorePatch === undefined
+              ? {}
+              : { blob_store: blobStorePatch }),
             ...(mediaLocation === undefined
               ? {}
-              : { media_location: mediaLocation as 'keep' | 'strip' | null }),
+              : { media_location: mediaLocation as "keep" | "strip" | null }),
           });
-          if (Object.keys(policyPatch).length > 0) updateBackupPolicy(plane.db.vault, policyPatch);
+          if (Object.keys(policyPatch).length > 0)
+            updateBackupPolicy(plane.db.vault, policyPatch);
           if (attachingRemote) plane.db.blobTransfers.kickOutbox();
           const remoteWithoutBackup =
             attachingRemote &&
             options.gatewayDatabase !== undefined &&
             options.gatewayDatabase.db
-              .prepare('SELECT 1 AS present FROM backup_targets WHERE vault_id = ?')
+              .prepare(
+                "SELECT 1 AS present FROM backup_targets WHERE vault_id = ?"
+              )
               .get(plane.boot.vaultId) === undefined;
           return sendJson(res, 200, {
             blob_store: readBlobStoreSettings(plane.db.vault),
             media_location: mediaLocationPolicy(plane.db),
-            ...(recoveryKitConfirmed === undefined ? {} : { recoveryKitConfirmed }),
+            ...(recoveryKitConfirmed === undefined
+              ? {}
+              : { recoveryKitConfirmed }),
             ...(remoteWithoutBackup
               ? {
                   warning:
-                    'Remote CAS is storing offsite bytes without a backup target; ' +
-                    'the recovery kit cannot restore those bytes.',
+                    "Remote CAS is storing offsite bytes without a backup target; " +
+                    "the recovery kit cannot restore those bytes.",
                 }
               : {}),
           });
@@ -518,19 +590,20 @@ export function makeVaultRouteHandler(
       // the default; `model` — derivative bytes leaving for an inference
       // provider — is a deliberate per-domain opt-in; `off` silences a
       // domain entirely.
-      if (segments[0] === 'enrich' && segments.length === 1) {
-        if (method === 'GET') {
+      if (segments[0] === "enrich" && segments.length === 1) {
+        if (method === "GET") {
           return sendJson(res, 200, { enrich: readEnrichSettings(plane.db) });
         }
-        if (method === 'PUT') {
+        if (method === "PUT") {
           const body = await readJson(req);
-          const patch: Partial<Record<'photos' | 'docs', EnrichTier | null>> = {};
-          for (const key of ['photos', 'docs'] as const) {
+          const patch: Partial<Record<"photos" | "docs", EnrichTier | null>> =
+            {};
+          for (const key of ["photos", "docs"] as const) {
             const v = body[key];
             if (v === undefined) continue;
-            if (v !== null && v !== 'off' && v !== 'local' && v !== 'model') {
+            if (v !== null && v !== "off" && v !== "local" && v !== "model") {
               return sendJson(res, 400, {
-                error: 'bad_request',
+                error: "bad_request",
                 message: `${key} must be "off", "local", "model" or null`,
               });
             }
@@ -541,7 +614,7 @@ export function makeVaultRouteHandler(
         }
       }
 
-      if (method === 'GET' && segments[0] === 'apps' && segments.length === 1) {
+      if (method === "GET" && segments[0] === "apps" && segments.length === 1) {
         const companionProfile = vaultContext()?.grantProfile;
         if (companionProfile !== undefined) {
           const allowed = new Set(companionProfile);
@@ -558,14 +631,19 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, { apps: plane.listApps() });
       }
 
-      if (method === 'POST' && segments[0] === 'apps' && segments[2] === 'grants') {
-        const appId = segments[1] ?? '';
+      if (
+        method === "POST" &&
+        segments[0] === "apps" &&
+        segments[2] === "grants"
+      ) {
+        const appId = segments[1] ?? "";
         const body = await readJson(req);
         const request = parseGrantRequest(body);
         if (!request) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'grant body needs {purpose: string, scopes: [{schema, verbs, table?}]}',
+            error: "bad_request",
+            message:
+              "grant body needs {purpose: string, scopes: [{schema, verbs, table?}]}",
           });
         }
         try {
@@ -573,7 +651,7 @@ export function makeVaultRouteHandler(
           return sendJson(res, 200, { grantId });
         } catch (err) {
           return sendJson(res, 400, {
-            error: 'grant_refused',
+            error: "grant_refused",
             message: err instanceof Error ? err.message : String(err),
           });
         }
@@ -583,34 +661,43 @@ export function makeVaultRouteHandler(
       // uninstall RETAINS the app's ext band (the data is the owner's);
       // this drops its tables + registry rows for good.
       if (
-        method === 'POST' &&
-        segments[0] === 'apps' &&
-        segments[2] === 'purge-ext' &&
+        method === "POST" &&
+        segments[0] === "apps" &&
+        segments[2] === "purge-ext" &&
         segments.length === 3
       ) {
-        const appId = segments[1] ?? '';
+        const appId = segments[1] ?? "";
         try {
           return sendJson(res, 200, plane.purgeAppExt(appId));
         } catch (err) {
           return sendJson(res, 400, {
-            error: 'purge_failed',
+            error: "purge_failed",
             message: err instanceof Error ? err.message : String(err),
           });
         }
       }
 
-      if (method === 'GET' && segments[0] === 'agents' && segments.length === 1) {
+      if (
+        method === "GET" &&
+        segments[0] === "agents" &&
+        segments.length === 1
+      ) {
         return sendJson(res, 200, { agents: plane.listAgents() });
       }
 
-      if (method === 'POST' && segments[0] === 'agents' && segments[2] === 'grants') {
-        const appId = segments[1] ?? '';
+      if (
+        method === "POST" &&
+        segments[0] === "agents" &&
+        segments[2] === "grants"
+      ) {
+        const appId = segments[1] ?? "";
         const body = await readJson(req);
         const request = parseGrantRequest(body);
         if (!request) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'grant body needs {purpose: string, scopes: [{schema, verbs, table?}]}',
+            error: "bad_request",
+            message:
+              "grant body needs {purpose: string, scopes: [{schema, verbs, table?}]}",
           });
         }
         try {
@@ -619,7 +706,7 @@ export function makeVaultRouteHandler(
           return sendJson(res, 200, { grantId });
         } catch (err) {
           return sendJson(res, 400, {
-            error: 'grant_refused',
+            error: "grant_refused",
             message: err instanceof Error ? err.message : String(err),
           });
         }
@@ -629,27 +716,35 @@ export function makeVaultRouteHandler(
       // granted scopes with salience highlights — what the install screen
       // and the app's consent card render.
       if (
-        method === 'GET' &&
-        segments[0] === 'apps' &&
+        method === "GET" &&
+        segments[0] === "apps" &&
         segments.length === 3 &&
-        segments[2] === 'scopes'
+        segments[2] === "scopes"
       ) {
-        return sendJson(res, 200, plane.scopeSurface(segments[1] ?? ''));
+        return sendJson(res, 200, plane.scopeSurface(segments[1] ?? ""));
       }
 
-      if (method === 'DELETE' && segments[0] === 'grants' && segments.length === 2) {
+      if (
+        method === "DELETE" &&
+        segments[0] === "grants" &&
+        segments.length === 2
+      ) {
         try {
-          const result = plane.revokeGrant(segments[1] ?? '');
+          const result = plane.revokeGrant(segments[1] ?? "");
           return sendJson(res, 200, result);
         } catch (err) {
           return sendJson(res, 404, {
-            error: 'revoke_failed',
+            error: "revoke_failed",
             message: err instanceof Error ? err.message : String(err),
           });
         }
       }
 
-      if (method === 'GET' && segments[0] === 'parked' && segments.length === 1) {
+      if (
+        method === "GET" &&
+        segments[0] === "parked" &&
+        segments.length === 1
+      ) {
         return sendJson(res, 200, { parked: plane.listParked() });
       }
 
@@ -658,11 +753,15 @@ export function makeVaultRouteHandler(
       // artifact itself); POST /<itemId> is the owner's decision — approve /
       // edit-then-approve / discard / always-allow — and an approval kicks
       // the executor so the send happens now, not on the next clock tick.
-      if (method === 'GET' && segments[0] === 'outbox' && segments.length === 1) {
-        const statusParam = url.searchParams.get('status');
+      if (
+        method === "GET" &&
+        segments[0] === "outbox" &&
+        segments.length === 1
+      ) {
+        const statusParam = url.searchParams.get("status");
         const statuses = statusParam
           ? statusParam
-              .split(',')
+              .split(",")
               .map((s) => s.trim())
               .filter(Boolean)
           : undefined;
@@ -671,12 +770,17 @@ export function makeVaultRouteHandler(
         });
       }
 
-      if (method === 'POST' && segments[0] === 'outbox' && segments.length === 2) {
+      if (
+        method === "POST" &&
+        segments[0] === "outbox" &&
+        segments.length === 2
+      ) {
         const body = await readJson(req);
-        if (body.decision !== 'approve' && body.decision !== 'discard') {
+        if (body.decision !== "approve" && body.decision !== "discard") {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'outbox decision body needs {decision: "approve" | "discard"}',
+            error: "bad_request",
+            message:
+              'outbox decision body needs {decision: "approve" | "discard"}',
           });
         }
         // The owner surface edits the ARTIFACT only — the wire request may
@@ -687,20 +791,20 @@ export function makeVaultRouteHandler(
         // when it didn't.
         if (body.request !== undefined) {
           return sendJson(res, 400, {
-            error: 'bad_request',
+            error: "bad_request",
             message:
               'the outbox route never accepts a raw "request" from the owner surface — edit the artifact and the gateway rebuilds the wire request server-side',
           });
         }
-        const itemId = segments[1] ?? '';
+        const itemId = segments[1] ?? "";
         let rebuiltRequest: Record<string, unknown> | undefined;
         if (isRecord(body.artifact)) {
           // Edit-then-send is an approve-time act (issue #308 A5 UI
           // slice): discarding sends nothing, so there is nothing an
           // artifact edit could change about the outcome.
-          if (body.decision !== 'approve') {
+          if (body.decision !== "approve") {
             return sendJson(res, 400, {
-              error: 'bad_request',
+              error: "bad_request",
               message:
                 'an artifact edit only applies to "approve" — discarding sends nothing, so there is nothing to edit',
             });
@@ -708,14 +812,14 @@ export function makeVaultRouteHandler(
           const original = plane.rawOutboxItem(itemId);
           if (!original) {
             return sendJson(res, 404, {
-              error: 'not_found',
+              error: "not_found",
               message: `no outbox item ${itemId}`,
             });
           }
           const rebuild = rebuilderForVerb(original.verb);
           if (!rebuild) {
             return sendJson(res, 400, {
-              error: 'edit_unsupported',
+              error: "edit_unsupported",
               message: `editing isn't supported for ${original.verb} yet — approve or deny as staged`,
             });
           }
@@ -723,11 +827,11 @@ export function makeVaultRouteHandler(
             assertArtifactShapeUnchanged(original.artifact, body.artifact);
             rebuiltRequest = rebuild(
               original.request as unknown as OutboxWireRequest,
-              body.artifact,
+              body.artifact
             ) as unknown as Record<string, unknown>;
           } catch (err) {
             return sendJson(res, 400, {
-              error: 'bad_request',
+              error: "bad_request",
               message: err instanceof Error ? err.message : String(err),
             });
           }
@@ -737,28 +841,50 @@ export function makeVaultRouteHandler(
           decision: body.decision,
           ...(isRecord(body.artifact) ? { artifact: body.artifact } : {}),
           ...(rebuiltRequest ? { request: rebuiltRequest } : {}),
-          ...(typeof body.always_allow === 'boolean' ? { alwaysAllow: body.always_allow } : {}),
-          ...(typeof body.note === 'string' ? { note: body.note } : {}),
+          ...(typeof body.always_allow === "boolean"
+            ? { alwaysAllow: body.always_allow }
+            : {}),
+          ...(typeof body.note === "string" ? { note: body.note } : {}),
         });
-        if (outcome.status === 'executed' && body.decision === 'approve') {
+        if (outcome.status === "executed" && body.decision === "approve") {
           options.onOutboxDecided?.(plane);
         }
-        return sendJson(res, outcome.status === 'executed' ? 200 : 409, outcome);
+        return sendJson(
+          res,
+          outcome.status === "executed" ? 200 : 409,
+          outcome
+        );
       }
 
-      if (method === 'GET' && segments[0] === 'outbox-grants' && segments.length === 1) {
+      if (
+        method === "GET" &&
+        segments[0] === "outbox-grants" &&
+        segments.length === 1
+      ) {
         return sendJson(res, 200, { grants: plane.listOutboxGrants() });
       }
 
-      if (method === 'DELETE' && segments[0] === 'outbox-grants' && segments.length === 2) {
-        const outcome = await plane.revokeOutboxGrant(segments[1] ?? '');
-        return sendJson(res, outcome.status === 'executed' ? 200 : 409, outcome);
+      if (
+        method === "DELETE" &&
+        segments[0] === "outbox-grants" &&
+        segments.length === 2
+      ) {
+        const outcome = await plane.revokeOutboxGrant(segments[1] ?? "");
+        return sendJson(
+          res,
+          outcome.status === "executed" ? 200 : 409,
+          outcome
+        );
       }
 
       // The honest split of the old parked surface (issue #306 decision 5):
       // BLOCKING = things waiting on the owner; REVIEW = what happened,
       // salience-ranked, with receipts.
-      if (method === 'GET' && segments[0] === 'blocking' && segments.length === 1) {
+      if (
+        method === "GET" &&
+        segments[0] === "blocking" &&
+        segments.length === 1
+      ) {
         const blocking = plane.blocking();
         if (vaultContext()?.grantProfile !== undefined) {
           return sendJson(res, 200, {
@@ -778,34 +904,51 @@ export function makeVaultRouteHandler(
       // Manifest scope-widening requests (issue #308 A3): a published
       // manifest asking beyond its last consent parks here; the owner's
       // decision mints the grant (approve) or tombstones the ask (deny).
-      if (method === 'GET' && segments[0] === 'scope-requests' && segments.length === 1) {
+      if (
+        method === "GET" &&
+        segments[0] === "scope-requests" &&
+        segments.length === 1
+      ) {
         return sendJson(res, 200, { requests: plane.listScopeRequests() });
       }
 
-      if (method === 'POST' && segments[0] === 'scope-requests' && segments.length === 2) {
+      if (
+        method === "POST" &&
+        segments[0] === "scope-requests" &&
+        segments.length === 2
+      ) {
         const body = await readJson(req);
-        if (typeof body.approve !== 'boolean') {
+        if (typeof body.approve !== "boolean") {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'scope-request decision body needs {approve: boolean}',
+            error: "bad_request",
+            message: "scope-request decision body needs {approve: boolean}",
           });
         }
         try {
-          const request = plane.decideScopeRequest(segments[1] ?? '', body.approve);
+          const request = plane.decideScopeRequest(
+            segments[1] ?? "",
+            body.approve
+          );
           return sendJson(res, 200, { request, approved: body.approve });
         } catch (err) {
           return sendJson(res, 404, {
-            error: 'decide_failed',
+            error: "decide_failed",
             message: err instanceof Error ? err.message : String(err),
           });
         }
       }
 
-      if (method === 'GET' && segments[0] === 'review' && segments.length === 1) {
-        const limitParam = Number(url.searchParams.get('limit'));
+      if (
+        method === "GET" &&
+        segments[0] === "review" &&
+        segments.length === 1
+      ) {
+        const limitParam = Number(url.searchParams.get("limit"));
         return sendJson(res, 200, {
           entries: plane.reviewFeed(
-            Number.isFinite(limitParam) && limitParam > 0 ? limitParam : undefined,
+            Number.isFinite(limitParam) && limitParam > 0
+              ? limitParam
+              : undefined
           ),
         });
       }
@@ -816,7 +959,11 @@ export function makeVaultRouteHandler(
       // Canonical domain entity types (`schema.table`) — the ontology model,
       // surfaced by the automation editor's @-tagging so the owner can reference
       // an entity kind ("@core.event") without a matching vault row to search.
-      if (method === 'GET' && segments[0] === 'entities' && segments.length === 1) {
+      if (
+        method === "GET" &&
+        segments[0] === "entities" &&
+        segments.length === 1
+      ) {
         return sendJson(res, 200, { entities: listVaultEntities() });
       }
 
@@ -824,17 +971,25 @@ export function makeVaultRouteHandler(
       // surfaces over the registered ontology. All computed on request — an
       // owner ops screen, not a hot path. Numbers are derived from the live
       // schema (the FK walk, dbstat, the journal), never hardcoded.
-      if (method === 'GET' && segments[0] === 'atlas' && segments.length === 2) {
-        if (segments[1] === 'stats') {
-          return sendJson(res, 200, atlasCensus(plane.db.vault, plane.db.journal));
+      if (
+        method === "GET" &&
+        segments[0] === "atlas" &&
+        segments.length === 2
+      ) {
+        if (segments[1] === "stats") {
+          return sendJson(
+            res,
+            200,
+            atlasCensus(plane.db.vault, plane.db.journal)
+          );
         }
-        if (segments[1] === 'graph') {
+        if (segments[1] === "graph") {
           // FK edges + per-edge fill + BFS rings, plus core_link aggregation
           // as a SEPARATE collection (FK ≠ core_link — the trap this must not
           // fall into). See atlas-census.ts.
           return sendJson(res, 200, atlasGraph(plane.db.vault));
         }
-        if (segments[1] === 'pulse') {
+        if (segments[1] === "pulse") {
           return sendJson(res, 200, atlasPulse(plane.db.journal));
         }
       }
@@ -844,21 +999,25 @@ export function makeVaultRouteHandler(
       // ride the journalled command pipeline (atlas.* commands) with the
       // owner-device credential so every edit is a receipted operator act and
       // ships in the replica change log. All under `/atlas/browse/...`.
-      if (segments[0] === 'atlas' && segments[1] === 'browse' && segments.length === 3) {
+      if (
+        segments[0] === "atlas" &&
+        segments[1] === "browse" &&
+        segments.length === 3
+      ) {
         const sub = segments[2];
-        const table = url.searchParams.get('table') ?? '';
+        const table = url.searchParams.get("table") ?? "";
         try {
-          if (method === 'GET' && sub === 'tables') {
+          if (method === "GET" && sub === "tables") {
             return sendJson(res, 200, {
               tables: browseTableList(plane.db.vault),
             });
           }
-          if (method === 'GET' && sub === 'columns') {
+          if (method === "GET" && sub === "columns") {
             return sendJson(res, 200, browseColumns(plane.db.vault, table));
           }
-          if (method === 'GET' && sub === 'rows') {
-            const limitParam = Number(url.searchParams.get('limit'));
-            const dirParam = url.searchParams.get('dir');
+          if (method === "GET" && sub === "rows") {
+            const limitParam = Number(url.searchParams.get("limit"));
+            const dirParam = url.searchParams.get("dir");
             return sendJson(
               res,
               200,
@@ -867,36 +1026,46 @@ export function makeVaultRouteHandler(
                 ...(Number.isFinite(limitParam) && limitParam > 0
                   ? { limit: Math.min(limitParam, BROWSE_MAX_LIMIT) }
                   : {}),
-                ...(url.searchParams.get('after') ? { after: url.searchParams.get('after')! } : {}),
-                ...(url.searchParams.get('orderBy')
-                  ? { orderBy: url.searchParams.get('orderBy')! }
+                ...(url.searchParams.get("after")
+                  ? { after: url.searchParams.get("after")! }
                   : {}),
-                ...(dirParam === 'desc' ? { dir: 'desc' as const } : {}),
-              }),
+                ...(url.searchParams.get("orderBy")
+                  ? { orderBy: url.searchParams.get("orderBy")! }
+                  : {}),
+                ...(dirParam === "desc" ? { dir: "desc" as const } : {}),
+              })
             );
           }
-          if (method === 'GET' && sub === 'row') {
+          if (method === "GET" && sub === "row") {
             return sendJson(
               res,
               200,
-              browseRow(plane.db.vault, table, url.searchParams.get('id') ?? ''),
+              browseRow(plane.db.vault, table, url.searchParams.get("id") ?? "")
             );
           }
-          if (method === 'GET' && sub === 'ref-search') {
+          if (method === "GET" && sub === "ref-search") {
             return sendJson(res, 200, {
-              hits: browseRefSearch(plane.db.vault, table, url.searchParams.get('query') ?? ''),
+              hits: browseRefSearch(
+                plane.db.vault,
+                table,
+                url.searchParams.get("query") ?? ""
+              ),
             });
           }
-          if (method === 'GET' && sub === 'dependents') {
+          if (method === "GET" && sub === "dependents") {
             return sendJson(
               res,
               200,
-              browseDependents(plane.db.vault, table, url.searchParams.get('id') ?? ''),
+              browseDependents(
+                plane.db.vault,
+                table,
+                url.searchParams.get("id") ?? ""
+              )
             );
           }
         } catch (err) {
           if (err instanceof BrowseError) {
-            const status = err.code === 'bad_request' ? 400 : 404;
+            const status = err.code === "bad_request" ? 400 : 404;
             return sendJson(res, status, {
               error: err.code,
               message: err.message,
@@ -905,27 +1074,32 @@ export function makeVaultRouteHandler(
           throw err;
         }
 
-        if (method === 'POST' && sub === 'insert') {
+        if (method === "POST" && sub === "insert") {
           const body = await readJson(req);
-          return runBrowseWrite(res, plane, 'atlas.insert_row', {
-            table: body['table'],
-            values: body['values'],
-            ...(body['unlockMachinery'] === true ? { unlockMachinery: true } : {}),
+          return runBrowseWrite(res, plane, "atlas.insert_row", {
+            table: body["table"],
+            values: body["values"],
+            ...(body["unlockMachinery"] === true
+              ? { unlockMachinery: true }
+              : {}),
           });
         }
-        if (method === 'POST' && sub === 'update') {
+        if (method === "POST" && sub === "update") {
           const body = await readJson(req);
-          return runBrowseWrite(res, plane, 'atlas.update_row', {
-            table: body['table'],
-            id: body['id'],
-            set: body['set'],
-            ...(body['unlockMachinery'] === true ? { unlockMachinery: true } : {}),
+          return runBrowseWrite(res, plane, "atlas.update_row", {
+            table: body["table"],
+            id: body["id"],
+            set: body["set"],
+            ...(body["unlockMachinery"] === true
+              ? { unlockMachinery: true }
+              : {}),
           });
         }
-        if (method === 'POST' && sub === 'delete') {
+        if (method === "POST" && sub === "delete") {
           const body = await readJson(req);
-          const delTable = typeof body['table'] === 'string' ? body['table'] : '';
-          const delId = typeof body['id'] === 'string' ? body['id'] : '';
+          const delTable =
+            typeof body["table"] === "string" ? body["table"] : "";
+          const delId = typeof body["id"] === "string" ? body["id"] : "";
           // Preflight the dependent walk so a blocked delete returns the FULL
           // dependent payload (engine + polymorphic) as a 409 — the command's
           // own guard only surfaces a reason string through the pipeline.
@@ -933,7 +1107,7 @@ export function makeVaultRouteHandler(
             const deps = browseDependents(plane.db.vault, delTable, delId);
             if (deps.hasEngineDependents) {
               return sendJson(res, 409, {
-                error: 'has_dependents',
+                error: "has_dependents",
                 message: `${deps.totalRows} row(s) reference this row`,
                 dependents: deps.dependents,
                 totalRows: deps.totalRows,
@@ -941,7 +1115,7 @@ export function makeVaultRouteHandler(
             }
           } catch (err) {
             if (err instanceof BrowseError) {
-              const status = err.code === 'bad_request' ? 400 : 404;
+              const status = err.code === "bad_request" ? 400 : 404;
               return sendJson(res, status, {
                 error: err.code,
                 message: err.message,
@@ -949,55 +1123,74 @@ export function makeVaultRouteHandler(
             }
             throw err;
           }
-          return runBrowseWrite(res, plane, 'atlas.delete_row', {
-            table: body['table'],
-            id: body['id'],
-            ...(body['unlockMachinery'] === true ? { unlockMachinery: true } : {}),
+          return runBrowseWrite(res, plane, "atlas.delete_row", {
+            table: body["table"],
+            id: body["id"],
+            ...(body["unlockMachinery"] === true
+              ? { unlockMachinery: true }
+              : {}),
           });
         }
       }
 
-      if (method === 'GET' && segments[0] === 'picker' && segments.length === 1) {
-        const term = url.searchParams.get('term') ?? undefined;
-        const kindsParam = url.searchParams.get('kinds');
+      if (
+        method === "GET" &&
+        segments[0] === "picker" &&
+        segments.length === 1
+      ) {
+        const term = url.searchParams.get("term") ?? undefined;
+        const kindsParam = url.searchParams.get("kinds");
         const kinds = kindsParam
           ? kindsParam
-              .split(',')
+              .split(",")
               .map((k) => k.trim())
               .filter(Boolean)
           : undefined;
-        const limitParam = Number(url.searchParams.get('limit'));
+        const limitParam = Number(url.searchParams.get("limit"));
         return sendJson(
           res,
           200,
           plane.pickEntities({
             ...(term === undefined ? {} : { term }),
             ...(kinds ? { kinds } : {}),
-            ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
-          }),
+            ...(Number.isFinite(limitParam) && limitParam > 0
+              ? { limit: limitParam }
+              : {}),
+          })
         );
       }
 
-      if (method === 'GET' && segments[0] === 'anchors' && segments.length === 1) {
-        const term = url.searchParams.get('term') ?? undefined;
-        const limitParam = Number(url.searchParams.get('limit'));
+      if (
+        method === "GET" &&
+        segments[0] === "anchors" &&
+        segments.length === 1
+      ) {
+        const term = url.searchParams.get("term") ?? undefined;
+        const limitParam = Number(url.searchParams.get("limit"));
         return sendJson(
           res,
           200,
           plane.pickAnchors({
             ...(term === undefined ? {} : { term }),
-            ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
-          }),
+            ...(Number.isFinite(limitParam) && limitParam > 0
+              ? { limit: limitParam }
+              : {}),
+          })
         );
       }
 
-      if (method === 'POST' && segments[0] === 'links' && segments.length === 1) {
+      if (
+        method === "POST" &&
+        segments[0] === "links" &&
+        segments.length === 1
+      ) {
         const body = await readJson(req);
-        const fields = ['from_type', 'from_id', 'to_type', 'to_id'] as const;
-        if (fields.some((f) => typeof body[f] !== 'string' || body[f] === '')) {
+        const fields = ["from_type", "from_id", "to_type", "to_id"] as const;
+        if (fields.some((f) => typeof body[f] !== "string" || body[f] === "")) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'link body needs {from_type, from_id, to_type, to_id, relation?}',
+            error: "bad_request",
+            message:
+              "link body needs {from_type, from_id, to_type, to_id, relation?}",
           });
         }
         let selector: AnchorSelector | undefined;
@@ -1005,8 +1198,8 @@ export function makeVaultRouteHandler(
           selector = parseSelector(body.selector);
           if (selector === undefined) {
             return sendJson(res, 400, {
-              error: 'bad_request',
-              message: 'selector must be {exact, prefix, suffix, start}',
+              error: "bad_request",
+              message: "selector must be {exact, prefix, suffix, start}",
             });
           }
         }
@@ -1015,7 +1208,7 @@ export function makeVaultRouteHandler(
           from_id: body.from_id as string,
           to_type: body.to_type as string,
           to_id: body.to_id as string,
-          ...(typeof body.relation === 'string' && body.relation !== ''
+          ...(typeof body.relation === "string" && body.relation !== ""
             ? { relation: body.relation }
             : {}),
           ...(selector ? { selector } : {}),
@@ -1023,58 +1216,76 @@ export function makeVaultRouteHandler(
         return sendJson(res, 200, outcome);
       }
 
-      if (method === 'DELETE' && segments[0] === 'links' && segments.length === 2) {
-        return sendJson(res, 200, await plane.unlinkAsOwner(segments[1] ?? ''));
+      if (
+        method === "DELETE" &&
+        segments[0] === "links" &&
+        segments.length === 2
+      ) {
+        return sendJson(res, 200, await plane.unlinkAsOwner(segments[1] ?? ""));
       }
 
       // Re-anchor / re-baseline (issue #282): move the standoff anchor of a
       // live link ({selector: {...}}) or clear it ({selector: null}) —
       // demoting the reference to strip-only. A locator write; the link
       // judgment is untouched.
-      if (method === 'PATCH' && segments[0] === 'links' && segments.length === 2) {
+      if (
+        method === "PATCH" &&
+        segments[0] === "links" &&
+        segments.length === 2
+      ) {
         const body = await readJson(req);
-        if (!('selector' in body)) {
+        if (!("selector" in body)) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'anchor body needs {selector: {exact, prefix, suffix, start} | null}',
+            error: "bad_request",
+            message:
+              "anchor body needs {selector: {exact, prefix, suffix, start} | null}",
           });
         }
-        const selector = body.selector === null ? null : parseSelector(body.selector);
+        const selector =
+          body.selector === null ? null : parseSelector(body.selector);
         if (selector === undefined) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'selector must be {exact, prefix, suffix, start} or null',
+            error: "bad_request",
+            message: "selector must be {exact, prefix, suffix, start} or null",
           });
         }
-        return sendJson(res, 200, await plane.anchorAsOwner(segments[1] ?? '', selector));
+        return sendJson(
+          res,
+          200,
+          await plane.anchorAsOwner(segments[1] ?? "", selector)
+        );
       }
 
-      if (method === 'POST' && segments[0] === 'parked' && segments.length === 2) {
+      if (
+        method === "POST" &&
+        segments[0] === "parked" &&
+        segments.length === 2
+      ) {
         const body = await readJson(req);
-        if (typeof body.approve !== 'boolean') {
+        if (typeof body.approve !== "boolean") {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'confirmation body needs {approve: boolean}',
+            error: "bad_request",
+            message: "confirmation body needs {approve: boolean}",
           });
         }
         try {
-          const outcome = plane.confirmParked(segments[1] ?? '', body.approve);
+          const outcome = plane.confirmParked(segments[1] ?? "", body.approve);
           return sendJson(res, 200, outcome);
         } catch (err) {
           return sendJson(res, 404, {
-            error: 'confirm_failed',
+            error: "confirm_failed",
             message: err instanceof Error ? err.message : String(err),
           });
         }
       }
 
       return sendJson(res, 404, {
-        error: 'not_found',
-        message: 'unknown _vault route',
+        error: "not_found",
+        message: "unknown _vault route",
       });
     } catch (err) {
       return sendJson(res, 500, {
-        error: 'internal_error',
+        error: "internal_error",
         message: err instanceof Error ? err.message : String(err),
       });
     }
@@ -1092,41 +1303,46 @@ async function handleVaultsRoute(
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
-  segments: string[],
+  segments: string[]
 ): Promise<boolean> {
   try {
-    if (method === 'GET' && segments.length === 1) {
+    if (method === "GET" && segments.length === 1) {
       // A vault directory that failed to mount is invisible in `vaults` — it
       // has no plane to describe. Reporting the failures alongside (issue
       // #603 X1) is the difference between "you have one vault" and "one of
       // your two vaults would not open". Every caller here is an
       // authenticated device; the entries carry only a directory and the
       // mount error, never vault contents.
-      return sendJson(res, 200, { vaults: visibleVaults(), failedMounts: vaults.failedMounts() });
+      return sendJson(res, 200, {
+        vaults: visibleVaults(),
+        failedMounts: vaults.failedMounts(),
+      });
     }
 
-    if (method === 'POST' && segments.length === 1) {
+    if (method === "POST" && segments.length === 1) {
       const deviceKey = vaultContext()?.deviceKey;
       const currentVaultId = vaultContext()?.vaultId;
       const current =
         deviceKey && currentVaultId && options.enrollments
           ? options.enrollments.get(deviceKey, currentVaultId)
           : undefined;
-      if (current?.role !== 'admin' || !options.enrollments) {
+      if (current?.role !== "admin" || !options.enrollments) {
         return sendJson(res, 403, {
-          error: 'admin_required',
-          message: 'only an admin device can create another vault',
+          error: "admin_required",
+          message: "only an admin device can create another vault",
         });
       }
       const body = await readJson(req);
-      if (body.name !== undefined && typeof body.name !== 'string') {
+      if (body.name !== undefined && typeof body.name !== "string") {
         return sendJson(res, 400, {
-          error: 'bad_request',
-          message: 'name must be a string',
+          error: "bad_request",
+          message: "name must be a string",
         });
       }
       const created = vaults.create(
-        typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined,
+        typeof body.name === "string" && body.name.trim()
+          ? body.name.trim()
+          : undefined
       );
       try {
         options.enrollments.enroll({
@@ -1134,7 +1350,7 @@ async function handleVaultsRoute(
           vaultId: created.vaultId,
           label: current.label,
           ...(current.platform ? { platform: current.platform } : {}),
-          role: 'admin',
+          role: "admin",
           rememberDevice: current.rememberDevice,
         });
       } catch (error) {
@@ -1145,52 +1361,63 @@ async function handleVaultsRoute(
       return sendJson(res, 201, created);
     }
 
-    if (method === 'DELETE' && segments.length === 2) {
+    if (method === "DELETE" && segments.length === 2) {
       return sendJson(res, 405, {
-        error: 'erase_ceremony_required',
+        error: "erase_ceremony_required",
         message: `POST ${ROUTES.vaultErase} with the exact vault name`,
       });
     }
 
-    if (method === 'PATCH' && segments.length === 2) {
-      const vaultId = segments[1] ?? '';
+    if (method === "PATCH" && segments.length === 2) {
+      const vaultId = segments[1] ?? "";
       // An owner act on ONE of the caller's vaults — a device may only
       // touch what it can see.
       if (!visibleVaults().some((v) => v.vaultId === vaultId)) {
         return sendJson(res, 404, {
-          error: 'vault_not_found',
+          error: "vault_not_found",
           message: `unknown vault "${vaultId}"`,
         });
       }
       const body = await readJson(req);
-      const presentationKeys = ['color', 'icon', 'blurb'] as const;
-      const hasPresentation = presentationKeys.some((k) => body[k] !== undefined);
+      const presentationKeys = ["color", "icon", "blurb"] as const;
+      const hasPresentation = presentationKeys.some(
+        (k) => body[k] !== undefined
+      );
       if (body.name === undefined && !hasPresentation) {
         return sendJson(res, 400, {
-          error: 'bad_request',
+          error: "bad_request",
           message:
-            'update body needs {name?: string, color?: string, icon?: string, blurb?: string}',
+            "update body needs {name?: string, color?: string, icon?: string, blurb?: string}",
         });
       }
-      if (body.name !== undefined && typeof body.name !== 'string') {
+      if (body.name !== undefined && typeof body.name !== "string") {
         return sendJson(res, 400, {
-          error: 'bad_request',
-          message: 'name must be a string',
+          error: "bad_request",
+          message: "name must be a string",
         });
       }
       for (const k of presentationKeys) {
-        if (body[k] !== undefined && body[k] !== null && typeof body[k] !== 'string') {
+        if (
+          body[k] !== undefined &&
+          body[k] !== null &&
+          typeof body[k] !== "string"
+        ) {
           return sendJson(res, 400, {
-            error: 'bad_request',
+            error: "bad_request",
             message: `${k} must be a string`,
           });
         }
       }
-      let info = typeof body.name === 'string' ? vaults.rename(vaultId, body.name) : undefined;
+      let info =
+        typeof body.name === "string"
+          ? vaults.rename(vaultId, body.name)
+          : undefined;
       if (hasPresentation) {
         // Presentation lives IN the vault (#280: profiles are vaults) — the
         // switcher's color/icon/blurb travel with an export.
-        const patch: Partial<Record<'color' | 'icon' | 'blurb', string | null>> = {};
+        const patch: Partial<
+          Record<"color" | "icon" | "blurb", string | null>
+        > = {};
         for (const k of presentationKeys) {
           if (body[k] !== undefined) patch[k] = body[k] as string | null;
         }
@@ -1200,8 +1427,8 @@ async function handleVaultsRoute(
     }
 
     return sendJson(res, 404, {
-      error: 'not_found',
-      message: 'unknown _vault/vaults route',
+      error: "not_found",
+      message: "unknown _vault/vaults route",
     });
   } catch (err) {
     return sendRegistryError(res, err);
@@ -1219,27 +1446,27 @@ async function runBrowseWrite(
   res: ServerResponse,
   plane: VaultPlane,
   command: string,
-  input: Record<string, unknown>,
+  input: Record<string, unknown>
 ): Promise<boolean> {
   const outcome = await plane.invoke(plane.ownerCredential, {
     command,
     input,
-    purpose: 'dpv:ServiceProvision',
+    purpose: "dpv:ServiceProvision",
   });
-  if (outcome.status === 'executed') {
+  if (outcome.status === "executed") {
     return sendJson(res, 200, {
       ok: true,
       ...(outcome.output as Record<string, unknown>),
     });
   }
-  if (outcome.status === 'replayed') {
+  if (outcome.status === "replayed") {
     return sendJson(res, 200, {
       ok: true,
       ...(outcome.output as Record<string, unknown>),
     });
   }
   // Everything else — denied / parked / failed — carries a reason.
-  return sendJson(res, outcome.status === 'denied' ? 403 : 400, {
+  return sendJson(res, outcome.status === "denied" ? 403 : 400, {
     ok: false,
     error: outcome.reason,
   });
@@ -1247,11 +1474,11 @@ async function runBrowseWrite(
 
 function sendRegistryError(res: ServerResponse, err: unknown): boolean {
   if (err instanceof VaultRegistryError) {
-    const status = err.code === 'vault_not_found' ? 404 : 400;
+    const status = err.code === "vault_not_found" ? 404 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   return sendJson(res, 500, {
-    error: 'internal_error',
+    error: "internal_error",
     message: err instanceof Error ? err.message : String(err),
   });
 }
@@ -1261,66 +1488,79 @@ function sendRegistryError(res: ServerResponse, err: unknown): boolean {
  * undefined on anything malformed — the routes turn that into a 400.
  */
 function parseSelector(raw: unknown): AnchorSelector | undefined {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw))
+    return undefined;
   const s = raw as Record<string, unknown>;
-  if (typeof s.exact !== 'string' || s.exact.length === 0) return undefined;
-  if (typeof s.prefix !== 'string' || typeof s.suffix !== 'string') return undefined;
-  if (typeof s.start !== 'number' || !Number.isInteger(s.start) || s.start < 0) return undefined;
+  if (typeof s.exact !== "string" || s.exact.length === 0) return undefined;
+  if (typeof s.prefix !== "string" || typeof s.suffix !== "string")
+    return undefined;
+  if (typeof s.start !== "number" || !Number.isInteger(s.start) || s.start < 0)
+    return undefined;
   return { exact: s.exact, prefix: s.prefix, suffix: s.suffix, start: s.start };
 }
 
-const VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
+const VERBS = new Set(["read", "read+act", "act", "reveal"]);
 const FILTER_OPS = new Set([
-  'eq',
-  'ne',
-  'lt',
-  'lte',
-  'gt',
-  'gte',
-  'in',
-  'is-null',
-  'not-null',
-  'within-days',
-  'within-next-days',
+  "eq",
+  "ne",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+  "in",
+  "is-null",
+  "not-null",
+  "within-days",
+  "within-next-days",
 ]);
 
-function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefined {
-  if (typeof body.purpose !== 'string' || body.purpose.length === 0) return undefined;
+function parseGrantRequest(
+  body: Record<string, unknown>
+): GrantRequest | undefined {
+  if (typeof body.purpose !== "string" || body.purpose.length === 0)
+    return undefined;
   if (!Array.isArray(body.scopes) || body.scopes.length === 0) return undefined;
-  const scopes: GrantRequest['scopes'] = [];
+  const scopes: GrantRequest["scopes"] = [];
   for (const raw of body.scopes) {
-    if (raw === null || typeof raw !== 'object') return undefined;
+    if (raw === null || typeof raw !== "object") return undefined;
     const s = raw as Record<string, unknown>;
-    if (typeof s.schema !== 'string' || s.schema.length === 0) return undefined;
-    if (typeof s.verbs !== 'string' || !VERBS.has(s.verbs)) return undefined;
-    if (s.table !== undefined && typeof s.table !== 'string') return undefined;
+    if (typeof s.schema !== "string" || s.schema.length === 0) return undefined;
+    if (typeof s.verbs !== "string" || !VERBS.has(s.verbs)) return undefined;
+    if (s.table !== undefined && typeof s.table !== "string") return undefined;
     if (
       (s.rowFilter !== undefined || s.fieldMask !== undefined) &&
-      (typeof s.table !== 'string' || s.table === '')
+      (typeof s.table !== "string" || s.table === "")
     ) {
       return undefined;
     }
-    let rowFilter: GrantRequest['scopes'][number]['rowFilter'];
+    let rowFilter: GrantRequest["scopes"][number]["rowFilter"];
     if (s.rowFilter !== undefined) {
-      if (!Array.isArray(s.rowFilter) || s.rowFilter.length === 0) return undefined;
+      if (!Array.isArray(s.rowFilter) || s.rowFilter.length === 0)
+        return undefined;
       rowFilter = [];
       for (const rawClause of s.rowFilter) {
-        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+        if (
+          rawClause === null ||
+          typeof rawClause !== "object" ||
+          Array.isArray(rawClause)
+        ) {
           return undefined;
         }
         const clause = rawClause as Record<string, unknown>;
         if (
-          typeof clause.column !== 'string' ||
-          clause.column === '' ||
-          typeof clause.op !== 'string' ||
+          typeof clause.column !== "string" ||
+          clause.column === "" ||
+          typeof clause.op !== "string" ||
           !FILTER_OPS.has(clause.op)
         ) {
           return undefined;
         }
         rowFilter.push({
           column: clause.column,
-          op: clause.op as NonNullable<GrantRequest['scopes'][number]['rowFilter']>[number]['op'],
-          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+          op: clause.op as NonNullable<
+            GrantRequest["scopes"][number]["rowFilter"]
+          >[number]["op"],
+          ...(Object.hasOwn(clause, "value") ? { value: clause.value } : {}),
         });
       }
     }
@@ -1329,7 +1569,7 @@ function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefi
       if (
         !Array.isArray(s.fieldMask) ||
         s.fieldMask.length === 0 ||
-        !s.fieldMask.every((field) => typeof field === 'string' && field !== '')
+        !s.fieldMask.every((field) => typeof field === "string" && field !== "")
       ) {
         return undefined;
       }
@@ -1337,8 +1577,8 @@ function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefi
     }
     scopes.push({
       schema: s.schema,
-      verbs: s.verbs as 'read' | 'read+act' | 'act' | 'reveal',
-      ...(typeof s.table === 'string' ? { table: s.table } : {}),
+      verbs: s.verbs as "read" | "read+act" | "act" | "reveal",
+      ...(typeof s.table === "string" ? { table: s.table } : {}),
       ...(rowFilter ? { rowFilter } : {}),
       ...(fieldMask ? { fieldMask } : {}),
     });
@@ -1346,6 +1586,8 @@ function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefi
   return {
     purpose: body.purpose,
     scopes,
-    ...(typeof body.expiresAt === 'string' ? { expiresAt: body.expiresAt } : {}),
+    ...(typeof body.expiresAt === "string"
+      ? { expiresAt: body.expiresAt }
+      : {}),
   };
 }

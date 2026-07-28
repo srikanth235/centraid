@@ -1,18 +1,23 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AppSettingsBridgeProps, AppSettingsSnapshot } from '../screen-contracts.js';
-import AppSettingsPanel from './AppSettingsPanel.js';
+import type {
+  AppSettingsBridgeProps,
+  AppSettingsSnapshot,
+} from "../screen-contracts.js";
+import AppSettingsPanel from "./AppSettingsPanel.js";
 
-function makeSnapshot(over: Partial<AppSettingsSnapshot> = {}): AppSettingsSnapshot {
+function makeSnapshot(
+  over: Partial<AppSettingsSnapshot> = {}
+): AppSettingsSnapshot {
   return {
-    appName: 'Locker',
-    iconSvg: '<svg></svg>',
-    iconBg: 'linear-gradient(#111,#222)',
-    iconColor: '#fff',
+    appName: "Locker",
+    iconSvg: "<svg></svg>",
+    iconBg: "linear-gradient(#111,#222)",
+    iconColor: "#fff",
     iconShadow: null,
-    accent: '#6b5bff',
+    accent: "#6b5bff",
     vaultVisible: false,
     automationsBadge: null,
     vaultBadge: null,
@@ -22,21 +27,23 @@ function makeSnapshot(over: Partial<AppSettingsSnapshot> = {}): AppSettingsSnaps
   };
 }
 
-function makeProps(over: Partial<AppSettingsBridgeProps> = {}): AppSettingsBridgeProps {
+function makeProps(
+  over: Partial<AppSettingsBridgeProps> = {}
+): AppSettingsBridgeProps {
   return {
-    onReady: vi.fn<AppSettingsBridgeProps['onReady']>(),
-    onClose: vi.fn<AppSettingsBridgeProps['onClose']>(),
-    onKnobCommit: vi.fn<AppSettingsBridgeProps['onKnobCommit']>(),
-    onRunOrder: vi.fn<AppSettingsBridgeProps['onRunOrder']>(),
-    onToggleOrder: vi.fn<AppSettingsBridgeProps['onToggleOrder']>(),
-    onOpenOrder: vi.fn<AppSettingsBridgeProps['onOpenOrder']>(),
-    onOpenAutomations: vi.fn<AppSettingsBridgeProps['onOpenAutomations']>(),
-    onRename: vi.fn<AppSettingsBridgeProps['onRename']>(),
-    onShare: vi.fn<AppSettingsBridgeProps['onShare']>(),
-    onReveal: vi.fn<AppSettingsBridgeProps['onReveal']>(),
-    onDelete: vi.fn<AppSettingsBridgeProps['onDelete']>(),
-    onMountRuns: vi.fn<AppSettingsBridgeProps['onMountRuns']>(),
-    onMountVault: vi.fn<AppSettingsBridgeProps['onMountVault']>(),
+    onReady: vi.fn<AppSettingsBridgeProps["onReady"]>(),
+    onClose: vi.fn<AppSettingsBridgeProps["onClose"]>(),
+    onKnobCommit: vi.fn<AppSettingsBridgeProps["onKnobCommit"]>(),
+    onRunOrder: vi.fn<AppSettingsBridgeProps["onRunOrder"]>(),
+    onToggleOrder: vi.fn<AppSettingsBridgeProps["onToggleOrder"]>(),
+    onOpenOrder: vi.fn<AppSettingsBridgeProps["onOpenOrder"]>(),
+    onOpenAutomations: vi.fn<AppSettingsBridgeProps["onOpenAutomations"]>(),
+    onRename: vi.fn<AppSettingsBridgeProps["onRename"]>(),
+    onShare: vi.fn<AppSettingsBridgeProps["onShare"]>(),
+    onReveal: vi.fn<AppSettingsBridgeProps["onReveal"]>(),
+    onDelete: vi.fn<AppSettingsBridgeProps["onDelete"]>(),
+    onMountRuns: vi.fn<AppSettingsBridgeProps["onMountRuns"]>(),
+    onMountVault: vi.fn<AppSettingsBridgeProps["onMountVault"]>(),
     ...over,
   };
 }
@@ -44,7 +51,7 @@ function makeProps(over: Partial<AppSettingsBridgeProps> = {}): AppSettingsBridg
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let update: ((s: AppSettingsSnapshot) => void) | null = null;
-describe('screens/AppSettingsPanel', () => {
+describe("screens/AppSettingsPanel", () => {
   afterEach(() => {
     act(() => root?.unmount());
     root = null;
@@ -54,7 +61,7 @@ describe('screens/AppSettingsPanel', () => {
     vi.clearAllMocks();
   });
   function mount(props: AppSettingsBridgeProps): HTMLDivElement {
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     const onReady = (u: (s: AppSettingsSnapshot) => void): void => {
       update = u;
@@ -69,82 +76,88 @@ describe('screens/AppSettingsPanel', () => {
     act(() => update?.(snap));
   }
   function clickTab(el: HTMLElement, label: string): void {
-    const btn = [...el.querySelectorAll<HTMLButtonElement>('.settingsTabs button')].find((b) =>
-      b.textContent?.includes(label),
-    )!;
-    void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const btn = [
+      ...el.querySelectorAll<HTMLButtonElement>(".settingsTabs button"),
+    ].find((b) => b.textContent?.includes(label))!;
+    void act(() =>
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
   }
 
   describe(AppSettingsPanel, () => {
-    it('renders header identity and closes on the X and backdrop', () => {
+    it("renders header identity and closes on the X and backdrop", () => {
       const props = makeProps();
       const el = mount(props);
       push(makeSnapshot());
-      expect(el.querySelector('.settingsName')?.textContent).toBe('Locker');
+      expect(el.querySelector(".settingsName")?.textContent).toBe("Locker");
       void act(() =>
-        (el.querySelector('.settingsClose') as HTMLButtonElement).dispatchEvent(
-          new MouseEvent('click', { bubbles: true }),
-        ),
+        (el.querySelector(".settingsClose") as HTMLButtonElement).dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
       void act(() =>
-        (el.querySelector('.settingsBackdrop') as HTMLElement).dispatchEvent(
-          new MouseEvent('click', { bubbles: true }),
-        ),
+        (el.querySelector(".settingsBackdrop") as HTMLElement).dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
       expect(props.onClose).toHaveBeenCalledTimes(2);
     });
 
-    it('hides the Vault tab until the manifest declares one', () => {
+    it("hides the Vault tab until the manifest declares one", () => {
       const el = mount(makeProps());
       push(makeSnapshot({ vaultVisible: false }));
       expect(
-        [...el.querySelectorAll('.settingsTabs button')].some((b) =>
-          b.textContent?.includes('Vault'),
-        ),
+        [...el.querySelectorAll(".settingsTabs button")].some((b) =>
+          b.textContent?.includes("Vault")
+        )
       ).toBe(false);
       push(makeSnapshot({ vaultVisible: true, vaultBadge: 3 }));
-      const vaultTab = [...el.querySelectorAll('.settingsTabs button')].find((b) =>
-        b.textContent?.includes('Vault'),
+      const vaultTab = [...el.querySelectorAll(".settingsTabs button")].find(
+        (b) => b.textContent?.includes("Vault")
       )!;
       expect(vaultTab).toBeTruthy();
-      expect(vaultTab.querySelector('.settingsTabBadge')?.textContent).toBe('3');
+      expect(vaultTab.querySelector(".settingsTabBadge")?.textContent).toBe(
+        "3"
+      );
     });
 
-    it('renders appearance knobs and commits a change', () => {
+    it("renders appearance knobs and commits a change", () => {
       const props = makeProps();
       const el = mount(props);
       push(
         makeSnapshot({
           knobs: [
             {
-              key: 'appFont',
-              label: 'Font',
-              type: 'segmented',
-              value: 'sans',
+              key: "appFont",
+              label: "Font",
+              type: "segmented",
+              value: "sans",
               options: [
-                { value: 'sans', label: 'Sans' },
-                { value: 'serif', label: 'Serif' },
+                { value: "sans", label: "Sans" },
+                { value: "serif", label: "Serif" },
               ],
             },
           ],
-        }),
+        })
       );
-      const serif = [...el.querySelectorAll<HTMLButtonElement>('.seg button')].find(
-        (b) => b.textContent === 'Serif',
-      )!;
-      expect(serif.dataset.active).toBe('false');
-      void act(() => serif.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-      expect(props.onKnobCommit).toHaveBeenCalledWith('appFont', 'serif');
-      expect(serif.dataset.active).toBe('true');
+      const serif = [
+        ...el.querySelectorAll<HTMLButtonElement>(".seg button"),
+      ].find((b) => b.textContent === "Serif")!;
+      expect(serif.dataset.active).toBe("false");
+      void act(() =>
+        serif.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
+      expect(props.onKnobCommit).toHaveBeenCalledWith("appFont", "serif");
+      expect(serif.dataset.active).toBe("true");
     });
 
-    it('shows the empty appearance note when there are no knobs', () => {
+    it("shows the empty appearance note when there are no knobs", () => {
       const el = mount(makeProps());
       push(makeSnapshot({ knobs: null }));
-      expect(el.textContent).toContain('No appearance options');
+      expect(el.textContent).toContain("No appearance options");
     });
 
-    it('renders standing orders and fires run / toggle / open', () => {
+    it("renders standing orders and fires run / toggle / open", () => {
       const props = makeProps();
       const el = mount(props);
       push(
@@ -152,146 +165,167 @@ describe('screens/AppSettingsPanel', () => {
           automationsBadge: 1,
           orders: [
             {
-              id: 'a1',
-              ref: 'auto/a1',
-              name: 'Daily digest',
-              schedule: 'Every day at 8am',
-              prompt: 'Summarize the inbox.',
-              appsLabel: 'Apps: locker',
+              id: "a1",
+              ref: "auto/a1",
+              name: "Daily digest",
+              schedule: "Every day at 8am",
+              prompt: "Summarize the inbox.",
+              appsLabel: "Apps: locker",
               enabled: true,
-              run: { kind: 'idle' },
+              run: { kind: "idle" },
             },
           ],
-        }),
+        })
       );
-      clickTab(el, 'Automations');
-      expect(el.querySelector('.orderName')?.textContent).toBe('Daily digest');
-      expect(el.querySelector('.orderSchedule')?.textContent).toBe('Every day at 8am');
+      clickTab(el, "Automations");
+      expect(el.querySelector(".orderName")?.textContent).toBe("Daily digest");
+      expect(el.querySelector(".orderSchedule")?.textContent).toBe(
+        "Every day at 8am"
+      );
       void act(() =>
-        (el.querySelector('.orderRun') as HTMLButtonElement).dispatchEvent(
-          new MouseEvent('click', { bubbles: true }),
-        ),
+        (el.querySelector(".orderRun") as HTMLButtonElement).dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
-      expect(props.onRunOrder).toHaveBeenCalledWith('auto/a1');
-      act(() => (el.querySelector('.orderToggle input') as HTMLInputElement).click());
-      expect(props.onToggleOrder).toHaveBeenCalledWith('auto/a1', false);
+      expect(props.onRunOrder).toHaveBeenCalledWith("auto/a1");
+      act(() =>
+        (el.querySelector(".orderToggle input") as HTMLInputElement).click()
+      );
+      expect(props.onToggleOrder).toHaveBeenCalledWith("auto/a1", false);
       void act(() =>
-        (el.querySelector('.orderName') as HTMLButtonElement).dispatchEvent(
-          new MouseEvent('click', { bubbles: true }),
-        ),
+        (el.querySelector(".orderName") as HTMLButtonElement).dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
-      expect(props.onOpenOrder).toHaveBeenCalledWith('auto/a1');
+      expect(props.onOpenOrder).toHaveBeenCalledWith("auto/a1");
     });
 
-    it('reflects a running order and a done result chip', () => {
+    it("reflects a running order and a done result chip", () => {
       const el = mount(makeProps());
       push(
         makeSnapshot({
           orders: [
             {
-              id: 'a1',
-              ref: 'auto/a1',
-              name: 'Digest',
-              schedule: 'daily',
-              prompt: 'go',
-              appsLabel: 'No apps linked',
+              id: "a1",
+              ref: "auto/a1",
+              name: "Digest",
+              schedule: "daily",
+              prompt: "go",
+              appsLabel: "No apps linked",
               enabled: true,
-              run: { kind: 'running' },
+              run: { kind: "running" },
             },
           ],
-        }),
+        })
       );
-      clickTab(el, 'Automations');
-      const runBtn = el.querySelector('.orderRun') as HTMLButtonElement;
+      clickTab(el, "Automations");
+      const runBtn = el.querySelector(".orderRun") as HTMLButtonElement;
       expect(runBtn.disabled).toBe(true);
-      expect(runBtn.textContent).toBe('Running…');
+      expect(runBtn.textContent).toBe("Running…");
       push(
         makeSnapshot({
           orders: [
             {
-              id: 'a1',
-              ref: 'auto/a1',
-              name: 'Digest',
-              schedule: 'daily',
-              prompt: 'go',
-              appsLabel: 'No apps linked',
+              id: "a1",
+              ref: "auto/a1",
+              name: "Digest",
+              schedule: "daily",
+              prompt: "go",
+              appsLabel: "No apps linked",
               enabled: true,
-              run: { kind: 'done', ok: true, label: 'Ran in 1.2s' },
+              run: { kind: "done", ok: true, label: "Ran in 1.2s" },
             },
           ],
-        }),
+        })
       );
-      expect(el.querySelector('.orderResult')?.textContent).toBe('Ran in 1.2s');
+      expect(el.querySelector(".orderResult")?.textContent).toBe("Ran in 1.2s");
     });
 
-    it('lazily mounts the vanilla runs host on first expand', () => {
+    it("lazily mounts the vanilla runs host on first expand", () => {
       const props = makeProps();
       const el = mount(props);
       push(
         makeSnapshot({
           orders: [
             {
-              id: 'a1',
-              ref: 'auto/a1',
-              name: 'Digest',
-              schedule: 'daily',
-              prompt: 'go',
-              appsLabel: 'x',
+              id: "a1",
+              ref: "auto/a1",
+              name: "Digest",
+              schedule: "daily",
+              prompt: "go",
+              appsLabel: "x",
               enabled: true,
-              run: { kind: 'idle' },
+              run: { kind: "idle" },
             },
           ],
-        }),
+        })
       );
-      clickTab(el, 'Automations');
+      clickTab(el, "Automations");
       expect(props.onMountRuns).toHaveBeenCalledTimes(0);
       void act(() =>
-        (el.querySelector('.orderRunsToggle') as HTMLButtonElement).dispatchEvent(
-          new MouseEvent('click', { bubbles: true }),
-        ),
+        (
+          el.querySelector(".orderRunsToggle") as HTMLButtonElement
+        ).dispatchEvent(new MouseEvent("click", { bubbles: true }))
       );
-      expect(props.onMountRuns).toHaveBeenCalledExactlyOnceWith('auto/a1', expect.any(HTMLElement));
+      expect(props.onMountRuns).toHaveBeenCalledExactlyOnceWith(
+        "auto/a1",
+        expect.any(HTMLElement)
+      );
     });
 
-    it('injects the vault pane host when the Vault tab shows', () => {
+    it("injects the vault pane host when the Vault tab shows", () => {
       const props = makeProps();
       mount(props);
       push(makeSnapshot({ vaultVisible: true }));
-      expect(props.onMountVault).toHaveBeenCalledExactlyOnceWith(expect.any(HTMLElement));
+      expect(props.onMountVault).toHaveBeenCalledExactlyOnceWith(
+        expect.any(HTMLElement)
+      );
     });
 
-    it('arms then confirms delete; fires rename/share/reveal', () => {
+    it("arms then confirms delete; fires rename/share/reveal", () => {
       const props = makeProps();
       const el = mount(props);
       push(makeSnapshot());
-      clickTab(el, 'Manage');
-      const del = el.querySelector('.settingsDangerItem') as HTMLButtonElement;
-      void act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      clickTab(el, "Manage");
+      const del = el.querySelector(".settingsDangerItem") as HTMLButtonElement;
+      void act(() =>
+        del.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(props.onDelete).toHaveBeenCalledTimes(0);
-      expect(del.dataset.armed).toBe('true');
-      void act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(del.dataset.armed).toBe("true");
+      void act(() =>
+        del.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(props.onDelete).toHaveBeenCalledOnce();
 
       const items = [
-        ...el.querySelectorAll<HTMLButtonElement>('.settingsManage .settingsMenuItem'),
+        ...el.querySelectorAll<HTMLButtonElement>(
+          ".settingsManage .settingsMenuItem"
+        ),
       ];
-      void act(() => items[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      void act(() =>
+        items[0]!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(props.onRename).toHaveBeenCalledOnce();
-      void act(() => items[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      void act(() =>
+        items[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(props.onShare).toHaveBeenCalledOnce();
-      void act(() => items[2]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      void act(() =>
+        items[2]!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(props.onReveal).toHaveBeenCalledOnce();
     });
 
-    it('opens the Automations destination from the pane link', () => {
+    it("opens the Automations destination from the pane link", () => {
       const props = makeProps();
       const el = mount(props);
       push(makeSnapshot());
-      clickTab(el, 'Automations');
+      clickTab(el, "Automations");
       void act(() =>
-        (el.querySelector('.settingsPaneLink') as HTMLButtonElement).dispatchEvent(
-          new MouseEvent('click', { bubbles: true }),
-        ),
+        (
+          el.querySelector(".settingsPaneLink") as HTMLButtonElement
+        ).dispatchEvent(new MouseEvent("click", { bubbles: true }))
       );
       expect(props.onOpenAutomations).toHaveBeenCalledOnce();
     });

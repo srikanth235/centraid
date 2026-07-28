@@ -44,10 +44,10 @@ interface PdfFileLike {
 let runtimeLoad: Promise<PdfJsModule> | undefined;
 
 function resolveWorkerUrl(url: string): string {
-  const processLike = Reflect.get(globalThis, 'process') as
+  const processLike = Reflect.get(globalThis, "process") as
     | { versions?: { node?: unknown } }
     | undefined;
-  if (processLike?.versions?.node && url.startsWith('/@fs/')) {
+  if (processLike?.versions?.node && url.startsWith("/@fs/")) {
     return new URL(`file://${url.slice(4)}`).href;
   }
   return url;
@@ -55,10 +55,13 @@ function resolveWorkerUrl(url: string): string {
 
 function ensurePdfJsCompatibility(): void {
   const promise = Promise as PromiseConstructor & {
-    try?: <T>(fn: (...args: unknown[]) => T, ...args: unknown[]) => Promise<Awaited<T>>;
+    try?: <T>(
+      fn: (...args: unknown[]) => T,
+      ...args: unknown[]
+    ) => Promise<Awaited<T>>;
   };
   if (!promise.try) {
-    Object.defineProperty(promise, 'try', {
+    Object.defineProperty(promise, "try", {
       configurable: true,
       writable: true,
       value<T>(
@@ -66,7 +69,9 @@ function ensurePdfJsCompatibility(): void {
         fn: (...args: unknown[]) => T,
         ...args: unknown[]
       ): Promise<Awaited<T>> {
-        return new this((resolve) => resolve(fn(...args) as Awaited<T> | PromiseLike<Awaited<T>>));
+        return new this((resolve) =>
+          resolve(fn(...args) as Awaited<T> | PromiseLike<Awaited<T>>)
+        );
       },
     });
   }
@@ -77,7 +82,7 @@ export function loadPdfJs(): Promise<PdfJsModule> {
   ensurePdfJsCompatibility();
 
   if (!runtimeLoad) {
-    runtimeLoad = import('pdfjs-dist/legacy/build/pdf.mjs').then((module) => {
+    runtimeLoad = import("pdfjs-dist/legacy/build/pdf.mjs").then((module) => {
       const pdfjs = module as unknown as PdfJsModule;
       pdfjs.GlobalWorkerOptions.workerSrc = resolveWorkerUrl(pdfWorkerUrl);
       return pdfjs;
@@ -88,7 +93,7 @@ export function loadPdfJs(): Promise<PdfJsModule> {
 
 export async function extractPdfTextWithPdfJs(
   file: PdfFileLike,
-  pdfjs?: PdfJsModule,
+  pdfjs?: PdfJsModule
 ): Promise<string | null> {
   let resolvedPdfjs: PdfJsModule;
   try {
@@ -96,7 +101,8 @@ export async function extractPdfTextWithPdfJs(
   } catch {
     return null;
   }
-  if (!resolvedPdfjs.getDocument || typeof file?.arrayBuffer !== 'function') return null;
+  if (!resolvedPdfjs.getDocument || typeof file?.arrayBuffer !== "function")
+    return null;
   let doc: PdfDocument | undefined;
   try {
     const loading = resolvedPdfjs.getDocument({
@@ -119,10 +125,10 @@ export async function extractPdfTextWithPdfJs(
       const page = await document.getPage(pageNo);
       const content = await page.getTextContent();
       const text = (content.items ?? [])
-        .map((item) => (typeof item?.str === 'string' ? item.str : ''))
+        .map((item) => (typeof item?.str === "string" ? item.str : ""))
         .filter(Boolean)
-        .join(' ')
-        .replace(/\s+/gu, ' ')
+        .join(" ")
+        .replace(/\s+/gu, " ")
         .trim();
       if (!text) return extractNextPage(pageNo + 1);
       const remaining = MAX_TEXT_CHARS - chars;
@@ -132,7 +138,7 @@ export async function extractPdfTextWithPdfJs(
       return extractNextPage(pageNo + 1);
     };
     await extractNextPage(1);
-    const joined = pages.join('\n').trim();
+    const joined = pages.join("\n").trim();
     return joined || null;
   } catch {
     return null;

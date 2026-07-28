@@ -1,26 +1,26 @@
-import { type JSX, type ReactNode, useEffect, useRef, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
 
-import type { AppearancePrefs } from '../../../../app-shell-context.js';
-import BuilderChatPane from '../../../screens/BuilderChatPane.js';
-import { cx } from '../../../ui/cx.js';
-import { useShellActions } from '../../actions.js';
-import { iconSvg } from '../../iconSvg.js';
-import type { ShellNav } from '../../ShellApp.js';
-import ShellFrame from '../../ShellFrame.js';
-import { Store } from '../../store.js';
-import BuilderAutomationPane from './BuilderAutomationPane.js';
-import BuilderCloud from './BuilderCloud.js';
-import BuilderCode from './BuilderCode.js';
-import BuilderHistory from './BuilderHistory.js';
-import type { Tab } from './builderModel.js';
-import BuilderPreview from './BuilderPreview.js';
-import { type UseBuilderInput, useBuilder } from './useBuilder.js';
+import type { AppearancePrefs } from "../../../../app-shell-context.js";
+import BuilderChatPane from "../../../screens/BuilderChatPane.js";
+import { cx } from "../../../ui/cx.js";
+import { useShellActions } from "../../actions.js";
+import { iconSvg } from "../../iconSvg.js";
+import type { ShellNav } from "../../ShellApp.js";
+import ShellFrame from "../../ShellFrame.js";
+import { Store } from "../../store.js";
+import BuilderAutomationPane from "./BuilderAutomationPane.js";
+import BuilderCloud from "./BuilderCloud.js";
+import BuilderCode from "./BuilderCode.js";
+import BuilderHistory from "./BuilderHistory.js";
+import type { Tab } from "./builderModel.js";
+import BuilderPreview from "./BuilderPreview.js";
+import { type UseBuilderInput, useBuilder } from "./useBuilder.js";
 
-import buttonCss from '../../../ui/Button.module.css';
-import chrome from '../../chrome.module.css';
-import styles from './BuilderShell.module.css';
-import rightPaneCss from './rightPane.module.css';
+import buttonCss from "../../../ui/Button.module.css";
+import chrome from "../../chrome.module.css";
+import styles from "./BuilderShell.module.css";
+import rightPaneCss from "./rightPane.module.css";
 
 // Inline device/reload glyphs (mirror builder.ts) — not in the design-token set.
 const SmartphoneIcon =
@@ -33,28 +33,28 @@ const RefreshIcon =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>';
 
 const APP_TABS: [Tab, string, string][] = [
-  ['preview', 'Preview', 'Eye'],
-  ['code', 'Code', 'Code'],
-  ['cloud', 'Cloud', 'Bolt'],
+  ["preview", "Preview", "Eye"],
+  ["code", "Code", "Code"],
+  ["cloud", "Cloud", "Bolt"],
 ];
 const AUTO_TABS: [Tab, string, string][] = [
-  ['config', 'Config', 'Settings'],
-  ['flow', 'Flow', 'Activity'],
-  ['runs', 'Runs', 'History'],
-  ['code', 'Code', 'Code'],
+  ["config", "Config", "Settings"],
+  ["flow", "Flow", "Activity"],
+  ["runs", "Runs", "History"],
+  ["code", "Code", "Code"],
 ];
 
 function formatPreviewUrl(src: string): string {
   try {
     const u = new URL(src);
-    if (u.pathname.includes('/_draft/')) return 'Draft preview';
-    return u.host + (u.pathname === '/' ? '' : u.pathname);
+    if (u.pathname.includes("/_draft/")) return "Draft preview";
+    return u.host + (u.pathname === "/" ? "" : u.pathname);
   } catch {
     return src;
   }
 }
 
-const CHAT_PANE_PREF = 'builder.chatPaneOpen';
+const CHAT_PANE_PREF = "builder.chatPaneOpen";
 
 /** Character width for the rename input, clamped to the old lockup's range. */
 function nameSize(name: string): number {
@@ -66,11 +66,17 @@ function mountBuilderHistory(
   roots: Map<HTMLElement, Root>,
   appId: string,
   onRestored: (id: string) => void,
-  showToast: (message: string) => void,
+  showToast: (message: string) => void
 ): void {
   roots.get(host)?.unmount();
   const root = createRoot(host);
-  root.render(<BuilderHistory appId={appId} onRestored={onRestored} showToast={showToast} />);
+  root.render(
+    <BuilderHistory
+      appId={appId}
+      onRestored={onRestored}
+      showToast={showToast}
+    />
+  );
   roots.set(host, root);
 }
 
@@ -87,7 +93,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   const vm = useBuilder(builderInput);
 
   const [chatOpenPref, setChatOpenPref] = useState<boolean>(() =>
-    Store.get<boolean>(CHAT_PANE_PREF, true),
+    Store.get<boolean>(CHAT_PANE_PREF, true)
   );
   const [previewInfo, setPreviewInfo] = useState<{ src: string } | null>(null);
 
@@ -113,7 +119,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   }, []);
 
   // Chat pane only exists on Preview (app) or every automation tab; ⌘\ toggles.
-  const chatEligible = vm.isAutomation || vm.tab === 'preview';
+  const chatEligible = vm.isAutomation || vm.tab === "preview";
   const chatVisible = chatEligible && chatOpenPref;
   const toggleChat = (): void => {
     if (!chatEligible) return;
@@ -125,17 +131,23 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (!(e.metaKey || e.ctrlKey) || e.key !== '\\') return;
+      if (!(e.metaKey || e.ctrlKey) || e.key !== "\\") return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.isContentEditable)
+      )
+        return;
       e.preventDefault();
       toggleChat();
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [chatEligible, toggleChat]);
 
-  const finish = window.CentraidTokens.tileFinish(vm.projColor, 'gradient');
+  const finish = window.CentraidTokens.tileFinish(vm.projColor, "gradient");
 
   // ── Titlebar lead: identity lockup ──────────────────────────────────────
   const titlebarLead = (
@@ -148,7 +160,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           boxShadow: finish.boxShadow || undefined,
         }}
         dangerouslySetInnerHTML={{
-          __html: iconSvg(vm.projIcon || 'Sparkle', 11, 1.9),
+          __html: iconSvg(vm.projIcon || "Sparkle", 11, 1.9),
         }}
       />
       {/* The rename field is a text field, so it is a real <input> — a
@@ -174,10 +186,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           }}
           onBlur={(e) => vm.commitRename(e.currentTarget.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
               e.preventDefault();
               e.currentTarget.blur();
-            } else if (e.key === 'Escape') {
+            } else if (e.key === "Escape") {
               e.preventDefault();
               e.currentTarget.value = vm.projName;
               e.currentTarget.size = nameSize(vm.projName);
@@ -195,7 +207,11 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
 
   // ── Titlebar right: history, more, primary ──────────────────────────────
   const primaryGlyph =
-    vm.primaryKind === 'publish' ? 'Share' : vm.primaryKind === 'disable' ? 'Pause' : 'Play';
+    vm.primaryKind === "publish"
+      ? "Share"
+      : vm.primaryKind === "disable"
+        ? "Pause"
+        : "Play";
   const titlebarRight = (
     <span className={styles.tlBuilderActions}>
       {!vm.isAutomation && (
@@ -205,8 +221,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           aria-label="View history"
           title="View history"
           data-active={String(vm.historyToggleActive)}
-          onClick={() => vm.setChatView(vm.chatView === 'history' ? 'chat' : 'history')}
-          dangerouslySetInnerHTML={{ __html: iconSvg('History', 14) }}
+          onClick={() =>
+            vm.setChatView(vm.chatView === "history" ? "chat" : "history")
+          }
+          dangerouslySetInnerHTML={{ __html: iconSvg("History", 14) }}
         />
       )}
       <button
@@ -214,7 +232,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
         className={chrome.tbBtn}
         aria-label="More app actions"
         title="More"
-        dangerouslySetInnerHTML={{ __html: iconSvg('MoreHoriz', 14) }}
+        dangerouslySetInnerHTML={{ __html: iconSvg("MoreHoriz", 14) }}
       />
       <button
         type="button"
@@ -236,9 +254,9 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     <div className={styles.device}>
       {(
         [
-          ['mobile', SmartphoneIcon],
-          ['tablet', TabletIcon],
-          ['desktop', MonitorIcon],
+          ["mobile", SmartphoneIcon],
+          ["tablet", TabletIcon],
+          ["desktop", MonitorIcon],
         ] as const
       ).map(([d, glyph]) => (
         <button
@@ -256,16 +274,19 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   );
   const urlPill = (
     <div className={styles.url} title={previewInfo?.src}>
-      <span className={styles.urlDot} data-state={previewInfo ? 'local' : 'building'} />
+      <span
+        className={styles.urlDot}
+        data-state={previewInfo ? "local" : "building"}
+      />
       <span className={styles.urlText}>
-        {previewInfo ? formatPreviewUrl(previewInfo.src) : 'Building…'}
+        {previewInfo ? formatPreviewUrl(previewInfo.src) : "Building…"}
       </span>
       <button
         type="button"
         className={styles.urlRefresh}
         aria-label="Reload preview"
         title="Reload preview"
-        onClick={() => vm.setTab('preview')}
+        onClick={() => vm.setTab("preview")}
         dangerouslySetInnerHTML={{ __html: RefreshIcon }}
       />
     </div>
@@ -281,8 +302,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           className={styles.toolbarShare}
           aria-label="Open in new tab"
           title="Open in new tab"
-          onClick={() => previewInfo && window.open(previewInfo.src, '_blank', 'noopener')}
-          dangerouslySetInnerHTML={{ __html: iconSvg('Share', 12) }}
+          onClick={() =>
+            previewInfo && window.open(previewInfo.src, "_blank", "noopener")
+          }
+          dangerouslySetInnerHTML={{ __html: iconSvg("Share", 12) }}
         />
       )}
       <span className={styles.tabsPill}>
@@ -307,15 +330,17 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   if (vm.isAutomation) {
     pane = (
       <BuilderAutomationPane
-        tab={vm.tab as 'config' | 'flow' | 'runs' | 'code'}
-        appId={vm.automationRow?.ref ?? vm.appId ?? ''}
+        tab={vm.tab as "config" | "flow" | "runs" | "code"}
+        appId={vm.automationRow?.ref ?? vm.appId ?? ""}
         automationRow={vm.automationRow}
         flashSections={vm.flashSections}
       />
     );
-  } else if (vm.tab === 'code') {
-    pane = vm.appId ? <BuilderCode appId={vm.appId} reloadNonce={vm.reloadNonce} /> : null;
-  } else if (vm.tab === 'cloud') {
+  } else if (vm.tab === "code") {
+    pane = vm.appId ? (
+      <BuilderCode appId={vm.appId} reloadNonce={vm.reloadNonce} />
+    ) : null;
+  } else if (vm.tab === "cloud") {
     pane = vm.appId ? <BuilderCloud appId={vm.appId} /> : null;
   } else {
     pane = (
@@ -331,7 +356,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
 
   const rightPaneClass = cx(
     rightPaneCss.pane,
-    !vm.isAutomation && vm.tab === 'preview' && vm.previewDevice !== 'desktop' && styles.hasPhone,
+    !vm.isAutomation &&
+      vm.tab === "preview" &&
+      vm.previewDevice !== "desktop" &&
+      styles.hasPhone
   );
 
   return (
@@ -344,14 +372,17 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       onBack={() => nav.back()}
       onForward={() => nav.forward()}
       showNewChat
-      onNewChat={() => nav.navigate({ kind: 'home' })}
+      onNewChat={() => nav.navigate({ kind: "home" })}
       showChatToggle
       chatPaneOpen={chatVisible}
       onToggleChat={toggleChat}
       titlebarLead={titlebarLead}
       titlebarRight={titlebarRight}
     >
-      <div className={styles.builder} data-chat={chatVisible ? 'open' : 'closed'}>
+      <div
+        className={styles.builder}
+        data-chat={chatVisible ? "open" : "closed"}
+      >
         <div className={styles.builderBody} data-testid="builder-body">
           <div className={styles.chatPane}>
             <BuilderChatPane
@@ -376,7 +407,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
                     historyRoots.current,
                     vm.appId,
                     vm.onRestored,
-                    showToast,
+                    showToast
                   );
                 }
               }}
@@ -384,7 +415,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           </div>
           <div className={rightPaneClass}>
             {rbToolbar}
-            <div className={styles.rightPaneContent} data-testid="builder-right-pane">
+            <div
+              className={styles.rightPaneContent}
+              data-testid="builder-right-pane"
+            >
               {pane}
             </div>
           </div>

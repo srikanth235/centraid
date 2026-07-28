@@ -16,14 +16,18 @@
  * Never bump version only to fix a failed build — rebuild / retry tag instead.
  */
 
-import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import path from 'node:path';
+import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
 
-import { buildSurfaceMatrix, defaultShipSurfaceIds, resolveShipSurfaces } from './surfaces.mjs';
-import { runSyncVersions } from './sync-versions.mjs';
+import {
+  buildSurfaceMatrix,
+  defaultShipSurfaceIds,
+  resolveShipSurfaces,
+} from "./surfaces.mjs";
+import { runSyncVersions } from "./sync-versions.mjs";
 
-const root = path.resolve(import.meta.dirname, '../..');
+const root = path.resolve(import.meta.dirname, "../..");
 const args = process.argv.slice(2);
 let version = null;
 let issue = null;
@@ -34,16 +38,16 @@ let betaN = 1;
 /** @type {string[] | null} */
 let shipIds = null;
 for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--version') version = args[++i];
-  else if (args[i] === '--issue') issue = args[++i];
-  else if (args[i] === '--dry-run') dryRun = true;
-  else if (args[i] === '--beta') beta = true;
-  else if (args[i] === '--beta-n') betaN = Number(args[++i]);
-  else if (args[i] === '--push') doPush = true;
-  else if (args[i] === '--surfaces') {
-    const raw = args[++i] ?? '';
+  if (args[i] === "--version") version = args[++i];
+  else if (args[i] === "--issue") issue = args[++i];
+  else if (args[i] === "--dry-run") dryRun = true;
+  else if (args[i] === "--beta") beta = true;
+  else if (args[i] === "--beta-n") betaN = Number(args[++i]);
+  else if (args[i] === "--push") doPush = true;
+  else if (args[i] === "--surfaces") {
+    const raw = args[++i] ?? "";
     shipIds = raw
-      .split(',')
+      .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
   }
@@ -51,12 +55,14 @@ for (let i = 0; i < args.length; i++) {
 
 if (!version || !/^\d+\.\d+\.\d+$/u.test(version)) {
   console.error(
-    'usage: node scripts/release/publish.mjs --version X.Y.Z --issue N [--surfaces a,b] [--beta] [--dry-run] [--push]',
+    "usage: node scripts/release/publish.mjs --version X.Y.Z --issue N [--surfaces a,b] [--beta] [--dry-run] [--push]"
   );
   process.exit(2);
 }
-if (!issue || !/^\d+$/u.test(issue) || issue === '0') {
-  console.error('publish requires --issue N (real GitHub issue; #0 is forbidden)');
+if (!issue || !/^\d+$/u.test(issue) || issue === "0") {
+  console.error(
+    "publish requires --issue N (real GitHub issue; #0 is forbidden)"
+  );
   process.exit(2);
 }
 
@@ -67,20 +73,22 @@ if (!shipResolved.ok) {
   process.exit(2);
 }
 const continuousOnly = shipResolved.surfaces.every(
-  (s) => s.cadence === 'continuous' || s.cadence === 'sideline',
+  (s) => s.cadence === "continuous" || s.cadence === "sideline"
 );
 if (continuousOnly && resolvedShip.length > 0) {
-  const allContinuous = shipResolved.surfaces.every((s) => s.cadence === 'continuous');
+  const allContinuous = shipResolved.surfaces.every(
+    (s) => s.cadence === "continuous"
+  );
   if (allContinuous) {
     console.error(
-      'refusing publish that only lists continuous surfaces (web/docs/oauth-worker) — deploy from main, not v* tags',
+      "refusing publish that only lists continuous surfaces (web/docs/oauth-worker) — deploy from main, not v* tags"
     );
     process.exit(2);
   }
 }
 
-const rootPkgPath = path.join(root, 'package.json');
-const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf8'));
+const rootPkgPath = path.join(root, "package.json");
+const rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
 const prev = rootPkg.version;
 const tag = beta ? `v${version}-beta.${betaN}` : `v${version}`;
 const shipManifest = {
@@ -90,45 +98,48 @@ const shipManifest = {
   surfaces: resolvedShip,
   matrix: buildSurfaceMatrix({ shipIds: resolvedShip }),
   createdAt: new Date().toISOString(),
-  note: 'Monorepo stamps all packages; ship set is intent for which workflows must go green.',
+  note: "Monorepo stamps all packages; ship set is intent for which workflows must go green.",
 };
 
 function foldChangelog() {
-  const clPath = path.join(root, 'CHANGELOG.md');
+  const clPath = path.join(root, "CHANGELOG.md");
   if (!existsSync(clPath)) return;
-  let text = readFileSync(clPath, 'utf8');
+  let text = readFileSync(clPath, "utf8");
   const date = new Date().toISOString().slice(0, 10);
-  if (!text.includes('## [Unreleased]')) return;
-  text = text.replace('## [Unreleased]', `## [Unreleased]\n\n## [${version}] - ${date}`);
+  if (!text.includes("## [Unreleased]")) return;
+  text = text.replace(
+    "## [Unreleased]",
+    `## [Unreleased]\n\n## [${version}] - ${date}`
+  );
   if (!dryRun) writeFileSync(clPath, text);
 }
 
 function extractReleaseBody() {
-  const clPath = path.join(root, 'CHANGELOG.md');
+  const clPath = path.join(root, "CHANGELOG.md");
   if (!existsSync(clPath)) return `Centraid ${version}`;
-  const text = readFileSync(clPath, 'utf8');
+  const text = readFileSync(clPath, "utf8");
   const re = new RegExp(
-    `^##\\s+\\[${version.replace(/\./gu, '\\.')}\\][^\\n]*\\n(?<body>[\\s\\S]*?)(?=^##\\s+|$)`,
-    'mu',
+    `^##\\s+\\[${version.replace(/\./gu, "\\.")}\\][^\\n]*\\n(?<body>[\\s\\S]*?)(?=^##\\s+|$)`,
+    "mu"
   );
   const m = text.match(re);
-  return (m?.groups?.body ?? '').trim() || `Centraid ${version}`;
+  return (m?.groups?.body ?? "").trim() || `Centraid ${version}`;
 }
 
 console.error(
-  `publish ${prev} → ${version} tag ${tag} (#${issue}) surfaces=[${resolvedShip.join(',')}]${dryRun ? ' (dry-run)' : ''}`,
+  `publish ${prev} → ${version} tag ${tag} (#${issue}) surfaces=[${resolvedShip.join(",")}]${dryRun ? " (dry-run)" : ""}`
 );
 
 const syncReport = runSyncVersions({ rootDir: root, version, dryRun });
 foldChangelog();
 const body = extractReleaseBody();
-const bodyPath = path.join(root, 'artifacts', 'release-body.md');
-const shipPath = path.join(root, 'artifacts', 'release-ship.json');
+const bodyPath = path.join(root, "artifacts", "release-body.md");
+const shipPath = path.join(root, "artifacts", "release-ship.json");
 if (!dryRun) {
   try {
     mkdirSync(path.dirname(bodyPath), { recursive: true });
-    writeFileSync(bodyPath, body + '\n');
-    writeFileSync(shipPath, JSON.stringify(shipManifest, null, 2) + '\n');
+    writeFileSync(bodyPath, body + "\n");
+    writeFileSync(shipPath, JSON.stringify(shipManifest, null, 2) + "\n");
   } catch {
     /* optional */
   }
@@ -147,48 +158,48 @@ if (dryRun) {
         syncReport,
         bodyPath,
         bodyPreview: body.slice(0, 200),
-        mobileHint: resolvedShip.includes('mobile')
-          ? 'gh workflow run release-mobile.yml -f profile=preview -f platform=all -f submit=false'
+        mobileHint: resolvedShip.includes("mobile")
+          ? "gh workflow run release-mobile.yml -f profile=preview -f platform=all -f submit=false"
           : undefined,
       },
       null,
-      2,
-    ),
+      2
+    )
   );
   process.exit(0);
 }
 
 const commitMsg = `chore(release): ${version} (#${issue})`;
 execSync(
-  'git add package.json packages/*/package.json apps/*/package.json CHANGELOG.md ' +
-    'apps/mobile/android/app/build.gradle ' +
-    'apps/mobile/ios/Centraid.xcodeproj/project.pbxproj ' +
-    'apps/mobile/ios/Centraid/Info.plist ' +
-    'apps/mobile/ios/ShareExtension/ShareExtension-Info.plist 2>/dev/null || true',
-  { cwd: root, stdio: 'inherit', shell: true },
+  "git add package.json packages/*/package.json apps/*/package.json CHANGELOG.md " +
+    "apps/mobile/android/app/build.gradle " +
+    "apps/mobile/ios/Centraid.xcodeproj/project.pbxproj " +
+    "apps/mobile/ios/Centraid/Info.plist " +
+    "apps/mobile/ios/ShareExtension/ShareExtension-Info.plist 2>/dev/null || true",
+  { cwd: root, stdio: "inherit", shell: true }
 );
 execSync(`git commit -m ${JSON.stringify(commitMsg)}`, {
   cwd: root,
-  stdio: 'inherit',
+  stdio: "inherit",
 });
 execSync(`git tag -a ${tag} -m "Centraid ${tag}"`, {
   cwd: root,
-  stdio: 'inherit',
+  stdio: "inherit",
 });
 
 if (doPush) {
-  execSync('git push origin HEAD', { cwd: root, stdio: 'inherit' });
-  execSync(`git push origin ${tag}`, { cwd: root, stdio: 'inherit' });
+  execSync("git push origin HEAD", { cwd: root, stdio: "inherit" });
+  execSync(`git push origin ${tag}`, { cwd: root, stdio: "inherit" });
 } else {
   console.error(
-    `tag ${tag} created locally. Push with: git push origin HEAD && git push origin ${tag}`,
+    `tag ${tag} created locally. Push with: git push origin HEAD && git push origin ${tag}`
   );
 }
 
-if (resolvedShip.includes('mobile')) {
+if (resolvedShip.includes("mobile")) {
   console.error(
-    'mobile is in the ship set — after tag push, dispatch:\n' +
-      '  gh workflow run release-mobile.yml -f profile=preview -f platform=all -f submit=false',
+    "mobile is in the ship set — after tag push, dispatch:\n" +
+      "  gh workflow run release-mobile.yml -f profile=preview -f platform=all -f submit=false"
   );
 }
 
@@ -204,6 +215,6 @@ console.log(
       build: syncReport.build,
     },
     null,
-    2,
-  ),
+    2
+  )
 );

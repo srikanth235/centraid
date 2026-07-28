@@ -1,11 +1,14 @@
-import { type JSX, type ReactNode, useState } from 'react';
+import { type JSX, type ReactNode, useState } from "react";
 
-import type { AppearancePrefs, ShellRoute } from '../../../app-shell-context.js';
-import { useShellActions } from '../actions.js';
-import type { ShellNav } from '../ShellApp.js';
-import { useMemberScopes } from '../useMemberScopes.js';
-import BuilderShell from './builder/BuilderShell.js';
-import BuilderTargetGate from './BuilderTargetGate.js';
+import type {
+  AppearancePrefs,
+  ShellRoute,
+} from "../../../app-shell-context.js";
+import { useShellActions } from "../actions.js";
+import type { ShellNav } from "../ShellApp.js";
+import { useMemberScopes } from "../useMemberScopes.js";
+import BuilderShell from "./builder/BuilderShell.js";
+import BuilderTargetGate from "./BuilderTargetGate.js";
 
 // React-owned builder route — the full-bleed conversational app/automation
 // builder (issue #325, R5-B). Replaces the vanilla `window.openBuilder`
@@ -16,7 +19,10 @@ import BuilderTargetGate from './BuilderTargetGate.js';
 // builder's inputs (home-pin + meta-change callbacks). Handles both `builder`
 // and `automation-builder`.
 export interface BuilderRouteProps {
-  route: Extract<ShellRoute, { kind: 'builder' } | { kind: 'automation-builder' }>;
+  route: Extract<
+    ShellRoute,
+    { kind: "builder" } | { kind: "automation-builder" }
+  >;
   nav: ShellNav;
   userApps: readonly UserAppMeta[];
   setUserApps: (next: UserAppMeta[]) => void;
@@ -48,7 +54,10 @@ export default function BuilderRoute({
     versionId?: string;
   }): void => {
     const now = new Date().toISOString();
-    const desc = input.prompt && input.prompt.length <= 60 ? input.prompt : 'Built with Centraid.';
+    const desc =
+      input.prompt && input.prompt.length <= 60
+        ? input.prompt
+        : "Built with Centraid.";
     const existing = userApps.find((a) => a.id === input.appId);
     if (existing) {
       setUserApps(
@@ -60,27 +69,31 @@ export default function BuilderRoute({
                 centraidAppId: input.appId,
                 updatedAt: now,
               }
-            : a,
-        ),
+            : a
+        )
       );
       showToast(`Updated "${input.name || existing.name}"`);
       return;
     }
     const meta = {
-      color: '#7C5BD9',
-      colorKey: 'violet',
+      color: "#7C5BD9",
+      colorKey: "violet",
       createdAt: now,
       desc,
-      iconKey: 'Sparkle',
+      iconKey: "Sparkle",
       id: input.appId,
       centraidAppId: input.appId,
-      name: input.name || 'New app',
+      name: input.name || "New app",
       updatedAt: now,
     } as unknown as UserAppMeta;
     setUserApps([meta, ...userApps]);
   };
 
-  const onMetaChange = (input: { appId: string; name?: string; description?: string }): void => {
+  const onMetaChange = (input: {
+    appId: string;
+    name?: string;
+    description?: string;
+  }): void => {
     setUserApps(
       userApps.map((a) =>
         a.centraidAppId === input.appId || a.id === input.appId
@@ -89,17 +102,18 @@ export default function BuilderRoute({
               ...(input.name === undefined ? {} : { name: input.name }),
               ...(input.description === undefined
                 ? {}
-                : { desc: input.description || 'Built with Centraid.' }),
+                : { desc: input.description || "Built with Centraid." }),
             }
-          : a,
-      ),
+          : a
+      )
     );
   };
 
-  const automation = route.kind === 'automation-builder';
+  const automation = route.kind === "automation-builder";
   // A fresh from-a-prompt build is the only flow that creates an app; editing
   // an existing one already knows where it lives.
-  const isNewBuild = !automation && !route.appContext && Boolean(route.initialPrompt);
+  const isNewBuild =
+    !automation && !route.appContext && Boolean(route.initialPrompt);
   const writableScopes = memberScopes.scopes.filter((s) => s.canWrite);
   const targetScopeId = chosenScope ?? memberScopes.primary?.id;
   if (isNewBuild && !chosenScope && writableScopes.length > 1) {
@@ -108,19 +122,23 @@ export default function BuilderRoute({
         scopes={memberScopes.scopes}
         defaultScopeId={memberScopes.primary?.id}
         onConfirm={setChosenScope}
-        onCancel={() => nav.replace({ kind: 'home' })}
+        onCancel={() => nav.replace({ kind: "home" })}
       />
     );
   }
 
   return (
     <BuilderShell
-      key={automation ? `auto:${route.automationId}` : `app:${route.appContext?.id ?? 'new'}`}
+      key={
+        automation
+          ? `auto:${route.automationId}`
+          : `app:${route.appContext?.id ?? "new"}`
+      }
       nav={nav}
       renderSidebar={renderSidebar}
       prefs={prefs}
       onToggleSidebar={onToggleSidebar}
-      appKind={automation ? 'automation' : 'app'}
+      appKind={automation ? "automation" : "app"}
       showToast={showToast}
       onAddToHome={onAddToHome}
       onMetaChange={onMetaChange}
@@ -149,7 +167,9 @@ export default function BuilderRoute({
                   initialAppId: route.appContext.id,
                 }
               : {}),
-            ...(route.initialPrompt ? { initialPrompt: route.initialPrompt } : {}),
+            ...(route.initialPrompt
+              ? { initialPrompt: route.initialPrompt }
+              : {}),
           })}
     />
   );

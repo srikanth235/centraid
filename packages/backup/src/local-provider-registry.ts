@@ -1,9 +1,13 @@
-import type { ProviderAuditEvent, ProviderPolicy, SnapshotRow } from './provider.js';
+import type {
+  ProviderAuditEvent,
+  ProviderPolicy,
+  SnapshotRow,
+} from "./provider.js";
 
 export interface RegistryTarget {
   id: string;
   name: string;
-  status: 'active' | 'deleted';
+  status: "active" | "deleted";
   currentGeneration: number;
   createdAt: string;
   deletedAt: string | null;

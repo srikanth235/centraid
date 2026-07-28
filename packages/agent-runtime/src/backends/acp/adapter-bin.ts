@@ -21,9 +21,9 @@
  * strips off `PATH`.
  */
 
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'node:path';
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 const require_ = createRequire(import.meta.url);
 
@@ -46,15 +46,17 @@ export function resolveAdapterEntry(packageName: string): string {
     manifestPath = require_.resolve(`${packageName}/package.json`);
   } catch {
     throw new Error(
-      `ACP adapter "${packageName}" is not installed — reinstall @centraid/agent-runtime's dependencies.`,
+      `ACP adapter "${packageName}" is not installed — reinstall @centraid/agent-runtime's dependencies.`
     );
   }
 
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
     bin?: string | Record<string, string>;
   };
   const rel =
-    typeof manifest.bin === 'string' ? manifest.bin : Object.values(manifest.bin ?? {})[0];
+    typeof manifest.bin === "string"
+      ? manifest.bin
+      : Object.values(manifest.bin ?? {})[0];
   if (!rel) {
     throw new Error(`ACP adapter "${packageName}" declares no bin entry.`);
   }

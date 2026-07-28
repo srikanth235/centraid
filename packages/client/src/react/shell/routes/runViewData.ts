@@ -9,12 +9,16 @@ import {
   prettyJson,
   runTriggerLabel,
   triggersSummary,
-} from '../../../app-format.js';
-import { glyphForId, hueForId } from '../../../automation-identity.js';
-import type { AuStatusKind, RunLogRowDTO, RunViewSnapshot } from '../../screen-contracts.js';
-import { automationTurnMessages } from './automationTurnMessages.js';
+} from "../../../app-format.js";
+import { glyphForId, hueForId } from "../../../automation-identity.js";
+import type {
+  AuStatusKind,
+  RunLogRowDTO,
+  RunViewSnapshot,
+} from "../../screen-contracts.js";
+import { automationTurnMessages } from "./automationTurnMessages.js";
 
-export { automationTurnMessages } from './automationTurnMessages.js';
+export { automationTurnMessages } from "./automationTurnMessages.js";
 
 export function buildRunSnapshot(
   // `null` when the run's parent automation was deleted — the Automations
@@ -23,7 +27,7 @@ export function buildRunSnapshot(
   row: CentraidAutomationRow | null,
   run: CentraidAutomationTurnRecord,
   nodes: readonly CentraidAutomationItem[],
-  liveText: Map<number, string>,
+  liveText: Map<number, string>
 ): RunViewSnapshot {
   const deleted = row === null;
   // Matches the Automations overview's orphan-run label (InsightsRoute does
@@ -36,88 +40,103 @@ export function buildRunSnapshot(
   // honest label is 'Auto' — never the brand name 'Centraid', which is the
   // assistant/actor, not a model.
   const rawModel = row === null ? undefined : row.manifest.requires.model;
-  const model = rawModel ? (rawModel.split('/').pop() ?? rawModel) : 'Auto';
+  const model = rawModel ? (rawModel.split("/").pop() ?? rawModel) : "Auto";
   const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
   // Deterministic / zero-usage runs (fixed output, no model step) have no
   // meaningful tokens/cost/steps — the Usage card collapses those rows to a
   // single caption instead of showing a wall of dashes/zeros.
-  const hasUsage = tokens > 0 || (run.totalCostUsd ?? 0) > 0 || (run.stepCount ?? nodes.length) > 0;
+  const hasUsage =
+    tokens > 0 ||
+    (run.totalCostUsd ?? 0) > 0 ||
+    (run.stepCount ?? nodes.length) > 0;
   const duration =
-    run.endedAt === undefined ? 'running' : formatDuration(run.endedAt - run.startedAt);
-  const statusKind: AuStatusKind = inFlight ? 'running' : run.ok ? 'success' : 'failed';
-  const statusLabel = inFlight ? 'Running' : run.ok ? 'Completed' : 'Failed';
+    run.endedAt === undefined
+      ? "running"
+      : formatDuration(run.endedAt - run.startedAt);
+  const statusKind: AuStatusKind = inFlight
+    ? "running"
+    : run.ok
+      ? "success"
+      : "failed";
+  const statusLabel = inFlight ? "Running" : run.ok ? "Completed" : "Failed";
   const hasWebhook =
     row !== null &&
-    row.triggers.some((t) => t.kind === 'webhook') &&
-    !row.triggers.some((t) => t.kind === 'cron');
+    row.triggers.some((t) => t.kind === "webhook") &&
+    !row.triggers.some((t) => t.kind === "cron");
   // Deleted automation: prefer the run's own last-known name over the raw
   // ref (matches the Automations overview's orphan-run fallback).
-  const crumbName = row === null ? (run.automationName ?? fallbackRef) : row.name;
+  const crumbName =
+    row === null ? (run.automationName ?? fallbackRef) : row.name;
   const promptInstr =
     row === null
-      ? 'This automation was deleted. Its instructions are no longer available.'
-      : row.manifest.prompt || 'No instructions.';
+      ? "This automation was deleted. Its instructions are no longer available."
+      : row.manifest.prompt || "No instructions.";
   const triggersSummaryText =
-    row === null ? 'Trigger configuration unavailable' : triggersSummary(row.triggers);
+    row === null
+      ? "Trigger configuration unavailable"
+      : triggersSummary(row.triggers);
   const startedLabel = ((): string => {
     const d = new Date(run.startedAt);
     const nowMs = Date.now();
     const ds = d.toDateString();
     const day =
       ds === new Date(nowMs).toDateString()
-        ? 'Today'
+        ? "Today"
         : ds === new Date(nowMs - 86_400_000).toDateString()
-          ? 'Yesterday'
+          ? "Yesterday"
           : d.toLocaleDateString(undefined, {
-              weekday: 'short',
-              day: 'numeric',
-              month: 'short',
+              weekday: "short",
+              day: "numeric",
+              month: "short",
             });
-    return `${day}, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`;
+    return `${day}, ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
   })();
 
-  const origin = run.triggerOrigin ?? (run.triggerKind === 'manual' ? 'manual' : 'cron');
+  const origin =
+    run.triggerOrigin ?? (run.triggerKind === "manual" ? "manual" : "cron");
   const trig =
-    origin === 'webhook'
-      ? { icon: 'Webhook', label: 'Webhook' }
-      : origin === 'manual'
-        ? { icon: 'Play', label: 'Manual' }
-        : origin === 'data'
-          ? { icon: 'Clock', label: 'Data' }
-          : origin === 'condition'
-            ? { icon: 'Clock', label: 'Condition' }
-            : { icon: 'Clock', label: 'Cron' };
+    origin === "webhook"
+      ? { icon: "Webhook", label: "Webhook" }
+      : origin === "manual"
+        ? { icon: "Play", label: "Manual" }
+        : origin === "data"
+          ? { icon: "Clock", label: "Data" }
+          : origin === "condition"
+            ? { icon: "Clock", label: "Condition" }
+            : { icon: "Clock", label: "Cron" };
   const start = run.startedAt;
   const elapsed = (ms: number): string => {
     const d = Math.max(0, ms - start);
-    const pad = (n: number): string => String(n).padStart(2, '0');
+    const pad = (n: number): string => String(n).padStart(2, "0");
     return `${pad(Math.floor(d / 60_000))}:${pad(Math.floor((d % 60_000) / 1000))}.${Math.floor((d % 1000) / 100)}`;
   };
   const startedBy =
-    origin === 'webhook'
-      ? 'Run started by webhook'
-      : origin === 'manual'
-        ? 'Run started manually'
-        : origin === 'data'
-          ? 'Run started by data trigger'
-          : origin === 'condition'
-            ? 'Run started by condition trigger'
-            : 'Run started by cron';
+    origin === "webhook"
+      ? "Run started by webhook"
+      : origin === "manual"
+        ? "Run started manually"
+        : origin === "data"
+          ? "Run started by data trigger"
+          : origin === "condition"
+            ? "Run started by condition trigger"
+            : "Run started by cron";
   const logRows: RunLogRowDTO[] = [
     {
       label: startedBy,
       sub: triggersSummaryText,
       time: elapsed(run.startedAt),
-      tone: 'trigger',
+      tone: "trigger",
     },
     ...nodes.map((node): RunLogRowDTO => {
       const status = nodeRunStatus(node);
-      const isAgent = node.kind === 'agent';
+      const isAgent = node.kind === "agent";
       return {
         error: node.error,
-        input: !isAgent && node.argsJson ? prettyJson(node.argsJson) : undefined,
+        input:
+          !isAgent && node.argsJson ? prettyJson(node.argsJson) : undefined,
         label: node.name ?? node.model ?? node.kind,
-        output: !isAgent && node.outputJson ? prettyJson(node.outputJson) : undefined,
+        output:
+          !isAgent && node.outputJson ? prettyJson(node.outputJson) : undefined,
         response: isAgent
           ? (liveText.get(node.ordinal) ??
             (node.outputJson ? prettyJson(node.outputJson) : undefined))
@@ -131,11 +150,13 @@ export function buildRunSnapshot(
       ? []
       : [
           {
-            error: run.ok ? undefined : (run.error ?? 'No error detail was recorded.'),
-            label: run.ok ? 'Run completed' : 'Run failed',
+            error: run.ok
+              ? undefined
+              : (run.error ?? "No error detail was recorded."),
+            label: run.ok ? "Run completed" : "Run failed",
             sub: run.ok ? (run.summary ?? undefined) : undefined,
             time: elapsed(run.endedAt ?? Date.now()),
-            tone: run.ok ? 'ok' : 'fail',
+            tone: run.ok ? "ok" : "fail",
           } as RunLogRowDTO,
         ]),
   ];
@@ -144,21 +165,24 @@ export function buildRunSnapshot(
     crumbName,
     deleted,
     final: inFlight
-      ? { kind: 'pending', model }
+      ? { kind: "pending", model }
       : run.ok
         ? {
-            kind: 'ok',
+            kind: "ok",
             model,
             output: run.outputJson ? prettyJson(run.outputJson) : undefined,
             summary: run.summary ?? undefined,
           }
-        : { error: run.error ?? undefined, kind: 'fail', model },
+        : { error: run.error ?? undefined, kind: "fail", model },
     glyphIcon: glyphForId(identityId),
     headerName: crumbName,
     hue: hueForId(identityId),
     inFlight,
     logKpi: {
-      cost: run.totalCostUsd === undefined ? '—' : `$${run.totalCostUsd.toFixed(3)}`,
+      cost:
+        run.totalCostUsd === undefined
+          ? "—"
+          : `$${run.totalCostUsd.toFixed(3)}`,
       duration,
       tokens: fmtTokens(tokens),
       triggerIcon: trig.icon,
@@ -169,7 +193,7 @@ export function buildRunSnapshot(
     messages: automationTurnMessages(run, nodes, liveText),
     promptInstr,
     side: {
-      cost: run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—',
+      cost: run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : "—",
       duration,
       hasUsage,
       model,
@@ -184,7 +208,7 @@ export function buildRunSnapshot(
     startedLabel,
     statusKind,
     statusLabel,
-    triggerHeroIcon: hasWebhook ? 'Webhook' : 'Clock',
+    triggerHeroIcon: hasWebhook ? "Webhook" : "Clock",
     triggerLabel: runTriggerLabel(run),
     triggersSummary: triggersSummaryText,
   };

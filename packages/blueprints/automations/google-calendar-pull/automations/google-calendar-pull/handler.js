@@ -8,8 +8,8 @@
  * increment. A 410 GONE (expired token) restarts the walk honestly.
  */
 
-const API = 'https://www.googleapis.com/calendar/v3';
-const AUTH = { authorization: 'Bearer {{connection:access_token}}' };
+const API = "https://www.googleapis.com/calendar/v3";
+const AUTH = { authorization: "Bearer {{connection:access_token}}" };
 /** Pages per fire on the initial walk (250 events each). */
 const MAX_PAGES_PER_RUN = 4;
 
@@ -18,7 +18,7 @@ async function api(ctx, path) {
   if (res.status === 410) return { gone: true };
   if (res.status !== 200) {
     throw new Error(
-      `calendar ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
+      `calendar ${path.split("?")[0]} answered ${res.status}: ${res.text.slice(0, 200)}`
     );
   }
   return JSON.parse(res.text);
@@ -28,43 +28,45 @@ function toEventRow(event) {
   const start = event.start || {};
   const end = event.end || {};
   return {
-    entity_type: 'core.event',
+    entity_type: "core.event",
     external_id: `gcal:${event.id}`,
     payload: {
       uid: event.iCalUID || `gcal:${event.id}`,
-      summary: event.summary || '(untitled)',
+      summary: event.summary || "(untitled)",
       description: event.description || null,
       dtstart: start.dateTime || start.date || null,
       dtend: end.dateTime || end.date || null,
       startTz: start.timeZone || null,
-      rrule: Array.isArray(event.recurrence) ? event.recurrence.join('\n') : null,
-      status: event.status || 'confirmed',
+      rrule: Array.isArray(event.recurrence)
+        ? event.recurrence.join("\n")
+        : null,
+      status: event.status || "confirmed",
     },
   };
 }
 
 export default {
-  protocol: 'centraid.pull/v1',
+  protocol: "centraid.pull/v1",
 
   async principal({ ctx }) {
-    const primary = await api(ctx, '/calendars/primary');
+    const primary = await api(ctx, "/calendars/primary");
     return primary.id;
   },
 
   async pull({ ctx, log, cursor }) {
-    const syncCursor = cursor.provider('gcal.syncToken');
-    const pageCursor = cursor.provider('gcal.pageToken');
+    const syncCursor = cursor.provider("gcal.syncToken");
+    const pageCursor = cursor.provider("gcal.pageToken");
     let syncToken = syncCursor.current;
     let pageToken = pageCursor.current;
     const rows = [];
     let nextSyncToken = null;
     let nextPageToken = null;
-    let mode = syncToken ? 'incremental' : 'walk';
+    let mode = syncToken ? "incremental" : "walk";
 
     for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
       const params = new URLSearchParams({
-        maxResults: '250',
-        singleEvents: 'false',
+        maxResults: "250",
+        singleEvents: "false",
       });
       // Calendar's contract: syncToken and pageToken are MUTUALLY EXCLUSIVE
       // (sending both is a 400). A continuation page — whether within this
@@ -73,14 +75,17 @@ export default {
       // incremental sync. (People API differs: it repeats both — see the
       // Contacts connector.)
       if (pageToken) {
-        params.set('pageToken', String(pageToken));
-      } else if (syncToken && mode === 'incremental') {
-        params.set('syncToken', String(syncToken));
+        params.set("pageToken", String(pageToken));
+      } else if (syncToken && mode === "incremental") {
+        params.set("syncToken", String(syncToken));
       }
-      const listing = await api(ctx, `/calendars/primary/events?${params.toString()}`);
+      const listing = await api(
+        ctx,
+        `/calendars/primary/events?${params.toString()}`
+      );
       if (listing.gone) {
         // Expired sync token: restart the walk from the top, next fire on.
-        mode = 'walk';
+        mode = "walk";
         syncToken = null;
         pageToken = null;
         nextPageToken = null;
@@ -88,7 +93,7 @@ export default {
         break;
       }
       for (const event of listing.items || []) {
-        if (event.status === 'cancelled' && !event.summary) continue; // bare tombstone of an uncached event
+        if (event.status === "cancelled" && !event.summary) continue; // bare tombstone of an uncached event
         rows.push(toEventRow(event));
       }
       nextPageToken = listing.nextPageToken || null;
@@ -104,7 +109,7 @@ export default {
       pageCursor.clear();
     } else {
       pageCursor.set(nextPageToken);
-      if (mode === 'walk' && !nextPageToken) {
+      if (mode === "walk" && !nextPageToken) {
         // A reset (410) also clears a stale syncToken so the next fire restarts.
         syncCursor.clear();
       }

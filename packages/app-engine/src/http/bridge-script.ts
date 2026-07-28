@@ -14,7 +14,10 @@
  * abort independently. `write()` remains non-deduped and both helpers retain
  * their original Promise return values.
  */
-export function changeBridgeScript(draft?: { appId: string; basePath: string }): string {
+export function changeBridgeScript(draft?: {
+  appId: string;
+  basePath: string;
+}): string {
   // Live mode sniffs the app id from `/centraid/<id>/…` and addresses the app
   // RPC routes under `/centraid/<id>/` (issue #505). Draft mode pins both
   // because its first path segment is `_draft` and its handlers run through the
@@ -507,12 +510,14 @@ if(hasParent){
 
 export function injectChangeBridge(
   html: string,
-  draft?: { appId: string; basePath: string },
+  draft?: { appId: string; basePath: string }
 ): string {
   // Inject right after the opening <head>. If the document has no <head>
   // (rare in practice but legal HTML) the script falls through unchanged.
   const m = /<head\b[^>]*>/iu.exec(html);
   if (!m) return html;
   const insertAt = m.index + m[0].length;
-  return html.slice(0, insertAt) + changeBridgeScript(draft) + html.slice(insertAt);
+  return (
+    html.slice(0, insertAt) + changeBridgeScript(draft) + html.slice(insertAt)
+  );
 }

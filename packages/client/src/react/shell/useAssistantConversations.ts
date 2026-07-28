@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import { ASSISTANT_APP_ID, listConversations } from '../../gateway-client.js';
+import { ASSISTANT_APP_ID, listConversations } from "../../gateway-client.js";
 
 export interface AssistantConversationsController {
   conversations: CentraidConversationSummary[];
@@ -17,7 +17,9 @@ export interface AssistantConversationsController {
 // re-fetch), mirroring useShellApps' ownership of the Apps list.
 /** The list fetch, with the "a failed list reads as empty" rule applied once
  *  for both entry points (the mount effect and the imperative `refresh`). */
-async function loadAssistantConversations(): Promise<CentraidConversationSummary[]> {
+async function loadAssistantConversations(): Promise<
+  CentraidConversationSummary[]
+> {
   try {
     return await listConversations(ASSISTANT_APP_ID);
   } catch {
@@ -26,7 +28,9 @@ async function loadAssistantConversations(): Promise<CentraidConversationSummary
 }
 
 export function useAssistantConversations(): AssistantConversationsController {
-  const [conversations, setConversations] = useState<CentraidConversationSummary[]>([]);
+  const [conversations, setConversations] = useState<
+    CentraidConversationSummary[]
+  >([]);
 
   const refresh = useCallback(async () => {
     setConversations(await loadAssistantConversations());

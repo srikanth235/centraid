@@ -1,20 +1,22 @@
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 /**
  * Secret-in-logs / token leakage smoke (#496 G3).
  * Drives a real `serve()` instance and asserts error/auth paths never echo
  * bearer tokens or seal-key material back in response bodies **or** in the
  * on-disk gateway JSONL log ring (when logsDir is configured).
  */
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { describe, afterEach, beforeEach, expect, test } from 'vitest';
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import type { GatewayPaths } from '../paths.js';
-import { serve, type GatewayServeHandle } from './serve.js';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
-const ADMIN = 'secret-log-admin-token-do-not-echo';
-const FAKE_SEAL = 'f'.repeat(64);
+import type { GatewayPaths } from "../paths.js";
+import { serve, type GatewayServeHandle } from "./serve.js";
+
+const ADMIN = "secret-log-admin-token-do-not-echo";
+const FAKE_SEAL = "f".repeat(64);
 
 let dataDir: string;
 let logsDir: string;
@@ -22,7 +24,7 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string, logs: string): GatewayPaths {
   return {
-    vaultDir: path.join(dir, 'vault'),
+    vaultDir: path.join(dir, "vault"),
     logsDir: logs,
   };
 }
@@ -33,19 +35,19 @@ async function readAllLogs(): Promise<string> {
     const names = await fs.readdir(logsDir);
     const chunks: string[] = [];
     await forEachSequentially(names, async (name) => {
-      if (!name.endsWith('.jsonl')) return;
-      chunks.push(await fs.readFile(path.join(logsDir, name), 'utf8'));
+      if (!name.endsWith(".jsonl")) return;
+      chunks.push(await fs.readFile(path.join(logsDir, name), "utf8"));
     });
-    return chunks.join('\n');
+    return chunks.join("\n");
   } catch {
-    return '';
+    return "";
   }
 }
 
-describe('secret-log.smoke scenarios', () => {
+describe("secret-log.smoke scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`secret-log-${crypto.randomUUID()}-`);
-    logsDir = path.join(dataDir, 'gateway-logs');
+    logsDir = path.join(dataDir, "gateway-logs");
     await fs.mkdir(logsDir, { recursive: true });
     handle = await serve({
       paths: pathsUnder(dataDir, logsDir),
@@ -58,8 +60,8 @@ describe('secret-log.smoke scenarios', () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test('401 body and logs do not echo a presented wrong bearer token', async () => {
-    const wrong = 'wrong-bearer-should-never-appear-in-body-xyz';
+  test("401 body and logs do not echo a presented wrong bearer token", async () => {
+    const wrong = "wrong-bearer-should-never-appear-in-body-xyz";
     const res = await fetch(`${handle.url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${wrong}` },
     });
@@ -73,7 +75,7 @@ describe('secret-log.smoke scenarios', () => {
     expect(logs).not.toContain(ADMIN);
   });
 
-  test('admin success path does not leak the bearer in JSON bodies or logs', async () => {
+  test("admin success path does not leak the bearer in JSON bodies or logs", async () => {
     const res = await fetch(`${handle.url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${ADMIN}` },
     });
@@ -88,16 +90,16 @@ describe('secret-log.smoke scenarios', () => {
     expect(logs).not.toMatch(/Bearer\s+secret-log-admin/iu);
   });
 
-  test('error path with seal-key-shaped payload does not reflect raw key material in body or logs', async () => {
+  test("error path with seal-key-shaped payload does not reflect raw key material in body or logs", async () => {
     // POST a nonsense body that includes seal-key-looking content; the server
     // must not reflect it in an error message or persist it into JSONL logs.
     const res = await fetch(`${handle.url}/_centraid/vault/sql`, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${ADMIN}`,
-        'content-type': 'application/json',
+        "content-type": "application/json",
       },
-      body: JSON.stringify({ sql: 'SELECT 1', seal_key: FAKE_SEAL }),
+      body: JSON.stringify({ sql: "SELECT 1", seal_key: FAKE_SEAL }),
     });
     const body = await res.text();
     expect(body).not.toContain(FAKE_SEAL);

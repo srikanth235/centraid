@@ -8,4 +8,6 @@
 // diagnostics are suppressed rather than surfaced — so an async state update
 // that never settles reads as a pass. Setting it here, once, for every jsdom
 // project is what makes those tests assert against a settled tree.
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;

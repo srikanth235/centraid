@@ -196,7 +196,7 @@
   border-radius: 999px;
 }
 .instrChip:hover,
-.instrChip[data-open='true'] {
+.instrChip[data-open="true"] {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   color: var(--ink);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
@@ -342,7 +342,7 @@
   background: var(--bg);
   padding: 6px;
 }
-.connPickerRow[data-selected='true'] {
+.connPickerRow[data-selected="true"] {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   background: color-mix(in srgb, var(--accent) 8%, var(--bg));
 }
@@ -395,7 +395,7 @@
   place-items: center;
   color: var(--accent);
 }
-.connPickerCheck[data-on='true'] {
+.connPickerCheck[data-on="true"] {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   border-color: var(--accent);
 }
@@ -428,7 +428,7 @@
   cursor: pointer;
 }
 .connAccount:hover,
-.connAccount[data-chosen='true'] {
+.connAccount[data-chosen="true"] {
   background: var(--bg-sunken);
 }
 .connAccountCopy {
@@ -456,11 +456,11 @@
   font-size: 10.5px;
   white-space: nowrap;
 }
-.connAccountHealth[data-health='ok'] {
+.connAccountHealth[data-health="ok"] {
   color: var(--success);
 }
-.connAccountHealth[data-health='failing'],
-.connAccountHealth[data-health='needs-auth'] {
+.connAccountHealth[data-health="failing"],
+.connAccountHealth[data-health="needs-auth"] {
   color: var(--danger);
 }
 /* The saved binding names a connection the vault no longer lists (#541). */
@@ -717,7 +717,7 @@
 }
 .mentionOption:hover,
 .mentionOption:focus-visible,
-.mentionOption[data-active='true'] {
+.mentionOption[data-active="true"] {
   background: var(--bg-sunken);
   outline: none;
 }
@@ -1177,7 +1177,7 @@
   transition: background 0.16s ease;
 }
 .switchTrack::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -1213,7 +1213,7 @@
   border-radius: 8px;
   background: var(--bg-elev);
 }
-.grantRow[data-revoked='true'] {
+.grantRow[data-revoked="true"] {
   opacity: 0.55;
 }
 .grantVerb {

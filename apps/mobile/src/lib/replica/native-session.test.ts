@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
 import type {
   GatewayAuth,
@@ -9,17 +9,17 @@ import type {
   ReplicaSnapshot,
   ReplicaSnapshotRow,
   VaultChangeMessage,
-} from '@centraid/client/replica/native';
-import { describe, expect, test } from 'vitest';
+} from "@centraid/client/replica/native";
+import { describe, expect, test } from "vitest";
 
-import type { AppStateLike, NativeChangeFeed } from './native-session';
-import { createNativeReplicaSession } from './native-session';
-import { NodeSqliteDriver } from './node-sqlite-driver';
+import type { AppStateLike, NativeChangeFeed } from "./native-session";
+import { createNativeReplicaSession } from "./native-session";
+import { NodeSqliteDriver } from "./node-sqlite-driver";
 
 const gatewayAuth: GatewayAuth = {
-  baseUrl: 'http://127.0.0.1:18789',
-  gatewayId: 'gateway-1',
-  vaultId: 'vault-a',
+  baseUrl: "http://127.0.0.1:18789",
+  gatewayId: "gateway-1",
+  vaultId: "vault-a",
 };
 
 /**
@@ -30,7 +30,7 @@ const gatewayAuth: GatewayAuth = {
  * `expo-crypto` and `crypto.subtle` satisfy, so payload hashes are identical.
  */
 const nodeDigest: ReplicaDigest = (input) =>
-  Promise.resolve(createHash('sha256').update(input, 'utf8').digest('hex'));
+  Promise.resolve(createHash("sha256").update(input, "utf8").digest("hex"));
 
 function sequentialIds(): ReplicaIdFactory {
   let next = 0;
@@ -43,18 +43,20 @@ function sequentialIds(): ReplicaIdFactory {
  */
 function page(
   cursor: ReplicaCursor,
-  options: { rows?: ReplicaSnapshotRow[]; next?: string; first?: boolean } = {},
+  options: { rows?: ReplicaSnapshotRow[]; next?: string; first?: boolean } = {}
 ): Record<string, unknown> {
   const full = snapshot(cursor);
   return {
     protocolVersion: 1,
-    vaultId: 'vault-a',
-    schemaEpoch: 'schema-1',
+    vaultId: "vault-a",
+    schemaEpoch: "schema-1",
     cursor,
     rows: options.rows ?? full.rows,
     complete: options.next === undefined,
     ...(options.next ? { next: options.next } : {}),
-    ...(options.first === false ? {} : { shapes: full.shapes, shapeIds: ['shape-photos'] }),
+    ...(options.first === false
+      ? {}
+      : { shapes: full.shapes, shapeIds: ["shape-photos"] }),
   };
 }
 
@@ -62,7 +64,7 @@ function page(
 function noChanges(cursor: ReplicaCursor): ReplicaChangeBatch {
   return {
     protocolVersion: 1,
-    schemaEpoch: 'schema-1',
+    schemaEpoch: "schema-1",
     from: cursor,
     to: cursor,
     changes: [],
@@ -72,33 +74,33 @@ function noChanges(cursor: ReplicaCursor): ReplicaChangeBatch {
 function snapshot(cursor: ReplicaCursor): ReplicaSnapshot {
   return {
     protocolVersion: 1,
-    vaultId: 'vault-a',
-    schemaEpoch: 'schema-1',
+    vaultId: "vault-a",
+    schemaEpoch: "schema-1",
     cursor,
     shapes: [
       {
-        shapeId: 'shape-photos',
-        appId: 'photos',
-        purpose: 'dpv:ServiceProvision',
+        shapeId: "shape-photos",
+        appId: "photos",
+        purpose: "dpv:ServiceProvision",
         entities: [
           {
-            entity: 'core.content_item',
-            primaryKey: 'content_id',
-            columns: ['content_id', 'title', 'deleted_at', 'created_at'],
+            entity: "core.content_item",
+            primaryKey: "content_id",
+            columns: ["content_id", "title", "deleted_at", "created_at"],
           },
         ],
       },
     ],
     rows: [
       {
-        shapeId: 'shape-photos',
-        entity: 'core.content_item',
-        rowId: 'photo-1',
+        shapeId: "shape-photos",
+        entity: "core.content_item",
+        rowId: "photo-1",
         values: {
-          content_id: 'photo-1',
-          title: 'Original',
+          content_id: "photo-1",
+          title: "Original",
           deleted_at: null,
-          created_at: '2026-07-15T10:00:00.000Z',
+          created_at: "2026-07-15T10:00:00.000Z",
         },
       },
     ],
@@ -150,7 +152,7 @@ interface FakeAppState extends AppStateLike {
 
 function createAppState(): FakeAppState {
   let handler: ((state: string) => void) | undefined;
-  let currentState = 'active';
+  let currentState = "active";
   return {
     get currentState() {
       return currentState;
@@ -175,7 +177,11 @@ type Responder = () => Response;
 interface FakeGateway {
   on: (pathFragment: string, responder: Responder) => FakeGateway;
   readonly baseUrls: readonly string[];
-  readonly fetcher: (baseUrl: string, pathname: string, init: RequestInit) => Promise<Response>;
+  readonly fetcher: (
+    baseUrl: string,
+    pathname: string,
+    init: RequestInit
+  ) => Promise<Response>;
 }
 
 /** Programmable transport keyed by path, with a per-path FIFO of responders. */
@@ -197,7 +203,7 @@ function createGateway(): FakeGateway {
           return Promise.resolve(queue.shift()!());
         }
       }
-      return Promise.resolve(new Response('{}', { status: 200 }));
+      return Promise.resolve(new Response("{}", { status: 200 }));
     },
   };
   return gateway;
@@ -206,27 +212,30 @@ function createGateway(): FakeGateway {
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: { "content-type": "application/json" },
   });
 }
 
-function changeBatch(from: ReplicaCursor, to: ReplicaCursor): ReplicaChangeBatch {
+function changeBatch(
+  from: ReplicaCursor,
+  to: ReplicaCursor
+): ReplicaChangeBatch {
   return {
     protocolVersion: 1,
-    schemaEpoch: 'schema-1',
+    schemaEpoch: "schema-1",
     from,
     to,
     changes: [
       {
-        op: 'upsert',
-        shapeId: 'shape-photos',
-        entity: 'core.content_item',
-        rowId: 'photo-1',
+        op: "upsert",
+        shapeId: "shape-photos",
+        entity: "core.content_item",
+        rowId: "photo-1",
         values: {
-          content_id: 'photo-1',
-          title: 'Renamed',
+          content_id: "photo-1",
+          title: "Renamed",
           deleted_at: null,
-          created_at: '2026-07-15T10:00:00.000Z',
+          created_at: "2026-07-15T10:00:00.000Z",
         },
       },
     ],
@@ -235,12 +244,12 @@ function changeBatch(from: ReplicaCursor, to: ReplicaCursor): ReplicaChangeBatch
 
 async function until(
   predicate: () => boolean | Promise<boolean>,
-  timeoutMs = 1_000,
+  timeoutMs = 1_000
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const poll = async (): Promise<void> => {
     if (await predicate()) return;
-    if (Date.now() > deadline) throw new Error('condition not reached in time');
+    if (Date.now() > deadline) throw new Error("condition not reached in time");
     await new Promise((resolve) => setTimeout(resolve, 5));
     return poll();
   };
@@ -248,13 +257,20 @@ async function until(
 }
 
 describe(createNativeReplicaSession, () => {
-  test('bootstraps on start and pulls deltas when the feed reports a newer cursor', async () => {
+  test("bootstraps on start and pulls deltas when the feed reports a newer cursor", async () => {
     const gateway = createGateway()
-      .on('/replica/bootstrap', () => json(page({ epoch: 'replica-1', seq: 1 })))
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
       // The bootstrap's own convergence replay runs first and finds nothing.
-      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })))
-      .on('/changes', () =>
-        json(changeBatch({ epoch: 'replica-1', seq: 1 }, { epoch: 'replica-1', seq: 2 })),
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })))
+      .on("/changes", () =>
+        json(
+          changeBatch(
+            { epoch: "replica-1", seq: 1 },
+            { epoch: "replica-1", seq: 2 }
+          )
+        )
       );
     const feed = createFeed();
     const session = await createNativeReplicaSession({
@@ -267,30 +283,32 @@ describe(createNativeReplicaSession, () => {
     });
     try {
       expect((await session.status()).cursor).toStrictEqual({
-        epoch: 'replica-1',
+        epoch: "replica-1",
         seq: 1,
       });
       expect(feed.active).toBe(true);
 
       feed.emit({
-        type: 'centraid:vault-cursor',
-        cursor: { epoch: 'replica-1', seq: 2 },
+        type: "centraid:vault-cursor",
+        cursor: { epoch: "replica-1", seq: 2 },
       });
       await until(async () => (await session.status()).cursor?.seq === 2);
 
-      const read = await session.read('photos', {
-        entity: 'core.content_item',
+      const read = await session.read("photos", {
+        entity: "core.content_item",
       });
-      expect(read.rows[0]?.values.title).toBe('Renamed');
+      expect(read.rows[0]?.values.title).toBe("Renamed");
     } finally {
       await session.close();
     }
   });
 
-  test('pauses the feed on background and resumes it on foreground', async () => {
+  test("pauses the feed on background and resumes it on foreground", async () => {
     const gateway = createGateway()
-      .on('/replica/bootstrap', () => json(page({ epoch: 'replica-1', seq: 1 })))
-      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })));
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })));
     const feed = createFeed();
     const appState = createAppState();
     const session = await createNativeReplicaSession({
@@ -304,20 +322,22 @@ describe(createNativeReplicaSession, () => {
     });
     try {
       expect(feed.active).toBe(true);
-      appState.send('background');
+      appState.send("background");
       expect(feed.active).toBe(false);
-      appState.send('active');
+      appState.send("active");
       expect(feed.active).toBe(true);
     } finally {
       await session.close();
     }
   });
 
-  test('uses a newly resolved tunnel port after process restart', async () => {
+  test("uses a newly resolved tunnel port after process restart", async () => {
     const gateway = createGateway()
-      .on('/replica/bootstrap', () => json(page({ epoch: 'replica-1', seq: 1 })))
-      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })))
-      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })));
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })))
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })));
     const feed = createFeed();
     const session = await createNativeReplicaSession({
       gatewayAuth: { ...gatewayAuth },
@@ -328,21 +348,23 @@ describe(createNativeReplicaSession, () => {
       idFactory: sequentialIds(),
     });
     try {
-      session.updateGatewayBase('http://127.0.0.1:29999');
+      session.updateGatewayBase("http://127.0.0.1:29999");
       await session.pullNow();
-      expect(gateway.baseUrls.at(-1)).toBe('http://127.0.0.1:29999');
+      expect(gateway.baseUrls.at(-1)).toBe("http://127.0.0.1:29999");
       expect(feed.active).toBe(true);
     } finally {
       await session.close();
     }
   });
 
-  test('write() enqueues and ships an intent using the injected Hermes crypto', async () => {
+  test("write() enqueues and ships an intent using the injected Hermes crypto", async () => {
     const gateway = createGateway()
-      .on('/replica/bootstrap', () => json(page({ epoch: 'replica-1', seq: 1 })))
-      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })))
-      .on('/replica/intents', () =>
-        json({ outcome: { intentId: 'intent-1', status: 'executed' } }),
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })))
+      .on("/replica/intents", () =>
+        json({ outcome: { intentId: "intent-1", status: "executed" } })
       );
     const feed = createFeed();
     const session = await createNativeReplicaSession({
@@ -356,13 +378,13 @@ describe(createNativeReplicaSession, () => {
     try {
       // Without injection this path throws on device: RN has no crypto.subtle
       // for the payload hash and no crypto.randomUUID for the intent id.
-      const result = await session.write('photos', {
-        action: 'photos.favorite',
-        input: { assetId: 'asset-1', favorite: true },
+      const result = await session.write("photos", {
+        action: "photos.favorite",
+        input: { assetId: "asset-1", favorite: true },
       });
       expect(result).toMatchObject({
-        intentId: 'intent-1',
-        status: 'executed',
+        intentId: "intent-1",
+        status: "executed",
       });
 
       const [intent] = await session.coordinator.intents.list();
@@ -370,54 +392,64 @@ describe(createNativeReplicaSession, () => {
         // The pinned cross-platform hash: identical under crypto.subtle,
         // expo-crypto and this node digest, so intent idempotency survives a
         // device swap.
-        '9fb4ce111fbf05254e7437936d9e5082d6888dd4112fe38c8254c6d1beff844f',
+        "9fb4ce111fbf05254e7437936d9e5082d6888dd4112fe38c8254c6d1beff844f"
       );
     } finally {
       await session.close();
     }
   });
 
-  test('bootstraps a multi-page window and converges from the page-1 cursor', async () => {
+  test("bootstraps a multi-page window and converges from the page-1 cursor", async () => {
     const rows = (id: string): ReplicaSnapshotRow[] => [
       {
-        shapeId: 'shape-photos',
-        entity: 'core.content_item',
+        shapeId: "shape-photos",
+        entity: "core.content_item",
         rowId: id,
         values: {
           content_id: id,
           title: id,
           deleted_at: null,
-          created_at: '2026-07-15T10:00:00.000Z',
+          created_at: "2026-07-15T10:00:00.000Z",
         },
       },
     ];
     const gateway = createGateway()
       // Page 1 pins the delta floor at seq 1; page 2 is read from a later snapshot.
-      .on('/replica/bootstrap', () =>
-        json(page({ epoch: 'replica-1', seq: 1 }, { rows: rows('photo-a'), next: 'token-2' })),
+      .on("/replica/bootstrap", () =>
+        json(
+          page(
+            { epoch: "replica-1", seq: 1 },
+            { rows: rows("photo-a"), next: "token-2" }
+          )
+        )
       )
-      .on('/replica/bootstrap', () =>
-        json(page({ epoch: 'replica-1', seq: 3 }, { rows: rows('photo-b'), first: false })),
+      .on("/replica/bootstrap", () =>
+        json(
+          page(
+            { epoch: "replica-1", seq: 3 },
+            { rows: rows("photo-b"), first: false }
+          )
+        )
       )
       // The mandatory replay from seq 1 removes what page 1 handed us but that
       // was deleted before page 2's snapshot — the deletion hole this closes.
-      .on('/changes', () =>
+      .on("/changes", () =>
         json({
           protocolVersion: 1,
-          schemaEpoch: 'schema-1',
-          from: { epoch: 'replica-1', seq: 1 },
-          to: { epoch: 'replica-1', seq: 3 },
+          schemaEpoch: "schema-1",
+          from: { epoch: "replica-1", seq: 1 },
+          to: { epoch: "replica-1", seq: 3 },
           changes: [
             {
-              op: 'delete',
-              shapeId: 'shape-photos',
-              entity: 'core.content_item',
-              rowId: 'photo-a',
+              op: "delete",
+              shapeId: "shape-photos",
+              entity: "core.content_item",
+              rowId: "photo-a",
             },
           ],
-        }),
+        })
       )
-      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 3 })));
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 3 })));
     const feed = createFeed();
     const session = await createNativeReplicaSession({
       gatewayAuth,
@@ -429,12 +461,14 @@ describe(createNativeReplicaSession, () => {
       bootstrapWindow: 1,
     });
     try {
-      const read = await session.read('photos', {
-        entity: 'core.content_item',
+      const read = await session.read("photos", {
+        entity: "core.content_item",
       });
-      expect(read.rows.map((row) => row.values.content_id)).toStrictEqual(['photo-b']);
+      expect(read.rows.map((row) => row.values.content_id)).toStrictEqual([
+        "photo-b",
+      ]);
       expect((await session.status()).cursor).toStrictEqual({
-        epoch: 'replica-1',
+        epoch: "replica-1",
         seq: 3,
       });
     } finally {
@@ -442,14 +476,18 @@ describe(createNativeReplicaSession, () => {
     }
   });
 
-  test('a 409 pull rebootstraps without dropping a queued intent', async () => {
+  test("a 409 pull rebootstraps without dropping a queued intent", async () => {
     const gateway = createGateway()
-      .on('/replica/bootstrap', () => json(page({ epoch: 'replica-1', seq: 1 })))
-      .on('/changes', () => json(noChanges({ epoch: 'replica-1', seq: 1 })))
-      .on('/changes', () => json({ reason: 'restore' }, 409))
-      .on('/replica/outcomes', () => json({ outcomes: [] }))
-      .on('/replica/bootstrap', () => json(page({ epoch: 'replica-2', seq: 5 })))
-      .on('/changes', () => json(noChanges({ epoch: 'replica-2', seq: 5 })));
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-1", seq: 1 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-1", seq: 1 })))
+      .on("/changes", () => json({ reason: "restore" }, 409))
+      .on("/replica/outcomes", () => json({ outcomes: [] }))
+      .on("/replica/bootstrap", () =>
+        json(page({ epoch: "replica-2", seq: 5 }))
+      )
+      .on("/changes", () => json(noChanges({ epoch: "replica-2", seq: 5 })));
     const feed = createFeed();
     const session = await createNativeReplicaSession({
       gatewayAuth,
@@ -463,23 +501,27 @@ describe(createNativeReplicaSession, () => {
     try {
       // Queue an intent directly so it stays 'queued' (no drain shipping it).
       await session.coordinator.enqueue({
-        appId: 'photos',
-        action: 'rename',
-        input: { title: 'Local edit' },
+        appId: "photos",
+        action: "rename",
+        input: { title: "Local edit" },
       });
-      expect((await session.coordinator.pendingIntents()).map((i) => i.intentId)).toHaveLength(1);
+      expect(
+        (await session.coordinator.pendingIntents()).map((i) => i.intentId)
+      ).toHaveLength(1);
 
       feed.emit({
-        type: 'centraid:vault-cursor',
-        cursor: { epoch: 'replica-1', seq: 2 },
+        type: "centraid:vault-cursor",
+        cursor: { epoch: "replica-1", seq: 2 },
       });
       // The 409 pull wipes canonical state and re-bootstraps to the new epoch.
-      await until(async () => (await session.status()).cursor?.epoch === 'replica-2');
+      await until(
+        async () => (await session.status()).cursor?.epoch === "replica-2"
+      );
 
       // The queued intent lives in its own table and survives the wipe.
       const pending = await session.coordinator.pendingIntents();
       expect(pending).toHaveLength(1);
-      expect(pending[0]?.state).toBe('queued');
+      expect(pending[0]?.state).toBe("queued");
     } finally {
       await session.close();
     }

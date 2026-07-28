@@ -16,9 +16,9 @@
  * is backgrounded or on another screen.
  */
 
-import { Notification } from 'electron';
+import { Notification } from "electron";
 
-import { loadSettings } from './settings.js';
+import { loadSettings } from "./settings.js";
 
 export const REMINDER_POLL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 8000;
@@ -27,7 +27,7 @@ const SEEN_TTL_MS = 48 * 60 * 60 * 1000;
 
 interface DueReminder {
   key: string;
-  kind: 'task' | 'event';
+  kind: "task" | "event";
   id: string;
   title: string;
   at: string;
@@ -45,7 +45,7 @@ function pruneSeen(now: number): void {
 }
 
 function leadLabel(minutesBefore: number): string {
-  if (minutesBefore === 0) return 'now';
+  if (minutesBefore === 0) return "now";
   if (minutesBefore < 60) return `${minutesBefore}m`;
   if (minutesBefore % 1440 === 0) return `${minutesBefore / 1440}d`;
   if (minutesBefore % 60 === 0) return `${minutesBefore / 60}h`;
@@ -54,7 +54,7 @@ function leadLabel(minutesBefore: number): string {
 
 function notify(reminder: DueReminder): void {
   if (!Notification.isSupported()) return;
-  const noun = reminder.kind === 'task' ? 'Task due' : 'Event starting';
+  const noun = reminder.kind === "task" ? "Task due" : "Event starting";
   const n = new Notification({
     title: reminder.title,
     body: `${noun} — reminder set ${leadLabel(reminder.minutesBefore)} before.`,
@@ -64,12 +64,15 @@ function notify(reminder: DueReminder): void {
 
 async function fetchDueReminders(
   baseUrl: string,
-  token: string | undefined,
+  token: string | undefined
 ): Promise<DueReminder[]> {
-  const res = await fetch(new URL('/centraid/_reminders/due', `${baseUrl}/`).toString(), {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-  });
+  const res = await fetch(
+    new URL("/centraid/_reminders/due", `${baseUrl}/`).toString(),
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    }
+  );
   if (!res.ok) return [];
   const body = (await res.json().catch(() => ({}))) as {
     reminders?: DueReminder[];
@@ -101,7 +104,9 @@ function runTick(): Promise<void> {
   if (!inFlight) {
     inFlight = tick()
       .catch((err) => {
-        process.stdout.write(`[reminder-monitor] tick failed: ${String(err)}\n`);
+        process.stdout.write(
+          `[reminder-monitor] tick failed: ${String(err)}\n`
+        );
       })
       .finally(() => {
         inFlight = undefined;

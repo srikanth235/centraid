@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
-import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from '../constants.ts';
+import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "../constants.ts";
 import {
   AlbumsIcon,
   CameraIcon,
@@ -12,7 +12,7 @@ import {
   RenameIcon,
   ShieldIcon,
   TrashIcon,
-} from '../icons.tsx';
+} from "../icons.tsx";
 // The v2 sidebar: brand row, Add photos, smart nav (Photos/Favorites/
 // Albums), the owner's actual album list (mini cover + count, inline
 // rename/delete on hover), a Tags filter section (issue #352's free-form
@@ -23,12 +23,12 @@ import {
 // (sidebar.tsx, replacing toolbar.jsx).
 // CSS split: own classes in Sidebar.module.css; the `.sectionLabel` eyebrow is
 // shared (shared.module.css); `kit-*` classes stay global strings.
-import { armConfirm } from '../kit.ts';
-import type { Album } from '../types.ts';
-import { InlineInput } from './InlineInput.tsx';
+import { armConfirm } from "../kit.ts";
+import type { Album } from "../types.ts";
+import { InlineInput } from "./InlineInput.tsx";
 
-import shared from './shared.module.css';
-import styles from './Sidebar.module.css';
+import shared from "./shared.module.css";
+import styles from "./Sidebar.module.css";
 
 function NavItem({
   icon,
@@ -47,7 +47,7 @@ function NavItem({
     <button
       type="button"
       className={styles.navItem}
-      data-active={active ? 'true' : 'false'}
+      data-active={active ? "true" : "false"}
       onClick={onClick}
     >
       <span className={styles.navIcon}>{icon}</span>
@@ -82,7 +82,7 @@ function AlbumRow({
     return (
       <div className={`${styles.albumRow} ${styles.albumRowEditing}`}>
         <InlineInput
-          value={album.title ?? ''}
+          value={album.title ?? ""}
           placeholder="Album name"
           label="Rename album"
           autoSelect
@@ -97,21 +97,21 @@ function AlbumRow({
       <button
         type="button"
         className={`${styles.navItem} ${styles.albumItem}`}
-        data-active={active ? 'true' : 'false'}
+        data-active={active ? "true" : "false"}
         onClick={onOpen}
       >
         <span
           className={styles.albumCover}
           style={cover ? { backgroundImage: `url(${cover})` } : undefined}
         />
-        <span className={styles.navLabel}>{album.title ?? 'Album'}</span>
+        <span className={styles.navLabel}>{album.title ?? "Album"}</span>
         <span className={styles.navCount}>{album.count}</span>
       </button>
       <span className={styles.albumTools}>
         <button
           type="button"
           className="kit-icon-btn"
-          aria-label={`Rename ${album.title ?? 'album'}`}
+          aria-label={`Rename ${album.title ?? "album"}`}
           onClick={(e) => {
             e.stopPropagation();
             onStartRename(album);
@@ -122,10 +122,10 @@ function AlbumRow({
         <button
           type="button"
           className="kit-icon-btn danger"
-          aria-label={`Delete ${album.title ?? 'album'}`}
+          aria-label={`Delete ${album.title ?? "album"}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
+            if (!armConfirm(e.currentTarget, { armedLabel: "×?" })) return;
             onDelete(album);
           }}
         >
@@ -188,7 +188,7 @@ export function SidebarView({
           onClick={onClose}
         />
       ) : null}
-      <aside className={styles.sidebar} data-open={open ? 'true' : 'false'}>
+      <aside className={styles.sidebar} data-open={open ? "true" : "false"}>
         <div className={styles.brand}>
           <span className={styles.brandMark}>
             <CameraIcon size={17} />
@@ -207,7 +207,12 @@ export function SidebarView({
           </button>
         </div>
 
-        <button type="button" className={styles.uploadBtn} id="uploadBtn" onClick={onUpload}>
+        <button
+          type="button"
+          className={styles.uploadBtn}
+          id="uploadBtn"
+          onClick={onUpload}
+        >
           <PlusIcon />
           Add photos
         </button>
@@ -263,7 +268,11 @@ export function SidebarView({
               />
             </div>
           ) : (
-            <button type="button" className={styles.newAlbum} onClick={onStartNewAlbum}>
+            <button
+              type="button"
+              className={styles.newAlbum}
+              onClick={onStartNewAlbum}
+            >
               <PlusIcon size={14} />
               New album
             </button>
@@ -279,8 +288,14 @@ export function SidebarView({
                   key={tag}
                   type="button"
                   className={`kit-chip ${styles.tagChip}`}
-                  data-active={selectedAlbum === `tag:${tag}` ? 'true' : 'false'}
-                  onClick={() => onSelect(selectedAlbum === `tag:${tag}` ? null : `tag:${tag}`)}
+                  data-active={
+                    selectedAlbum === `tag:${tag}` ? "true" : "false"
+                  }
+                  onClick={() =>
+                    onSelect(
+                      selectedAlbum === `tag:${tag}` ? null : `tag:${tag}`
+                    )
+                  }
                 >
                   #{tag}
                 </button>
@@ -289,7 +304,10 @@ export function SidebarView({
           </>
         ) : null}
 
-        <nav className={`${styles.nav} ${styles.navShelves}`} aria-label="Shelves">
+        <nav
+          className={`${styles.nav} ${styles.navShelves}`}
+          aria-label="Shelves"
+        >
           <NavItem
             icon={<DuplicatesIcon />}
             label="Duplicates"

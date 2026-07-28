@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type { JSX } from "react";
 
 // Chrome-local line glyphs — the sidebar/titlebar marks that are NOT in
 // @centraid/design-tokens (design-token icons render via <Icon name=…>).
@@ -95,7 +95,10 @@ export const HomeGlyph = (p: GlyphProps): JSX.Element => (
   </Svg>
 );
 
-export const SparkleGlyph = ({ size = 15, strokeWidth = 1.5 }: GlyphProps): JSX.Element => (
+export const SparkleGlyph = ({
+  size = 15,
+  strokeWidth = 1.5,
+}: GlyphProps): JSX.Element => (
   <Svg size={size} strokeWidth={strokeWidth}>
     <>
       <path d="M12 3l1.8 4.7L18 9l-4.2 1.3L12 15l-1.8-4.7L6 9l4.2-1.3z" />

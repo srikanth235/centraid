@@ -1,8 +1,8 @@
-import type { AutomationTriggerCursor } from '@centraid/app-engine';
+import type { AutomationTriggerCursor } from "@centraid/app-engine";
 
-import { wallClockMinuteKey } from '../cron-timezone.js';
-import { cronMatches } from './cron-match.js';
-import type { CursorReadResult } from './cursor-engine.js';
+import { wallClockMinuteKey } from "../cron-timezone.js";
+import { cronMatches } from "./cron-match.js";
+import type { CursorReadResult } from "./cursor-engine.js";
 
 /** One cron expression plus its resolved match zone (undefined = host-local). */
 export type CronSchedule = {
@@ -32,10 +32,12 @@ const MAX_SCAN_MINUTES = 44_640;
 const IDLE_POSITION_REFRESH_MS = 60 * 60 * 1_000;
 
 function asSchedules(
-  exprsOrSchedules: readonly string[] | readonly CronSchedule[],
+  exprsOrSchedules: readonly string[] | readonly CronSchedule[]
 ): CronSchedule[] {
   return exprsOrSchedules.map((entry) =>
-    typeof entry === 'string' ? { expr: entry } : { expr: entry.expr, timeZone: entry.timeZone },
+    typeof entry === "string"
+      ? { expr: entry }
+      : { expr: entry.expr, timeZone: entry.timeZone }
   );
 }
 
@@ -47,16 +49,21 @@ function asSchedules(
 export function dueInstants(
   exprsOrSchedules: readonly string[] | readonly CronSchedule[],
   from: Date,
-  to: Date,
+  to: Date
 ): Date[] {
   const schedules = asSchedules(exprsOrSchedules);
   const toMs = floorMinute(to.getTime());
-  const earliest = Math.max(floorMinute(from.getTime()), toMs - MAX_SCAN_MINUTES * 60_000);
+  const earliest = Math.max(
+    floorMinute(from.getTime()),
+    toMs - MAX_SCAN_MINUTES * 60_000
+  );
   const out: Date[] = [];
   const seen = new Set<string>();
   for (let instant = toMs; instant > earliest; instant -= 60_000) {
     const candidate = new Date(instant);
-    const matching = schedules.filter((s) => cronMatches(s.expr, candidate, s.timeZone));
+    const matching = schedules.filter((s) =>
+      cronMatches(s.expr, candidate, s.timeZone)
+    );
     if (matching.length === 0) continue;
     // A DST fall-back repeats a wall-clock minute in absolute time. Cron is a
     // wall-clock contract, so the repeat is the same due instant — counting it
@@ -80,7 +87,7 @@ export function dueInstants(
 export function readCronCursor(
   exprsOrSchedules: readonly string[] | readonly CronSchedule[],
   cursor: AutomationTriggerCursor | undefined,
-  at: Date,
+  at: Date
 ): CursorReadResult {
   const to = floorMinute(at.getTime());
   let parsed = to - 60_000;
@@ -109,11 +116,13 @@ export function readCronCursor(
     };
   }
   return {
-    elements: [{ position: String(latest.getTime()), occurredAt: latest.getTime() }],
+    elements: [
+      { position: String(latest.getTime()), occurredAt: latest.getTime() },
+    ],
     positionJson: JSON.stringify(to),
     windowFrom: from,
     windowTo: to,
     skipped: Math.max(0, due.length - 1),
-    ...(due.length > 1 ? { gapReason: 'scheduler_gap' } : {}),
+    ...(due.length > 1 ? { gapReason: "scheduler_gap" } : {}),
   };
 }

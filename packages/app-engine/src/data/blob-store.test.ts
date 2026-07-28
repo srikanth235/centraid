@@ -1,79 +1,85 @@
-import { mkdirSync, existsSync, readdirSync } from 'node:fs';
-import path from 'node:path';
+import { mkdirSync, existsSync, readdirSync } from "node:fs";
+import path from "node:path";
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { describe, expect, it } from 'vitest';
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { describe, expect, it } from "vitest";
 
-import { BlobStore, hashBytes, blobUrl } from './blob-store.js';
+import { BlobStore, hashBytes, blobUrl } from "./blob-store.js";
 
-function freshAppsDir(appId = 'app'): string {
-  const dir = tempDirSync('centraid-blobs-');
+function freshAppsDir(appId = "app"): string {
+  const dir = tempDirSync("centraid-blobs-");
   mkdirSync(path.join(dir, appId), { recursive: true });
   return dir;
 }
 
 describe(BlobStore, () => {
-  it('content-addresses bytes and dedups a second identical put', async () => {
+  it("content-addresses bytes and dedups a second identical put", async () => {
     const store = new BlobStore(freshAppsDir());
-    const bytes = Buffer.from('hello world');
-    const first = await store.put('app', bytes);
+    const bytes = Buffer.from("hello world");
+    const first = await store.put("app", bytes);
     expect(first.hash).toBe(hashBytes(bytes));
     expect(first.sizeBytes).toBe(bytes.byteLength);
     expect(first.deduped).toBe(false);
-    const second = await store.put('app', bytes);
+    const second = await store.put("app", bytes);
     expect(second.hash).toBe(first.hash);
     expect(second.deduped).toBe(true);
   });
 
-  it('round-trips bytes through read; missing hash → undefined', async () => {
+  it("round-trips bytes through read; missing hash → undefined", async () => {
     const store = new BlobStore(freshAppsDir());
-    const { hash } = await store.put('app', Buffer.from('data'));
-    await expect(store.read('app', hash)).resolves.toStrictEqual(Buffer.from('data'));
-    await expect(store.read('app', 'f'.repeat(64))).resolves.toBeUndefined();
+    const { hash } = await store.put("app", Buffer.from("data"));
+    await expect(store.read("app", hash)).resolves.toStrictEqual(
+      Buffer.from("data")
+    );
+    await expect(store.read("app", "f".repeat(64))).resolves.toBeUndefined();
   });
 
-  it('rejects a non-sha256 hash (path-traversal guard)', () => {
+  it("rejects a non-sha256 hash (path-traversal guard)", () => {
     const store = new BlobStore(freshAppsDir());
-    expect(() => store.pathFor('app', '../escape')).toThrow(/invalid hash/iu);
+    expect(() => store.pathFor("app", "../escape")).toThrow(/invalid hash/iu);
   });
 
-  it('gc removes blobs not in the referenced set, keeps referenced ones', async () => {
+  it("gc removes blobs not in the referenced set, keeps referenced ones", async () => {
     const dir = freshAppsDir();
     const store = new BlobStore(dir);
-    const keep = await store.put('app', Buffer.from('keep'));
-    const drop = await store.put('app', Buffer.from('drop'));
-    expect(existsSync(store.pathFor('app', drop.hash))).toBe(true);
+    const keep = await store.put("app", Buffer.from("keep"));
+    const drop = await store.put("app", Buffer.from("drop"));
+    expect(existsSync(store.pathFor("app", drop.hash))).toBe(true);
 
-    const { removed } = await store.gc('app', new Set([keep.hash]));
+    const { removed } = await store.gc("app", new Set([keep.hash]));
     expect(removed).toBe(1);
-    expect(existsSync(store.pathFor('app', keep.hash))).toBe(true);
-    expect(existsSync(store.pathFor('app', drop.hash))).toBe(false);
-    expect(readdirSync(path.join(dir, 'app', 'blobs'))).toStrictEqual([keep.hash]);
+    expect(existsSync(store.pathFor("app", keep.hash))).toBe(true);
+    expect(existsSync(store.pathFor("app", drop.hash))).toBe(false);
+    expect(readdirSync(path.join(dir, "app", "blobs"))).toStrictEqual([
+      keep.hash,
+    ]);
   });
 
-  it('gc on an app with no blobs dir is a no-op', async () => {
+  it("gc on an app with no blobs dir is a no-op", async () => {
     const store = new BlobStore(freshAppsDir());
-    await expect(store.gc('app', new Set())).resolves.toStrictEqual({
+    await expect(store.gc("app", new Set())).resolves.toStrictEqual({
       removed: 0,
     });
   });
 
-  it('blobUrl builds the chat-history download path', () => {
-    expect(blobUrl('app', 'a'.repeat(64))).toBe(
-      `/_centraid-conversations/apps/app/blobs/${'a'.repeat(64)}`,
+  it("blobUrl builds the chat-history download path", () => {
+    expect(blobUrl("app", "a".repeat(64))).toBe(
+      `/_centraid-conversations/apps/app/blobs/${"a".repeat(64)}`
     );
   });
 
-  it('rejects a `_`-prefixed app id that is not the reserved assistant scope', () => {
+  it("rejects a `_`-prefixed app id that is not the reserved assistant scope", () => {
     const store = new BlobStore(freshAppsDir());
-    expect(() => store.pathFor('_not-a-real-scope', 'a'.repeat(64))).toThrow(/invalid app id/iu);
+    expect(() => store.pathFor("_not-a-real-scope", "a".repeat(64))).toThrow(
+      /invalid app id/iu
+    );
   });
 
-  it('allows the reserved `_assistant` scope through the same app-id gate', async () => {
-    const store = new BlobStore(freshAppsDir('_assistant'));
-    const put = await store.put('_assistant', Buffer.from('assistant upload'));
-    await expect(store.read('_assistant', put.hash)).resolves.toStrictEqual(
-      Buffer.from('assistant upload'),
+  it("allows the reserved `_assistant` scope through the same app-id gate", async () => {
+    const store = new BlobStore(freshAppsDir("_assistant"));
+    const put = await store.put("_assistant", Buffer.from("assistant upload"));
+    await expect(store.read("_assistant", put.hash)).resolves.toStrictEqual(
+      Buffer.from("assistant upload")
     );
   });
 });

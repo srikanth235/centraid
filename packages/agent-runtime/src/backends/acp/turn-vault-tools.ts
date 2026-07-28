@@ -8,18 +8,20 @@
  * vault tools reach them without silent loss.
  */
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath } from "node:url";
 
-import type { ToolContext, TurnStreamEvent } from '@centraid/app-engine';
+import type { ToolContext, TurnStreamEvent } from "@centraid/app-engine";
 
 import {
   startVaultMcpServer,
   type AcpHttpMcpServer,
   type VaultMcpHandle,
   VAULT_MCP_SERVER_NAME,
-} from './vault-mcp-server.js';
+} from "./vault-mcp-server.js";
 
-const STDIO_PROXY = fileURLToPath(new URL('vault-mcp-stdio-proxy.mjs', import.meta.url));
+const STDIO_PROXY = fileURLToPath(
+  new URL("vault-mcp-stdio-proxy.mjs", import.meta.url)
+);
 
 /** ACP default (stdio) MCP server shape — no `type` field. */
 export interface AcpStdioMcpServer {
@@ -37,7 +39,7 @@ export interface TurnVaultTools {
   /** The live HTTP endpoint, to be closed with the turn. Absent when none was started. */
   handle?: VaultMcpHandle;
   /** How the agent was told to reach the vault (for capability notices). */
-  transport?: 'http' | 'stdio';
+  transport?: "http" | "stdio";
 }
 
 export async function startTurnVaultTools(args: {
@@ -60,17 +62,17 @@ export async function startTurnVaultTools(args: {
           return;
         }
         args.emit({
-          type: 'tool.start',
+          type: "tool.start",
           toolCallId: call.toolCallId,
           toolName: call.toolName,
           args: call.args,
-          ...(typeof call.args.sql === 'string' ? { sql: call.args.sql } : {}),
+          ...(typeof call.args.sql === "string" ? { sql: call.args.sql } : {}),
         });
       },
       onResult: (call) => {
         if (suppressed.has(call.toolCallId)) return;
         args.emit({
-          type: 'tool.result',
+          type: "tool.result",
           toolCallId: call.toolCallId,
           toolName: call.toolName,
           ok: call.ok,
@@ -81,37 +83,39 @@ export async function startTurnVaultTools(args: {
     });
 
     if (args.httpMcp) {
-      return { mcpServers: [handle.server], handle, transport: 'http' };
+      return { mcpServers: [handle.server], handle, transport: "http" };
     }
 
     // Stdio bridge: agent spawns proxy; proxy dials our loopback HTTP.
     const bearer =
-      handle.server.headers.find((h) => h.name.toLowerCase() === 'authorization')?.value ?? '';
-    const token = bearer.replace(/^Bearer\s+/iu, '');
+      handle.server.headers.find(
+        (h) => h.name.toLowerCase() === "authorization"
+      )?.value ?? "";
+    const token = bearer.replace(/^Bearer\s+/iu, "");
     const stdio: AcpStdioMcpServer = {
       name: VAULT_MCP_SERVER_NAME,
       command: process.execPath,
       args: [STDIO_PROXY],
       env: [
-        { name: 'CENTRAID_VAULT_MCP_URL', value: handle.server.url },
-        { name: 'CENTRAID_VAULT_MCP_TOKEN', value: token },
+        { name: "CENTRAID_VAULT_MCP_URL", value: handle.server.url },
+        { name: "CENTRAID_VAULT_MCP_TOKEN", value: token },
       ],
     };
     args.emit({
-      type: 'notice',
-      level: 'info',
-      code: 'vault_tools_stdio',
+      type: "notice",
+      level: "info",
+      code: "vault_tools_stdio",
       message:
-        'This runner doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.',
+        "This runner doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.",
     });
-    return { mcpServers: [stdio], handle, transport: 'stdio' };
+    return { mcpServers: [stdio], handle, transport: "stdio" };
   } catch (err) {
     args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'vault_tools_unavailable',
+      type: "notice",
+      level: "warn",
+      code: "vault_tools_unavailable",
       message:
-        'Couldn’t start the local vault tool endpoint, so this turn can’t reach your vault ' +
+        "Couldn’t start the local vault tool endpoint, so this turn can’t reach your vault " +
         `data: ${err instanceof Error ? err.message : String(err)}`,
     });
     return { mcpServers: [] };

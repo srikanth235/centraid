@@ -20,7 +20,7 @@
 // the code path is the SAME one a five-scope household walks, which is what
 // keeps the collision from creeping back in.
 
-const SEP = '\u0000';
+const SEP = "\u0000";
 
 /** One row on the merged timeline, resolved to exactly one scope. */
 export interface AssetRef {
@@ -30,13 +30,19 @@ export interface AssetRef {
 }
 
 /** The composite key for an asset row as the UI holds it. */
-export function assetKey(asset: { asset_id: string; scope_id?: string | null }): string {
+export function assetKey(asset: {
+  asset_id: string;
+  scope_id?: string | null;
+}): string {
   return assetRefKey(asset.scope_id, asset.asset_id);
 }
 
 /** The same key from its two halves, for callers that hold ids rather than rows. */
-export function assetRefKey(scopeId: string | null | undefined, assetId: string): string {
-  return `${scopeId ?? ''}${SEP}${assetId}`;
+export function assetRefKey(
+  scopeId: string | null | undefined,
+  assetId: string
+): string {
+  return `${scopeId ?? ""}${SEP}${assetId}`;
 }
 
 /**
@@ -46,20 +52,20 @@ export function assetRefKey(scopeId: string | null | undefined, assetId: string)
  */
 export function parseAssetKey(key: string): AssetRef {
   const at = key.indexOf(SEP);
-  if (at < 0) return { scopeId: '', assetId: key };
+  if (at < 0) return { scopeId: "", assetId: key };
   return { scopeId: key.slice(0, at), assetId: key.slice(at + 1) };
 }
 
 /** The scope half of a key, as the write path wants it (`''` → ambient). */
 export function scopeOfKey(key: string): string | null {
   const { scopeId } = parseAssetKey(key);
-  return scopeId === '' ? null : scopeId;
+  return scopeId === "" ? null : scopeId;
 }
 
 /** Does this row have exactly this key? The one identity test the UI uses. */
 export function isAsset(
   asset: { asset_id: string; scope_id?: string | null },
-  key: string,
+  key: string
 ): boolean {
   return assetKey(asset) === key;
 }

@@ -6,15 +6,15 @@
 // version's behavior: a successful write re-reads the person, which used to
 // recreate these DOM-imperative rows from scratch; a failed/parked one left
 // the typed draft in place so nothing the owner typed is lost).
-import { useState } from 'react';
-import type { ReactNode } from 'react';
+import { useState } from "react";
+import type { ReactNode } from "react";
 
-import { dateInputToMonthDay } from '../format.ts';
-import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
+import { dateInputToMonthDay } from "../format.ts";
+import { I } from "../icons.ts";
+import { Icon } from "./Shared.tsx";
 
-import styles from './AddRows.module.css';
-import shared from './shared.module.css';
+import styles from "./AddRows.module.css";
+import shared from "./shared.module.css";
 
 type SubmitFn = (fields: Record<string, unknown>) => Promise<boolean>;
 
@@ -44,8 +44,10 @@ function AddRow({
         className={shared.miniBtn}
         aria-label="Add"
         style={{
-          background: canCommit ? 'var(--accd)' : 'color-mix(in oklab, var(--ink) 8%, transparent)',
-          color: canCommit ? '#fff' : 'var(--ink-3)',
+          background: canCommit
+            ? "var(--accd)"
+            : "color-mix(in oklab, var(--ink) 8%, transparent)",
+          color: canCommit ? "#fff" : "var(--ink-3)",
         }}
       >
         <Icon svg={I.plus} />
@@ -55,9 +57,9 @@ function AddRow({
 }
 
 export function RelationshipAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
-  const [name, setName] = useState('');
-  const [kind, setKind] = useState('');
-  const [pet, setPet] = useState('');
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("");
+  const [pet, setPet] = useState("");
   const commit = async () => {
     const n = name.trim();
     const k = kind.trim();
@@ -68,9 +70,9 @@ export function RelationshipAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
       ...(pet.trim() ? { pet: pet.trim() } : {}),
     });
     if (ok) {
-      setName('');
-      setKind('');
-      setPet('');
+      setName("");
+      setKind("");
+      setPet("");
     }
   };
   return (
@@ -100,16 +102,16 @@ export function RelationshipAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
 }
 
 export function DateAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
-  const [label, setLabel] = useState('');
-  const [date, setDate] = useState('');
+  const [label, setLabel] = useState("");
+  const [date, setDate] = useState("");
   const commit = async () => {
     const l = label.trim();
     const md = dateInputToMonthDay(date);
     if (!l || !md) return;
     const ok = await onSubmit({ label: l, month_day: md, reminder_on: true });
     if (ok) {
-      setLabel('');
-      setDate('');
+      setLabel("");
+      setDate("");
     }
   };
   return (
@@ -132,12 +134,12 @@ export function DateAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
 }
 
 export function TaskAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const commit = async () => {
     const t = text.trim();
     if (!t) return;
     const ok = await onSubmit({ text: t });
-    if (ok) setText('');
+    if (ok) setText("");
   };
   return (
     <AddRow canCommit={Boolean(text.trim())} onCommit={commit}>
@@ -152,12 +154,12 @@ export function TaskAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
 }
 
 export function NoteAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const commit = async () => {
     const t = text.trim();
     if (!t) return;
     const ok = await onSubmit({ text: t });
-    if (ok) setText('');
+    if (ok) setText("");
   };
   return (
     <AddRow canCommit={Boolean(text.trim())} onCommit={commit}>
@@ -172,12 +174,12 @@ export function NoteAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
 }
 
 export function GiftAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const commit = async () => {
     const t = text.trim();
     if (!t) return;
     const ok = await onSubmit({ text: t });
-    if (ok) setText('');
+    if (ok) setText("");
   };
   return (
     <AddRow canCommit={Boolean(text.trim())} onCommit={commit}>
@@ -192,9 +194,9 @@ export function GiftAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
 }
 
 export function DebtAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
-  const [dir, setDir] = useState('owe');
-  const [amount, setAmount] = useState('');
-  const [reason, setReason] = useState('');
+  const [dir, setDir] = useState("owe");
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
   const commit = async () => {
     const dollars = Number(amount);
     if (dollars <= 0) return;
@@ -204,17 +206,25 @@ export function DebtAddRow({ onSubmit }: { onSubmit: SubmitFn }) {
       ...(reason.trim() ? { reason: reason.trim() } : {}),
     });
     if (ok) {
-      setAmount('');
-      setReason('');
+      setAmount("");
+      setReason("");
     }
   };
   return (
     <AddRow canCommit={Number(amount) > 0} onCommit={commit}>
       <div className={`kit-seg ${styles.seg}`}>
-        <button type="button" aria-pressed={dir === 'owe'} onClick={() => setDir('owe')}>
+        <button
+          type="button"
+          aria-pressed={dir === "owe"}
+          onClick={() => setDir("owe")}
+        >
           You owe
         </button>
-        <button type="button" aria-pressed={dir === 'owed'} onClick={() => setDir('owed')}>
+        <button
+          type="button"
+          aria-pressed={dir === "owed"}
+          onClick={() => setDir("owed")}
+        >
           Owes you
         </button>
       </div>

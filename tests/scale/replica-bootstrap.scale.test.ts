@@ -1,13 +1,13 @@
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { generateVolumeFixture } from '@centraid/test-kit/volume-fixture';
-import { describe, expect, test } from 'vitest';
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
+import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";
+import { describe, expect, test } from "vitest";
 
-import { exerciseWindowedBootstrap } from '../quality/replica-bootstrap-fixture.js';
+import { exerciseWindowedBootstrap } from "../quality/replica-bootstrap-fixture.js";
 
-const OWNER = 'tests/scale/replica-bootstrap.scale.test.ts';
+const OWNER = "tests/scale/replica-bootstrap.scale.test.ts";
 
-describe('replica-bootstrap.scale', () => {
-  test('windowed bootstrap converges after an in-flight deletion at volume', async () => {
+describe("replica-bootstrap.scale", () => {
+  test("windowed bootstrap converges after an in-flight deletion at volume", async () => {
     const fixture = generateVolumeFixture({
       seed: 458,
       parties: 0,
@@ -22,20 +22,23 @@ describe('replica-bootstrap.scale', () => {
       typeof exerciseWindowedBootstrap
     >[0];
     const result = await exerciseWindowedBootstrap(source, 2_000, 24_999);
-    const passed = result.rows === 49_999 && result.cursor.seq === 11 && result.durationMs < 20_000;
+    const passed =
+      result.rows === 49_999 &&
+      result.cursor.seq === 11 &&
+      result.durationMs < 20_000;
     await recordQualityResult({
-      lane: 'scale',
+      lane: "scale",
       owner: OWNER,
-      name: 'Replica convergence at 50k rows',
-      status: passed ? 'passed' : 'failed',
+      name: "Replica convergence at 50k rows",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
-          name: 'wall clock',
+          name: "wall clock",
           value: result.durationMs,
-          unit: 'ms',
+          unit: "ms",
           budget: 20_000,
         },
-        { name: 'converged rows', value: result.rows, unit: 'rows' },
+        { name: "converged rows", value: result.rows, unit: "rows" },
       ],
     });
     expect(result.rows).toBe(49_999);

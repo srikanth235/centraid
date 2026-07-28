@@ -1,20 +1,20 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { commandVault } from './vault-admin.ts';
+import { commandVault } from "./vault-admin.ts";
 
 let dataDir: string;
 
 class CliFailError extends Error {
   constructor(
     message: string,
-    readonly code: number,
+    readonly code: number
   ) {
     super(message);
-    this.name = 'CliFailError';
+    this.name = "CliFailError";
   }
 }
 
@@ -34,15 +34,15 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
   } finally {
     process.stdout.write = original;
   }
-  return chunks.join('');
+  return chunks.join("");
 }
 
 function lastJson(text: string): Record<string, unknown> {
-  const lines = text.trim().split('\n').filter(Boolean);
+  const lines = text.trim().split("\n").filter(Boolean);
   return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
 }
 
-describe('vault-admin', () => {
+describe("vault-admin", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`vault-admin-${crypto.randomUUID()}-`);
   });
@@ -51,90 +51,120 @@ describe('vault-admin', () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test('vault create / list / rename / delete while the daemon lock is free', async () => {
+  test("vault create / list / rename / delete while the daemon lock is free", async () => {
     const created = lastJson(
       await capture(() =>
-        commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail),
-      ),
+        commandVault(
+          ["create", "--data-dir", dataDir, "--name", "Family"],
+          fail
+        )
+      )
     );
-    expect(created).toMatchObject({ name: 'Family' });
-    const listed = (await capture(() => commandVault(['list', '--data-dir', dataDir], fail)))
+    expect(created).toMatchObject({ name: "Family" });
+    const listed = (
+      await capture(() => commandVault(["list", "--data-dir", dataDir], fail))
+    )
       .trim()
-      .split('\n')
+      .split("\n")
       .filter(Boolean);
     expect(listed).toHaveLength(1);
     const renamed = lastJson(
       await capture(() =>
-        commandVault(['rename', '--data-dir', dataDir, created.vaultId as string, 'Sharma'], fail),
-      ),
+        commandVault(
+          [
+            "rename",
+            "--data-dir",
+            dataDir,
+            created.vaultId as string,
+            "Sharma",
+          ],
+          fail
+        )
+      )
     );
-    expect(renamed).toMatchObject({ name: 'Sharma' });
+    expect(renamed).toMatchObject({ name: "Sharma" });
     const deleted = lastJson(
       await capture(() =>
-        commandVault(['delete', '--data-dir', dataDir, created.vaultId as string], fail),
-      ),
+        commandVault(
+          ["delete", "--data-dir", dataDir, created.vaultId as string],
+          fail
+        )
+      )
     );
     expect(deleted).toMatchObject({ deleted: created.vaultId });
   });
 
-  test('vault CLI rejects bad usage and permits deletion back to zero vaults', async () => {
+  test("vault CLI rejects bad usage and permits deletion back to zero vaults", async () => {
     await expect(
-      capture(() => commandVault(['bogus', '--data-dir', dataDir], fail)),
+      capture(() => commandVault(["bogus", "--data-dir", dataDir], fail))
     ).rejects.toThrow(/list, create, rename, delete/u);
-    await expect(capture(() => commandVault(['list'], fail))).rejects.toThrow(/--data-dir/u);
+    await expect(capture(() => commandVault(["list"], fail))).rejects.toThrow(
+      /--data-dir/u
+    );
     await expect(
-      capture(() => commandVault(['rename', '--data-dir', dataDir], fail)),
+      capture(() => commandVault(["rename", "--data-dir", dataDir], fail))
     ).rejects.toThrow(/vault rename/u);
     const only = lastJson(
-      await capture(() => commandVault(['create', '--data-dir', dataDir], fail)),
+      await capture(() => commandVault(["create", "--data-dir", dataDir], fail))
     );
-    const [first] = (await capture(() => commandVault(['list', '--data-dir', dataDir], fail)))
+    const [first] = (
+      await capture(() => commandVault(["list", "--data-dir", dataDir], fail))
+    )
       .trim()
-      .split('\n')
+      .split("\n")
       .map((line) => JSON.parse(line) as { vaultId: string });
-    await capture(() => commandVault(['delete', '--data-dir', dataDir, first!.vaultId], fail));
-    expect(first!.vaultId).toBe(only.vaultId);
-    await expect(capture(() => commandVault(['list', '--data-dir', dataDir], fail))).resolves.toBe(
-      '',
+    await capture(() =>
+      commandVault(["delete", "--data-dir", dataDir, first!.vaultId], fail)
     );
+    expect(first!.vaultId).toBe(only.vaultId);
+    await expect(
+      capture(() => commandVault(["list", "--data-dir", dataDir], fail))
+    ).resolves.toBe("");
   });
 
-  test('vault list/create --json wrap output in one {ok,...} line (issue #382)', async () => {
+  test("vault list/create --json wrap output in one {ok,...} line (issue #382)", async () => {
     const created = lastJson(
       await capture(() =>
-        commandVault(['create', '--data-dir', dataDir, '--name', 'Family', '--json'], fail),
-      ),
+        commandVault(
+          ["create", "--data-dir", dataDir, "--name", "Family", "--json"],
+          fail
+        )
+      )
     );
     expect(created).toStrictEqual({
       ok: true,
       vaultId: expect.any(String),
-      name: 'Family',
+      name: "Family",
     });
     const listed = lastJson(
-      await capture(() => commandVault(['list', '--data-dir', dataDir, '--json'], fail)),
+      await capture(() =>
+        commandVault(["list", "--data-dir", dataDir, "--json"], fail)
+      )
     );
     expect(listed.ok).toBe(true);
     expect(Array.isArray(listed.vaults)).toBe(true);
     expect(listed.vaults as unknown[]).toHaveLength(1);
     expect(listed.vaults).toContainEqual(
-      expect.objectContaining({ vaultId: created.vaultId, name: 'Family' }),
+      expect.objectContaining({ vaultId: created.vaultId, name: "Family" })
     );
   });
 
-  test('vault --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {
-    let captured = '';
+  test("vault --json failure emits {ok:false,error,message} on stdout, then still fails the process", async () => {
+    let captured = "";
     const original = process.stdout.write.bind(process.stdout);
     process.stdout.write = ((chunk: unknown): boolean => {
       captured += String(chunk);
       return true;
     }) as typeof process.stdout.write;
     try {
-      await expect(commandVault(['list', '--json'], fail)).rejects.toThrow(/--data-dir/u);
+      await expect(commandVault(["list", "--json"], fail)).rejects.toThrow(
+        /--data-dir/u
+      );
     } finally {
       process.stdout.write = original;
     }
     const parsed = lastJson(captured);
-    expect(parsed).toMatchObject({ ok: false, error: 'usage' });
+    expect(parsed).toMatchObject({ ok: false, error: "usage" });
     expect(parsed.message).toMatch(/--data-dir/u);
   });
 });

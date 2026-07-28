@@ -1,21 +1,21 @@
-import { palette } from '@centraid/design-tokens';
-import type { IconName } from '@centraid/design-tokens';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { palette } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design-tokens";
+import React, { useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
-import Button from '../../kit/components/Button';
-import Icon from '../../kit/components/Icon';
-import { radii, t, useTheme, type ThemeColors } from '../../kit/theme';
+import Button from "../../kit/components/Button";
+import Icon from "../../kit/components/Icon";
+import { radii, t, useTheme, type ThemeColors } from "../../kit/theme";
 import {
   GatewayError,
   listVaults,
   resolveGatewayBase,
   updateVault,
   type VaultRow,
-} from '../../lib/gateway';
-import { getActiveVaultId, subscribeSpaces } from '../../lib/spaces';
-import ColorSwatchRow from './ColorSwatchRow';
-import SettingsSection from './SettingsSection';
+} from "../../lib/gateway";
+import { getActiveVaultId, subscribeSpaces } from "../../lib/spaces";
+import ColorSwatchRow from "./ColorSwatchRow";
+import SettingsSection from "./SettingsSection";
 
 // Settings → Space — a port of desktop's Settings → Space (issue #382), scoped
 // to the ACTIVE (gateway, vault) tuple the Spaces switcher has selected (lib/
@@ -41,29 +41,29 @@ const SPACE_COLORS: readonly string[] = [
 // The vault stores an icon as a design-tokens IconName key. Mirrors desktop's
 // PROFILE_ICONS; every one resolves in the mobile Icon registry.
 const SPACE_ICONS: readonly IconName[] = [
-  'Home',
-  'Bolt',
-  'Sparkle',
-  'Compass',
-  'Book',
-  'Music',
-  'Gym',
-  'Plant',
-  'Calendar',
-  'Camera',
-  'Mood',
-  'Gift',
+  "Home",
+  "Bolt",
+  "Sparkle",
+  "Compass",
+  "Book",
+  "Music",
+  "Gym",
+  "Plant",
+  "Calendar",
+  "Camera",
+  "Mood",
+  "Gift",
 ];
 
 const DEFAULT_COLOR = palette.indigo;
-const DEFAULT_ICON: IconName = 'Sparkle';
+const DEFAULT_ICON: IconName = "Sparkle";
 
 type State =
-  | { kind: 'loading' }
-  | { kind: 'no-gateway' }
-  | { kind: 'no-space' }
-  | { kind: 'ready'; vault: VaultRow }
-  | { kind: 'error'; message: string };
+  | { kind: "loading" }
+  | { kind: "no-gateway" }
+  | { kind: "no-space" }
+  | { kind: "ready"; vault: VaultRow }
+  | { kind: "error"; message: string };
 
 type SpaceFormSetters = {
   setState: (next: State) => void;
@@ -78,7 +78,7 @@ function seedForm(setters: SpaceFormSetters, vault: VaultRow): void {
   setters.setName(vault.name);
   setters.setColor(vault.color ?? DEFAULT_COLOR);
   setters.setIcon(asIcon(vault.icon) ?? DEFAULT_ICON);
-  setters.setBlurb(vault.blurb ?? '');
+  setters.setBlurb(vault.blurb ?? "");
 }
 
 // The loader lives outside the component: it closes over nothing but the
@@ -88,37 +88,38 @@ async function loadSpace(setters: SpaceFormSetters): Promise<void> {
   try {
     const base = await resolveGatewayBase();
     if (!base) {
-      setters.setState({ kind: 'no-gateway' });
+      setters.setState({ kind: "no-gateway" });
       return;
     }
     const vaults = await listVaults();
     // Prefer the vault the Spaces switcher has active; fall back to the first
     // visible one (fresh install with nothing selected yet).
     const activeVaultId = getActiveVaultId();
-    const active = vaults?.find((v) => v.vaultId === activeVaultId) ?? vaults?.[0];
+    const active =
+      vaults?.find((v) => v.vaultId === activeVaultId) ?? vaults?.[0];
     if (!active) {
-      setters.setState({ kind: 'no-space' });
+      setters.setState({ kind: "no-space" });
       return;
     }
     seedForm(setters, active);
-    setters.setState({ kind: 'ready', vault: active });
+    setters.setState({ kind: "ready", vault: active });
   } catch (err) {
     const message =
       err instanceof GatewayError || err instanceof Error
         ? err.message
-        : 'Could not load your space.';
-    setters.setState({ kind: 'error', message });
+        : "Could not load your space.";
+    setters.setState({ kind: "error", message });
   }
 }
 
 export default function SpaceSection(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [state, setState] = useState<State>({ kind: 'loading' });
-  const [name, setName] = useState('');
+  const [state, setState] = useState<State>({ kind: "loading" });
+  const [name, setName] = useState("");
   const [color, setColor] = useState<string>(DEFAULT_COLOR);
   const [icon, setIcon] = useState<IconName>(DEFAULT_ICON);
-  const [blurb, setBlurb] = useState('');
+  const [blurb, setBlurb] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
 
@@ -126,7 +127,7 @@ export default function SpaceSection(): React.JSX.Element {
   // component's lifetime — memoized once so the effects below can depend on it.
   const setters = useMemo<SpaceFormSetters>(
     () => ({ setState, setName, setColor, setIcon, setBlurb }),
-    [],
+    []
   );
 
   useEffect(() => {
@@ -136,17 +137,17 @@ export default function SpaceSection(): React.JSX.Element {
   // just selected.
   useEffect(() => subscribeSpaces(() => void loadSpace(setters)), [setters]);
 
-  if (state.kind !== 'ready') {
+  if (state.kind !== "ready") {
     return (
       <SettingsSection label="Space">
         <Text style={styles.hint}>
-          {state.kind === 'loading'
-            ? 'Loading your space…'
-            : state.kind === 'error'
+          {state.kind === "loading"
+            ? "Loading your space…"
+            : state.kind === "error"
               ? state.message
-              : state.kind === 'no-space'
-                ? 'No space on this gateway yet.'
-                : 'Pair with your desktop to edit your space.'}
+              : state.kind === "no-space"
+                ? "No space on this gateway yet."
+                : "Pair with your desktop to edit your space."}
         </Text>
       </SettingsSection>
     );
@@ -158,7 +159,7 @@ export default function SpaceSection(): React.JSX.Element {
     trimmedName !== vault.name ||
     color !== (vault.color ?? DEFAULT_COLOR) ||
     icon !== (asIcon(vault.icon) ?? DEFAULT_ICON) ||
-    blurb.trim() !== (vault.blurb ?? '');
+    blurb.trim() !== (vault.blurb ?? "");
   const canSave = trimmedName.length > 0 && dirty && !saving;
 
   const save = (): void => {
@@ -172,10 +173,12 @@ export default function SpaceSection(): React.JSX.Element {
     })
       .then((updated) => {
         seedForm(setters, updated);
-        setState({ kind: 'ready', vault: updated });
+        setState({ kind: "ready", vault: updated });
       })
       .catch((err: unknown) => {
-        setSaveError(err instanceof Error ? err.message : 'Could not save your space.');
+        setSaveError(
+          err instanceof Error ? err.message : "Could not save your space."
+        );
       })
       .finally(() => setSaving(false));
   };
@@ -194,7 +197,11 @@ export default function SpaceSection(): React.JSX.Element {
         />
 
         <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Colour</Text>
-        <ColorSwatchRow value={color} options={SPACE_COLORS} onChange={setColor} />
+        <ColorSwatchRow
+          value={color}
+          options={SPACE_COLORS}
+          onChange={setColor}
+        />
 
         <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Icon</Text>
         <View style={styles.iconGrid}>
@@ -213,13 +220,19 @@ export default function SpaceSection(): React.JSX.Element {
                   pressed && !active && styles.pressed,
                 ]}
               >
-                <Icon name={iconName} size={18} color={active ? colors.inkInv : colors.ink2} />
+                <Icon
+                  name={iconName}
+                  size={18}
+                  color={active ? colors.inkInv : colors.ink2}
+                />
               </Pressable>
             );
           })}
         </View>
 
-        <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Description</Text>
+        <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>
+          Description
+        </Text>
         <TextInput
           value={blurb}
           onChangeText={setBlurb}
@@ -232,7 +245,7 @@ export default function SpaceSection(): React.JSX.Element {
         {saveError ? <Text style={styles.error}>{saveError}</Text> : null}
         <View style={styles.actions}>
           <Button
-            label={saving ? 'Saving…' : 'Save'}
+            label={saving ? "Saving…" : "Save"}
             icon="Check"
             onPress={save}
             disabled={!canSave}
@@ -244,7 +257,8 @@ export default function SpaceSection(): React.JSX.Element {
 }
 
 function asIcon(value: string | undefined): IconName | undefined {
-  return value !== undefined && (SPACE_ICONS as readonly string[]).includes(value)
+  return value !== undefined &&
+    (SPACE_ICONS as readonly string[]).includes(value)
     ? (value as IconName)
     : undefined;
 }
@@ -260,19 +274,19 @@ const makeStyles = (colors: ThemeColors) =>
       gap: 8,
       padding: 16,
     },
-    error: { ...t('small'), color: colors.danger, marginTop: 8 },
-    fieldLabel: { ...t('small'), color: colors.ink2, fontWeight: '500' },
+    error: { ...t("small"), color: colors.danger, marginTop: 8 },
+    fieldLabel: { ...t("small"), color: colors.ink2, fontWeight: "500" },
     fieldLabelSpaced: { marginTop: 8 },
-    hint: { ...t('small'), color: colors.ink3 },
-    iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    hint: { ...t("small"), color: colors.ink3 },
+    iconGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     iconTile: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.bg,
       borderColor: colors.line,
       borderRadius: radii.md,
       borderWidth: 1,
       height: 40,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 40,
     },
     iconTileActive: {
@@ -280,7 +294,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderColor: colors.accent,
     },
     input: {
-      ...t('body'),
+      ...t("body"),
       backgroundColor: colors.bg,
       borderColor: colors.line,
       borderRadius: radii.md,

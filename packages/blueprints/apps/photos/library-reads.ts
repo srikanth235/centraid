@@ -2,9 +2,9 @@
 // app-root.tsx: how a `library` read reaches N scopes on this host, and how a
 // refetch is deferred. Both are pure plumbing with no app state, which is why
 // they live here rather than inside the mount closure.
-import { subscribeReadUpdates } from './kit.ts';
-import type { ScopeReadResult } from './library-store.ts';
-import type { LibraryData } from './types.ts';
+import { subscribeReadUpdates } from "./kit.ts";
+import type { ScopeReadResult } from "./library-store.ts";
+import type { LibraryData } from "./types.ts";
 
 /**
  * Fan the `library` query across scopes. `readAll` is the multi-scope door —
@@ -21,27 +21,27 @@ import type { LibraryData } from './types.ts';
 export async function readLibraryScopes(
   scopeIds: readonly string[],
   input: Record<string, unknown>,
-  onLive?: (scopeId: string, data: LibraryData) => void,
+  onLive?: (scopeId: string, data: LibraryData) => void
 ): Promise<ScopeReadResult[]> {
   const client = window.centraid;
-  if (typeof client.readAll === 'function') {
+  if (typeof client.readAll === "function") {
     const results = await client.readAll<LibraryData>({
-      query: 'library',
+      query: "library",
       input,
       scopes: scopeIds,
     });
     return results.map((result) =>
       result.ok
         ? { scope: result.scope, ok: true, data: result.data }
-        : { scope: result.scope, ok: false, error: result.error },
+        : { scope: result.scope, ok: false, error: result.error }
     );
   }
   const reads = scopeIds.map((scopeId) =>
     client.read<LibraryData>({
-      query: 'library',
+      query: "library",
       input,
       ...(scopeId ? { scope: scopeId } : {}),
-    }),
+    })
   );
   if (onLive) {
     reads.forEach((read, index) => {
@@ -50,7 +50,7 @@ export async function readLibraryScopes(
       // when its replacement lands, exactly as the pre-#599 single read did.
       liveSubscriptions.get(scopeId)?.();
       const subscription = subscribeReadUpdates<LibraryData>(read, (value) =>
-        onLive(scopeId, value),
+        onLive(scopeId, value)
       );
       liveSubscriptions.set(scopeId, subscription.unsubscribe);
     });
@@ -58,7 +58,8 @@ export async function readLibraryScopes(
   const settled = await Promise.allSettled(reads);
   return settled.map((result, index): ScopeReadResult => {
     const scope = scopeIds[index]!;
-    if (result.status === 'fulfilled') return { scope, ok: true, data: result.value };
+    if (result.status === "fulfilled")
+      return { scope, ok: true, data: result.value };
     const reason = result.reason as { message?: string };
     return {
       scope,
@@ -88,7 +89,7 @@ const REFETCH_MS = 200;
  * module stays free of the browser kit.
  */
 export function createRefetchScheduler(
-  debounce: (fn: () => void, ms: number) => () => void,
+  debounce: (fn: () => void, ms: number) => () => void
 ): (key: string, run: () => void) => void {
   const schedulers = new Map<string, () => void>();
   return (key, run) => {

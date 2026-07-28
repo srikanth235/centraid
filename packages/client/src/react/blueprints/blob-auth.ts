@@ -10,13 +10,18 @@
 // kit — only the authed gateway client — so it lives here as its own leaf
 // module. `kit-inline.ts` re-exports it, so the served-kit consumers are
 // unchanged; `inline-blob-images.ts` imports it directly and stays kit-free.
-import { auth, authHeaders, doFetch, VAULT_HEADER } from '../../gateway-client-core.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  VAULT_HEADER,
+} from "../../gateway-client-core.js";
 
 /** The vault blob route prefix every inline blob reference points at. */
-export const BLOB_PREFIX = '/centraid/_vault/blobs';
+export const BLOB_PREFIX = "/centraid/_vault/blobs";
 
 /** The DOM attribute an inline app stamps to say which scope owns these bytes. */
-export const SCOPE_ATTR = 'data-scope';
+export const SCOPE_ATTR = "data-scope";
 
 /**
  * Authorization headers for a blob request, addressed at ONE scope.
@@ -29,7 +34,10 @@ export const SCOPE_ATTR = 'data-scope';
  * multi-scope surface therefore names its scope.
  * @public
  */
-export function blobAuthHeaders(token: string | undefined, scope?: string): Record<string, string> {
+export function blobAuthHeaders(
+  token: string | undefined,
+  scope?: string
+): Record<string, string> {
   return { ...authHeaders(token), ...(scope ? { [VAULT_HEADER]: scope } : {}) };
 }
 
@@ -45,7 +53,10 @@ export function blobAuthHeaders(token: string | undefined, scope?: string): Reco
  * surface.
  * @public
  */
-export async function authorizeBlobUrl(pathname: string, scope?: string): Promise<string | null> {
+export async function authorizeBlobUrl(
+  pathname: string,
+  scope?: string
+): Promise<string | null> {
   try {
     const { baseUrl, token } = await auth();
     const res = await doFetch(baseUrl, pathname, {

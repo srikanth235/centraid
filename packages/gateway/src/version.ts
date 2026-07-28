@@ -10,4 +10,4 @@ export {
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
-} from '@centraid/protocol';
+} from "@centraid/protocol";

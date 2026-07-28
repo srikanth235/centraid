@@ -9,7 +9,11 @@
 // screen renders — reusing `deriveAutomationHero`/`triggerOriginLabel`/
 // `AU_STATUS_LABEL` from automationsData.ts rather than re-deriving the
 // hero/trigger block a second time.
-import { auStatusForRow, glyphForId, hueForId } from '../../../automation-identity.js';
+import {
+  auStatusForRow,
+  glyphForId,
+  hueForId,
+} from "../../../automation-identity.js";
 import {
   confirmVaultParked,
   decideOutboxItem,
@@ -21,7 +25,7 @@ import {
   revokeOutboxGrant,
   type BlockingSummary,
   type OutboxGrant,
-} from '../../../gateway-client.js';
+} from "../../../gateway-client.js";
 import type {
   AuConsentDTO,
   AuPlanStatusDTO,
@@ -32,8 +36,12 @@ import type {
   ConsentKind,
   ThreadRunDTO,
   ThreadRunStatus,
-} from '../../screen-contracts.js';
-import { AU_STATUS_LABEL, deriveAutomationHero, triggerOriginLabel } from './automationsData.js';
+} from "../../screen-contracts.js";
+import {
+  AU_STATUS_LABEL,
+  deriveAutomationHero,
+  triggerOriginLabel,
+} from "./automationsData.js";
 
 /**
  * The result `loadAutomationThreadData` hands back to the route wrapper. The
@@ -99,10 +107,10 @@ export interface AutomationThreadLoadResult {
 export function filterConsentForAutomation(
   agentId: string | undefined,
   blocking: BlockingSummary,
-  grants: readonly OutboxGrant[],
+  grants: readonly OutboxGrant[]
 ): AuConsentDTO {
   const parked = blocking.parked
-    .filter((p) => p.callerKind === 'agent' && p.callerId === agentId)
+    .filter((p) => p.callerKind === "agent" && p.callerId === agentId)
     .map((p) => ({
       command: p.command,
       input: p.input,
@@ -110,7 +118,7 @@ export function filterConsentForAutomation(
       parkedAt: p.parkedAt,
     }));
   const outbox = blocking.outbox
-    .filter((o) => o.actorKind === 'agent' && o.actorId === agentId)
+    .filter((o) => o.actorKind === "agent" && o.actorId === agentId)
     .map((o) => ({
       artifact: o.artifact,
       canEdit: o.canEdit,
@@ -142,28 +150,30 @@ function dateGroupLabel(startedAt: number): string {
   const d = new Date(startedAt);
   const now = new Date();
   const ds = d.toDateString();
-  if (ds === now.toDateString()) return 'Today';
-  if (ds === new Date(now.getTime() - 86_400_000).toDateString()) return 'Yesterday';
+  if (ds === now.toDateString()) return "Today";
+  if (ds === new Date(now.getTime() - 86_400_000).toDateString())
+    return "Yesterday";
   return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
+    weekday: "short",
+    day: "numeric",
+    month: "short",
   });
 }
 
 function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
-  const status: ThreadRunStatus = run.endedAt === undefined ? 'running' : run.ok ? 'ok' : 'fail';
+  const status: ThreadRunStatus =
+    run.endedAt === undefined ? "running" : run.ok ? "ok" : "fail";
   return {
     costUsd: run.totalCostUsd ?? null,
     dateGroup: dateGroupLabel(run.startedAt),
     durationMs: run.endedAt === undefined ? null : run.endedAt - run.startedAt,
     endedAt: run.endedAt ?? null,
-    entryKind: run.triggerKind === 'interactive' ? 'ask' : 'run',
+    entryKind: run.triggerKind === "interactive" ? "ask" : "run",
     originLabel: triggerOriginLabel(run).label,
     runId: run.turnId,
     startedAt: run.startedAt,
     status,
-    summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+    summary: run.ok ? (run.summary ?? "—") : (run.error ?? "Failed"),
   };
 }
 
@@ -181,42 +191,45 @@ function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
  */
 function buildPlanStatus(
   compiles: readonly CentraidAutomationTurnRecord[],
-  hasRun: boolean,
+  hasRun: boolean
 ): AuPlanStatusDTO {
   const latest = compiles[0];
   if (!latest) {
     return hasRun
-      ? { detail: null, label: 'Plan ready', state: 'ready' }
+      ? { detail: null, label: "Plan ready", state: "ready" }
       : {
-          detail: 'This automation has never been compiled, so it has nothing to run yet.',
-          label: 'No plan yet',
-          state: 'never',
+          detail:
+            "This automation has never been compiled, so it has nothing to run yet.",
+          label: "No plan yet",
+          state: "never",
         };
   }
   if (latest.endedAt === undefined) {
     return {
-      detail: 'Building a new plan from the instructions.',
-      label: 'Compiling…',
-      state: 'compiling',
+      detail: "Building a new plan from the instructions.",
+      label: "Compiling…",
+      state: "compiling",
     };
   }
   if (!latest.ok) {
     return {
-      detail: latest.error ?? 'The compiler could not turn these instructions into a plan.',
-      label: 'Compile failed',
-      state: 'failed',
+      detail:
+        latest.error ??
+        "The compiler could not turn these instructions into a plan.",
+      label: "Compile failed",
+      state: "failed",
     };
   }
   return {
     detail: `Compiled ${relativeCompileTime(latest.startedAt)}.`,
-    label: 'Plan ready',
-    state: 'ready',
+    label: "Plan ready",
+    state: "ready",
   };
 }
 
 function relativeCompileTime(startedAt: number): string {
   const mins = Math.round((Date.now() - startedAt) / 60_000);
-  if (mins < 1) return 'just now';
+  if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.round(mins / 60);
   if (hours < 24) return `${hours}h ago`;
@@ -249,14 +262,19 @@ export async function loadAutomationThreadData(input: {
   // must not act on) and otherwise handed to the compiler screen, which reads
   // the same turns as steps via automationCompileData.ts.
   const compiles = runs
-    .filter((run) => run.triggerKind === 'compile')
+    .filter((run) => run.triggerKind === "compile")
     .sort((a, b) => b.startedAt - a.startedAt);
-  const threadTurns = runs.filter((run) => run.triggerKind !== 'compile');
-  const executions = threadTurns.filter((run) => run.triggerKind !== 'interactive');
+  const threadTurns = runs.filter((run) => run.triggerKind !== "compile");
+  const executions = threadTurns.filter(
+    (run) => run.triggerKind !== "interactive"
+  );
   // Header status now reports the AUTOMATION, not its last compile — the plan
   // banner carries compile state, and duplicating it in the header badge is
   // what made "Compile failed" read like a run outcome.
-  const statusKind = auStatusForRow(row.enabled, executions.length > 0) as AuStatusKind;
+  const statusKind = auStatusForRow(
+    row.enabled,
+    executions.length > 0
+  ) as AuStatusKind;
   const statusLabel = AU_STATUS_LABEL[statusKind];
 
   const header: AutomationThreadHeaderDTO = {
@@ -275,11 +293,13 @@ export async function loadAutomationThreadData(input: {
     triggerSummary: hero.when,
     webhook: hero.webhook,
     entityTags: Array.from(
-      (row.manifest.prompt ?? '').matchAll(/@\[(?<entityType>[^/\]]+)\/(?<entityId>[^\]]+)\]/gu),
+      (row.manifest.prompt ?? "").matchAll(
+        /@\[(?<entityType>[^/\]]+)\/(?<entityId>[^\]]+)\]/gu
+      ),
       (match) => ({
-        type: match.groups?.entityType ?? '',
-        id: match.groups?.entityId ?? '',
-      }),
+        type: match.groups?.entityType ?? "",
+        id: match.groups?.entityId ?? "",
+      })
     ),
   };
 
@@ -288,7 +308,7 @@ export async function loadAutomationThreadData(input: {
       consent: filterConsentForAutomation(
         agents.find((agent) => agent.hostKey === row.ownerApp)?.agentId,
         blocking,
-        grants,
+        grants
       ),
       header,
       plan: buildPlanStatus(compiles, executions.length > 0),
@@ -317,24 +337,26 @@ export async function decideConsentItem(input: {
   alwaysAllow?: boolean;
 }): Promise<boolean> {
   switch (input.kind) {
-    case 'outbox': {
+    case "outbox": {
       const outcome = await decideOutboxItem({
-        decision: input.decision === 'discard' ? 'discard' : 'approve',
+        decision: input.decision === "discard" ? "discard" : "approve",
         itemId: input.id,
-        ...(input.alwaysAllow === undefined ? {} : { alwaysAllow: input.alwaysAllow }),
+        ...(input.alwaysAllow === undefined
+          ? {}
+          : { alwaysAllow: input.alwaysAllow }),
       });
-      return outcome.status === 'executed';
+      return outcome.status === "executed";
     }
-    case 'parked': {
+    case "parked": {
       await confirmVaultParked({
-        approve: input.decision !== 'discard',
+        approve: input.decision !== "discard",
         invocationId: input.id,
       });
       return true;
     }
-    case 'grant': {
+    case "grant": {
       const outcome = await revokeOutboxGrant(input.id);
-      return outcome.status === 'executed';
+      return outcome.status === "executed";
     }
   }
 }

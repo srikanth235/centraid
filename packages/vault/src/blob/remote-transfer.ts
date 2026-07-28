@@ -1,4 +1,4 @@
-import type { BlobRange, BlobStat } from './store.js';
+import type { BlobRange, BlobStat } from "./store.js";
 
 export interface MultipartPart {
   partNumber: number;
@@ -29,12 +29,12 @@ export interface RemoteBlobTransfer {
     sha256: string,
     uploadId: string,
     partNumber: number,
-    bytes: Buffer,
+    bytes: Buffer
   ) => Promise<string>;
   completeShaUpload?: (
     sha256: string,
     uploadId: string,
-    parts: readonly MultipartPart[],
+    parts: readonly MultipartPart[]
   ) => Promise<void>;
   abortShaUpload?: (sha256: string, uploadId: string) => Promise<void>;
   beginTemporaryUpload: (tempId: string) => Promise<string>;
@@ -42,12 +42,12 @@ export interface RemoteBlobTransfer {
     tempId: string,
     uploadId: string,
     partNumber: number,
-    bytes: Buffer,
+    bytes: Buffer
   ) => Promise<string>;
   completeTemporaryUpload: (
     tempId: string,
     uploadId: string,
-    parts: readonly MultipartPart[],
+    parts: readonly MultipartPart[]
   ) => Promise<void>;
   abortTemporaryUpload: (tempId: string, uploadId: string) => Promise<void>;
   /** Enumerate every in-progress upload under this vault's temp prefix. */
@@ -56,7 +56,7 @@ export interface RemoteBlobTransfer {
   putTemporaryStream: (
     tempId: string,
     source: NodeJS.ReadableStream,
-    approxSize: number,
+    approxSize: number
   ) => Promise<void>;
   statTemporary: (tempId: string) => Promise<BlobStat | null>;
   /** Bounded read used only to re-key a hash-unknown encrypted temp object. */
@@ -68,14 +68,21 @@ export interface RemoteBlobTransfer {
    * large original; the presigned temp PUT itself stays class-less (presign
    * signs only `host`). Absent ⇒ the instance default.
    */
-  copyTemporaryToSha: (tempId: string, sha256: string, storageClass?: string) => Promise<void>;
+  copyTemporaryToSha: (
+    tempId: string,
+    sha256: string,
+    storageClass?: string
+  ) => Promise<void>;
   deleteTemporary: (tempId: string) => Promise<void>;
-  presignTemporaryPut: (tempId: string, expiresSeconds?: number) => Promise<URL>;
+  presignTemporaryPut: (
+    tempId: string,
+    expiresSeconds?: number
+  ) => Promise<URL>;
   presignTemporaryPart: (
     tempId: string,
     uploadId: string,
     partNumber: number,
-    expiresSeconds?: number,
+    expiresSeconds?: number
   ) => Promise<URL>;
   presignShaGet: (sha256: string, expiresSeconds?: number) => Promise<URL>;
 }

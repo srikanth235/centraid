@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 
 import {
   browseRows,
   type AtlasCensusPayload,
   type AtlasGraphPayload,
   type AtlasPulsePayload,
-} from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import AtlasBrowseTab from './AtlasBrowseTab.js';
-import AtlasKindsTab from './AtlasKindsTab.js';
-import AtlasRelationsTab from './AtlasRelationsTab.js';
+} from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import AtlasBrowseTab from "./AtlasBrowseTab.js";
+import AtlasKindsTab from "./AtlasKindsTab.js";
+import AtlasRelationsTab from "./AtlasRelationsTab.js";
 
-import styles from './AtlasScreen.module.css';
+import styles from "./AtlasScreen.module.css";
 
 // The Vault Atlas (issue #441 Part B) — ontology at a glance in Operations.
 // Owns its own head + tab strip (Kinds / Relations / Browse) and the census/
@@ -31,12 +31,12 @@ export interface AtlasScreenProps {
   loadGraph: () => Promise<AtlasGraphPayload>;
 }
 
-type TabId = 'kinds' | 'relations' | 'browse';
+type TabId = "kinds" | "relations" | "browse";
 
 const TABS: readonly { id: TabId; label: string }[] = [
-  { id: 'kinds', label: 'Kinds' },
-  { id: 'relations', label: 'Map' },
-  { id: 'browse', label: 'Browse' },
+  { id: "kinds", label: "Kinds" },
+  { id: "relations", label: "Map" },
+  { id: "browse", label: "Browse" },
 ];
 
 export default function AtlasScreen({
@@ -44,7 +44,7 @@ export default function AtlasScreen({
   loadPulse,
   loadGraph,
 }: AtlasScreenProps): JSX.Element {
-  const [tab, setTab] = useState<TabId>('kinds');
+  const [tab, setTab] = useState<TabId>("kinds");
   const [browseTable, setBrowseTable] = useState<string | undefined>(undefined);
 
   const [stats, setStats] = useState<AtlasCensusPayload | null>(null);
@@ -62,11 +62,14 @@ export default function AtlasScreen({
   const loadCensus = useCallback(() => {
     void Promise.allSettled([loadStats(), loadPulse()]).then(([s, p]) => {
       if (!mountedRef.current) return;
-      if (s.status === 'fulfilled') {
+      if (s.status === "fulfilled") {
         setStats(s.value);
         setStatsError(null);
-      } else setStatsError(s.reason instanceof Error ? s.reason.message : String(s.reason));
-      if (p.status === 'fulfilled') setPulse(p.value);
+      } else
+        setStatsError(
+          s.reason instanceof Error ? s.reason.message : String(s.reason)
+        );
+      if (p.status === "fulfilled") setPulse(p.value);
       setRefreshing(false);
     });
   }, [loadStats, loadPulse]);
@@ -97,14 +100,15 @@ export default function AtlasScreen({
 
   const openBrowse = useCallback((logical: string) => {
     setBrowseTable(logical);
-    setTab('browse');
+    setTab("browse");
   }, []);
 
   // The Map tab's "A few of yours" fetcher — the Browse rows endpoint, capped at
   // three, reusing the same journalled read path (zero new plumbing).
   const fetchSampleRows = useCallback(
-    (logical: string) => browseRows({ table: logical, limit: 3 }).then((r) => r.rows),
-    [],
+    (logical: string) =>
+      browseRows({ table: logical, limit: 3 }).then((r) => r.rows),
+    []
   );
 
   return (
@@ -136,7 +140,7 @@ export default function AtlasScreen({
         ))}
       </div>
 
-      {tab === 'kinds' ? (
+      {tab === "kinds" ? (
         statsError && !stats ? (
           <div className={styles.error} data-testid="atlas-census-error">
             Couldn’t read the census: {statsError}
@@ -154,10 +158,10 @@ export default function AtlasScreen({
         )
       ) : null}
 
-      {tab === 'relations' ? (
+      {tab === "relations" ? (
         <AtlasRelationsTab graph={graph} fetchSampleRows={fetchSampleRows} />
       ) : null}
-      {tab === 'browse' ? <AtlasBrowseTab initialTable={browseTable} /> : null}
+      {tab === "browse" ? <AtlasBrowseTab initialTable={browseTable} /> : null}
     </div>
   );
 }

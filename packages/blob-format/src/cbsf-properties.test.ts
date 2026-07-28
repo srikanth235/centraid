@@ -1,5 +1,5 @@
-import { fc } from '@centraid/test-kit/fast-check';
-import { describe, expect, test } from 'vitest';
+import { fc } from "@centraid/test-kit/fast-check";
+import { describe, expect, test } from "vitest";
 
 import {
   CBSF_VERSION,
@@ -7,11 +7,11 @@ import {
   cbsfFrameAad,
   decodeCbsfDirectory,
   encodeCbsfDirectory,
-} from './index.js';
+} from "./index.js";
 
 const sha64: fc.Arbitrary<string> = fc
   .uint8Array({ minLength: 32, maxLength: 32 })
-  .map((b) => Buffer.from(b).toString('hex'));
+  .map((b) => Buffer.from(b).toString("hex"));
 
 /**
  * CBSF wire properties (#532 core expansion).
@@ -19,8 +19,8 @@ const sha64: fc.Arbitrary<string> = fc
  * Model: directory encode/decode is bijective for valid inputs; AAD strings
  * are pure functions of (sha, index, count) and must not collide across frames.
  */
-describe('CBSF wire property', () => {
-  test('directory encode/decode round-trips', () => {
+describe("CBSF wire property", () => {
+  test("directory encode/decode round-trips", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 1_048_576 }),
@@ -35,13 +35,13 @@ describe('CBSF wire property', () => {
           expect(decoded.frameSize).toBe(frameSize);
           expect(decoded.totalSize).toBe(totalSize);
           expect(decoded.sealedLens).toStrictEqual(sealedLens);
-        },
+        }
       ),
-      { numRuns: 48, seed: 53260 },
+      { numRuns: 48, seed: 53260 }
     );
   });
 
-  test('decode rejects wrong frameCount', () => {
+  test("decode rejects wrong frameCount", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 1024 }),
@@ -55,15 +55,15 @@ describe('CBSF wire property', () => {
           const bytes = encodeCbsfDirectory(frameSize, totalSize, sealedLens);
           const wrongCount = sealedLens.length + 1 + wrongOffset;
           expect(() => decodeCbsfDirectory(bytes, wrongCount)).toThrow(
-            'CBSF directory size mismatch',
+            "CBSF directory size mismatch"
           );
-        },
+        }
       ),
-      { numRuns: 24, seed: 53261 },
+      { numRuns: 24, seed: 53261 }
     );
   });
 
-  test('frame AAD embeds version and is injective on index for fixed count', () => {
+  test("frame AAD embeds version and is injective on index for fixed count", () => {
     fc.assert(
       fc.property(
         sha64,
@@ -77,13 +77,13 @@ describe('CBSF wire property', () => {
           expect(a).toContain(`v${CBSF_VERSION}`);
           expect(a).not.toBe(b);
           expect(a).toBe(`blob:${sha}:v${CBSF_VERSION}:f${i}/${frameCount}`);
-        },
+        }
       ),
-      { numRuns: 32, seed: 53262 },
+      { numRuns: 32, seed: 53262 }
     );
   });
 
-  test('directory AAD is deterministic and distinct from frame AAD', () => {
+  test("directory AAD is deterministic and distinct from frame AAD", () => {
     fc.assert(
       fc.property(sha64, fc.integer({ min: 1, max: 64 }), (sha, frameCount) => {
         const dir = cbsfDirectoryAad(sha, frameCount);
@@ -92,11 +92,11 @@ describe('CBSF wire property', () => {
         expect(dir).not.toBe(frame);
         expect(cbsfDirectoryAad(sha, frameCount)).toBe(dir);
       }),
-      { numRuns: 24, seed: 53263 },
+      { numRuns: 24, seed: 53263 }
     );
   });
 
-  test('byte length of directory is 16 + 4*frameCount', () => {
+  test("byte length of directory is 16 + 4*frameCount", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 4096 }),
@@ -108,13 +108,13 @@ describe('CBSF wire property', () => {
         (frameSize, totalSize, sealedLens) => {
           const bytes = encodeCbsfDirectory(frameSize, totalSize, sealedLens);
           expect(bytes.byteLength).toBe(16 + sealedLens.length * 4);
-        },
+        }
       ),
-      { numRuns: 24, seed: 53264 },
+      { numRuns: 24, seed: 53264 }
     );
   });
 
-  test('decode rejects when encodedCount disagrees even if byte length matches', () => {
+  test("decode rejects when encodedCount disagrees even if byte length matches", () => {
     // Craft a directory whose outer length matches `frameCount` but whose
     // internal encodedCount field was written for a different count — kills
     // the `encodedCount !== frameCount` guard mutants.

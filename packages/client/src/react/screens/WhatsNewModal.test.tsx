@@ -1,9 +1,9 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CentraidChangelogResult } from '../../centraid-api.js';
-import WhatsNewModal from './WhatsNewModal.js';
+import type { CentraidChangelogResult } from "../../centraid-api.js";
+import WhatsNewModal from "./WhatsNewModal.js";
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -15,7 +15,7 @@ function mockChangelog(impl: () => Promise<CentraidChangelogResult>): void {
 }
 
 async function mount(onClose = (): void => {}): Promise<void> {
-  host = document.createElement('div');
+  host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
   await act(async () => {
@@ -27,9 +27,9 @@ async function mount(onClose = (): void => {}): Promise<void> {
   });
 }
 
-const text = (): string => host?.textContent ?? '';
+const text = (): string => host?.textContent ?? "";
 
-describe('screens/WhatsNewModal', () => {
+describe("screens/WhatsNewModal", () => {
   beforeEach(() => {
     (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {};
   });
@@ -41,88 +41,92 @@ describe('screens/WhatsNewModal', () => {
     vi.restoreAllMocks();
   });
 
-  const result = (releases: CentraidChangelogResult['releases']): CentraidChangelogResult => ({
-    currentVersion: '0.2.0',
+  const result = (
+    releases: CentraidChangelogResult["releases"]
+  ): CentraidChangelogResult => ({
+    currentVersion: "0.2.0",
     releases,
   });
 
   describe(WhatsNewModal, () => {
-    it('renders releases with title, version chip, and markdown notes', async () => {
+    it("renders releases with title, version chip, and markdown notes", async () => {
       mockChangelog(() =>
         Promise.resolve(
           result([
             {
-              version: 'v0.2.0',
-              title: 'Sharper sync',
-              notes: '### Fixed\n- a real bug',
-              publishedAt: '2026-07-09T10:00:00Z',
-              url: 'https://github.com/x/y/releases/tag/v0.2.0',
+              version: "v0.2.0",
+              title: "Sharper sync",
+              notes: "### Fixed\n- a real bug",
+              publishedAt: "2026-07-09T10:00:00Z",
+              url: "https://github.com/x/y/releases/tag/v0.2.0",
               prerelease: false,
             },
-          ]),
-        ),
+          ])
+        )
       );
       await mount();
-      expect(text()).toContain('Sharper sync');
-      expect(text()).toContain('v0.2.0');
-      expect(text()).toContain('a real bug');
+      expect(text()).toContain("Sharper sync");
+      expect(text()).toContain("v0.2.0");
+      expect(text()).toContain("a real bug");
       // Section label + list came from the md-lite renderer.
-      expect(host?.querySelector('h4')?.textContent).toBe('Fixed');
-      expect(host?.querySelector('li')?.textContent).toBe('a real bug');
+      expect(host?.querySelector("h4")?.textContent).toBe("Fixed");
+      expect(host?.querySelector("li")?.textContent).toBe("a real bug");
     });
 
-    it('tags the release matching the running version as Installed', async () => {
+    it("tags the release matching the running version as Installed", async () => {
       mockChangelog(() =>
         Promise.resolve(
           result([
             {
-              version: 'v0.2.0',
-              title: 'Now',
-              notes: '',
+              version: "v0.2.0",
+              title: "Now",
+              notes: "",
               publishedAt: null,
-              url: '',
+              url: "",
               prerelease: false,
             },
             {
-              version: 'v0.1.0',
-              title: 'Old',
-              notes: '',
+              version: "v0.1.0",
+              title: "Old",
+              notes: "",
               publishedAt: null,
-              url: '',
+              url: "",
               prerelease: false,
             },
-          ]),
-        ),
+          ])
+        )
       );
       await mount();
-      expect(text()).toContain('Installed');
+      expect(text()).toContain("Installed");
       // Only the current one is tagged.
-      expect(host?.querySelectorAll('*')).toBeTruthy();
+      expect(host?.querySelectorAll("*")).toBeTruthy();
       expect(text().match(/Installed/gu)?.length).toBe(1);
     });
 
-    it('shows an empty state when there are no releases', async () => {
+    it("shows an empty state when there are no releases", async () => {
       mockChangelog(() => Promise.resolve(result([])));
       await mount();
-      expect(text()).toContain('No releases published yet');
+      expect(text()).toContain("No releases published yet");
     });
 
-    it('shows an error state with the message when the fetch rejects', async () => {
-      mockChangelog(() => Promise.reject(new Error('offline')));
+    it("shows an error state with the message when the fetch rejects", async () => {
+      mockChangelog(() => Promise.reject(new Error("offline")));
       await mount();
-      expect(text()).toContain('Couldn');
-      expect(text()).toContain('offline');
+      expect(text()).toContain("Couldn");
+      expect(text()).toContain("offline");
     });
 
-    it('closes on the close button and on Escape', async () => {
+    it("closes on the close button and on Escape", async () => {
       const onClose = vi.fn<() => void>();
       mockChangelog(() => Promise.resolve(result([])));
       await mount(onClose);
-      const closeBtn = host?.querySelector('button[aria-label="Close"]') as HTMLButtonElement;
+      const closeBtn = host?.querySelector(
+        'button[aria-label="Close"]'
+      ) as HTMLButtonElement;
       await act(async () => closeBtn.click());
       expect(onClose).toHaveBeenCalledOnce();
       await act(async () => {
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
       });
       expect(onClose).toHaveBeenCalledTimes(2);
     });

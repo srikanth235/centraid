@@ -27,7 +27,7 @@ import {
   type BackupProvider,
   type Keyring,
   type ManifestEntry,
-} from '@centraid/backup';
+} from "@centraid/backup";
 
 /**
  * The blob shas a single manifest's entries reference. A `blob` entry's
@@ -37,11 +37,13 @@ import {
  * CAS objects; `db`/`git-bundle`/`seal-key` entries are the snapshot's own
  * parts, not attachments.
  */
-export function blobShasFromManifestEntries(entries: readonly ManifestEntry[]): string[] {
+export function blobShasFromManifestEntries(
+  entries: readonly ManifestEntry[]
+): string[] {
   const shas: string[] = [];
   for (const entry of entries) {
-    if (entry.kind !== 'blob') continue;
-    const sha = entry.path.split('/').pop() ?? '';
+    if (entry.kind !== "blob") continue;
+    const sha = entry.path.split("/").pop() ?? "";
     if (/^[0-9a-f]{64}$/u.test(sha)) shas.push(sha);
   }
   return shas;
@@ -69,7 +71,11 @@ export async function snapshotReferencedBlobShas(opts: {
   const roots = new Set<string>();
   const cache = opts.manifestBlobCache;
   const rows = await opts.provider.listSnapshots(opts.targetId);
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read"
+  );
   const collectNext = async (index: number): Promise<void> => {
     const row = rows[index];
     if (!row) return;
@@ -84,7 +90,7 @@ export async function snapshotReferencedBlobShas(opts: {
         await store.get(row.manifestKey),
         opts.keyring,
         opts.vaultId,
-        row.manifestHash,
+        row.manifestHash
       );
     } catch (err) {
       // An unreadable retained manifest must FAIL the root computation, never
@@ -92,7 +98,7 @@ export async function snapshotReferencedBlobShas(opts: {
       // deleting bytes it simply failed to prove were still reachable.
       throw new Error(
         `snapshot roots: cannot read manifest seq ${row.seq}: ${err instanceof Error ? err.message : String(err)}`,
-        { cause: err },
+        { cause: err }
       );
     }
     const shas = blobShasFromManifestEntries(opened.entries);

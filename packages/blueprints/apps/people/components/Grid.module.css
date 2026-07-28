@@ -18,7 +18,7 @@
   border-color: var(--line-strong);
   box-shadow: var(--shadow-md);
 }
-.card[data-selected='true'] {
+.card[data-selected="true"] {
   border-color: var(--selb);
   box-shadow: 0 0 0 2px var(--sel);
 }
@@ -50,10 +50,10 @@
   transition: opacity 0.12s;
 }
 .card:hover .cardSelect,
-.card[data-selected='true'] .cardSelect {
+.card[data-selected="true"] .cardSelect {
   opacity: 1;
 }
-.cardSelect[aria-pressed='true'] {
+.cardSelect[aria-pressed="true"] {
   background: var(--accd);
   border-color: var(--accd);
   opacity: 1;

@@ -50,10 +50,10 @@
   outline: 2px solid var(--_accent);
   outline-offset: -2px;
 }
-.dayCell[data-outside='true'] {
+.dayCell[data-outside="true"] {
   background: color-mix(in oklab, var(--bg-sunken) 55%, var(--surface));
 }
-.dayCell[data-outside='true'] .dayNum {
+.dayCell[data-outside="true"] .dayNum {
   color: var(--ink-3);
   opacity: 0.6;
 }
@@ -71,7 +71,7 @@
   justify-content: center;
   padding: 0 4px;
 }
-.dayCell[data-today='true'] .dayNum {
+.dayCell[data-today="true"] .dayNum {
   background: var(--accent-deep);
   color: #fff;
   font-weight: 600;
@@ -105,14 +105,14 @@
 .pill:hover {
   background: color-mix(in srgb, var(--ev-color) 14%, transparent);
 }
-.pill[data-spans='true'] {
+.pill[data-spans="true"] {
   background: var(--ev-color);
   color: #fff;
 }
-.pill[data-spans='true']:hover {
+.pill[data-spans="true"]:hover {
   filter: brightness(1.08);
 }
-.pill[data-status='tentative'] {
+.pill[data-status="tentative"] {
   color: var(--ink-2);
 }
 .pill :global(.ag-dot) {
@@ -148,7 +148,7 @@
     display: none;
   }
   .dayCell:has(.pill)::after {
-    content: '';
+    content: "";
     width: 0.35rem;
     height: 0.35rem;
     border-radius: 50%;

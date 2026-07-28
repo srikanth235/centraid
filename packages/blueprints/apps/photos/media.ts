@@ -2,10 +2,13 @@
 // mount guard that makes it safe to call from a React callback ref on every
 // render. JSX-free by design — shared by every component that renders a tile
 // (Timeline.tsx, Picker.tsx, Duplicates.tsx).
-import { isAudioAsset, isVideoAsset } from './format.ts';
-import { observeNextScreen, stopNextScreenObservation } from './media-observer.ts';
-import { scopeAttr } from './scopes.ts';
-import type { Asset } from './types.ts';
+import { isAudioAsset, isVideoAsset } from "./format.ts";
+import {
+  observeNextScreen,
+  stopNextScreenObservation,
+} from "./media-observer.ts";
+import { scopeAttr } from "./scopes.ts";
+import type { Asset } from "./types.ts";
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
 // thumb variant (issue #296) — a few KB; a `data:` URI already rode inline
@@ -32,7 +35,7 @@ export const THUMB_EDGE = 360;
 export function gridSrc(asset: Asset): string | null | undefined {
   if (isVideoAsset(asset)) return asset.poster_uri ?? null;
   if (isAudioAsset(asset)) return null;
-  if (typeof asset.thumb_uri === 'string') {
+  if (typeof asset.thumb_uri === "string") {
     // Known-small blobs never get a thumb staged (upload only downsizes the
     // larger ones), so their `?variant=thumb` probe is a guaranteed 404 — the
     // original is already thumb-sized, so paint it directly and skip the
@@ -47,13 +50,18 @@ export function gridSrc(asset: Asset): string | null | undefined {
   // A non-blob `data:` URI already travelled inline with the row — render it
   // directly (no network). Any other bare URI would be a full remote original,
   // so it stays a placeholder.
-  if (typeof asset.content_uri === 'string' && asset.content_uri.startsWith('data:')) {
+  if (
+    typeof asset.content_uri === "string" &&
+    asset.content_uri.startsWith("data:")
+  ) {
     return asset.content_uri;
   }
   return null;
 }
 
-export function durationLabel(seconds: number | null | undefined): string | null {
+export function durationLabel(
+  seconds: number | null | undefined
+): string | null {
   const value = Number(seconds);
   if (!Number.isFinite(value) || value < 0) return null;
   const total = Math.round(value);
@@ -61,29 +69,29 @@ export function durationLabel(seconds: number | null | undefined): string | null
   const minutes = Math.floor((total % 3600) / 60);
   const secs = total % 60;
   return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-    : `${minutes}:${String(secs).padStart(2, '0')}`;
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+    : `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
 function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
-  tile.classList.add('is-placeholder');
-  const shimmer = document.createElement('span');
-  shimmer.className = 'ph-tile-ph';
-  shimmer.setAttribute('aria-hidden', 'true');
+  tile.classList.add("is-placeholder");
+  const shimmer = document.createElement("span");
+  shimmer.className = "ph-tile-ph";
+  shimmer.setAttribute("aria-hidden", "true");
   tile.appendChild(shimmer);
   if (isVideoAsset(asset)) {
-    const badge = document.createElement('span');
-    badge.className = 'ph-tile-video-badge';
-    badge.setAttribute('aria-hidden', 'true');
+    const badge = document.createElement("span");
+    badge.className = "ph-tile-video-badge";
+    badge.setAttribute("aria-hidden", "true");
     // Inline the same play triangle icons.tsx's PlayIcon draws, so the
     // existing `.ph-tile-video-badge svg` styling applies unchanged.
     badge.innerHTML =
       '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>';
     tile.appendChild(badge);
   } else if (isAudioAsset(asset)) {
-    const badge = document.createElement('span');
-    badge.className = 'ph-tile-audio-badge';
-    badge.setAttribute('aria-hidden', 'true');
+    const badge = document.createElement("span");
+    badge.className = "ph-tile-audio-badge";
+    badge.setAttribute("aria-hidden", "true");
     badge.innerHTML =
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12v2M8 8v10M12 5v14M16 8v10M20 11v4"/></svg>';
     tile.appendChild(badge);
@@ -93,8 +101,8 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
 function renderDuration(tile: HTMLElement, asset: Asset): void {
   const label = durationLabel(asset.duration_s);
   if (!label) return;
-  const badge = document.createElement('span');
-  badge.className = 'ph-tile-duration';
+  const badge = document.createElement("span");
+  badge.className = "ph-tile-duration";
   badge.textContent = label;
   tile.appendChild(badge);
 }
@@ -119,11 +127,11 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
     renderDuration(tile, asset);
     return;
   }
-  const img = document.createElement('img');
-  img.loading = 'lazy';
-  img.decoding = 'async';
-  img.fetchPriority = 'low';
-  img.alt = asset.title ?? asset.kind ?? 'Photo';
+  const img = document.createElement("img");
+  img.loading = "lazy";
+  img.decoding = "async";
+  img.fetchPriority = "low";
+  img.alt = asset.title ?? asset.kind ?? "Photo";
   // Reserve the intrinsic aspect box before the bytes decode (no CLS). The
   // tile container is already fixed-size (justify()), so these attributes only
   // hint the decoder; CSS `object-fit: cover` still fills the box.
@@ -134,22 +142,22 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
   // A thumb 404 (variant never produced) must NOT fall back to the original —
   // swap in a placeholder instead of pulling multi-MB bytes into the grid.
   img.addEventListener(
-    'error',
+    "error",
     () => {
       stopNextScreenObservation(img);
       img.remove();
-      tile.querySelector('.ph-tile-video-badge')?.remove();
-      tile.querySelector('.ph-tile-duration')?.remove();
+      tile.querySelector(".ph-tile-video-badge")?.remove();
+      tile.querySelector(".ph-tile-duration")?.remove();
       renderPlaceholder(tile, asset);
       renderDuration(tile, asset);
     },
-    { once: true },
+    { once: true }
   );
   tile.appendChild(img);
   if (isVideoAsset(asset)) {
-    const badge = document.createElement('span');
-    badge.className = 'ph-tile-video-badge';
-    badge.setAttribute('aria-hidden', 'true');
+    const badge = document.createElement("span");
+    badge.className = "ph-tile-video-badge";
+    badge.setAttribute("aria-hidden", "true");
     badge.innerHTML =
       '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>';
     tile.appendChild(badge);
@@ -172,7 +180,7 @@ export function mountMedia(el: HTMLElement | null, asset: Asset): void {
   // would treat a Family photo as "already painted" because the member's own
   // library happens to hold that id — and leave the previous scope's bytes and
   // `data-scope` in place. That is the wrong-image failure, not a missing one.
-  const key = `${asset.scope_id ?? ''}:${asset.asset_id}`;
+  const key = `${asset.scope_id ?? ""}:${asset.asset_id}`;
   if (!el || el.dataset.mediaFor === key) return;
   el.dataset.mediaFor = key;
   fillTileMedia(el, asset);

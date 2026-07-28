@@ -9,7 +9,7 @@
  * credential).
  */
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   chmodSync,
   mkdirSync,
@@ -19,15 +19,15 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
-} from 'node:fs';
-import path from 'node:path';
+} from "node:fs";
+import path from "node:path";
 
 export const KEY_STORE_SECRET_BYTES = 32;
-export const KEY_STORE_ENVELOPE_MAGIC = 'CENTRAID-KEY-V1\n';
+export const KEY_STORE_ENVELOPE_MAGIC = "CENTRAID-KEY-V1\n";
 
 const KEY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
-const FILE_SCHEME = 'file-0600-v1';
-const AES_GCM_SCHEME = 'aes-256-gcm-v1';
+const FILE_SCHEME = "file-0600-v1";
+const AES_GCM_SCHEME = "aes-256-gcm-v1";
 
 interface KeyEnvelope {
   scheme: string;
@@ -51,33 +51,36 @@ export interface KeyStoreOptions {
 export function aesGcmKeyProtector(masterKey: Buffer): KeyProtector {
   if (masterKey.length !== KEY_STORE_SECRET_BYTES) {
     throw new KeyStoreError(
-      'corrupt',
-      `KeyStore wrapping key is ${masterKey.length} bytes, expected ${KEY_STORE_SECRET_BYTES}`,
+      "corrupt",
+      `KeyStore wrapping key is ${masterKey.length} bytes, expected ${KEY_STORE_SECRET_BYTES}`
     );
   }
   return {
     scheme: AES_GCM_SCHEME,
     protect(secret) {
       const nonce = randomBytes(12);
-      const cipher = createCipheriv('aes-256-gcm', masterKey, nonce);
+      const cipher = createCipheriv("aes-256-gcm", masterKey, nonce);
       const ciphertext = Buffer.concat([cipher.update(secret), cipher.final()]);
       return Buffer.concat([nonce, cipher.getAuthTag(), ciphertext]);
     },
     unprotect(payload) {
       if (payload.length < 28) {
-        throw new KeyStoreError('corrupt', 'KeyStore AES-GCM payload is truncated');
+        throw new KeyStoreError(
+          "corrupt",
+          "KeyStore AES-GCM payload is truncated"
+        );
       }
       const nonce = payload.subarray(0, 12);
       const tag = payload.subarray(12, 28);
       const ciphertext = payload.subarray(28);
       try {
-        const decipher = createDecipheriv('aes-256-gcm', masterKey, nonce);
+        const decipher = createDecipheriv("aes-256-gcm", masterKey, nonce);
         decipher.setAuthTag(tag);
         return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
       } catch (error) {
         throw new KeyStoreError(
-          'corrupt',
-          `KeyStore AES-GCM authentication failed: ${error instanceof Error ? error.message : String(error)}`,
+          "corrupt",
+          `KeyStore AES-GCM authentication failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     },
@@ -86,11 +89,11 @@ export function aesGcmKeyProtector(masterKey: Buffer): KeyProtector {
 
 export class KeyStoreError extends Error {
   constructor(
-    readonly code: 'corrupt' | 'unsupported_scheme' | 'invalid_name',
-    message: string,
+    readonly code: "corrupt" | "unsupported_scheme" | "invalid_name",
+    message: string
   ) {
     super(message);
-    this.name = 'KeyStoreError';
+    this.name = "KeyStoreError";
   }
 }
 
@@ -104,7 +107,9 @@ export class KeyStore {
   readonly dir: string;
   private readonly protector: KeyProtector | undefined;
   private readonly warn: (message: string) => void;
-  private readonly beforeCommit: ((file: string, tempFile: string) => void) | undefined;
+  private readonly beforeCommit:
+    | ((file: string, tempFile: string) => void)
+    | undefined;
 
   constructor(dir: string, options: KeyStoreOptions = {}) {
     this.dir = path.resolve(dir);
@@ -130,7 +135,7 @@ export class KeyStore {
     try {
       raw = readFileSync(file);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
     this.repairMode(file);
@@ -156,8 +161,8 @@ export class KeyStore {
       secret = this.protector.unprotect(decodePayload(file, envelope.payload));
     } else {
       throw new KeyStoreError(
-        'unsupported_scheme',
-        `key ${file} uses unavailable custody scheme "${envelope.scheme}"`,
+        "unsupported_scheme",
+        `key ${file} uses unavailable custody scheme "${envelope.scheme}"`
       );
     }
     return Buffer.from(secret);
@@ -184,9 +189,12 @@ export class KeyStore {
     const payload = this.protector?.protect(secret) ?? Buffer.from(secret);
     const envelope: KeyEnvelope = {
       scheme,
-      payload: payload.toString('base64'),
+      payload: payload.toString("base64"),
     };
-    const bytes = Buffer.from(`${KEY_STORE_ENVELOPE_MAGIC}${JSON.stringify(envelope)}\n`, 'utf8');
+    const bytes = Buffer.from(
+      `${KEY_STORE_ENVELOPE_MAGIC}${JSON.stringify(envelope)}\n`,
+      "utf8"
+    );
     atomicWrite(file, bytes, this.beforeCommit);
   }
 
@@ -205,7 +213,10 @@ export class KeyStore {
 
   import(name: string, secret: Buffer): void {
     if (secret.length === 0) {
-      throw new KeyStoreError('corrupt', `key at ${this.file(name)} cannot be empty`);
+      throw new KeyStoreError(
+        "corrupt",
+        `key at ${this.file(name)} cannot be empty`
+      );
     }
     this.write(name, secret);
   }
@@ -216,14 +227,14 @@ export class KeyStore {
       unlinkSync(this.file(name));
       destroyed = true;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
-    if (!name.endsWith('.next')) {
+    if (!name.endsWith(".next")) {
       try {
         unlinkSync(this.file(`${name}.next`));
         destroyed = true;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
     }
     return destroyed;
@@ -233,59 +244,76 @@ export class KeyStore {
     const mode = statSync(file).mode & 0o777;
     if (mode === 0o600) return;
     chmodSync(file, 0o600);
-    this.warn(`repaired key permissions on ${file} from ${mode.toString(8)} to 600`);
+    this.warn(
+      `repaired key permissions on ${file} from ${mode.toString(8)} to 600`
+    );
   }
 }
 
 function assertKeyName(name: string): void {
   if (!KEY_NAME_RE.test(name)) {
-    throw new KeyStoreError('invalid_name', `invalid key name "${name}"`);
+    throw new KeyStoreError("invalid_name", `invalid key name "${name}"`);
   }
 }
 
 function assertSecretLength(file: string, secret: Buffer): void {
   if (secret.length !== KEY_STORE_SECRET_BYTES) {
     throw new KeyStoreError(
-      'corrupt',
-      `key at ${file} is ${secret.length} bytes, expected ${KEY_STORE_SECRET_BYTES}`,
+      "corrupt",
+      `key at ${file} is ${secret.length} bytes, expected ${KEY_STORE_SECRET_BYTES}`
     );
   }
 }
 
 function parseEnvelope(file: string, raw: Buffer): KeyEnvelope {
-  const text = raw.toString('utf8');
+  const text = raw.toString("utf8");
   if (!text.startsWith(KEY_STORE_ENVELOPE_MAGIC)) {
-    throw new KeyStoreError('corrupt', `key at ${file} has no KeyStore envelope`);
+    throw new KeyStoreError(
+      "corrupt",
+      `key at ${file} has no KeyStore envelope`
+    );
   }
   try {
-    const parsed = JSON.parse(text.slice(KEY_STORE_ENVELOPE_MAGIC.length)) as Partial<KeyEnvelope>;
-    if (typeof parsed.scheme !== 'string' || typeof parsed.payload !== 'string') {
-      throw new Error('missing scheme or payload');
+    const parsed = JSON.parse(
+      text.slice(KEY_STORE_ENVELOPE_MAGIC.length)
+    ) as Partial<KeyEnvelope>;
+    if (
+      typeof parsed.scheme !== "string" ||
+      typeof parsed.payload !== "string"
+    ) {
+      throw new Error("missing scheme or payload");
     }
     return { scheme: parsed.scheme, payload: parsed.payload };
   } catch (error) {
     throw new KeyStoreError(
-      'corrupt',
-      `key at ${file} has a corrupt KeyStore envelope: ${error instanceof Error ? error.message : String(error)}`,
+      "corrupt",
+      `key at ${file} has a corrupt KeyStore envelope: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
 
 function decodePayload(file: string, payload: string): Buffer {
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(payload)) {
-    throw new KeyStoreError('corrupt', `key at ${file} has invalid base64 payload`);
+  if (
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(
+      payload
+    )
+  ) {
+    throw new KeyStoreError(
+      "corrupt",
+      `key at ${file} has invalid base64 payload`
+    );
   }
-  return Buffer.from(payload, 'base64');
+  return Buffer.from(payload, "base64");
 }
 
 function atomicWrite(
   file: string,
   bytes: Buffer,
-  beforeCommit?: (file: string, tempFile: string) => void,
+  beforeCommit?: (file: string, tempFile: string) => void
 ): void {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
-  writeFileSync(temp, bytes, { mode: 0o600, flag: 'wx' });
+  const temp = `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  writeFileSync(temp, bytes, { mode: 0o600, flag: "wx" });
   let committed = false;
   try {
     beforeCommit?.(file, temp);

@@ -15,17 +15,20 @@
 //   node lib/harness.mjs setup         -> JSON with runId, platform, udid, runDir
 //   node lib/harness.mjs list-devices  -> JSON with first booted device
 
-import { spawn } from 'node:child_process';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
-import { DISMISS_KEYBOARD_ONBOARDING, skipOnboarding } from './first-run.mjs';
-import { metroReachable, prewarmMetroBundle } from './metro.mjs';
+import {
+  defaultRunId,
+  writeFlowVerdict,
+} from "../../agent-e2e-shared/harness.mjs";
+import { DISMISS_KEYBOARD_ONBOARDING, skipOnboarding } from "./first-run.mjs";
+import { metroReachable, prewarmMetroBundle } from "./metro.mjs";
 
 const __dirname = import.meta.dirname;
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const RUNS_DIR = path.join(__dirname, '..', 'runs');
+const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
+const RUNS_DIR = path.join(__dirname, "..", "runs");
 
 // iOS bundle id, and the Android *release* applicationId. Android *debug*
 // builds append `.debug` (applicationIdSuffix in android/app/build.gradle, kept
@@ -35,8 +38,9 @@ const RUNS_DIR = path.join(__dirname, '..', 'runs');
 // `setup()` resolves the id per platform and threads it through `state.appId`;
 // flows must launch the package that is installed, not this base id, so they
 // read `ctx.state.appId` rather than importing APP_ID.
-export const APP_ID = 'dev.centraid.mobile';
-const appIdForPlatform = (platform) => (platform === 'android' ? `${APP_ID}.debug` : APP_ID);
+export const APP_ID = "dev.centraid.mobile";
+const appIdForPlatform = (platform) =>
+  platform === "android" ? `${APP_ID}.debug` : APP_ID;
 
 /**
  * Budget for the first `assertVisible` after a `clearState: true` launch.
@@ -58,38 +62,47 @@ export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    let err = '';
-    p.stdout.on('data', (d) => (out += d.toString()));
-    p.stderr.on('data', (d) => (err += d.toString()));
-    p.on('exit', (code) => {
+    const p = spawn(cmd, args, { ...opts, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    p.stdout.on("data", (d) => (out += d.toString()));
+    p.stderr.on("data", (d) => (err += d.toString()));
+    p.on("exit", (code) => {
       if (code === 0) resolve(out);
-      else reject(new Error(`${cmd} ${args.join(' ')} exited ${code}: ${err || out}`));
+      else
+        reject(
+          new Error(`${cmd} ${args.join(" ")} exited ${code}: ${err || out}`)
+        );
     });
-    p.on('error', reject);
+    p.on("error", reject);
   });
 }
 
 function spawnLive(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { ...opts, stdio: 'inherit' });
-    p.on('exit', (code) => {
+    const p = spawn(cmd, args, { ...opts, stdio: "inherit" });
+    p.on("exit", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`${cmd} ${args.join(' ')} exited ${code}`));
+      else reject(new Error(`${cmd} ${args.join(" ")} exited ${code}`));
     });
-    p.on('error', reject);
+    p.on("error", reject);
   });
 }
 
 // Pick the first booted iOS Simulator. Real-device support comes later
 // (Maestro takes --device for that; the seed/install story is different).
 async function bootedIosSim() {
-  const out = await spawnText('xcrun', ['simctl', 'list', 'devices', 'booted', '--json']);
+  const out = await spawnText("xcrun", [
+    "simctl",
+    "list",
+    "devices",
+    "booted",
+    "--json",
+  ]);
   const data = JSON.parse(out);
   for (const list of Object.values(data.devices ?? {})) {
     for (const dev of list ?? []) {
-      if (dev.state === 'Booted') return dev.udid;
+      if (dev.state === "Booted") return dev.udid;
     }
   }
   return null;
@@ -100,10 +113,10 @@ async function bootedIosSim() {
 // state is `device` for ready, `offline` / `unauthorized` otherwise.
 async function bootedAndroidEmu() {
   try {
-    const out = await spawnText('adb', ['devices']);
-    for (const line of out.split('\n').slice(1)) {
-      const [serial, state] = line.split('\t');
-      if (state?.trim() === 'device' && serial) return serial.trim();
+    const out = await spawnText("adb", ["devices"]);
+    for (const line of out.split("\n").slice(1)) {
+      const [serial, state] = line.split("\t");
+      if (state?.trim() === "device" && serial) return serial.trim();
     }
   } catch {
     // adb not installed or daemon refused — no Android target.
@@ -115,25 +128,31 @@ async function bootedAndroidEmu() {
 // otherwise iOS first (legacy behavior), Android fallback.
 async function bootedDevice() {
   const force = process.env.MAESTRO_PLATFORM;
-  if (force === 'android') {
+  if (force === "android") {
     const udid = await bootedAndroidEmu();
-    return udid ? { udid, platform: 'android' } : null;
+    return udid ? { udid, platform: "android" } : null;
   }
-  if (force === 'ios') {
+  if (force === "ios") {
     const udid = await bootedIosSim();
-    return udid ? { udid, platform: 'ios' } : null;
+    return udid ? { udid, platform: "ios" } : null;
   }
   const ios = await bootedIosSim();
-  if (ios) return { udid: ios, platform: 'ios' };
+  if (ios) return { udid: ios, platform: "ios" };
   const android = await bootedAndroidEmu();
-  if (android) return { udid: android, platform: 'android' };
+  if (android) return { udid: android, platform: "android" };
   return null;
 }
 
 async function appInstalled(device, appId) {
-  if (device.platform === 'ios') {
+  if (device.platform === "ios") {
     try {
-      await spawnText('xcrun', ['simctl', 'get_app_container', device.udid, appId, 'app']);
+      await spawnText("xcrun", [
+        "simctl",
+        "get_app_container",
+        device.udid,
+        appId,
+        "app",
+      ]);
       return true;
     } catch {
       return false;
@@ -142,13 +161,13 @@ async function appInstalled(device, appId) {
   // Android: `adb shell pm list packages <appId>` echoes `package:<appId>`
   // when installed, empty output otherwise. Exit code is 0 either way.
   try {
-    const out = await spawnText('adb', [
-      '-s',
+    const out = await spawnText("adb", [
+      "-s",
       device.udid,
-      'shell',
-      'pm',
-      'list',
-      'packages',
+      "shell",
+      "pm",
+      "list",
+      "packages",
       appId,
     ]);
     return out.includes(`package:${appId}`);
@@ -162,43 +181,43 @@ async function appInstalled(device, appId) {
 // from `localhost:8081` by default) can reach Metro on the dev machine.
 // iOS Simulator shares the host network so no reverse is needed there.
 async function ensureMetroReverseForAndroid(udid) {
-  await spawnText('adb', ['-s', udid, 'reverse', 'tcp:8081', 'tcp:8081']);
+  await spawnText("adb", ["-s", udid, "reverse", "tcp:8081", "tcp:8081"]);
 }
 
 export async function setup({ runId } = {}) {
   const device = await bootedDevice();
   if (!device) {
     throw new Error(
-      'No booted iOS Simulator or Android emulator. For iOS: open Simulator.app ' +
-        '(or `xcrun simctl boot <udid>`) then `bun run --filter=@centraid/mobile ios`. ' +
-        'For Android: start an AVD via `emulator @<name>` (or Android Studio) then ' +
-        '`bun run --filter=@centraid/mobile android`. Set MAESTRO_PLATFORM=ios|android ' +
-        'to force a side when both are present.',
+      "No booted iOS Simulator or Android emulator. For iOS: open Simulator.app " +
+        "(or `xcrun simctl boot <udid>`) then `bun run --filter=@centraid/mobile ios`. " +
+        "For Android: start an AVD via `emulator @<name>` (or Android Studio) then " +
+        "`bun run --filter=@centraid/mobile android`. Set MAESTRO_PLATFORM=ios|android " +
+        "to force a side when both are present."
     );
   }
   const appId = appIdForPlatform(device.platform);
   if (!(await appInstalled(device, appId))) {
     throw new Error(
       `${appId} not installed on ${device.platform} device ${device.udid}. ` +
-        `Run \`bun run --filter=@centraid/mobile ${device.platform}\` first.`,
+        `Run \`bun run --filter=@centraid/mobile ${device.platform}\` first.`
     );
   }
-  if (device.platform === 'android') {
+  if (device.platform === "android") {
     // Must happen before metroReachable(): the dev client reaches Metro via
     // the reverse forward, but the harness's own fetch goes directly.
     await ensureMetroReverseForAndroid(device.udid);
   }
   if (!(await metroReachable())) {
     throw new Error(
-      'Metro bundler not reachable at http://127.0.0.1:8081. The dev build needs it to ' +
-        'serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`.',
+      "Metro bundler not reachable at http://127.0.0.1:8081. The dev build needs it to " +
+        "serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`."
     );
   }
   await prewarmMetroBundle(device.platform, appId);
   const id = runId ?? defaultRunId();
   const runDir = path.join(RUNS_DIR, id);
-  const screenshotsDir = path.join(runDir, 'screenshots');
-  const flowsDir = path.join(runDir, 'flows');
+  const screenshotsDir = path.join(runDir, "screenshots");
+  const flowsDir = path.join(runDir, "flows");
   await fs.mkdir(screenshotsDir, { recursive: true });
   await fs.mkdir(flowsDir, { recursive: true });
 
@@ -211,7 +230,10 @@ export async function setup({ runId } = {}) {
     platform: device.platform,
     appId,
   };
-  await fs.writeFile(path.join(runDir, 'state.json'), JSON.stringify(state, null, 2));
+  await fs.writeFile(
+    path.join(runDir, "state.json"),
+    JSON.stringify(state, null, 2)
+  );
   return state;
 }
 
@@ -231,17 +253,17 @@ async function runMaestroChunk(yaml, { state, label }) {
   // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
   // is already an uploaded artifact path.
   await spawnLive(
-    'maestro',
+    "maestro",
     [
-      '--udid',
+      "--udid",
       state.udid,
-      'test',
-      '--debug-output',
-      path.join(state.runDir, 'maestro-debug', label),
-      '--flatten-debug-output',
+      "test",
+      "--debug-output",
+      path.join(state.runDir, "maestro-debug", label),
+      "--flatten-debug-output",
       flowFile,
     ],
-    { cwd: state.screenshotsDir },
+    { cwd: state.screenshotsDir }
   );
 }
 
@@ -290,7 +312,7 @@ export async function runFlow(slug, fn) {
   let stepIdx = 0;
   const nextLabel = (hint) => {
     stepIdx += 1;
-    const n = String(stepIdx).padStart(2, '0');
+    const n = String(stepIdx).padStart(2, "0");
     return hint ? `${n}-${hint}` : `${n}-step`;
   };
 
@@ -311,10 +333,12 @@ export async function runFlow(slug, fn) {
 
   ctx.configureGateway = async (
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
-    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? '',
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
   ) => {
     if (!gatewayUrl) {
-      throw new Error('MAESTRO_GATEWAY_URL is required for this mobile journey');
+      throw new Error(
+        "MAESTRO_GATEWAY_URL is required for this mobile journey"
+      );
     }
     // The token field's placeholder is unique on the screen, so it needs no
     // relative anchor the way the URL field does.
@@ -324,7 +348,7 @@ export async function runFlow(slug, fn) {
 # it and it is never rendered back, so there is no value to assertVisible on.
 - inputText: ${JSON.stringify(gatewayToken)}
 ${DISMISS_KEYBOARD_ONBOARDING}`
-      : '';
+      : "";
     // Every selector below was checked against a running build. The previous
     // version of this helper was written from the source instead, and each of
     // these lines is a place where that produced something that "passed" while
@@ -408,7 +432,7 @@ ${tokenSteps}- hideKeyboard
     timeout: 30000
 - assertNotVisible: "Connect your desktop"
 `,
-      'configure-gateway',
+      "configure-gateway"
     );
     ctx.note(`configured the journey gateway at ${gatewayUrl}`);
   };
@@ -418,7 +442,7 @@ ${tokenSteps}- hideKeyboard
   // stopApp gives RN's AsyncStorage time to enter its persistence pipeline
   // (analogous to the desktop harness's flushMs before SIGTERM).
   ctx.restart = async () => {
-    console.log('  restart …');
+    console.log("  restart …");
     await new Promise((resolve) => setTimeout(resolve, 300));
     await ctx.run(
       `appId: ${state.appId}
@@ -427,7 +451,7 @@ ${tokenSteps}- hideKeyboard
 - launchApp:
     clearState: false
 `,
-      'restart',
+      "restart"
     );
   };
 
@@ -452,7 +476,7 @@ ${tokenSteps}- hideKeyboard
     result,
     metadata: { platform: state.platform, udid: state.udid, app: state.appId },
     debug:
-      'Maestro keeps per-step screenshots and ai-report.html under `~/.maestro/tests/<timestamp>/`; the newest directory belongs to this run.',
+      "Maestro keeps per-step screenshots and ai-report.html under `~/.maestro/tests/<timestamp>/`; the newest directory belongs to this run.",
     owner: `tests/agent-e2e-mobile/flows/${slug}.mjs`,
   });
 
@@ -466,8 +490,8 @@ const cmd = process.argv[2];
 if (cmd) {
   try {
     let out;
-    if (cmd === 'setup') out = await setup();
-    else if (cmd === 'list-devices') out = await bootedDevice();
+    if (cmd === "setup") out = await setup();
+    else if (cmd === "list-devices") out = await bootedDevice();
     else {
       console.error(`unknown command: ${cmd}`);
       process.exit(1);

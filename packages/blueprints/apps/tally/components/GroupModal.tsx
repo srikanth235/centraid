@@ -1,12 +1,12 @@
 // The new-group form: name, an icon picker and a friend-multiselect for
 // members. `ng` is app.tsx's mutable `state.newGroup`; `onPatch` mutates it
 // in place and re-renders, same pattern as ExpenseModal's `onPatch`.
-import { GROUP_ICONS, first } from '../format.ts';
-import type { Friend, NewGroupModel } from '../types.ts';
-import { ModalBackdrop } from './Shared.tsx';
+import { GROUP_ICONS, first } from "../format.ts";
+import type { Friend, NewGroupModel } from "../types.ts";
+import { ModalBackdrop } from "./Shared.tsx";
 
-import styles from './GroupModal.module.css';
-import shared from './shared.module.css';
+import styles from "./GroupModal.module.css";
+import shared from "./shared.module.css";
 
 export function GroupModal({
   ng,
@@ -25,11 +25,11 @@ export function GroupModal({
 
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="kit-modal" style={{ maxWidth: '420px' }}>
+      <div className="kit-modal" style={{ maxWidth: "420px" }}>
         <h2>New group</h2>
         <input
           className={shared.in}
-          style={{ fontSize: '15px' }}
+          style={{ fontSize: "15px" }}
           value={ng.name}
           placeholder="Group name"
           onChange={(e) => onPatch({ name: e.target.value })}
@@ -70,9 +70,9 @@ export function GroupModal({
                 >
                   <span
                     style={{
-                      width: '9px',
-                      height: '9px',
-                      borderRadius: '999px',
+                      width: "9px",
+                      height: "9px",
+                      borderRadius: "999px",
                       background: f.color,
                     }}
                   />
@@ -86,7 +86,12 @@ export function GroupModal({
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="kit-btn primary" disabled={!valid} onClick={onSave}>
+          <button
+            type="button"
+            className="kit-btn primary"
+            disabled={!valid}
+            onClick={onSave}
+          >
             Create group
           </button>
         </div>

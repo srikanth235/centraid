@@ -6,11 +6,16 @@ import {
   type JSX,
   type KeyboardEvent,
   type RefObject,
-} from 'react';
+} from "react";
 
-import { clearSlash, insertRef, mentionTokenAt, slashCommandAt } from './composerMentions.js';
+import {
+  clearSlash,
+  insertRef,
+  mentionTokenAt,
+  slashCommandAt,
+} from "./composerMentions.js";
 
-import styles from './AssistantScreen.module.css';
+import styles from "./AssistantScreen.module.css";
 
 /** An entity the @-mention picker can offer (a trimmed vault search hit). */
 export interface ComposerEntity {
@@ -41,13 +46,13 @@ export interface ComposerAutocompleteOptions {
 
 type Suggest =
   | {
-      kind: 'mention';
+      kind: "mention";
       start: number;
       caret: number;
       items: ComposerEntity[];
       loading: boolean;
     }
-  | { kind: 'slash'; caret: number; items: SlashCommand[] }
+  | { kind: "slash"; caret: number; items: SlashCommand[] }
   | null;
 
 /**
@@ -66,7 +71,9 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
   const [suggest, setSuggest] = useState<Suggest>(null);
   const [active, setActive] = useState(0);
   const searchSeq = useRef(0);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
 
   const close = useCallback(() => {
     setSuggest(null);
@@ -78,14 +85,14 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
     (start: number, caret: number, query: string) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       const seq = ++searchSeq.current;
-      setSuggest({ kind: 'mention', start, caret, items: [], loading: true });
+      setSuggest({ kind: "mention", start, caret, items: [], loading: true });
       debounceRef.current = setTimeout(() => {
         void opts
           .searchEntities(query)
           .then((items) => {
             if (seq !== searchSeq.current) return;
             setSuggest({
-              kind: 'mention',
+              kind: "mention",
               start,
               caret,
               items,
@@ -96,7 +103,7 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
           .catch(() => {
             if (seq !== searchSeq.current) return;
             setSuggest({
-              kind: 'mention',
+              kind: "mention",
               start,
               caret,
               items: [],
@@ -105,7 +112,7 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
           });
       }, 150);
     },
-    [opts],
+    [opts]
   );
 
   const onChange = useCallback(
@@ -123,17 +130,17 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
       if (slash) {
         const q = slash.query.toLowerCase();
         const items = opts.slashCommands.filter(
-          (c) => !q || c.id.includes(q) || c.label.toLowerCase().includes(q),
+          (c) => !q || c.id.includes(q) || c.label.toLowerCase().includes(q)
         );
         if (items.length > 0) {
-          setSuggest({ kind: 'slash', caret, items });
+          setSuggest({ kind: "slash", caret, items });
           setActive(0);
           return;
         }
       }
       close();
     },
-    [opts, runMentionSearch, close],
+    [opts, runMentionSearch, close]
   );
 
   const setCaret = useCallback(
@@ -145,14 +152,14 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
         ta.setSelectionRange(caret, caret);
       });
     },
-    [opts.textareaRef],
+    [opts.textareaRef]
   );
 
   const pick = useCallback(
     (index: number) => {
       if (!suggest) return;
-      const value = opts.textareaRef.current?.value ?? '';
-      if (suggest.kind === 'mention') {
+      const value = opts.textareaRef.current?.value ?? "";
+      if (suggest.kind === "mention") {
         const item = suggest.items[index];
         if (!item) return;
         const label = item.title || `${item.type} ${item.id}`;
@@ -173,38 +180,38 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
         opts.onRunSlash(cmd.id);
       }
     },
-    [suggest, opts, close, setCaret],
+    [suggest, opts, close, setCaret]
   );
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>): boolean => {
       if (!suggest) return false;
       const len = suggest.items.length;
-      if (e.key === 'ArrowDown') {
+      if (e.key === "ArrowDown") {
         e.preventDefault();
         setActive((a) => (len === 0 ? 0 : Math.min(len - 1, a + 1)));
         return true;
       }
-      if (e.key === 'ArrowUp') {
+      if (e.key === "ArrowUp") {
         e.preventDefault();
         setActive((a) => Math.max(0, a - 1));
         return true;
       }
-      if (e.key === 'Enter' || e.key === 'Tab') {
+      if (e.key === "Enter" || e.key === "Tab") {
         // Nothing to pick — let the composer handle Enter (send) normally.
         if (len === 0) return false;
         e.preventDefault();
         pick(active);
         return true;
       }
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         close();
         return true;
       }
       return false;
     },
-    [suggest, active, pick, close],
+    [suggest, active, pick, close]
   );
 
   let popover: JSX.Element | null = null;
@@ -217,25 +224,31 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
     // keyboard highlight, as it always did.
     popover = (
       <div className={styles.acPopover}>
-        {suggest.kind === 'mention' && suggest.loading && suggest.items.length === 0 ? (
+        {suggest.kind === "mention" &&
+        suggest.loading &&
+        suggest.items.length === 0 ? (
           <div className={styles.acEmpty}>Searching…</div>
         ) : suggest.items.length === 0 ? (
           <div className={styles.acEmpty}>
-            {suggest.kind === 'mention' ? 'No matches' : 'No commands'}
+            {suggest.kind === "mention" ? "No matches" : "No commands"}
           </div>
-        ) : suggest.kind === 'mention' ? (
+        ) : suggest.kind === "mention" ? (
           suggest.items.map((item, i) => (
             <button
               key={`${item.type}/${item.id}`}
               type="button"
               className={styles.acItem}
-              data-active={i === clampedActive ? 'true' : undefined}
+              data-active={i === clampedActive ? "true" : undefined}
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setActive(i)}
               onClick={() => pick(i)}
             >
-              <span className={styles.acItemTitle}>{item.title || `${item.type} ${item.id}`}</span>
-              <span className={styles.acItemHint}>{item.subtitle || item.type}</span>
+              <span className={styles.acItemTitle}>
+                {item.title || `${item.type} ${item.id}`}
+              </span>
+              <span className={styles.acItemHint}>
+                {item.subtitle || item.type}
+              </span>
             </button>
           ))
         ) : (
@@ -244,14 +257,16 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
               key={cmd.id}
               type="button"
               className={styles.acItem}
-              data-active={i === clampedActive ? 'true' : undefined}
-              data-disabled={cmd.enabled === false ? 'true' : undefined}
+              data-active={i === clampedActive ? "true" : undefined}
+              data-disabled={cmd.enabled === false ? "true" : undefined}
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setActive(i)}
               onClick={() => pick(i)}
             >
               <span className={styles.acItemTitle}>/{cmd.label}</span>
-              {cmd.hint ? <span className={styles.acItemHint}>{cmd.hint}</span> : null}
+              {cmd.hint ? (
+                <span className={styles.acItemHint}>{cmd.hint}</span>
+              ) : null}
             </button>
           ))
         )}

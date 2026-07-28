@@ -1,7 +1,7 @@
-import { cx } from '../ui/cx.js';
+import { cx } from "../ui/cx.js";
 
-import modalCss from '../styles/modal.module.css';
-import buttonCss from '../ui/Button.module.css';
+import modalCss from "../styles/modal.module.css";
+import buttonCss from "../ui/Button.module.css";
 // Text-prompt dialog — a promise-based modal (backdrop + card + a single text
 // field + Cancel/Save, Esc = cancel, Enter = save). Sibling of confirm.ts's
 // `openConfirm`; it portals to document.body and resolves the trimmed string, or
@@ -25,7 +25,7 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     const finish = (result: string | null): void => {
       if (settled) return;
       settled = true;
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
       backdrop.remove();
       card.remove();
       resolve(result);
@@ -33,60 +33,60 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     // The trimmed field value, or null when empty or unchanged from the initial.
     const commit = (): void => {
       const next = input.value.trim();
-      finish(next && next !== (opts.initial ?? '').trim() ? next : null);
+      finish(next && next !== (opts.initial ?? "").trim() ? next : null);
     };
 
-    const backdrop = document.createElement('div');
-    backdrop.className = modalCss.backdrop ?? '';
-    backdrop.addEventListener('click', () => finish(null));
+    const backdrop = document.createElement("div");
+    backdrop.className = modalCss.backdrop ?? "";
+    backdrop.addEventListener("click", () => finish(null));
 
-    const card = document.createElement('div');
-    card.className = modalCss.card ?? '';
-    card.setAttribute('role', 'dialog');
-    card.setAttribute('aria-label', opts.title);
+    const card = document.createElement("div");
+    card.className = modalCss.card ?? "";
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-label", opts.title);
 
-    const closeBtn = document.createElement('button');
+    const closeBtn = document.createElement("button");
     closeBtn.className = cx(buttonCss.icon, modalCss.close);
-    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.setAttribute("aria-label", "Close");
     closeBtn.innerHTML = X_SVG;
-    closeBtn.addEventListener('click', () => finish(null));
+    closeBtn.addEventListener("click", () => finish(null));
 
-    const heading = document.createElement('h3');
+    const heading = document.createElement("h3");
     heading.textContent = opts.title;
 
-    const input = document.createElement('input');
-    input.className = modalCss.input ?? '';
-    input.type = 'text';
-    input.value = opts.initial ?? '';
+    const input = document.createElement("input");
+    input.className = modalCss.input ?? "";
+    input.type = "text";
+    input.value = opts.initial ?? "";
     if (opts.placeholder) input.placeholder = opts.placeholder;
 
-    const cancelBtn = document.createElement('button');
+    const cancelBtn = document.createElement("button");
     cancelBtn.className = cx(buttonCss.btn, buttonCss.ghost);
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => finish(null));
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => finish(null));
 
-    const saveBtn = document.createElement('button');
+    const saveBtn = document.createElement("button");
     saveBtn.className = cx(buttonCss.btn, buttonCss.primary);
-    saveBtn.textContent = opts.confirmLabel ?? 'Save';
-    saveBtn.addEventListener('click', commit);
+    saveBtn.textContent = opts.confirmLabel ?? "Save";
+    saveBtn.addEventListener("click", commit);
 
-    const actions = document.createElement('div');
+    const actions = document.createElement("div");
     // `sheet-actions` was a dead class (no rule survived the carve); the
     // modal module's actions row is the styled equivalent confirm.ts uses.
-    actions.className = modalCss.actions ?? '';
+    actions.className = modalCss.actions ?? "";
     actions.append(cancelBtn, saveBtn);
     card.append(closeBtn, heading, input, actions);
 
     function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         finish(null);
-      } else if (e.key === 'Enter') {
+      } else if (e.key === "Enter") {
         e.preventDefault();
         commit();
       }
     }
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
 
     document.body.append(backdrop, card);
     setTimeout(() => {

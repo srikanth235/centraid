@@ -4,9 +4,9 @@
  */
 export function isExpectedPrewarmSkip(error: unknown): boolean {
   if (error == null) return false;
-  if (typeof error === 'object') {
+  if (typeof error === "object") {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') return true;
+    if (code === "ENOENT") return true;
   }
   const message = error instanceof Error ? error.message : String(error);
   return /ENOENT|no such file or directory/iu.test(message);

@@ -1,15 +1,18 @@
-import type { IconName } from '@centraid/design-tokens';
-import { useMemo, useState, type CSSProperties, type JSX } from 'react';
+import type { IconName } from "@centraid/design-tokens";
+import { useMemo, useState, type CSSProperties, type JSX } from "react";
 
-import { INTEGRATION_HUES } from '../format.js';
-import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { Icon } from '../ui/index.js';
+import { INTEGRATION_HUES } from "../format.js";
+import type {
+  AutomationTemplatesBridgeProps,
+  DiscoverTemplate,
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
 
-import au from '../styles/automation.module.css';
-import styles from './AutomationTemplatesScreen.module.css';
+import au from "../styles/automation.module.css";
+import styles from "./AutomationTemplatesScreen.module.css";
 
-type Trig = 'all' | 'cron' | 'webhook' | 'data' | 'condition';
+type Trig = "all" | "cron" | "webhook" | "data" | "condition";
 
 // Trigger-kind → icon/label/hue, matching the labels automationsData.ts'
 // deriveAutomationHero (kindEyebrow/run trig) uses for the same four kinds —
@@ -20,16 +23,20 @@ type Trig = 'all' | 'cron' | 'webhook' | 'data' | 'condition';
 // automation instances yet (no `hueForId`), so the accent is keyed off
 // trigger kind instead, kept fixed and decorative only (never gates state).
 const TRIGGER_KIND_META: Record<
-  'cron' | 'webhook' | 'data' | 'condition',
+  "cron" | "webhook" | "data" | "condition",
   { icon: IconName; label: string; hue: string }
 > = {
-  cron: { icon: 'Clock', label: 'Cron', hue: 'indigo' },
-  webhook: { icon: 'Webhook', label: 'Webhook', hue: 'teal' },
-  data: { icon: 'Clock', label: 'Data', hue: 'violet' },
-  condition: { icon: 'Clock', label: 'Condition', hue: 'ochre' },
+  cron: { icon: "Clock", label: "Cron", hue: "indigo" },
+  webhook: { icon: "Webhook", label: "Webhook", hue: "teal" },
+  data: { icon: "Clock", label: "Data", hue: "violet" },
+  condition: { icon: "Clock", label: "Condition", hue: "ochre" },
 };
 
-function IntegrationChips({ integrations }: { integrations: readonly string[] }): JSX.Element {
+function IntegrationChips({
+  integrations,
+}: {
+  integrations: readonly string[];
+}): JSX.Element {
   return (
     <div className={au.auChips}>
       {integrations.map((name) => (
@@ -38,7 +45,7 @@ function IntegrationChips({ integrations }: { integrations: readonly string[] })
             className={au.auChipDot}
             aria-hidden="true"
             style={{
-              background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})`,
+              background: `var(--c-${INTEGRATION_HUES[name] ?? "slate"})`,
             }}
           />
           {name}
@@ -55,12 +62,12 @@ function TemplateCard({
   t: DiscoverTemplate;
   onOpen: (t: DiscoverTemplate) => void;
 }): JSX.Element {
-  const meta = TRIGGER_KIND_META[t.triggerKind ?? 'cron'];
+  const meta = TRIGGER_KIND_META[t.triggerKind ?? "cron"];
   return (
     <button
       type="button"
       className={styles.card}
-      style={{ '--tk-hue': `var(--c-${meta.hue})` } as CSSProperties}
+      style={{ "--tk-hue": `var(--c-${meta.hue})` } as CSSProperties}
       onClick={() => onOpen(t)}
     >
       <span className={styles.use}>
@@ -68,7 +75,7 @@ function TemplateCard({
         <Icon name="ArrowRight" size={13} />
       </span>
       <span className={styles.top}>
-        <span className={styles.emoji}>{t.emoji ?? '⚙️'}</span>
+        <span className={styles.emoji}>{t.emoji ?? "⚙️"}</span>
         <span className={styles.name}>{t.name}</span>
       </span>
       <span className={styles.desc}>{t.desc}</span>
@@ -77,7 +84,7 @@ function TemplateCard({
           <span className={styles.trigIcon} aria-hidden="true">
             <Icon name={meta.icon} size={13} />
           </span>
-          {t.triggerLabel ?? ''}
+          {t.triggerLabel ?? ""}
         </span>
         <IntegrationChips integrations={t.integrations ?? []} />
       </span>
@@ -98,8 +105,8 @@ export default function AutomationTemplatesScreen({
   onPreview,
   onStartFromScratch,
 }: AutomationTemplatesBridgeProps): JSX.Element {
-  const [query, setQuery] = useState('');
-  const [trig, setTrig] = useState<Trig>('all');
+  const [query, setQuery] = useState("");
+  const [trig, setTrig] = useState<Trig>("all");
   const [active, setActive] = useState<ReadonlySet<string>>(new Set());
 
   const allIntegrations = useMemo(() => {
@@ -114,7 +121,7 @@ export default function AutomationTemplatesScreen({
 
   const q = query.trim().toLowerCase();
   const shown = templates.filter((t) => {
-    if (trig !== 'all' && (t.triggerKind ?? 'cron') !== trig) return false;
+    if (trig !== "all" && (t.triggerKind ?? "cron") !== trig) return false;
     if (active.size > 0) {
       const ints = t.integrations ?? [];
       for (const want of active) {
@@ -123,7 +130,7 @@ export default function AutomationTemplatesScreen({
     }
     if (q) {
       const hay =
-        `${t.name} ${t.desc} ${t.category ?? ''} ${(t.integrations ?? []).join(' ')}`.toLowerCase();
+        `${t.name} ${t.desc} ${t.category ?? ""} ${(t.integrations ?? []).join(" ")}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -131,7 +138,7 @@ export default function AutomationTemplatesScreen({
 
   const cats: string[] = [];
   for (const t of shown) {
-    const c = t.category ?? 'Other';
+    const c = t.category ?? "Other";
     if (!cats.includes(c)) cats.push(c);
   }
 
@@ -148,8 +155,8 @@ export default function AutomationTemplatesScreen({
   };
 
   const clearFilters = (): void => {
-    setQuery('');
-    setTrig('all');
+    setQuery("");
+    setTrig("all");
     setActive(new Set());
   };
 
@@ -179,21 +186,27 @@ export default function AutomationTemplatesScreen({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <div className={styles.seg} role="tablist" aria-label="Filter by trigger">
-          {(['all', 'cron', 'webhook', 'data', 'condition'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              className={styles.segB}
-              role="tab"
-              aria-selected={k === trig}
-              data-k={k}
-              data-active={k === trig ? 'true' : undefined}
-              onClick={() => setTrig(k)}
-            >
-              {k === 'all' ? 'All' : TRIGGER_KIND_META[k].label}
-            </button>
-          ))}
+        <div
+          className={styles.seg}
+          role="tablist"
+          aria-label="Filter by trigger"
+        >
+          {(["all", "cron", "webhook", "data", "condition"] as const).map(
+            (k) => (
+              <button
+                key={k}
+                type="button"
+                className={styles.segB}
+                role="tab"
+                aria-selected={k === trig}
+                data-k={k}
+                data-active={k === trig ? "true" : undefined}
+                onClick={() => setTrig(k)}
+              >
+                {k === "all" ? "All" : TRIGGER_KIND_META[k].label}
+              </button>
+            )
+          )}
         </div>
       </div>
 
@@ -207,14 +220,14 @@ export default function AutomationTemplatesScreen({
                 type="button"
                 className={styles.fltrChip}
                 aria-pressed={on}
-                data-active={on ? 'true' : undefined}
+                data-active={on ? "true" : undefined}
                 onClick={() => toggleIntegration(name)}
               >
                 <i
                   className={au.auChipDot}
                   aria-hidden="true"
                   style={{
-                    background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})`,
+                    background: `var(--c-${INTEGRATION_HUES[name] ?? "slate"})`,
                   }}
                 />
                 {name}
@@ -231,9 +244,15 @@ export default function AutomationTemplatesScreen({
               <Icon name="Filter" size={22} />
             </div>
             <div className={styles.emptyTitle}>No templates match</div>
-            <div className={styles.emptyText}>Try a different search or clear the filters.</div>
+            <div className={styles.emptyText}>
+              Try a different search or clear the filters.
+            </div>
             <div className={styles.emptyActions}>
-              <button type="button" className={cx(au.auBtn, au.auBtnGhost)} onClick={clearFilters}>
+              <button
+                type="button"
+                className={cx(au.auBtn, au.auBtnGhost)}
+                onClick={clearFilters}
+              >
                 <Icon name="X" size={14} />
                 <span>Clear filters</span>
               </button>
@@ -253,9 +272,13 @@ export default function AutomationTemplatesScreen({
               <div className={styles.catLabel}>{cat}</div>
               <div className={styles.grid}>
                 {shown
-                  .filter((t) => (t.category ?? 'Other') === cat)
+                  .filter((t) => (t.category ?? "Other") === cat)
                   .map((t) => (
-                    <TemplateCard key={`${t.kind ?? 'auto'}:${t.id}`} t={t} onOpen={onPreview} />
+                    <TemplateCard
+                      key={`${t.kind ?? "auto"}:${t.id}`}
+                      t={t}
+                      onOpen={onPreview}
+                    />
                   ))}
               </div>
             </section>

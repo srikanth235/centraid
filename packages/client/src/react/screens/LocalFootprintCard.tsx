@@ -1,21 +1,21 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX } from "react";
 
-import type { LocalUsageReportDTO } from '../../gateway-client-local-storage.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
+import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
 import {
   COMPONENT_PRESENTATION,
   budgetSummary,
   footprintScale,
   footprintSlices,
   formatBytes,
-} from './localUsageView.js';
+} from "./localUsageView.js";
 
-import a11y from '../styles/a11y.module.css';
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import gwStyles from './GatewayScreen.module.css';
-import styles from './LocalFootprintCard.module.css';
+import a11y from "../styles/a11y.module.css";
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import gwStyles from "./GatewayScreen.module.css";
+import styles from "./LocalFootprintCard.module.css";
 
 // Storage → Footprint (issue #544): what Centraid is using on THIS machine,
 // split by component. The page's opening statement, so it leads with one
@@ -35,12 +35,20 @@ export interface LocalFootprintCardProps {
   rescanning: boolean;
 }
 
-function OccupancyRail({ report }: { report: LocalUsageReportDTO }): JSX.Element {
+function OccupancyRail({
+  report,
+}: {
+  report: LocalUsageReportDTO;
+}): JSX.Element {
   const scale = footprintScale(report);
   const slices = footprintSlices(report);
 
-  if (scale.kind === 'none') {
-    return <div className={controlsCss.note}>Nothing measurable on this volume yet.</div>;
+  if (scale.kind === "none") {
+    return (
+      <div className={controlsCss.note}>
+        Nothing measurable on this volume yet.
+      </div>
+    );
   }
 
   return (
@@ -78,7 +86,7 @@ function OccupancyRail({ report }: { report: LocalUsageReportDTO }): JSX.Element
         <span className={styles.railCap}>
           {formatBytes(scale.againstBytes ?? 0)}
           <span className={styles.railCapKind}>
-            {scale.kind === 'budget' ? 'budget' : 'this disk'}
+            {scale.kind === "budget" ? "budget" : "this disk"}
           </span>
         </span>
       </div>
@@ -86,7 +94,11 @@ function OccupancyRail({ report }: { report: LocalUsageReportDTO }): JSX.Element
   );
 }
 
-function VaultBreakdown({ report }: { report: LocalUsageReportDTO }): JSX.Element | null {
+function VaultBreakdown({
+  report,
+}: {
+  report: LocalUsageReportDTO;
+}): JSX.Element | null {
   if (report.vaults.length === 0) return null;
   return (
     <details className={styles.byVault} data-testid="footprint-by-vault">
@@ -95,7 +107,9 @@ function VaultBreakdown({ report }: { report: LocalUsageReportDTO }): JSX.Elemen
         {report.vaults.map((vault) => (
           <div key={vault.vaultId} className={styles.vaultRow}>
             <div className={styles.vaultHead}>
-              <span className={styles.vaultName}>{vault.name ?? vault.vaultId.slice(0, 8)}</span>
+              <span className={styles.vaultName}>
+                {vault.name ?? vault.vaultId.slice(0, 8)}
+              </span>
               <span className={styles.figure}>{formatBytes(vault.bytes)}</span>
             </div>
             <div className={styles.vaultParts}>
@@ -107,11 +121,14 @@ function VaultBreakdown({ report }: { report: LocalUsageReportDTO }): JSX.Elemen
                     <i
                       className={styles.chip}
                       style={{
-                        background: COMPONENT_PRESENTATION[component.component].color,
+                        background:
+                          COMPONENT_PRESENTATION[component.component].color,
                       }}
                     />
                     {COMPONENT_PRESENTATION[component.component].label}
-                    <b className={styles.figure}>{formatBytes(component.bytes)}</b>
+                    <b className={styles.figure}>
+                      {formatBytes(component.bytes)}
+                    </b>
                   </span>
                 ))}
             </div>
@@ -129,10 +146,16 @@ export default function LocalFootprintCard({
   rescanning,
 }: LocalFootprintCardProps): JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const slices = useMemo(() => (report ? footprintSlices(report) : []), [report]);
+  const slices = useMemo(
+    () => (report ? footprintSlices(report) : []),
+    [report]
+  );
 
   return (
-    <section className={cx(gwStyles.panel, styles.card)} data-testid="local-footprint-card">
+    <section
+      className={cx(gwStyles.panel, styles.card)}
+      data-testid="local-footprint-card"
+    >
       <div className={gwStyles.panelHead}>
         <h2>On this machine</h2>
         <button
@@ -141,28 +164,38 @@ export default function LocalFootprintCard({
           disabled={rescanning || !report}
           onClick={onRescan}
         >
-          <span className={styles.rescanIcon} data-spin={rescanning || undefined}>
-            <Icon name={rescanning ? 'Loader' : 'Refresh'} size={13} />
+          <span
+            className={styles.rescanIcon}
+            data-spin={rescanning || undefined}
+          >
+            <Icon name={rescanning ? "Loader" : "Refresh"} size={13} />
           </span>
-          <span>{rescanning ? 'Measuring…' : 'Rescan'}</span>
+          <span>{rescanning ? "Measuring…" : "Rescan"}</span>
         </button>
       </div>
 
       <div className={styles.body}>
         {loadError ? (
-          <div className={styles.loadError}>Couldn’t measure local storage: {loadError}</div>
+          <div className={styles.loadError}>
+            Couldn’t measure local storage: {loadError}
+          </div>
         ) : report ? (
           <>
             <div className={styles.headline} data-status={report.limit.status}>
-              <span className={styles.headlineFigure}>{formatBytes(report.totalBytes)}</span>
-              <span className={styles.headlineNote}>{budgetSummary(report, report.limits)}</span>
+              <span className={styles.headlineFigure}>
+                {formatBytes(report.totalBytes)}
+              </span>
+              <span className={styles.headlineNote}>
+                {budgetSummary(report, report.limits)}
+              </span>
             </div>
 
             <OccupancyRail report={report} />
 
             {report.error ? (
               <div className={styles.staleNote}>
-                Last measurement failed ({report.error}) — showing the previous figures.
+                Last measurement failed ({report.error}) — showing the previous
+                figures.
               </div>
             ) : null}
 
@@ -178,10 +211,16 @@ export default function LocalFootprintCard({
                     aria-expanded={open}
                     onClick={() => setExpanded(open ? null : slice.component)}
                   >
-                    <i className={styles.chip} style={{ background: slice.color }} />
+                    <i
+                      className={styles.chip}
+                      style={{ background: slice.color }}
+                    />
                     <span className={styles.legendLabel}>{slice.label}</span>
                     <span className={styles.legendShare}>
-                      {(slice.fraction * 100).toFixed(slice.fraction >= 0.1 ? 0 : 1)}%
+                      {(slice.fraction * 100).toFixed(
+                        slice.fraction >= 0.1 ? 0 : 1
+                      )}
+                      %
                     </span>
                     <span className={cx(styles.figure, styles.legendBytes)}>
                       {formatBytes(slice.bytes)}
@@ -191,7 +230,7 @@ export default function LocalFootprintCard({
                         {slice.blurb}
                         {slice.unreadable
                           ? ` Part of this tree is unreadable (${slice.unreadable}), so the figure is a floor.`
-                          : ''}
+                          : ""}
                       </span>
                     ) : null}
                   </button>
@@ -205,8 +244,8 @@ export default function LocalFootprintCard({
               <div className={styles.diskLine}>
                 <Icon name="Gauge" size={13} />
                 <span>
-                  {formatBytes(report.disk.freeBytes)} free of {formatBytes(report.disk.totalBytes)}{' '}
-                  on this disk
+                  {formatBytes(report.disk.freeBytes)} free of{" "}
+                  {formatBytes(report.disk.totalBytes)} on this disk
                 </span>
               </div>
             ) : null}

@@ -9,14 +9,14 @@
 // active state keeps the single `--accent` action colour.
 
 export const AU_HUES = [
-  'indigo',
-  'rose',
-  'violet',
-  'teal',
-  'forest',
-  'amber',
-  'ochre',
-  'slate',
+  "indigo",
+  "rose",
+  "violet",
+  "teal",
+  "forest",
+  "amber",
+  "ochre",
+  "slate",
 ] as const;
 export type AuHue = (typeof AU_HUES)[number];
 
@@ -24,14 +24,14 @@ export type AuHue = (typeof AU_HUES)[number];
 // automation keeps a stable face across every surface. Every entry is a real
 // key in the @centraid/design-tokens icon set.
 export const AU_GLYPHS = [
-  'Bolt',
-  'Clock',
-  'Webhook',
-  'Bell',
-  'Activity',
-  'Gauge',
-  'Beaker',
-  'Cpu',
+  "Bolt",
+  "Clock",
+  "Webhook",
+  "Bell",
+  "Activity",
+  "Gauge",
+  "Beaker",
+  "Cpu",
 ] as const;
 export type AuGlyph = (typeof AU_GLYPHS)[number];
 
@@ -51,11 +51,11 @@ export function glyphForId(id: string): AuGlyph {
   return AU_GLYPHS[hashId(`${id}#glyph`) % AU_GLYPHS.length]!;
 }
 
-export type RowStatus = 'active' | 'paused' | 'draft';
+export type RowStatus = "active" | "paused" | "draft";
 
 // An automation's lifecycle status: enabled = active; disabled with no runs
 // yet = draft (never switched on); disabled but previously run = paused.
 export function auStatusForRow(enabled: boolean, hasRun: boolean): RowStatus {
-  if (enabled) return 'active';
-  return hasRun ? 'paused' : 'draft';
+  if (enabled) return "active";
+  return hasRun ? "paused" : "draft";
 }

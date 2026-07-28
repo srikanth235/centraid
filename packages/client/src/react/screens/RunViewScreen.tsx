@@ -1,35 +1,41 @@
-import type { IconName } from '@centraid/design-tokens';
+import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for one automation run's detail view; splitting would fragment one visual unit
-import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
 
 import type {
   AuStatusKind,
   RunLogRowDTO,
   RunViewBridgeProps,
   RunViewSnapshot,
-} from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { Icon } from '../ui/index.js';
-import Message, { type MessageCallbacks } from './AssistantMessage.js';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
+import Message, { type MessageCallbacks } from "./AssistantMessage.js";
 
-import au from '../styles/automation.module.css';
-import styles from './RunViewScreen.module.css';
+import au from "../styles/automation.module.css";
+import styles from "./RunViewScreen.module.css";
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
-  active: 'Power',
-  paused: 'Pause',
-  draft: 'Pencil',
-  running: 'Loader',
-  success: 'CheckCircle',
-  failed: 'AlertTriangle',
+  active: "Power",
+  paused: "Pause",
+  draft: "Pencil",
+  running: "Loader",
+  success: "CheckCircle",
+  failed: "AlertTriangle",
 };
 
-function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX.Element {
+function StatusPill({
+  kind,
+  label,
+}: {
+  kind: AuStatusKind;
+  label: string;
+}): JSX.Element {
   return (
     <output className={au.auStatus} data-tone={kind}>
       <span
         className={au.auStatusIc}
-        data-spin={kind === 'running' ? 'true' : undefined}
+        data-spin={kind === "running" ? "true" : undefined}
         aria-hidden="true"
       >
         <Icon name={STATUS_ICON[kind]} size={12} />
@@ -55,7 +61,11 @@ function LogRow({ row }: { row: RunLogRowDTO }): JSX.Element {
       <span className={styles.logTime}>{row.time}</span>
       <div className={styles.logMain}>
         <div className={styles.logHead}>
-          <span className={styles.logGlyph} data-status={row.tone} aria-hidden="true" />
+          <span
+            className={styles.logGlyph}
+            data-status={row.tone}
+            aria-hidden="true"
+          />
           <span>{row.label}</span>
           {row.sub ? <span>{row.sub}</span> : null}
         </div>
@@ -113,7 +123,9 @@ function TriggerInstructions({ text }: { text: string }): JSX.Element {
     <>
       <div
         ref={ref}
-        className={open ? cx(styles.trigInstr, styles.trigInstrOpen) : styles.trigInstr}
+        className={
+          open ? cx(styles.trigInstr, styles.trigInstrOpen) : styles.trigInstr
+        }
       >
         {text}
       </div>
@@ -124,7 +136,7 @@ function TriggerInstructions({ text }: { text: string }): JSX.Element {
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
-          {open ? 'Show less' : 'Show more'}
+          {open ? "Show less" : "Show more"}
         </button>
       ) : null}
     </>
@@ -154,7 +166,8 @@ export default function RunViewScreen({
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs: () => undefined,
     wireCodeCopy: () => undefined,
-    loadAttachmentImage: () => Promise.reject(new Error('automation attachments unavailable')),
+    loadAttachmentImage: () =>
+      Promise.reject(new Error("automation attachments unavailable")),
     onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
     onFeedback: () => undefined,
     onRegenerate: () => undefined,
@@ -194,7 +207,10 @@ export default function RunViewScreen({
           <span className={styles.deletedNoticeIc} aria-hidden="true">
             <Icon name="AlertCircle" size={14} />
           </span>
-          <span>This automation was deleted — showing the last recorded details for this run.</span>
+          <span>
+            This automation was deleted — showing the last recorded details for
+            this run.
+          </span>
         </output>
       ) : null}
       <div className={styles.rvHead}>
@@ -206,13 +222,15 @@ export default function RunViewScreen({
             {snap.headerName}
             <StatusPill kind={snap.statusKind} label={snap.statusLabel} />
           </div>
-          <div className={styles.rvHeadMeta}>{`${snap.startedLabel}  ·  ${snap.model}`}</div>
+          <div
+            className={styles.rvHeadMeta}
+          >{`${snap.startedLabel}  ·  ${snap.model}`}</div>
         </div>
       </div>
     </>
   );
 
-  if (mode === 'log') {
+  if (mode === "log") {
     return (
       <div className={styles.rv} data-testid="run-view">
         {header}
@@ -223,7 +241,10 @@ export default function RunViewScreen({
               <div className={styles.logStatV}>
                 <span className={styles.logStatTrig}>
                   <span className={styles.logStatIc} aria-hidden="true">
-                    <Icon name={snap.logKpi.triggerIcon as IconName} size={13} />
+                    <Icon
+                      name={snap.logKpi.triggerIcon as IconName}
+                      size={13}
+                    />
                   </span>
                   <span>{snap.logKpi.triggerLabel}</span>
                 </span>
@@ -244,7 +265,10 @@ export default function RunViewScreen({
             <div className={styles.logStat}>
               <div className={styles.logStatL}>Outcome</div>
               <div className={styles.logStatV}>
-                <StatusPill kind={snap.side.outcomeKind} label={snap.side.outcomeLabel} />
+                <StatusPill
+                  kind={snap.side.outcomeKind}
+                  label={snap.side.outcomeLabel}
+                />
               </div>
             </div>
           </div>
@@ -275,7 +299,9 @@ export default function RunViewScreen({
               </span>
               <div className={cx(styles.tlCard, styles.tlCardTrigger)}>
                 <div className={styles.tlTrigHead}>
-                  <span className={styles.tlTrigLabel}>{snap.triggerLabel}</span>
+                  <span className={styles.tlTrigLabel}>
+                    {snap.triggerLabel}
+                  </span>
                 </div>
                 <div className={styles.trigLine}>
                   <span aria-hidden="true">
@@ -290,26 +316,31 @@ export default function RunViewScreen({
             <div
               className={styles.tlItem}
               data-testid="timeline-final"
-              data-status={snap.final.kind === 'pending' ? 'running' : snap.final.kind}
+              data-status={
+                snap.final.kind === "pending" ? "running" : snap.final.kind
+              }
             >
               <span className={styles.tlRail} aria-hidden="true">
                 <span
                   className={styles.tlDot}
-                  data-spin={snap.final.kind === 'pending' ? 'true' : undefined}
+                  data-spin={snap.final.kind === "pending" ? "true" : undefined}
                 >
                   <Icon
                     name={
-                      snap.final.kind === 'pending'
-                        ? 'Loader'
-                        : snap.final.kind === 'ok'
-                          ? 'CheckCircle'
-                          : 'AlertTriangle'
+                      snap.final.kind === "pending"
+                        ? "Loader"
+                        : snap.final.kind === "ok"
+                          ? "CheckCircle"
+                          : "AlertTriangle"
                     }
-                    size={snap.final.kind === 'pending' ? 12 : 13}
+                    size={snap.final.kind === "pending" ? 12 : 13}
                   />
                 </span>
               </span>
-              <div className={styles.turnTranscript} data-testid="automation-turn-messages">
+              <div
+                className={styles.turnTranscript}
+                data-testid="automation-turn-messages"
+              >
                 {snap.messages.length > 0 ? (
                   snap.messages.map((message, index) => (
                     <Message
@@ -326,7 +357,9 @@ export default function RunViewScreen({
                       <i />
                       <i />
                     </span>
-                    <span>Working — this updates live as the run progresses.</span>
+                    <span>
+                      Working — this updates live as the run progresses.
+                    </span>
                   </div>
                 )}
               </div>
@@ -339,14 +372,17 @@ export default function RunViewScreen({
             <div className={styles.rsideH}>Run detail</div>
             <div className={styles.rsideRow}>
               <span className={styles.rsideK}>Outcome</span>
-              <StatusPill kind={snap.side.outcomeKind} label={snap.side.outcomeLabel} />
+              <StatusPill
+                kind={snap.side.outcomeKind}
+                label={snap.side.outcomeLabel}
+              />
             </div>
             {(
               [
-                ['Trigger', snap.side.trigger],
-                ['Duration', snap.side.duration],
-                ['Started', snap.side.started],
-                ['Run ID', snap.side.runId],
+                ["Trigger", snap.side.trigger],
+                ["Duration", snap.side.duration],
+                ["Started", snap.side.started],
+                ["Run ID", snap.side.runId],
               ] as const
             ).map(([k, v]) => (
               <div key={k} className={styles.rsideRow}>
@@ -364,9 +400,9 @@ export default function RunViewScreen({
             {snap.side.hasUsage ? (
               (
                 [
-                  ['Tokens', snap.side.tokens],
-                  ['Cost', snap.side.cost],
-                  ['Steps', snap.side.steps],
+                  ["Tokens", snap.side.tokens],
+                  ["Cost", snap.side.cost],
+                  ["Steps", snap.side.steps],
                 ] as const
               ).map(([k, v]) => (
                 <div key={k} className={styles.rsideRow}>
@@ -375,7 +411,9 @@ export default function RunViewScreen({
                 </div>
               ))
             ) : (
-              <div className={styles.rsideEmpty}>No token usage — this run was deterministic.</div>
+              <div className={styles.rsideEmpty}>
+                No token usage — this run was deterministic.
+              </div>
             )}
           </div>
           <div className={styles.rsideCard}>
@@ -388,7 +426,11 @@ export default function RunViewScreen({
                 <span>{snap.crumbName} (deleted)</span>
               </div>
             ) : (
-              <button type="button" className={styles.rsideLink} onClick={onOpenAutomation}>
+              <button
+                type="button"
+                className={styles.rsideLink}
+                onClick={onOpenAutomation}
+              >
                 <span>{snap.crumbName}</span>
                 <span aria-hidden="true">
                   <Icon name="ArrowRight" size={14} />

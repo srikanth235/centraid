@@ -3,7 +3,7 @@
 // content streams, which covers the common born-digital PDF path without
 // putting an unbounded document or decompression bomb in gateway memory.
 
-import { inflateSync } from 'node:zlib';
+import { inflateSync } from "node:zlib";
 
 const MIB = 1024 * 1024;
 const MAX_SCAN_BYTES = 8 * MIB;
@@ -12,13 +12,13 @@ const MAX_INFLATED_STREAM_BYTES = MIB;
 const MAX_TOTAL_INFLATED_BYTES = 4 * MIB;
 const MAX_STREAMS = 64;
 const MAX_TEXT_PARTS = 5000;
-const STREAM_TOKEN = Buffer.from('stream', 'ascii');
-const END_STREAM_TOKEN = Buffer.from('endstream', 'ascii');
+const STREAM_TOKEN = Buffer.from("stream", "ascii");
+const END_STREAM_TOKEN = Buffer.from("endstream", "ascii");
 
 /** Extract a bounded useful-text candidate from one PDF byte probe. */
 export function extractPdfText(bytes: Buffer): string | null {
   const probe = bytes.subarray(0, Math.min(bytes.length, MAX_SCAN_BYTES));
-  const parts = textShowingParts(probe.toString('latin1'));
+  const parts = textShowingParts(probe.toString("latin1"));
   let inflatedBytes = 0;
   let cursor = 0;
   let streams = 0;
@@ -32,7 +32,8 @@ export function extractPdfText(bytes: Buffer): string | null {
     const dictionary = streamDictionary(probe, streamAt);
     if (!dictionary || !hasOnlyFlateFilter(dictionary)) continue;
     const compressed = compressedStream(probe, dictionary, dataStart);
-    if (!compressed || compressed.length > MAX_COMPRESSED_STREAM_BYTES) continue;
+    if (!compressed || compressed.length > MAX_COMPRESSED_STREAM_BYTES)
+      continue;
     const remaining = MAX_TOTAL_INFLATED_BYTES - inflatedBytes;
     if (remaining <= 0) break;
     try {
@@ -40,19 +41,24 @@ export function extractPdfText(bytes: Buffer): string | null {
         maxOutputLength: Math.min(MAX_INFLATED_STREAM_BYTES, remaining),
       });
       inflatedBytes += inflated.length;
-      parts.push(...textShowingParts(inflated.toString('latin1')));
+      parts.push(...textShowingParts(inflated.toString("latin1")));
     } catch {
       // Unsupported filters, truncated probes and oversized output are a
       // clean miss. A device/pdf.js enricher may still contribute later.
     }
   }
-  const text = parts.slice(0, MAX_TEXT_PARTS).join(' ').replace(/\s+/gu, ' ').trim();
+  const text = parts
+    .slice(0, MAX_TEXT_PARTS)
+    .join(" ")
+    .replace(/\s+/gu, " ")
+    .trim();
   return text.length >= 16 ? text : null;
 }
 
 function streamDataStart(bytes: Buffer, afterToken: number): number | null {
   if (bytes[afterToken] === 0x0a) return afterToken + 1;
-  if (bytes[afterToken] === 0x0d && bytes[afterToken + 1] === 0x0a) return afterToken + 2;
+  if (bytes[afterToken] === 0x0d && bytes[afterToken + 1] === 0x0a)
+    return afterToken + 2;
   if (bytes[afterToken] === 0x0d) return afterToken + 1;
   return null;
 }
@@ -62,30 +68,39 @@ interface StreamDictionary {
   end: number;
 }
 
-function streamDictionary(bytes: Buffer, streamAt: number): StreamDictionary | null {
+function streamDictionary(
+  bytes: Buffer,
+  streamAt: number
+): StreamDictionary | null {
   const floor = Math.max(0, streamAt - 64 * 1024);
-  const end = bytes.lastIndexOf(Buffer.from('>>', 'ascii'), streamAt - 1);
+  const end = bytes.lastIndexOf(Buffer.from(">>", "ascii"), streamAt - 1);
   if (end < floor) return null;
-  const start = bytes.lastIndexOf(Buffer.from('<<', 'ascii'), end - 1);
+  const start = bytes.lastIndexOf(Buffer.from("<<", "ascii"), end - 1);
   if (start < floor) return null;
-  return { text: bytes.toString('latin1', start, end + 2), end: end + 2 };
+  return { text: bytes.toString("latin1", start, end + 2), end: end + 2 };
 }
 
 function hasOnlyFlateFilter(dictionary: StreamDictionary): boolean {
   return /\/Filter\s*(?:\/(?:FlateDecode|Fl)\b|\[\s*\/(?:FlateDecode|Fl)\s*\])/u.test(
-    dictionary.text,
+    dictionary.text
   );
 }
 
 function compressedStream(
   bytes: Buffer,
   dictionary: StreamDictionary,
-  dataStart: number,
+  dataStart: number
 ): Buffer | null {
-  const lengthMatch = /\/Length\s+(?<streamLength>\d+)\b/u.exec(dictionary.text);
+  const lengthMatch = /\/Length\s+(?<streamLength>\d+)\b/u.exec(
+    dictionary.text
+  );
   if (lengthMatch) {
     const length = Number(lengthMatch.groups?.streamLength);
-    if (Number.isSafeInteger(length) && length >= 0 && dataStart + length <= bytes.length) {
+    if (
+      Number.isSafeInteger(length) &&
+      length >= 0 &&
+      dataStart + length <= bytes.length
+    ) {
       return bytes.subarray(dataStart, dataStart + length);
     }
   }
@@ -100,14 +115,16 @@ function compressedStream(
 function textShowingParts(raw: string): string[] {
   const parts: string[] = [];
   for (const match of raw.matchAll(/\((?<literal>(?:\\.|[^\\)])*)\)\s*Tj/gu)) {
-    parts.push(decodePdfString(match.groups?.literal ?? ''));
+    parts.push(decodePdfString(match.groups?.literal ?? ""));
     if (parts.length >= MAX_TEXT_PARTS) return parts;
   }
-  for (const match of raw.matchAll(/\[(?<elements>(?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/gu)) {
-    for (const value of (match.groups?.elements ?? '').matchAll(
-      /\((?<literal>(?:\\.|[^\\)])*)\)/gu,
+  for (const match of raw.matchAll(
+    /\[(?<elements>(?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/gu
+  )) {
+    for (const value of (match.groups?.elements ?? "").matchAll(
+      /\((?<literal>(?:\\.|[^\\)])*)\)/gu
     )) {
-      parts.push(decodePdfString(value.groups?.literal ?? ''));
+      parts.push(decodePdfString(value.groups?.literal ?? ""));
       if (parts.length >= MAX_TEXT_PARTS) return parts;
     }
   }
@@ -117,17 +134,17 @@ function textShowingParts(raw: string): string[] {
 function decodePdfString(value: string): string {
   return value
     .replace(/\\(?<char>[nrtbf()\\])/gu, (_, char: string) =>
-      char === 'n'
-        ? '\n'
-        : char === 'r'
-          ? '\r'
-          : char === 't'
-            ? '\t'
-            : char === 'b' || char === 'f'
-              ? ''
-              : char,
+      char === "n"
+        ? "\n"
+        : char === "r"
+          ? "\r"
+          : char === "t"
+            ? "\t"
+            : char === "b" || char === "f"
+              ? ""
+              : char
     )
     .replace(/\\(?<octal>\d{1,3})/gu, (_, octal: string) =>
-      String.fromCharCode(parseInt(octal, 8)),
+      String.fromCharCode(parseInt(octal, 8))
     );
 }

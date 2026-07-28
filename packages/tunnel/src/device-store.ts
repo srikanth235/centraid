@@ -8,9 +8,9 @@
  * small control files (e.g. `devices.json`).
  */
 
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface PairedDevice {
   deviceId: string;
@@ -36,9 +36,9 @@ export function sanitizeDeviceName(raw: string): string {
       const code = ch.charCodeAt(0);
       return code > 0x1f && code !== 0x7f;
     })
-    .join('');
+    .join("");
   const clipped = stripped.trim().slice(0, MAX_NAME_LENGTH).trim();
-  return clipped.length > 0 ? clipped : 'Phone';
+  return clipped.length > 0 ? clipped : "Phone";
 }
 
 export class DeviceStore {
@@ -46,7 +46,7 @@ export class DeviceStore {
 
   private constructor(
     private readonly file: string,
-    devices: PairedDevice[],
+    devices: PairedDevice[]
   ) {
     this.devices = devices;
   }
@@ -54,17 +54,19 @@ export class DeviceStore {
   static open(file: string): DeviceStore {
     let devices: PairedDevice[] = [];
     try {
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<DeviceFile>;
+      const parsed = JSON.parse(
+        fs.readFileSync(file, "utf8")
+      ) as Partial<DeviceFile>;
       if (parsed.version === 1 && Array.isArray(parsed.devices)) {
         devices = parsed.devices.filter(
           (d): d is PairedDevice =>
-            typeof d?.deviceId === 'string' &&
-            typeof d?.endpointId === 'string' &&
-            typeof d?.name === 'string',
+            typeof d?.deviceId === "string" &&
+            typeof d?.endpointId === "string" &&
+            typeof d?.name === "string"
         );
       }
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     }
     return new DeviceStore(file, devices);
   }
@@ -82,7 +84,11 @@ export class DeviceStore {
    * Add a device. Re-pairing the same endpoint (e.g. after a reinstall that
    * kept the key) replaces the prior entry rather than duplicating it.
    */
-  add(input: { name: string; platform: string; endpointId: string }): PairedDevice {
+  add(input: {
+    name: string;
+    platform: string;
+    endpointId: string;
+  }): PairedDevice {
     const device: PairedDevice = {
       deviceId: crypto.randomUUID(),
       name: sanitizeDeviceName(input.name),
@@ -90,7 +96,10 @@ export class DeviceStore {
       endpointId: input.endpointId,
       addedAt: new Date().toISOString(),
     };
-    this.devices = [...this.devices.filter((d) => d.endpointId !== input.endpointId), device];
+    this.devices = [
+      ...this.devices.filter((d) => d.endpointId !== input.endpointId),
+      device,
+    ];
     this.persist();
     return { ...device };
   }

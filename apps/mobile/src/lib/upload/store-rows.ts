@@ -2,7 +2,12 @@
 // store.ts to keep that module under the governance line-cap. Pure functions
 // over plain rows — no driver, no I/O.
 
-import type { UploadItem, UploadItemState, UploadPart, UploadPartState } from './store';
+import type {
+  UploadItem,
+  UploadItemState,
+  UploadPart,
+  UploadPartState,
+} from "./store";
 
 export interface ItemRow {
   item_id: string;

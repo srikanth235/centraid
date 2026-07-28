@@ -20,12 +20,12 @@
  * the new gateway.
  */
 
-import { mkdir, stat } from 'node:fs/promises';
-import path from 'node:path';
+import { mkdir, stat } from "node:fs/promises";
+import path from "node:path";
 
-import { openSession } from './apps-store-client.js';
-import { vaultCodeStoreDir } from './gateway-paths.js';
-import { loadSettings } from './settings.js';
+import { openSession } from "./apps-store-client.js";
+import { vaultCodeStoreDir } from "./gateway-paths.js";
+import { loadSettings } from "./settings.js";
 
 async function dirExists(p: string): Promise<boolean> {
   try {
@@ -71,7 +71,10 @@ export async function ensureAppSession(appId: string): Promise<string> {
   // tolerate "already exists" by treating it as success — the worktree
   // is there, which is all the caller needs.
   const p = openSession(wanted).catch((err: unknown) => {
-    if (err instanceof Error && /already has a worktree|session_exists/u.test(err.message)) {
+    if (
+      err instanceof Error &&
+      /already has a worktree|session_exists/u.test(err.message)
+    ) {
       return wanted;
     }
     throw err;
@@ -101,9 +104,9 @@ export function resetAppSessions(): void {
  */
 export async function assertActiveGatewayLocal(action: string): Promise<void> {
   const settings = await loadSettings();
-  if (settings.activeGatewayKind !== 'local') {
+  if (settings.activeGatewayKind !== "local") {
     throw new Error(
-      `${action} requires the local gateway (active is ${settings.activeGatewayKind})`,
+      `${action} requires the local gateway (active is ${settings.activeGatewayKind})`
     );
   }
 }
@@ -125,9 +128,16 @@ export async function ensureAppSessionDir(appId: string): Promise<string> {
   const settings = await loadSettings();
   const sessionId = await ensureAppSession(appId);
   if (!settings.activeVaultId)
-    throw new Error('no active vault — the code store is not mounted yet');
+    throw new Error("no active vault — the code store is not mounted yet");
   const codeStore = vaultCodeStoreDir(settings.activeVaultId);
-  return path.join(codeStore, 'worktrees', 'sessions', sessionId, 'apps', appId);
+  return path.join(
+    codeStore,
+    "worktrees",
+    "sessions",
+    sessionId,
+    "apps",
+    appId
+  );
 }
 
 /**
@@ -145,9 +155,9 @@ export async function resolveAppRevealDir(appId: string): Promise<string> {
   await assertActiveGatewayLocal(`revealing app "${appId}"`);
   const settings = await loadSettings();
   if (!settings.activeVaultId)
-    throw new Error('no active vault — the code store is not mounted yet');
+    throw new Error("no active vault — the code store is not mounted yet");
   const codeStore = vaultCodeStoreDir(settings.activeVaultId);
-  const liveDir = path.join(codeStore, 'active-main', 'apps', appId);
+  const liveDir = path.join(codeStore, "active-main", "apps", appId);
   if (await dirExists(liveDir)) return liveDir;
   // Not on `main` (a draft) — materialize/open its editing session and reveal
   // that. `mkdir` guarantees the folder exists even for a brand-new draft the

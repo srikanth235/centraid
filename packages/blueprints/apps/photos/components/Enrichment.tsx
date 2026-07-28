@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-import { SparkleIcon } from '../icons.tsx';
+import { SparkleIcon } from "../icons.tsx";
 // Face-proposer on-demand (issue #352 phase 3/4): a header icon-button +
 // popover that reads `enrichment-status` (enrich.policy for the photos
 // domain) on mount and either offers "Detect faces now" (fires
@@ -10,9 +10,9 @@ import { SparkleIcon } from '../icons.tsx';
 // it once at boot and never re-renders it itself; no domain (asset/album)
 // state is threaded in. v2: lives in the main header's icon-button group
 // (next to zoom) instead of the old text "✨ Faces" toolbar button.
-import { act, narrate } from '../outcomes.ts';
+import { act, narrate } from "../outcomes.ts";
 
-import styles from './Enrichment.module.css';
+import styles from "./Enrichment.module.css";
 
 interface EnrichmentStatus {
   tier?: string | null;
@@ -30,7 +30,7 @@ export function EnrichmentPanel() {
   useEffect(() => {
     let cancelled = false;
     window.centraid
-      .read<EnrichmentStatus>({ query: 'enrichment-status' })
+      .read<EnrichmentStatus>({ query: "enrichment-status" })
       .then((data) => {
         if (!cancelled) setStatus(data ?? {});
       })
@@ -38,7 +38,7 @@ export function EnrichmentPanel() {
         if (!cancelled)
           setStatus({
             tier: null,
-            vaultDenied: { message: 'Could not check.' },
+            vaultDenied: { message: "Could not check." },
           });
       });
     return () => {
@@ -52,23 +52,24 @@ export function EnrichmentPanel() {
   useEffect(() => {
     if (!open) return undefined;
     function onAway(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node))
+        setOpen(false);
     }
-    document.addEventListener('click', onAway, true);
-    return () => document.removeEventListener('click', onAway, true);
+    document.addEventListener("click", onAway, true);
+    return () => document.removeEventListener("click", onAway, true);
   }, [open]);
 
   const tier = status?.tier ?? null;
-  const enabled = tier === 'local' || tier === 'model';
+  const enabled = tier === "local" || tier === "model";
 
   return (
     <div className={styles.wrap} ref={wrapRef}>
       <button
         type="button"
         className="ph-header-icon-btn"
-        data-active={open ? 'true' : 'false'}
+        data-active={open ? "true" : "false"}
         aria-haspopup="true"
-        aria-expanded={open ? 'true' : 'false'}
+        aria-expanded={open ? "true" : "false"}
         aria-label="Face detection"
         title="Face detection"
         onClick={() => setOpen((v) => !v)}
@@ -79,7 +80,11 @@ export function EnrichmentPanel() {
           without it is `display:none`); the popover keeps its own away-click
           close and its `.kit-popover` box. */}
       {open ? (
-        <dialog open className={`kit-popover ${styles.panel}`} aria-label="Face detection">
+        <dialog
+          open
+          className={`kit-popover ${styles.panel}`}
+          aria-label="Face detection"
+        >
           {status == null ? (
             <p className="kit-muted kit-small">Checking…</p>
           ) : status.vaultDenied ? (
@@ -87,7 +92,8 @@ export function EnrichmentPanel() {
           ) : enabled ? (
             <>
               <p className="kit-small">
-                Face detection is on ({tier === 'model' ? 'cloud model' : 'on-device'}).
+                Face detection is on (
+                {tier === "model" ? "cloud model" : "on-device"}).
               </p>
               <button
                 type="button"
@@ -95,25 +101,30 @@ export function EnrichmentPanel() {
                 disabled={busy}
                 onClick={async () => {
                   setBusy(true);
-                  const outcome = await act('request-enrichment', {
-                    entity_type: 'media.media_asset',
+                  const outcome = await act("request-enrichment", {
+                    entity_type: "media.media_asset",
                   });
                   setBusy(false);
                   if (narrate(outcome, noteRef.current)) {
                     setRequested(true);
                     if (noteRef.current) {
                       noteRef.current.textContent =
-                        'Requested — new face proposals will show up on your photos soon.';
+                        "Requested — new face proposals will show up on your photos soon.";
                     }
                   }
                 }}
               >
-                {busy ? 'Requesting…' : requested ? 'Requested ✓' : 'Detect faces now'}
+                {busy
+                  ? "Requesting…"
+                  : requested
+                    ? "Requested ✓"
+                    : "Detect faces now"}
               </button>
             </>
           ) : (
             <p className="kit-small">
-              Face detection is turned off here. Turn it on in settings to use this.
+              Face detection is turned off here. Turn it on in settings to use
+              this.
             </p>
           )}
           <p className="lightbox-note enrichment-note" ref={noteRef} />

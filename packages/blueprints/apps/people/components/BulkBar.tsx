@@ -1,5 +1,5 @@
 // Bulk-selection action bar (#bulkBar root).
-import styles from './BulkBar.module.css';
+import styles from "./BulkBar.module.css";
 
 export function BulkBar({
   n,

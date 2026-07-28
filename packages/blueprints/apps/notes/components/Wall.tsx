@@ -1,22 +1,22 @@
-import { I } from '../icons.ts';
-import type { Note, PendingCreate } from '../types.ts';
-import { Card } from './Card.tsx';
+import { I } from "../icons.ts";
+import type { Note, PendingCreate } from "../types.ts";
+import { Card } from "./Card.tsx";
 // The scrolling wall: the quick-add card, a "pending approval" strip for
 // parked creates (no note_id exists yet, so these render as ghost cards),
 // the pinned/others card groups (CSS-columns masonry, or a single narrow
 // column in list view), the empty state and the bounded-window "Show more"
 // footer. Mirrors tasks/components/Board.jsx's shape.
-import { QuickAdd, type QuickAddProps } from './QuickAdd.tsx';
-import { Icon } from './Shared.tsx';
+import { QuickAdd, type QuickAddProps } from "./QuickAdd.tsx";
+import { Icon } from "./Shared.tsx";
 
-import cardStyles from './Card.module.css';
-import styles from './Wall.module.css';
+import cardStyles from "./Card.module.css";
+import styles from "./Wall.module.css";
 
 function PendingCreateCard({ item }: { item: PendingCreate }) {
   return (
     <article className={`${cardStyles.card} kit-pending`}>
       <div className={cardStyles.cardHead}>
-        <div className={cardStyles.cardTitle}>{item.title || 'Untitled'}</div>
+        <div className={cardStyles.cardTitle}>{item.title || "Untitled"}</div>
         <span className="kit-pending-chip">pending</span>
       </div>
     </article>
@@ -41,7 +41,7 @@ export function Wall({
   onOpenNote,
   onTogglePin,
 }: {
-  view: 'masonry' | 'list';
+  view: "masonry" | "list";
   showQuickAdd: boolean;
   quickAddProps: QuickAddProps;
   pendingCreates: PendingCreate[];
@@ -58,7 +58,8 @@ export function Wall({
   onOpenNote: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
 }) {
-  const wallClass = view === 'list' ? `${styles.wall} ${styles.list}` : styles.wall;
+  const wallClass =
+    view === "list" ? `${styles.wall} ${styles.list}` : styles.wall;
 
   return (
     <div className={styles.scrollInner}>
@@ -95,7 +96,9 @@ export function Wall({
             ))}
           </div>
           {others.length > 0 ? (
-            <div className={`${styles.eyebrow} ${styles.eyebrowOthers}`}>Others</div>
+            <div className={`${styles.eyebrow} ${styles.eyebrowOthers}`}>
+              Others
+            </div>
           ) : null}
         </>
       ) : null}
@@ -125,7 +128,10 @@ export function Wall({
 
       {footer ? (
         <div className="kit-foot">
-          <span>Showing your latest {footer.windowSize} notes — older ones are a search away.</span>
+          <span>
+            Showing your latest {footer.windowSize} notes — older ones are a
+            search away.
+          </span>
           <button type="button" className="kit-btn" onClick={onShowMore}>
             Show more
           </button>

@@ -88,7 +88,7 @@ export interface MergeOptions {
 }
 
 const identityOf = (asset: MergeAsset) =>
-  asset.sha256 != null && asset.sha256 !== ''
+  asset.sha256 != null && asset.sha256 !== ""
     ? `sha:${asset.sha256}`
     : `content:${asset.content_id}`;
 
@@ -115,7 +115,9 @@ function horizonOf(pages: readonly ScopePage[]) {
   // At the horizon: the dated truncated scopes whose tail IS the horizon, plus
   // every null-tailed truncated scope (they cap the undated bucket, and paging
   // them is the only way to lift that cap).
-  const atHorizon = truncated.filter((page) => page.tail === horizon || page.tail == null);
+  const atHorizon = truncated.filter(
+    (page) => page.tail === horizon || page.tail == null
+  );
   return {
     horizon,
     horizonScopeIds: atHorizon.map((page) => page.scopeId),
@@ -123,7 +125,10 @@ function horizonOf(pages: readonly ScopePage[]) {
   };
 }
 
-export function mergeScopePages(pages: readonly ScopePage[], options: MergeOptions): MergeResult {
+export function mergeScopePages(
+  pages: readonly ScopePage[],
+  options: MergeOptions
+): MergeResult {
   const { ownScopeId } = options;
   const byIdentity = new Map<string, MergedAsset>();
   for (const page of pages) {
@@ -131,7 +136,8 @@ export function mergeScopePages(pages: readonly ScopePage[], options: MergeOptio
       const key = identityOf(asset);
       const seen = byIdentity.get(key);
       // Own wins over any audience copy; otherwise first page order wins.
-      if (seen && (seen.scope_id === ownScopeId || page.scopeId !== ownScopeId)) continue;
+      if (seen && (seen.scope_id === ownScopeId || page.scopeId !== ownScopeId))
+        continue;
       byIdentity.set(key, { ...asset, scope_id: page.scopeId });
     }
   }

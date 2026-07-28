@@ -1,8 +1,8 @@
-import { type JSX } from 'react';
+import { type JSX } from "react";
 
-import { Icon } from '../ui/index.js';
+import { Icon } from "../ui/index.js";
 
-import styles from './AutomationCompilePane.module.css';
+import styles from "./AutomationCompilePane.module.css";
 
 /*
  * The compiled-plan viewer — band 3 of the compiler rail.
@@ -16,7 +16,7 @@ import styles from './AutomationCompilePane.module.css';
  * surface, not a component with an independent look.
  */
 
-export type ArtifactFile = 'handler' | 'manifest';
+export type ArtifactFile = "handler" | "manifest";
 
 export interface AutomationCompileArtifactsProps {
   /** Compiled source, or null before the first successful compile. */
@@ -30,12 +30,20 @@ export default function AutomationCompileArtifacts({
   file,
   onFile,
 }: AutomationCompileArtifactsProps): JSX.Element {
-  const code = source ? (file === 'handler' ? source.handler : source.manifest) : null;
-  const lines = (code ?? '').split('\n');
+  const code = source
+    ? file === "handler"
+      ? source.handler
+      : source.manifest
+    : null;
+  const lines = (code ?? "").split("\n");
   return (
     <div className={styles.artifacts}>
-      <div className={styles.artifactTabs} role="tablist" aria-label="Compiled files">
-        {(['handler', 'manifest'] as const).map((f) => (
+      <div
+        className={styles.artifactTabs}
+        role="tablist"
+        aria-label="Compiled files"
+      >
+        {(["handler", "manifest"] as const).map((f) => (
           <button
             key={f}
             type="button"
@@ -45,7 +53,7 @@ export default function AutomationCompileArtifacts({
             data-active={String(file === f)}
             onClick={() => onFile(f)}
           >
-            {f === 'handler' ? 'handler.js' : 'automation.json'}
+            {f === "handler" ? "handler.js" : "automation.json"}
           </button>
         ))}
         <span className={styles.artifactSpacer} />
@@ -66,7 +74,7 @@ export default function AutomationCompileArtifacts({
               <span className={styles.codeGutter} aria-hidden="true">
                 {i + 1}
               </span>
-              <code>{line || ' '}</code>
+              <code>{line || " "}</code>
             </div>
           ))}
         </pre>

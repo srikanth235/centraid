@@ -1,19 +1,30 @@
-import { Feather } from '@expo/vector-icons';
-import { File } from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from "@expo/vector-icons";
+import { File } from "expo-file-system";
+import * as MediaLibrary from "expo-media-library";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { useTheme } from '../../kit/theme';
-import { authHeader } from '../../lib/gateway';
-import { backupDeviceMedia } from '../../lib/upload/media-producer';
-import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from '../../lib/upload/native-policy';
-import { UploadQueue } from '../../lib/upload/native-queue';
-import type { PhotosScreenProps } from '../../navigation';
-import { Store } from '../../storage';
-import { styles } from './BackupHealth.styles';
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { useTheme } from "../../kit/theme";
+import { authHeader } from "../../lib/gateway";
+import { backupDeviceMedia } from "../../lib/upload/media-producer";
+import {
+  LAST_SUCCESSFUL_SYNC_KEY,
+  nativeUploadPolicy,
+} from "../../lib/upload/native-policy";
+import { UploadQueue } from "../../lib/upload/native-queue";
+import type { PhotosScreenProps } from "../../navigation";
+import { Store } from "../../storage";
+import { styles } from "./BackupHealth.styles";
 import {
   IN_CLOUD_MESSAGE,
   InCloudOriginalError,
@@ -22,7 +33,7 @@ import {
   liveVideoUri,
   openDeviceOriginal,
   type DeviceOriginal,
-} from './device-media';
+} from "./device-media";
 
 interface Rules {
   wifiOnly: boolean;
@@ -30,7 +41,7 @@ interface Rules {
   chargerOnly: boolean;
   selectedAlbums: string[];
 }
-const RULES_KEY = 'photos.backupRules';
+const RULES_KEY = "photos.backupRules";
 const DEFAULT_RULES: Rules = {
   wifiOnly: true,
   allowMetered: false,
@@ -50,7 +61,7 @@ type PendingUpload = {
 // rather than an in-body state update.
 function readPendingUploads(
   gatewayBase: string,
-  setPending: (next: PendingUpload[]) => void,
+  setPending: (next: PendingUpload[]) => void
 ): void {
   const queue = UploadQueue.open({
     gatewayBaseUrl: gatewayBase,
@@ -62,40 +73,43 @@ function readPendingUploads(
 
 export default function BackupHealth({
   navigation,
-}: PhotosScreenProps<'BackupHealth'>): React.JSX.Element {
+}: PhotosScreenProps<"BackupHealth">): React.JSX.Element {
   const { colors } = useTheme();
   const { gatewayBase, online, session } = useReplica();
   const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
   // Album titles are async getters in the Next API, so they are read once here
   // rather than during render. The asset count legacy albums carried has no
   // Next equivalent short of walking every album, which this screen will not do.
-  const [albums, setAlbums] = useState<Array<{ id: string; title: string }>>([]);
+  const [albums, setAlbums] = useState<Array<{ id: string; title: string }>>(
+    []
+  );
   const [albumError, setAlbumError] = useState<string>();
   const [pending, setPending] = useState<PendingUpload[]>([]);
-  const [storage, setStorage] = useState('Storage policy unavailable offline');
+  const [storage, setStorage] = useState("Storage policy unavailable offline");
   const [running, setRunning] = useState(false);
   const [inCloudSkipped, setInCloudSkipped] = useState(0);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string>();
 
   useEffect(() => {
     void Store.hydrate(RULES_KEY, DEFAULT_RULES).then((value) =>
-      setRules({ ...DEFAULT_RULES, ...value }),
+      setRules({ ...DEFAULT_RULES, ...value })
     );
-    void Store.hydrate<string | undefined>(LAST_SUCCESSFUL_SYNC_KEY, undefined).then(
-      setLastSuccessfulSync,
-    );
+    void Store.hydrate<string | undefined>(
+      LAST_SUCCESSFUL_SYNC_KEY,
+      undefined
+    ).then(setLastSuccessfulSync);
     void MediaLibrary.Album.getAll()
       .then((all) =>
         Promise.all(
           all.map(async (album) => ({
             id: album.id,
             title: await album.getTitle(),
-          })),
-        ),
+          }))
+        )
       )
       .then(setAlbums)
       .catch((reason: unknown) =>
-        setAlbumError(reason instanceof Error ? reason.message : String(reason)),
+        setAlbumError(reason instanceof Error ? reason.message : String(reason))
       );
   }, []);
   useEffect(() => {
@@ -117,16 +131,16 @@ export default function BackupHealth({
             const vault = body.vaults?.[0];
             if (vault)
               setStorage(
-                `${vault.replicated?.count ?? 0} replicated · ${vault.backlog?.count ?? 0} offsite · policy ${vault.casAck ?? 'unknown'}`,
+                `${vault.replicated?.count ?? 0} replicated · ${vault.backlog?.count ?? 0} offsite · policy ${vault.casAck ?? "unknown"}`
               );
-          },
+          }
         )
         .catch(() => undefined);
   }, [gatewayBase, online]);
 
   const bytes = useMemo(
     () => pending.reduce((sum, item) => sum + item.plaintextSize, 0),
-    [pending],
+    [pending]
   );
   const update = (next: Rules): void => {
     setRules(next);
@@ -140,7 +154,9 @@ export default function BackupHealth({
     setInCloudSkipped(0);
     try {
       const pageSize = 250;
-      const backupAsset = async (metadata: MediaLibrary.AssetMetadata): Promise<void> => {
+      const backupAsset = async (
+        metadata: MediaLibrary.AssetMetadata
+      ): Promise<void> => {
         const isVideo = metadata.mediaType === MediaLibrary.MediaType.VIDEO;
         const capturedAt = capturedAtIso(metadata);
         let original: DeviceOriginal;
@@ -158,9 +174,9 @@ export default function BackupHealth({
         await backupDeviceMedia(session, gatewayBase, {
           localUri: original.uri,
           ...(metadata.filename ? { filename: metadata.filename } : {}),
-          mediaType: isVideo ? 'video/mp4' : 'image/jpeg',
+          mediaType: isVideo ? "video/mp4" : "image/jpeg",
           plaintextSize: new File(original.uri).size,
-          kind: isVideo ? 'video' : 'photo',
+          kind: isVideo ? "video" : "photo",
           capturedAt,
           captureGroupId: companion ? `live:${metadata.id}` : undefined,
           width: metadata.width ?? undefined,
@@ -175,15 +191,18 @@ export default function BackupHealth({
             // than exposing a paired asset, so its dimensions and duration
             // are not on offer — only the name and the bytes.
             filename: companionFile.name,
-            mediaType: 'video/quicktime',
+            mediaType: "video/quicktime",
             plaintextSize: companionFile.size,
-            kind: 'video',
+            kind: "video",
             capturedAt,
             captureGroupId: `live:${metadata.id}`,
           });
         }
       };
-      const backupAlbumPage = async (albumId: string, offset: number): Promise<void> => {
+      const backupAlbumPage = async (
+        albumId: string,
+        offset: number
+      ): Promise<void> => {
         // One native round-trip per page for every cheap field; the bytes of
         // each asset are resolved individually below.
         const page = await new MediaLibrary.Query()
@@ -202,7 +221,8 @@ export default function BackupHealth({
           return backupPageAsset(index + 1);
         };
         await backupPageAsset(0);
-        if (page.length === pageSize) return backupAlbumPage(albumId, offset + page.length);
+        if (page.length === pageSize)
+          return backupAlbumPage(albumId, offset + page.length);
       };
       const backupAlbum = async (index: number): Promise<void> => {
         const albumId = rules.selectedAlbums[index];
@@ -211,13 +231,18 @@ export default function BackupHealth({
         return backupAlbum(index + 1);
       };
       await backupAlbum(0);
-      setLastSuccessfulSync(Store.get<string | undefined>(LAST_SUCCESSFUL_SYNC_KEY, undefined));
+      setLastSuccessfulSync(
+        Store.get<string | undefined>(LAST_SUCCESSFUL_SYNC_KEY, undefined)
+      );
     } finally {
       setRunning(false);
     }
   };
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={["top"]}
+    >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
           <Feather name="chevron-left" size={26} color={colors.ink} />
@@ -236,32 +261,39 @@ export default function BackupHealth({
           ]}
         >
           <Feather
-            name={pending.length ? 'cloud' : 'check-circle'}
+            name={pending.length ? "cloud" : "check-circle"}
             size={30}
-            color={pending.length ? colors.accent : '#2f9d6a'}
+            color={pending.length ? colors.accent : "#2f9d6a"}
           />
           <Text style={[styles.heroValue, { color: colors.ink }]}>
-            {pending.length ? `${pending.length} pending` : 'Backup is healthy'}
+            {pending.length ? `${pending.length} pending` : "Backup is healthy"}
           </Text>
           <Text style={[styles.meta, { color: colors.ink2 }]}>
-            {pending.length ? `${formatBytes(bytes)} remaining` : 'The durable queue is empty.'}
+            {pending.length
+              ? `${formatBytes(bytes)} remaining`
+              : "The durable queue is empty."}
           </Text>
           <Text style={[styles.meta, { color: colors.ink2 }]}>
-            Last successful sync:{' '}
-            {lastSuccessfulSync ? formatSyncTime(lastSuccessfulSync) : 'Never'}
+            Last successful sync:{" "}
+            {lastSuccessfulSync ? formatSyncTime(lastSuccessfulSync) : "Never"}
           </Text>
         </View>
         {inCloudSkipped ? (
           <View style={[styles.warning, { borderColor: colors.danger }]}>
             <Feather name="cloud-off" size={18} color={colors.danger} />
             <Text style={[styles.warningText, { color: colors.danger }]}>
-              {inCloudSkipped} {inCloudSkipped === 1 ? 'original is' : 'originals are'}{' '}
-              {IN_CLOUD_MESSAGE}, so {inCloudSkipped === 1 ? 'it was' : 'they were'} not backed up.
-              Download {inCloudSkipped === 1 ? 'it' : 'them'} in the Photos app and run this again.
+              {inCloudSkipped}{" "}
+              {inCloudSkipped === 1 ? "original is" : "originals are"}{" "}
+              {IN_CLOUD_MESSAGE}, so{" "}
+              {inCloudSkipped === 1 ? "it was" : "they were"} not backed up.
+              Download {inCloudSkipped === 1 ? "it" : "them"} in the Photos app
+              and run this again.
             </Text>
           </View>
         ) : null}
-        <Text style={[styles.section, { color: colors.ink2 }]}>TRANSFER RULES</Text>
+        <Text style={[styles.section, { color: colors.ink2 }]}>
+          TRANSFER RULES
+        </Text>
         <Rule
           label="Wi-Fi only"
           value={rules.wifiOnly}
@@ -281,7 +313,9 @@ export default function BackupHealth({
           onValueChange={(value) => update({ ...rules, chargerOnly: value })}
           colors={colors}
         />
-        <Text style={[styles.section, { color: colors.ink2 }]}>DEVICE ALBUMS</Text>
+        <Text style={[styles.section, { color: colors.ink2 }]}>
+          DEVICE ALBUMS
+        </Text>
         {albumError ? (
           <Text style={[styles.error, { color: colors.danger }]}>
             Device albums could not be read: {albumError}
@@ -311,7 +345,9 @@ export default function BackupHealth({
           style={[
             styles.settings,
             {
-              backgroundColor: rules.selectedAlbums.length ? colors.accent : colors.bgSunken,
+              backgroundColor: rules.selectedAlbums.length
+                ? colors.accent
+                : colors.bgSunken,
               borderColor: colors.line,
             },
           ]}
@@ -326,11 +362,15 @@ export default function BackupHealth({
             style={[
               styles.settingsText,
               {
-                color: rules.selectedAlbums.length ? colors.onAccent : colors.ink3,
+                color: rules.selectedAlbums.length
+                  ? colors.onAccent
+                  : colors.ink3,
               },
             ]}
           >
-            {running ? 'Backing up selected albums…' : 'Back up selected albums now'}
+            {running
+              ? "Backing up selected albums…"
+              : "Back up selected albums now"}
           </Text>
         </Pressable>
         <Text style={[styles.section, { color: colors.ink2 }]}>STORAGE</Text>
@@ -339,10 +379,10 @@ export default function BackupHealth({
           .filter((item) => item.lastError)
           .map((item, index) => (
             <Text key={index} style={[styles.error, { color: colors.danger }]}>
-              {item.filename ?? 'Asset'}: {item.lastError}
+              {item.filename ?? "Asset"}: {item.lastError}
             </Text>
           ))}
-        {Platform.OS === 'android' ? (
+        {Platform.OS === "android" ? (
           <Pressable
             style={[styles.settings, { borderColor: colors.line }]}
             onPress={() => void Linking.openSettings()}
@@ -368,12 +408,17 @@ function Rule({
   label: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
-  colors: ReturnType<typeof useTheme>['colors'];
+  colors: ReturnType<typeof useTheme>["colors"];
   disabled?: boolean;
 }): React.JSX.Element {
   return (
     <View style={[styles.rule, { borderBottomColor: colors.line }]}>
-      <Text style={[styles.ruleLabel, { color: disabled ? colors.ink3 : colors.ink }]}>
+      <Text
+        style={[
+          styles.ruleLabel,
+          { color: disabled ? colors.ink3 : colors.ink },
+        ]}
+      >
         {label}
       </Text>
       <Switch
@@ -394,5 +439,7 @@ function formatBytes(value: number): string {
 
 function formatSyncTime(value: string): string {
   const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? 'Unknown' : new Date(timestamp).toLocaleString();
+  return Number.isNaN(timestamp)
+    ? "Unknown"
+    : new Date(timestamp).toLocaleString();
 }

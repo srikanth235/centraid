@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-import { ResourceAccounting } from './resource-accounting.js';
+import { ResourceAccounting } from "./resource-accounting.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -30,7 +30,7 @@ function makeAccounting(init?: {
 }
 
 describe(ResourceAccounting, () => {
-  it('stamps sinceMs at construction and starts every subsystem at zero', () => {
+  it("stamps sinceMs at construction and starts every subsystem at zero", () => {
     const { acc } = makeAccounting({ start: 5_000 });
     const snap = acc.snapshot();
     expect(snap.sinceMs).toBe(5_000);
@@ -52,7 +52,7 @@ describe(ResourceAccounting, () => {
     });
   });
 
-  it('accumulates replication, backup, sweep, and agent-run counters', () => {
+  it("accumulates replication, backup, sweep, and agent-run counters", () => {
     const { acc } = makeAccounting();
     acc.recordReplicationPass({ bytesReplicated: 100, durationMs: 10 });
     acc.recordReplicationPass({ bytesReplicated: 50, durationMs: 5 });
@@ -80,14 +80,14 @@ describe(ResourceAccounting, () => {
     });
   });
 
-  it('agentRuns.cpuSeconds stays null (no fabricated child rusage)', () => {
+  it("agentRuns.cpuSeconds stays null (no fabricated child rusage)", () => {
     const { acc } = makeAccounting();
     acc.recordAgentRun({ durationMs: 500 });
     acc.recordAgentRun({ durationMs: 500 });
     expect(acc.snapshot().subsystems.agentRuns.cpuSeconds).toBeNull();
   });
 
-  it('clamps negative byte/duration inputs to zero (honest, never negative)', () => {
+  it("clamps negative byte/duration inputs to zero (honest, never negative)", () => {
     const { acc } = makeAccounting();
     acc.recordReplicationPass({ bytesReplicated: -10, durationMs: -5 });
     acc.recordAgentRun({ durationMs: -100 });
@@ -100,7 +100,7 @@ describe(ResourceAccounting, () => {
     expect(snap.subsystems.agentRuns.busyMs).toBe(0);
   });
 
-  it('derives cpuSecondsTotal from user+system microseconds and reports current rss', () => {
+  it("derives cpuSecondsTotal from user+system microseconds and reports current rss", () => {
     let rss = 111;
     const { acc } = makeAccounting({
       cpu: () => ({ user: 1_500_000, system: 500_000 }),
@@ -112,7 +112,7 @@ describe(ResourceAccounting, () => {
     expect(snap.process.currentRssBytes).toBe(222);
   });
 
-  it('peakRssBytes is monotonic across sample points and never falls back', () => {
+  it("peakRssBytes is monotonic across sample points and never falls back", () => {
     let rss = 1_000;
     const { acc } = makeAccounting({ rss: () => rss });
     rss = 5_000;
@@ -124,7 +124,7 @@ describe(ResourceAccounting, () => {
     expect(snap.process.currentRssBytes).toBe(2_000);
   });
 
-  it('reads worker-pool actuals live from the injected stats getter', () => {
+  it("reads worker-pool actuals live from the injected stats getter", () => {
     const { acc } = makeAccounting({
       worker: () => ({ tasks: 12, busyMs: 3_400 }),
     });
@@ -134,15 +134,15 @@ describe(ResourceAccounting, () => {
     });
   });
 
-  describe('backgroundTimerFiresLastHour', () => {
-    it('is null before a full hour has elapsed since boot', () => {
+  describe("backgroundTimerFiresLastHour", () => {
+    it("is null before a full hour has elapsed since boot", () => {
       const { acc, advance } = makeAccounting({ start: 0 });
       acc.recordBackgroundTimerFire();
       advance(HOUR_MS - 1);
       expect(acc.snapshot().backgroundTimerFiresLastHour).toBeNull();
     });
 
-    it('counts fires within the rolling hour once the first window elapses', () => {
+    it("counts fires within the rolling hour once the first window elapses", () => {
       const { acc, advance } = makeAccounting({ start: 0 });
       acc.recordBackgroundTimerFire(); // t=0
       advance(HOUR_MS); // now t=HOUR_MS — window complete
@@ -151,7 +151,7 @@ describe(ResourceAccounting, () => {
       expect(acc.snapshot().backgroundTimerFiresLastHour).toBe(1);
     });
 
-    it('prunes fires older than one hour out of the window', () => {
+    it("prunes fires older than one hour out of the window", () => {
       const { acc, advance, set } = makeAccounting({ start: 0 });
       set(2 * HOUR_MS); // past the first-window gate
       acc.recordBackgroundTimerFire(); // t=2h
@@ -163,14 +163,19 @@ describe(ResourceAccounting, () => {
     });
   });
 
-  it('conforms to the fixed DTO shape', () => {
+  it("conforms to the fixed DTO shape", () => {
     const { acc } = makeAccounting();
     const snap = acc.snapshot();
     expect(Object.keys(snap).sort()).toStrictEqual(
-      ['backgroundTimerFiresLastHour', 'process', 'sinceMs', 'subsystems'].sort(),
+      [
+        "backgroundTimerFiresLastHour",
+        "process",
+        "sinceMs",
+        "subsystems",
+      ].sort()
     );
     expect(Object.keys(snap.subsystems).sort()).toStrictEqual(
-      ['agentRuns', 'backup', 'replication', 'sweeps', 'workerPool'].sort(),
+      ["agentRuns", "backup", "replication", "sweeps", "workerPool"].sort()
     );
   });
 });

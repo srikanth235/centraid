@@ -5,21 +5,32 @@ import {
   relativeRunLabel,
   relativeTime,
   triggersSummary,
-} from '../../../app-format.js';
+} from "../../../app-format.js";
 // Automations overview data layer — ports the vanilla app-automations.ts
 // `collectAutomationRuns` + `buildOverviewData`. Every display value (hue,
 // glyph, trigger/status labels, formatted run meta) is computed here so the
 // React AutomationsOverviewScreen imports no vanilla formatters. All derivation
 // helpers come from the pure automation-identity + app-format modules.
-import { auStatusForRow, glyphForId, hueForId } from '../../../automation-identity.js';
-import { cronNextRuns, cronRunLabel, resolveCronTimezone } from '../../../cron.js';
-import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
+import {
+  auStatusForRow,
+  glyphForId,
+  hueForId,
+} from "../../../automation-identity.js";
+import {
+  cronNextRuns,
+  cronRunLabel,
+  resolveCronTimezone,
+} from "../../../cron.js";
+import {
+  listAutomationTurns,
+  listAutomations,
+} from "../../../gateway-client.js";
 import type {
   AuOverviewData,
   AuStatusKind,
   AuViewConditionDetailDTO,
   AuViewDataDetailDTO,
-} from '../../screen-contracts.js';
+} from "../../screen-contracts.js";
 
 export interface AutomationFeedEntry {
   automationId: string;
@@ -28,12 +39,12 @@ export interface AutomationFeedEntry {
 }
 
 export const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
-  active: 'Active',
-  paused: 'Paused',
-  draft: 'Draft',
-  running: 'Running',
-  success: 'Success',
-  failed: 'Failed',
+  active: "Active",
+  paused: "Paused",
+  draft: "Draft",
+  running: "Running",
+  success: "Success",
+  failed: "Failed",
 };
 
 /** Title-Case trigger-origin icon + label for a run row — shared by the
@@ -44,22 +55,22 @@ export function triggerOriginLabel(run: CentraidAutomationTurnRecord): {
   icon: string;
   label: string;
 } {
-  return run.triggerKind === 'compile'
-    ? { icon: 'Sparkle', label: 'Compile' }
+  return run.triggerKind === "compile"
+    ? { icon: "Sparkle", label: "Compile" }
     : // An interactive turn is the owner ASKING about runs, not a run. Left
       // unlabelled it fell through to the "Cron" default, so a question you
       // typed showed up in the history as a scheduled fire.
-      run.triggerKind === 'interactive'
-      ? { icon: 'Send', label: 'You asked' }
-      : run.triggerOrigin === 'webhook'
-        ? { icon: 'Webhook', label: 'Webhook' }
-        : run.triggerOrigin === 'data'
-          ? { icon: 'Clock', label: 'Data' }
-          : run.triggerOrigin === 'condition'
-            ? { icon: 'Clock', label: 'Condition' }
-            : run.triggerKind === 'manual'
-              ? { icon: 'Play', label: 'Manual' }
-              : { icon: 'Clock', label: 'Cron' };
+      run.triggerKind === "interactive"
+      ? { icon: "Send", label: "You asked" }
+      : run.triggerOrigin === "webhook"
+        ? { icon: "Webhook", label: "Webhook" }
+        : run.triggerOrigin === "data"
+          ? { icon: "Clock", label: "Data" }
+          : run.triggerOrigin === "condition"
+            ? { icon: "Clock", label: "Condition" }
+            : run.triggerKind === "manual"
+              ? { icon: "Play", label: "Manual" }
+              : { icon: "Clock", label: "Cron" };
 }
 
 /** Render a `where` condition clause readably — a plain string passes
@@ -67,8 +78,8 @@ export function triggerOriginLabel(run: CentraidAutomationTurnRecord): {
  *  compact `column op value` lines the builder shows (formatWhereClauses),
  *  and any other shape falls back to pretty-printed JSON. */
 function formatWhereClause(where: unknown): string {
-  if (where === undefined || where === null) return '—';
-  if (typeof where === 'string') return where;
+  if (where === undefined || where === null) return "—";
+  if (typeof where === "string") return where;
   const compact = formatWhereClauses(where);
   if (compact !== null) return compact;
   try {
@@ -109,18 +120,22 @@ export async function collectAutomationRuns(): Promise<{
   // catch the throw at their own call site and degrade the whole block.
   const [autos, runs] = await Promise.all([
     listAutomations(),
-    listAutomationTurns({ limit: 100 }).catch(() => [] as CentraidAutomationTurnRecord[]),
+    listAutomationTurns({ limit: 100 }).catch(
+      () => [] as CentraidAutomationTurnRecord[]
+    ),
   ]);
   const nameByRef = new Map(autos.map((a) => [a.ref, a.name]));
   return {
     rows: autos,
     entries: runs.map((run) => ({
-      automationId: run.automationId ?? '',
+      automationId: run.automationId ?? "",
       // Live automation name → the run's own last-known name (carried on the
       // run record even after the automation is deleted) → the raw ref.
       automationName: run.automationId
-        ? (nameByRef.get(run.automationId) ?? run.automationName ?? run.automationId)
-        : 'Automation',
+        ? (nameByRef.get(run.automationId) ??
+          run.automationName ??
+          run.automationId)
+        : "Automation",
       run,
     })),
   };
@@ -137,14 +152,15 @@ export async function collectAutomationRuns(): Promise<{
 export function buildOverviewData(
   rows: readonly CentraidAutomationRow[],
   entries: readonly AutomationFeedEntry[],
-  attentionByRef?: ReadonlyMap<string, number>,
+  attentionByRef?: ReadonlyMap<string, number>
 ): AuOverviewData {
   const runs = entries
     .filter((e) => e.automationId)
     .slice()
     .sort((a, b) => b.run.startedAt - a.run.startedAt);
   const lastByRef = new Map<string, AutomationFeedEntry>();
-  for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
+  for (const e of runs)
+    if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
 
   let active = 0;
   let paused = 0;
@@ -155,7 +171,8 @@ export function buildOverviewData(
     if (r.enabled) active += 1;
     else if (lastEntry) paused += 1;
     else drafts += 1;
-    if (lastEntry?.run.endedAt !== undefined && !lastEntry.run.ok) attention += 1;
+    if (lastEntry?.run.endedAt !== undefined && !lastEntry.run.ok)
+      attention += 1;
   }
   // Keep the prose consistent with the health tiles below it — drafts are
   // not "paused", they've simply never run.
@@ -167,46 +184,50 @@ export function buildOverviewData(
     health: { active, attention, drafts, paused },
     rows: rows.map((r) => {
       const last = lastByRef.get(r.ref);
-      const hasCron = r.triggers.some((t) => t.kind === 'cron');
-      const hasWebhook = r.triggers.some((t) => t.kind === 'webhook');
-      const compile = last?.run.triggerKind === 'compile' ? last.run : undefined;
+      const hasCron = r.triggers.some((t) => t.kind === "cron");
+      const hasWebhook = r.triggers.some((t) => t.kind === "webhook");
+      const compile =
+        last?.run.triggerKind === "compile" ? last.run : undefined;
       const statusKind = (
         compile
           ? compile.endedAt === undefined
-            ? 'running'
+            ? "running"
             : compile.ok
-              ? 'success'
-              : 'failed'
+              ? "success"
+              : "failed"
           : auStatusForRow(r.enabled, !!last)
       ) as AuStatusKind;
       const statusLabel = compile
         ? compile.endedAt === undefined
-          ? 'Compiling…'
+          ? "Compiling…"
           : compile.ok
-            ? 'Plan ready'
-            : 'Compile failed'
+            ? "Plan ready"
+            : "Compile failed"
         : AU_STATUS_LABEL[statusKind];
       const cronTrig = r.triggers.find(
-        (t): t is { kind: 'cron'; expr: string; tz?: string } => t.kind === 'cron',
+        (t): t is { kind: "cron"; expr: string; tz?: string } =>
+          t.kind === "cron"
       );
       const cronTz = cronTrig ? resolveCronTimezone(cronTrig.tz) : undefined;
-      const nextRun = cronTrig ? cronNextRuns(cronTrig.expr, 1, new Date(), cronTz)[0] : undefined;
+      const nextRun = cronTrig
+        ? cronNextRuns(cronTrig.expr, 1, new Date(), cronTz)[0]
+        : undefined;
       const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       return {
         attentionCount: attentionByRef?.get(r.ref) ?? 0,
-        recentFailover: last?.run.turnId.includes(':failover:') ?? false,
+        recentFailover: last?.run.turnId.includes(":failover:") ?? false,
         glyphIcon: glyphForId(r.id),
         hue: hueForId(r.id),
         id: r.id,
         integrations: [...(r.manifest.requires.mcps ?? [])],
         lastRunLabel: last
           ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
-          : 'No runs yet',
+          : "No runs yet",
         lastRunOk: last?.run.endedAt === undefined ? null : last.run.ok,
         lastRunSummary: last
           ? last.run.ok
             ? (last.run.summary ?? null)
-            : (last.run.error ?? 'Failed')
+            : (last.run.error ?? "Failed")
           : null,
         name: r.name,
         nextRunLabel: nextRun
@@ -220,14 +241,17 @@ export function buildOverviewData(
         ref: r.ref,
         statusKind,
         statusLabel,
-        triggerIcon: hasWebhook && !hasCron ? 'Webhook' : 'Clock',
+        triggerIcon: hasWebhook && !hasCron ? "Webhook" : "Clock",
         triggerLabel: triggersSummary(r.triggers),
       };
     }),
     runs: runs.map((entry) => {
       const { run, automationName, automationId } = entry;
       const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
-      const dur = run.endedAt === undefined ? '—' : formatDuration(run.endedAt - run.startedAt);
+      const dur =
+        run.endedAt === undefined
+          ? "—"
+          : formatDuration(run.endedAt - run.startedAt);
       return {
         automationId,
         metaLabel: `${triggerOriginLabel(run).label} · ${dur} · ${fmtTokens(tokens)}`,
@@ -235,11 +259,14 @@ export function buildOverviewData(
         ok: run.ok,
         runId: run.turnId,
         startedAt: run.startedAt,
-        summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+        summary: run.ok ? (run.summary ?? "—") : (run.error ?? "Failed"),
         whenLabel: relativeTime(new Date(run.startedAt).toISOString()),
       };
     }),
-    subtitle: rows.length > 0 ? subParts.join('  ·  ') : 'Conversations that run on their own.',
+    subtitle:
+      rows.length > 0
+        ? subParts.join("  ·  ")
+        : "Conversations that run on their own.",
   };
 }
 
@@ -275,12 +302,12 @@ export function deriveAutomationHero(
    * (no import of the gateway-client module, which has a load-time
    * `window.CentraidApi` side effect the unit tests stub around).
    */
-  gatewayOrigin: string,
+  gatewayOrigin: string
 ): AutomationHeroDTO {
-  const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
-  const hasCron = row.triggers.some((t) => t.kind === 'cron');
+  const hasWebhook = row.triggers.some((t) => t.kind === "webhook");
+  const hasCron = row.triggers.some((t) => t.kind === "cron");
   const cronTriggers = row.triggers.filter(
-    (t): t is { kind: 'cron'; expr: string; tz?: string } => t.kind === 'cron',
+    (t): t is { kind: "cron"; expr: string; tz?: string } => t.kind === "cron"
   );
   const cronExprs = cronTriggers.map((t) => t.expr);
   const firstCron = cronTriggers[0];
@@ -291,14 +318,14 @@ export function deriveAutomationHero(
       ? cronNextRuns(cronExprs[0], 3, new Date(), cronTz).map((dt) =>
           cronTz
             ? cronRunLabel(dt, { timeZone: cronTz, viewerTimeZone: viewerTz })
-            : relativeRunLabel(dt),
+            : relativeRunLabel(dt)
         )
       : [];
 
-  let webhook: AutomationHeroDTO['webhook'] = null;
+  let webhook: AutomationHeroDTO["webhook"] = null;
   if (hasWebhook) {
-    const wh = row.triggers.find((t) => t.kind === 'webhook') as
-      | { kind: 'webhook'; id?: string; pending?: true }
+    const wh = row.triggers.find((t) => t.kind === "webhook") as
+      | { kind: "webhook"; id?: string; pending?: true }
       | undefined;
     webhook =
       wh?.pending || !wh?.id
@@ -314,7 +341,8 @@ export function deriveAutomationHero(
   // JSON (the manifest's `where` is `unknown`; a structured value is
   // pretty-printed, a plain string passes through).
   const dataTrig = row.triggers.find(
-    (t): t is { kind: 'data'; entities: readonly string[]; every?: string } => t.kind === 'data',
+    (t): t is { kind: "data"; entities: readonly string[]; every?: string } =>
+      t.kind === "data"
   );
   const dataDetail: AuViewDataDetailDTO | null = dataTrig
     ? {
@@ -325,13 +353,13 @@ export function deriveAutomationHero(
 
   const condTrig = row.triggers.find(
     (
-      t,
+      t
     ): t is {
-      kind: 'condition';
+      kind: "condition";
       entity: string;
       where?: unknown;
       every?: string;
-    } => t.kind === 'condition',
+    } => t.kind === "condition"
   );
   const conditionDetail: AuViewConditionDetailDTO | null = condTrig
     ? {
@@ -345,16 +373,16 @@ export function deriveAutomationHero(
     conditionDetail,
     cronExprs,
     dataDetail,
-    heroIcon: hasWebhook && !hasCron ? 'Webhook' : 'Clock',
+    heroIcon: hasWebhook && !hasCron ? "Webhook" : "Clock",
     kindEyebrow: hasCron
-      ? 'Cron schedule'
+      ? "Cron schedule"
       : hasWebhook
-        ? 'Webhook'
-        : row.triggers.some((t) => t.kind === 'data')
-          ? 'Data trigger'
-          : row.triggers.some((t) => t.kind === 'condition')
-            ? 'Condition'
-            : 'Manual',
+        ? "Webhook"
+        : row.triggers.some((t) => t.kind === "data")
+          ? "Data trigger"
+          : row.triggers.some((t) => t.kind === "condition")
+            ? "Condition"
+            : "Manual",
     nextRuns,
     webhook,
     when: triggersSummary(row.triggers),

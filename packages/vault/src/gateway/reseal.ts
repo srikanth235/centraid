@@ -14,12 +14,12 @@
 // interruption between commit and the final rename is healed at next open —
 // `resolveSealKey` promotes a matching sidecar automatically.
 
-import { randomBytes } from 'node:crypto';
-import { renameSync, rmSync } from 'node:fs';
+import { randomBytes } from "node:crypto";
+import { renameSync, rmSync } from "node:fs";
 
-import type { VaultDb } from '../db.js';
-import { readBlobStoreSettings } from '../db.js';
-import { payloadAad } from '../ingest/staging.js';
+import type { VaultDb } from "../db.js";
+import { readBlobStoreSettings } from "../db.js";
+import { payloadAad } from "../ingest/staging.js";
 import {
   SEALED_COLUMNS,
   SEALED_PAYLOAD_FIELDS,
@@ -33,10 +33,10 @@ import {
   stampSealKeyFingerprint,
   unsealValue,
   writeSealKeyFile,
-} from '../schema/sealed.js';
-import { resolveEntity } from '../schema/tables.js';
-import { writeReceipt } from './evidence.js';
-import { pkColumn } from './execution.js';
+} from "../schema/sealed.js";
+import { resolveEntity } from "../schema/tables.js";
+import { writeReceipt } from "./evidence.js";
+import { pkColumn } from "./execution.js";
 
 /**
  * Every logical entity that may hold sealed cells: the canonical static
@@ -47,7 +47,9 @@ function sealedEntities(db: VaultDb): string[] {
   const entities = Object.keys(SEALED_COLUMNS);
   try {
     const rows = db.vault
-      .prepare(`SELECT app_id, table_name, spec_json FROM consent_app_ext WHERE band = 'live'`)
+      .prepare(
+        `SELECT app_id, table_name, spec_json FROM consent_app_ext WHERE band = 'live'`
+      )
       .all() as { app_id: string; table_name: string; spec_json: string }[];
     for (const row of rows) {
       const sealed = (JSON.parse(row.spec_json) as { sealed?: unknown }).sealed;
@@ -76,18 +78,21 @@ export interface ResealResult {
  * and re-encrypts with a fresh one, atomically. Owner/admin gesture only —
  * this is not a registered command, so no app or agent can ever reach it.
  */
-export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString()): ResealResult {
+export function resealVaultKey(
+  db: VaultDb,
+  now: string = new Date().toISOString()
+): ResealResult {
   const blobSettings = readBlobStoreSettings(db.vault);
-  if (blobSettings.kind === 's3') {
+  if (blobSettings.kind === "s3") {
     throw new Error(
-      'reseal refused: blob_store.encrypt is mandatory while remote CAS is configured — drain and detach the remote tier before rotating',
+      "reseal refused: blob_store.encrypt is mandatory while remote CAS is configured — drain and detach the remote tier before rotating"
     );
   }
   const oldKey = db.sealKey;
   const newKey = randomBytes(32);
   const oldFingerprint = sealKeyFingerprint(oldKey);
   const newFingerprint = sealKeyFingerprint(newKey);
-  const onDisk = db.dir !== ':memory:';
+  const onDisk = db.dir !== ":memory:";
   const keyFile = onDisk ? sealKeyFileFor(db.dir) : null;
 
   // Sidecar first: if we crash mid-sweep, the old key is still the stamped
@@ -97,7 +102,7 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
 
   let resealedCells = 0;
   let resealedStaged = 0;
-  db.vault.exec('BEGIN');
+  db.vault.exec("BEGIN");
   try {
     // Live band: every sealed column of every entity — canonical (static
     // registry) AND ext-band (declared in consent_app_ext, issue #298 item 9).
@@ -105,20 +110,22 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
       const cols = sealedColumnsOf(entity, db.vault);
       if (cols.length === 0) continue;
       const ref = resolveEntity(entity, db.vault);
-      if (!ref || ref.file !== 'vault') continue;
+      if (!ref || ref.file !== "vault") continue;
       const pk = pkColumn(db.vault, ref.physical);
-      const select = cols.map((c) => `"${c}"`).join(', ');
+      const select = cols.map((c) => `"${c}"`).join(", ");
       const rows = db.vault
         .prepare(`SELECT "${pk}" AS __pk, ${select} FROM "${ref.physical}"`)
         .all() as Record<string, unknown>[];
       for (const row of rows) {
-        const id = String(row['__pk']);
+        const id = String(row["__pk"]);
         for (const col of cols) {
           const value = row[col];
           if (!isSealedValue(value)) continue;
           const aad = sealAad(ref.physical, col, id);
           db.vault
-            .prepare(`UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`)
+            .prepare(
+              `UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`
+            )
             .run(sealValue(newKey, aad, unsealValue(oldKey, aad, value)), id);
           resealedCells += 1;
         }
@@ -128,7 +135,9 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
     for (const entityType of Object.keys(SEALED_PAYLOAD_FIELDS)) {
       const fields = sealedPayloadFieldsOf(entityType);
       const rows = db.vault
-        .prepare(`SELECT row_id, payload_json FROM sync_import_row WHERE entity_type = ?`)
+        .prepare(
+          `SELECT row_id, payload_json FROM sync_import_row WHERE entity_type = ?`
+        )
         .all(entityType) as { row_id: string; payload_json: string }[];
       for (const row of rows) {
         const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
@@ -143,16 +152,18 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
         }
         if (changed) {
           db.vault
-            .prepare(`UPDATE sync_import_row SET payload_json = ? WHERE row_id = ?`)
+            .prepare(
+              `UPDATE sync_import_row SET payload_json = ? WHERE row_id = ?`
+            )
             .run(JSON.stringify(payload), row.row_id);
         }
       }
     }
     // The stamped fingerprint flips with the data, in the same transaction.
     stampSealKeyFingerprint(db.vault, newKey);
-    db.vault.exec('COMMIT');
+    db.vault.exec("COMMIT");
   } catch (err) {
-    db.vault.exec('ROLLBACK');
+    db.vault.exec("ROLLBACK");
     if (keyFile) rmSync(`${keyFile}.next`, { force: true });
     throw err;
   }
@@ -164,11 +175,11 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
     invocationId: null,
-    action: 'key.rotate',
-    objectType: 'core.vault',
-    objectId: 'seal-key',
+    action: "key.rotate",
+    objectType: "core.vault",
+    objectId: "seal-key",
     purpose: null,
-    decision: 'allow',
+    decision: "allow",
     detail: {
       oldFingerprint,
       newFingerprint,

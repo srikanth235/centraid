@@ -24,10 +24,10 @@
  * @returns {string} The concatenated data payload.
  */
 export function frameData(rawFrame) {
-  let data = '';
-  for (const line of rawFrame.split('\n')) {
+  let data = "";
+  for (const line of rawFrame.split("\n")) {
     // `data:foo` and `data: foo` are both valid — trim one leading space.
-    if (line.slice(0, 5) === 'data:') data += line.slice(5).replace(/^ /u, '');
+    if (line.slice(0, 5) === "data:") data += line.slice(5).replace(/^ /u, "");
   }
   return data;
 }
@@ -44,7 +44,7 @@ export function parseFrame(rawFrame) {
   if (!data) return null;
   try {
     const evt = JSON.parse(data);
-    if (evt && typeof evt.type === 'string') return evt;
+    if (evt && typeof evt.type === "string") return evt;
   } catch {
     /* skip a malformed frame rather than abort the stream */
   }
@@ -61,9 +61,13 @@ export function parseFrame(rawFrame) {
  * @returns {boolean} Whether the frame terminates the stream.
  */
 export function isEndFrame(rawFrame) {
-  for (const line of rawFrame.split('\n')) {
+  for (const line of rawFrame.split("\n")) {
     // `event:end` and `event: end` are both valid — trim one leading space.
-    if (line.slice(0, 6) === 'event:' && line.slice(6).replace(/^ /u, '') === 'end') return true;
+    if (
+      line.slice(0, 6) === "event:" &&
+      line.slice(6).replace(/^ /u, "") === "end"
+    )
+      return true;
   }
   return false;
 }
@@ -76,7 +80,7 @@ export function isEndFrame(rawFrame) {
  */
 export function parseSseText(text) {
   const out = [];
-  for (const frame of text.split('\n\n')) {
+  for (const frame of text.split("\n\n")) {
     const evt = parseFrame(frame);
     if (evt) out.push(evt);
   }
@@ -99,14 +103,14 @@ export async function consumeSseFrames(body, onFrame, opts = {}) {
   const { signal } = opts;
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buf = '';
+  let buf = "";
   async function consumeNext() {
     if (signal && signal.aborted) return;
     const { done, value } = await reader.read();
     if (done) return;
     buf += decoder.decode(value, { stream: true });
     let sep;
-    while ((sep = buf.indexOf('\n\n')) >= 0) {
+    while ((sep = buf.indexOf("\n\n")) >= 0) {
       const frame = buf.slice(0, sep);
       buf = buf.slice(sep + 2);
       onFrame(frame);
@@ -154,12 +158,13 @@ export async function consumeSse(body, onEvent, opts = {}) {
         const evt = parseFrame(frame);
         if (evt) onEvent(evt);
       },
-      opts,
+      opts
     );
   } catch (err) {
     // An abort surfaces as an AbortError on the pending read — that's the Stop
     // button doing its job, not a stream failure. Re-throw anything else.
-    if (!(signal && signal.aborted) && !(err && err.name === 'AbortError')) throw err;
+    if (!(signal && signal.aborted) && !(err && err.name === "AbortError"))
+      throw err;
   }
   return { ended };
 }

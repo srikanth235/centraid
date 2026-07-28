@@ -5,11 +5,11 @@
 // in-flight dedup + AbortController semantics — not just that the source string
 // contains the API.
 
-import { runInNewContext } from 'node:vm';
+import { runInNewContext } from "node:vm";
 
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { changeBridgeScript } from './bridge-script.js';
+import { changeBridgeScript } from "./bridge-script.js";
 
 interface FetchCall {
   url: string;
@@ -19,7 +19,11 @@ interface FetchCall {
 }
 
 interface Centraid {
-  read: (opts: { query: string; input?: unknown; signal?: AbortSignal }) => Promise<unknown> & {
+  read: (opts: {
+    query: string;
+    input?: unknown;
+    signal?: AbortSignal;
+  }) => Promise<unknown> & {
     abort: () => void;
     subscribe: (listener: (value: unknown) => void) => () => void;
   };
@@ -37,14 +41,20 @@ interface Centraid {
 
 interface TestPort {
   postMessage: (data: unknown, transfer?: readonly unknown[]) => void;
-  addEventListener: (type: 'message', listener: (event: { data: unknown }) => void) => void;
+  addEventListener: (
+    type: "message",
+    listener: (event: { data: unknown }) => void
+  ) => void;
   start: () => void;
   close: () => void;
   onmessage?: (event: { data: unknown }) => void;
 }
 
 function testMessageChannel(): { parent: TestPort; child: TestPort } {
-  const listeners = new WeakMap<TestPort, Array<(event: { data: unknown }) => void>>();
+  const listeners = new WeakMap<
+    TestPort,
+    Array<(event: { data: unknown }) => void>
+  >();
   const closed = new WeakSet<TestPort>();
   let parent: TestPort;
   let child: TestPort;
@@ -74,16 +84,19 @@ function testMessageChannel(): { parent: TestPort; child: TestPort } {
   return { parent, child };
 }
 
-describe('bridge-script', () => {
+describe("bridge-script", () => {
   afterEach(() => vi.useRealTimers());
 
   /** Load the bridge into a sandbox; returns the wired `centraid` API + fetch log. */
   function loadBridge(): { centraid: Centraid; calls: FetchCall[] } {
     const src = changeBridgeScript()
-      .replace(/^<script>/u, '')
-      .replace(/<\/script>$/u, '');
+      .replace(/^<script>/u, "")
+      .replace(/<\/script>$/u, "");
     const calls: FetchCall[] = [];
-    const fetchMock = (url: string, init: FetchCall['init']): Promise<unknown> => {
+    const fetchMock = (
+      url: string,
+      init: FetchCall["init"]
+    ): Promise<unknown> => {
       return new Promise((resolve, reject) => {
         calls.push({
           url,
@@ -100,7 +113,7 @@ describe('bridge-script', () => {
       });
     };
     const win: Record<string, unknown> = {
-      location: { pathname: '/centraid/demo/index.html' },
+      location: { pathname: "/centraid/demo/index.html" },
       addEventListener: () => undefined,
       dispatchEvent: () => undefined,
     };
@@ -129,10 +142,10 @@ describe('bridge-script', () => {
     return new Promise((resolve) => setImmediate(resolve));
   }
 
-  test('concurrent identical reads share one fetch and one result', async () => {
+  test("concurrent identical reads share one fetch and one result", async () => {
     const { centraid, calls } = loadBridge();
-    const p1 = centraid.read({ query: 'list', input: { page: 1 } });
-    const p2 = centraid.read({ query: 'list', input: { page: 1 } });
+    const p1 = centraid.read({ query: "list", input: { page: 1 } });
+    const p2 = centraid.read({ query: "list", input: { page: 1 } });
     expect(calls).toHaveLength(1);
     calls[0]!.resolve({ rows: [1, 2, 3] });
     const [r1, r2] = await Promise.all([p1, p2]);
@@ -140,89 +153,89 @@ describe('bridge-script', () => {
     expect(r2).toStrictEqual({ rows: [1, 2, 3] });
   });
 
-  test('reads with different input are not deduped', async () => {
+  test("reads with different input are not deduped", async () => {
     const { centraid, calls } = loadBridge();
-    void centraid.read({ query: 'list', input: { page: 1 } });
-    void centraid.read({ query: 'list', input: { page: 2 } });
+    void centraid.read({ query: "list", input: { page: 1 } });
+    void centraid.read({ query: "list", input: { page: 2 } });
     expect(calls).toHaveLength(2);
   });
 
-  test('a fresh read after the shared one settles issues a new fetch', async () => {
+  test("a fresh read after the shared one settles issues a new fetch", async () => {
     const { centraid, calls } = loadBridge();
-    const p1 = centraid.read({ query: 'list', input: {} });
+    const p1 = centraid.read({ query: "list", input: {} });
     expect(calls).toHaveLength(1);
     calls[0]!.resolve({ rows: [] });
     await p1;
     await flush(); // dedup entry cleared on the settle microtask
-    void centraid.read({ query: 'list', input: {} });
+    void centraid.read({ query: "list", input: {} });
     expect(calls).toHaveLength(2);
   });
 
-  test('write is never deduped', async () => {
+  test("write is never deduped", async () => {
     const { centraid, calls } = loadBridge();
-    void centraid.write({ action: 'add', input: { x: 1 } });
-    void centraid.write({ action: 'add', input: { x: 1 } });
+    void centraid.write({ action: "add", input: { x: 1 } });
+    void centraid.write({ action: "add", input: { x: 1 } });
     expect(calls).toHaveLength(2);
   });
 
-  test('write passes its signal through to fetch', async () => {
+  test("write passes its signal through to fetch", async () => {
     const { centraid, calls } = loadBridge();
     const ac = new AbortController();
-    void centraid.write({ action: 'add', input: {}, signal: ac.signal });
+    void centraid.write({ action: "add", input: {}, signal: ac.signal });
     expect(calls[0]!.init.signal).toBe(ac.signal);
   });
 
-  test('aborting one sharer rejects only that caller; the shared fetch continues', async () => {
+  test("aborting one sharer rejects only that caller; the shared fetch continues", async () => {
     const { centraid, calls } = loadBridge();
     const ac = new AbortController();
     const aborter = centraid.read({
-      query: 'list',
+      query: "list",
       input: {},
       signal: ac.signal,
     });
-    const other = centraid.read({ query: 'list', input: {} });
+    const other = centraid.read({ query: "list", input: {} });
     expect(calls).toHaveLength(1);
 
     ac.abort();
-    await expect(aborter).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(aborter).rejects.toMatchObject({ name: "AbortError" });
     // Only one of two sharers aborted → the underlying fetch signal is untouched.
     expect(calls[0]!.init.signal!.aborted).toBe(false);
 
-    calls[0]!.resolve({ rows: ['still here'] });
-    await expect(other).resolves.toStrictEqual({ rows: ['still here'] });
+    calls[0]!.resolve({ rows: ["still here"] });
+    await expect(other).resolves.toStrictEqual({ rows: ["still here"] });
   });
 
-  test('when every sharer aborts, the underlying fetch is aborted', async () => {
+  test("when every sharer aborts, the underlying fetch is aborted", async () => {
     const { centraid, calls } = loadBridge();
     const a1 = new AbortController();
     const a2 = new AbortController();
-    const p1 = centraid.read({ query: 'list', input: {}, signal: a1.signal });
-    const p2 = centraid.read({ query: 'list', input: {}, signal: a2.signal });
+    const p1 = centraid.read({ query: "list", input: {}, signal: a1.signal });
+    const p2 = centraid.read({ query: "list", input: {}, signal: a2.signal });
     expect(calls).toHaveLength(1);
 
     a1.abort();
     a2.abort();
-    await expect(p1).rejects.toMatchObject({ name: 'AbortError' });
-    await expect(p2).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(p1).rejects.toMatchObject({ name: "AbortError" });
+    await expect(p2).rejects.toMatchObject({ name: "AbortError" });
     expect(calls[0]!.init.signal!.aborted).toBe(true);
   });
 
-  test('the returned promise exposes .abort() for callers without a signal', async () => {
+  test("the returned promise exposes .abort() for callers without a signal", async () => {
     const { centraid, calls } = loadBridge();
-    const p = centraid.read({ query: 'list', input: {} });
-    expect(p.abort).toBeTypeOf('function');
+    const p = centraid.read({ query: "list", input: {} });
+    expect(p.abort).toBeTypeOf("function");
     p.abort();
-    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(p).rejects.toMatchObject({ name: "AbortError" });
     // Sole sharer aborted → shared fetch cancelled.
     expect(calls[0]!.init.signal!.aborted).toBe(true);
   });
 
-  test('an already-aborted signal rejects the read immediately', async () => {
+  test("an already-aborted signal rejects the read immediately", async () => {
     const { centraid, calls } = loadBridge();
     const ac = new AbortController();
     ac.abort();
-    const p = centraid.read({ query: 'list', input: {}, signal: ac.signal });
-    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+    const p = centraid.read({ query: "list", input: {}, signal: ac.signal });
+    await expect(p).rejects.toMatchObject({ name: "AbortError" });
     expect(calls[0]!.init.signal!.aborted).toBe(true);
   });
 
@@ -233,8 +246,8 @@ describe('bridge-script', () => {
     sendFromParent: (data: unknown) => void;
   } {
     const src = changeBridgeScript()
-      .replace(/^<script>/u, '')
-      .replace(/<\/script>$/u, '');
+      .replace(/^<script>/u, "")
+      .replace(/<\/script>$/u, "");
     const parentPosts: unknown[] = [];
     const messageListeners: Array<
       (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
@@ -249,22 +262,25 @@ describe('bridge-script', () => {
     const parent = {
       postMessage(data: unknown): void {
         parentPosts.push(data);
-        const message = data as { type?: unknown; documentNonce?: unknown } | undefined;
-        if (message?.type === 'centraid:changes-ready') changesRequested = true;
-        if (autoAcknowledge && message?.type === 'centraid:replica-ready') {
+        const message = data as
+          | { type?: unknown; documentNonce?: unknown }
+          | undefined;
+        if (message?.type === "centraid:changes-ready") changesRequested = true;
+        if (autoAcknowledge && message?.type === "centraid:replica-ready") {
           const channel = testMessageChannel();
           parentPort = channel.parent;
           for (const listener of messageListeners) {
             listener({
               source: parent,
               data: {
-                type: 'centraid:replica-parent',
+                type: "centraid:replica-parent",
                 documentNonce: message.documentNonce,
               },
               ports: [channel.child],
             });
           }
-          if (changesRequested) parentPort.postMessage({ type: 'centraid:changes-parent' }, []);
+          if (changesRequested)
+            parentPort.postMessage({ type: "centraid:changes-parent" }, []);
         }
       },
     };
@@ -285,12 +301,16 @@ describe('bridge-script', () => {
     }
     const win: Record<string, unknown> = {
       parent,
-      location: { pathname: '/centraid/demo/index.html' },
+      location: { pathname: "/centraid/demo/index.html" },
       addEventListener(
         type: string,
-        listener: (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void,
+        listener: (event: {
+          source: unknown;
+          data: unknown;
+          ports?: TestPort[];
+        }) => void
       ) {
-        if (type === 'message') messageListeners.push(listener);
+        if (type === "message") messageListeners.push(listener);
       },
       dispatchEvent: () => undefined,
     };
@@ -298,7 +318,7 @@ describe('bridge-script', () => {
       window: win,
       document: { hidden: false, addEventListener: () => undefined },
       EventSource: FakeEventSource,
-      fetch: () => Promise.reject(new Error('unused')),
+      fetch: () => Promise.reject(new Error("unused")),
       AbortController,
       Promise,
       JSON,
@@ -319,7 +339,7 @@ describe('bridge-script', () => {
           for (const listener of messageListeners) {
             listener({
               source: parent,
-              data: { type: 'centraid:replica-parent', documentNonce: null },
+              data: { type: "centraid:replica-parent", documentNonce: null },
               ports: [channel.child],
             });
           }
@@ -329,7 +349,7 @@ describe('bridge-script', () => {
     };
   }
 
-  test('a parent handshake suppresses the per-app EventSource and delivers vault changes', () => {
+  test("a parent handshake suppresses the per-app EventSource and delivers vault changes", () => {
     vi.useFakeTimers();
     const bridge = loadChangeHandshake(true);
     const received: unknown[] = [];
@@ -342,43 +362,45 @@ describe('bridge-script', () => {
     expect(
       bridge.parentPosts.map((post) => ({
         ...(post as Record<string, unknown>),
-      })),
+      }))
     ).toStrictEqual([
-      { type: 'centraid:changes-ready', appId: 'demo', documentNonce: null },
-      { type: 'centraid:replica-ready', appId: 'demo', documentNonce: null },
+      { type: "centraid:changes-ready", appId: "demo", documentNonce: null },
+      { type: "centraid:replica-ready", appId: "demo", documentNonce: null },
     ]);
     vi.advanceTimersByTime(2_000);
     expect(bridge.eventSources).toHaveLength(0);
 
     bridge.sendFromParent({
-      type: 'centraid:vault-change',
+      type: "centraid:vault-change",
       detail: {
-        cursor: { epoch: 'epoch-a', seq: 7 },
-        entity: 'task',
-        rowId: 'task-1',
-        op: 'update',
-        changedAt: '2026-07-15T08:00:00.000Z',
+        cursor: { epoch: "epoch-a", seq: 7 },
+        entity: "task",
+        rowId: "task-1",
+        op: "update",
+        changedAt: "2026-07-15T08:00:00.000Z",
       },
     });
     expect(received).toHaveLength(1);
     expect(received[0]).toMatchObject({
-      entity: 'task',
-      rowId: 'task-1',
-      tables: ['task'],
-      source: 'vault-replica',
+      entity: "task",
+      rowId: "task-1",
+      tables: ["task"],
+      source: "vault-replica",
     });
   });
 
-  test('a managed iframe with no acknowledgement falls back, and a late acknowledgement closes it', () => {
+  test("a managed iframe with no acknowledgement falls back, and a late acknowledgement closes it", () => {
     vi.useFakeTimers();
     const bridge = loadChangeHandshake(false);
 
     vi.advanceTimersByTime(499);
     expect(bridge.eventSources).toHaveLength(0);
     vi.advanceTimersByTime(1);
-    expect(bridge.eventSources).toMatchObject([{ url: '_changes', closed: false }]);
+    expect(bridge.eventSources).toMatchObject([
+      { url: "_changes", closed: false },
+    ]);
 
-    bridge.sendFromParent({ type: 'centraid:changes-parent' });
+    bridge.sendFromParent({ type: "centraid:changes-parent" });
     expect(bridge.eventSources[0]!.closed).toBe(true);
     vi.advanceTimersByTime(30_000);
     expect(bridge.eventSources).toHaveLength(1);
@@ -393,7 +415,7 @@ describe('bridge-script', () => {
           search: (request: unknown) => Promise<unknown>;
         };
       };
-    }) => Promise<unknown>,
+    }) => Promise<unknown>
   ): {
     centraid: Centraid;
     fetches: Array<{ url: string; body: Record<string, unknown> }>;
@@ -404,8 +426,8 @@ describe('bridge-script', () => {
     sendFromParent: (data: unknown) => void;
   } {
     const src = changeBridgeScript()
-      .replace(/^<script>/u, '')
-      .replace(/<\/script>$/u, '');
+      .replace(/^<script>/u, "")
+      .replace(/<\/script>$/u, "");
     const messageListeners: Array<
       (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
     > = [];
@@ -413,8 +435,8 @@ describe('bridge-script', () => {
     const fetches: Array<{ url: string; body: Record<string, unknown> }> = [];
     let rows: unknown[] = [
       {
-        rowId: 'task-1',
-        values: { task_id: 'task-1', title: 'Local' },
+        rowId: "task-1",
+        values: { task_id: "task-1", title: "Local" },
         oversizedFields: [],
         hasUnavailableFields: false,
       },
@@ -430,10 +452,13 @@ describe('bridge-script', () => {
     };
     const handlePortMessage = (data: Record<string, unknown>): void => {
       parentPosts.push(data);
-      if (data.type === 'centraid:replica-read' || data.type === 'centraid:replica-search') {
+      if (
+        data.type === "centraid:replica-read" ||
+        data.type === "centraid:replica-search"
+      ) {
         if (replicaError) {
           reply({
-            type: 'centraid:replica-result',
+            type: "centraid:replica-result",
             id: data.id,
             ok: false,
             code: replicaError.code,
@@ -442,19 +467,19 @@ describe('bridge-script', () => {
           return;
         }
         reply({
-          type: 'centraid:replica-result',
+          type: "centraid:replica-result",
           id: data.id,
           ok: true,
           result: {
             rows,
-            cursor: { epoch: 'epoch-a', seq: 2 },
-            dependency: { shapeId: 'agenda:shape', entity: 'schedule.task' },
+            cursor: { epoch: "epoch-a", seq: 2 },
+            dependency: { shapeId: "agenda:shape", entity: "schedule.task" },
           },
         });
-      } else if (data.type === 'centraid:replica-write') {
+      } else if (data.type === "centraid:replica-write") {
         if (replicaError) {
           reply({
-            type: 'centraid:replica-result',
+            type: "centraid:replica-result",
             id: data.id,
             ok: false,
             code: replicaError.code,
@@ -463,34 +488,34 @@ describe('bridge-script', () => {
           return;
         }
         reply({
-          type: 'centraid:replica-result',
+          type: "centraid:replica-result",
           id: data.id,
           ok: true,
-          result: { status: 'queued', intentId: 'intent-1' },
+          result: { status: "queued", intentId: "intent-1" },
         });
       }
     };
     const parent = {
       postMessage(data: Record<string, unknown>): void {
         parentPosts.push(data);
-        if (data.type === 'centraid:changes-ready') changesRequested = true;
-        else if (data.type === 'centraid:replica-ready') {
+        if (data.type === "centraid:changes-ready") changesRequested = true;
+        else if (data.type === "centraid:replica-ready") {
           const channel = testMessageChannel();
           parentPort = channel.parent;
-          parentPort.addEventListener('message', (event) =>
-            handlePortMessage(event.data as Record<string, unknown>),
+          parentPort.addEventListener("message", (event) =>
+            handlePortMessage(event.data as Record<string, unknown>)
           );
           for (const listener of messageListeners) {
             listener({
               source: parent,
               data: {
-                type: 'centraid:replica-parent',
+                type: "centraid:replica-parent",
                 documentNonce: data.documentNonce,
               },
               ports: [channel.child],
             });
           }
-          if (changesRequested) reply({ type: 'centraid:changes-parent' });
+          if (changesRequested) reply({ type: "centraid:changes-parent" });
         }
       },
     };
@@ -498,14 +523,18 @@ describe('bridge-script', () => {
       parent,
       centraid: { __loadQuery: () => Promise.resolve({ default: handler }) },
       location: {
-        href: 'https://gateway.test/centraid/demo/index.html',
-        pathname: '/centraid/demo/index.html',
+        href: "https://gateway.test/centraid/demo/index.html",
+        pathname: "/centraid/demo/index.html",
       },
       addEventListener(
         type: string,
-        listener: (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void,
+        listener: (event: {
+          source: unknown;
+          data: unknown;
+          ports?: TestPort[];
+        }) => void
       ) {
-        if (type === 'message') messageListeners.push(listener);
+        if (type === "message") messageListeners.push(listener);
       },
       dispatchEvent: () => undefined,
     };
@@ -522,7 +551,7 @@ describe('bridge-script', () => {
         return {
           ok: true,
           status: 200,
-          text: () => Promise.resolve(JSON.stringify({ source: 'server' })),
+          text: () => Promise.resolve(JSON.stringify({ source: "server" })),
         };
       },
       AbortController,
@@ -554,27 +583,29 @@ describe('bridge-script', () => {
     };
   }
 
-  test('managed reads execute the declared query in-frame against clone-safe replica rows', async () => {
+  test("managed reads execute the declared query in-frame against clone-safe replica rows", async () => {
     const bridge = loadReplicaBridge(async ({ ctx }) => {
-      const result = (await ctx.vault.read({ entity: 'schedule.task' })) as {
+      const result = (await ctx.vault.read({ entity: "schedule.task" })) as {
         rows: Array<{ title: string }>;
       };
       return { titles: result.rows.map((row) => row.title) };
     });
-    await expect(bridge.centraid.read({ query: 'board' })).resolves.toStrictEqual({
-      titles: ['Local'],
+    await expect(
+      bridge.centraid.read({ query: "board" })
+    ).resolves.toStrictEqual({
+      titles: ["Local"],
     });
     expect(bridge.fetches).toHaveLength(0);
     expect(bridge.parentPosts).toContainEqual(
-      expect.objectContaining({ type: 'centraid:replica-read', appId: 'demo' }),
+      expect.objectContaining({ type: "centraid:replica-read", appId: "demo" })
     );
   });
 
-  test('managed searches stay local and retain their replica receipt and dependency', async () => {
+  test("managed searches stay local and retain their replica receipt and dependency", async () => {
     const bridge = loadReplicaBridge(async ({ ctx }) => {
       const result = (await ctx.vault.search({
-        entity: 'schedule.task',
-        query: 'local',
+        entity: "schedule.task",
+        query: "local",
         limit: 100,
       })) as {
         rows: Array<{ title: string }>;
@@ -589,26 +620,26 @@ describe('bridge-script', () => {
     });
 
     await expect(
-      bridge.centraid.read({ query: 'search', input: { query: 'local' } }),
+      bridge.centraid.read({ query: "search", input: { query: "local" } })
     ).resolves.toStrictEqual({
-      titles: ['Local'],
-      receiptId: 'replica:epoch-a:2',
-      dependency: { shapeId: 'agenda:shape', entity: 'schedule.task' },
+      titles: ["Local"],
+      receiptId: "replica:epoch-a:2",
+      dependency: { shapeId: "agenda:shape", entity: "schedule.task" },
     });
     expect(bridge.fetches).toHaveLength(0);
     expect(bridge.parentPosts).toContainEqual(
       expect.objectContaining({
-        type: 'centraid:replica-search',
-        appId: 'demo',
-        request: { entity: 'schedule.task', query: 'local', limit: 100 },
-      }),
+        type: "centraid:replica-search",
+        appId: "demo",
+        request: { entity: "schedule.task", query: "local", limit: 100 },
+      })
     );
   });
 
-  test('a caught sealed-field access stays sticky and transparently reruns server-side', async () => {
+  test("a caught sealed-field access stays sticky and transparently reruns server-side", async () => {
     const bridge = loadReplicaBridge(async ({ ctx }) => {
       try {
-        const result = (await ctx.vault.read({ entity: 'locker.item' })) as {
+        const result = (await ctx.vault.read({ entity: "locker.item" })) as {
           rows: Array<{ password?: string }>;
         };
         return { password: result.rows[0]?.password };
@@ -618,216 +649,226 @@ describe('bridge-script', () => {
     });
     bridge.setRows([
       {
-        rowId: 'item-1',
-        values: { item_id: 'item-1', title: 'Login' },
+        rowId: "item-1",
+        values: { item_id: "item-1", title: "Login" },
         oversizedFields: [],
         hasUnavailableFields: true,
       },
     ]);
-    await expect(bridge.centraid.read({ query: 'items' })).resolves.toStrictEqual({
-      source: 'server',
+    await expect(
+      bridge.centraid.read({ query: "items" })
+    ).resolves.toStrictEqual({
+      source: "server",
     });
     expect(bridge.fetches).toHaveLength(1);
   });
 
-  test('a local query bug is surfaced instead of being masked by an online rerun', async () => {
+  test("a local query bug is surfaced instead of being masked by an online rerun", async () => {
     const bridge = loadReplicaBridge(async () => {
-      throw Object.assign(new Error('query implementation broke'), {
-        code: 'QUERY_BUNDLE_INVALID',
+      throw Object.assign(new Error("query implementation broke"), {
+        code: "QUERY_BUNDLE_INVALID",
       });
     });
 
-    await expect(bridge.centraid.read({ query: 'items' })).rejects.toThrow(
-      'query implementation broke',
+    await expect(bridge.centraid.read({ query: "items" })).rejects.toThrow(
+      "query implementation broke"
     );
     expect(bridge.fetches).toHaveLength(0);
   });
 
-  test('a replica protocol error is surfaced instead of changing execution modes', async () => {
+  test("a replica protocol error is surfaced instead of changing execution modes", async () => {
     const bridge = loadReplicaBridge(async ({ ctx }) =>
-      ctx.vault.read({ entity: 'schedule.task' }),
+      ctx.vault.read({ entity: "schedule.task" })
     );
     bridge.setReplicaError({
-      code: 'REPLICA_PROTOCOL_ERROR',
-      message: 'local schema contract was violated',
+      code: "REPLICA_PROTOCOL_ERROR",
+      message: "local schema contract was violated",
     });
 
-    await expect(bridge.centraid.read({ query: 'items' })).rejects.toThrow(
-      'local schema contract was violated',
+    await expect(bridge.centraid.read({ query: "items" })).rejects.toThrow(
+      "local schema contract was violated"
     );
     expect(bridge.fetches).toHaveLength(0);
   });
 
-  test('read subscriptions deliver rerun data after a relevant replica invalidation', async () => {
+  test("read subscriptions deliver rerun data after a relevant replica invalidation", async () => {
     const bridge = loadReplicaBridge(async ({ ctx }) => {
-      const result = (await ctx.vault.read({ entity: 'schedule.task' })) as {
+      const result = (await ctx.vault.read({ entity: "schedule.task" })) as {
         rows: Array<{ title: string }>;
       };
       return result.rows.map((row) => row.title);
     });
     const values: unknown[] = [];
-    const pending = bridge.centraid.read({ query: 'board' });
+    const pending = bridge.centraid.read({ query: "board" });
     const unsubscribe = pending.subscribe((value) => values.push(value));
     await pending;
     await flush();
     const subscription = bridge.parentPosts.find(
-      (message) => message.type === 'centraid:replica-subscribe',
+      (message) => message.type === "centraid:replica-subscribe"
     );
     expect(subscription).toBeDefined();
 
     bridge.setRows([
       {
-        rowId: 'task-1',
-        values: { task_id: 'task-1', title: 'Updated' },
+        rowId: "task-1",
+        values: { task_id: "task-1", title: "Updated" },
         oversizedFields: [],
         hasUnavailableFields: false,
       },
     ]);
     bridge.sendFromParent({
-      type: 'centraid:replica-invalidate',
+      type: "centraid:replica-invalidate",
       subscriptionId: subscription?.subscriptionId,
-      invalidations: [{ shapeId: 'agenda:shape', entity: 'schedule.task' }],
+      invalidations: [{ shapeId: "agenda:shape", entity: "schedule.task" }],
     });
     await flush();
     await flush();
-    expect(values).toStrictEqual([['Local'], ['Updated']]);
+    expect(values).toStrictEqual([["Local"], ["Updated"]]);
     unsubscribe();
     expect(bridge.parentPosts).toContainEqual(
-      expect.objectContaining({ type: 'centraid:replica-unsubscribe' }),
+      expect.objectContaining({ type: "centraid:replica-unsubscribe" })
     );
   });
 
-  test('a live query re-localizes after rebootstrap restores the replica', async () => {
+  test("a live query re-localizes after rebootstrap restores the replica", async () => {
     const bridge = loadReplicaBridge(async ({ ctx }) => {
-      const result = (await ctx.vault.read({ entity: 'schedule.task' })) as {
+      const result = (await ctx.vault.read({ entity: "schedule.task" })) as {
         rows: Array<{ title: string }>;
       };
       return result.rows.map((row) => row.title);
     });
     const values: unknown[] = [];
-    const pending = bridge.centraid.read({ query: 'board' });
+    const pending = bridge.centraid.read({ query: "board" });
     const unsubscribe = pending.subscribe((value) => values.push(value));
     await pending;
     await flush();
     const firstSubscription = bridge.parentPosts.find(
-      (message) => message.type === 'centraid:replica-subscribe',
+      (message) => message.type === "centraid:replica-subscribe"
     );
     expect(firstSubscription).toBeDefined();
 
     bridge.setReplicaError({
-      code: 'REPLICA_REBOOTSTRAP_REQUIRED',
-      message: 'replica is rebuilding',
+      code: "REPLICA_REBOOTSTRAP_REQUIRED",
+      message: "replica is rebuilding",
     });
     bridge.sendFromParent({
-      type: 'centraid:replica-invalidate',
+      type: "centraid:replica-invalidate",
       subscriptionId: firstSubscription?.subscriptionId,
-      invalidations: [{ shapeId: 'agenda:shape', entity: 'schedule.task', source: 'purge' }],
+      invalidations: [
+        { shapeId: "agenda:shape", entity: "schedule.task", source: "purge" },
+      ],
     });
     await flush();
     await flush();
-    expect(values).toStrictEqual([['Local'], { source: 'server' }]);
+    expect(values).toStrictEqual([["Local"], { source: "server" }]);
     expect(bridge.parentPosts).toContainEqual(
-      expect.objectContaining({ type: 'centraid:replica-unsubscribe' }),
+      expect.objectContaining({ type: "centraid:replica-unsubscribe" })
     );
 
     bridge.setReplicaError();
     bridge.setRows([
       {
-        rowId: 'task-1',
-        values: { task_id: 'task-1', title: 'Rebootstrapped' },
+        rowId: "task-1",
+        values: { task_id: "task-1", title: "Rebootstrapped" },
         oversizedFields: [],
         hasUnavailableFields: false,
       },
     ]);
     bridge.sendFromParent({
-      type: 'centraid:vault-rebootstrap',
-      detail: { reason: 'bootstrap-complete' },
+      type: "centraid:vault-rebootstrap",
+      detail: { reason: "bootstrap-complete" },
     });
     await flush();
     await flush();
 
-    expect(values).toStrictEqual([['Local'], { source: 'server' }, ['Rebootstrapped']]);
+    expect(values).toStrictEqual([
+      ["Local"],
+      { source: "server" },
+      ["Rebootstrapped"],
+    ]);
     expect(
-      bridge.parentPosts.filter((message) => message.type === 'centraid:replica-subscribe'),
+      bridge.parentPosts.filter(
+        (message) => message.type === "centraid:replica-subscribe"
+      )
     ).toHaveLength(2);
     unsubscribe();
   });
 
-  test('managed writes enter the shell intent queue with optimistic mutations', async () => {
+  test("managed writes enter the shell intent queue with optimistic mutations", async () => {
     const bridge = loadReplicaBridge(async () => null);
     await expect(
       bridge.centraid.write({
-        action: 'complete',
-        input: { task_id: 'task-1' },
+        action: "complete",
+        input: { task_id: "task-1" },
         optimistic: [
           {
-            op: 'upsert',
-            entity: 'schedule.task',
-            rowId: 'task-1',
-            values: { status: 'done' },
+            op: "upsert",
+            entity: "schedule.task",
+            rowId: "task-1",
+            values: { status: "done" },
           },
         ],
-      }),
-    ).resolves.toStrictEqual({ status: 'queued', intentId: 'intent-1' });
+      })
+    ).resolves.toStrictEqual({ status: "queued", intentId: "intent-1" });
     expect(bridge.parentPosts).toContainEqual(
       expect.objectContaining({
-        type: 'centraid:replica-write',
-        action: 'complete',
-        optimistic: [expect.objectContaining({ entity: 'schedule.task' })],
-      }),
+        type: "centraid:replica-write",
+        action: "complete",
+        optimistic: [expect.objectContaining({ entity: "schedule.task" })],
+      })
     );
   });
 
-  test('replica-unavailable write fallback preserves its idempotency key', async () => {
+  test("replica-unavailable write fallback preserves its idempotency key", async () => {
     const bridge = loadReplicaBridge(async () => null);
     bridge.setReplicaError({
-      code: 'REPLICA_UNAVAILABLE',
-      message: 'admission timed out',
+      code: "REPLICA_UNAVAILABLE",
+      message: "admission timed out",
     });
 
     await expect(
       bridge.centraid.write({
-        action: 'complete',
-        input: { task_id: 'task-1' },
-        intentId: 'intent-timeout-1',
-      }),
-    ).resolves.toStrictEqual({ source: 'server' });
+        action: "complete",
+        input: { task_id: "task-1" },
+        intentId: "intent-timeout-1",
+      })
+    ).resolves.toStrictEqual({ source: "server" });
     expect(bridge.fetches).toContainEqual({
-      url: '/centraid/demo/actions/complete',
+      url: "/centraid/demo/actions/complete",
       body: {
-        input: { task_id: 'task-1' },
-        intentId: 'intent-timeout-1',
+        input: { task_id: "task-1" },
+        intentId: "intent-timeout-1",
       },
     });
   });
 
-  test('managed online-only writes fail with the network and never enter the shell intent queue', async () => {
+  test("managed online-only writes fail with the network and never enter the shell intent queue", async () => {
     const bridge = loadReplicaBridge(async () => null);
-    bridge.setFetchError(new Error('offline'));
+    bridge.setFetchError(new Error("offline"));
 
     await expect(
       bridge.centraid.write({
-        action: 'add-item',
-        input: { title: 'Email', password: 'do-not-persist' },
+        action: "add-item",
+        input: { title: "Email", password: "do-not-persist" },
         onlineOnly: true,
-      }),
-    ).rejects.toThrow('offline');
+      })
+    ).rejects.toThrow("offline");
 
     expect(bridge.fetches).toContainEqual({
-      url: '/centraid/demo/actions/add-item',
+      url: "/centraid/demo/actions/add-item",
       body: {
-        input: { title: 'Email', password: 'do-not-persist' },
+        input: { title: "Email", password: "do-not-persist" },
       },
     });
     expect(bridge.parentPosts).not.toContainEqual(
-      expect.objectContaining({ type: 'centraid:replica-write' }),
+      expect.objectContaining({ type: "centraid:replica-write" })
     );
   });
 
-  test('a remembered opaque app prewarms every declared query without evaluating it or leaking failures', async () => {
+  test("a remembered opaque app prewarms every declared query without evaluating it or leaking failures", async () => {
     const src = changeBridgeScript()
-      .replace(/^<script>/u, '')
-      .replace(/<\/script>$/u, '');
+      .replace(/^<script>/u, "")
+      .replace(/<\/script>$/u, "");
     const messageListeners: Array<
       (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
     > = [];
@@ -839,55 +880,57 @@ describe('bridge-script', () => {
     };
     const parent = {
       postMessage(data: Record<string, unknown>): void {
-        if (data.type !== 'centraid:replica-ready') return;
+        if (data.type !== "centraid:replica-ready") return;
         const channel = testMessageChannel();
         parentPort = channel.parent;
-        parentPort.addEventListener('message', (event) => {
+        parentPort.addEventListener("message", (event) => {
           const message = event.data as Record<string, unknown>;
-          if (message.type !== 'centraid:resource') return;
+          if (message.type !== "centraid:resource") return;
           resources.push(message);
           const request = message.request as { url: string; method: string };
-          if (request.url.endsWith('/_query/search.mjs')) {
+          if (request.url.endsWith("/_query/search.mjs")) {
             // One broken bundle must neither reject globally nor prevent the
             // other declared modules from warming.
             reply({
-              type: 'centraid:replica-result',
+              type: "centraid:replica-result",
               id: message.id,
               ok: false,
-              code: 'APP_RESOURCE_UNAVAILABLE',
-              error: 'query bundle unavailable',
+              code: "APP_RESOURCE_UNAVAILABLE",
+              error: "query bundle unavailable",
             });
             return;
           }
-          const payload = request.url.endsWith('/app.json')
+          const payload = request.url.endsWith("/app.json")
             ? {
                 manifestVersion: 1,
-                id: 'demo',
+                id: "demo",
                 queries: [
-                  { name: 'upcoming' },
-                  { name: 'search' },
-                  { name: 'upcoming' },
-                  { name: '../not-a-query' },
+                  { name: "upcoming" },
+                  { name: "search" },
+                  { name: "upcoming" },
+                  { name: "../not-a-query" },
                 ],
               }
-            : request.url.includes('/_query/')
-              ? 'export default async function(){}'
-              : { source: 'tool-over-port' };
+            : request.url.includes("/_query/")
+              ? "export default async function(){}"
+              : { source: "tool-over-port" };
           const body = new TextEncoder().encode(
-            typeof payload === 'string' ? payload : JSON.stringify(payload),
+            typeof payload === "string" ? payload : JSON.stringify(payload)
           ).buffer;
           reply({
-            type: 'centraid:replica-result',
+            type: "centraid:replica-result",
             id: message.id,
             ok: true,
             result: {
               url: request.url,
               status: 200,
-              statusText: 'OK',
+              statusText: "OK",
               headers: [
                 [
-                  'content-type',
-                  request.url.includes('/_query/') ? 'application/javascript' : 'application/json',
+                  "content-type",
+                  request.url.includes("/_query/")
+                    ? "application/javascript"
+                    : "application/json",
                 ],
               ],
               body,
@@ -898,8 +941,8 @@ describe('bridge-script', () => {
           listener({
             source: parent,
             data: {
-              type: 'centraid:replica-parent',
-              documentNonce: 'document-one',
+              type: "centraid:replica-parent",
+              documentNonce: "document-one",
             },
             ports: [channel.child],
           });
@@ -907,22 +950,27 @@ describe('bridge-script', () => {
       },
     };
     const nativeFetch = vi.fn<typeof fetch>(() =>
-      Promise.reject(new Error('opaque fetch escaped to network')),
+      Promise.reject(new Error("opaque fetch escaped to network"))
     );
     const win: Record<string, unknown> = {
       parent,
       centraid: {
-        appId: 'demo',
-        documentNonce: 'document-one',
-        opaqueBaseUrl: 'https://shell.test/__centraid_iroh__/d-device/centraid/demo/',
+        appId: "demo",
+        documentNonce: "document-one",
+        opaqueBaseUrl:
+          "https://shell.test/__centraid_iroh__/d-device/centraid/demo/",
       },
       fetch: nativeFetch,
-      location: { href: 'data:text/html,opaque', pathname: '', hash: '' },
+      location: { href: "data:text/html,opaque", pathname: "", hash: "" },
       addEventListener(
         type: string,
-        listener: (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void,
+        listener: (event: {
+          source: unknown;
+          data: unknown;
+          ports?: TestPort[];
+        }) => void
       ) {
-        if (type === 'message') messageListeners.push(listener);
+        if (type === "message") messageListeners.push(listener);
       },
       dispatchEvent: () => undefined,
     };
@@ -948,37 +996,39 @@ describe('bridge-script', () => {
     });
 
     await expect((win.centraid as Centraid).describe()).resolves.toStrictEqual({
-      source: 'tool-over-port',
+      source: "tool-over-port",
     });
     await flush();
     await flush();
     expect(nativeFetch).not.toHaveBeenCalled();
     const requests = resources.map(
-      (resource) => resource.request as { url: string; method: string },
+      (resource) => resource.request as { url: string; method: string }
     );
     expect(requests).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          url: 'https://shell.test/__centraid_iroh__/d-device/centraid/demo/app.json',
-          method: 'GET',
+          url: "https://shell.test/__centraid_iroh__/d-device/centraid/demo/app.json",
+          method: "GET",
         }),
         expect.objectContaining({
-          url: 'https://shell.test/__centraid_iroh__/d-device/centraid/demo/_query/upcoming.mjs',
-          method: 'GET',
+          url: "https://shell.test/__centraid_iroh__/d-device/centraid/demo/_query/upcoming.mjs",
+          method: "GET",
         }),
         expect.objectContaining({
-          url: 'https://shell.test/__centraid_iroh__/d-device/centraid/demo/_query/search.mjs',
-          method: 'GET',
+          url: "https://shell.test/__centraid_iroh__/d-device/centraid/demo/_query/search.mjs",
+          method: "GET",
         }),
         expect.objectContaining({
-          url: 'https://shell.test/__centraid_iroh__/d-device/centraid/demo/_describe',
-          method: 'GET',
+          url: "https://shell.test/__centraid_iroh__/d-device/centraid/demo/_describe",
+          method: "GET",
         }),
-      ]),
+      ])
     );
-    expect(requests.filter((request) => request.url.endsWith('/_query/upcoming.mjs'))).toHaveLength(
-      1,
-    );
-    expect(requests.some((request) => request.url.includes('not-a-query'))).toBe(false);
+    expect(
+      requests.filter((request) => request.url.endsWith("/_query/upcoming.mjs"))
+    ).toHaveLength(1);
+    expect(
+      requests.some((request) => request.url.includes("not-a-query"))
+    ).toBe(false);
   });
 });

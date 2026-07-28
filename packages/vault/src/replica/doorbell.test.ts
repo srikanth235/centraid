@@ -1,10 +1,10 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { openVaultDb, type VaultDb } from '../db.js';
-import { notifyReplicaCommit, subscribeReplicaCommits } from './doorbell.js';
+import { openVaultDb, type VaultDb } from "../db.js";
+import { notifyReplicaCommit, subscribeReplicaCommits } from "./doorbell.js";
 
 let db: VaultDb | undefined;
-describe('doorbell', () => {
+describe("doorbell", () => {
   afterEach(() => {
     db?.close();
     db = undefined;
@@ -15,12 +15,12 @@ describe('doorbell', () => {
     return db;
   }
 
-  test('notifyReplicaCommit is a no-op when nobody is subscribed', () => {
+  test("notifyReplicaCommit is a no-op when nobody is subscribed", () => {
     const { vault } = open();
     expect(() => notifyReplicaCommit(vault)).not.toThrow();
   });
 
-  test('subscribeReplicaCommits delivers notifies and unsubscribe stops delivery', () => {
+  test("subscribeReplicaCommits delivers notifies and unsubscribe stops delivery", () => {
     const { vault } = open();
     const hits: number[] = [];
     const unsub = subscribeReplicaCommits(vault, () => {
@@ -41,11 +41,11 @@ describe('doorbell', () => {
     expect(hits).toStrictEqual([1, 2]);
   });
 
-  test('a throwing listener does not prevent other listeners or fail the notify', () => {
+  test("a throwing listener does not prevent other listeners or fail the notify", () => {
     const { vault } = open();
     const good = vi.fn<() => void>();
     const unsubThrow = subscribeReplicaCommits(vault, () => {
-      throw new Error('stream closed');
+      throw new Error("stream closed");
     });
     const unsubGood = subscribeReplicaCommits(vault, good);
 
@@ -56,7 +56,7 @@ describe('doorbell', () => {
     unsubGood();
   });
 
-  test('last unsubscribe clears the weakmap entry so a new subscribe starts fresh', () => {
+  test("last unsubscribe clears the weakmap entry so a new subscribe starts fresh", () => {
     const { vault } = open();
     const first = vi.fn<() => void>();
     const unsub = subscribeReplicaCommits(vault, first);

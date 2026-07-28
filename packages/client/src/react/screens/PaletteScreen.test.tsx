@@ -1,11 +1,14 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { PaletteBridgeProps, PaletteGroupDTO } from '../screen-contracts.js';
-import PaletteScreen from './PaletteScreen.js';
+import type {
+  PaletteBridgeProps,
+  PaletteGroupDTO,
+} from "../screen-contracts.js";
+import PaletteScreen from "./PaletteScreen.js";
 
-type PaletteRun = NonNullable<PaletteGroupDTO['items'][number]['run']>;
+type PaletteRun = NonNullable<PaletteGroupDTO["items"][number]["run"]>;
 
 const buildRun = vi.fn<PaletteRun>();
 const browseRun = vi.fn<PaletteRun>();
@@ -13,34 +16,34 @@ const appRun = vi.fn<PaletteRun>();
 
 function groupsFor(query: string): PaletteGroupDTO[] {
   const build: PaletteGroupDTO = {
-    group: 'Build',
+    group: "Build",
     items: [
       {
-        label: query ? `Build ${query}` : 'Build a new app',
-        iconHtml: '<svg></svg>',
-        variant: 'action',
+        label: query ? `Build ${query}` : "Build a new app",
+        iconHtml: "<svg></svg>",
+        variant: "action",
         accent: true,
-        kbd: '↵',
+        kbd: "↵",
         run: buildRun,
       },
       {
-        label: 'Browse templates',
-        iconHtml: '',
-        variant: 'action',
+        label: "Browse templates",
+        iconHtml: "",
+        variant: "action",
         run: browseRun,
       },
     ],
   };
   const apps: PaletteGroupDTO = {
-    group: 'Apps · 1',
+    group: "Apps · 1",
     items: [
       {
-        label: 'Todos',
-        sub: 'A todo app',
-        iconHtml: '<svg></svg>',
-        variant: 'app',
-        tile: { background: '#000', glyphColor: '#fff' },
-        meta: '2h',
+        label: "Todos",
+        sub: "A todo app",
+        iconHtml: "<svg></svg>",
+        variant: "app",
+        tile: { background: "#000", glyphColor: "#fff" },
+        meta: "2h",
         run: appRun,
       },
     ],
@@ -50,15 +53,15 @@ function groupsFor(query: string): PaletteGroupDTO[] {
 
 function makeProps(over: Partial<PaletteBridgeProps> = {}): PaletteBridgeProps {
   return {
-    buildGroups: vi.fn<PaletteBridgeProps['buildGroups']>(groupsFor),
-    onClose: vi.fn<PaletteBridgeProps['onClose']>(),
+    buildGroups: vi.fn<PaletteBridgeProps["buildGroups"]>(groupsFor),
+    onClose: vi.fn<PaletteBridgeProps["onClose"]>(),
     ...over,
   };
 }
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-describe('screens/PaletteScreen', () => {
+describe("screens/PaletteScreen", () => {
   afterEach(() => {
     act(() => root?.unmount());
     root = null;
@@ -67,7 +70,7 @@ describe('screens/PaletteScreen', () => {
     vi.clearAllMocks();
   });
   function mount(props: PaletteBridgeProps): HTMLDivElement {
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     act(() => {
       root = createRoot(container as HTMLDivElement);
@@ -77,65 +80,75 @@ describe('screens/PaletteScreen', () => {
   }
 
   const rows = (el: HTMLElement): HTMLButtonElement[] =>
-    [...el.querySelectorAll('.row')] as HTMLButtonElement[];
+    [...el.querySelectorAll(".row")] as HTMLButtonElement[];
 
   describe(PaletteScreen, () => {
-    it('renders grouped rows with the first row active', () => {
+    it("renders grouped rows with the first row active", () => {
       const el = mount(makeProps());
-      expect(el.querySelectorAll('.group')).toHaveLength(2);
+      expect(el.querySelectorAll(".group")).toHaveLength(2);
       expect(rows(el)).toHaveLength(3);
-      expect(rows(el)[0]?.dataset.active).toBe('true');
+      expect(rows(el)[0]?.dataset.active).toBe("true");
       // app-variant row carries the gradient tile + injected icon svg
-      expect(el.querySelector('.rowTile')).toBeTruthy();
-      expect(el.querySelector('.rowTile svg')).toBeTruthy();
+      expect(el.querySelector(".rowTile")).toBeTruthy();
+      expect(el.querySelector(".rowTile svg")).toBeTruthy();
     });
 
-    it('moves the active row with ArrowDown and runs it on Enter', () => {
+    it("moves the active row with ArrowDown and runs it on Enter", () => {
       const el = mount(makeProps());
-      const input = el.querySelector('.input') as HTMLInputElement;
+      const input = el.querySelector(".input") as HTMLInputElement;
       void act(() =>
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+        )
       );
-      expect(rows(el)[1]?.dataset.active).toBe('true');
+      expect(rows(el)[1]?.dataset.active).toBe("true");
       void act(() =>
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+        )
       );
       expect(browseRun).toHaveBeenCalledOnce();
       expect(buildRun).not.toHaveBeenCalled();
     });
 
-    it('runs a row on click', () => {
+    it("runs a row on click", () => {
       const el = mount(makeProps());
-      void act(() => rows(el)[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      void act(() =>
+        rows(el)[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(appRun).toHaveBeenCalledOnce();
     });
 
-    it('recomputes groups from the query and passes it to buildGroups', () => {
+    it("recomputes groups from the query and passes it to buildGroups", () => {
       const props = makeProps();
       const el = mount(props);
-      const input = el.querySelector('.input') as HTMLInputElement;
+      const input = el.querySelector(".input") as HTMLInputElement;
       const setter = Object.getOwnPropertyDescriptor(
         globalThis.HTMLInputElement.prototype,
-        'value',
+        "value"
       )?.set;
       act(() => {
-        setter?.call(input, 'notes');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        setter?.call(input, "notes");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
       });
-      expect(props.buildGroups).toHaveBeenCalledWith('notes');
-      expect(el.textContent).toContain('Build notes');
+      expect(props.buildGroups).toHaveBeenCalledWith("notes");
+      expect(el.textContent).toContain("Build notes");
     });
 
-    it('closes on Escape and on backdrop click', () => {
+    it("closes on Escape and on backdrop click", () => {
       const props = makeProps();
       const el = mount(props);
-      const input = el.querySelector('.input') as HTMLInputElement;
+      const input = el.querySelector(".input") as HTMLInputElement;
       void act(() =>
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+        )
       );
       expect(props.onClose).toHaveBeenCalledOnce();
-      const backdrop = el.querySelector('.backdrop') as HTMLElement;
-      void act(() => backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      const backdrop = el.querySelector(".backdrop") as HTMLElement;
+      void act(() =>
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(props.onClose).toHaveBeenCalledTimes(2);
     });
   });

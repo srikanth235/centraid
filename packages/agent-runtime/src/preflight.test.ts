@@ -1,12 +1,12 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, afterEach, expect, test } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { describe, afterEach, expect, test } from "vitest";
 
-import { FAKE_AGENT } from './backends/acp/test-fixtures.js';
-import { writeCatalogEntry } from './models/catalog.ts';
+import { FAKE_AGENT } from "./backends/acp/test-fixtures.js";
+import { writeCatalogEntry } from "./models/catalog.ts";
 import {
   compareSemver,
   invalidatePreflightCache,
@@ -14,10 +14,10 @@ import {
   parseSemver,
   probeCliAvailability,
   runPreflight,
-} from './preflight.ts';
-import { agentSpawnEnv, sanitizeAgentPath } from './spawn-env.ts';
+} from "./preflight.ts";
+import { agentSpawnEnv, sanitizeAgentPath } from "./spawn-env.ts";
 
-describe('preflight suite', () => {
+describe("preflight suite", () => {
   let savedPath: string | undefined;
 
   afterEach(() => {
@@ -26,56 +26,56 @@ describe('preflight suite', () => {
       savedPath = undefined;
     }
   });
-  test('reports binary-not-found when bin does not exist', async () => {
+  test("reports binary-not-found when bin does not exist", async () => {
     invalidatePreflightCache();
     const status = await runPreflight({
-      kind: 'codex',
-      binPath: '/this/path/does/not/exist/codex',
+      kind: "codex",
+      binPath: "/this/path/does/not/exist/codex",
     });
-    expect(status.kind).toBe('codex');
+    expect(status.kind).toBe("codex");
     expect(status.ok).toBe(false);
-    expect(status.reason ?? '').toMatch(/not found|ENOENT|spawn|--version/u);
-    expect(status.hint?.includes('Codex')).toBeTruthy();
+    expect(status.reason ?? "").toMatch(/not found|ENOENT|spawn|--version/u);
+    expect(status.hint?.includes("Codex")).toBeTruthy();
   });
 
-  test('caches result per (kind, binPath)', async () => {
+  test("caches result per (kind, binPath)", async () => {
     invalidatePreflightCache();
     // Use `true` (always succeeds, version output) and `false` (always fails)
     // to exercise both branches without depending on any user-installed CLI.
-    const first = await runPreflight({ kind: 'codex', binPath: 'true' });
-    const second = await runPreflight({ kind: 'codex', binPath: 'true' });
+    const first = await runPreflight({ kind: "codex", binPath: "true" });
+    const second = await runPreflight({ kind: "codex", binPath: "true" });
     // Same cache key → identical object (we don't deep-clone — fine for tests).
     expect(first).toBe(second);
   });
 
-  test('different binPath busts the cache', async () => {
+  test("different binPath busts the cache", async () => {
     invalidatePreflightCache();
-    const a = await runPreflight({ kind: 'codex', binPath: 'true' });
-    const b = await runPreflight({ kind: 'codex', binPath: '/no/such/bin' });
+    const a = await runPreflight({ kind: "codex", binPath: "true" });
+    const b = await runPreflight({ kind: "codex", binPath: "/no/such/bin" });
     expect(a.ok).toBe(true);
     expect(b.ok).toBe(false);
   });
 
-  test('parseSemver handles common --version output shapes', () => {
-    expect(parseSemver('codex-cli 0.128.0')).toStrictEqual({
+  test("parseSemver handles common --version output shapes", () => {
+    expect(parseSemver("codex-cli 0.128.0")).toStrictEqual({
       major: 0,
       minor: 128,
       patch: 0,
     });
-    expect(parseSemver('2.1.126 (Claude Code)')).toStrictEqual({
+    expect(parseSemver("2.1.126 (Claude Code)")).toStrictEqual({
       major: 2,
       minor: 1,
       patch: 126,
     });
-    expect(parseSemver('v1.2.3-beta')).toStrictEqual({
+    expect(parseSemver("v1.2.3-beta")).toStrictEqual({
       major: 1,
       minor: 2,
       patch: 3,
     });
-    expect(parseSemver('no version here')).toBeUndefined();
+    expect(parseSemver("no version here")).toBeUndefined();
   });
 
-  test('compareSemver orders versions', () => {
+  test("compareSemver orders versions", () => {
     const a = { major: 1, minor: 2, patch: 3 };
     const b = { major: 1, minor: 2, patch: 4 };
     const c = { major: 1, minor: 3, patch: 0 };
@@ -87,41 +87,45 @@ describe('preflight suite', () => {
     expect(compareSemver(c, d) < 0).toBeTruthy();
   });
 
-  test('preflight surfaces versionAtLeast when version parses', async () => {
+  test("preflight surfaces versionAtLeast when version parses", async () => {
     invalidatePreflightCache();
     // `true --version` exits 0 and prints empty output → version parses
     // as undefined → versionAtLeast stays undefined. Confirm the field is
     // absent (not falsely false) in that case.
-    const status = await runPreflight({ kind: 'codex', binPath: 'true' });
+    const status = await runPreflight({ kind: "codex", binPath: "true" });
     expect(status.ok).toBe(true);
     expect(status.versionAtLeast).toBeUndefined();
-    expect(status.minVersion).toBe(minVersionString('codex'));
+    expect(status.minVersion).toBe(minVersionString("codex"));
   });
 
-  test('session-ready preflight rejects an installed but unauthenticated ACP runner', async () => {
+  test("session-ready preflight rejects an installed but unauthenticated ACP runner", async () => {
     const status = await runPreflight(
       {
-        kind: 'acp',
+        kind: "acp",
         binPath: FAKE_AGENT,
-        extraArgs: ['--mode=auth'],
+        extraArgs: ["--mode=auth"],
       },
-      { requireSessionReady: true },
+      { requireSessionReady: true }
     );
     expect(status.ok).toBe(false);
     expect(status.reason).toMatch(/not authenticated/iu);
     expect(status.hint).toMatch(/set|configure|install|sign/iu);
   });
 
-  test('session-ready preflight serves a warm capability cache without spawning the agent', async () => {
+  test("session-ready preflight serves a warm capability cache without spawning the agent", async () => {
     // Readiness used to force `refresh: true`, so every poll spawned the agent
     // AND bought a live provider turn from the diagnostic prompt.
-    const dir = await tempDir('centraid-preflight-ready-');
-    const pidMarker = path.join(dir, 'pid');
-    const promptMarker = path.join(dir, 'prompt.json');
+    const dir = await tempDir("centraid-preflight-ready-");
+    const pidMarker = path.join(dir, "pid");
+    const promptMarker = path.join(dir, "prompt.json");
     const prefs = {
-      kind: 'acp' as const,
+      kind: "acp" as const,
       binPath: FAKE_AGENT,
-      extraArgs: ['--mode=normal', `--pid-marker=${pidMarker}`, `--prompt-marker=${promptMarker}`],
+      extraArgs: [
+        "--mode=normal",
+        `--pid-marker=${pidMarker}`,
+        `--prompt-marker=${promptMarker}`,
+      ],
     };
 
     invalidatePreflightCache();
@@ -139,61 +143,70 @@ describe('preflight suite', () => {
     await expect(fs.access(pidMarker)).rejects.toThrow(/ENOENT/u);
   });
 
-  test('attaches an empty model list when no catalog path is set (no seed)', async () => {
+  test("attaches an empty model list when no catalog path is set (no seed)", async () => {
     invalidatePreflightCache();
-    const status = await runPreflight({ kind: 'codex', binPath: 'true' });
+    const status = await runPreflight({ kind: "codex", binPath: "true" });
     expect(status.ok).toBe(true);
     expect(status.models).toStrictEqual([]);
   });
 
-  test('reads the model list from the catalog without enumerating', async () => {
+  test("reads the model list from the catalog without enumerating", async () => {
     invalidatePreflightCache();
-    const dir = await tempDir('centraid-preflight-');
-    const catalogPath = path.join(dir, 'model-catalog.json');
+    const dir = await tempDir("centraid-preflight-");
+    const catalogPath = path.join(dir, "model-catalog.json");
 
     // Cold catalog → empty list (a loading/empty state, no seed). The read must
     // not spawn anything, so no catalog file appears.
-    const cold = await runPreflight({ kind: 'codex', binPath: 'true' }, { catalogPath });
+    const cold = await runPreflight(
+      { kind: "codex", binPath: "true" },
+      { catalogPath }
+    );
     expect(cold.models).toStrictEqual([]);
     await expect(fs.access(catalogPath)).rejects.toThrow(/ENOENT/u);
 
     // A populated catalog is read back verbatim.
-    await writeCatalogEntry(catalogPath, 'codex', {
-      hash: 'h',
-      models: [{ id: 'gpt-x', name: 'GPT-X', default: true }],
-      enumeratedAt: '2026-01-01T00:00:00.000Z',
+    await writeCatalogEntry(catalogPath, "codex", {
+      hash: "h",
+      models: [{ id: "gpt-x", name: "GPT-X", default: true }],
+      enumeratedAt: "2026-01-01T00:00:00.000Z",
     });
     invalidatePreflightCache();
-    const warm = await runPreflight({ kind: 'codex', binPath: 'true' }, { catalogPath });
-    expect(warm.models?.map((m) => m.id)).toStrictEqual(['gpt-x']);
+    const warm = await runPreflight(
+      { kind: "codex", binPath: "true" },
+      { catalogPath }
+    );
+    expect(warm.models?.map((m) => m.id)).toStrictEqual(["gpt-x"]);
   });
 
   // ---- pluggable runner kinds (gemini / qwen / custom acp) ----------------
 
-  test('gemini/qwen preflight probe their bin and carry the registry min version', async () => {
+  test("gemini/qwen preflight probe their bin and carry the registry min version", async () => {
     invalidatePreflightCache();
-    const gemini = await runPreflight({ kind: 'gemini', binPath: 'true' });
-    expect(gemini.kind).toBe('gemini');
+    const gemini = await runPreflight({ kind: "gemini", binPath: "true" });
+    expect(gemini.kind).toBe("gemini");
     expect(gemini.ok).toBe(true);
-    expect(gemini.minVersion).toBe(minVersionString('gemini'));
+    expect(gemini.minVersion).toBe(minVersionString("gemini"));
 
     invalidatePreflightCache();
-    const qwen = await runPreflight({ kind: 'qwen', binPath: 'true' });
+    const qwen = await runPreflight({ kind: "qwen", binPath: "true" });
     expect(qwen.ok).toBe(true);
-    expect(qwen.minVersion).toBe(minVersionString('qwen'));
+    expect(qwen.minVersion).toBe(minVersionString("qwen"));
   });
 
-  test('opencode/grok/kimi preflight probe their bin and carry the registry min version', async () => {
-    await forEachSequentially(['opencode', 'grok', 'kimi'] as const, async (kind) => {
-      invalidatePreflightCache();
-      const status = await runPreflight({ kind, binPath: 'true' });
-      expect(status.kind).toBe(kind);
-      expect(status.ok).toBe(true);
-      expect(status.minVersion).toBe(minVersionString(kind));
-    });
+  test("opencode/grok/kimi preflight probe their bin and carry the registry min version", async () => {
+    await forEachSequentially(
+      ["opencode", "grok", "kimi"] as const,
+      async (kind) => {
+        invalidatePreflightCache();
+        const status = await runPreflight({ kind, binPath: "true" });
+        expect(status.kind).toBe(kind);
+        expect(status.ok).toBe(true);
+        expect(status.minVersion).toBe(minVersionString(kind));
+      }
+    );
   });
 
-  test('a missing opencode/grok/kimi binary reports unavailable with the install hint', async () => {
+  test("a missing opencode/grok/kimi binary reports unavailable with the install hint", async () => {
     // The hint IS the "why not" the providers console shows, so an unavailable
     // runner must never come back hintless.
     const expected = {
@@ -201,34 +214,37 @@ describe('preflight suite', () => {
       grok: /SuperGrok|X Premium/u,
       kimi: /uv tool install kimi-cli/u,
     } as const;
-    await forEachSequentially(Object.entries(expected), async ([kind, pattern]) => {
-      invalidatePreflightCache();
-      const status = await runPreflight({
-        kind: kind as 'opencode' | 'grok' | 'kimi',
-        binPath: `/no/such/${kind}`,
-      });
-      expect(status.ok, kind).toBe(false);
-      expect(status.hint ?? '', kind).toMatch(pattern);
-    });
+    await forEachSequentially(
+      Object.entries(expected),
+      async ([kind, pattern]) => {
+        invalidatePreflightCache();
+        const status = await runPreflight({
+          kind: kind as "opencode" | "grok" | "kimi",
+          binPath: `/no/such/${kind}`,
+        });
+        expect(status.ok, kind).toBe(false);
+        expect(status.hint ?? "", kind).toMatch(pattern);
+      }
+    );
   });
 
   // ---- wave 7: eight more ACP-native kinds ---------------------------------
 
   const WAVE_7_KINDS = [
-    'copilot',
-    'cursor',
-    'kilo',
-    'cline',
-    'goose',
-    'auggie',
-    'vibe',
-    'droid',
+    "copilot",
+    "cursor",
+    "kilo",
+    "cline",
+    "goose",
+    "auggie",
+    "vibe",
+    "droid",
   ] as const;
 
-  test('every added kind preflights its bin and carries the registry min version', async () => {
+  test("every added kind preflights its bin and carries the registry min version", async () => {
     await forEachSequentially(WAVE_7_KINDS, async (kind) => {
       invalidatePreflightCache();
-      const status = await runPreflight({ kind, binPath: 'true' });
+      const status = await runPreflight({ kind, binPath: "true" });
       expect(status.kind, kind).toBe(kind);
       expect(status.ok, kind).toBe(true);
       expect(status.minVersion, kind).toBe(minVersionString(kind));
@@ -238,10 +254,10 @@ describe('preflight suite', () => {
   test("cursor's CalVer floor survives the semver-shaped minVersion string", () => {
     // 2026.07.16 is year.month.day, not semver — but it renders and compares
     // through the same numeric path, so the reported floor is exactly the date.
-    expect(minVersionString('cursor')).toBe('2026.7.16');
+    expect(minVersionString("cursor")).toBe("2026.7.16");
   });
 
-  test('a missing binary for any added kind reports unavailable with its install hint', async () => {
+  test("a missing binary for any added kind reports unavailable with its install hint", async () => {
     // The hint IS the "why not" the providers console shows, so an unavailable
     // runner must never come back hintless — and for these kinds it is often
     // the only place the paid-plan / provider-config requirement appears.
@@ -255,19 +271,24 @@ describe('preflight suite', () => {
       vibe: /uv tool install mistral-vibe/u,
       droid: /app\.factory\.ai\/cli|brew install --cask droid/u,
     } as const;
-    await forEachSequentially(Object.entries(expected), async ([kind, pattern]) => {
-      invalidatePreflightCache();
-      const status = await runPreflight({
-        kind: kind as (typeof WAVE_7_KINDS)[number],
-        binPath: `/no/such/${kind}`,
-      });
-      expect(status.ok, kind).toBe(false);
-      expect(status.reason ?? '', kind).toMatch(/not found|ENOENT|spawn|--version/u);
-      expect(status.hint ?? '', kind).toMatch(pattern);
-    });
+    await forEachSequentially(
+      Object.entries(expected),
+      async ([kind, pattern]) => {
+        invalidatePreflightCache();
+        const status = await runPreflight({
+          kind: kind as (typeof WAVE_7_KINDS)[number],
+          binPath: `/no/such/${kind}`,
+        });
+        expect(status.ok, kind).toBe(false);
+        expect(status.reason ?? "", kind).toMatch(
+          /not found|ENOENT|spawn|--version/u
+        );
+        expect(status.hint ?? "", kind).toMatch(pattern);
+      }
+    );
   });
 
-  test('probeCliAvailability defaults each added kind to its own binary', async () => {
+  test("probeCliAvailability defaults each added kind to its own binary", async () => {
     // `vibe-acp` (not `vibe`) and `cursor-agent` (not `agent`) are the ones a
     // regression would most plausibly get wrong, so probe with no binPath and
     // confirm the default bin is the one that gets looked up and missed.
@@ -277,46 +298,46 @@ describe('preflight suite', () => {
     });
   });
 
-  test('gemini install hint points at the Gemini CLI', async () => {
+  test("gemini install hint points at the Gemini CLI", async () => {
     invalidatePreflightCache();
     const status = await runPreflight({
-      kind: 'gemini',
-      binPath: '/no/such/gemini',
+      kind: "gemini",
+      binPath: "/no/such/gemini",
     });
     expect(status.ok).toBe(false);
-    expect(status.hint ?? '').toMatch(/Gemini CLI/u);
+    expect(status.hint ?? "").toMatch(/Gemini CLI/u);
   });
 
-  test('custom acp kind is unavailable until a binPath is configured', async () => {
+  test("custom acp kind is unavailable until a binPath is configured", async () => {
     invalidatePreflightCache();
-    const status = await runPreflight({ kind: 'acp' });
-    expect(status.kind).toBe('acp');
+    const status = await runPreflight({ kind: "acp" });
+    expect(status.kind).toBe("acp");
     expect(status.ok).toBe(false);
-    expect(status.reason ?? '').toMatch(/no binary configured/u);
-    expect(status.hint ?? '').toMatch(/Settings/u);
+    expect(status.reason ?? "").toMatch(/no binary configured/u);
+    expect(status.hint ?? "").toMatch(/Settings/u);
   });
 
-  test('custom acp kind probes a configured binPath like any other runner', async () => {
+  test("custom acp kind probes a configured binPath like any other runner", async () => {
     invalidatePreflightCache();
-    const status = await runPreflight({ kind: 'acp', binPath: 'true' });
+    const status = await runPreflight({ kind: "acp", binPath: "true" });
     expect(status.ok).toBe(true);
   });
 
-  test('probeCliAvailability reports unavailable for custom acp with no binPath', async () => {
-    const status = await probeCliAvailability('acp');
+  test("probeCliAvailability reports unavailable for custom acp with no binPath", async () => {
+    const status = await probeCliAvailability("acp");
     expect(status.available).toBe(false);
   });
 
   // ---- probeCliAvailability tests -----------------------------------------
 
-  test('probeCliAvailability reports available + version when the CLI runs', async () => {
+  test("probeCliAvailability reports available + version when the CLI runs", async () => {
     // `true` always exits 0 (empty output) — stands in for an installed CLI.
-    const status = await probeCliAvailability('codex', 'true');
+    const status = await probeCliAvailability("codex", "true");
     expect(status.available).toBe(true);
   });
 
-  test('probeCliAvailability reports unavailable when the CLI is missing', async () => {
-    const status = await probeCliAvailability('codex', '/no/such/bin');
+  test("probeCliAvailability reports unavailable when the CLI is missing", async () => {
+    const status = await probeCliAvailability("codex", "/no/such/bin");
     expect(status.available).toBe(false);
     expect(status.version).toBeUndefined();
   });
@@ -331,67 +352,81 @@ describe('preflight suite', () => {
   // `sanitizeAgentPath`/`agentSpawnEnv` (spawn-env.ts) strip those entries
   // before any bare-name `spawn('claude'|'codex', …)`.
 
-  test('sanitizeAgentPath strips node_modules/.bin entries, preserving order', () => {
+  test("sanitizeAgentPath strips node_modules/.bin entries, preserving order", () => {
     const input = [
-      '/usr/local/bin',
-      '/Users/x/node_modules/.bin',
-      '/opt/homebrew/bin',
-      '/Users/x/project/node_modules/.bin',
-      '/Users/x/.local/bin',
+      "/usr/local/bin",
+      "/Users/x/node_modules/.bin",
+      "/opt/homebrew/bin",
+      "/Users/x/project/node_modules/.bin",
+      "/Users/x/.local/bin",
     ].join(path.delimiter);
     expect(sanitizeAgentPath(input)).toBe(
-      ['/usr/local/bin', '/opt/homebrew/bin', '/Users/x/.local/bin'].join(path.delimiter),
+      ["/usr/local/bin", "/opt/homebrew/bin", "/Users/x/.local/bin"].join(
+        path.delimiter
+      )
     );
   });
 
-  test('sanitizeAgentPath preserves non-matching entries verbatim (no-op on a clean PATH)', () => {
-    const input = ['/usr/bin', '/bin', '/Users/x/.local/bin'].join(path.delimiter);
+  test("sanitizeAgentPath preserves non-matching entries verbatim (no-op on a clean PATH)", () => {
+    const input = ["/usr/bin", "/bin", "/Users/x/.local/bin"].join(
+      path.delimiter
+    );
     expect(sanitizeAgentPath(input)).toBe(input);
   });
 
-  test('sanitizeAgentPath handles an empty/undefined PATH', () => {
-    expect(sanitizeAgentPath(undefined)).toBe('');
-    expect(sanitizeAgentPath('')).toBe('');
+  test("sanitizeAgentPath handles an empty/undefined PATH", () => {
+    expect(sanitizeAgentPath(undefined)).toBe("");
+    expect(sanitizeAgentPath("")).toBe("");
   });
 
-  test('agentSpawnEnv strips node_modules/.bin from PATH when no binPath is given', () => {
+  test("agentSpawnEnv strips node_modules/.bin from PATH when no binPath is given", () => {
     const baseEnv = {
-      PATH: ['/Users/x/node_modules/.bin', '/Users/x/.local/bin'].join(path.delimiter),
+      PATH: ["/Users/x/node_modules/.bin", "/Users/x/.local/bin"].join(
+        path.delimiter
+      ),
     };
     const env = agentSpawnEnv({ baseEnv });
-    expect(env.PATH).toBe('/Users/x/.local/bin');
+    expect(env.PATH).toBe("/Users/x/.local/bin");
   });
 
-  test('agentSpawnEnv leaves PATH untouched when an explicit binPath is given', () => {
+  test("agentSpawnEnv leaves PATH untouched when an explicit binPath is given", () => {
     const baseEnv = {
-      PATH: ['/Users/x/node_modules/.bin', '/Users/x/.local/bin'].join(path.delimiter),
+      PATH: ["/Users/x/node_modules/.bin", "/Users/x/.local/bin"].join(
+        path.delimiter
+      ),
     };
-    const env = agentSpawnEnv({ baseEnv, binPath: '/some/explicit/claude' });
+    const env = agentSpawnEnv({ baseEnv, binPath: "/some/explicit/claude" });
     expect(env.PATH).toBe(baseEnv.PATH);
   });
 
-  test('agentSpawnEnv prepends extraPath after sanitization', () => {
+  test("agentSpawnEnv prepends extraPath after sanitization", () => {
     const baseEnv = {
-      PATH: ['/Users/x/node_modules/.bin', '/Users/x/.local/bin'].join(path.delimiter),
+      PATH: ["/Users/x/node_modules/.bin", "/Users/x/.local/bin"].join(
+        path.delimiter
+      ),
     };
-    const env = agentSpawnEnv({ baseEnv, extraPath: '/extra/dir' });
-    expect(env.PATH).toBe(['/extra/dir', '/Users/x/.local/bin'].join(path.delimiter));
+    const env = agentSpawnEnv({ baseEnv, extraPath: "/extra/dir" });
+    expect(env.PATH).toBe(
+      ["/extra/dir", "/Users/x/.local/bin"].join(path.delimiter)
+    );
   });
 
-  test('agentSpawnEnv preserves other env vars and never mutates baseEnv', () => {
-    const baseEnv = { PATH: '/Users/x/node_modules/.bin', FOO: 'bar' };
+  test("agentSpawnEnv preserves other env vars and never mutates baseEnv", () => {
+    const baseEnv = { PATH: "/Users/x/node_modules/.bin", FOO: "bar" };
     const env = agentSpawnEnv({ baseEnv });
-    expect(env.FOO).toBe('bar');
+    expect(env.FOO).toBe("bar");
     expect(env).not.toBe(baseEnv);
-    expect(baseEnv.PATH).toBe('/Users/x/node_modules/.bin'); // unmutated
+    expect(baseEnv.PATH).toBe("/Users/x/node_modules/.bin"); // unmutated
   });
 
-  test('agentSpawnEnv defaults baseEnv to process.env', () => {
+  test("agentSpawnEnv defaults baseEnv to process.env", () => {
     const savedPath = process.env.PATH;
     try {
-      process.env.PATH = ['/Users/x/node_modules/.bin', '/usr/bin'].join(path.delimiter);
+      process.env.PATH = ["/Users/x/node_modules/.bin", "/usr/bin"].join(
+        path.delimiter
+      );
       const env = agentSpawnEnv();
-      expect(env.PATH).toBe('/usr/bin');
+      expect(env.PATH).toBe("/usr/bin");
     } finally {
       process.env.PATH = savedPath;
     }
@@ -400,49 +435,53 @@ describe('preflight suite', () => {
   // ---- end-to-end: probeCliAvailability resolves the real install, not a
   // stray node_modules/.bin shim shadowing it on a polluted dev-run PATH ----
 
-  async function writeFakeBin(dir: string, name: string, version: string): Promise<string> {
+  async function writeFakeBin(
+    dir: string,
+    name: string,
+    version: string
+  ): Promise<string> {
     await fs.mkdir(dir, { recursive: true });
     const file = path.join(dir, name);
     await fs.writeFile(file, `#!/bin/sh\necho "${version}"\n`, { mode: 0o755 });
     return file;
   }
 
-  test('probeCliAvailability resolves the real install past a node_modules/.bin shim on PATH', async () => {
-    const root = await tempDir('centraid-preflight-pathfix-');
-    const shimDir = path.join(root, 'node_modules', '.bin'); // e.g. a stray ~/node_modules/.bin
-    const realDir = path.join(root, 'real-bin'); // e.g. ~/.local/bin
-    await writeFakeBin(shimDir, 'codex', '1.0.128');
-    await writeFakeBin(realDir, 'codex', '2.1.207');
+  test("probeCliAvailability resolves the real install past a node_modules/.bin shim on PATH", async () => {
+    const root = await tempDir("centraid-preflight-pathfix-");
+    const shimDir = path.join(root, "node_modules", ".bin"); // e.g. a stray ~/node_modules/.bin
+    const realDir = path.join(root, "real-bin"); // e.g. ~/.local/bin
+    await writeFakeBin(shimDir, "codex", "1.0.128");
+    await writeFakeBin(realDir, "codex", "2.1.207");
 
     savedPath = process.env.PATH;
     // Shim first — reproduces npm/bun `run`'s ancestor node_modules/.bin
     // injection landing ahead of the user's real install on PATH.
     process.env.PATH = [shimDir, realDir].join(path.delimiter);
 
-    const status = await probeCliAvailability('codex');
+    const status = await probeCliAvailability("codex");
     expect(status.available).toBe(true);
-    expect(status.version).toBe('2.1.207');
+    expect(status.version).toBe("2.1.207");
   });
 
-  test('probeCliAvailability still finds the shim if it is the only thing on PATH (sanitization is not overzealous)', async () => {
-    const root = await tempDir('centraid-preflight-pathfix-');
-    const shimDir = path.join(root, 'node_modules', '.bin');
-    await writeFakeBin(shimDir, 'codex', '1.0.128');
+  test("probeCliAvailability still finds the shim if it is the only thing on PATH (sanitization is not overzealous)", async () => {
+    const root = await tempDir("centraid-preflight-pathfix-");
+    const shimDir = path.join(root, "node_modules", ".bin");
+    await writeFakeBin(shimDir, "codex", "1.0.128");
 
     savedPath = process.env.PATH;
     process.env.PATH = shimDir;
 
-    const status = await probeCliAvailability('codex');
+    const status = await probeCliAvailability("codex");
     expect(status.available).toBe(false);
   });
 
-  test('probeCliAvailability with an explicit binPath ignores PATH sanitization entirely', async () => {
-    const root = await tempDir('centraid-preflight-pathfix-');
-    const explicitDir = path.join(root, 'node_modules', '.bin'); // even if it LOOKS like a shim dir
-    const explicitBin = await writeFakeBin(explicitDir, 'codex', '3.3.3');
+  test("probeCliAvailability with an explicit binPath ignores PATH sanitization entirely", async () => {
+    const root = await tempDir("centraid-preflight-pathfix-");
+    const explicitDir = path.join(root, "node_modules", ".bin"); // even if it LOOKS like a shim dir
+    const explicitBin = await writeFakeBin(explicitDir, "codex", "3.3.3");
 
-    const status = await probeCliAvailability('codex', explicitBin);
+    const status = await probeCliAvailability("codex", explicitBin);
     expect(status.available).toBe(true);
-    expect(status.version).toBe('3.3.3');
+    expect(status.version).toBe("3.3.3");
   });
 });

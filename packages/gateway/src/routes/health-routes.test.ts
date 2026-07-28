@@ -1,11 +1,11 @@
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from "vitest";
 
-import type { RouteHandler } from '../serve/build-gateway.js';
-import { HealthRegistry } from '../serve/health-registry.js';
-import { makeHealthRouteHandler } from './health-routes.js';
+import type { RouteHandler } from "../serve/build-gateway.js";
+import { HealthRegistry } from "../serve/health-registry.js";
+import { makeHealthRouteHandler } from "./health-routes.js";
 
 const servers: http.Server[] = [];
 
@@ -20,23 +20,23 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
   });
   servers.push(server);
   return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, "127.0.0.1", () => {
       const { port } = server.address() as AddressInfo;
       resolve(`http://127.0.0.1:${port}`);
     });
   });
 }
 
-describe('health-routes', () => {
+describe("health-routes", () => {
   afterEach(() => {
     for (const server of servers.splice(0)) server.close();
   });
 
   describe(makeHealthRouteHandler, () => {
-    it('returns the aggregated snapshot', async () => {
+    it("returns the aggregated snapshot", async () => {
       const registry = new HealthRegistry({ now: () => 42_000 });
-      registry.reportOk('vaults', '1 vault mounted');
-      registry.reportError('outbox', 'drain failed: ECONNREFUSED');
+      registry.reportOk("vaults", "1 vault mounted");
+      registry.reportError("outbox", "drain failed: ECONNREFUSED");
       const url = await startHandlerServer(makeHealthRouteHandler(registry));
 
       const res = await fetch(`${url}/centraid/_gateway/health`);
@@ -50,22 +50,22 @@ describe('health-routes', () => {
         }>;
         recentEvents: Array<{ component: string; level: string }>;
       };
-      expect(body.status).toBe('error');
+      expect(body.status).toBe("error");
       expect(body.components).toHaveLength(2);
-      expect(body.components.find((c) => c.component === 'outbox')?.lastError).toBe(
-        'drain failed: ECONNREFUSED',
-      );
+      expect(
+        body.components.find((c) => c.component === "outbox")?.lastError
+      ).toBe("drain failed: ECONNREFUSED");
       expect(body.recentEvents[0]).toMatchObject({
-        component: 'outbox',
-        level: 'error',
+        component: "outbox",
+        level: "error",
       });
     });
 
-    it('runs registered probes at request time', async () => {
+    it("runs registered probes at request time", async () => {
       const registry = new HealthRegistry();
-      registry.registerProbe('vaults', async () => ({
-        status: 'ok',
-        detail: '3 vaults mounted',
+      registry.registerProbe("vaults", async () => ({
+        status: "ok",
+        detail: "3 vaults mounted",
       }));
       const url = await startHandlerServer(makeHealthRouteHandler(registry));
 
@@ -79,18 +79,20 @@ describe('health-routes', () => {
       };
       expect(body.components).toStrictEqual([
         expect.objectContaining({
-          component: 'vaults',
-          status: 'ok',
-          detail: '3 vaults mounted',
+          component: "vaults",
+          status: "ok",
+          detail: "3 vaults mounted",
         }),
       ]);
     });
 
-    it('answers 405 for non-GET and ignores other paths', async () => {
-      const url = await startHandlerServer(makeHealthRouteHandler(new HealthRegistry()));
+    it("answers 405 for non-GET and ignores other paths", async () => {
+      const url = await startHandlerServer(
+        makeHealthRouteHandler(new HealthRegistry())
+      );
 
       const post = await fetch(`${url}/centraid/_gateway/health`, {
-        method: 'POST',
+        method: "POST",
       });
       expect(post.status).toBe(405);
 

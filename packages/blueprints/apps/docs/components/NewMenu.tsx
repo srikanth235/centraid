@@ -1,8 +1,8 @@
 // The "+ New" menu popover contents (#newMenu root).
-import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
+import { I } from "../icons.ts";
+import { Icon } from "./Shared.tsx";
 
-import styles from './NewMenu.module.css';
+import styles from "./NewMenu.module.css";
 
 export function NewMenu({
   onUpload,
@@ -13,12 +13,22 @@ export function NewMenu({
 }) {
   return (
     <>
-      <button type="button" className={styles.menuItem} role="menuitem" onClick={onUpload}>
+      <button
+        type="button"
+        className={styles.menuItem}
+        role="menuitem"
+        onClick={onUpload}
+      >
         <Icon svg={I.upload!} />
         Upload files
       </button>
       <div className={styles.menuSep} />
-      <button type="button" className={styles.menuItem} role="menuitem" onClick={onNewFolder}>
+      <button
+        type="button"
+        className={styles.menuItem}
+        role="menuitem"
+        onClick={onNewFolder}
+      >
         <Icon svg={I.folderPlus!} />
         New folder
       </button>

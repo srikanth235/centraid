@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import crypto from "node:crypto";
 /*
  * Lifecycle-shared publish/delete helpers (issue #147, Concern 3).
  *
@@ -8,20 +8,20 @@ import crypto from 'node:crypto';
  * full sequence — in order — against fakes, so a future edit that drops the
  * `reconcile()` call (the easy bug) fails here.
  */
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import * as automation from '@centraid/automation';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import * as automation from "@centraid/automation";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { writeFileMap } from '../routes/route-helpers.js';
-import type { WorktreeStore } from '../worktree-store/index.js';
+import { writeFileMap } from "../routes/route-helpers.js";
+import type { WorktreeStore } from "../worktree-store/index.js";
 import {
   deleteAppAndReconcile,
   publishAndReconcile,
   type LifecycleRouteOptions,
-} from './lifecycle-shared.js';
+} from "./lifecycle-shared.js";
 
 let appDir: string;
 let calls: string[];
@@ -33,14 +33,14 @@ function makeOpts(): LifecycleRouteOptions {
       return appDir;
     },
     async publish() {
-      calls.push('publish');
-      return { versionTag: 'v1', sha: 'deadbeef' };
+      calls.push("publish");
+      return { versionTag: "v1", sha: "deadbeef" };
     },
     async deleteApp() {
-      calls.push('deleteApp');
+      calls.push("deleteApp");
     },
     async closeSession() {
-      calls.push('closeSession');
+      calls.push("closeSession");
     },
   } as unknown as WorktreeStore;
 
@@ -48,21 +48,21 @@ function makeOpts(): LifecycleRouteOptions {
     store,
     codeAppsDir: () => appDir,
     ensureRegistered: async () => {
-      calls.push('ensureRegistered');
+      calls.push("ensureRegistered");
     },
     preparePublishedApp: async () => {
-      calls.push('preparePublishedApp');
+      calls.push("preparePublishedApp");
     },
     deregister: async () => {
-      calls.push('deregister');
+      calls.push("deregister");
     },
     reconcile: () => {
-      calls.push('reconcile');
+      calls.push("reconcile");
     },
   };
 }
 
-describe('lifecycle-shared', () => {
+describe("lifecycle-shared", () => {
   beforeEach(async () => {
     appDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
     calls = [];
@@ -72,63 +72,75 @@ describe('lifecycle-shared', () => {
     await fs.rm(appDir, { recursive: true, force: true });
   });
 
-  test('publishAndReconcile validates, publishes, registers, reconciles, then closes', async () => {
+  test("publishAndReconcile validates, publishes, registers, reconciles, then closes", async () => {
     // A valid scaffolded automation app so manifest validation passes.
-    await writeFileMap(appDir, automation.scaffoldAppFiles('notes', { prompt: 'do it' }));
+    await writeFileMap(
+      appDir,
+      automation.scaffoldAppFiles("notes", { prompt: "do it" })
+    );
 
     await publishAndReconcile(makeOpts(), {
-      appId: 'notes',
-      sessionId: 's1',
+      appId: "notes",
+      sessionId: "s1",
       appDir,
-      message: 'publish notes',
+      message: "publish notes",
       ephemeralSession: true,
     });
 
     expect(calls).toStrictEqual([
-      'publish',
-      'ensureRegistered',
-      'preparePublishedApp',
-      'reconcile',
-      'closeSession',
+      "publish",
+      "ensureRegistered",
+      "preparePublishedApp",
+      "reconcile",
+      "closeSession",
     ]);
   });
 
-  test('publishAndReconcile keeps a non-ephemeral session open', async () => {
-    await writeFileMap(appDir, automation.scaffoldAppFiles('notes', { prompt: 'do it' }));
+  test("publishAndReconcile keeps a non-ephemeral session open", async () => {
+    await writeFileMap(
+      appDir,
+      automation.scaffoldAppFiles("notes", { prompt: "do it" })
+    );
 
     await publishAndReconcile(makeOpts(), {
-      appId: 'notes',
-      sessionId: 's1',
+      appId: "notes",
+      sessionId: "s1",
       appDir,
-      message: 'publish notes',
+      message: "publish notes",
     });
 
     expect(calls).toStrictEqual([
-      'publish',
-      'ensureRegistered',
-      'preparePublishedApp',
-      'reconcile',
+      "publish",
+      "ensureRegistered",
+      "preparePublishedApp",
+      "reconcile",
     ]);
   });
 
-  test('publishAndReconcile rejects an invalid manifest before publishing', async () => {
-    await fs.writeFile(path.join(appDir, 'app.json'), '{ not valid json', 'utf8');
+  test("publishAndReconcile rejects an invalid manifest before publishing", async () => {
+    await fs.writeFile(
+      path.join(appDir, "app.json"),
+      "{ not valid json",
+      "utf8"
+    );
 
     await expect(
       (() =>
         publishAndReconcile(makeOpts(), {
-          appId: 'notes',
-          sessionId: 's1',
+          appId: "notes",
+          sessionId: "s1",
           appDir,
-          message: 'publish notes',
-        }))(),
-    ).rejects.toThrow('app.json invalid (invalid_json): app.json is not valid JSON');
+          message: "publish notes",
+        }))()
+    ).rejects.toThrow(
+      "app.json invalid (invalid_json): app.json is not valid JSON"
+    );
     // Validation gates the whole sequence — nothing ran.
     expect(calls).toStrictEqual([]);
   });
 
-  test('deleteAppAndReconcile deletes, deregisters, then reconciles — in order', async () => {
-    await deleteAppAndReconcile(makeOpts(), 'notes');
-    expect(calls).toStrictEqual(['deleteApp', 'deregister', 'reconcile']);
+  test("deleteAppAndReconcile deletes, deregisters, then reconciles — in order", async () => {
+    await deleteAppAndReconcile(makeOpts(), "notes");
+    expect(calls).toStrictEqual(["deleteApp", "deregister", "reconcile"]);
   });
 });

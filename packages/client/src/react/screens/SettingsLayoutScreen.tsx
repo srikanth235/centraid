@@ -1,16 +1,21 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from "react";
 
-import type { SettingsLayoutBridgeProps } from '../screen-contracts.js';
+import type { SettingsLayoutBridgeProps } from "../screen-contracts.js";
 import {
   loadDefaultCronTimeZone,
   saveDefaultCronTimeZone,
-} from '../shell/routes/settingsCronTimezoneData.js';
-import { DrawerGroup, DrawerRow, Segmented, Switch } from './settings-controls.js';
+} from "../shell/routes/settingsCronTimezoneData.js";
+import {
+  DrawerGroup,
+  DrawerRow,
+  Segmented,
+  Switch,
+} from "./settings-controls.js";
 
-import sc from './settings-controls.module.css';
+import sc from "./settings-controls.module.css";
 
-const DENSITIES = ['compact', 'regular', 'comfy'] as const;
-const CARDS = ['flat', 'outlined', 'elevated'] as const;
+const DENSITIES = ["compact", "regular", "comfy"] as const;
+const CARDS = ["flat", "outlined", "elevated"] as const;
 
 /**
  * Settings → Layout page, ported to React (issue #325, Phase 3). Density, card
@@ -28,7 +33,7 @@ export default function SettingsLayoutScreen({
   const [curDensity, setCurDensity] = useState(density);
   const [curCards, setCurCards] = useState(cardVariant);
   const [curSidebar, setCurSidebar] = useState(sidebarOpen);
-  const [cronTz, setCronTz] = useState('');
+  const [cronTz, setCronTz] = useState("");
   const [cronTzError, setCronTzError] = useState<string | null>(null);
   const [cronTzLoaded, setCronTzLoaded] = useState(false);
 

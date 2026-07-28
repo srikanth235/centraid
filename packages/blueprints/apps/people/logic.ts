@@ -1,4 +1,10 @@
-import { PALETTE, listColor, daysSince, daysUntilAnnual, statusOf } from './format.ts';
+import {
+  PALETTE,
+  listColor,
+  daysSince,
+  daysUntilAnnual,
+  statusOf,
+} from "./format.ts";
 // Non-visual business logic: vault IO (write/act), row derivation, selection,
 // the kebab/move-to-list popover (stays plain DOM, built with kit's
 // `h()`/`popItem()` — no React root needed there), every person/list write,
@@ -19,7 +25,7 @@ import {
   popItem,
   runBulk as runBulkBase,
   toast,
-} from './kit.ts';
+} from "./kit.ts";
 import type {
   DashboardData,
   DetailPerson,
@@ -28,7 +34,7 @@ import type {
   Nav,
   Person,
   PersonList,
-} from './types.ts';
+} from "./types.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
@@ -43,25 +49,25 @@ export function createLogic({
   renderNewMenu,
 }: LogicDeps) {
   function notice(text: string) {
-    const b = $('noticeBanner');
-    b.textContent = text || '';
+    const b = $("noticeBanner");
+    b.textContent = text || "";
     b.hidden = !text;
   }
 
   // Returns true when the write executed; otherwise narrates the outcome and
   // returns false.
   function narrate(outcome: VaultOutcome | undefined): boolean {
-    if (outcome?.status === 'executed') {
-      notice('');
+    if (outcome?.status === "executed") {
+      notice("");
       return true;
     }
-    notice(outcomeMessage(outcome) ?? '');
+    notice(outcomeMessage(outcome) ?? "");
     return false;
   }
 
   async function act(
     action: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
@@ -80,32 +86,42 @@ export function createLogic({
       base = state.searchResults ?? [];
     } else {
       base = data.people.slice();
-      if (nav.kind === 'reconnect')
+      if (nav.kind === "reconnect")
         base = base.filter((p) => daysSince(p) >= (p.cadence_days ?? 30));
-      else if (nav.kind === 'upcoming') base = base.filter((p) => (p.reminders || []).length > 0);
-      else if (nav.kind === 'starred') base = base.filter((p) => p.starred);
-      else if (nav.kind === 'list') base = base.filter((p) => (p.list_id ?? null) === nav.listId);
+      else if (nav.kind === "upcoming")
+        base = base.filter((p) => (p.reminders || []).length > 0);
+      else if (nav.kind === "starred") base = base.filter((p) => p.starred);
+      else if (nav.kind === "list")
+        base = base.filter((p) => (p.list_id ?? null) === nav.listId);
     }
-    if (chip !== 'all') base = base.filter((p) => statusOf(p).key === chip);
+    if (chip !== "all") base = base.filter((p) => statusOf(p).key === chip);
 
     if (search.trim()) return base; // keep vault rank order
-    if (nav.kind === 'reconnect') {
+    if (nav.kind === "reconnect") {
       return base
         .slice()
         .sort(
-          (a, b) => daysSince(b) - (b.cadence_days ?? 30) - (daysSince(a) - (a.cadence_days ?? 30)),
+          (a, b) =>
+            daysSince(b) -
+            (b.cadence_days ?? 30) -
+            (daysSince(a) - (a.cadence_days ?? 30))
         );
     }
-    if (nav.kind === 'upcoming') {
+    if (nav.kind === "upcoming") {
       const near = (p: Person) =>
-        Math.min(...(p.reminders || []).map((d) => daysUntilAnnual(d.month_day)), 999);
+        Math.min(
+          ...(p.reminders || []).map((d) => daysUntilAnnual(d.month_day)),
+          999
+        );
       return base.slice().sort((a, b) => near(a) - near(b));
     }
     const dir = state.sortDir;
     return base.slice().sort((a, b) => {
       let r: number;
-      if (state.sortKey === 'name') r = String(a.name).localeCompare(String(b.name));
-      else if (state.sortKey === 'cadence') r = (a.cadence_days ?? 0) - (b.cadence_days ?? 0);
+      if (state.sortKey === "name")
+        r = String(a.name).localeCompare(String(b.name));
+      else if (state.sortKey === "cadence")
+        r = (a.cadence_days ?? 0) - (b.cadence_days ?? 0);
       else r = daysSince(a) - daysSince(b);
       return r * dir;
     });
@@ -138,23 +154,23 @@ export function createLogic({
   function openPersonMenu(anchor: HTMLElement, p: Person) {
     openPopover(anchor, (box) => {
       box.append(
-        popItem('Open profile', () => {
+        popItem("Open profile", () => {
           closePopover();
           openDetails(p.party_id);
         }),
-        popItem(p.starred ? 'Remove favorite' : 'Add to favorites', () => {
+        popItem(p.starred ? "Remove favorite" : "Add to favorites", () => {
           closePopover();
           toggleStar(p);
         }),
-        h('div', { class: 'kit-popover-sep' }),
-        h('p', { class: 'kit-popover-head' }, 'Move to list'),
+        h("div", { class: "kit-popover-sep" }),
+        h("p", { class: "kit-popover-head" }, "Move to list"),
         popItem(
-          'No list',
+          "No list",
           () => {
             closePopover();
-            movePerson(p, null, 'no list');
+            movePerson(p, null, "no list");
           },
-          { disabled: p.list_id == null, dotColor: 'var(--ink-3)' },
+          { disabled: p.list_id == null, dotColor: "var(--ink-3)" }
         ),
         ...data.lists.map((c) =>
           popItem(
@@ -166,9 +182,9 @@ export function createLogic({
             {
               disabled: p.list_id === c.list_id,
               dotColor: listColor(c.list_id),
-            },
-          ),
-        ),
+            }
+          )
+        )
       );
     });
   }
@@ -185,21 +201,27 @@ export function createLogic({
   }
 
   async function toggleStar(p: Person | DetailPerson) {
-    const outcome = await act(p.starred ? 'unstar-person' : 'star-person', {
+    const outcome = await act(p.starred ? "unstar-person" : "star-person", {
       party_id: p.party_id,
     });
     if (!narrate(outcome)) return;
-    toast(p.starred ? 'Favorite removed · receipted.' : 'Favorited · receipted.');
+    toast(
+      p.starred ? "Favorite removed · receipted." : "Favorited · receipted."
+    );
     await refresh();
     await reloadOpenDetail(p.party_id);
   }
 
-  async function movePerson(p: Person | DetailPerson, listId: string | null, name: string) {
+  async function movePerson(
+    p: Person | DetailPerson,
+    listId: string | null,
+    name: string
+  ) {
     const input = {
       party_id: p.party_id,
       ...(listId == null ? {} : { list_id: listId }),
     };
-    const outcome = await act('move-person', input);
+    const outcome = await act("move-person", input);
     if (!narrate(outcome)) return;
     toast(`Moved to ${name} · receipted.`);
     await refresh();
@@ -207,7 +229,7 @@ export function createLogic({
   }
 
   async function logInteraction(p: DetailPerson, kind: string, text: string) {
-    const outcome = await act('log-interaction', {
+    const outcome = await act("log-interaction", {
       party_id: p.party_id,
       kind,
       text,
@@ -221,24 +243,29 @@ export function createLogic({
   // Bulk actions run through the kit's runBulk with the app's own voice.
   const bulkOpts = {
     notice,
-    friendly: (outcome: VaultOutcome | undefined) => outcome?.reason ?? outcome?.predicate ?? null,
+    friendly: (outcome: VaultOutcome | undefined) =>
+      outcome?.reason ?? outcome?.predicate ?? null,
     after: async () => {
       clearSelection();
       await refresh();
     },
   };
   function favoriteSelected() {
-    return runBulkBase([...state.selected], (id) => act('star-person', { party_id: id }), {
-      progress: 'Favoriting',
-      done: 'Favorited',
-      ...bulkOpts,
-    });
+    return runBulkBase(
+      [...state.selected],
+      (id) => act("star-person", { party_id: id }),
+      {
+        progress: "Favoriting",
+        done: "Favorited",
+        ...bulkOpts,
+      }
+    );
   }
 
   // ---------- List writes ----------
 
   async function createList(name: string) {
-    const outcome = await act('create-list', { name });
+    const outcome = await act("create-list", { name });
     if (narrate(outcome)) {
       state.creatingList = false;
       toast(`List "${name}" created · receipted.`);
@@ -248,21 +275,21 @@ export function createLogic({
     }
   }
   async function renameList(listId: string, name: string) {
-    const outcome = await act('rename-list', { list_id: listId, name });
+    const outcome = await act("rename-list", { list_id: listId, name });
     if (narrate(outcome)) {
       state.renamingListId = null;
-      toast('List renamed · receipted.');
+      toast("List renamed · receipted.");
       await refresh();
     } else {
       render();
     }
   }
   async function deleteList(list: PersonList) {
-    const outcome = await act('delete-list', { list_id: list.list_id });
+    const outcome = await act("delete-list", { list_id: list.list_id });
     if (narrate(outcome)) {
-      if (state.nav.kind === 'list' && state.nav.listId === list.list_id)
-        state.nav = { kind: 'all' };
-      toast('List deleted · receipted.');
+      if (state.nav.kind === "list" && state.nav.listId === list.list_id)
+        state.nav = { kind: "all" };
+      toast("List deleted · receipted.");
       await refresh();
     }
   }
@@ -299,7 +326,7 @@ export function createLogic({
         person?: DetailPerson;
         vaultDenied?: unknown;
       }>({
-        query: 'person',
+        query: "person",
         input: { party_id: id },
       });
       if (res?.vaultDenied) return;
@@ -321,7 +348,7 @@ export function createLogic({
   async function drawerAct(
     action: string,
     input: Record<string, unknown>,
-    message: string,
+    message: string
   ): Promise<boolean> {
     const outcome = await act(action, input);
     if (!narrate(outcome)) return false;
@@ -352,14 +379,14 @@ export function createLogic({
       ...(role ? { role } : {}),
       ...(listId == null ? {} : { list_id: listId }),
     };
-    const outcome = await act('add-person', input);
+    const outcome = await act("add-person", input);
     if (!narrate(outcome)) return false;
     state.addModalOpen = false;
     renderModal();
-    toast('Added · receipted.');
+    toast("Added · receipted.");
     await refresh();
     const newId = outcome?.output?.party_id;
-    if (typeof newId === 'string') await openDetails(newId);
+    if (typeof newId === "string") await openDetails(newId);
     return true;
   }
   function openAddModal() {
@@ -383,30 +410,38 @@ export function createLogic({
 
   async function loadJournal() {
     try {
-      const res = await window.centraid.read<JournalData & { vaultDenied?: unknown }>({
-        query: 'journal',
+      const res = await window.centraid.read<
+        JournalData & { vaultDenied?: unknown }
+      >({
+        query: "journal",
         input: {},
       });
-      state.journalData = res?.vaultDenied ? { entries: [] } : (res ?? { entries: [] });
+      state.journalData = res?.vaultDenied
+        ? { entries: [] }
+        : (res ?? { entries: [] });
     } catch {
       state.journalData = { entries: [] };
     }
   }
   async function loadDashboard() {
     try {
-      const res = await window.centraid.read<DashboardData & { vaultDenied?: unknown }>({
-        query: 'dashboard',
+      const res = await window.centraid.read<
+        DashboardData & { vaultDenied?: unknown }
+      >({
+        query: "dashboard",
         input: {},
       });
-      state.dashboardData = res?.vaultDenied ? { recent: [] } : (res ?? { recent: [] });
+      state.dashboardData = res?.vaultDenied
+        ? { recent: [] }
+        : (res ?? { recent: [] });
     } catch {
       state.dashboardData = { recent: [] };
     }
   }
   async function addJournalEntry(mood: string, text: string): Promise<boolean> {
-    const outcome = await act('add-journal-entry', { mood, text });
+    const outcome = await act("add-journal-entry", { mood, text });
     if (!narrate(outcome)) return false;
-    toast('Entry added · receipted.');
+    toast("Entry added · receipted.");
     await loadJournal();
     renderRows();
     return true;
@@ -419,17 +454,17 @@ export function createLogic({
     clearSelection();
     state.detailsId = null;
     state.detailPerson = null;
-    state.search = '';
+    state.search = "";
     state.searchResults = null;
-    ($('searchInput') as HTMLInputElement).value = '';
-    state.chip = 'all';
+    ($("searchInput") as HTMLInputElement).value = "";
+    state.chip = "all";
     state.newMenuOpen = false;
     state.creatingList = false;
     state.renamingListId = null;
-    if (state.narrow) $('root').classList.remove('side-open');
+    if (state.narrow) $("root").classList.remove("side-open");
     renderDetails();
-    if (nav.kind === 'journal') await loadJournal();
-    if (nav.kind === 'activity') await loadDashboard();
+    if (nav.kind === "journal") await loadJournal();
+    if (nav.kind === "activity") await loadDashboard();
     render();
   }
 

@@ -1,11 +1,11 @@
-import { fc } from '@centraid/test-kit/fast-check';
-import { describe, expect, test } from 'vitest';
+import { fc } from "@centraid/test-kit/fast-check";
+import { describe, expect, test } from "vitest";
 
-import { bootstrapVault } from '../bootstrap.js';
-import { openVaultDb } from '../db.js';
-import { updateBlobStoreSettings } from '../host.js';
-import { blobCustodyProven } from './custody-proven.js';
-import { sha256OfBytes } from './store.js';
+import { bootstrapVault } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import { updateBlobStoreSettings } from "../host.js";
+import { blobCustodyProven } from "./custody-proven.js";
+import { sha256OfBytes } from "./store.js";
 
 type CustodyCase = {
   remote: boolean;
@@ -30,13 +30,13 @@ const PROP_TIMEOUT_MS = 60_000;
 
 function openBootstrappedDb(remote: boolean) {
   const db = openVaultDb({});
-  bootstrapVault(db, { ownerName: 'Owner' });
+  bootstrapVault(db, { ownerName: "Owner" });
   if (remote) {
     updateBlobStoreSettings(db, {
       blob_store: {
-        kind: 's3',
-        endpoint: 'https://example.invalid',
-        bucket: 'test',
+        kind: "s3",
+        endpoint: "https://example.invalid",
+        bucket: "test",
         encrypt: true,
       },
     });
@@ -47,7 +47,7 @@ function openBootstrappedDb(remote: boolean) {
 function applyCustodyState(
   db: ReturnType<typeof openVaultDb>,
   bytes: Buffer,
-  { local, replica, pending }: Omit<CustodyCase, 'remote'>,
+  { local, replica, pending }: Omit<CustodyCase, "remote">
 ): string {
   const sha = sha256OfBytes(bytes);
   if (local) db.blobs.ingestSync(bytes);
@@ -55,7 +55,7 @@ function applyCustodyState(
     db.vault
       .prepare(
         `INSERT INTO blob_replica (sha256, replicated_at, byte_size, store)
-         VALUES (?, ?, ?, 'cas')`,
+         VALUES (?, ?, ?, 'cas')`
       )
       .run(sha, new Date(0).toISOString(), bytes.byteLength);
   }
@@ -63,9 +63,14 @@ function applyCustodyState(
     db.vault
       .prepare(
         `INSERT INTO blob_outbox (sha256, byte_size, created_at, updated_at)
-         VALUES (?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?)`
       )
-      .run(sha, bytes.byteLength, new Date(0).toISOString(), new Date(0).toISOString());
+      .run(
+        sha,
+        bytes.byteLength,
+        new Date(0).toISOString(),
+        new Date(0).toISOString()
+      );
   }
   return sha;
 }
@@ -77,31 +82,35 @@ function applyCustodyState(
  * local CAS presence. Generative suites + corner properties keep the latch
  * under-constrained only if a mutant survives every case.
  */
-describe('blob custody generated-state property', () => {
+describe("blob custody generated-state property", () => {
   test(
-    'fails closed for every remote/local/replica/pending combination',
+    "fails closed for every remote/local/replica/pending combination",
     () => {
       fc.assert(
-        fc.property(custodyFlags, payloadBytes, ({ remote, local, replica, pending }, bytes) => {
-          const db = openBootstrappedDb(remote);
-          const sha = applyCustodyState(db, bytes, {
-            local,
-            replica,
-            pending,
-          });
-          const expected = remote ? replica && !pending : local;
-          const proven = blobCustodyProven(db, sha);
-          db.close();
-          expect(proven).toBe(expected);
-        }),
-        { numRuns: 32, seed: 53201 },
+        fc.property(
+          custodyFlags,
+          payloadBytes,
+          ({ remote, local, replica, pending }, bytes) => {
+            const db = openBootstrappedDb(remote);
+            const sha = applyCustodyState(db, bytes, {
+              local,
+              replica,
+              pending,
+            });
+            const expected = remote ? replica && !pending : local;
+            const proven = blobCustodyProven(db, sha);
+            db.close();
+            expect(proven).toBe(expected);
+          }
+        ),
+        { numRuns: 32, seed: 53201 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'exhaustive 16-state table matches the model',
+    "exhaustive 16-state table matches the model",
     () => {
       const all: CustodyCase[] = [false, true].flatMap((remote) =>
         [false, true].flatMap((local) =>
@@ -111,24 +120,28 @@ describe('blob custody generated-state property', () => {
               local,
               replica,
               pending,
-            })),
-          ),
-        ),
+            }))
+          )
+        )
       );
       expect(all).toHaveLength(16);
       for (const c of all) {
         const db = openBootstrappedDb(c.remote);
-        const sha = applyCustodyState(db, Buffer.from(`ex-${JSON.stringify(c)}`), c);
+        const sha = applyCustodyState(
+          db,
+          Buffer.from(`ex-${JSON.stringify(c)}`),
+          c
+        );
         const expected = c.remote ? c.replica && !c.pending : c.local;
         expect(blobCustodyProven(db, sha)).toBe(expected);
         db.close();
       }
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'unknown sha is never proven on a local-only vault',
+    "unknown sha is never proven on a local-only vault",
     () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
@@ -138,14 +151,14 @@ describe('blob custody generated-state property', () => {
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.close();
         }),
-        { numRuns: 24, seed: 53212 },
+        { numRuns: 24, seed: 53212 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'remote tier without replica never proves (even if local CAS has bytes)',
+    "remote tier without replica never proves (even if local CAS has bytes)",
     () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
@@ -158,14 +171,14 @@ describe('blob custody generated-state property', () => {
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.close();
         }),
-        { numRuns: 24, seed: 53213 },
+        { numRuns: 24, seed: 53213 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'remote replica with pending outbox never proves',
+    "remote replica with pending outbox never proves",
     () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
@@ -178,14 +191,14 @@ describe('blob custody generated-state property', () => {
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.close();
         }),
-        { numRuns: 24, seed: 53214 },
+        { numRuns: 24, seed: 53214 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'remote replica without pending always proves',
+    "remote replica without pending always proves",
     () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
@@ -198,14 +211,14 @@ describe('blob custody generated-state property', () => {
           expect(blobCustodyProven(db, sha)).toBe(true);
           db.close();
         }),
-        { numRuns: 24, seed: 53215 },
+        { numRuns: 24, seed: 53215 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'local-only with local CAS always proves',
+    "local-only with local CAS always proves",
     () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
@@ -218,35 +231,40 @@ describe('blob custody generated-state property', () => {
           expect(blobCustodyProven(db, sha)).toBe(true);
           db.close();
         }),
-        { numRuns: 24, seed: 53216 },
+        { numRuns: 24, seed: 53216 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'local-only ignores remote replica/outbox tables for proof',
+    "local-only ignores remote replica/outbox tables for proof",
     () => {
       fc.assert(
-        fc.property(payloadBytes, fc.boolean(), fc.boolean(), (bytes, replica, pending) => {
-          const db = openBootstrappedDb(false);
-          const sha = applyCustodyState(db, bytes, {
-            local: true,
-            replica,
-            pending,
-          });
-          // local tier: only local CAS matters
-          expect(blobCustodyProven(db, sha)).toBe(true);
-          db.close();
-        }),
-        { numRuns: 24, seed: 53217 },
+        fc.property(
+          payloadBytes,
+          fc.boolean(),
+          fc.boolean(),
+          (bytes, replica, pending) => {
+            const db = openBootstrappedDb(false);
+            const sha = applyCustodyState(db, bytes, {
+              local: true,
+              replica,
+              pending,
+            });
+            // local tier: only local CAS matters
+            expect(blobCustodyProven(db, sha)).toBe(true);
+            db.close();
+          }
+        ),
+        { numRuns: 24, seed: 53217 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'proof is deterministic for a fixed custody state',
+    "proof is deterministic for a fixed custody state",
     () => {
       fc.assert(
         fc.property(custodyFlags, payloadBytes, (flags, bytes) => {
@@ -257,14 +275,14 @@ describe('blob custody generated-state property', () => {
           expect(a).toBe(b);
           db.close();
         }),
-        { numRuns: 24, seed: 53218 },
+        { numRuns: 24, seed: 53218 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'clearing pending after replica enables proof under remote tier',
+    "clearing pending after replica enables proof under remote tier",
     () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
@@ -275,18 +293,18 @@ describe('blob custody generated-state property', () => {
             pending: true,
           });
           expect(blobCustodyProven(db, sha)).toBe(false);
-          db.vault.prepare('DELETE FROM blob_outbox WHERE sha256 = ?').run(sha);
+          db.vault.prepare("DELETE FROM blob_outbox WHERE sha256 = ?").run(sha);
           expect(blobCustodyProven(db, sha)).toBe(true);
           db.close();
         }),
-        { numRuns: 16, seed: 53219 },
+        { numRuns: 16, seed: 53219 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'removing replica after it was proven drops proof under remote tier',
+    "removing replica after it was proven drops proof under remote tier",
     () => {
       fc.assert(
         fc.property(payloadBytes, (bytes) => {
@@ -297,18 +315,20 @@ describe('blob custody generated-state property', () => {
             pending: false,
           });
           expect(blobCustodyProven(db, sha)).toBe(true);
-          db.vault.prepare('DELETE FROM blob_replica WHERE sha256 = ?').run(sha);
+          db.vault
+            .prepare("DELETE FROM blob_replica WHERE sha256 = ?")
+            .run(sha);
           expect(blobCustodyProven(db, sha)).toBe(false);
           db.close();
         }),
-        { numRuns: 16, seed: 53220 },
+        { numRuns: 16, seed: 53220 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 
   test(
-    'local-only proof requires the exact sha (different payload does not prove)',
+    "local-only proof requires the exact sha (different payload does not prove)",
     () => {
       fc.assert(
         fc.property(payloadBytes, payloadBytes, (a, b) => {
@@ -324,9 +344,9 @@ describe('blob custody generated-state property', () => {
           expect(blobCustodyProven(db, shaB)).toBe(false);
           db.close();
         }),
-        { numRuns: 24, seed: 53221 },
+        { numRuns: 24, seed: 53221 }
       );
     },
-    PROP_TIMEOUT_MS,
+    PROP_TIMEOUT_MS
   );
 });

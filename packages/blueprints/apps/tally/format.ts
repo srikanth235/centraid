@@ -4,8 +4,14 @@
 // no vault IO — every function is a plain projection of its arguments so
 // app.tsx and the components can both call them without a circular import.
 // Same role as tasks/format.ts and notes/format.ts.
-import { fmtMoney, localDayKey } from './kit.ts';
-import type { BalLabel, ExpenseModel, Member, SplitEntry, SplitSum } from './types.ts';
+import { fmtMoney, localDayKey } from "./kit.ts";
+import type {
+  BalLabel,
+  ExpenseModel,
+  Member,
+  SplitEntry,
+  SplitSum,
+} from "./types.ts";
 
 /** Category metadata: emoji glyph + tint colour. */
 export interface CatMeta {
@@ -14,53 +20,53 @@ export interface CatMeta {
 }
 
 export const MS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ] as const;
 
 // The closed category set — emoji + tint, straight from the prototype.
 export const CATS: Record<string, CatMeta> = {
-  food: { icon: '🍔', color: '#E2603A' },
-  groceries: { icon: '🛒', color: '#57A55A' },
-  rent: { icon: '🏠', color: '#4E68DD' },
-  utilities: { icon: '💡', color: '#E8923C' },
-  transport: { icon: '🚕', color: '#3AA6B9' },
-  fun: { icon: '🎬', color: '#7C5BD9' },
-  travel: { icon: '✈️', color: '#0FA678' },
-  shopping: { icon: '🛍️', color: '#E0567A' },
-  general: { icon: '🧾', color: '#5C677D' },
+  food: { icon: "🍔", color: "#E2603A" },
+  groceries: { icon: "🛒", color: "#57A55A" },
+  rent: { icon: "🏠", color: "#4E68DD" },
+  utilities: { icon: "💡", color: "#E8923C" },
+  transport: { icon: "🚕", color: "#3AA6B9" },
+  fun: { icon: "🎬", color: "#7C5BD9" },
+  travel: { icon: "✈️", color: "#0FA678" },
+  shopping: { icon: "🛍️", color: "#E0567A" },
+  general: { icon: "🧾", color: "#5C677D" },
 };
 export const CAT_LIST = [
-  'food',
-  'groceries',
-  'rent',
-  'utilities',
-  'transport',
-  'fun',
-  'travel',
-  'shopping',
-  'general',
+  "food",
+  "groceries",
+  "rent",
+  "utilities",
+  "transport",
+  "fun",
+  "travel",
+  "shopping",
+  "general",
 ];
-export const GROUP_ICONS = ['🏠', '✈️', '🎲', '🍽️', '🏖️', '🎉', '🏔️', '🚗'];
+export const GROUP_ICONS = ["🏠", "✈️", "🎲", "🍽️", "🏖️", "🎉", "🏔️", "🚗"];
 export const FRIEND_COLORS = [
-  '#7C5BD9',
-  '#4E68DD',
-  '#E0567A',
-  '#E8923C',
-  '#2EA098',
-  '#3AA6B9',
-  '#57A55A',
-  '#D9536F',
+  "#7C5BD9",
+  "#4E68DD",
+  "#E0567A",
+  "#E8923C",
+  "#2EA098",
+  "#3AA6B9",
+  "#57A55A",
+  "#D9536F",
 ];
 
 export function cat(c: string | undefined): CatMeta {
@@ -72,13 +78,13 @@ export function cat(c: string | undefined): CatMeta {
 // same person always renders the same colour; a people_profile hue, when the
 // party is also a CRM contact, takes precedence at the call site.
 export function friendColor(partyId: string | null | undefined): string {
-  const id = String(partyId || '');
+  const id = String(partyId || "");
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return FRIEND_COLORS[h % FRIEND_COLORS.length]!;
 }
 export function tint(color: string | undefined): string {
-  return `color-mix(in oklab, ${color || '#5C677D'} 16%, transparent)`;
+  return `color-mix(in oklab, ${color || "#5C677D"} 16%, transparent)`;
 }
 
 // ---------- Formatting (money is minor units end-to-end) ----------
@@ -87,19 +93,22 @@ export function tint(color: string | undefined): string {
 // hardcoded "$" (callers phrase direction themselves: "owes you …"). Callers
 // pass the active `currency` explicitly (dash.currency) instead of this
 // module closing over app state.
-export function money(minor: number | null | undefined, currency: string | undefined): string {
-  return fmtMoney(Math.abs(Number(minor ?? 0)), currency || 'USD');
+export function money(
+  minor: number | null | undefined,
+  currency: string | undefined
+): string {
+  return fmtMoney(Math.abs(Number(minor ?? 0)), currency || "USD");
 }
 // The bare currency symbol for the amount-input prefixes. Every rendered
 // amount already follows the vault's base currency via fmtMoney (₹, €, …),
 // so a hard-coded "$" next to the input lies whenever the vault isn't USD —
 // derive the symbol from the same currency instead.
-export function curSymbolFor(cur: string | undefined = 'USD'): string {
+export function curSymbolFor(cur: string | undefined = "USD"): string {
   try {
     return (
-      new Intl.NumberFormat(undefined, { style: 'currency', currency: cur })
+      new Intl.NumberFormat(undefined, { style: "currency", currency: cur })
         .formatToParts(0)
-        .find((p) => p.type === 'currency')?.value ?? cur
+        .find((p) => p.type === "currency")?.value ?? cur
     );
   } catch {
     return cur;
@@ -115,20 +124,26 @@ export function todayKey(): string {
   return localDayKey(new Date());
 }
 export function first(name: string | null | undefined): string {
-  return String(name ?? '').split(/\s+/u)[0] || name || '';
+  return String(name ?? "").split(/\s+/u)[0] || name || "";
 }
 
-export function balLabelFriend(v: number, currency: string | undefined): BalLabel {
-  if (Math.abs(v) < 1) return { cls: 'muted', label: 'settled up' };
+export function balLabelFriend(
+  v: number,
+  currency: string | undefined
+): BalLabel {
+  if (Math.abs(v) < 1) return { cls: "muted", label: "settled up" };
   return v > 0
-    ? { cls: 'pos', label: 'owes you ' + money(v, currency) }
-    : { cls: 'neg', label: 'you owe ' + money(v, currency) };
+    ? { cls: "pos", label: "owes you " + money(v, currency) }
+    : { cls: "neg", label: "you owe " + money(v, currency) };
 }
-export function balLabelGroup(v: number, currency: string | undefined): BalLabel {
-  if (Math.abs(v) < 1) return { cls: 'muted', label: 'settled up' };
+export function balLabelGroup(
+  v: number,
+  currency: string | undefined
+): BalLabel {
+  if (Math.abs(v) < 1) return { cls: "muted", label: "settled up" };
   return v > 0
-    ? { cls: 'pos', label: 'you are owed ' + money(v, currency) }
-    : { cls: 'neg', label: 'you owe ' + money(v, currency) };
+    ? { cls: "pos", label: "you are owed " + money(v, currency) }
+    : { cls: "neg", label: "you owe " + money(v, currency) };
 }
 
 // ---------- Split resolution → minor-unit splits array ----------
@@ -143,12 +158,14 @@ export function balLabelGroup(v: number, currency: string | undefined): BalLabel
 export function resolveSplits(
   model: ExpenseModel,
   amountCents: number,
-  members: Member[],
+  members: Member[]
 ): SplitEntry[] | null {
-  const parts = members.map((m) => m.party_id).filter((id) => model.include.has(id));
+  const parts = members
+    .map((m) => m.party_id)
+    .filter((id) => model.include.has(id));
   if (parts.length === 0 || amountCents <= 0) return null;
   const out: SplitEntry[] = [];
-  if (model.method === 'equal') {
+  if (model.method === "equal") {
     const per = Math.round(amountCents / parts.length);
     let acc = 0;
     parts.forEach((id, i) => {
@@ -156,7 +173,7 @@ export function resolveSplits(
       out.push({ party_id: id, share_minor: share });
       acc += share;
     });
-  } else if (model.method === 'exact') {
+  } else if (model.method === "exact") {
     let sum = 0;
     for (const id of parts) {
       const c = toCents(model.exact[id]) || 0;
@@ -167,14 +184,16 @@ export function resolveSplits(
   } else {
     // percent
     let pctSum = 0;
-    for (const id of parts) pctSum += Number(model.percent[id] ?? '') || 0;
+    for (const id of parts) pctSum += Number(model.percent[id] ?? "") || 0;
     if (Math.abs(pctSum - 100) > 0.1) return null;
     let acc = 0;
     parts.forEach((id, i) => {
       const share =
         i === parts.length - 1
           ? amountCents - acc
-          : Math.round((amountCents * (Number(model.percent[id] ?? '') || 0)) / 100);
+          : Math.round(
+              (amountCents * (Number(model.percent[id] ?? "") || 0)) / 100
+            );
       out.push({ party_id: id, share_minor: share });
       acc += share;
     });
@@ -189,33 +208,43 @@ export function resolveSplits(
 export function splitSumInfo(
   exp: ExpenseModel,
   members: Member[],
-  currency: string | undefined,
+  currency: string | undefined
 ): SplitSum {
   const cents = toCents(exp.amount) || 0;
   const parts = members.filter((m) => exp.include.has(m.party_id));
-  if (exp.method === 'exact') {
-    const sum = parts.reduce((a, m) => a + (toCents(exp.exact[m.party_id]) || 0), 0);
+  if (exp.method === "exact") {
+    const sum = parts.reduce(
+      (a, m) => a + (toCents(exp.exact[m.party_id]) || 0),
+      0
+    );
     const diff = cents - sum;
     const bad = Math.abs(diff) > 1;
     return {
       bad,
       text:
         money(sum, currency) +
-        ' of ' +
+        " of " +
         money(cents, currency) +
-        (bad ? ' · ' + money(Math.abs(diff), currency) + (diff > 0 ? ' left' : ' over') : ' ✓'),
+        (bad
+          ? " · " +
+            money(Math.abs(diff), currency) +
+            (diff > 0 ? " left" : " over")
+          : " ✓"),
     };
   }
-  if (exp.method === 'percent') {
-    const sum = parts.reduce((a, m) => a + (Number(exp.percent[m.party_id] ?? '') || 0), 0);
+  if (exp.method === "percent") {
+    const sum = parts.reduce(
+      (a, m) => a + (Number(exp.percent[m.party_id] ?? "") || 0),
+      0
+    );
     const bad = Math.abs(sum - 100) > 0.1;
-    return { bad, text: sum.toFixed(0) + '% of 100%' + (bad ? '' : ' ✓') };
+    return { bad, text: sum.toFixed(0) + "% of 100%" + (bad ? "" : " ✓") };
   }
   const per = parts.length && cents > 0 ? cents / parts.length : 0;
   return {
     bad: false,
     text: parts.length
-      ? money(per, currency) + ' each · ' + parts.length + ' people'
-      : 'Select who splits',
+      ? money(per, currency) + " each · " + parts.length + " people"
+      : "Select who splits",
   };
 }

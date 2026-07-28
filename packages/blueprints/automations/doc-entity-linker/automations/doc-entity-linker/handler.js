@@ -15,36 +15,37 @@
  */
 
 const BATCH = 6;
-const PURPOSE = 'dpv:ServiceProvision';
+const PURPOSE = "dpv:ServiceProvision";
 
 const MENTIONS_SCHEMA = {
-  type: 'object',
-  required: ['mentions'],
+  type: "object",
+  required: ["mentions"],
   additionalProperties: false,
   properties: {
     mentions: {
-      type: 'array',
+      type: "array",
       maxItems: 12,
       items: {
-        type: 'object',
-        required: ['name', 'exact'],
+        type: "object",
+        required: ["name", "exact"],
         additionalProperties: false,
         properties: {
           name: {
-            type: 'string',
+            type: "string",
             description: "The person's name as the document uses it.",
           },
           exact: {
-            type: 'string',
-            description: 'The exact short passage (≤200 chars) containing the mention, verbatim.',
+            type: "string",
+            description:
+              "The exact short passage (≤200 chars) containing the mention, verbatim.",
           },
           prefix: {
-            type: 'string',
-            description: 'Up to 32 chars immediately before the passage.',
+            type: "string",
+            description: "Up to 32 chars immediately before the passage.",
           },
           suffix: {
-            type: 'string',
-            description: 'Up to 32 chars immediately after the passage.',
+            type: "string",
+            description: "Up to 32 chars immediately after the passage.",
           },
         },
       },
@@ -53,26 +54,27 @@ const MENTIONS_SCHEMA = {
 };
 
 export default async ({ ctx, log }) => {
-  const cursor = (await ctx.state.get('cursor')) ?? '';
+  const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
-    entity: 'core.content_derivative',
+    entity: "core.content_derivative",
     where: [
-      { column: 'derivative_id', op: 'gt', value: cursor },
-      { column: 'variant', op: 'eq', value: 'text' },
+      { column: "derivative_id", op: "gt", value: cursor },
+      { column: "variant", op: "eq", value: "text" },
     ],
-    orderBy: { column: 'derivative_id', dir: 'asc' },
+    orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
     purpose: PURPOSE,
   });
   const derivatives = read.rows ?? [];
-  if (derivatives.length === 0) return { summary: 'no newly readable documents to link' };
+  if (derivatives.length === 0)
+    return { summary: "no newly readable documents to link" };
 
   const parties = await ctx.vault.read({
-    entity: 'core.party',
+    entity: "core.party",
     limit: 500,
     purpose: PURPOSE,
   });
-  const people = (parties.rows ?? []).filter((p) => p.kind === 'person');
+  const people = (parties.rows ?? []).filter((p) => p.kind === "person");
 
   let linked = 0;
   let dropped = 0;
@@ -82,20 +84,23 @@ export default async ({ ctx, log }) => {
     const contentId = derivative.content_id;
     const out = await ctx.agent({
       prompt:
-        'Find mentions of PEOPLE (personal names) in the attached document text. For each, ' +
-        'return the name as written and the exact verbatim passage (≤200 chars) containing it, ' +
-        'with short prefix/suffix context. People only — no companies, no places.',
+        "Find mentions of PEOPLE (personal names) in the attached document text. For each, " +
+        "return the name as written and the exact verbatim passage (≤200 chars) containing it, " +
+        "with short prefix/suffix context. People only — no companies, no places.",
       json: MENTIONS_SCHEMA,
-      content: [{ contentId, variant: 'text' }],
+      content: [{ contentId, variant: "text" }],
     });
     for (const mention of Array.isArray(out?.mentions) ? out.mentions : []) {
-      if (typeof mention.name !== 'string' || typeof mention.exact !== 'string') continue;
+      if (typeof mention.name !== "string" || typeof mention.exact !== "string")
+        continue;
       // Only people ALREADY in the vault — plain-code matching, the model
       // never decides who exists.
       const needle = mention.name.trim().toLowerCase();
       const person = people.find((p) => {
-        const display = String(p.display_name ?? '').toLowerCase();
-        return display === needle || (needle.length > 3 && display.includes(needle));
+        const display = String(p.display_name ?? "").toLowerCase();
+        return (
+          display === needle || (needle.length > 3 && display.includes(needle))
+        );
       });
       if (!person) {
         dropped += 1;
@@ -103,17 +108,21 @@ export default async ({ ctx, log }) => {
       }
       try {
         await ctx.vault.invoke({
-          command: 'core.link_entities',
+          command: "core.link_entities",
           input: {
-            from_type: 'core.content_item',
+            from_type: "core.content_item",
             from_id: contentId,
-            to_type: 'core.party',
+            to_type: "core.party",
             to_id: person.party_id,
-            relation: 'references',
+            relation: "references",
             selector: {
               exact: mention.exact.slice(0, 200),
-              ...(mention.prefix ? { prefix: String(mention.prefix).slice(0, 32) } : {}),
-              ...(mention.suffix ? { suffix: String(mention.suffix).slice(0, 32) } : {}),
+              ...(mention.prefix
+                ? { prefix: String(mention.prefix).slice(0, 32) }
+                : {}),
+              ...(mention.suffix
+                ? { suffix: String(mention.suffix).slice(0, 32) }
+                : {}),
             },
           },
           purpose: PURPOSE,
@@ -126,7 +135,7 @@ export default async ({ ctx, log }) => {
       }
     }
   }
-  await ctx.state.set('cursor', lastSeen);
+  await ctx.state.set("cursor", lastSeen);
   return {
     summary: `linked ${linked} mention(s); ${dropped} named nobody in the vault`,
     output: { linked, dropped },

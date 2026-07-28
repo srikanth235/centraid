@@ -1,4 +1,4 @@
-import { onTestFinished, vi } from 'vitest';
+import { onTestFinished, vi } from "vitest";
 
 export interface FakeClock {
   now: () => number;

@@ -34,7 +34,7 @@
  *     to settle every entry.
  */
 
-import type { Row } from '../scaffold/app.js';
+import type { Row } from "../scaffold/app.js";
 
 export interface Host {
   /**

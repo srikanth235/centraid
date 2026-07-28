@@ -1,13 +1,13 @@
-import { palette } from '@centraid/design-tokens';
+import { palette } from "@centraid/design-tokens";
 
-import { isAutomationTemplate } from '../../../app-format.js';
-import type { TemplateEntry } from '../../../app-shell-context.js';
+import { isAutomationTemplate } from "../../../app-format.js";
+import type { TemplateEntry } from "../../../app-shell-context.js";
 import {
   cloneTemplate as gwCloneTemplate,
   installTemplate as gwInstallTemplate,
   listAutomations,
   listTemplates,
-} from '../../../gateway-client.js';
+} from "../../../gateway-client.js";
 
 // Template catalog data layer — ports the vanilla loadAvailableTemplates
 // (app-cards.ts) + loadAutomationTemplates (app-automations-templates.ts) +
@@ -18,7 +18,9 @@ import {
 /** App templates only (the automation slice has its own surface). */
 export async function loadAppTemplates(): Promise<TemplateEntry[]> {
   try {
-    return ((await listTemplates()) as TemplateEntry[]).filter((t) => !isAutomationTemplate(t));
+    return ((await listTemplates()) as TemplateEntry[]).filter(
+      (t) => !isAutomationTemplate(t)
+    );
   } catch {
     return [];
   }
@@ -27,7 +29,9 @@ export async function loadAppTemplates(): Promise<TemplateEntry[]> {
 /** Automation templates only. */
 export async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
   try {
-    return ((await listTemplates()) as TemplateEntry[]).filter(isAutomationTemplate);
+    return ((await listTemplates()) as TemplateEntry[]).filter(
+      isAutomationTemplate
+    );
   } catch {
     return [];
   }
@@ -37,21 +41,23 @@ export async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
  *  signal, not catalog order). Missing ids are skipped; if none match, the
  *  first `cap` catalog rows fill the strip. */
 const OVERVIEW_SUGGESTION_IDS = [
-  'obligation-extractor',
-  'google-gmail-pull',
-  'renewal-reminders',
-  'release-notes-drafter',
+  "obligation-extractor",
+  "google-gmail-pull",
+  "renewal-reminders",
+  "release-notes-drafter",
 ] as const;
 
 /** Curated 3–4 automation templates for the fleet empty state. */
 export async function loadOverviewSuggestions(
-  cap = 3,
-): Promise<Array<{ id: string; name: string; desc: string; triggerLabel?: string }>> {
+  cap = 3
+): Promise<
+  Array<{ id: string; name: string; desc: string; triggerLabel?: string }>
+> {
   const all = await loadAutomationTemplates();
   if (all.length === 0) return [];
   const byId = new Map(all.map((t) => [t.id, t]));
   const preferred = OVERVIEW_SUGGESTION_IDS.map((id) => byId.get(id)).filter(
-    (t): t is TemplateEntry => t !== undefined,
+    (t): t is TemplateEntry => t !== undefined
   );
   const picks = preferred.length > 0 ? preferred : all;
   return picks.slice(0, cap).map((t) => ({
@@ -77,7 +83,9 @@ export async function cloneAutomationTemplate(tmpl: TemplateEntry): Promise<{
   const result = await gwCloneTemplate({ templateId: tmpl.id });
   let ref: string | null = null;
   try {
-    ref = (await listAutomations()).find((r) => r.id === result.app.id)?.ref ?? null;
+    ref =
+      (await listAutomations()).find((r) => r.id === result.app.id)?.ref ??
+      null;
   } catch {
     ref = null;
   }
@@ -104,7 +112,7 @@ export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
  *  store), app templates never fork. Throws on failure. */
 export async function installAppTemplate(
   tmpl: TemplateEntry,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<UserAppMeta> {
   const pal = palette as unknown as Record<string, string>;
   const result = await gwInstallTemplate({
@@ -112,8 +120,10 @@ export async function installAppTemplate(
     ...(scopeId ? { scopeId } : {}),
   });
   const app = result.app;
-  const colorKey = (app.colorKey ?? tmpl.colorKey) as UserAppMeta['colorKey'];
-  const color = (pal[colorKey] ?? pal[tmpl.colorKey] ?? '#5847e0') as UserAppMeta['color'];
+  const colorKey = (app.colorKey ?? tmpl.colorKey) as UserAppMeta["colorKey"];
+  const color = (pal[colorKey] ??
+    pal[tmpl.colorKey] ??
+    "#5847e0") as UserAppMeta["color"];
   const now = new Date().toISOString();
   const id = app.id;
   return {
@@ -122,7 +132,7 @@ export async function installAppTemplate(
     colorKey,
     createdAt: now,
     desc: app.description || tmpl.desc,
-    iconKey: (app.iconKey ?? tmpl.iconKey) as UserAppMeta['iconKey'],
+    iconKey: (app.iconKey ?? tmpl.iconKey) as UserAppMeta["iconKey"],
     id,
     name: app.name ?? tmpl.name,
     updatedAt: now,

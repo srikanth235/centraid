@@ -1,8 +1,8 @@
 // Warm-pool lifecycle: put / take / dispose / idle eviction edges.
 
-import { describe, expect, test, afterEach } from 'vitest';
+import { describe, expect, test, afterEach } from "vitest";
 
-import type { AcpConnection } from './json-rpc.js';
+import type { AcpConnection } from "./json-rpc.js";
 import {
   clearWarmPool,
   disposeSlot,
@@ -10,7 +10,7 @@ import {
   takeWarmSlot,
   warmKey,
   type WarmAgentSlot,
-} from './session-warm.ts';
+} from "./session-warm.ts";
 
 function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
   conn: AcpConnection;
@@ -32,9 +32,9 @@ function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
   const conn: AcpConnection = {
     send: () => undefined,
     request: async <T = unknown>(method: string): Promise<T> => {
-      if (method === 'session/close') {
+      if (method === "session/close") {
         closeCalls += 1;
-        if (opts?.closeThrows) throw new Error('close failed');
+        if (opts?.closeThrows) throw new Error("close failed");
       }
       return undefined as T;
     },
@@ -44,7 +44,7 @@ function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
     hasExited: () => exited,
     exited: exitedPromise,
     spawnError: () => undefined,
-    stderrTail: () => '',
+    stderrTail: () => "",
   };
   return {
     conn,
@@ -53,7 +53,7 @@ function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
   };
 }
 
-function makeChild(onKill: () => void): WarmAgentSlot['child'] {
+function makeChild(onKill: () => void): WarmAgentSlot["child"] {
   let killed = false;
   return {
     get killed() {
@@ -66,30 +66,30 @@ function makeChild(onKill: () => void): WarmAgentSlot['child'] {
       killed = true;
       onKill();
     },
-  } as unknown as WarmAgentSlot['child'];
+  } as unknown as WarmAgentSlot["child"];
 }
-describe('session-warm suite', () => {
+describe("session-warm suite", () => {
   afterEach(async () => {
     await clearWarmPool();
   });
 
-  test('warmKey joins kind/cwd/sessionId', () => {
-    expect(warmKey('goose', '/tmp/a', 's1', 'conversation-1')).toBe(
-      'conversation-1\0goose\0/tmp/a\0s1',
+  test("warmKey joins kind/cwd/sessionId", () => {
+    expect(warmKey("goose", "/tmp/a", "s1", "conversation-1")).toBe(
+      "conversation-1\0goose\0/tmp/a\0s1"
     );
   });
 
-  test('takeWarmSlot returns undefined when empty', () => {
-    expect(takeWarmSlot('goose', '/tmp', 's1')).toBeUndefined();
+  test("takeWarmSlot returns undefined when empty", () => {
+    expect(takeWarmSlot("goose", "/tmp", "s1")).toBeUndefined();
   });
 
-  test('put then take returns a live slot and removes it from the pool', async () => {
+  test("put then take returns a live slot and removes it from the pool", async () => {
     const { conn, markExited } = makeConn();
     const child = makeChild(markExited);
     putWarmSlot({
-      kind: 'goose',
-      cwd: '/tmp/w',
-      sessionId: 'sess-a',
+      kind: "goose",
+      cwd: "/tmp/w",
+      sessionId: "sess-a",
       child,
       conn,
       canResume: true,
@@ -99,23 +99,23 @@ describe('session-warm suite', () => {
       httpMcp: true,
       promptCaps: { image: true },
     });
-    const slot = takeWarmSlot('goose', '/tmp/w', 'sess-a');
-    expect(slot?.sessionId).toBe('sess-a');
+    const slot = takeWarmSlot("goose", "/tmp/w", "sess-a");
+    expect(slot?.sessionId).toBe("sess-a");
     expect(slot?.canResume).toBe(true);
     expect(slot?.httpMcp).toBe(true);
     // Second take misses — slot was claimed.
-    expect(takeWarmSlot('goose', '/tmp/w', 'sess-a')).toBeUndefined();
+    expect(takeWarmSlot("goose", "/tmp/w", "sess-a")).toBeUndefined();
     // Drop the claimed slot so afterEach clearWarmPool isn't needed for it.
     await disposeSlot(slot!);
   });
 
-  test('takeWarmSlot disposes and returns undefined when process already exited', async () => {
+  test("takeWarmSlot disposes and returns undefined when process already exited", async () => {
     const { conn, markExited } = makeConn({ exited: true });
     const child = makeChild(markExited);
     putWarmSlot({
-      kind: 'acp',
-      cwd: '/tmp/x',
-      sessionId: 'dead',
+      kind: "acp",
+      cwd: "/tmp/x",
+      sessionId: "dead",
       child,
       conn,
       canResume: false,
@@ -125,15 +125,15 @@ describe('session-warm suite', () => {
       httpMcp: false,
       promptCaps: {},
     });
-    expect(takeWarmSlot('acp', '/tmp/x', 'dead')).toBeUndefined();
+    expect(takeWarmSlot("acp", "/tmp/x", "dead")).toBeUndefined();
   });
 
-  test('putWarmSlot replaces a previous entry for the same key', async () => {
+  test("putWarmSlot replaces a previous entry for the same key", async () => {
     const old = makeConn();
     putWarmSlot({
-      kind: 'k',
-      cwd: '/c',
-      sessionId: 's',
+      kind: "k",
+      cwd: "/c",
+      sessionId: "s",
       child: makeChild(old.markExited),
       conn: old.conn,
       canResume: false,
@@ -145,9 +145,9 @@ describe('session-warm suite', () => {
     });
     const next = makeConn();
     putWarmSlot({
-      kind: 'k',
-      cwd: '/c',
-      sessionId: 's',
+      kind: "k",
+      cwd: "/c",
+      sessionId: "s",
       child: makeChild(next.markExited),
       conn: next.conn,
       canResume: true,
@@ -157,19 +157,19 @@ describe('session-warm suite', () => {
       httpMcp: true,
       promptCaps: {},
     });
-    const slot = takeWarmSlot('k', '/c', 's');
+    const slot = takeWarmSlot("k", "/c", "s");
     expect(slot?.conn).toBe(next.conn);
     expect(slot?.canResume).toBe(true);
     await disposeSlot(slot!);
   });
 
-  test('a conversation keeps only its newest warm runner binding', async () => {
+  test("a conversation keeps only its newest warm runner binding", async () => {
     const codex = makeConn();
     putWarmSlot({
-      kind: 'codex',
-      conversationId: 'conversation-1',
-      cwd: '/shared',
-      sessionId: 'codex-session',
+      kind: "codex",
+      conversationId: "conversation-1",
+      cwd: "/shared",
+      sessionId: "codex-session",
       child: makeChild(codex.markExited),
       conn: codex.conn,
       canResume: true,
@@ -181,10 +181,10 @@ describe('session-warm suite', () => {
     });
     const claude = makeConn();
     putWarmSlot({
-      kind: 'claude-code',
-      conversationId: 'conversation-1',
-      cwd: '/shared',
-      sessionId: 'claude-session',
+      kind: "claude-code",
+      conversationId: "conversation-1",
+      cwd: "/shared",
+      sessionId: "claude-session",
       child: makeChild(claude.markExited),
       conn: claude.conn,
       canResume: true,
@@ -195,19 +195,26 @@ describe('session-warm suite', () => {
       promptCaps: {},
     });
 
-    expect(takeWarmSlot('codex', '/shared', 'codex-session', 'conversation-1')).toBeUndefined();
-    const current = takeWarmSlot('claude-code', '/shared', 'claude-session', 'conversation-1');
+    expect(
+      takeWarmSlot("codex", "/shared", "codex-session", "conversation-1")
+    ).toBeUndefined();
+    const current = takeWarmSlot(
+      "claude-code",
+      "/shared",
+      "claude-session",
+      "conversation-1"
+    );
     expect(current).toBeDefined();
     await disposeSlot(current!);
   });
 
-  test('conversations sharing a cwd keep independent warm processes', async () => {
+  test("conversations sharing a cwd keep independent warm processes", async () => {
     const first = makeConn();
     putWarmSlot({
-      kind: 'codex',
-      conversationId: 'conversation-a',
-      cwd: '/shared',
-      sessionId: 'session-a',
+      kind: "codex",
+      conversationId: "conversation-a",
+      cwd: "/shared",
+      sessionId: "session-a",
       child: makeChild(first.markExited),
       conn: first.conn,
       canResume: true,
@@ -219,10 +226,10 @@ describe('session-warm suite', () => {
     });
     const second = makeConn();
     putWarmSlot({
-      kind: 'claude-code',
-      conversationId: 'conversation-b',
-      cwd: '/shared',
-      sessionId: 'session-b',
+      kind: "claude-code",
+      conversationId: "conversation-b",
+      cwd: "/shared",
+      sessionId: "session-b",
       child: makeChild(second.markExited),
       conn: second.conn,
       canResume: true,
@@ -233,21 +240,26 @@ describe('session-warm suite', () => {
       promptCaps: {},
     });
 
-    const a = takeWarmSlot('codex', '/shared', 'session-a', 'conversation-a');
-    const b = takeWarmSlot('claude-code', '/shared', 'session-b', 'conversation-b');
+    const a = takeWarmSlot("codex", "/shared", "session-a", "conversation-a");
+    const b = takeWarmSlot(
+      "claude-code",
+      "/shared",
+      "session-b",
+      "conversation-b"
+    );
     expect(a).toBeDefined();
     expect(b).toBeDefined();
     await disposeSlot(a!);
     await disposeSlot(b!);
   });
 
-  test('disposeSlot issues session/close when canClose and still live', async () => {
+  test("disposeSlot issues session/close when canClose and still live", async () => {
     const { conn, closeCalls, markExited } = makeConn();
     const child = makeChild(markExited);
     await disposeSlot({
-      kind: 'g',
-      cwd: '/c',
-      sessionId: 's-close',
+      kind: "g",
+      cwd: "/c",
+      sessionId: "s-close",
       child,
       conn,
       canResume: false,
@@ -261,13 +273,13 @@ describe('session-warm suite', () => {
     expect(child.killed).toBe(true);
   });
 
-  test('disposeSlot ignores close failures and still kills the child', async () => {
+  test("disposeSlot ignores close failures and still kills the child", async () => {
     const { conn, markExited } = makeConn({ closeThrows: true });
     const child = makeChild(markExited);
     await disposeSlot({
-      kind: 'g',
-      cwd: '/c',
-      sessionId: 's-close-fail',
+      kind: "g",
+      cwd: "/c",
+      sessionId: "s-close-fail",
       child,
       conn,
       canResume: false,
@@ -280,13 +292,13 @@ describe('session-warm suite', () => {
     expect(child.killed).toBe(true);
   });
 
-  test('clearWarmPool empties every slot', async () => {
+  test("clearWarmPool empties every slot", async () => {
     const a = makeConn();
     const b = makeConn();
     putWarmSlot({
-      kind: 'a',
-      cwd: '/1',
-      sessionId: 's1',
+      kind: "a",
+      cwd: "/1",
+      sessionId: "s1",
       child: makeChild(a.markExited),
       conn: a.conn,
       canResume: false,
@@ -297,9 +309,9 @@ describe('session-warm suite', () => {
       promptCaps: {},
     });
     putWarmSlot({
-      kind: 'b',
-      cwd: '/2',
-      sessionId: 's2',
+      kind: "b",
+      cwd: "/2",
+      sessionId: "s2",
       child: makeChild(b.markExited),
       conn: b.conn,
       canResume: false,
@@ -310,7 +322,7 @@ describe('session-warm suite', () => {
       promptCaps: {},
     });
     await clearWarmPool();
-    expect(takeWarmSlot('a', '/1', 's1')).toBeUndefined();
-    expect(takeWarmSlot('b', '/2', 's2')).toBeUndefined();
+    expect(takeWarmSlot("a", "/1", "s1")).toBeUndefined();
+    expect(takeWarmSlot("b", "/2", "s2")).toBeUndefined();
   });
 });

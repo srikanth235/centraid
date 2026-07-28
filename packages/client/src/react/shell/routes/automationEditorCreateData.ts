@@ -1,12 +1,15 @@
-import type { AuEditorTriggerDTO, AutomationEditorData } from '../../screen-contracts.js';
-import type { AutomationAgentEditorData } from './automationEditorAgentData.js';
+import type {
+  AuEditorTriggerDTO,
+  AutomationEditorData,
+} from "../../screen-contracts.js";
+import type { AutomationAgentEditorData } from "./automationEditorAgentData.js";
 
 /** Pure create-mode DTO builder for template/watch-entity prefills. */
 export function buildCreateAutomationEditorData(opts: {
   template?: {
     name: string;
     desc: string;
-    triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
+    triggerKind?: "cron" | "webhook" | "data" | "condition";
   };
   watchEntity?: string;
   instructions: string;
@@ -15,12 +18,12 @@ export function buildCreateAutomationEditorData(opts: {
 }): AutomationEditorData {
   const { template, watchEntity, instructions, name, agent } = opts;
   const triggers: AuEditorTriggerDTO[] =
-    template?.triggerKind === 'webhook'
-      ? [{ id: null, kind: 'webhook', pending: true }]
-      : template?.triggerKind === 'cron'
-        ? [{ expr: '0 9 * * *', kind: 'cron' }]
+    template?.triggerKind === "webhook"
+      ? [{ id: null, kind: "webhook", pending: true }]
+      : template?.triggerKind === "cron"
+        ? [{ expr: "0 9 * * *", kind: "cron" }]
         : watchEntity
-          ? [{ entities: [watchEntity], kind: 'data' }]
+          ? [{ entities: [watchEntity], kind: "data" }]
           : [];
   return {
     automationId: null,
@@ -28,7 +31,7 @@ export function buildCreateAutomationEditorData(opts: {
     consent: { grants: [], outbox: [], parked: [] },
     enabled: false,
     instructions: template?.desc ?? instructions,
-    mode: 'create',
+    mode: "create",
     model: null,
     name: template?.name ?? name,
     onFailure: null,

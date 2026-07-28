@@ -5,7 +5,7 @@
 // auto-publish trust is what lets captions land without a review click, and
 // the agent content primitive only ever spells derivatives.
 
-import { assert, beforeEach, describe, expect, test } from 'vitest';
+import { assert, beforeEach, describe, expect, test } from "vitest";
 
 import {
   bootstrapVault,
@@ -13,18 +13,27 @@ import {
   enrollAgent,
   enrollDevice,
   type BootstrapResult,
-} from '../bootstrap.js';
-import { registerDocumentCommands } from '../commands/documents.js';
-import { registerEnrichCommands } from '../commands/enrich.js';
-import { registerMediaCommands } from '../commands/media.js';
-import { registerSyncCommands } from '../commands/sync.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, Gateway } from '../gateway/gateway.js';
-import type { Credential } from '../gateway/types.js';
-import { readEnrichSettings, updateEnrichSettings } from '../host.js';
-import { VISION_SCHEME_URI } from '../schema/enrich.js';
-import { leaseNextEnrichmentRequest, queueDeviceEnrichmentRequest } from './leases.js';
-import { hexHamming, encodeVector, decodeVector, cosine, scanEmbeddings } from './similarity.js';
+} from "../bootstrap.js";
+import { registerDocumentCommands } from "../commands/documents.js";
+import { registerEnrichCommands } from "../commands/enrich.js";
+import { registerMediaCommands } from "../commands/media.js";
+import { registerSyncCommands } from "../commands/sync.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { createGateway, Gateway } from "../gateway/gateway.js";
+import type { Credential } from "../gateway/types.js";
+import { readEnrichSettings, updateEnrichSettings } from "../host.js";
+import { VISION_SCHEME_URI } from "../schema/enrich.js";
+import {
+  leaseNextEnrichmentRequest,
+  queueDeviceEnrichmentRequest,
+} from "./leases.js";
+import {
+  hexHamming,
+  encodeVector,
+  decodeVector,
+  cosine,
+  scanEmbeddings,
+} from "./similarity.js";
 
 let db: VaultDb;
 let gw: Gateway;
@@ -34,52 +43,56 @@ let agent: Credential;
 let agentPartyId: string;
 
 const PNG_BYTES = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-  'base64',
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "base64"
 );
 
-describe('enrich', () => {
+describe("enrich", () => {
   beforeEach(() => {
     db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: 'Priya' });
+    boot = bootstrapVault(db, { ownerName: "Priya" });
     gw = createGateway(db);
     registerDocumentCommands(gw);
     registerEnrichCommands(gw);
     registerMediaCommands(gw);
     registerSyncCommands(gw);
     owner = {
-      kind: 'device',
+      kind: "device",
       deviceId: boot.deviceId,
       deviceKey: boot.deviceKey,
     };
     const enrolled = enrollAgent(db, {
-      name: 'photo-captioner',
-      modelRef: 'tier:fast',
+      name: "photo-captioner",
+      modelRef: "tier:fast",
     });
     agentPartyId = enrolled.partyId;
-    const device = enrollDevice(db, boot.ownerPartyId, 'agent-host');
+    const device = enrollDevice(db, boot.ownerPartyId, "agent-host");
     createGrant(db, {
       granteePartyId: enrolled.partyId,
-      purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
+      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
       grantedByPartyId: boot.ownerPartyId,
       scopes: [
-        { schema: 'sync', verbs: 'act' },
-        { schema: 'core', verbs: 'read+act' },
-        { schema: 'media', verbs: 'read' },
-        { schema: 'knowledge', verbs: 'read' },
-        { schema: 'enrich', verbs: 'act' },
+        { schema: "sync", verbs: "act" },
+        { schema: "core", verbs: "read+act" },
+        { schema: "media", verbs: "read" },
+        { schema: "knowledge", verbs: "read" },
+        { schema: "enrich", verbs: "act" },
       ],
     });
     agent = {
-      kind: 'agent',
+      kind: "agent",
       agentId: enrolled.agentId,
       deviceId: device.deviceId,
       deviceKey: device.deviceKey,
     };
   });
 
-  function invoke(cred: Credential, command: string, input: Record<string, unknown>) {
-    return gw.invoke(cred, { command, input, purpose: 'dpv:ServiceProvision' });
+  function invoke(
+    cred: Credential,
+    command: string,
+    input: Record<string, unknown>
+  ) {
+    return gw.invoke(cred, { command, input, purpose: "dpv:ServiceProvision" });
   }
 
   function output<T>(outcome: unknown): T {
@@ -90,117 +103,134 @@ describe('enrich', () => {
   function addPhoto(phash?: string): { assetId: string; contentId: string } {
     const staged = gw.stageBlob(owner, {
       bytes: PNG_BYTES,
-      filename: 'pixel.png',
+      filename: "pixel.png",
     });
     const out = output<{ asset_id: string; content_id: string }>(
-      invoke(owner, 'media.add_asset', {
+      invoke(owner, "media.add_asset", {
         staged_sha: staged.sha256,
         ...(phash ? { phash } : {}),
-      }),
+      })
     );
     return { assetId: out.asset_id, contentId: out.content_id };
   }
 
-  describe('v10 schema', () => {
-    test('phash sidecar, machine schemes, enrich tables', () => {
+  describe("v10 schema", () => {
+    test("phash sidecar, machine schemes, enrich tables", () => {
       expect(() =>
-        db.vault.prepare('SELECT phash FROM media_asset_phash LIMIT 1').all(),
+        db.vault.prepare("SELECT phash FROM media_asset_phash LIMIT 1").all()
       ).not.toThrow();
       const schemes = db.vault
-        .prepare('SELECT uri FROM core_concept_scheme WHERE uri LIKE ?')
-        .all('urn:centraid:%') as { uri: string }[];
+        .prepare("SELECT uri FROM core_concept_scheme WHERE uri LIKE ?")
+        .all("urn:centraid:%") as { uri: string }[];
       expect(schemes.map((s) => s.uri).sort()).toStrictEqual([
-        'urn:centraid:doctype',
-        'urn:centraid:vision',
+        "urn:centraid:doctype",
+        "urn:centraid:vision",
       ]);
-      expect(() => db.vault.prepare('SELECT 1 FROM enrich_embedding').all()).not.toThrow();
-      expect(() => db.vault.prepare('SELECT 1 FROM enrich_request').all()).not.toThrow();
+      expect(() =>
+        db.vault.prepare("SELECT 1 FROM enrich_embedding").all()
+      ).not.toThrow();
+      expect(() =>
+        db.vault.prepare("SELECT 1 FROM enrich_request").all()
+      ).not.toThrow();
     });
 
-    test('vault_hamming is registered and near-dup SQL works', () => {
-      expect(hexHamming('ff00', 'ff01')).toBe(1);
-      expect(hexHamming('ff00', 'ff0')).toBeNull();
-      const row = db.vault.prepare("SELECT vault_hamming('deadbeef', 'deadbee0') AS d").get() as {
+    test("vault_hamming is registered and near-dup SQL works", () => {
+      expect(hexHamming("ff00", "ff01")).toBe(1);
+      expect(hexHamming("ff00", "ff0")).toBeNull();
+      const row = db.vault
+        .prepare("SELECT vault_hamming('deadbeef', 'deadbee0') AS d")
+        .get() as {
         d: number;
       };
       expect(row.d).toBe(4); // f ^ 0 = 4 bits
-      addPhoto('a1b2c3d4e5f60708');
+      addPhoto("a1b2c3d4e5f60708");
       const near = db.vault
-        .prepare('SELECT asset_id FROM media_asset_phash WHERE vault_hamming(phash, ?) <= 2')
-        .all('a1b2c3d4e5f60709') as { asset_id: string }[];
+        .prepare(
+          "SELECT asset_id FROM media_asset_phash WHERE vault_hamming(phash, ?) <= 2"
+        )
+        .all("a1b2c3d4e5f60709") as { asset_id: string }[];
       expect(near).toHaveLength(1);
     });
   });
 
-  describe('the enrichment staging path', () => {
-    test('captions stage as drafts by default; owner trust flips to auto-publish; FTS finds the photo caption', () => {
+  describe("the enrichment staging path", () => {
+    test("captions stage as drafts by default; owner trust flips to auto-publish; FTS finds the photo caption", () => {
       const { assetId } = addPhoto();
       const rows = [
         {
-          entity_type: 'knowledge.annotation',
+          entity_type: "knowledge.annotation",
           external_id: `${assetId}:caption`,
           payload: {
-            target_type: 'media.media_asset',
+            target_type: "media.media_asset",
             target_id: assetId,
-            body: 'Two kids building a sandcastle at the beach',
+            body: "Two kids building a sandcastle at the beach",
           },
         },
       ];
-      const staged = invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      const staged = invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows,
       });
-      expect(staged.status).toBe('executed');
-      const stagedOut = output<{ connection_id: string; published?: unknown }>(staged);
+      expect(staged.status).toBe("executed");
+      const stagedOut = output<{ connection_id: string; published?: unknown }>(
+        staged
+      );
       expect(stagedOut.published).toBeUndefined(); // default trust = staged
       expect(
-        (db.vault.prepare('SELECT count(*) AS n FROM knowledge_annotation').get() as { n: number })
-          .n,
+        (
+          db.vault
+            .prepare("SELECT count(*) AS n FROM knowledge_annotation")
+            .get() as { n: number }
+        ).n
       ).toBe(0);
 
       // The agent proposing to widen its own trust PARKS (risk high).
-      const proposal = invoke(agent, 'sync.set_connection_trust', {
+      const proposal = invoke(agent, "sync.set_connection_trust", {
         connection_id: stagedOut.connection_id,
-        trust: 'auto-publish',
+        trust: "auto-publish",
       });
-      expect(proposal.status).toBe('parked');
+      expect(proposal.status).toBe("parked");
       // The owner flips it directly.
-      const flip = invoke(owner, 'sync.set_connection_trust', {
+      const flip = invoke(owner, "sync.set_connection_trust", {
         connection_id: stagedOut.connection_id,
-        trust: 'auto-publish',
+        trust: "auto-publish",
       });
-      expect(flip.status).toBe('executed');
+      expect(flip.status).toBe("executed");
 
       // Same rows again: the draft batch dedup skips nothing (nothing landed),
       // and this time the batch auto-publishes in the same command.
-      const again = invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      const again = invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows,
       });
-      expect(again.status).toBe('executed');
-      const published = output<{ published: { created: number } }>(again).published;
+      expect(again.status).toBe("executed");
+      const published = output<{ published: { created: number } }>(
+        again
+      ).published;
       expect(published.created).toBe(1);
 
       // Attribution is the ENRICHER's agent party, injected server-side.
       const annotation = db.vault
-        .prepare('SELECT author_party_id, body_text FROM knowledge_annotation WHERE target_id = ?')
+        .prepare(
+          "SELECT author_party_id, body_text FROM knowledge_annotation WHERE target_id = ?"
+        )
         .get(assetId) as { author_party_id: string; body_text: string };
       expect(annotation.author_party_id).toBe(agentPartyId);
 
       // FTS: "search photos by what's in them" via the caption.
       const hits = gw.search(owner, {
-        entity: 'knowledge.annotation',
-        query: 'sandcastle',
-        purpose: 'dpv:ServiceProvision',
+        entity: "knowledge.annotation",
+        query: "sandcastle",
+        purpose: "dpv:ServiceProvision",
       }) as { rows: unknown[] };
       expect(hits.rows).toHaveLength(1);
 
       // Idempotency: unchanged caption re-stages as skip (external-id map).
-      const third = invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      const third = invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows,
       });
       expect(output<{ staged: { skip: number } }>(third).staged.skip).toBe(1);
@@ -211,56 +241,60 @@ describe('enrich', () => {
           ...rows[0]!,
           payload: {
             ...rows[0]!.payload,
-            body: 'Kids at the beach with a red bucket',
+            body: "Kids at the beach with a red bucket",
           },
         },
       ];
-      invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows: upgraded,
       });
       const after = db.vault
-        .prepare('SELECT body_text FROM knowledge_annotation WHERE target_id = ?')
+        .prepare(
+          "SELECT body_text FROM knowledge_annotation WHERE target_id = ?"
+        )
         .all(assetId) as { body_text: string }[];
       expect(after).toHaveLength(1);
-      expect(after[0]!.body_text).toContain('red bucket');
+      expect(after[0]!.body_text).toContain("red bucket");
     });
 
-    test('machine tags carry confidence and never overwrite an owner-asserted tag', () => {
+    test("machine tags carry confidence and never overwrite an owner-asserted tag", () => {
       const { assetId } = addPhoto();
-      const stagedConn = invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      const stagedConn = invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows: [
           {
-            entity_type: 'core.tag',
+            entity_type: "core.tag",
             external_id: `${assetId}:tag:beach`,
             payload: {
-              target_type: 'media.media_asset',
+              target_type: "media.media_asset",
               target_id: assetId,
-              label: 'Beach',
+              label: "Beach",
               confidence: 0.92,
             },
           },
         ],
       });
-      const connectionId = output<{ connection_id: string }>(stagedConn).connection_id;
-      invoke(owner, 'sync.set_connection_trust', {
+      const connectionId = output<{ connection_id: string }>(
+        stagedConn
+      ).connection_id;
+      invoke(owner, "sync.set_connection_trust", {
         connection_id: connectionId,
-        trust: 'auto-publish',
+        trust: "auto-publish",
       });
-      invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows: [
           {
-            entity_type: 'core.tag',
+            entity_type: "core.tag",
             external_id: `${assetId}:tag:beach`,
             payload: {
-              target_type: 'media.media_asset',
+              target_type: "media.media_asset",
               target_id: assetId,
-              label: 'Beach',
+              label: "Beach",
               confidence: 0.92,
             },
           },
@@ -271,7 +305,7 @@ describe('enrich', () => {
           `SELECT t.confidence, t.tagged_by_party_id, c.notation, s.uri FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE t.target_id = ?`,
+          WHERE t.target_id = ?`
         )
         .get(assetId) as {
         confidence: number;
@@ -280,35 +314,37 @@ describe('enrich', () => {
         uri: string;
       };
       expect(tag.uri).toBe(VISION_SCHEME_URI);
-      expect(tag.notation).toBe('beach');
+      expect(tag.notation).toBe("beach");
       expect(tag.confidence).toBeCloseTo(0.92);
       expect(tag.tagged_by_party_id).toBeNull(); // machine tag, never a person
 
       // The owner asserts the same concept: convert to an owner tag.
       db.vault
         .prepare(
-          'UPDATE core_tag SET tagged_by_party_id = ?, confidence = NULL WHERE target_id = ?',
+          "UPDATE core_tag SET tagged_by_party_id = ?, confidence = NULL WHERE target_id = ?"
         )
         .run(boot.ownerPartyId, assetId);
       // The enricher re-runs with a different confidence — terminal, skipped.
-      invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows: [
           {
-            entity_type: 'core.tag',
+            entity_type: "core.tag",
             external_id: `${assetId}:tag:beach-2`,
             payload: {
-              target_type: 'media.media_asset',
+              target_type: "media.media_asset",
               target_id: assetId,
-              label: 'Beach',
+              label: "Beach",
               confidence: 0.5,
             },
           },
         ],
       });
       const after = db.vault
-        .prepare('SELECT confidence, tagged_by_party_id FROM core_tag WHERE target_id = ?')
+        .prepare(
+          "SELECT confidence, tagged_by_party_id FROM core_tag WHERE target_id = ?"
+        )
         .get(assetId) as {
         confidence: number | null;
         tagged_by_party_id: string;
@@ -317,14 +353,14 @@ describe('enrich', () => {
       expect(after.confidence).toBeNull();
     });
 
-    test('face proposals land unconfirmed; confirm/reject is the owner loop; confirmed regions are immune', () => {
+    test("face proposals land unconfirmed; confirm/reject is the owner loop; confirmed regions are immune", () => {
       const { assetId } = addPhoto();
-      const conn = invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      const conn = invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows: [
           {
-            entity_type: 'media.face_region',
+            entity_type: "media.face_region",
             external_id: `${assetId}:face:0`,
             payload: {
               asset_id: assetId,
@@ -334,17 +370,19 @@ describe('enrich', () => {
           },
         ],
       });
-      const connectionId = output<{ connection_id: string }>(conn).connection_id;
-      invoke(owner, 'sync.set_connection_trust', {
+      const connectionId = output<{ connection_id: string }>(
+        conn
+      ).connection_id;
+      invoke(owner, "sync.set_connection_trust", {
         connection_id: connectionId,
-        trust: 'auto-publish',
+        trust: "auto-publish",
       });
-      invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows: [
           {
-            entity_type: 'media.face_region',
+            entity_type: "media.face_region",
             external_id: `${assetId}:face:0`,
             payload: {
               asset_id: assetId,
@@ -356,24 +394,24 @@ describe('enrich', () => {
       });
       const region = db.vault
         .prepare(
-          'SELECT region_id, confirmed_by_party_id FROM media_face_region WHERE asset_id = ?',
+          "SELECT region_id, confirmed_by_party_id FROM media_face_region WHERE asset_id = ?"
         )
         .get(assetId) as { region_id: string; confirmed_by_party_id: null };
       expect(region.confirmed_by_party_id).toBeNull();
 
-      const confirmed = invoke(owner, 'media.confirm_face', {
+      const confirmed = invoke(owner, "media.confirm_face", {
         region_id: region.region_id,
         party_id: boot.ownerPartyId,
       });
-      expect(confirmed.status).toBe('executed');
+      expect(confirmed.status).toBe("executed");
 
       // A re-run proposing a different box no longer touches the region.
-      invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'photos',
+      invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "photos",
         rows: [
           {
-            entity_type: 'media.face_region',
+            entity_type: "media.face_region",
             external_id: `${assetId}:face:0`,
             payload: {
               asset_id: assetId,
@@ -384,35 +422,41 @@ describe('enrich', () => {
         ],
       });
       const after = db.vault
-        .prepare('SELECT bbox_json, confidence FROM media_face_region WHERE region_id = ?')
+        .prepare(
+          "SELECT bbox_json, confidence FROM media_face_region WHERE region_id = ?"
+        )
         .get(region.region_id) as { bbox_json: string; confidence: number };
       expect(JSON.parse(after.bbox_json).x).toBeCloseTo(0.1);
       expect(after.confidence).toBeCloseTo(0.8);
 
-      const rejected = invoke(owner, 'media.reject_face', {
+      const rejected = invoke(owner, "media.reject_face", {
         region_id: region.region_id,
       });
-      expect(rejected.status).toBe('executed');
+      expect(rejected.status).toBe("executed");
       expect(
-        (db.vault.prepare('SELECT count(*) AS n FROM media_face_region').get() as { n: number }).n,
+        (
+          db.vault
+            .prepare("SELECT count(*) AS n FROM media_face_region")
+            .get() as { n: number }
+        ).n
       ).toBe(0);
     });
 
-    test('album proposals stay staged for review; publish creates the collection and top-ups never remove', () => {
+    test("album proposals stay staged for review; publish creates the collection and top-ups never remove", () => {
       const a = addPhoto();
       const b = addPhoto(); // same bytes dedupe to one asset — use ids we have
-      const staged = invoke(owner, 'sync.stage_rows', {
-        kind: 'enrichment.cluster',
-        label: 'trips',
+      const staged = invoke(owner, "sync.stage_rows", {
+        kind: "enrichment.cluster",
+        label: "trips",
         rows: [
           {
-            entity_type: 'core.collection',
-            external_id: 'trip:2026-06-goa',
+            entity_type: "core.collection",
+            external_id: "trip:2026-06-goa",
             payload: {
-              name: 'Goa, June 2026',
+              name: "Goa, June 2026",
               members: [
-                { target_type: 'media.media_asset', target_id: a.assetId },
-                { target_type: 'media.media_asset', target_id: b.assetId },
+                { target_type: "media.media_asset", target_id: a.assetId },
+                { target_type: "media.media_asset", target_id: b.assetId },
               ],
             },
           },
@@ -420,54 +464,58 @@ describe('enrich', () => {
       });
       const batchId = output<{ batch_id: string }>(staged).batch_id;
       expect(
-        (db.vault.prepare('SELECT count(*) AS n FROM core_collection').get() as { n: number }).n,
+        (
+          db.vault
+            .prepare("SELECT count(*) AS n FROM core_collection")
+            .get() as { n: number }
+        ).n
       ).toBe(0);
-      const published = invoke(owner, 'sync.publish_batch', {
+      const published = invoke(owner, "sync.publish_batch", {
         batch_id: batchId,
       });
-      expect(published.status).toBe('executed');
+      expect(published.status).toBe("executed");
       const entries = db.vault
         .prepare(
           `SELECT count(*) AS n FROM core_collection_entry e
            JOIN core_collection c ON c.collection_id = e.collection_id
-          WHERE c.name = 'Goa, June 2026'`,
+          WHERE c.name = 'Goa, June 2026'`
         )
         .get() as { n: number };
       expect(entries.n).toBe(1); // deduped photo = one distinct asset
     });
 
-    test('filing a WRAPPED content item retargets title + folder tag onto its core_document', () => {
+    test("filing a WRAPPED content item retargets title + folder tag onto its core_document", () => {
       // issue #352: core_document wraps content items, so a filing proposal
       // against a content id that's already a document's current head must
       // land on the document, not the (no-longer-read) content item — else
       // the tag is silently invisible to every document-scoped read path.
       const staged = gw.stageBlob(owner, {
-        bytes: Buffer.from('scan scan scan'),
-        filename: 'scan_001.txt',
+        bytes: Buffer.from("scan scan scan"),
+        filename: "scan_001.txt",
       });
       const doc = output<{ document_id: string; content_id: string }>(
-        invoke(owner, 'core.add_document', {
+        invoke(owner, "core.add_document", {
           staged_sha: staged.sha256,
-          title: 'scan_001',
-        }),
+          title: "scan_001",
+        })
       );
-      const stagedBatch = invoke(owner, 'sync.stage_rows', {
-        kind: 'enrichment.doctype',
-        label: 'docs',
+      const stagedBatch = invoke(owner, "sync.stage_rows", {
+        kind: "enrichment.doctype",
+        label: "docs",
         rows: [
           {
-            entity_type: 'core.content_item',
+            entity_type: "core.content_item",
             external_id: `${doc.content_id}:filing`,
             payload: {
               content_id: doc.content_id,
-              title: 'Home insurance policy 2026',
-              folder: 'Insurance',
+              title: "Home insurance policy 2026",
+              folder: "Insurance",
             },
           },
           {
-            entity_type: 'core.content_item',
-            external_id: 'missing:filing',
-            payload: { content_id: 'does-not-exist', title: 'nope' },
+            entity_type: "core.content_item",
+            external_id: "missing:filing",
+            payload: { content_id: "does-not-exist", title: "nope" },
           },
         ],
       });
@@ -476,410 +524,437 @@ describe('enrich', () => {
         created: number;
         updated: number;
         failed: number;
-      }>(invoke(owner, 'sync.publish_batch', { batch_id: batchId }));
+      }>(invoke(owner, "sync.publish_batch", { batch_id: batchId }));
       expect(published.updated).toBe(1);
       expect(published.failed).toBe(1); // the missing content item refused to create
       // never mints a document: the wrapper row count doesn't grow
-      const docCount = db.vault.prepare('SELECT count(*) AS n FROM core_document').get() as {
+      const docCount = db.vault
+        .prepare("SELECT count(*) AS n FROM core_document")
+        .get() as {
         n: number;
       };
       expect(docCount.n).toBe(1);
       const contentTitleUnchanged = db.vault
-        .prepare('SELECT title FROM core_content_item WHERE content_id = ?')
+        .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
         .get(doc.content_id) as { title: string | null };
-      expect(contentTitleUnchanged.title).toBe('scan_001'); // untouched — the content item isn't the document's identity
+      expect(contentTitleUnchanged.title).toBe("scan_001"); // untouched — the content item isn't the document's identity
       const document = db.vault
-        .prepare('SELECT title FROM core_document WHERE document_id = ?')
+        .prepare("SELECT title FROM core_document WHERE document_id = ?")
         .get(doc.document_id) as { title: string };
-      expect(document.title).toBe('Home insurance policy 2026');
+      expect(document.title).toBe("Home insurance policy 2026");
       const folder = db.vault
         .prepare(
           `SELECT c.pref_label FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
-          WHERE t.target_id = ? AND t.target_type = 'core.document'`,
+          WHERE t.target_id = ? AND t.target_type = 'core.document'`
         )
         .get(doc.document_id) as { pref_label: string };
-      expect(folder.pref_label).toBe('Insurance');
+      expect(folder.pref_label).toBe("Insurance");
     });
 
-    test('filing an UNWRAPPED content item still tags the content item directly', () => {
+    test("filing an UNWRAPPED content item still tags the content item directly", () => {
       // A content item that no core_document wraps yet (e.g. a media asset,
       // or ingest that hasn't gone through core.add_document) keeps the
       // original content-item-scoped filing behavior.
       const staged = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
-        filename: 'loose.png',
+        filename: "loose.png",
       });
       const asset = output<{ content_id: string }>(
-        invoke(owner, 'media.add_asset', {
+        invoke(owner, "media.add_asset", {
           staged_sha: staged.sha256,
-          kind: 'photo',
-        }),
+          kind: "photo",
+        })
       );
-      const stagedBatch = invoke(owner, 'sync.stage_rows', {
-        kind: 'enrichment.doctype',
-        label: 'docs',
+      const stagedBatch = invoke(owner, "sync.stage_rows", {
+        kind: "enrichment.doctype",
+        label: "docs",
         rows: [
           {
-            entity_type: 'core.content_item',
+            entity_type: "core.content_item",
             external_id: `${asset.content_id}:filing`,
             payload: {
               content_id: asset.content_id,
-              title: 'Loose scan',
-              folder: 'Inbox',
+              title: "Loose scan",
+              folder: "Inbox",
             },
           },
         ],
       });
       const batchId = output<{ batch_id: string }>(stagedBatch).batch_id;
       const published = output<{ updated: number }>(
-        invoke(owner, 'sync.publish_batch', { batch_id: batchId }),
+        invoke(owner, "sync.publish_batch", { batch_id: batchId })
       );
       expect(published.updated).toBe(1);
-      const docCount = db.vault.prepare('SELECT count(*) AS n FROM core_document').get() as {
+      const docCount = db.vault
+        .prepare("SELECT count(*) AS n FROM core_document")
+        .get() as {
         n: number;
       };
       expect(docCount.n).toBe(0); // still never mints a document
       const item = db.vault
-        .prepare('SELECT title FROM core_content_item WHERE content_id = ?')
+        .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
         .get(asset.content_id) as { title: string };
-      expect(item.title).toBe('Loose scan');
+      expect(item.title).toBe("Loose scan");
       const folder = db.vault
         .prepare(
           `SELECT c.pref_label FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
-          WHERE t.target_id = ? AND t.target_type = 'core.content_item'`,
+          WHERE t.target_id = ? AND t.target_type = 'core.content_item'`
         )
         .get(asset.content_id) as { pref_label: string };
-      expect(folder.pref_label).toBe('Inbox');
+      expect(folder.pref_label).toBe("Inbox");
     });
   });
 
-  describe('core.set_extracted_text', () => {
-    test('writes the text derivative and the OWNING document becomes searchable', () => {
+  describe("core.set_extracted_text", () => {
+    test("writes the text derivative and the OWNING document becomes searchable", () => {
       const staged = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
-        filename: 'scanned.png',
+        filename: "scanned.png",
       });
       const doc = output<{ document_id: string; content_id: string }>(
-        invoke(owner, 'core.add_document', {
+        invoke(owner, "core.add_document", {
           staged_sha: staged.sha256,
-          title: 'scan',
-        }),
+          title: "scan",
+        })
       );
-      const set = invoke(agent, 'core.set_extracted_text', {
+      const set = invoke(agent, "core.set_extracted_text", {
         content_id: doc.content_id,
-        text: 'Warranty expires 2027-03-01 for the espresso machine',
+        text: "Warranty expires 2027-03-01 for the espresso machine",
       });
-      expect(set.status).toBe('executed');
+      expect(set.status).toBe("executed");
       const hits = gw.search(owner, {
-        entity: 'core.document',
-        query: 'espresso',
-        purpose: 'dpv:ServiceProvision',
+        entity: "core.document",
+        query: "espresso",
+        purpose: "dpv:ServiceProvision",
       }) as { rows: unknown[] };
       expect(hits.rows).toHaveLength(1);
       // Re-extraction replaces in place (re-derivable).
-      invoke(agent, 'core.set_extracted_text', {
+      invoke(agent, "core.set_extracted_text", {
         content_id: doc.content_id,
-        text: 'better OCR text',
+        text: "better OCR text",
       });
       const derivatives = db.vault
         .prepare(
-          `SELECT count(*) AS n FROM core_content_derivative WHERE content_id = ? AND variant = 'text'`,
+          `SELECT count(*) AS n FROM core_content_derivative WHERE content_id = ? AND variant = 'text'`
         )
         .get(doc.content_id) as { n: number };
       expect(derivatives.n).toBe(1);
     });
   });
 
-  describe('agent content access (the #296 §7 seam)', () => {
-    test('text and thumb variants serve size-bounded; originals are structurally unreachable; every fetch receipts', async () => {
+  describe("agent content access (the #296 §7 seam)", () => {
+    test("text and thumb variants serve size-bounded; originals are structurally unreachable; every fetch receipts", async () => {
       const original = gw.stageBlob(owner, {
         bytes: PNG_BYTES,
-        filename: 'photo.png',
+        filename: "photo.png",
       });
       gw.stageBlob(owner, {
-        bytes: Buffer.from('tiny-thumb-bytes'),
-        mediaType: 'image/jpeg',
-        variant: 'thumb',
+        bytes: Buffer.from("tiny-thumb-bytes"),
+        mediaType: "image/jpeg",
+        variant: "thumb",
         variantOf: original.sha256,
       });
       const asset = output<{ content_id: string }>(
-        invoke(owner, 'media.add_asset', { staged_sha: original.sha256 }),
+        invoke(owner, "media.add_asset", { staged_sha: original.sha256 })
       );
 
       const thumb = await gw.contentForAgent(agent, {
         contentId: asset.content_id,
-        variant: 'thumb',
+        variant: "thumb",
       });
-      expect(thumb.status).toBe('ok');
-      assert(thumb.status === 'ok' && thumb.kind === 'bytes');
-      expect(Buffer.from(thumb.base64, 'base64').toString()).toBe('tiny-thumb-bytes');
-      expect(thumb.mediaType).toBe('image/jpeg');
+      expect(thumb.status).toBe("ok");
+      assert(thumb.status === "ok" && thumb.kind === "bytes");
+      expect(Buffer.from(thumb.base64, "base64").toString()).toBe(
+        "tiny-thumb-bytes"
+      );
+      expect(thumb.mediaType).toBe("image/jpeg");
 
       // Originals are not a spelling this surface has.
       await expect(
         gw.contentForAgent(agent, {
           contentId: asset.content_id,
-          variant: 'original',
-        }),
+          variant: "original",
+        })
       ).rejects.toThrow(/derivatives egress, never originals/u);
 
       // The text variant reads the derivative row.
-      invoke(agent, 'core.set_extracted_text', {
+      invoke(agent, "core.set_extracted_text", {
         content_id: asset.content_id,
-        text: 'hello text',
+        text: "hello text",
       });
       const text = await gw.contentForAgent(agent, {
         contentId: asset.content_id,
-        variant: 'text',
+        variant: "text",
       });
-      expect(text.status).toBe('ok');
-      assert(text.status === 'ok' && text.kind === 'text');
-      expect(text.text).toBe('hello text');
+      expect(text.status).toBe("ok");
+      assert(text.status === "ok" && text.kind === "text");
+      expect(text.text).toBe("hello text");
 
       // A missing variant is a clean miss.
       const preview = await gw.contentForAgent(agent, {
         contentId: asset.content_id,
-        variant: 'preview',
+        variant: "preview",
       });
-      expect(preview.status).toBe('no-variant');
+      expect(preview.status).toBe("no-variant");
 
       // The size cap refuses oversized variants.
       const tooSmallCap = await gw.contentForAgent(agent, {
         contentId: asset.content_id,
-        variant: 'thumb',
+        variant: "thumb",
         maxBytes: 4,
       });
-      expect(tooSmallCap.status).toBe('too-large');
+      expect(tooSmallCap.status).toBe("too-large");
 
       // Every fetch (allow AND deny) wrote an agent-content receipt.
       const receipts = db.journal
         .prepare(
-          `SELECT count(*) AS n FROM consent_receipt WHERE detail_json LIKE '%agent-content%'`,
+          `SELECT count(*) AS n FROM consent_receipt WHERE detail_json LIKE '%agent-content%'`
         )
         .get() as { n: number };
       expect(receipts.n).toBeGreaterThanOrEqual(4);
     });
   });
 
-  describe('phase-5 surfaces', () => {
-    test('embeddings upsert + cosine scan; request queue records and reads back', () => {
+  describe("phase-5 surfaces", () => {
+    test("embeddings upsert + cosine scan; request queue records and reads back", () => {
       const { assetId } = addPhoto();
-      const up = invoke(agent, 'enrich.upsert_embedding', {
-        entity_type: 'media.media_asset',
+      const up = invoke(agent, "enrich.upsert_embedding", {
+        entity_type: "media.media_asset",
         entity_id: assetId,
-        model: 'stub-embedder-v1',
+        model: "stub-embedder-v1",
         vector: [1, 0, 0],
       });
-      expect(up.status).toBe('executed');
-      invoke(agent, 'enrich.upsert_embedding', {
-        entity_type: 'media.media_asset',
+      expect(up.status).toBe("executed");
+      invoke(agent, "enrich.upsert_embedding", {
+        entity_type: "media.media_asset",
         entity_id: assetId,
-        model: 'stub-embedder-v1',
+        model: "stub-embedder-v1",
         vector: [0.9, 0.1, 0],
       });
       expect(
-        (db.vault.prepare('SELECT count(*) AS n FROM enrich_embedding').get() as { n: number }).n,
+        (
+          db.vault
+            .prepare("SELECT count(*) AS n FROM enrich_embedding")
+            .get() as { n: number }
+        ).n
       ).toBe(1); // upsert, not append
-      const hits = scanEmbeddings(db.vault, 'stub-embedder-v1', [1, 0, 0], {
+      const hits = scanEmbeddings(db.vault, "stub-embedder-v1", [1, 0, 0], {
         limit: 5,
       });
       expect(hits[0]!.entityId).toBe(assetId);
       expect(hits[0]!.score).toBeGreaterThan(0.9);
       expect(
-        cosine(decodeVector(encodeVector([1, 2, 3])), Float32Array.from([1, 2, 3])),
+        cosine(
+          decodeVector(encodeVector([1, 2, 3])),
+          Float32Array.from([1, 2, 3])
+        )
       ).toBeCloseTo(1);
 
-      const req = invoke(owner, 'enrich.request_enrichment', {
-        entity_type: 'media.media_asset',
-        reason: 'search-miss',
-        detail: 'sunset over the lake',
+      const req = invoke(owner, "enrich.request_enrichment", {
+        entity_type: "media.media_asset",
+        reason: "search-miss",
+        detail: "sunset over the lake",
       });
-      expect(req.status).toBe('executed');
+      expect(req.status).toBe("executed");
       const open = db.vault
-        .prepare('SELECT reason, detail FROM enrich_request WHERE drained_at IS NULL')
+        .prepare(
+          "SELECT reason, detail FROM enrich_request WHERE drained_at IS NULL"
+        )
         .all() as { reason: string; detail: string }[];
       expect(open).toHaveLength(1);
-      expect(open[0]!.reason).toBe('search-miss');
+      expect(open[0]!.reason).toBe("search-miss");
     });
 
-    test('an owner search miss records ONE open request; agent misses record nothing; draining closes it', () => {
+    test("an owner search miss records ONE open request; agent misses record nothing; draining closes it", () => {
       const miss = () =>
         gw.search(owner, {
-          entity: 'knowledge.annotation',
-          query: 'sunset lake',
-          purpose: 'dpv:ServiceProvision',
+          entity: "knowledge.annotation",
+          query: "sunset lake",
+          purpose: "dpv:ServiceProvision",
         }) as { rows: unknown[] };
       expect(miss().rows).toHaveLength(0);
       expect(miss().rows).toHaveLength(0); // repeat search — deduped
       const open = db.vault
-        .prepare(`SELECT request_id, detail FROM enrich_request WHERE drained_at IS NULL`)
+        .prepare(
+          `SELECT request_id, detail FROM enrich_request WHERE drained_at IS NULL`
+        )
         .all() as { request_id: string; detail: string }[];
       expect(open).toHaveLength(1);
-      expect(open[0]!.detail).toBe('sunset lake');
+      expect(open[0]!.detail).toBe("sunset lake");
 
       // Agent-plane misses are the agent's business, never queue spam.
       gw.search(agent, {
-        entity: 'knowledge.annotation',
-        query: 'agent query',
-        purpose: 'dpv:ServiceProvision',
+        entity: "knowledge.annotation",
+        query: "agent query",
+        purpose: "dpv:ServiceProvision",
       });
       expect(
-        (db.vault.prepare('SELECT count(*) AS n FROM enrich_request').get() as { n: number }).n,
+        (
+          db.vault
+            .prepare("SELECT count(*) AS n FROM enrich_request")
+            .get() as { n: number }
+        ).n
       ).toBe(1);
 
-      const drained = invoke(agent, 'enrich.mark_requests_drained', {
+      const drained = invoke(agent, "enrich.mark_requests_drained", {
         request_ids: [open[0]!.request_id],
       });
-      expect(drained.status).toBe('executed');
+      expect(drained.status).toBe("executed");
       expect(output<{ drained: number }>(drained).drained).toBe(1);
       expect(
         (
           db.vault
-            .prepare('SELECT count(*) AS n FROM enrich_request WHERE drained_at IS NULL')
+            .prepare(
+              "SELECT count(*) AS n FROM enrich_request WHERE drained_at IS NULL"
+            )
             .get() as { n: number }
-        ).n,
+        ).n
       ).toBe(0);
     });
 
-    test('a gateway backstop cannot drain a live device lease but may resume after expiry', () => {
+    test("a gateway backstop cannot drain a live device lease but may resume after expiry", () => {
       queueDeviceEnrichmentRequest(db.vault, {
-        requestId: 'pdf-device-job',
-        entityType: 'core.content_item',
-        entityId: 'pdf-content',
-        capability: 'pdfText',
-        contributionVariant: 'text',
+        requestId: "pdf-device-job",
+        entityType: "core.content_item",
+        entityId: "pdf-content",
+        capability: "pdfText",
+        contributionVariant: "text",
       });
       leaseNextEnrichmentRequest(db.vault, {
-        deviceId: 'laptop',
-        capabilities: ['pdfText'],
-        now: '2099-01-01T00:00:00.000Z',
+        deviceId: "laptop",
+        capabilities: ["pdfText"],
+        now: "2099-01-01T00:00:00.000Z",
         ttlMs: 60_000,
-        token: 'live-token',
+        token: "live-token",
       });
-      const live = invoke(agent, 'enrich.mark_requests_drained', {
-        request_ids: ['pdf-device-job'],
+      const live = invoke(agent, "enrich.mark_requests_drained", {
+        request_ids: ["pdf-device-job"],
       });
       expect(output<{ drained: number }>(live).drained).toBe(0);
 
       db.vault
-        .prepare("UPDATE enrich_request SET lease_expires_at = '2000-01-01T00:00:00.000Z'")
+        .prepare(
+          "UPDATE enrich_request SET lease_expires_at = '2000-01-01T00:00:00.000Z'"
+        )
         .run();
-      const expired = invoke(agent, 'enrich.mark_requests_drained', {
-        request_ids: ['pdf-device-job'],
+      const expired = invoke(agent, "enrich.mark_requests_drained", {
+        request_ids: ["pdf-device-job"],
       });
       expect(output<{ drained: number }>(expired).drained).toBe(1);
     });
   });
 
-  describe('enrich settings', () => {
-    test('default is local; updates persist; junk refused', () => {
+  describe("enrich settings", () => {
+    test("default is local; updates persist; junk refused", () => {
       expect(readEnrichSettings(db)).toStrictEqual({
-        photos: 'local',
-        docs: 'local',
+        photos: "local",
+        docs: "local",
       });
-      updateEnrichSettings(db, { photos: 'model' });
+      updateEnrichSettings(db, { photos: "model" });
       expect(readEnrichSettings(db)).toStrictEqual({
-        photos: 'model',
-        docs: 'local',
+        photos: "model",
+        docs: "local",
       });
-      updateEnrichSettings(db, { photos: null, docs: 'off' });
+      updateEnrichSettings(db, { photos: null, docs: "off" });
       expect(readEnrichSettings(db)).toStrictEqual({
-        photos: 'local',
-        docs: 'off',
+        photos: "local",
+        docs: "off",
       });
-      expect(() => updateEnrichSettings(db, { docs: 'sometimes' as never })).toThrow(
-        /must be one of/u,
-      );
+      expect(() =>
+        updateEnrichSettings(db, { docs: "sometimes" as never })
+      ).toThrow(/must be one of/u);
     });
 
     // issue #352 phase 3/4: the settings bag itself is owner-only (GET/PATCH
     // /centraid/_vault/enrich); `enrich_policy` mirrors the one column of it —
     // "is this domain's model-tier enrichment on" — apps can actually reach
     // through the normal consent-checked read path.
-    test('enrich_policy mirrors the settings bag, seeded local at bootstrap and readable via gw.read', () => {
+    test("enrich_policy mirrors the settings bag, seeded local at bootstrap and readable via gw.read", () => {
       const seeded = db.vault
-        .prepare('SELECT domain, tier FROM enrich_policy ORDER BY domain')
+        .prepare("SELECT domain, tier FROM enrich_policy ORDER BY domain")
         .all() as { domain: string; tier: string }[];
       // node:sqlite hands back null-prototype rows; spreading compares the column
       // data (which is the contract) without asserting the driver's prototype.
       expect(seeded.map((row) => ({ ...row }))).toStrictEqual([
-        { domain: 'docs', tier: 'local' },
-        { domain: 'photos', tier: 'local' },
+        { domain: "docs", tier: "local" },
+        { domain: "photos", tier: "local" },
       ]);
-      updateEnrichSettings(db, { photos: 'model' });
+      updateEnrichSettings(db, { photos: "model" });
       const afterUpdate = db.vault
-        .prepare('SELECT tier FROM enrich_policy WHERE domain = ?')
-        .get('photos') as { tier: string };
-      expect(afterUpdate.tier).toBe('model');
+        .prepare("SELECT tier FROM enrich_policy WHERE domain = ?")
+        .get("photos") as { tier: string };
+      expect(afterUpdate.tier).toBe("model");
 
       // The exact surface an app reaches: ctx.vault.read({ entity: 'enrich.policy', ... }).
       const read = gw.read(owner, {
-        entity: 'enrich.policy',
-        where: [{ column: 'domain', op: 'eq', value: 'photos' }],
-        purpose: 'dpv:ServiceProvision',
+        entity: "enrich.policy",
+        where: [{ column: "domain", op: "eq", value: "photos" }],
+        purpose: "dpv:ServiceProvision",
       });
       expect(read.rows).toStrictEqual([
-        expect.objectContaining({ domain: 'photos', tier: 'model' }),
+        expect.objectContaining({ domain: "photos", tier: "model" }),
       ]);
     });
   });
 
-  describe('per-class standing consent (issue #310 C3)', () => {
-    test('classes outside the narrowed trust stage for review instead of auto-publishing', () => {
+  describe("per-class standing consent (issue #310 C3)", () => {
+    test("classes outside the narrowed trust stage for review instead of auto-publishing", () => {
       const { assetId } = addPhoto();
       // Owner consents to captions only on this enrichment connection.
-      const first = invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'narrow',
+      const first = invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "narrow",
         rows: [
           {
-            entity_type: 'knowledge.annotation',
+            entity_type: "knowledge.annotation",
             external_id: `${assetId}:warmup`,
             payload: {
-              target_type: 'media.media_asset',
+              target_type: "media.media_asset",
               target_id: assetId,
-              body: 'warmup',
+              body: "warmup",
             },
           },
         ],
       });
-      const connectionId = output<{ connection_id: string }>(first).connection_id;
+      const connectionId = output<{ connection_id: string }>(
+        first
+      ).connection_id;
       expect(
-        invoke(owner, 'sync.set_connection_trust', {
+        invoke(owner, "sync.set_connection_trust", {
           connection_id: connectionId,
-          trust: 'auto-publish',
-          enrich_classes: ['caption'],
-        }).status,
-      ).toBe('executed');
+          trust: "auto-publish",
+          enrich_classes: ["caption"],
+        }).status
+      ).toBe("executed");
 
-      const mixed = invoke(agent, 'sync.stage_rows', {
-        kind: 'enrichment.vision',
-        label: 'narrow',
+      const mixed = invoke(agent, "sync.stage_rows", {
+        kind: "enrichment.vision",
+        label: "narrow",
         rows: [
           {
-            entity_type: 'knowledge.annotation',
+            entity_type: "knowledge.annotation",
             external_id: `${assetId}:caption`,
             payload: {
-              target_type: 'media.media_asset',
+              target_type: "media.media_asset",
               target_id: assetId,
-              body: 'A red bicycle',
+              body: "A red bicycle",
             },
           },
           {
-            entity_type: 'core.tag',
+            entity_type: "core.tag",
             external_id: `${assetId}:tag:bicycle`,
             payload: {
-              target_type: 'media.media_asset',
+              target_type: "media.media_asset",
               target_id: assetId,
-              label: 'Bicycle',
+              label: "Bicycle",
               confidence: 0.9,
             },
           },
         ],
       });
-      expect(mixed.status).toBe('executed');
+      expect(mixed.status).toBe("executed");
       const out = output<{
         published: { created: number };
         held?: number;
@@ -892,15 +967,15 @@ describe('enrich', () => {
       const tagCount = db.vault
         .prepare(
           `SELECT count(*) AS n FROM core_tag t JOIN core_concept c ON c.concept_id = t.concept_id
-          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id WHERE s.uri = ?`,
+          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id WHERE s.uri = ?`
         )
         .get(VISION_SCHEME_URI) as { n: number };
       expect(tagCount.n).toBe(0);
       // …and it was not dropped either: it waits as a draft batch for review.
       const heldBatch = db.vault
-        .prepare('SELECT status FROM sync_import_batch WHERE batch_id = ?')
-        .get(out.held_batch_id ?? '') as { status: string };
-      expect(heldBatch.status).toBe('draft');
+        .prepare("SELECT status FROM sync_import_batch WHERE batch_id = ?")
+        .get(out.held_batch_id ?? "") as { status: string };
+      expect(heldBatch.status).toBe("draft");
     });
   });
 });

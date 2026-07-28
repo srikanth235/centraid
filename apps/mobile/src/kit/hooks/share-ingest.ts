@@ -3,8 +3,8 @@
 // injection lesson). The hook in `ShareIntentIngest.tsx` is a thin wrapper that
 // wires the real producers, `expo-file-system`, `Alert`, and reset in.
 
-import type { NativeReplicaSession } from '../../lib/replica/native-session';
-import type { DeviceMediaInput } from '../../lib/upload/media-producer';
+import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import type { DeviceMediaInput } from "../../lib/upload/media-producer";
 
 /** A shared file as expo-share-intent hands it to us (structural subset). */
 export interface SharedIntentFileLike {
@@ -44,12 +44,12 @@ export interface ShareIngestPorts {
   backupDeviceMedia: (
     session: NativeReplicaSession,
     gatewayBase: string,
-    input: MediaProducerInput,
+    input: MediaProducerInput
   ) => Promise<unknown>;
   backupDocument: (
     session: NativeReplicaSession,
     gatewayBase: string,
-    input: DocumentProducerInput,
+    input: DocumentProducerInput
   ) => Promise<unknown>;
   /** Plaintext size when the share intent did not carry one. */
   fileSize: (path: string) => number;
@@ -58,10 +58,10 @@ export interface ShareIngestPorts {
   alert: (title: string, message: string) => void;
 }
 
-function mediaKind(mimeType: string): DeviceMediaInput['kind'] {
-  if (mimeType.startsWith('video/')) return 'video';
-  if (mimeType.startsWith('audio/')) return 'audio';
-  return 'photo';
+function mediaKind(mimeType: string): DeviceMediaInput["kind"] {
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "photo";
 }
 
 function isDeviceMedia(mimeType: string): boolean {
@@ -69,7 +69,9 @@ function isDeviceMedia(mimeType: string): boolean {
   // 'audio', backupDeviceMedia skips derivatives for it), so shared audio goes
   // through the media producer rather than the docs shape (#431 F14e).
   return (
-    mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType.startsWith('audio/')
+    mimeType.startsWith("image/") ||
+    mimeType.startsWith("video/") ||
+    mimeType.startsWith("audio/")
   );
 }
 
@@ -83,14 +85,14 @@ export async function processShareIntent(
   ports: ShareIngestPorts,
   session: NativeReplicaSession,
   gatewayBase: string,
-  shareIntent: SharedIntentLike,
+  shareIntent: SharedIntentLike
 ): Promise<void> {
   try {
     const files = shareIntent.files ?? [];
     if (files.length === 0) {
       ports.alert(
-        'Can’t save this to Centraid',
-        'Centraid backs up photos, videos, audio, and documents. Links and plain text aren’t supported yet.',
+        "Can’t save this to Centraid",
+        "Centraid backs up photos, videos, audio, and documents. Links and plain text aren’t supported yet."
       );
       return;
     }
@@ -123,7 +125,10 @@ export async function processShareIntent(
     };
     await processFile(0);
   } catch (error) {
-    ports.alert('Save to Centraid paused', error instanceof Error ? error.message : String(error));
+    ports.alert(
+      "Save to Centraid paused",
+      error instanceof Error ? error.message : String(error)
+    );
   } finally {
     ports.reset();
   }

@@ -2,14 +2,14 @@
 // dispatcher. Kept in one tiny module so both halves stay in sync.
 
 export type BridgeMethod =
-  | 'notify.schedule'
-  | 'notify.cancel'
-  | 'haptic.impact'
-  | 'haptic.selection'
-  | 'haptic.success'
-  | 'transfer.putBackground'
-  | 'timer.startBackground'
-  | 'timer.cancel';
+  | "notify.schedule"
+  | "notify.cancel"
+  | "haptic.impact"
+  | "haptic.selection"
+  | "haptic.success"
+  | "transfer.putBackground"
+  | "timer.startBackground"
+  | "timer.cancel";
 
 export interface BridgeRequest {
   /** Correlator chosen by the WebView caller. */
@@ -37,4 +37,4 @@ export interface BridgeErr {
 
 export type BridgeResponse<T = unknown> = BridgeOk<T> | BridgeErr;
 
-export const CENTRAID_HANDSHAKE = '__centraid_bridge_v1__';
+export const CENTRAID_HANDSHAKE = "__centraid_bridge_v1__";

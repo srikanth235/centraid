@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import { getBlocking } from '../../gateway-client.js';
+import { getBlocking } from "../../gateway-client.js";
 
 const POLL_MS = 60_000;
 
@@ -16,7 +16,12 @@ export function useBlockingCount(): number {
   const load = useCallback(() => {
     void getBlocking()
       .then((b) =>
-        setCount(b.outbox.length + b.needsAuth.length + b.parked.length + b.scopeRequests.length),
+        setCount(
+          b.outbox.length +
+            b.needsAuth.length +
+            b.parked.length +
+            b.scopeRequests.length
+        )
       )
       .catch(() => {
         // Gateway unreachable — keep the last known count rather than flapping.
@@ -25,10 +30,10 @@ export function useBlockingCount(): number {
   useEffect(() => {
     load();
     const timer = window.setInterval(load, POLL_MS);
-    window.addEventListener('focus', load);
+    window.addEventListener("focus", load);
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener('focus', load);
+      window.removeEventListener("focus", load);
     };
   }, [load]);
   return count;

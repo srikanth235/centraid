@@ -19,10 +19,14 @@
  * the S3-storage enable flow.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
-import { parseRecoveryKit, recoveryKitFingerprint, wrapRecoveryKit } from '@centraid/backup';
+import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
+import {
+  parseRecoveryKit,
+  recoveryKitFingerprint,
+  wrapRecoveryKit,
+} from "@centraid/backup";
 import {
   BackupPolicyError,
   readBackupPolicy,
@@ -30,27 +34,31 @@ import {
   updateBackupPolicy,
   type BackupPolicy,
   type BackupPolicyPatch,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
-import type { ProviderPolicySyncState } from '../backup/backup-provider-observability.js';
-import type { BackupReconciliationState } from '../backup/backup-reconciliation.js';
-import type { BackupService, HomeDiscovery, RecoveryKitState } from '../backup/backup-service.js';
-import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { EnrollmentStore } from '../serve/enrollment-store.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import { readJson, sendError, sendJson } from './route-helpers.js';
+import type { ProviderPolicySyncState } from "../backup/backup-provider-observability.js";
+import type { BackupReconciliationState } from "../backup/backup-reconciliation.js";
+import type {
+  BackupService,
+  HomeDiscovery,
+  RecoveryKitState,
+} from "../backup/backup-service.js";
+import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { EnrollmentStore } from "../serve/enrollment-store.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
+import { readJson, sendError, sendJson } from "./route-helpers.js";
 
-const BACKUP_PATH = '/centraid/_gateway/backup';
-const BACKUP_RUN_PATH = '/centraid/_gateway/backup/run';
-const BACKUP_VERIFY_PATH = '/centraid/_gateway/backup/verify';
-const BACKUP_KIT_PATH = '/centraid/_gateway/backup/kit';
-const BACKUP_KIT_CONFIRMED_PATH = '/centraid/_gateway/backup/kit-confirmed';
-const BACKUP_POLICY_PREFIX = '/centraid/_gateway/backup/policy/';
-const BACKUP_VERIFY_BUCKET_PREFIX = '/centraid/_gateway/backup/verify-bucket/';
+const BACKUP_PATH = "/centraid/_gateway/backup";
+const BACKUP_RUN_PATH = "/centraid/_gateway/backup/run";
+const BACKUP_VERIFY_PATH = "/centraid/_gateway/backup/verify";
+const BACKUP_KIT_PATH = "/centraid/_gateway/backup/kit";
+const BACKUP_KIT_CONFIRMED_PATH = "/centraid/_gateway/backup/kit-confirmed";
+const BACKUP_POLICY_PREFIX = "/centraid/_gateway/backup/policy/";
+const BACKUP_VERIFY_BUCKET_PREFIX = "/centraid/_gateway/backup/verify-bucket/";
 
 export interface BackupDestinationStatus {
-  kind: 'gateway-local' | 'provider';
+  kind: "gateway-local" | "provider";
   connectionId?: string;
 }
 
@@ -95,18 +103,23 @@ export interface BackupRouteDeps {
   vaults: VaultRegistry;
 }
 
-function ownerRequired(req: IncomingMessage, deps: BackupRouteDeps, res: ServerResponse): boolean {
+function ownerRequired(
+  req: IncomingMessage,
+  deps: BackupRouteDeps,
+  res: ServerResponse
+): boolean {
   const raw = req.headers[AUTHED_DEVICE_HEADER];
   const endpointId = Array.isArray(raw) ? raw[0] : raw;
   const vaultId = deps.vaults.current().boot.vaultId;
   if (
-    typeof endpointId !== 'string' ||
+    typeof endpointId !== "string" ||
     !deps.enrollments ||
-    deps.enrollments.get(endpointId, vaultId)?.role !== 'admin'
+    deps.enrollments.get(endpointId, vaultId)?.role !== "admin"
   ) {
     sendJson(res, 403, {
-      error: 'admin_required',
-      message: 'only an admin device can export or verify live recovery key material',
+      error: "admin_required",
+      message:
+        "only an admin device can export or verify live recovery key material",
     });
     return false;
   }
@@ -121,22 +134,25 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
     };
     return {
       configured: false,
-      vaults: deps.vaults.planesList().map((plane) => vaultStatus(plane, undefined, false)),
+      vaults: deps.vaults
+        .planesList()
+        .map((plane) => vaultStatus(plane, undefined, false)),
       recoveryKit,
     };
   }
-  const [configuration, state, casReconciliations, recoveryKit, home] = await Promise.all([
-    backupService.configured?.() ?? Promise.resolve({ configured: true }),
-    backupService.status(),
-    backupService.casReconciliationStatus?.() ??
-      Promise.resolve<Record<string, BackupReconciliationState>>({}),
-    backupService.recoveryKitStatus(),
-    // Discovery is a provider round-trip; a failure must never blank the whole
-    // status body — the five-metric surface degrades to unknown recovery/exit.
-    typeof backupService.homeDiscovery === 'function'
-      ? backupService.homeDiscovery().catch(() => undefined)
-      : Promise.resolve<HomeDiscovery | undefined>(undefined),
-  ]);
+  const [configuration, state, casReconciliations, recoveryKit, home] =
+    await Promise.all([
+      backupService.configured?.() ?? Promise.resolve({ configured: true }),
+      backupService.status(),
+      backupService.casReconciliationStatus?.() ??
+        Promise.resolve<Record<string, BackupReconciliationState>>({}),
+      backupService.recoveryKitStatus(),
+      // Discovery is a provider round-trip; a failure must never blank the whole
+      // status body — the five-metric surface degrades to unknown recovery/exit.
+      typeof backupService.homeDiscovery === "function"
+        ? backupService.homeDiscovery().catch(() => undefined)
+        : Promise.resolve<HomeDiscovery | undefined>(undefined),
+    ]);
   const vaults: BackupVaultStatus[] = deps.vaults.planesList().map((plane) => {
     const vaultId = plane.boot.vaultId;
     const target = state[vaultId];
@@ -144,7 +160,7 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
       plane,
       target,
       backupService.isRunning(vaultId),
-      casReconciliations[vaultId],
+      casReconciliations[vaultId]
     );
   });
   return {
@@ -157,7 +173,7 @@ async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
 }
 
 function vaultStatus(
-  plane: ReturnType<VaultRegistry['current']>,
+  plane: ReturnType<VaultRegistry["current"]>,
   target:
     | {
         lastBackupAt?: string;
@@ -169,19 +185,22 @@ function vaultStatus(
       }
     | undefined,
   running: boolean,
-  casReconciliation?: BackupReconciliationState,
+  casReconciliation?: BackupReconciliationState
 ): BackupVaultStatus {
   const store = readBlobStoreSettings(plane.db.vault);
   // Every remote CAS connection is a provider home bundle now (#436 §2).
   const destination: BackupDestinationStatus =
-    store.kind === 's3'
+    store.kind === "s3"
       ? {
-          kind: 'provider',
+          kind: "provider",
           ...(store.connectionId ? { connectionId: store.connectionId } : {}),
         }
-      : { kind: 'gateway-local' };
+      : { kind: "gateway-local" };
   const outbox = plane.db.blobTransfers.status();
-  const reconciliation = newestReconciliation(target?.reconciliation, casReconciliation);
+  const reconciliation = newestReconciliation(
+    target?.reconciliation,
+    casReconciliation
+  );
   return {
     vaultId: plane.boot.vaultId,
     name: plane.name,
@@ -190,9 +209,13 @@ function vaultStatus(
     pendingOffsite: { count: outbox.pendingCount, bytes: outbox.pendingBytes },
     ...(target?.lastBackupAt ? { lastBackupAt: target.lastBackupAt } : {}),
     ...(target?.lastVerifiedAt ? { lastVerifyAt: target.lastVerifiedAt } : {}),
-    ...(target?.lastWalDrainAt ? { lastWalDrainAt: target.lastWalDrainAt } : {}),
+    ...(target?.lastWalDrainAt
+      ? { lastWalDrainAt: target.lastWalDrainAt }
+      : {}),
     ...(target?.lastError ? { lastError: target.lastError } : {}),
-    ...(target?.providerPolicy ? { providerPolicy: target.providerPolicy } : {}),
+    ...(target?.providerPolicy
+      ? { providerPolicy: target.providerPolicy }
+      : {}),
     ...(reconciliation ? { reconciliation } : {}),
     running,
   };
@@ -200,11 +223,13 @@ function vaultStatus(
 
 function newestReconciliation(
   first: BackupReconciliationState | undefined,
-  second: BackupReconciliationState | undefined,
+  second: BackupReconciliationState | undefined
 ): BackupReconciliationState | undefined {
   if (!first) return second;
   if (!second) return first;
-  return Date.parse(first.checkedAt) >= Date.parse(second.checkedAt) ? first : second;
+  return Date.parse(first.checkedAt) >= Date.parse(second.checkedAt)
+    ? first
+    : second;
 }
 
 // Owner-editable policy keys (issue #436 §4). Deliberately EXCLUDED:
@@ -216,26 +241,29 @@ function newestReconciliation(
 // The cadence fields (rpo/snapshot/verify) stay editable as "advanced", along
 // with the transit budgets and WAL-roll knobs.
 const POLICY_KEYS: readonly (keyof BackupPolicy)[] = [
-  'rpoSeconds',
-  'snapshotIntervalHours',
-  'verifyEveryDays',
-  'outboxBudgetBytes',
-  'reservedHeadroomBytes',
-  'cacheBudgetBytes',
-  'throttleBytesPerSec',
-  'walBaseRollBytes',
-  'walBaseRollHours',
+  "rpoSeconds",
+  "snapshotIntervalHours",
+  "verifyEveryDays",
+  "outboxBudgetBytes",
+  "reservedHeadroomBytes",
+  "cacheBudgetBytes",
+  "throttleBytesPerSec",
+  "walBaseRollBytes",
+  "walBaseRollHours",
 ];
 
 export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
 
     if (url.pathname === BACKUP_PATH) {
-      if ((req.method ?? 'GET') !== 'GET') {
+      if ((req.method ?? "GET") !== "GET") {
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'GET only',
+          error: "method_not_allowed",
+          message: "GET only",
         });
       }
       try {
@@ -246,23 +274,25 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     }
 
     if (url.pathname.startsWith(BACKUP_POLICY_PREFIX)) {
-      const vaultId = decodeURIComponent(url.pathname.slice(BACKUP_POLICY_PREFIX.length));
+      const vaultId = decodeURIComponent(
+        url.pathname.slice(BACKUP_POLICY_PREFIX.length)
+      );
       const plane = deps.vaults.get(vaultId);
       if (!plane)
         return sendJson(res, 404, {
-          error: 'not_found',
-          message: 'unknown vault',
+          error: "not_found",
+          message: "unknown vault",
         });
-      if ((req.method ?? 'GET') === 'GET') {
+      if ((req.method ?? "GET") === "GET") {
         return sendJson(res, 200, {
           vaultId,
           policy: readBackupPolicy(plane.db.vault),
         });
       }
-      if ((req.method ?? 'GET') !== 'PUT') {
+      if ((req.method ?? "GET") !== "PUT") {
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'GET, PUT only',
+          error: "method_not_allowed",
+          message: "GET, PUT only",
         });
       }
       try {
@@ -275,7 +305,8 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
         plane.rescheduleWalCapture();
         await deps.backupService?.refreshWalSchedule?.();
         const providerPolicy =
-          deps.backupService && typeof deps.backupService.syncPolicy === 'function'
+          deps.backupService &&
+          typeof deps.backupService.syncPolicy === "function"
             ? await deps.backupService.syncPolicy(vaultId)
             : undefined;
         const response = {
@@ -283,17 +314,19 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           policy,
           ...(providerPolicy ? { providerPolicy } : {}),
         };
-        if (providerPolicy?.status === 'rejected') {
+        if (providerPolicy?.status === "rejected") {
           return sendJson(res, 422, {
-            error: 'policy_unmet',
-            message: providerPolicy.error ?? 'the provider cannot meet this policy',
+            error: "policy_unmet",
+            message:
+              providerPolicy.error ?? "the provider cannot meet this policy",
             ...response,
           });
         }
-        if (providerPolicy?.status === 'error') {
+        if (providerPolicy?.status === "error") {
           return sendJson(res, 502, {
-            error: 'provider_policy_sync_failed',
-            message: providerPolicy.error ?? 'provider policy synchronization failed',
+            error: "provider_policy_sync_failed",
+            message:
+              providerPolicy.error ?? "provider policy synchronization failed",
             ...response,
           });
         }
@@ -301,7 +334,7 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
       } catch (err) {
         if (err instanceof BackupPolicyError) {
           return sendJson(res, 400, {
-            error: 'invalid_policy',
+            error: "invalid_policy",
             message: err.message,
           });
         }
@@ -310,32 +343,35 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     }
 
     if (url.pathname.startsWith(BACKUP_VERIFY_BUCKET_PREFIX)) {
-      if ((req.method ?? 'GET') !== 'POST') {
+      if ((req.method ?? "GET") !== "POST") {
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'POST only',
+          error: "method_not_allowed",
+          message: "POST only",
         });
       }
-      const vaultId = decodeURIComponent(url.pathname.slice(BACKUP_VERIFY_BUCKET_PREFIX.length));
+      const vaultId = decodeURIComponent(
+        url.pathname.slice(BACKUP_VERIFY_BUCKET_PREFIX.length)
+      );
       if (!deps.vaults.get(vaultId)) {
         return sendJson(res, 404, {
-          error: 'not_found',
-          message: 'unknown vault',
+          error: "not_found",
+          message: "unknown vault",
         });
       }
       const { backupService } = deps;
       if (!backupService) {
         return sendJson(res, 409, {
-          error: 'not_configured',
-          message: 'backup and remote CAS inventory are not configured',
+          error: "not_configured",
+          message: "backup and remote CAS inventory are not configured",
         });
       }
       try {
         const reconciliation = await backupService.verifyAgainstBucket(vaultId);
         if (!reconciliation) {
           return sendJson(res, 409, {
-            error: 'no_backup_target',
-            message: 'run the first backup or configure remote primary storage before verifying',
+            error: "no_backup_target",
+            message:
+              "run the first backup or configure remote primary storage before verifying",
           });
         }
         return sendJson(res, 200, { vaultId, reconciliation });
@@ -345,20 +381,22 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     }
 
     if (url.pathname === BACKUP_RUN_PATH) {
-      if ((req.method ?? 'GET') !== 'POST') {
+      if ((req.method ?? "GET") !== "POST") {
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'POST only',
+          error: "method_not_allowed",
+          message: "POST only",
         });
       }
       const { backupService } = deps;
       if (
         !backupService ||
-        !(await (backupService.configured?.() ?? { configured: true })).configured
+        !(await (backupService.configured?.() ?? { configured: true }))
+          .configured
       ) {
         return sendJson(res, 409, {
-          error: 'not_configured',
-          message: 'backup is not configured — add a "backup" block to the gateway config',
+          error: "not_configured",
+          message:
+            'backup is not configured — add a "backup" block to the gateway config',
         });
       }
       // Serialize: a run already in flight covers every mounted vault
@@ -376,20 +414,22 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     }
 
     if (url.pathname === BACKUP_VERIFY_PATH) {
-      if ((req.method ?? 'GET') !== 'POST') {
+      if ((req.method ?? "GET") !== "POST") {
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'POST only',
+          error: "method_not_allowed",
+          message: "POST only",
         });
       }
       const { backupService } = deps;
       if (
         !backupService ||
-        !(await (backupService.configured?.() ?? { configured: true })).configured
+        !(await (backupService.configured?.() ?? { configured: true }))
+          .configured
       ) {
         return sendJson(res, 409, {
-          error: 'not_configured',
-          message: 'backup is not configured — add a provider backup connection',
+          error: "not_configured",
+          message:
+            "backup is not configured — add a provider backup connection",
         });
       }
       if (backupService.isRunning()) {
@@ -400,31 +440,34 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     }
 
     if (url.pathname === BACKUP_KIT_PATH) {
-      if ((req.method ?? 'GET') !== 'POST') {
+      if ((req.method ?? "GET") !== "POST") {
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'POST only',
+          error: "method_not_allowed",
+          message: "POST only",
         });
       }
       if (!ownerRequired(req, deps, res)) return true;
       if (!deps.backupService) {
         return sendJson(res, 409, {
-          error: 'not_configured',
-          message: 'backup is not configured',
+          error: "not_configured",
+          message: "backup is not configured",
         });
       }
       try {
         const body = await readJson(req);
-        if (typeof body.password !== 'string' || body.password.length === 0) {
+        if (typeof body.password !== "string" || body.password.length === 0) {
           return sendJson(res, 400, {
-            error: 'password_required',
-            message: 'a recovery-kit password is required',
+            error: "password_required",
+            message: "a recovery-kit password is required",
           });
         }
         return sendJson(
           res,
           200,
-          wrapRecoveryKit(await deps.backupService.recoveryKitDocument(), body.password),
+          wrapRecoveryKit(
+            await deps.backupService.recoveryKitDocument(),
+            body.password
+          )
         );
       } catch (err) {
         return sendError(res, err);
@@ -432,10 +475,10 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     }
 
     if (url.pathname === BACKUP_KIT_CONFIRMED_PATH) {
-      if ((req.method ?? 'GET') !== 'POST') {
+      if ((req.method ?? "GET") !== "POST") {
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'POST only',
+          error: "method_not_allowed",
+          message: "POST only",
         });
       }
       if (!ownerRequired(req, deps, res)) return true;
@@ -444,12 +487,13 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
         const body = await readJson(req);
         if (body.lossConsent !== true) {
           return sendJson(res, 409, {
-            error: 'loss_consent_required',
-            message: 'confirm that losing this file and password makes backups unrecoverable',
+            error: "loss_consent_required",
+            message:
+              "confirm that losing this file and password makes backups unrecoverable",
           });
         }
-        if (typeof body.password !== 'string' || body.password.length === 0) {
-          return sendJson(res, 400, { error: 'password_required' });
+        if (typeof body.password !== "string" || body.password.length === 0) {
+          return sendJson(res, 400, { error: "password_required" });
         }
         const document = parseRecoveryKit(body.kit, body.password);
         const fingerprint = recoveryKitFingerprint(document);
@@ -457,15 +501,17 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           const recoveryKit = await recoveryKitStore.verify(fingerprint);
           if (!recoveryKit) {
             return sendJson(res, 409, {
-              error: 'kit_mismatch',
-              message: 'the selected recovery kit is stale or belongs to another gateway',
+              error: "kit_mismatch",
+              message:
+                "the selected recovery kit is stale or belongs to another gateway",
             });
           }
           return sendJson(res, 200, { ok: true, ...recoveryKit });
         }
         return sendJson(res, 409, {
-          error: 'not_configured',
-          message: 'backup is not configured — add a "backup" block to the gateway config',
+          error: "not_configured",
+          message:
+            'backup is not configured — add a "backup" block to the gateway config',
         });
       } catch (err) {
         return sendError(res, err);

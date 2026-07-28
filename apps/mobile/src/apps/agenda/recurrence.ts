@@ -21,11 +21,11 @@ export interface AgendaEventModel {
   isRecurrenceInstance: boolean;
 }
 
-const DAY_TOKENS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const;
+const DAY_TOKENS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 type DayToken = (typeof DAY_TOKENS)[number];
 
 interface ParsedRule {
-  freq: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   count?: number;
   /** Epoch-ms of the inclusive UNTIL bound. */
@@ -45,7 +45,7 @@ export function parseIcalInstant(value: string): number | undefined {
   if (!Number.isNaN(direct)) return direct;
   const match =
     /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})(?:T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2}))?Z?$/u.exec(
-      value.trim(),
+      value.trim()
     );
   if (!match) return undefined;
   const g: Record<string, string | undefined> = match.groups ?? {};
@@ -53,36 +53,46 @@ export function parseIcalInstant(value: string): number | undefined {
     Number(g.year),
     Number(g.month) - 1,
     Number(g.day),
-    Number(g.hour ?? '00'),
-    Number(g.minute ?? '00'),
-    Number(g.second ?? '00'),
+    Number(g.hour ?? "00"),
+    Number(g.minute ?? "00"),
+    Number(g.second ?? "00")
   );
   return Number.isNaN(ms) ? undefined : ms;
 }
 
 export function parseRule(value: string): ParsedRule | undefined {
   const parts = new Map<string, string>();
-  for (const seg of value.split(';')) {
-    const eq = seg.indexOf('=');
+  for (const seg of value.split(";")) {
+    const eq = seg.indexOf("=");
     if (eq < 0) continue;
     parts.set(seg.slice(0, eq).trim().toUpperCase(), seg.slice(eq + 1).trim());
   }
-  const freq = parts.get('FREQ');
-  if (freq !== 'DAILY' && freq !== 'WEEKLY' && freq !== 'MONTHLY' && freq !== 'YEARLY') {
+  const freq = parts.get("FREQ");
+  if (
+    freq !== "DAILY" &&
+    freq !== "WEEKLY" &&
+    freq !== "MONTHLY" &&
+    freq !== "YEARLY"
+  ) {
     return undefined;
   }
-  const interval = Math.max(1, Math.trunc(Number(parts.get('INTERVAL') ?? '1')) || 1);
-  const countRaw = parts.get('COUNT');
-  const count = countRaw ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined : undefined;
-  const untilRaw = parts.get('UNTIL');
+  const interval = Math.max(
+    1,
+    Math.trunc(Number(parts.get("INTERVAL") ?? "1")) || 1
+  );
+  const countRaw = parts.get("COUNT");
+  const count = countRaw
+    ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined
+    : undefined;
+  const untilRaw = parts.get("UNTIL");
   const until = untilRaw ? parseIcalInstant(untilRaw) : undefined;
-  const byDayRaw = parts.get('BYDAY');
+  const byDayRaw = parts.get("BYDAY");
   const byDay = byDayRaw
     ? (byDayRaw
-        .split(',')
+        .split(",")
         .map((day) => day.trim().toUpperCase())
         .filter((day): day is DayToken =>
-          (DAY_TOKENS as readonly string[]).includes(day),
+          (DAY_TOKENS as readonly string[]).includes(day)
         ) as DayToken[])
     : undefined;
   return {
@@ -109,7 +119,7 @@ function addMonths(date: Date, n: number): Date {
   next.setUTCDate(1);
   next.setUTCMonth(next.getUTCMonth() + n);
   const daysInMonth = new Date(
-    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)
   ).getUTCDate();
   next.setUTCDate(Math.min(day, daysInMonth));
   return next;
@@ -124,10 +134,10 @@ function addMonths(date: Date, n: number): Date {
  * fixed ceiling of empty steps.
  */
 export function expandEvent(
-  event: Omit<AgendaEventModel, 'instanceKey' | 'isRecurrenceInstance'>,
+  event: Omit<AgendaEventModel, "instanceKey" | "isRecurrenceInstance">,
   from: Date,
   to: Date,
-  max = 200,
+  max = 200
 ): AgendaEventModel[] {
   const anchor = new Date(event.start);
   const duration = Date.parse(event.end) - anchor.getTime();
@@ -161,7 +171,7 @@ export function expandEvent(
   // Weekly + BYDAY walks per anchor week and generates every named weekday
   // before the bound check, so an unsorted BYDAY (FR,MO) cannot drop an
   // in-window Monday; the result is sorted once at the end.
-  if (rule.freq === 'WEEKLY' && rule.byDay) {
+  if (rule.freq === "WEEKLY" && rule.byDay) {
     let week = addDays(anchor, -anchor.getUTCDay());
     let guard = 0;
     while (guard < max * 8 && out.length < max) {
@@ -188,9 +198,9 @@ export function expandEvent(
   }
 
   const cursorAt = (k: number): Date => {
-    if (rule.freq === 'DAILY') return addDays(anchor, k * rule.interval);
-    if (rule.freq === 'WEEKLY') return addDays(anchor, k * 7 * rule.interval);
-    if (rule.freq === 'MONTHLY') return addMonths(anchor, k * rule.interval);
+    if (rule.freq === "DAILY") return addDays(anchor, k * rule.interval);
+    if (rule.freq === "WEEKLY") return addDays(anchor, k * 7 * rule.interval);
+    if (rule.freq === "MONTHLY") return addMonths(anchor, k * rule.interval);
     return addMonths(anchor, k * 12 * rule.interval);
   };
   let k = 0;

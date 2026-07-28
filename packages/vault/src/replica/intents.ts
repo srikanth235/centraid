@@ -1,12 +1,12 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 export type ReplicaIntentStatus =
-  | 'queued'
-  | 'sending'
-  | 'parked'
-  | 'executed'
-  | 'denied'
-  | 'failed';
+  | "queued"
+  | "sending"
+  | "parked"
+  | "executed"
+  | "denied"
+  | "failed";
 
 export interface ReplicaIntentOutcome {
   intentId: string;
@@ -47,7 +47,7 @@ interface IntentRow {
   updated_at: string;
 }
 
-const TERMINAL = new Set<ReplicaIntentStatus>(['executed', 'denied', 'failed']);
+const TERMINAL = new Set<ReplicaIntentStatus>(["executed", "denied", "failed"]);
 
 function outcomeOf(row: IntentRow): ReplicaIntentOutcome {
   return {
@@ -69,12 +69,15 @@ function rowById(vault: DatabaseSync, intentId: string): IntentRow | undefined {
     .prepare(
       `SELECT intent_id, device_id, app_id, action, payload_hash, status,
               invocation_id, reason, created_at, updated_at
-         FROM replica_intent_outcome WHERE intent_id = ?`,
+         FROM replica_intent_outcome WHERE intent_id = ?`
     )
     .get(intentId) as IntentRow | undefined;
 }
 
-function assertIdentity(prior: IntentRow, input: RecordReplicaIntentOutcomeInput): void {
+function assertIdentity(
+  prior: IntentRow,
+  input: RecordReplicaIntentOutcomeInput
+): void {
   if (
     prior.device_id !== input.deviceId ||
     prior.app_id !== input.appId ||
@@ -82,12 +85,12 @@ function assertIdentity(prior: IntentRow, input: RecordReplicaIntentOutcomeInput
     prior.payload_hash !== input.payloadHash
   ) {
     throw new Error(
-      `replica intent ${input.intentId} was replayed with different immutable fields`,
+      `replica intent ${input.intentId} was replayed with different immutable fields`
     );
   }
   if (TERMINAL.has(prior.status) && prior.status !== input.status) {
     throw new Error(
-      `replica intent ${input.intentId} is already terminal (${prior.status}); refusing ${input.status}`,
+      `replica intent ${input.intentId} is already terminal (${prior.status}); refusing ${input.status}`
     );
   }
 }
@@ -98,10 +101,16 @@ function assertIdentity(prior: IntentRow, input: RecordReplicaIntentOutcomeInput
  */
 export function recordReplicaIntentOutcomeInTransaction(
   vault: DatabaseSync,
-  input: RecordReplicaIntentOutcomeInput,
+  input: RecordReplicaIntentOutcomeInput
 ): ReplicaIntentOutcome {
-  if (!input.intentId || !input.deviceId || !input.appId || !input.action || !input.payloadHash) {
-    throw new Error('replica intent identity fields must be non-empty');
+  if (
+    !input.intentId ||
+    !input.deviceId ||
+    !input.appId ||
+    !input.action ||
+    !input.payloadHash
+  ) {
+    throw new Error("replica intent identity fields must be non-empty");
   }
   const prior = rowById(vault, input.intentId);
   if (prior) assertIdentity(prior, input);
@@ -111,16 +120,22 @@ export function recordReplicaIntentOutcomeInTransaction(
       .prepare(
         `UPDATE replica_intent_outcome
             SET status = ?, invocation_id = ?, reason = ?, updated_at = ?
-          WHERE intent_id = ?`,
+          WHERE intent_id = ?`
       )
-      .run(input.status, input.invocationId ?? null, input.reason ?? null, now, input.intentId);
+      .run(
+        input.status,
+        input.invocationId ?? null,
+        input.reason ?? null,
+        now,
+        input.intentId
+      );
   } else {
     vault
       .prepare(
         `INSERT INTO replica_intent_outcome (
            intent_id, device_id, app_id, action, payload_hash, status,
            invocation_id, reason, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         input.intentId,
@@ -132,7 +147,7 @@ export function recordReplicaIntentOutcomeInTransaction(
         input.invocationId ?? null,
         input.reason ?? null,
         now,
-        now,
+        now
       );
   }
   // A terminal device outcome proves protocol dedupe, but it does not prove
@@ -142,27 +157,30 @@ export function recordReplicaIntentOutcomeInTransaction(
     vault
       .prepare(
         `DELETE FROM replica_invocation_commit
-          WHERE intent_id = ? AND journal_finalized_at IS NOT NULL`,
+          WHERE intent_id = ? AND journal_finalized_at IS NOT NULL`
       )
       .run(input.intentId);
   }
   const row = rowById(vault, input.intentId);
-  if (!row) throw new Error(`replica intent ${input.intentId} disappeared while recording`);
+  if (!row)
+    throw new Error(
+      `replica intent ${input.intentId} disappeared while recording`
+    );
   return outcomeOf(row);
 }
 
 /** Record one outcome as its own durable transaction. */
 export function recordReplicaIntentOutcome(
   vault: DatabaseSync,
-  input: RecordReplicaIntentOutcomeInput,
+  input: RecordReplicaIntentOutcomeInput
 ): ReplicaIntentOutcome {
-  vault.exec('BEGIN IMMEDIATE');
+  vault.exec("BEGIN IMMEDIATE");
   try {
     const outcome = recordReplicaIntentOutcomeInTransaction(vault, input);
-    vault.exec('COMMIT');
+    vault.exec("COMMIT");
     return outcome;
   } catch (error) {
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     throw error;
   }
 }
@@ -182,7 +200,7 @@ export interface TransitionReplicaIntentOutcomeInput {
 export function transitionReplicaIntentOutcomeInTransaction(
   vault: DatabaseSync,
   intentId: string,
-  update: TransitionReplicaIntentOutcomeInput,
+  update: TransitionReplicaIntentOutcomeInput
 ): ReplicaIntentOutcome | undefined {
   const prior = rowById(vault, intentId);
   if (!prior) return undefined;
@@ -203,15 +221,19 @@ export function transitionReplicaIntentOutcomeInTransaction(
 export function transitionReplicaIntentOutcome(
   vault: DatabaseSync,
   intentId: string,
-  update: TransitionReplicaIntentOutcomeInput,
+  update: TransitionReplicaIntentOutcomeInput
 ): ReplicaIntentOutcome | undefined {
-  vault.exec('BEGIN IMMEDIATE');
+  vault.exec("BEGIN IMMEDIATE");
   try {
-    const outcome = transitionReplicaIntentOutcomeInTransaction(vault, intentId, update);
-    vault.exec('COMMIT');
+    const outcome = transitionReplicaIntentOutcomeInTransaction(
+      vault,
+      intentId,
+      update
+    );
+    vault.exec("COMMIT");
     return outcome;
   } catch (error) {
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     throw error;
   }
 }
@@ -220,7 +242,7 @@ export function transitionReplicaIntentOutcome(
 export function readReplicaIntentOutcome(
   vault: DatabaseSync,
   intentId: string,
-  deviceId: string,
+  deviceId: string
 ): ReplicaIntentOutcome | undefined {
   const row = rowById(vault, intentId);
   return row?.device_id === deviceId ? outcomeOf(row) : undefined;
@@ -235,11 +257,13 @@ export interface ListReplicaIntentOutcomesOptions {
 export function listReplicaIntentOutcomes(
   vault: DatabaseSync,
   deviceId: string,
-  options: ListReplicaIntentOutcomesOptions = {},
+  options: ListReplicaIntentOutcomesOptions = {}
 ): ReplicaIntentOutcome[] {
   const limit = options.limit ?? 500;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 5_000) {
-    throw new RangeError('replica intent list limit must be an integer between 1 and 5000');
+    throw new RangeError(
+      "replica intent list limit must be an integer between 1 and 5000"
+    );
   }
   const rows = options.status
     ? (vault
@@ -247,7 +271,7 @@ export function listReplicaIntentOutcomes(
           `SELECT intent_id, device_id, app_id, action, payload_hash, status,
                   invocation_id, reason, created_at, updated_at
              FROM replica_intent_outcome
-            WHERE device_id = ? AND status = ? ORDER BY updated_at, intent_id LIMIT ?`,
+            WHERE device_id = ? AND status = ? ORDER BY updated_at, intent_id LIMIT ?`
         )
         .all(deviceId, options.status, limit) as unknown as IntentRow[])
     : (vault
@@ -255,7 +279,7 @@ export function listReplicaIntentOutcomes(
           `SELECT intent_id, device_id, app_id, action, payload_hash, status,
                   invocation_id, reason, created_at, updated_at
              FROM replica_intent_outcome
-            WHERE device_id = ? ORDER BY updated_at, intent_id LIMIT ?`,
+            WHERE device_id = ? ORDER BY updated_at, intent_id LIMIT ?`
         )
         .all(deviceId, limit) as unknown as IntentRow[]);
   return rows.map(outcomeOf);
@@ -264,9 +288,9 @@ export function listReplicaIntentOutcomes(
 /** Wipe protocol outcomes when a device is revoked or unpaired. */
 export function deleteReplicaIntentOutcomesForDevice(
   vault: DatabaseSync,
-  deviceId: string,
+  deviceId: string
 ): number {
-  vault.exec('BEGIN IMMEDIATE');
+  vault.exec("BEGIN IMMEDIATE");
   try {
     // A parked payload is executable authority, not merely presentation
     // state. Remove it while the device -> intent ownership rows still exist,
@@ -277,7 +301,7 @@ export function deleteReplicaIntentOutcomesForDevice(
         `DELETE FROM replica_parked_payload
           WHERE intent_id IN (
             SELECT intent_id FROM replica_intent_outcome WHERE device_id = ?
-          )`,
+          )`
       )
       .run(deviceId);
     // Revocation removes device-visible outcomes, but an unfinished marker
@@ -292,7 +316,7 @@ export function deleteReplicaIntentOutcomesForDevice(
           WHERE journal_finalized_at IS NULL
             AND intent_id IN (
               SELECT intent_id FROM replica_intent_outcome WHERE device_id = ?
-            )`,
+            )`
       )
       .run(deviceId);
     // Already proof-stamped markers are disposable under the existing device
@@ -303,16 +327,18 @@ export function deleteReplicaIntentOutcomesForDevice(
           WHERE journal_finalized_at IS NOT NULL
             AND intent_id IN (
             SELECT intent_id FROM replica_intent_outcome WHERE device_id = ?
-          )`,
+          )`
       )
       .run(deviceId);
     const deleted = Number(
-      vault.prepare(`DELETE FROM replica_intent_outcome WHERE device_id = ?`).run(deviceId).changes,
+      vault
+        .prepare(`DELETE FROM replica_intent_outcome WHERE device_id = ?`)
+        .run(deviceId).changes
     );
-    vault.exec('COMMIT');
+    vault.exec("COMMIT");
     return deleted;
   } catch (error) {
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     throw error;
   }
 }

@@ -1,20 +1,23 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 import {
   VaultBlobAuthorizationError,
   VaultBlobRemoteUnavailableError,
   VaultBlobSessionError,
-} from '../errors.js';
-import { uuidv7 } from '../ids.js';
-import type { BlobCache } from './cache.js';
-import { BlobContentKeyRegistry, type DeviceWrappedContentKey } from './content-keys.js';
-import type { CustodyState, RemoteTier } from './custody-types.js';
-import type { MultipartPart } from './remote-transfer.js';
-import { verifyRemoteSealedObject } from './remote-verify.js';
-import { recordKnownStagedBlob } from './staging-record.js';
-import { assertSha } from './store.js';
-import type { BlobTransferState } from './transfer-state.js';
-import type { CommittedBlob } from './transfers.js';
+} from "../errors.js";
+import { uuidv7 } from "../ids.js";
+import type { BlobCache } from "./cache.js";
+import {
+  BlobContentKeyRegistry,
+  type DeviceWrappedContentKey,
+} from "./content-keys.js";
+import type { CustodyState, RemoteTier } from "./custody-types.js";
+import type { MultipartPart } from "./remote-transfer.js";
+import { verifyRemoteSealedObject } from "./remote-verify.js";
+import { recordKnownStagedBlob } from "./staging-record.js";
+import { assertSha } from "./store.js";
+import type { BlobTransferState } from "./transfer-state.js";
+import type { CommittedBlob } from "./transfers.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -38,7 +41,7 @@ export interface DirectBlobInitInput {
 export interface DirectSettlementReceipt {
   alreadyPresent: true;
   sha256: string;
-  casAck: 'receipt' | 'replicated';
+  casAck: "receipt" | "replicated";
   custody: CustodyState;
   /** True only when the bytes are confirmed remote — the deletion gate. */
   acknowledged: boolean;
@@ -58,9 +61,9 @@ export interface DirectBlobInitResult {
   /** Present iff `alreadyPresent`: the honest, custody-derived settlement. */
   settlement?: DirectSettlementReceipt;
   upload?:
-    | { kind: 'single'; url: string }
+    | { kind: "single"; url: string }
     | {
-        kind: 'multipart';
+        kind: "multipart";
         uploadId: string;
         parts: { partNumber: number; url: string }[];
       };
@@ -71,8 +74,10 @@ export interface DirectBlobInitResult {
  * door: only bytes the remote tier confirms holding are `replicated` (safe to
  * free the device original); a merely-local or in-flight copy is `receipt`.
  */
-function directCasAck(custody: CustodyState): 'receipt' | 'replicated' {
-  return custody === 'replicated' || custody === 'remote-only' ? 'replicated' : 'receipt';
+function directCasAck(custody: CustodyState): "receipt" | "replicated" {
+  return custody === "replicated" || custody === "remote-only"
+    ? "replicated"
+    : "receipt";
 }
 
 export interface DirectBlobDownloadResult {
@@ -105,16 +110,20 @@ export class DirectBlobTransfers {
     const sha = assertSha(input.sha256);
     const deviceId = this.deps.contentKeys.resolvePairedDevice(input.deviceId);
     const grant = this.deps.contentKeys.grantToDevice(sha, deviceId);
-    const keyBase64 = this.deps.contentKeys.getOrCreate(sha).toString('base64');
+    const keyBase64 = this.deps.contentKeys.getOrCreate(sha).toString("base64");
     const remote = this.deps.remote();
     if (!remote?.transfer || !remote.keyFor) {
       throw new VaultBlobRemoteUnavailableError(
-        'direct edge-sealed upload requires an available encrypted S3 transfer tier',
+        "direct edge-sealed upload requires an available encrypted S3 transfer tier"
       );
     }
     const partCount = input.partCount ?? 1;
-    if (!Number.isSafeInteger(partCount) || partCount < 1 || partCount > 10_000) {
-      throw new Error('direct upload partCount must be between 1 and 10000');
+    if (
+      !Number.isSafeInteger(partCount) ||
+      partCount < 1 ||
+      partCount > 10_000
+    ) {
+      throw new Error("direct upload partCount must be between 1 and 10000");
     }
     const resumed = this.deps.state.openDirectSession({
       sha256: sha,
@@ -146,10 +155,14 @@ export class DirectBlobTransfers {
           sha256: sha,
           casAck,
           custody: existing.custody,
-          acknowledged: casAck === 'replicated',
-          ...(existing.byteSize === undefined ? {} : { byteSize: existing.byteSize }),
+          acknowledged: casAck === "replicated",
+          ...(existing.byteSize === undefined
+            ? {}
+            : { byteSize: existing.byteSize }),
           ...(existing.mediaType ? { mediaType: existing.mediaType } : {}),
-          ...(existing.contentId ? { existingContentId: existing.contentId } : {}),
+          ...(existing.contentId
+            ? { existingContentId: existing.contentId }
+            : {}),
         },
       };
     }
@@ -157,34 +170,55 @@ export class DirectBlobTransfers {
     const tempId = `direct-${sessionId}`;
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
     if (partCount === 1) {
-      this.createSession(input, deviceId, sessionId, tempId, expiresAt, partCount);
+      this.createSession(
+        input,
+        deviceId,
+        sessionId,
+        tempId,
+        expiresAt,
+        partCount
+      );
       const url = await remote.transfer.presignTemporaryPut(tempId);
       return {
         sessionId,
         alreadyPresent: false,
-        custody: 'pending-offsite',
+        custody: "pending-offsite",
         contentKey: grant,
         keyBase64,
         completedParts: [],
-        upload: { kind: 'single', url: url.toString() },
+        upload: { kind: "single", url: url.toString() },
       };
     }
     const uploadId = await remote.transfer.beginTemporaryUpload(tempId);
-    this.createSession(input, deviceId, sessionId, tempId, expiresAt, partCount, uploadId);
+    this.createSession(
+      input,
+      deviceId,
+      sessionId,
+      tempId,
+      expiresAt,
+      partCount,
+      uploadId
+    );
     const parts = await Promise.all(
       Array.from({ length: partCount }, async (_, index) => ({
         partNumber: index + 1,
-        url: (await remote.transfer!.presignTemporaryPart(tempId, uploadId, index + 1)).toString(),
-      })),
+        url: (
+          await remote.transfer!.presignTemporaryPart(
+            tempId,
+            uploadId,
+            index + 1
+          )
+        ).toString(),
+      }))
     );
     return {
       sessionId,
       alreadyPresent: false,
-      custody: 'pending-offsite',
+      custody: "pending-offsite",
       contentKey: grant,
       keyBase64,
       completedParts: [],
-      upload: { kind: 'multipart', uploadId, parts },
+      upload: { kind: "multipart", uploadId, parts },
     };
   }
 
@@ -195,11 +229,11 @@ export class DirectBlobTransfers {
     tempId: string,
     expiresAt: string,
     partCount: number,
-    remoteUploadId?: string,
+    remoteUploadId?: string
   ): void {
     this.deps.state.createSession({
       sessionId,
-      kind: 'direct',
+      kind: "direct",
       expectedSha256: input.sha256,
       expectedSize: input.plaintextSize,
       sealedSize: input.sealedSize,
@@ -215,31 +249,35 @@ export class DirectBlobTransfers {
   }
 
   private async resumeResult(
-    row: import('./transfer-state.js').IngressSessionRow,
-    remote: NonNullable<ReturnType<DirectBlobTransferDeps['remote']>>,
+    row: import("./transfer-state.js").IngressSessionRow,
+    remote: NonNullable<ReturnType<DirectBlobTransferDeps["remote"]>>,
     contentKey: DeviceWrappedContentKey,
-    keyBase64: string,
+    keyBase64: string
   ): Promise<DirectBlobInitResult> {
     const completedParts = this.parts(row.remote_parts_json);
-    if (!row.remote_temp_id) throw new Error('direct session has no remote temp id');
+    if (!row.remote_temp_id)
+      throw new Error("direct session has no remote temp id");
     if (!row.remote_upload_id) {
       return {
         sessionId: row.session_id,
         alreadyPresent: false,
-        custody: 'pending-offsite',
+        custody: "pending-offsite",
         contentKey,
         keyBase64,
         completedParts,
         upload: {
-          kind: 'single',
-          url: (await remote.transfer!.presignTemporaryPut(row.remote_temp_id)).toString(),
+          kind: "single",
+          url: (
+            await remote.transfer!.presignTemporaryPut(row.remote_temp_id)
+          ).toString(),
         },
       };
     }
     const done = new Set(completedParts.map((part) => part.partNumber));
-    const missing = Array.from({ length: row.part_count ?? 1 }, (_, index) => index + 1).filter(
-      (partNumber) => !done.has(partNumber),
-    );
+    const missing = Array.from(
+      { length: row.part_count ?? 1 },
+      (_, index) => index + 1
+    ).filter((partNumber) => !done.has(partNumber));
     const parts = await Promise.all(
       missing.map(async (partNumber) => ({
         partNumber,
@@ -247,19 +285,19 @@ export class DirectBlobTransfers {
           await remote.transfer!.presignTemporaryPart(
             row.remote_temp_id!,
             row.remote_upload_id!,
-            partNumber,
+            partNumber
           )
         ).toString(),
-      })),
+      }))
     );
     return {
       sessionId: row.session_id,
       alreadyPresent: false,
-      custody: 'pending-offsite',
+      custody: "pending-offsite",
       contentKey,
       keyBase64,
       completedParts,
-      upload: { kind: 'multipart', uploadId: row.remote_upload_id, parts },
+      upload: { kind: "multipart", uploadId: row.remote_upload_id, parts },
     };
   }
 
@@ -270,9 +308,9 @@ export class DirectBlobTransfers {
       return value.filter(
         (part): part is MultipartPart =>
           part !== null &&
-          typeof part === 'object' &&
+          typeof part === "object" &&
           Number.isInteger((part as MultipartPart).partNumber) &&
-          typeof (part as MultipartPart).etag === 'string',
+          typeof (part as MultipartPart).etag === "string"
       );
     } catch {
       return [];
@@ -283,22 +321,37 @@ export class DirectBlobTransfers {
     sessionId: string,
     partNumber: number,
     etag: string,
-    deviceIdentity: string,
+    deviceIdentity: string
   ): MultipartPart[] {
     const row = this.deps.state.session(sessionId);
-    if (!row || row.kind !== 'direct' || row.state !== 'open' || !row.remote_upload_id) {
-      throw new VaultBlobSessionError(`unknown or closed multipart direct session ${sessionId}`);
+    if (
+      !row ||
+      row.kind !== "direct" ||
+      row.state !== "open" ||
+      !row.remote_upload_id
+    ) {
+      throw new VaultBlobSessionError(
+        `unknown or closed multipart direct session ${sessionId}`
+      );
     }
     this.assertSessionDevice(row, deviceIdentity);
-    if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > (row.part_count ?? 0)) {
-      throw new VaultBlobSessionError(`part ${partNumber} is outside this session's part range`);
+    if (
+      !Number.isInteger(partNumber) ||
+      partNumber < 1 ||
+      partNumber > (row.part_count ?? 0)
+    ) {
+      throw new VaultBlobSessionError(
+        `part ${partNumber} is outside this session's part range`
+      );
     }
-    if (!etag) throw new VaultBlobSessionError('multipart ETag is required');
+    if (!etag) throw new VaultBlobSessionError("multipart ETag is required");
     const byNumber = new Map(
-      this.parts(row.remote_parts_json).map((part) => [part.partNumber, part]),
+      this.parts(row.remote_parts_json).map((part) => [part.partNumber, part])
     );
     byNumber.set(partNumber, { partNumber, etag });
-    const parts = [...byNumber.values()].sort((a, b) => a.partNumber - b.partNumber);
+    const parts = [...byNumber.values()].sort(
+      (a, b) => a.partNumber - b.partNumber
+    );
     this.deps.state.setDirectParts(sessionId, parts);
     return parts;
   }
@@ -306,19 +359,25 @@ export class DirectBlobTransfers {
   async complete(
     sessionId: string,
     deviceIdentity: string,
-    parts: readonly MultipartPart[] = [],
+    parts: readonly MultipartPart[] = []
   ): Promise<CommittedBlob> {
     const row = this.deps.state.session(sessionId);
-    if (!row || row.kind !== 'direct' || (row.state !== 'open' && row.state !== 'committing')) {
-      throw new VaultBlobSessionError(`unknown or closed direct session ${sessionId}`);
+    if (
+      !row ||
+      row.kind !== "direct" ||
+      (row.state !== "open" && row.state !== "committing")
+    ) {
+      throw new VaultBlobSessionError(
+        `unknown or closed direct session ${sessionId}`
+      );
     }
     this.assertSessionDevice(row, deviceIdentity);
     const remote = this.deps.remote();
     if (!remote?.transfer || !row.remote_temp_id || !row.expected_sha256) {
-      throw new Error('direct session remote tier is unavailable');
+      throw new Error("direct session remote tier is unavailable");
     }
     const merged = new Map(
-      this.parts(row.remote_parts_json).map((part) => [part.partNumber, part]),
+      this.parts(row.remote_parts_json).map((part) => [part.partNumber, part])
     );
     for (const part of parts) {
       if (
@@ -327,32 +386,36 @@ export class DirectBlobTransfers {
         part.partNumber > (row.part_count ?? 1) ||
         !part.etag
       ) {
-        throw new VaultBlobSessionError('multipart completion contains an invalid part receipt');
+        throw new VaultBlobSessionError(
+          "multipart completion contains an invalid part receipt"
+        );
       }
       merged.set(part.partNumber, part);
     }
-    const allParts = [...merged.values()].sort((a, b) => a.partNumber - b.partNumber);
+    const allParts = [...merged.values()].sort(
+      (a, b) => a.partNumber - b.partNumber
+    );
     let temp = await remote.transfer.statTemporary(row.remote_temp_id);
     if (!temp && row.remote_upload_id) {
       if (allParts.length !== row.part_count) {
         throw new Error(
-          `multipart completion has ${allParts.length}/${row.part_count} part receipts`,
+          `multipart completion has ${allParts.length}/${row.part_count} part receipts`
         );
       }
       this.deps.state.setDirectParts(sessionId, allParts);
-      this.deps.state.setSessionState(sessionId, 'committing');
+      this.deps.state.setSessionState(sessionId, "committing");
       await remote.transfer.completeTemporaryUpload(
         row.remote_temp_id,
         row.remote_upload_id,
-        allParts,
+        allParts
       );
       temp = await remote.transfer.statTemporary(row.remote_temp_id);
     } else {
-      this.deps.state.setSessionState(sessionId, 'committing');
+      this.deps.state.setSessionState(sessionId, "committing");
     }
     if (!temp || (row.sealed_size !== null && temp.size !== row.sealed_size)) {
       throw new Error(
-        `direct upload size mismatch: expected ${row.sealed_size ?? 'an object'}, got ${temp?.size ?? 'missing'}`,
+        `direct upload size mismatch: expected ${row.sealed_size ?? "an object"}, got ${temp?.size ?? "missing"}`
       );
     }
     const byteSize = row.expected_size ?? 0;
@@ -363,13 +426,17 @@ export class DirectBlobTransfers {
     // media type falls back to the DB lookup, which is empty ⇒ class-less).
     const storageClass = remote.storageClassFor?.(
       row.expected_sha256,
-      'cas',
-      row.media_type ? { mediaType: row.media_type, byteSize } : undefined,
+      "cas",
+      row.media_type ? { mediaType: row.media_type, byteSize } : undefined
     );
-    await remote.transfer.copyTemporaryToSha(row.remote_temp_id, row.expected_sha256, storageClass);
+    await remote.transfer.copyTemporaryToSha(
+      row.remote_temp_id,
+      row.expected_sha256,
+      storageClass
+    );
     const final = await remote.store.stat(row.expected_sha256);
     if (!final || final.size !== temp.size)
-      throw new Error('provider HEAD did not confirm final object');
+      throw new Error("provider HEAD did not confirm final object");
     await verifyRemoteSealedObject({
       store: remote.store,
       sha256: row.expected_sha256,
@@ -379,7 +446,9 @@ export class DirectBlobTransfers {
     });
     this.deps.cache.replica.mark(row.expected_sha256, byteSize);
     this.deps.state.completeSession(sessionId, row.expected_sha256);
-    await remote.transfer.deleteTemporary(row.remote_temp_id).catch(() => undefined);
+    await remote.transfer
+      .deleteTemporary(row.remote_temp_id)
+      .catch(() => undefined);
     const staged = recordKnownStagedBlob(this.deps.vault, {
       sha256: row.expected_sha256,
       byteSize,
@@ -388,29 +457,35 @@ export class DirectBlobTransfers {
       ...(row.staged_by ? { stagedBy: row.staged_by } : {}),
     });
     this.deps.emit();
-    return { ...staged, casAck: 'replicated', custody: 'remote-only' };
+    return { ...staged, casAck: "replicated", custody: "remote-only" };
   }
 
-  async download(sha256: string, deviceId: string): Promise<DirectBlobDownloadResult> {
+  async download(
+    sha256: string,
+    deviceId: string
+  ): Promise<DirectBlobDownloadResult> {
     const sha = assertSha(sha256);
-    const resolvedDeviceId = this.deps.contentKeys.resolvePairedDevice(deviceId);
+    const resolvedDeviceId =
+      this.deps.contentKeys.resolvePairedDevice(deviceId);
     const remote = this.deps.remote();
     if (!remote?.transfer || !(await remote.store.stat(sha)))
-      throw new Error('remote blob not found');
+      throw new Error("remote blob not found");
     return {
       url: (await remote.transfer.presignShaGet(sha)).toString(),
       contentKey: this.deps.contentKeys.grantToDevice(sha, resolvedDeviceId),
-      keyBase64: this.deps.contentKeys.getOrCreate(sha).toString('base64'),
+      keyBase64: this.deps.contentKeys.getOrCreate(sha).toString("base64"),
     };
   }
 
   private assertSessionDevice(
-    row: import('./transfer-state.js').IngressSessionRow,
-    deviceIdentity: string,
+    row: import("./transfer-state.js").IngressSessionRow,
+    deviceIdentity: string
   ): void {
     const deviceId = this.deps.contentKeys.resolvePairedDevice(deviceIdentity);
     if (!row.device_id || row.device_id !== deviceId) {
-      throw new VaultBlobAuthorizationError('direct session belongs to another paired device');
+      throw new VaultBlobAuthorizationError(
+        "direct session belongs to another paired device"
+      );
     }
   }
 }

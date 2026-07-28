@@ -1,20 +1,28 @@
-import type { IconName } from '@centraid/design-tokens';
-import { Fragment, type JSX, useEffect, useMemo, useState } from 'react';
+import type { IconName } from "@centraid/design-tokens";
+import { Fragment, type JSX, useEffect, useMemo, useState } from "react";
 
-import type { AccentKey, AppearancePrefs, ThemeName } from '../../../app-shell-context.js';
-import ImportScreen from '../../screens/ImportScreen.js';
-import PhoneScreen from '../../screens/PhoneScreen.js';
-import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
-import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
-import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
-import SettingsSpaceScreen from '../../screens/SettingsSpaceScreen.js';
-import SettingsStorageScreen from '../../screens/SettingsStorageScreen.js';
-import Icon from '../../ui/Icon.js';
-import { useShellActions } from '../actions.js';
-import { openPrompt } from '../prompt.js';
-import { PageEmpty, PageLoading } from '../status.js';
-import { useAsyncData } from '../useAsyncData.js';
-import { importCallbacks, loadActiveSpaceData, phoneCallbacks } from './settingsAccountData.js';
+import type {
+  AccentKey,
+  AppearancePrefs,
+  ThemeName,
+} from "../../../app-shell-context.js";
+import ImportScreen from "../../screens/ImportScreen.js";
+import PhoneScreen from "../../screens/PhoneScreen.js";
+import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
+import SettingsLayoutScreen from "../../screens/SettingsLayoutScreen.js";
+import SettingsProvidersScreen from "../../screens/SettingsProvidersScreen.js";
+import SettingsSpaceScreen from "../../screens/SettingsSpaceScreen.js";
+import SettingsStorageScreen from "../../screens/SettingsStorageScreen.js";
+import Icon from "../../ui/Icon.js";
+import { useShellActions } from "../actions.js";
+import { openPrompt } from "../prompt.js";
+import { PageEmpty, PageLoading } from "../status.js";
+import { useAsyncData } from "../useAsyncData.js";
+import {
+  importCallbacks,
+  loadActiveSpaceData,
+  phoneCallbacks,
+} from "./settingsAccountData.js";
 import {
   activateRunner,
   loadProviders,
@@ -24,7 +32,7 @@ import {
   setSubsystemConfigPin,
   setSubsystemRunner,
   setSubsystemRunnerLadder,
-} from './settingsProvidersData.js';
+} from "./settingsProvidersData.js";
 import {
   attachVaultConnection,
   createStorageConnection,
@@ -33,10 +41,10 @@ import {
   loadStorageConnectionsData,
   makeDeleteStorageConnection,
   testStorageConnection,
-} from './settingsStorageData.js';
-import { deleteSpace, saveSpace } from './spaceModals.js';
+} from "./settingsStorageData.js";
+import { deleteSpace, saveSpace } from "./spaceModals.js";
 
-import styles from './SettingsRoute.module.css';
+import styles from "./SettingsRoute.module.css";
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
 // renderSettings (app-settings.ts): a grouped category nav beside a content
@@ -48,14 +56,14 @@ import styles from './SettingsRoute.module.css';
 // "Gateway" surfaces stop being unrelated pages that share a name.
 
 type SettingsPageId =
-  | 'appearance'
-  | 'layout'
-  | 'workspace'
-  | 'space'
-  | 'phone'
-  | 'import'
-  | 'providers'
-  | 'storage';
+  | "appearance"
+  | "layout"
+  | "workspace"
+  | "space"
+  | "phone"
+  | "import"
+  | "providers"
+  | "storage";
 
 interface PageDef {
   id: SettingsPageId;
@@ -67,48 +75,50 @@ interface PageDef {
 
 const PAGES: readonly PageDef[] = [
   {
-    id: 'appearance',
-    label: 'Appearance',
-    section: 'Workspace',
-    icon: 'Mood',
-    subtitle: 'Visual treatment for Centraid chrome and the app tiles on your home screen.',
-  },
-  {
-    id: 'layout',
-    label: 'Layout',
-    section: 'Workspace',
-    icon: 'Code',
-    subtitle: 'Density and surface treatment across every Centraid screen.',
-  },
-  {
-    id: 'workspace',
-    label: 'Workspace',
-    section: 'Workspace',
-    icon: 'Folder',
-    subtitle: 'Sidebar and navigation.',
-  },
-  {
-    id: 'space',
-    label: 'Space',
-    section: 'Account',
-    icon: 'Users',
+    id: "appearance",
+    label: "Appearance",
+    section: "Workspace",
+    icon: "Mood",
     subtitle:
-      'This space’s presentation — name, icon, color, and description. Switch, add, rename, or remove OTHER spaces and gateways from the switcher at the top of the sidebar (⌘⇧G).',
+      "Visual treatment for Centraid chrome and the app tiles on your home screen.",
   },
   {
-    id: 'phone',
-    label: 'Phone',
-    section: 'Account',
-    icon: 'Phone',
-    subtitle: 'Use your published apps from your phone over an end-to-end encrypted tunnel.',
+    id: "layout",
+    label: "Layout",
+    section: "Workspace",
+    icon: "Code",
+    subtitle: "Density and surface treatment across every Centraid screen.",
   },
   {
-    id: 'import',
-    label: 'Import',
-    section: 'Account',
-    icon: 'Save',
+    id: "workspace",
+    label: "Workspace",
+    section: "Workspace",
+    icon: "Folder",
+    subtitle: "Sidebar and navigation.",
+  },
+  {
+    id: "space",
+    label: "Space",
+    section: "Account",
+    icon: "Users",
     subtitle:
-      'Bring your existing data into the vault — everything stages for review before it lands.',
+      "This space’s presentation — name, icon, color, and description. Switch, add, rename, or remove OTHER spaces and gateways from the switcher at the top of the sidebar (⌘⇧G).",
+  },
+  {
+    id: "phone",
+    label: "Phone",
+    section: "Account",
+    icon: "Phone",
+    subtitle:
+      "Use your published apps from your phone over an end-to-end encrypted tunnel.",
+  },
+  {
+    id: "import",
+    label: "Import",
+    section: "Account",
+    icon: "Save",
+    subtitle:
+      "Bring your existing data into the vault — everything stages for review before it lands.",
   },
   // Connections / Connectors moved to a primary sidebar page (ConnectorsRoute).
   // "Storage provider", not "Storage": the Operations sidebar owns a page
@@ -116,25 +126,29 @@ const PAGES: readonly PageDef[] = [
   // and two destinations under the same word is a coin toss for the owner.
   // This one is narrower and always was: the provider CONNECTION.
   {
-    id: 'storage',
-    label: 'Storage provider',
-    section: 'Account',
-    icon: 'Webhook',
+    id: "storage",
+    label: "Storage provider",
+    section: "Account",
+    icon: "Webhook",
     subtitle:
-      'Keep this vault on this device only, or an encrypted copy hosted with your storage provider.',
+      "Keep this vault on this device only, or an encrypted copy hosted with your storage provider.",
   },
   {
-    id: 'providers',
-    label: 'Agents',
-    section: 'Models',
-    icon: 'Sparkle',
+    id: "providers",
+    label: "Agents",
+    section: "Models",
+    icon: "Sparkle",
     subtitle:
-      'The coding-agent CLIs the gateway can drive, plus which model each one uses by default and per chat surface. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.',
+      "The coding-agent CLIs the gateway can drive, plus which model each one uses by default and per chat surface. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.",
   },
 ];
 
-const AUTO_SAVE = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
-const SECTIONS = ['Workspace', 'Account', 'Models'];
+const AUTO_SAVE = new Set<SettingsPageId>([
+  "appearance",
+  "layout",
+  "workspace",
+]);
+const SECTIONS = ["Workspace", "Account", "Models"];
 
 function isSettingsPageId(id: string | undefined): id is SettingsPageId {
   return PAGES.some((p) => p.id === id);
@@ -156,7 +170,7 @@ export default function SettingsRoute({
   initialPage,
 }: SettingsRouteProps): JSX.Element {
   const [page, setPage] = useState<SettingsPageId>(
-    isSettingsPageId(initialPage) ? initialPage : 'appearance',
+    isSettingsPageId(initialPage) ? initialPage : "appearance"
   );
   const def = PAGES.find((p) => p.id === page);
   const { showToast, navigate, confirm } = useShellActions();
@@ -164,7 +178,7 @@ export default function SettingsRoute({
   const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
   const deleteStorageConnectionGated = useMemo(
     () => makeDeleteStorageConnection(confirm),
-    [confirm],
+    [confirm]
   );
   // Settings → Space (issue #382) — scoped to the ACTIVE vault only; the
   // cross-vault list + gateway "Connections" group both moved to the
@@ -189,7 +203,7 @@ export default function SettingsRoute({
     color: string;
     blurb: string;
   }): void => {
-    if (activeSpace.status !== 'ready' || !activeSpace.data) return;
+    if (activeSpace.status !== "ready" || !activeSpace.data) return;
     const vaultId = activeSpace.data.vaultId;
     void saveSpace(vaultId, data)
       .then(() => {
@@ -197,25 +211,29 @@ export default function SettingsRoute({
         refreshSpace();
       })
       .catch((err: unknown) =>
-        showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`),
+        showToast(
+          `Save failed: ${err instanceof Error ? err.message : String(err)}`
+        )
       );
   };
   const deleteActiveSpace = (): void => {
-    if (activeSpace.status !== 'ready' || !activeSpace.data) return;
+    if (activeSpace.status !== "ready" || !activeSpace.data) return;
     const { vaultId, name } = activeSpace.data;
     void (async () => {
       const typed = await openPrompt({
         title: `Type ${JSON.stringify(name)} to erase this space`,
         placeholder: name,
-        confirmLabel: 'Erase permanently',
+        confirmLabel: "Erase permanently",
       });
       if (typed !== name) return;
       try {
         await deleteSpace(vaultId, typed);
         showToast(`Deleted · ${name}`);
-        navigate({ kind: 'home' });
+        navigate({ kind: "home" });
       } catch (err) {
-        showToast(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+        showToast(
+          `Delete failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     })();
   };
@@ -258,7 +276,9 @@ export default function SettingsRoute({
         <section className={styles.settingsContent}>
           <header className={styles.settingsPageHead}>
             <div className={styles.settingsPageTitlerow}>
-              <h1 className={styles.settingsPageTitle}>{def?.label ?? 'Settings'}</h1>
+              <h1 className={styles.settingsPageTitle}>
+                {def?.label ?? "Settings"}
+              </h1>
               {AUTO_SAVE.has(page) ? (
                 <span className={styles.settingsAutosaved}>
                   <Icon name="Check" size={10} strokeWidth={2.5} />
@@ -266,20 +286,24 @@ export default function SettingsRoute({
                 </span>
               ) : null}
             </div>
-            {def ? <p className={styles.settingsPageSub}>{def.subtitle}</p> : null}
+            {def ? (
+              <p className={styles.settingsPageSub}>{def.subtitle}</p>
+            ) : null}
           </header>
 
           <div className={styles.settingsPage} data-testid="settings-page">
-            {page === 'appearance' ? (
+            {page === "appearance" ? (
               <SettingsAppearanceScreen
                 accent={prefs.accent}
                 coolBlueCast={prefs.coolBlueCast}
                 theme={prefs.theme}
                 tileVariant={prefs.tileVariant}
                 onMatchSystem={() => {
-                  const next: ThemeName = window.matchMedia('(prefers-color-scheme: light)').matches
-                    ? ('light' as ThemeName)
-                    : ('dark' as ThemeName);
+                  const next: ThemeName = window.matchMedia(
+                    "(prefers-color-scheme: light)"
+                  ).matches
+                    ? ("light" as ThemeName)
+                    : ("dark" as ThemeName);
                   setPrefs({ theme: next });
                   return next;
                 }}
@@ -288,7 +312,7 @@ export default function SettingsRoute({
                 onSetTheme={(t) => setPrefs({ theme: t as ThemeName })}
                 onSetTile={(v) => setPrefs({ tileVariant: v })}
               />
-            ) : page === 'layout' ? (
+            ) : page === "layout" ? (
               <SettingsLayoutScreen
                 cardVariant={prefs.cardVariant}
                 density={prefs.density}
@@ -297,7 +321,7 @@ export default function SettingsRoute({
                 onSetDensity={(v) => setPrefs({ density: v })}
                 onSetSidebar={(v) => setPrefs({ sidebarOpen: v })}
               />
-            ) : page === 'providers' ? (
+            ) : page === "providers" ? (
               <SettingsProvidersScreen
                 loadStatus={() => loadProviders()}
                 refreshModels={() => loadProviders({ refresh: true })}
@@ -309,11 +333,11 @@ export default function SettingsRoute({
                 setSubsystemRunner={setSubsystemRunner}
                 setSubsystemRunnerLadder={setSubsystemRunnerLadder}
               />
-            ) : page === 'phone' ? (
+            ) : page === "phone" ? (
               <PhoneScreen {...phoneProps} />
-            ) : page === 'import' ? (
+            ) : page === "import" ? (
               <ImportScreen {...importProps} />
-            ) : page === 'storage' ? (
+            ) : page === "storage" ? (
               <SettingsStorageScreen
                 loadConnections={loadStorageConnectionsData}
                 createConnection={createStorageConnection}
@@ -324,16 +348,20 @@ export default function SettingsRoute({
                 detachVaultConnection={detachVaultConnection}
                 showToast={showToast}
               />
-            ) : page === 'space' ? (
-              activeSpace.status === 'loading' ? (
+            ) : page === "space" ? (
+              activeSpace.status === "loading" ? (
                 <PageLoading label="Loading this space…" />
-              ) : activeSpace.status === 'error' ? (
-                <PageEmpty message={`Couldn’t load this space: ${activeSpace.error}`} />
+              ) : activeSpace.status === "error" ? (
+                <PageEmpty
+                  message={`Couldn’t load this space: ${activeSpace.error}`}
+                />
               ) : activeSpace.data ? (
                 <SettingsSpaceScreen
                   space={activeSpace.data}
                   onSave={saveActiveSpace}
-                  {...(activeSpace.data.deletable ? { onDelete: deleteActiveSpace } : {})}
+                  {...(activeSpace.data.deletable
+                    ? { onDelete: deleteActiveSpace }
+                    : {})}
                 />
               ) : (
                 <PageEmpty message="No active space." />

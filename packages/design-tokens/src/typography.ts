@@ -8,9 +8,9 @@
 // forcing a network fetch for the chrome.
 
 export const fonts = {
-  display: 'system-ui',
-  mono: 'ui-monospace',
-  sans: 'system-ui',
+  display: "system-ui",
+  mono: "ui-monospace",
+  sans: "system-ui",
 } as const;
 
 export type FontFamily = keyof typeof fonts;
@@ -29,17 +29,17 @@ export interface TypeStyle {
   /** px — mobile maps this straight into RN `TextStyle.lineHeight`. */
   lineHeight: number;
   family: FontFamily;
-  weight: '400' | '500' | '600';
+  weight: "400" | "500" | "600";
 }
 
 export const type = {
-  body: { family: 'sans', lineHeight: 22, size: 15, weight: '400' },
-  bodyStrong: { family: 'sans', lineHeight: 22, size: 15, weight: '600' },
-  display: { family: 'display', lineHeight: 34, size: 28, weight: '600' },
-  mono: { family: 'mono', lineHeight: 16, size: 12, weight: '500' },
-  small: { family: 'sans', lineHeight: 18, size: 13, weight: '400' },
-  tiny: { family: 'sans', lineHeight: 14, size: 11, weight: '500' },
-  title: { family: 'display', lineHeight: 26, size: 20, weight: '600' },
+  body: { family: "sans", lineHeight: 22, size: 15, weight: "400" },
+  bodyStrong: { family: "sans", lineHeight: 22, size: 15, weight: "600" },
+  display: { family: "display", lineHeight: 34, size: 28, weight: "600" },
+  mono: { family: "mono", lineHeight: 16, size: 12, weight: "500" },
+  small: { family: "sans", lineHeight: 18, size: 13, weight: "400" },
+  tiny: { family: "sans", lineHeight: 14, size: 11, weight: "500" },
+  title: { family: "display", lineHeight: 26, size: 20, weight: "600" },
 } as const satisfies Record<string, TypeStyle>;
 
 export type TypeKey = keyof typeof type;
@@ -53,24 +53,27 @@ export interface MarketingTypeStyle {
   /** Unitless CSS line-height multiplier, e.g. `'1.2'`. */
   lineHeight: `${number}`;
   family: FontFamily;
-  weight: '400' | '500' | '600' | '700';
+  weight: "400" | "500" | "600" | "700";
 }
 
 export const marketingType = {
-  'display-1': {
-    family: 'display',
-    lineHeight: '1.1',
+  "display-1": {
+    family: "display",
+    lineHeight: "1.1",
     size: 40,
-    weight: '700',
+    weight: "700",
   },
-  h2: { family: 'display', lineHeight: '1.25', size: 22, weight: '600' },
-  h3: { family: 'sans', lineHeight: '1.3', size: 16, weight: '600' },
+  h2: { family: "display", lineHeight: "1.25", size: 22, weight: "600" },
+  h3: { family: "sans", lineHeight: "1.3", size: 16, weight: "600" },
 } as const satisfies Record<string, MarketingTypeStyle>;
 
 export type MarketingTypeKey = keyof typeof marketingType;
 
 /** CSS `font` shorthand for one type style, e.g. `600 20px/26px var(--font-display)`. */
 export function typeShorthand(style: TypeStyle | MarketingTypeStyle): string {
-  const lh = typeof style.lineHeight === 'number' ? `${style.lineHeight}px` : style.lineHeight;
+  const lh =
+    typeof style.lineHeight === "number"
+      ? `${style.lineHeight}px`
+      : style.lineHeight;
   return `${style.weight} ${style.size}px/${lh} var(--font-${style.family})`;
 }

@@ -1,17 +1,17 @@
-import { fork, type ChildProcess } from 'node:child_process';
-import path from 'node:path';
+import { fork, type ChildProcess } from "node:child_process";
+import path from "node:path";
 
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, expect, onTestFinished, test } from 'vitest';
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { describe, expect, onTestFinished, test } from "vitest";
 
-import { openVaultPlane } from '../../packages/gateway/src/serve/vault-plane.js';
+import { openVaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
 
-const OWNER = 'tests/perf/blob-egress.perf.test.ts';
+const OWNER = "tests/perf/blob-egress.perf.test.ts";
 
-describe('blob-egress.perf', () => {
-  test('large local blob egress produces a first byte without whole-file buffering', async () => {
-    const directory = await tempDir('blob-egress-');
+describe("blob-egress.perf", () => {
+  test("large local blob egress produces a first byte without whole-file buffering", async () => {
+    const directory = await tempDir("blob-egress-");
     // Seed outside the measured child. Its allocator has therefore never owned
     // the payload when it records the RSS baseline; a route that reads the whole
     // file must ask the OS for those pages instead of reusing seed-time slabs.
@@ -22,54 +22,57 @@ describe('blob-egress.perf', () => {
         warn: () => undefined,
         error: () => undefined,
       },
-      ownerName: 'Perf owner',
+      ownerName: "Perf owner",
     });
     const bytes = Buffer.alloc(128 * 1024 * 1024, 0x5a);
     const staged = seed.gateway.stageBlob(seed.ownerCredential, {
       bytes,
-      filename: 'large-perf.bin',
-      mediaType: 'application/octet-stream',
+      filename: "large-perf.bin",
+      mediaType: "application/octet-stream",
     });
     const attached = seed.gateway.invoke(seed.ownerCredential, {
-      command: 'core.add_document',
-      input: { staged_sha: staged.sha256, title: 'large-perf.bin' },
-      purpose: 'dpv:ServiceProvision',
+      command: "core.add_document",
+      input: { staged_sha: staged.sha256, title: "large-perf.bin" },
+      purpose: "dpv:ServiceProvision",
     });
-    if (attached.status !== 'executed') throw new Error('fixture could not attach staged blob');
-    const contentId = String((attached.output as { content_id: unknown }).content_id);
+    if (attached.status !== "executed")
+      throw new Error("fixture could not attach staged blob");
+    const contentId = String(
+      (attached.output as { content_id: unknown }).content_id
+    );
     await seed.stop();
 
     const child = fork(
-      path.resolve('tests/perf/fixtures/blob-egress-server.mjs'),
+      path.resolve("tests/perf/fixtures/blob-egress-server.mjs"),
       [directory, contentId, String(bytes.length)],
       {
-        execArgv: [...process.execArgv, '--expose-gc'],
-        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-      },
+        execArgv: [...process.execArgv, "--expose-gc"],
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+      }
     );
-    let childError = '';
-    child.stderr?.on('data', (chunk) => {
+    let childError = "";
+    child.stderr?.on("data", (chunk) => {
       childError += String(chunk);
     });
     onTestFinished(() => {
-      if (child.connected) child.send({ type: 'close' });
+      if (child.connected) child.send({ type: "close" });
       child.kill();
     });
     const ready = await childMessage<{
-      type: 'ready';
+      type: "ready";
       port: number;
       contentId: string;
       size: number;
-    }>(child, 'ready', () => childError);
-    const served = childMessage<{ type: 'served'; rssGrowthBytes: number }>(
+    }>(child, "ready", () => childError);
+    const served = childMessage<{ type: "served"; rssGrowthBytes: number }>(
       child,
-      'served',
-      () => childError,
+      "served",
+      () => childError
     );
 
     const started = performance.now();
     const response = await fetch(
-      `http://127.0.0.1:${ready.port}/centraid/_vault/blobs/${ready.contentId}`,
+      `http://127.0.0.1:${ready.port}/centraid/_vault/blobs/${ready.contentId}`
     );
     expect(response.status).toBe(200);
     const reader = response.body!.getReader();
@@ -88,24 +91,25 @@ describe('blob-egress.perf', () => {
     // The 96 MiB ceiling remains below the fixture's 128 MiB payload, so a
     // buffer-whole-file regression cannot fit while allocator noise gets room.
     const memoryBudget = 96 * 1024 * 1024;
-    const passed = ttfbMs < 500 && rssGrowthBytes < memoryBudget && received === ready.size;
+    const passed =
+      ttfbMs < 500 && rssGrowthBytes < memoryBudget && received === ready.size;
     await recordQualityResult({
-      lane: 'perf',
+      lane: "perf",
       owner: OWNER,
-      name: 'Large-blob egress TTFB and memory',
-      status: passed ? 'passed' : 'failed',
+      name: "Large-blob egress TTFB and memory",
+      status: passed ? "passed" : "failed",
       measurements: [
-        { name: 'TTFB', value: ttfbMs, unit: 'ms', budget: 500 },
+        { name: "TTFB", value: ttfbMs, unit: "ms", budget: 500 },
         {
-          name: 'RSS growth',
+          name: "RSS growth",
           value: rssGrowthBytes,
-          unit: 'bytes',
+          unit: "bytes",
           budget: memoryBudget,
         },
         {
-          name: 'bytes streamed',
+          name: "bytes streamed",
           value: received,
-          unit: 'bytes',
+          unit: "bytes",
           budget: ready.size,
         },
       ],
@@ -120,12 +124,15 @@ describe('blob-egress.perf', () => {
 function childMessage<T>(
   child: ChildProcess,
   expectedType: string,
-  stderr: () => string,
+  stderr: () => string
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error(`blob egress child timed out waiting for ${expectedType}`)),
-      10_000,
+      () =>
+        reject(
+          new Error(`blob egress child timed out waiting for ${expectedType}`)
+        ),
+      10_000
     );
     const onMessage = (message: unknown) => {
       if ((message as { type?: string })?.type !== expectedType) return;
@@ -138,10 +145,10 @@ function childMessage<T>(
     };
     const cleanup = () => {
       clearTimeout(timer);
-      child.off('message', onMessage);
-      child.off('exit', onExit);
+      child.off("message", onMessage);
+      child.off("exit", onExit);
     };
-    child.on('message', onMessage);
-    child.once('exit', onExit);
+    child.on("message", onMessage);
+    child.once("exit", onExit);
   });
 }

@@ -1,19 +1,19 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { VaultBridgeProps, VaultData } from '../screen-contracts.js';
-import VaultScreen from './VaultScreen.js';
+import type { VaultBridgeProps, VaultData } from "../screen-contracts.js";
+import VaultScreen from "./VaultScreen.js";
 
-const block: VaultBridgeProps['block'] = {
-  purpose: 'Read your notes',
-  why: 'To summarize them.',
-  scopes: [{ schema: 'notes', table: 'note', verbs: 'read' }],
+const block: VaultBridgeProps["block"] = {
+  purpose: "Read your notes",
+  why: "To summarize them.",
+  scopes: [{ schema: "notes", table: "note", verbs: "read" }],
 };
 
 const baseData: VaultData = {
-  vaultName: 'home',
+  vaultName: "home",
   grants: [],
   parked: [],
 };
@@ -21,12 +21,16 @@ const baseData: VaultData = {
 function makeProps(over: Partial<VaultBridgeProps> = {}): VaultBridgeProps {
   return {
     block,
-    confirm: vi.fn<VaultBridgeProps['confirm']>().mockResolvedValue(undefined),
-    demoLoad: vi.fn<VaultBridgeProps['demoLoad']>().mockResolvedValue(undefined),
-    demoPurge: vi.fn<VaultBridgeProps['demoPurge']>().mockResolvedValue(undefined),
-    grant: vi.fn<VaultBridgeProps['grant']>().mockResolvedValue(undefined),
-    loadData: vi.fn<VaultBridgeProps['loadData']>().mockResolvedValue(baseData),
-    revoke: vi.fn<VaultBridgeProps['revoke']>().mockResolvedValue(undefined),
+    confirm: vi.fn<VaultBridgeProps["confirm"]>().mockResolvedValue(undefined),
+    demoLoad: vi
+      .fn<VaultBridgeProps["demoLoad"]>()
+      .mockResolvedValue(undefined),
+    demoPurge: vi
+      .fn<VaultBridgeProps["demoPurge"]>()
+      .mockResolvedValue(undefined),
+    grant: vi.fn<VaultBridgeProps["grant"]>().mockResolvedValue(undefined),
+    loadData: vi.fn<VaultBridgeProps["loadData"]>().mockResolvedValue(baseData),
+    revoke: vi.fn<VaultBridgeProps["revoke"]>().mockResolvedValue(undefined),
     ...over,
   };
 }
@@ -34,7 +38,7 @@ function makeProps(over: Partial<VaultBridgeProps> = {}): VaultBridgeProps {
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
-describe('screens/VaultScreen', () => {
+describe("screens/VaultScreen", () => {
   afterEach(() => {
     act(() => root?.unmount());
     root = null;
@@ -43,7 +47,7 @@ describe('screens/VaultScreen', () => {
   });
 
   async function mount(props: VaultBridgeProps): Promise<HTMLDivElement> {
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     await act(async () => {
       root = createRoot(container as HTMLDivElement);
@@ -53,58 +57,63 @@ describe('screens/VaultScreen', () => {
   }
 
   describe(VaultScreen, () => {
-    it('always shows the requested-access section (even before data loads)', () => {
+    it("always shows the requested-access section (even before data loads)", () => {
       const html = renderToStaticMarkup(<VaultScreen {...makeProps()} />);
-      expect(html).toContain('Requested access');
-      expect(html).toContain('notes.note');
-      expect(html).toContain('To summarize them.');
-      expect(html).toContain('Purpose · Read your notes');
+      expect(html).toContain("Requested access");
+      expect(html).toContain("notes.note");
+      expect(html).toContain("To summarize them.");
+      expect(html).toContain("Purpose · Read your notes");
     });
 
-    it('renders the grant CTA when the app holds no grants', async () => {
+    it("renders the grant CTA when the app holds no grants", async () => {
       const el = await mount(makeProps());
-      expect(el.textContent).toContain('No access yet');
-      expect(el.querySelector('.grantBtn')?.textContent).toBe('Grant access');
+      expect(el.textContent).toContain("No access yet");
+      expect(el.querySelector(".grantBtn")?.textContent).toBe("Grant access");
     });
 
-    it('reports the parked count and renders parked cards', async () => {
-      const onParkedCount = vi.fn<NonNullable<VaultBridgeProps['onParkedCount']>>();
+    it("reports the parked count and renders parked cards", async () => {
+      const onParkedCount =
+        vi.fn<NonNullable<VaultBridgeProps["onParkedCount"]>>();
       const data: VaultData = {
         ...baseData,
         parked: [
           {
-            invocationId: 'iv1',
-            command: 'notes.write',
+            invocationId: "iv1",
+            command: "notes.write",
             parkedAt: new Date().toISOString(),
-            callerKind: 'app',
-            caller: 'notes',
-            input: { title: 'hi' },
+            callerKind: "app",
+            caller: "notes",
+            input: { title: "hi" },
           },
         ],
       };
-      const loadData = vi.fn<VaultBridgeProps['loadData']>().mockResolvedValue(data);
+      const loadData = vi
+        .fn<VaultBridgeProps["loadData"]>()
+        .mockResolvedValue(data);
       const el = await mount(makeProps({ loadData, onParkedCount }));
       expect(onParkedCount).toHaveBeenCalledWith(1);
-      expect(el.textContent).toContain('Waiting for your say-so');
-      expect(el.querySelector('.approveBtn')).toBeTruthy();
+      expect(el.textContent).toContain("Waiting for your say-so");
+      expect(el.querySelector(".approveBtn")).toBeTruthy();
     });
 
-    it('runs the grant action then reloads', async () => {
+    it("runs the grant action then reloads", async () => {
       const props = makeProps();
       const el = await mount(props);
-      const btn = el.querySelector('.grantBtn') as HTMLButtonElement;
+      const btn = el.querySelector(".grantBtn") as HTMLButtonElement;
       await act(async () => {
-        btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       });
       expect(props.grant).toHaveBeenCalledOnce();
       // one initial load + one after the action
       expect(props.loadData).toHaveBeenCalledTimes(2);
     });
 
-    it('shows the no-vault note when loadData resolves null', async () => {
-      const loadData = vi.fn<VaultBridgeProps['loadData']>().mockResolvedValue(null);
+    it("shows the no-vault note when loadData resolves null", async () => {
+      const loadData = vi
+        .fn<VaultBridgeProps["loadData"]>()
+        .mockResolvedValue(null);
       const el = await mount(makeProps({ loadData }));
-      expect(el.textContent).toContain('No vault is mounted');
+      expect(el.textContent).toContain("No vault is mounted");
     });
   });
 });

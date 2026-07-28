@@ -1,29 +1,31 @@
-import QRCode from 'qrcode';
-import { useEffect, useState, type JSX } from 'react';
+import QRCode from "qrcode";
+import { useEffect, useState, type JSX } from "react";
 
 import type {
   GatewayDeviceTicket,
   GatewayDeviceTicketInput,
   GatewayMember,
-} from '../../gateway-client.js';
-import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import { pairErrorMessage, roleLabel } from './device-roles.js';
+} from "../../gateway-client.js";
+import { formatClock, formatDuration } from "../shell/routes/gatewayData.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { pairErrorMessage, roleLabel } from "./device-roles.js";
 import DevicePairTarget, {
   type PairGrant,
   type PairSpace,
   type PairTarget,
-} from './DevicePairTarget.js';
+} from "./DevicePairTarget.js";
 
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './DevicePairPanel.module.css';
-import cardCss from './DevicesCard.module.css';
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./DevicePairPanel.module.css";
+import cardCss from "./DevicesCard.module.css";
 
 export interface DevicePairPanelProps {
   now: number;
-  onCreateTicket: (input?: GatewayDeviceTicketInput) => Promise<GatewayDeviceTicket>;
+  onCreateTicket: (
+    input?: GatewayDeviceTicketInput
+  ) => Promise<GatewayDeviceTicket>;
   onClose: () => void;
   /** Everyone the caller shares a space with — the picker's list (#599). */
   members?: readonly GatewayMember[];
@@ -37,9 +39,9 @@ const NO_MEMBERS: readonly GatewayMember[] = [];
 const NO_SPACES: readonly PairSpace[] = [];
 
 const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
-  { label: '15 min', minutes: 15 },
-  { label: '1 hour', minutes: 60 },
-  { label: '24 hours', minutes: 1440 },
+  { label: "15 min", minutes: 15 },
+  { label: "1 hour", minutes: 60 },
+  { label: "24 hours", minutes: 1440 },
 ];
 
 /*
@@ -58,7 +60,7 @@ export default function DevicePairPanel({
   spaces = NO_SPACES,
 }: DevicePairPanelProps): JSX.Element {
   const [minutes, setMinutes] = useState(15);
-  const [target, setTarget] = useState<PairTarget>({ kind: 'self' });
+  const [target, setTarget] = useState<PairTarget>({ kind: "self" });
   const [grants, setGrants] = useState<PairGrant[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,13 +73,14 @@ export default function DevicePairPanel({
     ticket: GatewayDeviceTicket;
     svg: string;
   } | null>(null);
-  const qrSvg = qr !== null && ticket !== null && qr.ticket === ticket ? qr.svg : null;
+  const qrSvg =
+    qr !== null && ticket !== null && qr.ticket === ticket ? qr.svg : null;
 
   useEffect(() => {
     if (!ticket) return;
     let live = true;
     void QRCode.toString(ticket.ticket, {
-      type: 'svg',
+      type: "svg",
       width: 176,
       margin: 1,
     }).then(
@@ -86,7 +89,7 @@ export default function DevicePairPanel({
       },
       (err: unknown) => {
         if (live) setError(err instanceof Error ? err.message : String(err));
-      },
+      }
     );
     return () => {
       live = false;
@@ -94,12 +97,12 @@ export default function DevicePairPanel({
   }, [ticket]);
 
   const generate = async (): Promise<void> => {
-    if (target.kind === 'new' && target.label.trim().length === 0) {
-      setError('Give the new person a name.');
+    if (target.kind === "new" && target.label.trim().length === 0) {
+      setError("Give the new person a name.");
       return;
     }
-    if (target.kind !== 'self' && grants.length === 0) {
-      setError('Choose at least one space this device may reach.');
+    if (target.kind !== "self" && grants.length === 0) {
+      setError("Choose at least one space this device may reach.");
       return;
     }
     setBusy(true);
@@ -108,10 +111,10 @@ export default function DevicePairPanel({
       // Self-pair sends NEITHER member nor grants: the gateway resolves the
       // caller's own member and clamps to the roles they already hold.
       const input: GatewayDeviceTicketInput = { ttlMinutes: minutes };
-      if (target.kind === 'member') {
+      if (target.kind === "member") {
         input.memberId = target.memberId;
         input.grants = grants;
-      } else if (target.kind === 'new') {
+      } else if (target.kind === "new") {
         input.newMemberLabel = target.label.trim();
         input.grants = grants;
       }
@@ -129,7 +132,9 @@ export default function DevicePairPanel({
       .writeText(ticket.ticket)
       .then(() => setCopied(true))
       .catch(() =>
-        setError('Couldn’t copy to the clipboard — select and copy the ticket manually.'),
+        setError(
+          "Couldn’t copy to the clipboard — select and copy the ticket manually."
+        )
       );
   };
 
@@ -139,8 +144,9 @@ export default function DevicePairPanel({
     return (
       <div className={styles.pair} data-testid="pair-panel">
         <div className={styles.pairLead}>
-          One-time ticket for <strong>{ticket.memberLabel}</strong>. Scan it in Centraid Companion,
-          or paste it into the other device’s pairing dialog. It burns on first use.
+          One-time ticket for <strong>{ticket.memberLabel}</strong>. Scan it in
+          Centraid Companion, or paste it into the other device’s pairing
+          dialog. It burns on first use.
         </div>
         <div className={styles.grantSummary}>
           {(granted.length > 0
@@ -173,17 +179,17 @@ export default function DevicePairPanel({
               className={cx(buttonCss.btn, buttonCss.sm, styles.copyBtn)}
               onClick={copy}
             >
-              <Icon name={copied ? 'Check' : 'Copy'} size={13} />
-              <span>{copied ? 'Copied' : 'Copy'}</span>
+              <Icon name={copied ? "Check" : "Copy"} size={13} />
+              <span>{copied ? "Copied" : "Copy"}</span>
             </button>
           </div>
         </div>
         <div className={styles.pairFoot}>
           <span className={styles.pairExpiry}>
             {Number.isNaN(expMs)
-              ? ''
+              ? ""
               : expMs <= now
-                ? 'Expired'
+                ? "Expired"
                 : `Expires ${formatClock(expMs)} · in ${formatDuration(expMs - now)}`}
           </span>
           <div className={styles.pairActions}>
@@ -233,7 +239,10 @@ export default function DevicePairPanel({
             <button
               key={preset.minutes}
               type="button"
-              className={cx(styles.ttlPreset, preset.minutes === minutes && styles.ttlPresetOn)}
+              className={cx(
+                styles.ttlPreset,
+                preset.minutes === minutes && styles.ttlPresetOn
+              )}
               aria-pressed={preset.minutes === minutes}
               disabled={busy}
               onClick={() => setMinutes(preset.minutes)}
@@ -254,7 +263,7 @@ export default function DevicePairPanel({
                 <Icon name="Loader" size={13} />
               </span>
             ) : (
-              'Generate ticket'
+              "Generate ticket"
             )}
           </button>
           <button

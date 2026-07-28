@@ -14,15 +14,23 @@
 // transparent Modal, a translateX slide from -width→0 on a bezier, and a fading
 // ~40% black scrim that closes on tap. Each row closes the drawer, then routes.
 
-import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useMemo } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from "@expo/vector-icons";
+import React, { useEffect, useMemo } from "react";
+import {
+  Animated,
+  Easing,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
-import { family, useTheme, type ThemeColors } from '../../kit/theme';
-import { initialsOf } from '../../lib/profile';
-import type { ConnectionState } from './AttentionLine';
+import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import { family, useTheme, type ThemeColors } from "../../kit/theme";
+import { initialsOf } from "../../lib/profile";
+import type { ConnectionState } from "./AttentionLine";
 
 const PANEL_WIDTH = 288;
 
@@ -44,7 +52,7 @@ export interface SpaceDrawerProps {
   onSettings: () => void;
 }
 
-type ConnTone = 'connected' | 'idle' | 'offline';
+type ConnTone = "connected" | "idle" | "offline";
 
 // Truthful, one-gateway status derived from the shared ConnectionState — no
 // invented "gateway health" beyond what Home already resolved.
@@ -53,14 +61,14 @@ function describeConnection(connection: ConnectionState): {
   tone: ConnTone;
 } {
   switch (connection.kind) {
-    case 'ready':
-      return { label: 'Connected', tone: 'connected' };
-    case 'error':
-      return { label: 'Desktop offline', tone: 'offline' };
-    case 'loading':
-      return { label: 'Connecting…', tone: 'idle' };
-    case 'no-gateway':
-      return { label: 'Not connected', tone: 'idle' };
+    case "ready":
+      return { label: "Connected", tone: "connected" };
+    case "error":
+      return { label: "Desktop offline", tone: "offline" };
+    case "loading":
+      return { label: "Connecting…", tone: "idle" };
+    case "no-gateway":
+      return { label: "Not connected", tone: "idle" };
   }
 }
 
@@ -85,9 +93,9 @@ export default function SpaceDrawer({
 
   const status = describeConnection(connection);
   const dotColor =
-    status.tone === 'connected'
+    status.tone === "connected"
       ? colors.accent
-      : status.tone === 'offline'
+      : status.tone === "offline"
         ? (colors.danger ?? colors.accent)
         : colors.ink4;
 
@@ -119,7 +127,12 @@ export default function SpaceDrawer({
   };
 
   return (
-    <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+    >
       <View style={styles.root}>
         <Animated.View
           style={[
@@ -143,10 +156,16 @@ export default function SpaceDrawer({
               <Text style={styles.avatarText}>{initialsOf(profile.name)}</Text>
             </View>
             <View style={styles.headerMeta}>
-              <Text style={[styles.headerName, { color: colors.ink }]} numberOfLines={1}>
-                {profile.name || 'Your space'}
+              <Text
+                style={[styles.headerName, { color: colors.ink }]}
+                numberOfLines={1}
+              >
+                {profile.name || "Your space"}
               </Text>
-              <Text style={[styles.headerSub, { color: colors.ink3 }]} numberOfLines={1}>
+              <Text
+                style={[styles.headerSub, { color: colors.ink3 }]}
+                numberOfLines={1}
+              >
                 {status.label}
               </Text>
             </View>
@@ -159,25 +178,37 @@ export default function SpaceDrawer({
 
             <Pressable style={styles.row} onPress={go(onAssistant)}>
               <Feather name="message-circle" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Assistant</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Assistant
+              </Text>
             </Pressable>
 
             <Pressable style={styles.row} onPress={go(onAutomations)}>
               <Feather name="zap" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Automations</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Automations
+              </Text>
             </Pressable>
 
             <Pressable style={styles.row} onPress={go(onInsights)}>
               <Feather name="bar-chart-2" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Insights</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Insights
+              </Text>
             </Pressable>
 
             <Pressable style={styles.row} onPress={go(onApprovals)}>
               <Feather name="bell" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Approvals</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Approvals
+              </Text>
               {approvals > 0 ? (
-                <View style={[styles.badge, { backgroundColor: colors.accent }]}>
-                  <Text style={styles.badgeText}>{approvals > 99 ? '99+' : approvals}</Text>
+                <View
+                  style={[styles.badge, { backgroundColor: colors.accent }]}
+                >
+                  <Text style={styles.badgeText}>
+                    {approvals > 99 ? "99+" : approvals}
+                  </Text>
                 </View>
               ) : null}
             </Pressable>
@@ -188,13 +219,17 @@ export default function SpaceDrawer({
 
             <Pressable style={styles.row} onPress={go(onSettings)}>
               <Feather name="settings" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Settings</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Settings
+              </Text>
             </Pressable>
 
             {/* Status, not a nav target of its own — pairing lives in Settings. */}
             <Pressable style={styles.row} onPress={go(onSettings)}>
               <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>{status.label}</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                {status.label}
+              </Text>
               <Feather name="chevron-right" size={17} color={colors.ink4} />
             </Pressable>
           </View>
@@ -215,31 +250,31 @@ export default function SpaceDrawer({
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     avatar: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 21,
       height: 42,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 42,
     },
-    avatarText: { color: '#fff', fontFamily: family.sansBold, fontSize: 15 },
+    avatarText: { color: "#fff", fontFamily: family.sansBold, fontSize: 15 },
     badge: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 10,
-      justifyContent: 'center',
+      justifyContent: "center",
       minWidth: 20,
       paddingHorizontal: 5,
       paddingVertical: 1,
     },
-    badgeText: { color: '#fff', fontFamily: family.sansBold, fontSize: 11 },
+    badgeText: { color: "#fff", fontFamily: family.sansBold, fontSize: 11 },
     divider: {
       height: StyleSheet.hairlineWidth,
       marginHorizontal: 2,
       marginVertical: 12,
     },
     header: {
-      alignItems: 'center',
+      alignItems: "center",
       borderBottomWidth: 0.5,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 12,
       paddingBottom: 16,
       paddingHorizontal: 20,
@@ -251,19 +286,19 @@ const makeStyles = (colors: ThemeColors) =>
     panel: {
       borderRightWidth: 0.5,
       flex: 0,
-      height: '100%',
+      height: "100%",
       width: PANEL_WIDTH,
     },
-    root: { flex: 1, flexDirection: 'row' },
+    root: { flex: 1, flexDirection: "row" },
     row: {
-      alignItems: 'center',
-      flexDirection: 'row',
+      alignItems: "center",
+      flexDirection: "row",
       gap: 13,
       paddingHorizontal: 2,
       paddingVertical: 13,
     },
     rowLabel: { flex: 1, fontFamily: family.sansRegular, fontSize: 15 },
-    scrim: { backgroundColor: 'rgba(0,0,0,.4)', flex: 1 },
+    scrim: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
     scroll: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
     sectionLabel: {
       color: colors.ink3,

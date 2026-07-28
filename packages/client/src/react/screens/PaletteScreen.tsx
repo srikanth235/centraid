@@ -1,8 +1,15 @@
-import { Fragment, useEffect, useReducer, useRef, useState, type JSX } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
 
-import type { PaletteBridgeProps, PaletteRowDTO } from '../screen-contracts.js';
+import type { PaletteBridgeProps, PaletteRowDTO } from "../screen-contracts.js";
 
-import styles from './PaletteScreen.module.css';
+import styles from "./PaletteScreen.module.css";
 
 function Row({
   row,
@@ -17,7 +24,7 @@ function Row({
   useEffect(() => {
     if (activeIsThis) {
       // Optional-call: jsdom (tests) doesn't implement scrollIntoView.
-      ref.current?.scrollIntoView?.({ block: 'nearest' });
+      ref.current?.scrollIntoView?.({ block: "nearest" });
     }
   }, [activeIsThis]);
   return (
@@ -33,7 +40,7 @@ function Row({
       }}
       onClick={onRun}
     >
-      {row.variant === 'app' && row.tile ? (
+      {row.variant === "app" && row.tile ? (
         <div
           className={styles.rowTile}
           style={{
@@ -47,7 +54,7 @@ function Row({
       ) : (
         <span
           className={styles.rowIcon}
-          data-accent={row.accent ? 'true' : undefined}
+          data-accent={row.accent ? "true" : undefined}
           // eslint-disable-next-line react/no-danger -- (#325) icon markup comes from the trusted vanilla Icon set
           dangerouslySetInnerHTML={{ __html: row.iconHtml }}
         />
@@ -77,7 +84,7 @@ export default function PaletteScreen({
   onClose,
   onReady,
 }: PaletteBridgeProps): JSX.Element {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -92,7 +99,8 @@ export default function PaletteScreen({
   const rows = groups.flatMap((g) => g.items);
 
   // Keep the active index in range as results shrink.
-  const clampedActive = active >= rows.length ? Math.max(0, rows.length - 1) : active;
+  const clampedActive =
+    active >= rows.length ? Math.max(0, rows.length - 1) : active;
 
   const run = (row: PaletteRowDTO | undefined): void => {
     row?.run();
@@ -104,25 +112,25 @@ export default function PaletteScreen({
   // the palette open (backdrop click aside).
   useEffect(() => {
     const onDocKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    document.addEventListener('keydown', onDocKey);
-    return () => document.removeEventListener('keydown', onDocKey);
+    document.addEventListener("keydown", onDocKey);
+    return () => document.removeEventListener("keydown", onDocKey);
   }, [onClose]);
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
     // Escape is handled by the document-level listener above (it also
     // covers the input-focused case — keydown bubbles to document).
-    if (e.key === 'ArrowDown') {
+    if (e.key === "ArrowDown") {
       e.preventDefault();
       setActive((a) => Math.min(rows.length - 1, a + 1));
-    } else if (e.key === 'ArrowUp') {
+    } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => Math.max(0, a - 1));
-    } else if (e.key === 'Enter') {
+    } else if (e.key === "Enter") {
       e.preventDefault();
       run(rows[clampedActive]);
     }
@@ -132,8 +140,11 @@ export default function PaletteScreen({
   // indexes `rows`, so a group's items need their flat offset. Precomputed
   // rather than counted with a mutable cursor inside the JSX map.
   const groupStarts = groups.reduce<number[]>(
-    (starts, _g, i) => [...starts, (starts[i - 1] ?? 0) + (groups[i - 1]?.items.length ?? 0)],
-    [],
+    (starts, _g, i) => [
+      ...starts,
+      (starts[i - 1] ?? 0) + (groups[i - 1]?.items.length ?? 0),
+    ],
+    []
   );
 
   return (

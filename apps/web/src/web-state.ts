@@ -1,4 +1,4 @@
-const PREFIX = 'centraid.web.v1.';
+const PREFIX = "centraid.web.v1.";
 
 export interface WebConnection {
   /** Refreshable iroh dial cache; never used as connection identity. */
@@ -14,9 +14,9 @@ export interface WebConnection {
 }
 
 const DEFAULT_CONNECTION: WebConnection = {
-  label: 'Web gateway',
-  displayName: 'Centraid',
-  avatarColor: '#6f5bf6',
+  label: "Web gateway",
+  displayName: "Centraid",
+  avatarColor: "#6f5bf6",
   rememberDevice: false,
 };
 
@@ -25,7 +25,7 @@ export function loadConnection(): WebConnection {
     const raw =
       sessionStorage.getItem(`${PREFIX}connection`) ??
       localStorage.getItem(`${PREFIX}connection`) ??
-      '{}';
+      "{}";
     const parsed = JSON.parse(raw) as Partial<WebConnection>;
     return { ...DEFAULT_CONNECTION, ...parsed };
   } catch {
@@ -51,7 +51,9 @@ export function webGatewayId(connection: WebConnection): string | undefined {
 
 export function loadSettingsPatch(): Record<string, unknown> {
   try {
-    return JSON.parse(localStorage.getItem(`${PREFIX}settings`) ?? '{}') as Record<string, unknown>;
+    return JSON.parse(
+      localStorage.getItem(`${PREFIX}settings`) ?? "{}"
+    ) as Record<string, unknown>;
   } catch {
     return {};
   }
@@ -60,35 +62,49 @@ export function loadSettingsPatch(): Record<string, unknown> {
 /** Fired after every settings write, carrying the merged result. The chrome
  *  listens so surfaces gated on onboarding state react the moment it flips,
  *  without polling (issue #603 W6). */
-export const SETTINGS_EVENT = 'settings-saved';
+export const SETTINGS_EVENT = "settings-saved";
 
-export function saveSettingsPatch(patch: Record<string, unknown>): Record<string, unknown> {
+export function saveSettingsPatch(
+  patch: Record<string, unknown>
+): Record<string, unknown> {
   const next = { ...loadSettingsPatch(), ...patch };
   localStorage.setItem(`${PREFIX}settings`, JSON.stringify(next));
   publish(SETTINGS_EVENT, next);
   return next;
 }
 
-export async function gatewayFetch(pathname: string, init: RequestInit = {}): Promise<Response> {
+export async function gatewayFetch(
+  pathname: string,
+  init: RequestInit = {}
+): Promise<Response> {
   const connection = loadConnection();
   if (!connection.endpointId || !connection.endpointTicket) {
-    throw new Error('No gateway is connected.');
+    throw new Error("No gateway is connected.");
   }
-  if (!window.CentraidIroh) throw new Error('Iroh browser transport is not installed.');
+  if (!window.CentraidIroh)
+    throw new Error("Iroh browser transport is not installed.");
   return window.CentraidIroh.fetch(pathname, init);
 }
 
-export async function gatewayJson<T>(pathname: string, init: RequestInit = {}): Promise<T> {
+export async function gatewayJson<T>(
+  pathname: string,
+  init: RequestInit = {}
+): Promise<T> {
   const response = await gatewayFetch(pathname, init);
   const text = await response.text();
-  if (!response.ok) throw new Error(text || `Gateway returned HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(text || `Gateway returned HTTP ${response.status}`);
   return JSON.parse(text) as T;
 }
 
 export const webEvents = new EventTarget();
 
-export function subscribe<T>(name: string, callback: (detail: T) => void): () => void {
-  const listener = (event: Event): void => callback((event as CustomEvent<T>).detail);
+export function subscribe<T>(
+  name: string,
+  callback: (detail: T) => void
+): () => void {
+  const listener = (event: Event): void =>
+    callback((event as CustomEvent<T>).detail);
   webEvents.addEventListener(name, listener);
   return () => webEvents.removeEventListener(name, listener);
 }
@@ -107,15 +123,17 @@ export function decodeTicket(raw: string):
     }
   | undefined {
   try {
-    const base64 = raw.trim().replaceAll('-', '+').replaceAll('_', '/');
+    const base64 = raw.trim().replaceAll("-", "+").replaceAll("_", "/");
     const decoded = JSON.parse(atob(base64)) as Record<string, unknown>;
-    if (decoded['kind'] !== 'centraid-gw-pair') return undefined;
+    if (decoded["kind"] !== "centraid-gw-pair") return undefined;
     return {
-      ...(typeof decoded['vaultName'] === 'string' ? { vaultName: decoded['vaultName'] } : {}),
-      ...(typeof decoded['exp'] === 'number' ? { exp: decoded['exp'] } : {}),
-      ...(typeof decoded['gw'] === 'string' ? { gw: decoded['gw'] } : {}),
-      ...(typeof decoded['t'] === 'string' ? { ticketId: decoded['t'] } : {}),
-      ...(typeof decoded['s'] === 'string' ? { secret: decoded['s'] } : {}),
+      ...(typeof decoded["vaultName"] === "string"
+        ? { vaultName: decoded["vaultName"] }
+        : {}),
+      ...(typeof decoded["exp"] === "number" ? { exp: decoded["exp"] } : {}),
+      ...(typeof decoded["gw"] === "string" ? { gw: decoded["gw"] } : {}),
+      ...(typeof decoded["t"] === "string" ? { ticketId: decoded["t"] } : {}),
+      ...(typeof decoded["s"] === "string" ? { secret: decoded["s"] } : {}),
     };
   } catch {
     return undefined;

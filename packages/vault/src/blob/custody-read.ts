@@ -11,8 +11,8 @@ import {
   TRAILER_BYTES,
   unsealFrame,
   type FrameDirectory,
-} from './seal-frames.js';
-import { resolveRange, type BlobRange, type BlobStore } from './store.js';
+} from "./seal-frames.js";
+import { resolveRange, type BlobRange, type BlobStore } from "./store.js";
 
 /**
  * Fetch a whole remote object and return its PLAINTEXT (issue #405 §4): one
@@ -25,7 +25,7 @@ export async function fetchRemoteWhole(
   store: BlobStore,
   key: Buffer | undefined,
   sha: string,
-  unseal: (key: Buffer, sha: string, sealed: Buffer) => Buffer,
+  unseal: (key: Buffer, sha: string, sealed: Buffer) => Buffer
 ): Promise<Buffer | null> {
   const raw = await store.get(sha);
   if (raw === null) return null;
@@ -41,12 +41,13 @@ export async function fetchRemoteWhole(
 export async function fetchFrameDirectory(
   store: BlobStore,
   key: Buffer,
-  sha: string,
+  sha: string
 ): Promise<FrameDirectory | null> {
   const stat = await store.stat(sha);
   if (!stat) return null;
   const size = stat.size;
-  if (size < TRAILER_BYTES) throw new Error(`remote blob ${sha}: object too small to be framed`);
+  if (size < TRAILER_BYTES)
+    throw new Error(`remote blob ${sha}: object too small to be framed`);
   const trailerBytes = await store.get(sha, { start: size - TRAILER_BYTES });
   if (!trailerBytes) return null;
   const { directoryLength, frameCount } = decodeTrailer(trailerBytes);
@@ -73,12 +74,16 @@ export async function fetchRemoteRange(
   key: Buffer,
   sha: string,
   range: BlobRange,
-  dir: FrameDirectory,
+  dir: FrameDirectory
 ): Promise<Buffer | null> {
   const resolved = resolveRange(dir.totalSize, range);
   if (!resolved) return null;
   if (dir.frameCount === 0) return Buffer.alloc(0);
-  const { first, last } = coveringFrames(dir.frameSize, resolved.start, resolved.end);
+  const { first, last } = coveringFrames(
+    dir.frameSize,
+    resolved.start,
+    resolved.end
+  );
   const plaintextParts = await Promise.all(
     Array.from({ length: last - first + 1 }, async (_, index) => {
       const frameIndex = first + index;
@@ -88,13 +93,17 @@ export async function fetchRemoteRange(
         start: offset,
         end: offset + sealedLen - 1,
       });
-      return sealed ? unsealFrame(key, sha, frameIndex, dir.frameCount, sealed) : null;
-    }),
+      return sealed
+        ? unsealFrame(key, sha, frameIndex, dir.frameCount, sealed)
+        : null;
+    })
   );
   if (plaintextParts.some((part) => part === null)) return null; // raced a delete mid-range
   // The covering frames start at plaintext offset `first * frameSize`; slice
   // the requested window out of that contiguous run.
-  const covered = Buffer.concat(plaintextParts.filter((part): part is Buffer => part !== null));
+  const covered = Buffer.concat(
+    plaintextParts.filter((part): part is Buffer => part !== null)
+  );
   const sliceStart = resolved.start - first * dir.frameSize;
   const sliceEnd = resolved.end - first * dir.frameSize;
   return covered.subarray(sliceStart, sliceEnd + 1);

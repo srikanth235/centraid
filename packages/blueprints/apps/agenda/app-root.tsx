@@ -13,17 +13,17 @@ import {
   useState,
   type KeyboardEvent,
   type ReactElement,
-} from 'react';
+} from "react";
 
-import type { InlineAppProps } from '../inline-types.ts';
-import { Chrome } from './Chrome.tsx';
-import { CreateModal } from './components/CreateModal.tsx';
-import { EventDrawer } from './components/EventDrawer.tsx';
-import { HeaderBar } from './components/HeaderBar.tsx';
-import { MonthView } from './components/MonthView.tsx';
-import { ScheduleView } from './components/ScheduleView.tsx';
-import { CalendarList, MiniMonth } from './components/Sidebar.tsx';
-import { WeekView } from './components/WeekView.tsx';
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome } from "./Chrome.tsx";
+import { CreateModal } from "./components/CreateModal.tsx";
+import { EventDrawer } from "./components/EventDrawer.tsx";
+import { HeaderBar } from "./components/HeaderBar.tsx";
+import { MonthView } from "./components/MonthView.tsx";
+import { ScheduleView } from "./components/ScheduleView.tsx";
+import { CalendarList, MiniMonth } from "./components/Sidebar.tsx";
+import { WeekView } from "./components/WeekView.tsx";
 import {
   bucketByDay,
   fmtDay,
@@ -33,7 +33,7 @@ import {
   segTimeText,
   startOfWeek,
   weekRange,
-} from './format.ts';
+} from "./format.ts";
 import {
   closePopover,
   h,
@@ -45,9 +45,9 @@ import {
   subscribeReadUpdates,
   wireAttachInput,
   wireThemeToggle,
-} from './kit.ts';
-import type { ReadSubscription } from './kit.ts';
-import { createLogic } from './logic.ts';
+} from "./kit.ts";
+import type { ReadSubscription } from "./kit.ts";
+import { createLogic } from "./logic.ts";
 import type {
   AgEvent,
   AppData,
@@ -56,24 +56,24 @@ import type {
   CreatePayload,
   Prefill,
   ViewKind,
-} from './types.ts';
+} from "./types.ts";
 
-import styles from './Chrome.module.css';
+import styles from "./Chrome.module.css";
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
 // when a change names one of these (or names none, i.e. "this app acted").
 export const CHANGE_TABLES = [
-  'core.event',
-  'schedule.event_ext',
-  'schedule.attendee',
-  'schedule.calendar',
-  'core.party',
-  'core.attachment',
-  'core.content_item',
-  'core.vault',
+  "core.event",
+  "schedule.event_ext",
+  "schedule.attendee",
+  "schedule.calendar",
+  "core.party",
+  "core.attachment",
+  "core.content_item",
+  "core.vault",
 ];
 
-const VALID_VIEWS = new Set<ViewKind>(['month', 'week', 'schedule']);
+const VALID_VIEWS = new Set<ViewKind>(["month", "week", "schedule"]);
 
 /** The `upcoming` query's payload — the canvas read and the mini read share it;
  *  a consent denial rides `vaultDenied` (a first-class outcome, not an error). */
@@ -83,7 +83,8 @@ interface UpcomingData {
   vaultDenied?: { code?: string; message?: string };
 }
 
-const byId = (id: string): HTMLElement | null => document.querySelector(`#${id}`);
+const byId = (id: string): HTMLElement | null =>
+  document.querySelector(`#${id}`);
 
 function initialView(rootEl: HTMLElement | null): ViewKind {
   // The inline shell pushes the default-view knob onto the app's OWN root
@@ -91,15 +92,19 @@ function initialView(rootEl: HTMLElement | null): ViewKind {
   // (they mount `Root` into #appRoot and can't reach into it). Read the app
   // root first, then fall back to documentElement so both boot paths honour the
   // knob (#505).
-  const knob = rootEl?.dataset.appDefaultView ?? document.documentElement.dataset.appDefaultView;
-  return knob && VALID_VIEWS.has(knob as ViewKind) ? (knob as ViewKind) : 'month';
+  const knob =
+    rootEl?.dataset.appDefaultView ??
+    document.documentElement.dataset.appDefaultView;
+  return knob && VALID_VIEWS.has(knob as ViewKind)
+    ? (knob as ViewKind)
+    : "month";
 }
 
 function makeState(view: ViewKind): AppState {
   return {
     view,
     cursor: new Date(),
-    search: '',
+    search: "",
     searchResults: null,
     hiddenCals: new Set(),
     detailEventId: null,
@@ -146,21 +151,25 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const replaceLiveReads = (reads: ReadSubscription[]): void => {
       for (const unsubscribe of liveUnsubRef.current) unsubscribe();
       liveUnsubRef.current = reads.map((read) => read.unsubscribe);
-      liveOwnRef.current = reads.length > 0 && reads.every((read) => read.managed);
+      liveOwnRef.current =
+        reads.length > 0 && reads.every((read) => read.managed);
     };
 
-    const applyLoadedData = (canvasData: UpcomingData, miniData: UpcomingData): void => {
+    const applyLoadedData = (
+      canvasData: UpcomingData,
+      miniData: UpcomingData
+    ): void => {
       if (seq !== loadSeqRef.current) return;
       if (state.readFailedShown) {
         state.readFailedShown = false;
-        logic.notice('');
+        logic.notice("");
       }
       const denied = canvasData?.vaultDenied;
-      const consentBanner = byId('consentBanner');
+      const consentBanner = byId("consentBanner");
       if (consentBanner) consentBanner.hidden = !denied;
       if (denied) {
-        const consentDetail = byId('consentDetail');
-        if (consentDetail) consentDetail.textContent = denied.message ?? '';
+        const consentDetail = byId("consentDetail");
+        if (consentDetail) consentDetail.textContent = denied.message ?? "";
         data.events = [];
         data.miniEvents = [];
         data.calendars = [];
@@ -172,19 +181,22 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       data.events = canvasData?.events ?? [];
       data.miniEvents = miniData?.events ?? [];
       data.calendars = canvasData?.calendars ?? [];
-      data.calById = new Map(data.calendars.map((c): [string, Calendar] => [c.calendar_id, c]));
-      if (state.detailEventId && !logic.findEvent(state.detailEventId)) state.detailEventId = null;
+      data.calById = new Map(
+        data.calendars.map((c): [string, Calendar] => [c.calendar_id, c])
+      );
+      if (state.detailEventId && !logic.findEvent(state.detailEventId))
+        state.detailEventId = null;
       bump();
     };
 
     const miniRange = monthGridRange(state.cursor);
     const canvasRange =
-      state.view === 'month'
+      state.view === "month"
         ? miniRange
-        : state.view === 'week'
+        : state.view === "week"
           ? weekRange(state.cursor)
           : { from: scheduleFrom(state.cursor) };
-    const needsSecondRead = state.view !== 'month';
+    const needsSecondRead = state.view !== "month";
 
     let canvasData: UpcomingData | undefined;
     let miniData: UpcomingData | undefined;
@@ -196,11 +208,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     try {
       if (needsSecondRead) {
         const canvasRead = window.centraid.read<UpcomingData>({
-          query: 'upcoming',
+          query: "upcoming",
           input: canvasRange,
         });
         const miniRead = window.centraid.read<UpcomingData>({
-          query: 'upcoming',
+          query: "upcoming",
           input: miniRange,
         });
         replaceLiveReads([
@@ -216,7 +228,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         [canvasData, miniData] = await Promise.all([canvasRead, miniRead]);
       } else {
         const read = window.centraid.read<UpcomingData>({
-          query: 'upcoming',
+          query: "upcoming",
           input: canvasRange,
         });
         replaceLiveReads([
@@ -235,7 +247,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // listeners so a later change can retry instead of leaving this view inert.
       replaceLiveReads([]);
       // A broken vault must not look like an empty one.
-      readFailed(byId('noticeBanner'));
+      readFailed(byId("noticeBanner"));
       state.readFailedShown = true;
       return;
     }
@@ -258,13 +270,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       rootRef(el);
       if (el) {
         const view = initialView(el);
-        if (view !== stateRef.current.view && stateRef.current.search === '') {
+        if (view !== stateRef.current.view && stateRef.current.search === "") {
           stateRef.current.view = view;
           bump();
         }
       }
     },
-    [rootRef],
+    [rootRef]
   );
 
   // ---- Navigation / view (mutate the state bag in place, then reload) ----
@@ -272,16 +284,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     (dir: number) => {
       const state = stateRef.current;
       state.cursor =
-        state.view === 'week'
+        state.view === "week"
           ? new Date(
               state.cursor.getFullYear(),
               state.cursor.getMonth(),
-              state.cursor.getDate() + dir * 7,
+              state.cursor.getDate() + dir * 7
             )
-          : new Date(state.cursor.getFullYear(), state.cursor.getMonth() + dir, 1);
+          : new Date(
+              state.cursor.getFullYear(),
+              state.cursor.getMonth() + dir,
+              1
+            );
       void load();
     },
-    [load],
+    [load]
   );
   const goToday = useCallback(() => {
     stateRef.current.cursor = new Date();
@@ -293,14 +309,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       stateRef.current.view = v;
       void load();
     },
-    [load],
+    [load]
   );
   const pickMiniDay = useCallback(
     (date: Date) => {
       stateRef.current.cursor = date;
       void load();
     },
-    [load],
+    [load]
   );
   const toggleCalendar = useCallback((calendarId: string) => {
     const hidden = stateRef.current.hiddenCals;
@@ -333,77 +349,85 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       const start = nextRoundHourOn(date);
       openCreate({ start, end: new Date(start.getTime() + 3600000) });
     },
-    [openCreate],
+    [openCreate]
   );
   const onSlotCreate = useCallback(
     (_date: Date, at: Date) => {
       openCreate({ start: at, end: new Date(at.getTime() + 3600000) });
     },
-    [openCreate],
+    [openCreate]
   );
   const submitCreate = useCallback(
     async (payload: CreatePayload): Promise<VaultOutcome | undefined> => {
       const outcome = await logic.proposeEvent(payload);
       if (
-        outcome?.status === 'executed' ||
-        outcome?.status === 'parked' ||
-        outcome?.status === 'queued' ||
-        outcome?.status === 'in-flight'
+        outcome?.status === "executed" ||
+        outcome?.status === "parked" ||
+        outcome?.status === "queued" ||
+        outcome?.status === "in-flight"
       ) {
         stateRef.current.cursor = new Date(payload.dtstart);
         await load();
       }
       return outcome;
     },
-    [logic, load],
+    [logic, load]
   );
 
-  const visibleEvents = useCallback((list: AgEvent[] | null | undefined): AgEvent[] => {
-    const hidden = stateRef.current.hiddenCals;
-    return (list ?? []).filter((ev) => !ev.calendar_id || !hidden.has(ev.calendar_id));
-  }, []);
+  const visibleEvents = useCallback(
+    (list: AgEvent[] | null | undefined): AgEvent[] => {
+      const hidden = stateRef.current.hiddenCals;
+      return (list ?? []).filter(
+        (ev) => !ev.calendar_id || !hidden.has(ev.calendar_id)
+      );
+    },
+    []
+  );
 
   /** The month cell's "+N more" — a kit popover listing every event that day. */
   const openDayPanel = useCallback(
     (dayKey: string, anchorEl: HTMLElement) => {
-      const segs = bucketByDay(visibleEvents(dataRef.current.events)).get(dayKey) ?? [];
+      const segs =
+        bucketByDay(visibleEvents(dataRef.current.events)).get(dayKey) ?? [];
       openPopover(
         anchorEl,
         (box) => {
-          box.appendChild(h('div', { class: 'ag-day-pop-title' }, fmtDay(dayKey)));
+          box.appendChild(
+            h("div", { class: "ag-day-pop-title" }, fmtDay(dayKey))
+          );
           for (const seg of segs) {
             const ev = seg.ev;
             box.appendChild(
               h(
-                'button',
+                "button",
                 {
-                  type: 'button',
-                  class: 'ag-day-pop-item',
+                  type: "button",
+                  class: "ag-day-pop-item",
                   onclick: () => {
                     closePopover();
                     openEventDetail(ev);
                   },
                 },
-                h('span', {
-                  class: 'ag-dot',
+                h("span", {
+                  class: "ag-dot",
                   style: `background:${logic.colorFor(ev.calendar_id)}`,
                 }),
-                h('span', { class: 'ag-day-pop-time' }, segTimeText(seg)),
-                h('span', { class: 'ag-day-pop-text' }, ev.summary),
-              ),
+                h("span", { class: "ag-day-pop-time" }, segTimeText(seg)),
+                h("span", { class: "ag-day-pop-text" }, ev.summary)
+              )
             );
           }
         },
-        { className: 'ag-day-pop' },
+        { className: "ag-day-pop" }
       );
     },
-    [logic, openEventDetail, visibleEvents],
+    [logic, openEventDetail, visibleEvents]
   );
 
   // ---- chrome wiring: theme toggle, attach input, doorbell, focus, keys, width ----
   useEffect(() => {
     if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
-    const attachInput = byId('attachInput') as HTMLInputElement | null;
+    const attachInput = byId("attachInput") as HTMLInputElement | null;
     if (attachInput) {
       wireAttachInput(attachInput, () => logic.getAttachTarget(), {
         act: logic.act,
@@ -424,11 +448,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const onKey = (e: globalThis.KeyboardEvent): void => {
       const searchInput = searchInputRef.current;
       const state = stateRef.current;
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         if (state.createOpen) return void closeCreate();
         if (state.detailEventId) return void closeDrawer();
         if (e.target === searchInput && searchInput?.value) {
-          searchInput.value = '';
+          searchInput.value = "";
           logic.clearSearch();
           return;
         }
@@ -441,22 +465,26 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         e.target instanceof HTMLSelectElement;
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
       if (state.createOpen || state.detailEventId) return;
-      if (e.key === 'ArrowLeft') nav(-1);
-      else if (e.key === 'ArrowRight') nav(1);
-      else if (e.key === 't') goToday();
-      else if (e.key === 'm') setView('month');
-      else if (e.key === 'w') setView('week');
-      else if (e.key === 's') setView('schedule');
+      if (e.key === "ArrowLeft") nav(-1);
+      else if (e.key === "ArrowRight") nav(1);
+      else if (e.key === "t") goToday();
+      else if (e.key === "m") setView("month");
+      else if (e.key === "w") setView("week");
+      else if (e.key === "s") setView("schedule");
     };
-    window.addEventListener('keydown', onKey);
-    const stopWidth = observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
-      stateRef.current.narrow = isNarrow;
-      setNarrow(isNarrow);
-      if (!isNarrow) setSideOpen(false);
-    });
+    window.addEventListener("keydown", onKey);
+    const stopWidth = observeWidth(
+      rootElRef.current,
+      860,
+      (isNarrow: boolean) => {
+        stateRef.current.narrow = isNarrow;
+        setNarrow(isNarrow);
+        if (!isNarrow) setSideOpen(false);
+      }
+    );
     void load();
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener("keydown", onKey);
       stopDoorbell();
       stopFocus();
       stopWidth();
@@ -467,11 +495,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   }, []);
 
   const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== "Escape") return;
     e.preventDefault();
     const el = searchInputRef.current;
     if (!el?.value && !stateRef.current.search) return;
-    if (el) el.value = '';
+    if (el) el.value = "";
     logic.clearSearch();
   };
 
@@ -490,20 +518,24 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   }
 
   const rangeLabel =
-    state.view === 'week'
+    state.view === "week"
       ? (() => {
           const start = startOfWeek(state.cursor);
-          const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
-          return `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+          const end = new Date(
+            start.getFullYear(),
+            start.getMonth(),
+            start.getDate() + 6
+          );
+          return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${end.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
         })()
       : state.cursor.toLocaleDateString(undefined, {
-          month: 'long',
-          year: 'numeric',
+          month: "long",
+          year: "numeric",
         });
 
   const events = visibleEvents(data.events);
   let canvasNode: ReactElement;
-  if (state.view === 'month') {
+  if (state.view === "month") {
     canvasNode = (
       <MonthView
         cursor={state.cursor}
@@ -514,7 +546,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onMoreOpen={openDayPanel}
       />
     );
-  } else if (state.view === 'week') {
+  } else if (state.view === "week") {
     canvasNode = (
       <WeekView
         cursor={state.cursor}
@@ -537,7 +569,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     );
   }
 
-  const detailEv = state.detailEventId ? logic.findEvent(state.detailEventId) : null;
+  const detailEv = state.detailEventId
+    ? logic.findEvent(state.detailEventId)
+    : null;
   const drawerNode = detailEv ? (
     <EventDrawer
       key={detailEv.event_id}
@@ -552,7 +586,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       onRsvp={(id, p, st) => logic.respondRsvp(id, p, st)}
       onAttach={(id) => {
         logic.setAttachTarget(id);
-        (byId('attachInput') as HTMLInputElement | null)?.click();
+        (byId("attachInput") as HTMLInputElement | null)?.click();
       }}
       onRemoveAttachment={(aid) => logic.removeAttachment(aid)}
       onCancel={(id) => logic.cancelEvent(id)}
@@ -621,7 +655,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         drawer={drawerNode}
       />
       {modalNode}
-      <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to an event" />
+      <input
+        id="attachInput"
+        type="file"
+        multiple
+        hidden
+        aria-label="Attach a file to an event"
+      />
     </div>
   );
 }

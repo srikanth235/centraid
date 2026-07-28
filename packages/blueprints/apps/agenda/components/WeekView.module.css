@@ -50,7 +50,7 @@
   border-radius: 999px;
   color: var(--ink);
 }
-.weekDayHead[data-today='true'] .weekNum {
+.weekDayHead[data-today="true"] .weekNum {
   background: var(--accent-deep);
   color: #fff;
   font-weight: 600;
@@ -123,7 +123,7 @@
     var(--line) 48px
   );
 }
-.weekCol[data-today='true'] {
+.weekCol[data-today="true"] {
   background-color: var(--accent-soft);
 }
 /* The column's own click target (#573): a button stretched over the column,
@@ -141,7 +141,7 @@
   z-index: 3;
 }
 .nowLine::before {
-  content: '';
+  content: "";
   position: absolute;
   left: -3px;
   top: -3px;
@@ -165,7 +165,7 @@
   padding: 2px 6px;
   cursor: pointer;
 }
-.weekEv[data-status='tentative'] {
+.weekEv[data-status="tentative"] {
   background: color-mix(in srgb, var(--ev-color) 20%, var(--surface));
   border: 1px dashed var(--ev-color);
   color: var(--ink);

@@ -87,21 +87,24 @@
 //      REQUEST leaves from an ephemeral port, so the requests still fall
 //      through to the DROPs they exist to exercise.
 
-import { spawn } from 'node:child_process';
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { spawn } from "node:child_process";
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
-import { ensureBuilt, parseTicket } from './harness.mjs';
+import {
+  defaultRunId,
+  writeFlowVerdict,
+} from "../../agent-e2e-shared/harness.mjs";
+import { ensureBuilt, parseTicket } from "./harness.mjs";
 
 const __dirname = import.meta.dirname;
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const RUNS_DIR = path.join(__dirname, '..', 'runs');
-const NODE_IMAGE = 'node:22-bookworm-slim';
-const GATEWAY_CLI_REL = 'packages/gateway/dist/cli/cli.js';
-const DEVICE_SCRIPT_REL = 'tests/agent-e2e-pairing/lib/device-redeem.mjs';
-const GW_DATA_DIR = '/tmp/gw-data';
+const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
+const RUNS_DIR = path.join(__dirname, "..", "runs");
+const NODE_IMAGE = "node:22-bookworm-slim";
+const GATEWAY_CLI_REL = "packages/gateway/dist/cli/cli.js";
+const DEVICE_SCRIPT_REL = "tests/agent-e2e-pairing/lib/device-redeem.mjs";
+const GW_DATA_DIR = "/tmp/gw-data";
 // The ONLY UDP destination port anything here legitimately needs: 53, or the
 // containers can't resolve the relay hostnames at all.
 //
@@ -136,22 +139,24 @@ const PROBE_UDP_PORT = 9999;
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ["ignore", "pipe", "pipe"],
       ...opts,
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout?.on('data', (c) => (stdout += c));
-    child.stderr?.on('data', (c) => (stderr += c));
-    child.on('error', reject);
-    child.on('exit', (code) => resolve({ code, stdout, stderr }));
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (c) => (stdout += c));
+    child.stderr?.on("data", (c) => (stderr += c));
+    child.on("error", reject);
+    child.on("exit", (code) => resolve({ code, stdout, stderr }));
   });
 }
 
 async function sh(cmd, args, opts = {}) {
   const { code, stdout, stderr } = await run(cmd, args, opts);
   if (code !== 0) {
-    throw new Error(`${cmd} ${args.join(' ')} exited ${code}: ${stderr.trim() || stdout.trim()}`);
+    throw new Error(
+      `${cmd} ${args.join(" ")} exited ${code}: ${stderr.trim() || stdout.trim()}`
+    );
   }
   return stdout;
 }
@@ -161,7 +166,9 @@ async function shQuiet(cmd, args, opts = {}) {
   try {
     await sh(cmd, args, opts);
   } catch (e) {
-    console.error(`  [teardown warning] ${cmd} ${args.join(' ')}: ${e.message}`);
+    console.error(
+      `  [teardown warning] ${cmd} ${args.join(" ")}: ${e.message}`
+    );
   }
 }
 
@@ -170,7 +177,7 @@ function applyInOrder(values, apply) {
   let index = 0;
   return Array.from(values).reduce(
     (sequence, value) => sequence.then(() => apply(value, index++)),
-    Promise.resolve(),
+    Promise.resolve()
   );
 }
 
@@ -182,16 +189,16 @@ function applyInOrder(values, apply) {
  * node_modules/@number0/, never touches the host's own platform package.
  */
 async function ensureNativeAddon() {
-  const archMap = { arm64: 'arm64', x64: 'x64' };
+  const archMap = { arm64: "arm64", x64: "x64" };
   const arch = archMap[process.arch];
   if (!arch) {
     throw new Error(
       `cross-network-relay: unsupported host arch "${process.arch}" — only arm64/x64 have ` +
-        `published @number0/iroh-linux-*-gnu packages`,
+        `published @number0/iroh-linux-*-gnu packages`
     );
   }
   const pkgName = `iroh-linux-${arch}-gnu`;
-  const pkgDir = path.join(REPO_ROOT, 'node_modules', '@number0', pkgName);
+  const pkgDir = path.join(REPO_ROOT, "node_modules", "@number0", pkgName);
   const addonFile = path.join(pkgDir, `iroh.linux-${arch}-gnu.node`);
   try {
     await fs.access(addonFile);
@@ -199,31 +206,37 @@ async function ensureNativeAddon() {
   } catch {
     const irohPkgJson = JSON.parse(
       await fs.readFile(
-        path.join(REPO_ROOT, 'node_modules', '@number0', 'iroh', 'package.json'),
-        'utf8',
-      ),
+        path.join(
+          REPO_ROOT,
+          "node_modules",
+          "@number0",
+          "iroh",
+          "package.json"
+        ),
+        "utf8"
+      )
     );
     const version = irohPkgJson.version;
     console.log(
       `[docker-harness] @number0/${pkgName}@${version} missing — the host's bun install only ` +
-        `fetched the host-platform optional dep; fetching the linux one additively for the container…`,
+        `fetched the host-platform optional dep; fetching the linux one additively for the container…`
     );
     const script = [
-      'set -e',
-      'cd /tmp',
+      "set -e",
+      "cd /tmp",
       `npm pack @number0/${pkgName}@${version} --silent >/dev/null`,
       `tar xzf number0-${pkgName}-${version}.tgz`,
       `mkdir -p /repo/node_modules/@number0/${pkgName}`,
       `cp -r package/* /repo/node_modules/@number0/${pkgName}/`,
-    ].join(' && ');
-    await sh('docker', [
-      'run',
-      '--rm',
-      '-v',
+    ].join(" && ");
+    await sh("docker", [
+      "run",
+      "--rm",
+      "-v",
       `${REPO_ROOT}:/repo`,
       NODE_IMAGE,
-      'bash',
-      '-c',
+      "bash",
+      "-c",
       script,
     ]);
   }
@@ -231,27 +244,27 @@ async function ensureNativeAddon() {
   // Verified, not assumed: actually load @centraid/tunnel inside a
   // throwaway container and confirm the native addon resolves before
   // trusting the rest of the flow to it.
-  const { code, stdout, stderr } = await run('docker', [
-    'run',
-    '--rm',
-    '-v',
+  const { code, stdout, stderr } = await run("docker", [
+    "run",
+    "--rm",
+    "-v",
     `${REPO_ROOT}:/repo`,
-    '-w',
-    '/repo',
+    "-w",
+    "/repo",
     NODE_IMAGE,
-    'node',
-    '-e',
+    "node",
+    "-e",
     "try { require('@centraid/tunnel'); console.log('OK'); } " +
-      'catch (e) { console.error(e.message); process.exit(1); }',
+      "catch (e) { console.error(e.message); process.exit(1); }",
   ]);
-  if (code !== 0 || !stdout.includes('OK')) {
+  if (code !== 0 || !stdout.includes("OK")) {
     throw new Error(
       `cross-network-relay: @centraid/tunnel's native addon does not load inside ${NODE_IMAGE} ` +
-        `even after fetching @number0/${pkgName} — ${stderr.trim() || stdout.trim()}`,
+        `even after fetching @number0/${pkgName} — ${stderr.trim() || stdout.trim()}`
     );
   }
   console.log(
-    '[docker-harness] @centraid/tunnel native addon loads inside the container — confirmed',
+    "[docker-harness] @centraid/tunnel native addon loads inside the container — confirmed"
   );
 }
 
@@ -264,20 +277,28 @@ async function dockerNetworkCreate(name) {
   // exists to exercise. Forcing IPv4-only removes that escape hatch
   // entirely rather than trying to firewall an address range that varies
   // by host/ISP.
-  await sh('docker', ['network', 'create', '--driver', 'bridge', '--ipv6=false', name]);
-  const inspectOut = await sh('docker', [
-    'network',
-    'inspect',
+  await sh("docker", [
+    "network",
+    "create",
+    "--driver",
+    "bridge",
+    "--ipv6=false",
     name,
-    '--format',
-    '{{range .IPAM.Config}}{{.Subnet}}\n{{end}}',
+  ]);
+  const inspectOut = await sh("docker", [
+    "network",
+    "inspect",
+    name,
+    "--format",
+    "{{range .IPAM.Config}}{{.Subnet}}\n{{end}}",
   ]);
   // IPv4 + IPv6 subnets are both listed; take the IPv4 one (contains a dot).
   const subnet = inspectOut
-    .split('\n')
+    .split("\n")
     .map((s) => s.trim())
-    .find((s) => s.includes('.'));
-  if (!subnet) throw new Error(`network ${name} has no IPv4 subnet in IPAM config`);
+    .find((s) => s.includes("."));
+  if (!subnet)
+    throw new Error(`network ${name} has no IPv4 subnet in IPAM config`);
   return subnet;
 }
 
@@ -292,34 +313,46 @@ async function dockerNetworkCreate(name) {
  * embed a live EndpointTicket because the CLI mints through the running
  * daemon once those lines appear.
  */
-async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 } = {}) {
+async function waitForGatewayReady(
+  containerName,
+  logFile,
+  { timeoutMs = 90000 } = {}
+) {
   const wanted = { url: undefined, endpointId: undefined };
   const start = Date.now();
   const waitForNextReadinessCheck = async () => {
     if (Date.now() - start >= timeoutMs) {
-      const logs = await sh('docker', ['logs', containerName]).catch(() => '(logs unavailable)');
+      const logs = await sh("docker", ["logs", containerName]).catch(
+        () => "(logs unavailable)"
+      );
       await fs.writeFile(logFile, logs);
       throw new Error(
         `gateway container ${containerName} not ready in ${timeoutMs}ms (url=${wanted.url} ` +
-          `endpoint=${wanted.endpointId}) — see ${logFile}`,
+          `endpoint=${wanted.endpointId}) — see ${logFile}`
       );
     }
-    const { code: inspectCode, stdout: statusOut } = await run('docker', [
-      'inspect',
+    const { code: inspectCode, stdout: statusOut } = await run("docker", [
+      "inspect",
       containerName,
-      '--format',
-      '{{.State.Status}}',
+      "--format",
+      "{{.State.Status}}",
     ]);
-    const logs = await sh('docker', ['logs', containerName]);
-    wanted.url ??= logs.match(/listening on (?<url>http:\/\/[^\s]+)/u)?.groups?.url;
-    wanted.endpointId ??= logs.match(/endpoint: (?<endpointId>[0-9a-f]{64})/u)?.groups?.endpointId;
+    const logs = await sh("docker", ["logs", containerName]);
+    wanted.url ??= logs.match(
+      /listening on (?<url>http:\/\/[^\s]+)/u
+    )?.groups?.url;
+    wanted.endpointId ??= logs.match(
+      /endpoint: (?<endpointId>[0-9a-f]{64})/u
+    )?.groups?.endpointId;
     if (wanted.url && wanted.endpointId) {
       await fs.writeFile(logFile, logs);
       return wanted;
     }
-    if (inspectCode === 0 && statusOut.trim() === 'exited') {
+    if (inspectCode === 0 && statusOut.trim() === "exited") {
       await fs.writeFile(logFile, logs);
-      throw new Error(`gateway container ${containerName} exited before ready — see ${logFile}`);
+      throw new Error(
+        `gateway container ${containerName} exited before ready — see ${logFile}`
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
     return waitForNextReadinessCheck();
@@ -346,19 +379,29 @@ async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 }
  *   - `veth*`: the host-side halves of container pairs, same reasoning.
  */
 async function hostAddresses(fwName) {
-  const out = await sh('docker', ['exec', fwName, 'ip', '-4', '-o', 'addr', 'show']);
+  const out = await sh("docker", [
+    "exec",
+    fwName,
+    "ip",
+    "-4",
+    "-o",
+    "addr",
+    "show",
+  ]);
   const addrs = [];
-  for (const line of out.split('\n')) {
+  for (const line of out.split("\n")) {
     // "2: eth0    inet 10.1.0.4/16 brd 10.1.255.255 scope global eth0"
-    const m = line.match(/^\d+:\s+(?<iface>\S+)\s+inet\s+(?<addr>\d+\.\d+\.\d+\.\d+)\//u);
+    const m = line.match(
+      /^\d+:\s+(?<iface>\S+)\s+inet\s+(?<addr>\d+\.\d+\.\d+\.\d+)\//u
+    );
     if (!m?.groups) continue;
-    const iface = m.groups.iface ?? '';
-    const addr = m.groups.addr ?? '';
+    const iface = m.groups.iface ?? "";
+    const addr = m.groups.addr ?? "";
     if (
-      iface === 'lo' ||
-      iface === 'docker0' ||
-      iface.startsWith('br-') ||
-      iface.startsWith('veth')
+      iface === "lo" ||
+      iface === "docker0" ||
+      iface.startsWith("br-") ||
+      iface.startsWith("veth")
     ) {
       continue;
     }
@@ -428,11 +471,18 @@ function udpProbeScript(targets) {
 
 /** Run one probe container/exec and parse its single JSON verdict line. */
 async function runProbe(dockerArgs, script, what) {
-  const { code, stdout } = await run('docker', [...dockerArgs, 'node', '-e', script]);
+  const { code, stdout } = await run("docker", [
+    ...dockerArgs,
+    "node",
+    "-e",
+    script,
+  ]);
   try {
-    return JSON.parse(stdout.trim().split('\n').at(-1) ?? '');
+    return JSON.parse(stdout.trim().split("\n").at(-1) ?? "");
   } catch {
-    throw new Error(`${what} printed no verdict JSON (exit ${code}): ${stdout.trim()}`);
+    throw new Error(
+      `${what} printed no verdict JSON (exit ${code}): ${stdout.trim()}`
+    );
   }
 }
 
@@ -484,25 +534,25 @@ async function runProbe(dockerArgs, script, what) {
  * still be in force once the ceremony starts.
  */
 async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
-  const probeServerName = `pairing-relay-isoprobe-${crypto.randomBytes(3).toString('hex')}`;
+  const probeServerName = `pairing-relay-isoprobe-${crypto.randomBytes(3).toString("hex")}`;
   // High random ports so concurrent runs on one host don't collide; `docker
   // run` fails loudly rather than silently sharing if one is already bound.
   const hostPort = 30000 + Math.floor(Math.random() * 20000);
   const udpHostPort = 30000 + Math.floor(Math.random() * 20000);
-  await sh('docker', [
-    'run',
-    '-d',
-    '--name',
+  await sh("docker", [
+    "run",
+    "-d",
+    "--name",
     probeServerName,
-    '--network',
+    "--network",
     netA,
-    '-p',
+    "-p",
     `${hostPort}:8080`,
-    '-p',
+    "-p",
     `${udpHostPort}:${PROBE_UDP_PORT}/udp`,
     NODE_IMAGE,
-    'node',
-    '-e',
+    "node",
+    "-e",
     "require('http').createServer((_q,r)=>r.end('probe')).listen(8080,'0.0.0.0');" +
       "const d=require('dgram').createSocket('udp4');" +
       "d.on('message',(m,ri)=>d.send(m,ri.port,ri.address));" +
@@ -511,10 +561,10 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
   try {
     await new Promise((resolve) => setTimeout(resolve, 500));
     const ip = (
-      await sh('docker', [
-        'inspect',
+      await sh("docker", [
+        "inspect",
         probeServerName,
-        '--format',
+        "--format",
         `{{(index .NetworkSettings.Networks "${netA}").IPAddress}}`,
       ])
     ).trim();
@@ -546,52 +596,52 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
     // the probe itself is broken (server not listening, publish not wired up)
     // and the netB run below would be meaningless.
     const control = await runProbe(
-      ['exec', fwName],
+      ["exec", fwName],
       udpProbeScript(udpTargets),
-      'UDP control probe',
+      "UDP control probe"
     );
-    const deadControls = control.filter((r) => r.verdict !== 'REACHABLE');
+    const deadControls = control.filter((r) => r.verdict !== "REACHABLE");
     if (deadControls.length > 0) {
       throw new Error(
         `UDP isolation probe is not trustworthy: the control run (from the host network) got no ` +
-          `reply from ${deadControls.map((r) => `${r.label}: ${r.verdict}`).join('; ')}. Either ` +
+          `reply from ${deadControls.map((r) => `${r.label}: ${r.verdict}`).join("; ")}. Either ` +
           `the echo server / its port publishing is broken, or one of our own DROP rules is ` +
           `eating the server's REPLY (it leaves netA for the dialed host address, so the (c) ` +
           `host-address DROP matches it unless the probe's --sport ACCEPT outranks (c) — see ` +
           `block (d) in this file). Silence from ${netB} would prove nothing either way — ` +
-          `refusing to report isolation this probe hasn't actually established.`,
+          `refusing to report isolation this probe hasn't actually established.`
       );
     }
 
     const results = [
       ...(await runProbe(
-        ['run', '--rm', '--network', netB, NODE_IMAGE],
+        ["run", "--rm", "--network", netB, NODE_IMAGE],
         probeScript(targets),
-        'TCP isolation probe container',
+        "TCP isolation probe container"
       )),
       ...(await runProbe(
-        ['run', '--rm', '--network', netB, NODE_IMAGE],
+        ["run", "--rm", "--network", netB, NODE_IMAGE],
         udpProbeScript(udpTargets),
-        'UDP isolation probe container',
+        "UDP isolation probe container"
       )),
     ];
-    const leaked = results.filter((r) => r.verdict === 'REACHABLE');
+    const leaked = results.filter((r) => r.verdict === "REACHABLE");
     if (leaked.length > 0) {
       throw new Error(
         `network isolation NOT confirmed: a container on ${netB} reached ${netA} via ` +
-          `${leaked.map((r) => r.label).join(', ')}. The DOCKER-USER/INPUT address and ` +
+          `${leaked.map((r) => r.label).join(", ")}. The DOCKER-USER/INPUT address and ` +
           `port-class DROP rules didn't ` +
-          `take effect on ${leaked.length === results.length ? 'any' : 'that'} path; refusing ` +
+          `take effect on ${leaked.length === results.length ? "any" : "that"} path; refusing ` +
           `to proceed since the flow's relay-path proof would be meaningless on a topology ` +
-          `that isn't actually isolated.`,
+          `that isn't actually isolated.`
       );
     }
     // Honest status: the per-target reason is preserved rather than flattened
     // to a single word, so "blocked (timeout)" and "blocked (ECONNREFUSED)"
     // stay distinguishable in the log and the verdict file.
-    return `ISOLATED — ${results.map((r) => `${r.label}: ${r.verdict}`).join('; ')}`;
+    return `ISOLATED — ${results.map((r) => `${r.label}: ${r.verdict}`).join("; ")}`;
   } finally {
-    await shQuiet('docker', ['rm', '-f', probeServerName]);
+    await shQuiet("docker", ["rm", "-f", probeServerName]);
   }
 }
 
@@ -612,21 +662,27 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
 async function verifyProbeExceptionsRemoved(fwName, subnets) {
   const survivors = [];
   await Promise.all(
-    ['DOCKER-USER', 'INPUT'].map(async (chain) => {
-      const dump = await sh('docker', ['exec', fwName, 'iptables', '-S', chain]);
-      for (const line of dump.split('\n')) {
+    ["DOCKER-USER", "INPUT"].map(async (chain) => {
+      const dump = await sh("docker", [
+        "exec",
+        fwName,
+        "iptables",
+        "-S",
+        chain,
+      ]);
+      for (const line of dump.split("\n")) {
         if (!line.includes(`--sport ${PROBE_UDP_PORT}`)) continue;
         if (!subnets.some((s) => line.includes(s))) continue;
         survivors.push(`${chain}: ${line.trim()}`);
       }
-    }),
+    })
   );
   if (survivors.length > 0) {
     throw new Error(
       `the isolation probe's UDP ACCEPT exception outlived the probe — still present as ` +
-        `${survivors.join('; ')}. The ceremony would run with a UDP hole in exactly the ` +
+        `${survivors.join("; ")}. The ceremony would run with a UDP hole in exactly the ` +
         `port-class block it is meant to prove closed; refusing to proceed rather than ` +
-        `producing a relay-path verdict with a known exception open.`,
+        `producing a relay-path verdict with a known exception open.`
     );
   }
   return `no --sport ${PROBE_UDP_PORT} ACCEPT remains in DOCKER-USER or INPUT (iptables -S read back)`;
@@ -656,7 +712,7 @@ export async function runFlow(slug, fn) {
   const runDir = path.join(RUNS_DIR, runId);
   await fs.mkdir(runDir, { recursive: true });
 
-  const suffix = crypto.randomBytes(4).toString('hex');
+  const suffix = crypto.randomBytes(4).toString("hex");
   const netA = `pairing-relay-a-${suffix}`;
   const netB = `pairing-relay-b-${suffix}`;
   const gwName = `pairing-relay-gw-${suffix}`;
@@ -675,7 +731,9 @@ export async function runFlow(slug, fn) {
   };
   console.log(`[runFlow] ${slug}`);
   console.log(`  run dir : ${path.relative(REPO_ROOT, runDir)}`);
-  console.log(`  networks: ${netA} (gateway) / ${netB} (device) — not interconnected`);
+  console.log(
+    `  networks: ${netA} (gateway) / ${netB} (device) — not interconnected`
+  );
 
   const notes = [];
   let error, result;
@@ -691,39 +749,41 @@ export async function runFlow(slug, fn) {
   try {
     state.subnetA = await dockerNetworkCreate(netA);
     state.subnetB = await dockerNetworkCreate(netB);
-    console.log(`  subnets : ${netA}=${state.subnetA} ${netB}=${state.subnetB}`);
+    console.log(
+      `  subnets : ${netA}=${state.subnetA} ${netB}=${state.subnetB}`
+    );
 
     // Explicit isolation (see module docstring point 3) — DOCKER-USER is
     // Docker's documented hook chain for user firewall rules, evaluated
     // before Docker's own bridge rules, so this holds regardless of
     // whether the driver's own default isolation does.
-    await sh('docker', [
-      'run',
-      '-d',
-      '--name',
+    await sh("docker", [
+      "run",
+      "-d",
+      "--name",
       fwName,
-      '--privileged',
-      '--network',
-      'host',
+      "--privileged",
+      "--network",
+      "host",
       NODE_IMAGE,
-      'sleep',
-      'infinity',
+      "sleep",
+      "infinity",
     ]);
-    await sh('docker', [
-      'exec',
+    await sh("docker", [
+      "exec",
       fwName,
-      'bash',
-      '-c',
-      'apt-get update -qq >/dev/null 2>&1 && ' +
-        'apt-get install -y -qq iptables iproute2 >/dev/null 2>&1',
+      "bash",
+      "-c",
+      "apt-get update -qq >/dev/null 2>&1 && " +
+        "apt-get install -y -qq iptables iproute2 >/dev/null 2>&1",
     ]);
     // Generic over the match: callers pass the full match-args array and the
     // -j target, so an address rule, a port-class DROP and its ACCEPT
     // exceptions all go through this one path rather than a parallel one.
     const insertRule = async (chain, matchArgs, target) => {
-      const rule = [...matchArgs, '-j', target];
-      const deleteArgs = ['exec', fwName, 'iptables', '-D', chain, ...rule];
-      await sh('docker', ['exec', fwName, 'iptables', '-I', chain, ...rule]);
+      const rule = [...matchArgs, "-j", target];
+      const deleteArgs = ["exec", fwName, "iptables", "-D", chain, ...rule];
+      await sh("docker", ["exec", fwName, "iptables", "-I", chain, ...rule]);
       // Recorded immediately after THIS insert succeeds, not after all of
       // them — so a throw partway through still leaves everything that
       // landed queued for teardown.
@@ -764,25 +824,37 @@ export async function runFlow(slug, fn) {
     // well, so it is inserted after (c). See the block below (c) for why.
     //
     // Both chains, for the same two-fates reason spelled out at (c).
-    await applyInOrder(['DOCKER-USER', 'INPUT'], async (chain) => {
+    await applyInOrder(["DOCKER-USER", "INPUT"], async (chain) => {
       await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
-        await insertRule(chain, ['-s', subnet, '-p', 'udp'], 'DROP');
+        await insertRule(chain, ["-s", subnet, "-p", "udp"], "DROP");
         await applyInOrder(ALLOWED_UDP_DPORTS, async (port) => {
-          await insertRule(chain, ['-s', subnet, '-p', 'udp', '--dport', String(port)], 'ACCEPT');
+          await insertRule(
+            chain,
+            ["-s", subnet, "-p", "udp", "--dport", String(port)],
+            "ACCEPT"
+          );
         });
       });
     });
     console.log(
       `  udpclass: DROP all UDP from both test subnets except dport ` +
-        `${ALLOWED_UDP_DPORTS.join('/')} (relay is TCP 443, so it is unaffected)`,
+        `${ALLOWED_UDP_DPORTS.join("/")} (relay is TCP 443, so it is unaffected)`
     );
 
     // (b) Peer-subnet rules: the docker-internal path. DOCKER-USER is
     // Docker's documented hook chain for user firewall rules, evaluated
     // before Docker's own bridge rules, so this holds regardless of whether
     // the driver's own default isolation does.
-    await insertRule('DOCKER-USER', ['-s', state.subnetA, '-d', state.subnetB], 'DROP');
-    await insertRule('DOCKER-USER', ['-s', state.subnetB, '-d', state.subnetA], 'DROP');
+    await insertRule(
+      "DOCKER-USER",
+      ["-s", state.subnetA, "-d", state.subnetB],
+      "DROP"
+    );
+    await insertRule(
+      "DOCKER-USER",
+      ["-s", state.subnetB, "-d", state.subnetA],
+      "DROP"
+    );
 
     // (c) Host-address rules: the escape hatch that made this flow's first
     // run on a GitHub-hosted runner select a DIRECT path despite (b) being
@@ -806,18 +878,20 @@ export async function runFlow(slug, fn) {
     const hostAddrs = await hostAddresses(fwName);
     if (hostAddrs.length === 0) {
       throw new Error(
-        'no non-loopback, non-bridge host IPv4 address found — cannot install the ' +
-          'host-routed isolation rules, and without them a direct path can survive ' +
-          'the subnet rules (see flows/cross-network-relay.md)',
+        "no non-loopback, non-bridge host IPv4 address found — cannot install the " +
+          "host-routed isolation rules, and without them a direct path can survive " +
+          "the subnet rules (see flows/cross-network-relay.md)"
       );
     }
     await applyInOrder(hostAddrs, async (hostAddr) => {
       await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
-        await insertRule('DOCKER-USER', ['-s', subnet, '-d', hostAddr], 'DROP');
-        await insertRule('INPUT', ['-s', subnet, '-d', hostAddr], 'DROP');
+        await insertRule("DOCKER-USER", ["-s", subnet, "-d", hostAddr], "DROP");
+        await insertRule("INPUT", ["-s", subnet, "-d", hostAddr], "DROP");
       });
     });
-    console.log(`  hostaddr: DROP ${hostAddrs.join(', ')} from both test subnets`);
+    console.log(
+      `  hostaddr: DROP ${hostAddrs.join(", ")} from both test subnets`
+    );
 
     // (d) The probe's ONE exception, inserted LAST so it evaluates FIRST —
     // ahead of (c), (b) and (a) alike. It is not part of the relay path; it
@@ -863,20 +937,27 @@ export async function runFlow(slug, fn) {
     // These stay in firewallRulesInserted until they are actually removed, so
     // the failure path needs no second teardown.
     const probeExceptionRules = [];
-    await applyInOrder(['DOCKER-USER', 'INPUT'], async (chain) => {
+    await applyInOrder(["DOCKER-USER", "INPUT"], async (chain) => {
       await applyInOrder([state.subnetA, state.subnetB], async (subnet) => {
         probeExceptionRules.push(
           await insertRule(
             chain,
-            ['-s', subnet, '-p', 'udp', '--sport', String(PROBE_UDP_PORT)],
-            'ACCEPT',
-          ),
+            ["-s", subnet, "-p", "udp", "--sport", String(PROBE_UDP_PORT)],
+            "ACCEPT"
+          )
         );
       });
     });
 
-    const isolationVerdict = await verifyNetworksIsolated(netA, netB, hostAddrs, fwName);
-    notes.push(`network isolation verified before ceremony: ${isolationVerdict}`);
+    const isolationVerdict = await verifyNetworksIsolated(
+      netA,
+      netB,
+      hostAddrs,
+      fwName
+    );
+    notes.push(
+      `network isolation verified before ceremony: ${isolationVerdict}`
+    );
     console.log(`  isolate : ${isolationVerdict}`);
 
     // The probe is done, so its affordance goes away before the ceremony
@@ -885,7 +966,7 @@ export async function runFlow(slug, fn) {
     // succeeded, so a failure here leaves the entry queued and the `finally`
     // retries it — and a success can't produce a double `-D`.
     await applyInOrder(probeExceptionRules, async (deleteArgs) => {
-      await sh('docker', deleteArgs);
+      await sh("docker", deleteArgs);
       const queued = firewallRulesInserted.indexOf(deleteArgs);
       if (queued >= 0) firewallRulesInserted.splice(queued, 1);
     });
@@ -900,29 +981,34 @@ export async function runFlow(slug, fn) {
       state.subnetA,
       state.subnetB,
     ]);
-    notes.push(`ceremony ran with the port-class UDP block fully closed: ${closedVerdict}`);
+    notes.push(
+      `ceremony ran with the port-class UDP block fully closed: ${closedVerdict}`
+    );
     console.log(`  udpshut : ${closedVerdict}`);
 
-    await sh('docker', [
-      'run',
-      '-d',
-      '--name',
+    await sh("docker", [
+      "run",
+      "-d",
+      "--name",
       gwName,
-      '--network',
+      "--network",
       netA,
-      '-v',
+      "-v",
       `${REPO_ROOT}:/repo`,
-      '-w',
-      '/repo',
+      "-w",
+      "/repo",
       NODE_IMAGE,
-      'bash',
-      '-c',
+      "bash",
+      "-c",
       `apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq git >/dev/null 2>&1 && ` +
         `exec node ${GATEWAY_CLI_REL} serve --data-dir ${GW_DATA_DIR}`,
     ]);
-    state.gateway = await waitForGatewayReady(gwName, path.join(runDir, 'gateway.log'));
+    state.gateway = await waitForGatewayReady(
+      gwName,
+      path.join(runDir, "gateway.log")
+    );
     console.log(
-      `  gateway : endpoint=${state.gateway.endpointId.slice(0, 10)}… (container ${gwName}, net ${netA})`,
+      `  gateway : endpoint=${state.gateway.endpointId.slice(0, 10)}… (container ${gwName}, net ${netA})`
     );
 
     const ctx = {
@@ -931,64 +1017,75 @@ export async function runFlow(slug, fn) {
       },
       netB,
       gatewayExec: async (args, { allowFailure = false } = {}) => {
-        const { code, stdout, stderr } = await run('docker', [
-          'exec',
+        const { code, stdout, stderr } = await run("docker", [
+          "exec",
           gwName,
-          'node',
+          "node",
           GATEWAY_CLI_REL,
           ...args,
-          '--data-dir',
+          "--data-dir",
           GW_DATA_DIR,
         ]);
         if (code !== 0 && !allowFailure) {
-          throw new Error(`gateway exec ${args.join(' ')} exited ${code}: ${stderr.trim()}`);
+          throw new Error(
+            `gateway exec ${args.join(" ")} exited ${code}: ${stderr.trim()}`
+          );
         }
         return { code, stdout, stderr };
       },
       mintTicket: async ({ vault, ttlMinutes } = {}) => {
-        const args = ['pair'];
-        if (vault) args.push('--vault', vault);
-        if (ttlMinutes !== undefined) args.push('--ttl-minutes', String(ttlMinutes));
+        const args = ["pair"];
+        if (vault) args.push("--vault", vault);
+        if (ttlMinutes !== undefined)
+          args.push("--ttl-minutes", String(ttlMinutes));
         const { stdout } = await ctx.gatewayExec(args);
-        const raw = stdout.match(/^(?<ticket>ey[A-Za-z0-9_-]{40,})$/mu)?.groups?.ticket;
+        const raw = stdout.match(/^(?<ticket>ey[A-Za-z0-9_-]{40,})$/mu)?.groups
+          ?.ticket;
         if (!raw) throw new Error(`pair printed no ticket token:\n${stdout}`);
         return { raw, payload: parseTicket(raw) };
       },
       runDevice: async ({ ticket, probeTarget }) => {
         deviceRunCount += 1;
         const containerName = `pairing-relay-device-${suffix}-${deviceRunCount}`;
-        const { code, stdout, stderr } = await run('docker', [
-          'run',
-          '--rm',
-          '--name',
+        const { code, stdout, stderr } = await run("docker", [
+          "run",
+          "--rm",
+          "--name",
           containerName,
-          '--network',
+          "--network",
           netB,
-          '-e',
+          "-e",
           `PAIR_TICKET=${ticket}`,
-          ...(probeTarget ? ['-e', `PROBE_TARGET=${probeTarget}`] : []),
-          '-v',
+          ...(probeTarget ? ["-e", `PROBE_TARGET=${probeTarget}`] : []),
+          "-v",
           `${REPO_ROOT}:/repo`,
-          '-w',
-          '/repo',
+          "-w",
+          "/repo",
           NODE_IMAGE,
-          'node',
+          "node",
           DEVICE_SCRIPT_REL,
         ]);
-        await fs.writeFile(path.join(runDir, `device-${deviceRunCount}.stderr.log`), stderr);
-        const lines = stdout.trim().split('\n');
-        const jsonLine = lines.toReversed().find((line) => line.trim().length > 0);
+        await fs.writeFile(
+          path.join(runDir, `device-${deviceRunCount}.stderr.log`),
+          stderr
+        );
+        const lines = stdout.trim().split("\n");
+        const jsonLine = lines
+          .toReversed()
+          .find((line) => line.trim().length > 0);
         if (!jsonLine) {
           throw new Error(
             `device container printed no JSON line (exit ${code}) — see ` +
-              `${path.relative(REPO_ROOT, path.join(runDir, `device-${deviceRunCount}.stderr.log`))}`,
+              `${path.relative(REPO_ROOT, path.join(runDir, `device-${deviceRunCount}.stderr.log`))}`
           );
         }
         let parsed;
         try {
           parsed = JSON.parse(jsonLine);
         } catch {
-          throw new Error(`device container stdout wasn't valid JSON: ${jsonLine}`);
+          throw new Error(
+            `device container stdout wasn't valid JSON: ${jsonLine}`
+          );
         }
         return parsed;
       },
@@ -1005,33 +1102,38 @@ export async function runFlow(slug, fn) {
     // Best-effort teardown, all of it — a failed cleanup step must not mask
     // the flow's actual pass/fail result, and must not stop later cleanup
     // steps from running.
-    const { stdout: finalLogs } = await run('docker', ['logs', gwName]);
-    if (finalLogs) await fs.writeFile(path.join(runDir, 'gateway.log'), finalLogs).catch(() => {});
+    const { stdout: finalLogs } = await run("docker", ["logs", gwName]);
+    if (finalLogs)
+      await fs
+        .writeFile(path.join(runDir, "gateway.log"), finalLogs)
+        .catch(() => {});
     if (error) {
-      await fs.mkdir(path.join(runDir, 'workspace'), { recursive: true }).catch(() => {});
-      await run('docker', [
-        'cp',
+      await fs
+        .mkdir(path.join(runDir, "workspace"), { recursive: true })
+        .catch(() => {});
+      await run("docker", [
+        "cp",
         `${gwName}:${GW_DATA_DIR}/gateway.db`,
-        path.join(runDir, 'workspace', 'gateway.db'),
+        path.join(runDir, "workspace", "gateway.db"),
       ]);
     }
-    await shQuiet('docker', ['rm', '-f', gwName]);
+    await shQuiet("docker", ["rm", "-f", gwName]);
     // Sweep any device containers that survived a mid-run crash (docker run
     // --rm should already have cleaned these up on normal exit).
-    const { stdout: strayList } = await run('docker', [
-      'ps',
-      '-a',
-      '--filter',
+    const { stdout: strayList } = await run("docker", [
+      "ps",
+      "-a",
+      "--filter",
       `name=pairing-relay-device-${suffix}-`,
-      '--format',
-      '{{.Names}}',
+      "--format",
+      "{{.Names}}",
     ]);
     await applyInOrder(
       strayList
-        .split('\n')
+        .split("\n")
         .map((s) => s.trim())
         .filter(Boolean),
-      async (name) => shQuiet('docker', ['rm', '-f', name]),
+      async (name) => shQuiet("docker", ["rm", "-f", name])
     );
     // Remove exactly whatever was actually inserted, regardless of where in
     // setup a failure happened — each entry is independent and carries its
@@ -1039,10 +1141,12 @@ export async function runFlow(slug, fn) {
     // still tears down every rule that landed. These live in the HOST's real
     // netfilter tables; leaking one would silently affect later jobs on the
     // same runner.
-    await applyInOrder(firewallRulesInserted, async (deleteArgs) => shQuiet('docker', deleteArgs));
-    await shQuiet('docker', ['rm', '-f', fwName]);
-    await shQuiet('docker', ['network', 'rm', netA]);
-    await shQuiet('docker', ['network', 'rm', netB]);
+    await applyInOrder(firewallRulesInserted, async (deleteArgs) =>
+      shQuiet("docker", deleteArgs)
+    );
+    await shQuiet("docker", ["rm", "-f", fwName]);
+    await shQuiet("docker", ["network", "rm", netA]);
+    await shQuiet("docker", ["network", "rm", netB]);
   }
 
   const elapsedMs = Date.now() - t0;
@@ -1057,10 +1161,10 @@ export async function runFlow(slug, fn) {
     notes,
     result,
     metadata: {
-      'network A (gateway)': `${state.netA} (${state.subnetA ?? '?'})`,
-      'network B (device)': `${state.netB} (${state.subnetB ?? '?'})`,
-      'gateway container': state.gwName,
-      'gateway endpoint': state.gateway?.endpointId ?? 'never became ready',
+      "network A (gateway)": `${state.netA} (${state.subnetA ?? "?"})`,
+      "network B (device)": `${state.netB} (${state.subnetB ?? "?"})`,
+      "gateway container": state.gwName,
+      "gateway endpoint": state.gateway?.endpointId ?? "never became ready",
     },
     owner: `tests/agent-e2e-pairing/flows/${slug}.mjs`,
   });

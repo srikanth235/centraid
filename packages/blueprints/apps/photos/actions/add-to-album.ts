@@ -9,19 +9,19 @@ export default async function addToAlbum({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'media.add_to_album',
+      command: "media.add_to_album",
       input: {
-        album_id: String(input.album_id ?? ''),
-        asset_id: String(input.asset_id ?? ''),
+        album_id: String(input.album_id ?? ""),
+        asset_id: String(input.asset_id ?? ""),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

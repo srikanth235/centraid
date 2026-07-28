@@ -23,13 +23,13 @@
  *     toggle surfaces.
  */
 
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
-export const APP_SETTINGS_FILE = 'settings.json';
+export const APP_SETTINGS_FILE = "settings.json";
 
 /** Reserved key prefix for runtime-owned settings. Apps must not write these. */
-export const RUNTIME_KEY_PREFIX = '__';
+export const RUNTIME_KEY_PREFIX = "__";
 
 /** Build the reserved key the runtime uses to persist an automation's enable toggle. */
 export function automationEnabledKey(name: string): string {
@@ -44,8 +44,8 @@ function readAll(appDir: string): Record<string, unknown> {
   const file = settingsFile(appDir);
   if (!existsSync(file)) return {};
   try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
   } catch {
@@ -56,7 +56,7 @@ function readAll(appDir: string): Record<string, unknown> {
 function writeAll(appDir: string, settings: Record<string, unknown>): void {
   const file = settingsFile(appDir);
   const tmp = `${file}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
   renameSync(tmp, file);
 }
 
@@ -69,7 +69,10 @@ export function readAppSettings(appDir: string): Record<string, unknown> {
 }
 
 /** Read a single setting value; `undefined` when absent. Never throws. */
-export function readAppSetting(appDir: string, key: string): unknown | undefined {
+export function readAppSetting(
+  appDir: string,
+  key: string
+): unknown | undefined {
   return readAll(appDir)[key];
 }
 
@@ -77,7 +80,11 @@ export function readAppSetting(appDir: string, key: string): unknown | undefined
  * Write a single setting value (file created on demand). Throws on I/O
  * errors — this is the toggle-failed path the user needs to see.
  */
-export function writeAppSetting(appDir: string, key: string, value: unknown): void {
+export function writeAppSetting(
+  appDir: string,
+  key: string,
+  value: unknown
+): void {
   const settings = readAll(appDir);
   settings[key] = value;
   writeAll(appDir, settings);

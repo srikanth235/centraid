@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
 import {
   diagnosticsFileName,
@@ -6,69 +6,78 @@ import {
   exportGatewayRecoveryKit,
   fetchDiagnosticsText,
   type ExportDiagnosticsDeps,
-} from './gateway-ops-core.js';
+} from "./gateway-ops-core.js";
 
 describe(diagnosticsFileName, () => {
-  it('formats the local calendar date, zero-padded', () => {
-    expect(diagnosticsFileName(new Date(2026, 0, 5))).toBe('centraid-diagnostics-2026-01-05.json');
+  it("formats the local calendar date, zero-padded", () => {
+    expect(diagnosticsFileName(new Date(2026, 0, 5))).toBe(
+      "centraid-diagnostics-2026-01-05.json"
+    );
     expect(diagnosticsFileName(new Date(2026, 10, 23))).toBe(
-      'centraid-diagnostics-2026-11-23.json',
+      "centraid-diagnostics-2026-11-23.json"
     );
   });
 });
 
 describe(fetchDiagnosticsText, () => {
-  it('pretty-prints a successful JSON response', async () => {
+  it("pretty-prints a successful JSON response", async () => {
     const result = await fetchDiagnosticsText(
-      'http://127.0.0.1:1',
-      'tok',
+      "http://127.0.0.1:1",
+      "tok",
       async () =>
-        new Response(JSON.stringify({ status: 'ok', components: [] }), {
+        new Response(JSON.stringify({ status: "ok", components: [] }), {
           status: 200,
-        }),
+        })
     );
     expect(result).toStrictEqual({
       ok: true,
-      text: JSON.stringify({ status: 'ok', components: [] }, null, 2),
+      text: JSON.stringify({ status: "ok", components: [] }, null, 2),
     });
   });
 
-  it('surfaces a non-2xx as an HTTP error', async () => {
+  it("surfaces a non-2xx as an HTTP error", async () => {
     const result = await fetchDiagnosticsText(
-      'http://gw',
+      "http://gw",
       undefined,
-      async () => new Response('', { status: 503 }),
+      async () => new Response("", { status: 503 })
     );
-    expect(result).toStrictEqual({ ok: false, error: 'HTTP 503' });
+    expect(result).toStrictEqual({ ok: false, error: "HTTP 503" });
   });
 
-  it('surfaces a network failure', async () => {
-    const result = await fetchDiagnosticsText('http://gw', undefined, async () => {
-      throw new Error('ECONNREFUSED');
-    });
-    expect(result).toStrictEqual({ ok: false, error: 'ECONNREFUSED' });
-  });
-
-  it('surfaces a malformed (non-JSON) response', async () => {
+  it("surfaces a network failure", async () => {
     const result = await fetchDiagnosticsText(
-      'http://gw',
+      "http://gw",
       undefined,
-      async () => new Response('not json', { status: 200 }),
+      async () => {
+        throw new Error("ECONNREFUSED");
+      }
+    );
+    expect(result).toStrictEqual({ ok: false, error: "ECONNREFUSED" });
+  });
+
+  it("surfaces a malformed (non-JSON) response", async () => {
+    const result = await fetchDiagnosticsText(
+      "http://gw",
+      undefined,
+      async () => new Response("not json", { status: 200 })
     );
     expect(result).toStrictEqual({
       ok: false,
-      error: 'diagnostics response was not JSON',
+      error: "diagnostics response was not JSON",
     });
   });
 });
 
-function makeDeps(overrides: Partial<ExportDiagnosticsDeps> = {}): ExportDiagnosticsDeps {
+function makeDeps(
+  overrides: Partial<ExportDiagnosticsDeps> = {}
+): ExportDiagnosticsDeps {
   return {
     loadSettings: async () => ({
-      gatewayUrl: 'http://127.0.0.1:4000',
-      gatewayToken: 'tok',
+      gatewayUrl: "http://127.0.0.1:4000",
+      gatewayToken: "tok",
     }),
-    fetchImpl: async () => new Response(JSON.stringify({ status: 'ok' }), { status: 200 }),
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ status: "ok" }), { status: 200 }),
     showSaveDialog: async (defaultPath) => ({
       canceled: false,
       filePath: `/tmp/${defaultPath}`,
@@ -80,91 +89,91 @@ function makeDeps(overrides: Partial<ExportDiagnosticsDeps> = {}): ExportDiagnos
 }
 
 describe(exportGatewayDiagnostics, () => {
-  it('happy path: fetches, saves, and returns the written path', async () => {
+  it("happy path: fetches, saves, and returns the written path", async () => {
     const writes: Array<{ path: string; data: string }> = [];
     const result = await exportGatewayDiagnostics(
       makeDeps({
         writeFile: async (path, data) => void writes.push({ path, data }),
-      }),
+      })
     );
     expect(result).toStrictEqual({
       ok: true,
-      path: '/tmp/centraid-diagnostics-2026-07-11.json',
+      path: "/tmp/centraid-diagnostics-2026-07-11.json",
     });
     expect(writes).toStrictEqual([
       {
-        path: '/tmp/centraid-diagnostics-2026-07-11.json',
-        data: JSON.stringify({ status: 'ok' }, null, 2),
+        path: "/tmp/centraid-diagnostics-2026-07-11.json",
+        data: JSON.stringify({ status: "ok" }, null, 2),
       },
     ]);
   });
 
-  it('canceled dialog: no write, ok:false with canceled:true', async () => {
+  it("canceled dialog: no write, ok:false with canceled:true", async () => {
     const writes: unknown[] = [];
     const result = await exportGatewayDiagnostics(
       makeDeps({
         showSaveDialog: async () => ({ canceled: true }),
         writeFile: async () => void writes.push(1),
-      }),
+      })
     );
     expect(result).toStrictEqual({ ok: false, canceled: true });
     expect(writes).toStrictEqual([]);
   });
 
-  it('no active gateway URL: refuses before ever fetching', async () => {
+  it("no active gateway URL: refuses before ever fetching", async () => {
     let fetchCalled = false;
     const result = await exportGatewayDiagnostics(
       makeDeps({
-        loadSettings: async () => ({ gatewayUrl: '' }),
+        loadSettings: async () => ({ gatewayUrl: "" }),
         fetchImpl: async () => {
           fetchCalled = true;
-          throw new Error('should not be called');
+          throw new Error("should not be called");
         },
-      }),
+      })
     );
     expect(result).toStrictEqual({
       ok: false,
-      error: 'No active gateway to export diagnostics from.',
+      error: "No active gateway to export diagnostics from.",
     });
     expect(fetchCalled).toBe(false);
   });
 
-  it('fetch error: surfaced without opening the save dialog', async () => {
+  it("fetch error: surfaced without opening the save dialog", async () => {
     let dialogCalled = false;
     const result = await exportGatewayDiagnostics(
       makeDeps({
-        fetchImpl: async () => new Response('', { status: 500 }),
+        fetchImpl: async () => new Response("", { status: 500 }),
         showSaveDialog: async () => {
           dialogCalled = true;
           return { canceled: true };
         },
-      }),
+      })
     );
-    expect(result).toStrictEqual({ ok: false, error: 'HTTP 500' });
+    expect(result).toStrictEqual({ ok: false, error: "HTTP 500" });
     expect(dialogCalled).toBe(false);
   });
 
-  it('write failure: surfaced as ok:false with the error message', async () => {
+  it("write failure: surfaced as ok:false with the error message", async () => {
     const result = await exportGatewayDiagnostics(
       makeDeps({
         writeFile: async () => {
-          throw new Error('EACCES: permission denied');
+          throw new Error("EACCES: permission denied");
         },
-      }),
+      })
     );
     expect(result).toStrictEqual({
       ok: false,
-      error: 'EACCES: permission denied',
+      error: "EACCES: permission denied",
     });
   });
 });
 
 describe(exportGatewayRecoveryKit, () => {
-  it('fetches the key-bearing document from the backup endpoint and saves it', async () => {
-    let requested = '';
+  it("fetches the key-bearing document from the backup endpoint and saves it", async () => {
+    let requested = "";
     let requestInit: RequestInit | undefined;
     const writes: Array<{ path: string; data: string }> = [];
-    const kit = { format: 'centraid-recovery-kit/2', wrapped: 'ciphertext' };
+    const kit = { format: "centraid-recovery-kit/2", wrapped: "ciphertext" };
     const result = await exportGatewayRecoveryKit(
       makeDeps({
         fetchImpl: async (url, init) => {
@@ -174,20 +183,22 @@ describe(exportGatewayRecoveryKit, () => {
         },
         writeFile: async (path, data) => void writes.push({ path, data }),
       }),
-      { password: 'correct horse' },
+      { password: "correct horse" }
     );
-    expect(requested).toBe('http://127.0.0.1:4000/centraid/_gateway/backup/kit');
+    expect(requested).toBe(
+      "http://127.0.0.1:4000/centraid/_gateway/backup/kit"
+    );
     expect(requestInit).toMatchObject({
-      method: 'POST',
-      body: JSON.stringify({ password: 'correct horse' }),
+      method: "POST",
+      body: JSON.stringify({ password: "correct horse" }),
     });
     expect(result).toStrictEqual({
       ok: true,
-      path: '/tmp/centraid-recovery-kit.json',
+      path: "/tmp/centraid-recovery-kit.json",
     });
     expect(writes).toStrictEqual([
       {
-        path: '/tmp/centraid-recovery-kit.json',
+        path: "/tmp/centraid-recovery-kit.json",
         data: JSON.stringify(kit, null, 2),
       },
     ]);

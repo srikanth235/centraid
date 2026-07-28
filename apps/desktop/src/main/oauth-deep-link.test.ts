@@ -1,68 +1,75 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { createDeepLinkBuffer, isOAuthFinishDeepLink } from './oauth-deep-link.js';
+import {
+  createDeepLinkBuffer,
+  isOAuthFinishDeepLink,
+} from "./oauth-deep-link.js";
 
-const state = `d.${'A'.repeat(43)}`;
-const receipt = `v1.1999999999.${'B'.repeat(43)}`;
+const state = `d.${"A".repeat(43)}`;
+const receipt = `v1.1999999999.${"B".repeat(43)}`;
 
-describe('oauth-deep-link', () => {
-  test('accepts only bounded desktop OAuth finish couriers', () => {
+describe("oauth-deep-link", () => {
+  test("accepts only bounded desktop OAuth finish couriers", () => {
     expect(
       isOAuthFinishDeepLink(
         `centraid://oauth/finish#${new URLSearchParams({
-          code: 'google-code',
+          code: "google-code",
           state,
           receipt,
-        })}`,
-      ),
+        })}`
+      )
     ).toBe(true);
     expect(
       isOAuthFinishDeepLink(
-        `centraid://oauth/finish#${new URLSearchParams({ error: 'access_denied', state })}`,
-      ),
+        `centraid://oauth/finish#${new URLSearchParams({ error: "access_denied", state })}`
+      )
     ).toBe(true);
   });
 
-  test('rejects other routes, web states, query material, extra fields, and oversized input', () => {
-    expect(isOAuthFinishDeepLink('centraid://settings')).toBe(false);
-    expect(isOAuthFinishDeepLink(`centraid://oauth/finish?code=x#state=${state}`)).toBe(false);
+  test("rejects other routes, web states, query material, extra fields, and oversized input", () => {
+    expect(isOAuthFinishDeepLink("centraid://settings")).toBe(false);
     expect(
-      isOAuthFinishDeepLink(
-        `centraid://oauth/finish#${new URLSearchParams({
-          code: 'google-code',
-          state: `w.${'A'.repeat(43)}`,
-          receipt,
-        })}`,
-      ),
+      isOAuthFinishDeepLink(`centraid://oauth/finish?code=x#state=${state}`)
     ).toBe(false);
     expect(
       isOAuthFinishDeepLink(
         `centraid://oauth/finish#${new URLSearchParams({
-          code: 'google-code',
+          code: "google-code",
+          state: `w.${"A".repeat(43)}`,
+          receipt,
+        })}`
+      )
+    ).toBe(false);
+    expect(
+      isOAuthFinishDeepLink(
+        `centraid://oauth/finish#${new URLSearchParams({
+          code: "google-code",
           state,
           receipt,
-          surprise: 'field',
-        })}`,
-      ),
+          surprise: "field",
+        })}`
+      )
     ).toBe(false);
-    expect(isOAuthFinishDeepLink(`centraid://oauth/finish#${'x'.repeat(7_001)}`)).toBe(false);
+    expect(
+      isOAuthFinishDeepLink(`centraid://oauth/finish#${"x".repeat(7_001)}`)
+    ).toBe(false);
   });
 
-  test('buffers warm handoffs until the renderer subscribes, then stays in-memory live', () => {
+  test("buffers warm handoffs until the renderer subscribes, then stays in-memory live", () => {
     const buffer = createDeepLinkBuffer(2);
     const received: string[] = [];
-    buffer.enqueue('first', 'second');
-    buffer.enqueue('bounded-away');
+    buffer.enqueue("first", "second");
+    buffer.enqueue("bounded-away");
     const unsubscribe = buffer.subscribe((url) => received.push(url));
-    expect(received).toStrictEqual(['first', 'second']);
+    expect(received).toStrictEqual(["first", "second"]);
 
-    buffer.enqueue('live');
-    expect(received).toStrictEqual(['first', 'second', 'live']);
+    buffer.enqueue("live");
+    expect(received).toStrictEqual(["first", "second", "live"]);
     unsubscribe();
-    buffer.enqueue('after-unsubscribe');
+    buffer.enqueue("after-unsubscribe");
 
     const replacement: string[] = [];
     buffer.subscribe((url) => replacement.push(url));
-    expect(replacement).toStrictEqual(['after-unsubscribe']);
+    expect(replacement).toStrictEqual(["after-unsubscribe"]);
   });
 });

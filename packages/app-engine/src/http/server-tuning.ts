@@ -1,4 +1,4 @@
-import type http from 'node:http';
+import type http from "node:http";
 
 export const GATEWAY_KEEP_ALIVE_TIMEOUT_MS = 60_000;
 export const GATEWAY_HEADERS_TIMEOUT_MS = 65_000;

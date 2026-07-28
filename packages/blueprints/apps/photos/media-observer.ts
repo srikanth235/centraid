@@ -16,9 +16,13 @@ function stopObserving(img: HTMLElement): void {
 }
 
 function scrollRootFor(img: HTMLElement): HTMLElement | null {
-  for (let node = img.parentElement; node && node !== document.documentElement;) {
+  for (
+    let node = img.parentElement;
+    node && node !== document.documentElement;
+  ) {
     const style = getComputedStyle(node);
-    if (/(?:auto|scroll|overlay)/u.test(`${style.overflow} ${style.overflowY}`)) return node;
+    if (/(?:auto|scroll|overlay)/u.test(`${style.overflow} ${style.overflowY}`))
+      return node;
     node = node.parentElement;
   }
   return null;
@@ -38,7 +42,7 @@ function createObserver(root: Element | null): IntersectionObserver {
     // Expand the ACTUAL scroll root by one viewport. A viewport-rooted
     // observer is still clipped by #scrollPane/.picker-grid, so rootMargin
     // alone cannot prefetch rows below those overflow boundaries.
-    { root, rootMargin: '100% 0px' },
+    { root, rootMargin: "100% 0px" }
   );
 }
 
@@ -53,13 +57,16 @@ function observerFor(root: HTMLElement | null): IntersectionObserver {
 }
 
 function ensureDetachedCleanup(): void {
-  if (detachedMediaObserver || typeof MutationObserver !== 'function') return;
+  if (detachedMediaObserver || typeof MutationObserver !== "function") return;
   detachedMediaObserver = new MutationObserver((records) => {
     for (const record of records) {
       for (const node of record.removedNodes) {
         if (!(node instanceof Element)) continue;
-        if (node.matches('img[data-prefetch-src]')) stopObserving(node as HTMLElement);
-        for (const img of node.querySelectorAll<HTMLImageElement>('img[data-prefetch-src]')) {
+        if (node.matches("img[data-prefetch-src]"))
+          stopObserving(node as HTMLElement);
+        for (const img of node.querySelectorAll<HTMLImageElement>(
+          "img[data-prefetch-src]"
+        )) {
           stopObserving(img);
         }
       }
@@ -77,9 +84,10 @@ export function stopNextScreenObservation(img: HTMLImageElement): void {
 
 export function observeNextScreen(img: HTMLImageElement, src: string): void {
   stopObserving(img);
-  const connection = (navigator as { connection?: { saveData?: boolean } }).connection;
+  const connection = (navigator as { connection?: { saveData?: boolean } })
+    .connection;
   const saveData = connection?.saveData === true;
-  if (saveData || typeof IntersectionObserver !== 'function') {
+  if (saveData || typeof IntersectionObserver !== "function") {
     img.src = src;
     return;
   }

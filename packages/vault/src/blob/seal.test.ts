@@ -3,10 +3,10 @@
 // incompressible frames in one blob, and tamper-evidence — a flipped byte, a
 // swapped frame, or a truncated directory must all fail closed.
 
-import { randomBytes } from 'node:crypto';
-import { Readable } from 'node:stream';
+import { randomBytes } from "node:crypto";
+import { Readable } from "node:stream";
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
 import {
   HEADER_BYTES,
@@ -15,13 +15,13 @@ import {
   sealStoredFrame,
   TRAILER_BYTES,
   unsealFrame,
-} from './seal-frames.js';
-import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
-import { sha256OfBytes } from './store.js';
+} from "./seal-frames.js";
+import { sealBlob, sealBlobStream, unsealBlob } from "./seal.js";
+import { sha256OfBytes } from "./store.js";
 
 const KEY = Buffer.alloc(32, 0x5a);
 /** node's AES-GCM `decipher.final()` message when the auth tag fails to verify. */
-const AEAD_TAG_MISMATCH = 'Unsupported state or unable to authenticate data';
+const AEAD_TAG_MISMATCH = "Unsupported state or unable to authenticate data";
 const FRAME = 32; // tiny frames so tests never allocate multi-MiB buffers
 
 function roundTrip(plain: Buffer, frameSize = FRAME): Buffer {
@@ -29,8 +29,8 @@ function roundTrip(plain: Buffer, frameSize = FRAME): Buffer {
   return unsealBlob(KEY, sha, sealBlob(KEY, sha, plain, frameSize));
 }
 
-describe('seal', () => {
-  test('framed seal round-trips across every frame-boundary size', () => {
+describe("seal", () => {
+  test("framed seal round-trips across every frame-boundary size", () => {
     const sizes = [0, 1, FRAME - 1, FRAME, FRAME + 1, FRAME * 3, FRAME * 3 + 7];
     for (const n of sizes) {
       const plain = randomBytes(n);
@@ -38,14 +38,14 @@ describe('seal', () => {
     }
   });
 
-  test('empty blob seals to a header + empty directory + trailer and reads back empty', () => {
+  test("empty blob seals to a header + empty directory + trailer and reads back empty", () => {
     const sha = sha256OfBytes(Buffer.alloc(0));
     const sealed = sealBlob(KEY, sha, Buffer.alloc(0), FRAME);
     expect(sealed.length).toBeGreaterThanOrEqual(HEADER_BYTES + TRAILER_BYTES);
     expect(unsealBlob(KEY, sha, sealed)).toHaveLength(0);
   });
 
-  test('entropy gate: compressible and incompressible frames coexist in one blob', () => {
+  test("entropy gate: compressible and incompressible frames coexist in one blob", () => {
     // Frame 0 all-zeros (compresses hard), frame 1 random (stored verbatim).
     const zeros = Buffer.alloc(FRAME, 0);
     const noise = randomBytes(FRAME);
@@ -68,7 +68,7 @@ describe('seal', () => {
     expect(noiseSealed.length).toBeGreaterThan(big * 4);
   });
 
-  test('tamper: a flipped byte inside a frame fails the GCM tag', () => {
+  test("tamper: a flipped byte inside a frame fails the GCM tag", () => {
     const plain = randomBytes(FRAME * 3);
     const sha = sha256OfBytes(plain);
     const sealed = sealBlob(KEY, sha, plain, FRAME);
@@ -78,7 +78,7 @@ describe('seal', () => {
     expect(() => unsealBlob(KEY, sha, bad)).toThrow(AEAD_TAG_MISMATCH);
   });
 
-  test('tamper: a truncated directory fails closed', () => {
+  test("tamper: a truncated directory fails closed", () => {
     const plain = randomBytes(FRAME * 2);
     const sha = sha256OfBytes(plain);
     const sealed = sealBlob(KEY, sha, plain, FRAME);
@@ -91,32 +91,48 @@ describe('seal', () => {
     expect(() => unsealBlob(KEY, sha, cut)).toThrow(AEAD_TAG_MISMATCH);
   });
 
-  test('tamper: a frame cannot be reordered, re-indexed, or transplanted', () => {
+  test("tamper: a frame cannot be reordered, re-indexed, or transplanted", () => {
     const sha = sha256OfBytes(randomBytes(64));
     const other = sha256OfBytes(randomBytes(64));
-    const frame = sealFrame(KEY, sha, 0, 3, Buffer.from('frame-zero-plaintext'));
+    const frame = sealFrame(
+      KEY,
+      sha,
+      0,
+      3,
+      Buffer.from("frame-zero-plaintext")
+    );
     // Correct (sha, index, count) unseals; any drift in the AAD triple throws.
-    expect(unsealFrame(KEY, sha, 0, 3, frame).toString()).toBe('frame-zero-plaintext');
+    expect(unsealFrame(KEY, sha, 0, 3, frame).toString()).toBe(
+      "frame-zero-plaintext"
+    );
     expect(() => unsealFrame(KEY, sha, 1, 3, frame)).toThrow(AEAD_TAG_MISMATCH); // re-indexed
     expect(() => unsealFrame(KEY, sha, 0, 4, frame)).toThrow(AEAD_TAG_MISMATCH); // count changed
-    expect(() => unsealFrame(KEY, other, 0, 3, frame)).toThrow(AEAD_TAG_MISMATCH); // transplanted
+    expect(() => unsealFrame(KEY, other, 0, 3, frame)).toThrow(
+      AEAD_TAG_MISMATCH
+    ); // transplanted
   });
 
-  test('compressed and store-only writers never reuse a GCM nonce for different plaintext', () => {
+  test("compressed and store-only writers never reuse a GCM nonce for different plaintext", () => {
     const plain = Buffer.alloc(4096, 0x61);
     const sha = sha256OfBytes(plain);
     const compressed = sealFrame(KEY, sha, 0, 1, plain);
     const stored = sealStoredFrame(KEY, sha, 0, 1, plain);
-    expect(compressed.subarray(0, 12).equals(stored.subarray(0, 12))).toBe(false);
+    expect(compressed.subarray(0, 12).equals(stored.subarray(0, 12))).toBe(
+      false
+    );
     expect(unsealFrame(KEY, sha, 0, 1, compressed).equals(plain)).toBe(true);
     expect(unsealFrame(KEY, sha, 0, 1, stored).equals(plain)).toBe(true);
 
-    const directoryA = sealDirectory(KEY, sha, 1, 4096, 4096, [compressed.length]);
+    const directoryA = sealDirectory(KEY, sha, 1, 4096, 4096, [
+      compressed.length,
+    ]);
     const directoryB = sealDirectory(KEY, sha, 1, 4096, 4096, [stored.length]);
-    expect(directoryA.subarray(0, 12).equals(directoryB.subarray(0, 12))).toBe(false);
+    expect(directoryA.subarray(0, 12).equals(directoryB.subarray(0, 12))).toBe(
+      false
+    );
   });
 
-  test('streaming seal matches the buffered seal end-to-end', async () => {
+  test("streaming seal matches the buffered seal end-to-end", async () => {
     const plain = randomBytes(FRAME * 4 + 11);
     const sha = sha256OfBytes(plain);
     // Feed the plaintext in awkward chunk sizes to exercise the frame carver.
@@ -129,15 +145,15 @@ describe('seal', () => {
     const out: Buffer[] = [];
     await new Promise<void>((resolve, reject) => {
       Readable.from(chunks).pipe(sealer);
-      sealer.on('data', (c: Buffer) => out.push(c));
-      sealer.on('end', resolve);
-      sealer.on('error', reject);
+      sealer.on("data", (c: Buffer) => out.push(c));
+      sealer.on("end", resolve);
+      sealer.on("error", reject);
     });
     const streamed = Buffer.concat(out);
     expect(unsealBlob(KEY, sha, streamed).equals(plain)).toBe(true);
   });
 
-  test('sealing is byte-stable so persisted multipart receipts survive a writer restart', () => {
+  test("sealing is byte-stable so persisted multipart receipts survive a writer restart", () => {
     const plain = randomBytes(FRAME * 5 + 9);
     const sha = sha256OfBytes(plain);
     const first = sealBlob(KEY, sha, plain, FRAME);

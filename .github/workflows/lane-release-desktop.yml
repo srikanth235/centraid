@@ -16,14 +16,14 @@ on:
   workflow_call:
     inputs:
       restamp_rollout_hours:
-        description: 'I8 re-stamp — set rollout window hours on an existing release (empty = skip)'
+        description: "I8 re-stamp — set rollout window hours on an existing release (empty = skip)"
         required: false
-        default: ''
+        default: ""
         type: string
       restamp_tag:
-        description: 'Tag to restamp (e.g. v0.2.0); required when restamp_rollout_hours is set'
+        description: "Tag to restamp (e.g. v0.2.0); required when restamp_rollout_hours is set"
         required: false
-        default: ''
+        default: ""
         type: string
     # Declared explicitly rather than `secrets: inherit`. Today every workflow in
     # the repo can read every secret; a lane that names what it accepts can only
@@ -178,7 +178,7 @@ jobs:
         with:
           # Runs `node scripts/release/changelog-to-github.mjs` only — no
           # node_modules needed, and this job had no install before #557.
-          install: 'false'
+          install: "false"
       - name: Detect signing enrollment
         id: sign
         env:
@@ -229,7 +229,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           # `node scripts/release/restamp-rollout.mjs` + gh only.
-          install: 'false'
+          install: "false"
       - name: I8 re-stamp latest*.yml on release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

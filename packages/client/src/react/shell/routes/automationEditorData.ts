@@ -6,8 +6,8 @@
 // webhook mint/rotate, consent-tab derivation) rather than start from
 // scratch. Kept intentionally thin: just enough to resolve `{ row, name,
 // instructions, triggers }` for edit mode, and defaults for create mode.
-import { readAutomation } from '../../../gateway-client.js';
-import type { AuEditorConnectorsDTO } from '../../screen-contracts.js';
+import { readAutomation } from "../../../gateway-client.js";
+import type { AuEditorConnectorsDTO } from "../../screen-contracts.js";
 
 export interface AutomationEditorLoadResult {
   /** `null` for create mode (no `automationId` in the route yet). */
@@ -16,7 +16,7 @@ export interface AutomationEditorLoadResult {
   /** Manifest `prompt` — the natural-language instructions the builder
    *  compiles into `handler.js`. */
   instructions: string;
-  triggers: CentraidAutomationRow['triggers'];
+  triggers: CentraidAutomationRow["triggers"];
   /** `row.id` — see `AutomationEditorData.rowId` (screen-contracts.ts) for
    *  why this is distinct from `row.ref`. `null` in create mode. */
   rowId: string | null;
@@ -32,9 +32,9 @@ export interface AutomationEditorLoadResult {
 
 const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
   connectors: null,
-  instructions: '',
+  instructions: "",
   model: null,
-  name: '',
+  name: "",
   onFailure: null,
   row: null,
   rowId: null,
@@ -88,18 +88,20 @@ function vaultScopeLabel(s: {
   fieldMask?: readonly string[];
 }): string {
   const extent = [
-    s.rowFilter ? `${s.rowFilter.length} row rule` : '',
-    s.fieldMask ? `${s.fieldMask.length} fields` : '',
+    s.rowFilter ? `${s.rowFilter.length} row rule` : "",
+    s.fieldMask ? `${s.fieldMask.length} fields` : "",
   ]
     .filter(Boolean)
-    .join(', ');
-  return `${s.schema}${s.table ? `.${s.table}` : ''} ${s.verbs}${extent ? ` · ${extent}` : ''}`;
+    .join(", ");
+  return `${s.schema}${s.table ? `.${s.table}` : ""} ${s.verbs}${extent ? ` · ${extent}` : ""}`;
 }
 
 function deriveConnectors(row: CentraidAutomationRow): AuEditorConnectorsDTO {
-  const manifest = row.manifest as CentraidAutomationRow['manifest'] & ManifestConnectorExtra;
+  const manifest = row.manifest as CentraidAutomationRow["manifest"] &
+    ManifestConnectorExtra;
   const vault = manifest.vault;
-  const bindings: Array<{ connectionId: string; kind: string; label: string }> = [];
+  const bindings: Array<{ connectionId: string; kind: string; label: string }> =
+    [];
   if (manifest.connections) {
     for (const b of manifest.connections) {
       bindings.push({
@@ -148,7 +150,7 @@ export async function loadAutomationEditorData(input: {
   const withPrompt = row as CentraidAutomationRow & { prompt?: string };
   return {
     connectors: deriveConnectors(row),
-    instructions: withPrompt.prompt ?? row.manifest.prompt ?? '',
+    instructions: withPrompt.prompt ?? row.manifest.prompt ?? "",
     model: row.manifest.requires.model ?? null,
     name: row.name,
     onFailure: row.manifest.onFailure ?? null,

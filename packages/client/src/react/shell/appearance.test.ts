@@ -1,64 +1,64 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-import { ACCENT_PALETTE } from '../../app-shell-context.js';
+import { ACCENT_PALETTE } from "../../app-shell-context.js";
 import {
   applyPrefsToDocument,
   DEFAULT_PREFS,
   pickAppearance,
   toRemoteShape,
-} from './appearance.js';
+} from "./appearance.js";
 
-describe('appearance prefs', () => {
-  it('picks only recognised keys off a remote object', () => {
+describe("appearance prefs", () => {
+  it("picks only recognised keys off a remote object", () => {
     const got = pickAppearance({
-      theme: 'dark',
-      density: 'comfy',
-      cards: 'elevated',
+      theme: "dark",
+      density: "comfy",
+      cards: "elevated",
       coolCast: false,
-      accentKey: 'rose',
-      bogus: 'nope',
-      density2: 'x',
+      accentKey: "rose",
+      bogus: "nope",
+      density2: "x",
     });
     expect(got).toStrictEqual({
-      theme: 'dark',
-      density: 'comfy',
-      cardVariant: 'elevated',
+      theme: "dark",
+      density: "comfy",
+      cardVariant: "elevated",
       coolBlueCast: false,
-      accent: 'rose',
+      accent: "rose",
     });
   });
 
-  it('rejects invalid union values', () => {
+  it("rejects invalid union values", () => {
     expect(
       pickAppearance({
-        density: 'huge',
-        cards: 'shiny',
-        accentKey: 'chartreuse',
-      }),
+        density: "huge",
+        cards: "shiny",
+        accentKey: "chartreuse",
+      })
     ).toStrictEqual({});
   });
 
-  it('falls back to the legacy `accent` key when `accentKey` is absent', () => {
-    expect(pickAppearance({ accent: 'teal' })).toStrictEqual({
-      accent: 'teal',
+  it("falls back to the legacy `accent` key when `accentKey` is absent", () => {
+    expect(pickAppearance({ accent: "teal" })).toStrictEqual({
+      accent: "teal",
     });
   });
 
-  it('emits both the accent key and its resolved swatches to the wire', () => {
-    const wire = toRemoteShape({ accent: 'violet' });
-    expect(wire.accentKey).toBe('violet');
+  it("emits both the accent key and its resolved swatches to the wire", () => {
+    const wire = toRemoteShape({ accent: "violet" });
+    expect(wire.accentKey).toBe("violet");
     expect(wire.accent).toBe(ACCENT_PALETTE.violet.accent);
     expect(wire.accentLight).toBe(ACCENT_PALETTE.violet.light);
     expect(wire.accentDeep).toBe(ACCENT_PALETTE.violet.deep);
   });
 
-  it('maps cardVariant → cards on the wire', () => {
-    expect(toRemoteShape({ cardVariant: 'flat' })).toStrictEqual({
-      cards: 'flat',
+  it("maps cardVariant → cards on the wire", () => {
+    expect(toRemoteShape({ cardVariant: "flat" })).toStrictEqual({
+      cards: "flat",
     });
   });
 
-  it('round-trips a full pref set through wire → pick', () => {
+  it("round-trips a full pref set through wire → pick", () => {
     const wire = toRemoteShape(DEFAULT_PREFS);
     const back = pickAppearance(wire);
     expect(back).toMatchObject({
@@ -70,16 +70,18 @@ describe('appearance prefs', () => {
     });
   });
 
-  it('writes prefs onto <html> as data-attrs + CSS vars', () => {
+  it("writes prefs onto <html> as data-attrs + CSS vars", () => {
     applyPrefsToDocument({
       ...DEFAULT_PREFS,
-      theme: 'light',
-      density: 'compact',
-      accent: 'ochre',
+      theme: "light",
+      density: "compact",
+      accent: "ochre",
     });
     const html = document.documentElement;
-    expect(html.dataset.theme).toBe('light');
-    expect(html.dataset.density).toBe('compact');
-    expect(html.style.getPropertyValue('--accent')).toBe(ACCENT_PALETTE.ochre.accent);
+    expect(html.dataset.theme).toBe("light");
+    expect(html.dataset.density).toBe("compact");
+    expect(html.style.getPropertyValue("--accent")).toBe(
+      ACCENT_PALETTE.ochre.accent
+    );
   });
 });

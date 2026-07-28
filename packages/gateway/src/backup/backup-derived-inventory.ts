@@ -13,11 +13,14 @@
  * alongside cas keeps the owner-facing signal honest without churning consumers.
  */
 
-import { ReplicaIndex, type VaultDb } from '@centraid/vault';
+import { ReplicaIndex, type VaultDb } from "@centraid/vault";
 
-import { collectCasInventory } from './backup-cas-inventory.js';
-import type { DriftSummary, StoreReconciliationState } from './backup-reconciliation-state.js';
-import type { StorageConnectionStore } from './storage-connections.js';
+import { collectCasInventory } from "./backup-cas-inventory.js";
+import type {
+  DriftSummary,
+  StoreReconciliationState,
+} from "./backup-reconciliation-state.js";
+import type { StorageConnectionStore } from "./storage-connections.js";
 
 const SAMPLE_LIMIT = 25;
 
@@ -25,7 +28,8 @@ const SAMPLE_LIMIT = 25;
 // store prefix, so a derived-prefixed object key resolves to its sha the same
 // way a cas one does (kept local to break the module cycle with the cas diff).
 function casSha(key: string): string | undefined {
-  return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups?.sha;
+  return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups
+    ?.sha;
 }
 
 function drift(list: Iterable<string>): DriftSummary {
@@ -35,7 +39,9 @@ function drift(list: Iterable<string>): DriftSummary {
 
 /** Union two drift summaries (folding derived into cas). */
 function mergeDrift(a: DriftSummary, b: DriftSummary): DriftSummary {
-  const sample = [...new Set([...a.sample, ...b.sample])].sort().slice(0, SAMPLE_LIMIT);
+  const sample = [...new Set([...a.sample, ...b.sample])]
+    .sort()
+    .slice(0, SAMPLE_LIMIT);
   return { count: a.count + b.count, sample };
 }
 
@@ -58,21 +64,25 @@ export async function reconcileDerivedInto(opts: {
   const collect = opts.collect ?? collectCasInventory;
   const result = await collect({
     db: opts.db,
-    ...(opts.storageConnections ? { storageConnections: opts.storageConnections } : {}),
+    ...(opts.storageConnections
+      ? { storageConnections: opts.storageConnections }
+      : {}),
     verifyBucket: opts.verifyBucket,
-    store: 'derived',
+    store: "derived",
   });
   if (!result.collection) return; // store not granted / unavailable — nothing to fold
   const index = new ReplicaIndex(opts.db.vault);
-  const rows = index.rows().filter((row) => row.store === 'derived');
+  const rows = index.rows().filter((row) => row.store === "derived");
   const indexed = new Set(rows.map((row) => row.sha256));
   const recentlyIndexed = new Set(
-    rows.filter((row) => row.replicatedAt >= opts.checkedAt).map((row) => row.sha256),
+    rows
+      .filter((row) => row.replicatedAt >= opts.checkedAt)
+      .map((row) => row.sha256)
   );
   const remote = new Set<string>();
   const unknownKeys: string[] = [];
   for (const object of result.collection.objects) {
-    if (object.state !== 'live') continue;
+    if (object.state !== "live") continue;
     const sha = casSha(object.key);
     if (sha) remote.add(sha);
     else unknownKeys.push(object.key);
@@ -80,9 +90,14 @@ export async function reconcileDerivedInto(opts: {
   // A derived replica the derived listing does not confirm is missing (even if
   // the same sha sits under cas); unmark synchronously so the next eviction
   // cannot trust it.
-  const missing = [...indexed].filter((sha) => !remote.has(sha) && !recentlyIndexed.has(sha));
+  const missing = [...indexed].filter(
+    (sha) => !remote.has(sha) && !recentlyIndexed.has(sha)
+  );
   for (const sha of missing) index.unmark(sha);
   const orphans = [...remote].filter((sha) => !opts.live.has(sha));
   opts.cas.missing = mergeDrift(opts.cas.missing, drift(missing));
-  opts.cas.orphans = mergeDrift(opts.cas.orphans, drift([...orphans, ...unknownKeys]));
+  opts.cas.orphans = mergeDrift(
+    opts.cas.orphans,
+    drift([...orphans, ...unknownKeys])
+  );
 }

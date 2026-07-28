@@ -1,70 +1,78 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TemplateEntry } from '../../app-shell-context.js';
-import { openAutomationTemplatePreview } from './automationTemplatePreview.js';
+import type { TemplateEntry } from "../../app-shell-context.js";
+import { openAutomationTemplatePreview } from "./automationTemplatePreview.js";
 
 const tmpl = {
-  id: 'digest',
-  name: 'Daily Digest',
-  desc: 'Summarizes your inbox',
-  colorKey: 'teal',
-  iconKey: 'Bolt',
-  version: '1',
-  emoji: '📬',
-  triggerKind: 'cron',
-  triggerLabel: 'Every morning',
-  integrations: ['gmail', 'slack'],
+  id: "digest",
+  name: "Daily Digest",
+  desc: "Summarizes your inbox",
+  colorKey: "teal",
+  iconKey: "Bolt",
+  version: "1",
+  emoji: "📬",
+  triggerKind: "cron",
+  triggerLabel: "Every morning",
+  integrations: ["gmail", "slack"],
 } as unknown as TemplateEntry;
 
-describe('automationTemplatePreview', () => {
+describe("automationTemplatePreview", () => {
   beforeEach(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML = "";
   });
   afterEach(() => {
-    document.body.innerHTML = '';
+    document.body.innerHTML = "";
   });
 
   describe(openAutomationTemplatePreview, () => {
-    it('renders the drawer with name, trigger label, steps, and integration chips', () => {
+    it("renders the drawer with name, trigger label, steps, and integration chips", () => {
       openAutomationTemplatePreview(tmpl, () => {});
-      const drawer = document.querySelector('.auDrawer')!;
-      expect(drawer.textContent).toContain('Daily Digest');
-      expect(drawer.textContent).toContain('Every morning');
-      expect(drawer.textContent).toContain('Summarizes your inbox');
-      const chips = drawer.querySelectorAll('.auChip');
+      const drawer = document.querySelector(".auDrawer")!;
+      expect(drawer.textContent).toContain("Daily Digest");
+      expect(drawer.textContent).toContain("Every morning");
+      expect(drawer.textContent).toContain("Summarizes your inbox");
+      const chips = drawer.querySelectorAll(".auChip");
       expect(chips).toHaveLength(2);
-      expect([...chips].map((c) => c.textContent)).toStrictEqual(['gmail', 'slack']);
+      expect([...chips].map((c) => c.textContent)).toStrictEqual([
+        "gmail",
+        "slack",
+      ]);
     });
 
     it('fires onUse with the template and closes on "Use template"', () => {
-      const onUse = vi.fn<Parameters<typeof openAutomationTemplatePreview>[1]>();
+      const onUse =
+        vi.fn<Parameters<typeof openAutomationTemplatePreview>[1]>();
       openAutomationTemplatePreview(tmpl, onUse);
-      const useBtn = [...document.querySelectorAll('.auBtnPrimary')].find((b) =>
-        b.textContent?.includes('Use template'),
+      const useBtn = [...document.querySelectorAll(".auBtnPrimary")].find((b) =>
+        b.textContent?.includes("Use template")
       ) as HTMLButtonElement;
       useBtn.click();
       expect(onUse).toHaveBeenCalledWith(tmpl);
-      expect(document.querySelector('.auDrawer')).toBeNull();
+      expect(document.querySelector(".auDrawer")).toBeNull();
     });
 
-    it('closes on Escape and backdrop click without firing onUse', () => {
-      const onUse = vi.fn<Parameters<typeof openAutomationTemplatePreview>[1]>();
+    it("closes on Escape and backdrop click without firing onUse", () => {
+      const onUse =
+        vi.fn<Parameters<typeof openAutomationTemplatePreview>[1]>();
       openAutomationTemplatePreview(tmpl, onUse);
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-      expect(document.querySelector('.auDrawer')).toBeNull();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      expect(document.querySelector(".auDrawer")).toBeNull();
 
       openAutomationTemplatePreview(tmpl, onUse);
-      (document.querySelector('.auDrawerBackdrop') as HTMLElement).click();
-      expect(document.querySelector('.auDrawer')).toBeNull();
+      (document.querySelector(".auDrawerBackdrop") as HTMLElement).click();
+      expect(document.querySelector(".auDrawer")).toBeNull();
       expect(onUse).not.toHaveBeenCalled();
     });
 
-    it('shows the default-tools line when there are no integrations', () => {
-      openAutomationTemplatePreview({ ...tmpl, integrations: [] } as TemplateEntry, () => {});
-      expect(document.querySelector('.auDrawer')!.textContent).toContain(
-        'Runs with the workspace default tools',
+    it("shows the default-tools line when there are no integrations", () => {
+      openAutomationTemplatePreview(
+        { ...tmpl, integrations: [] } as TemplateEntry,
+        () => {}
       );
-      expect(document.querySelectorAll('.auChip')).toHaveLength(0);
+      expect(document.querySelector(".auDrawer")!.textContent).toContain(
+        "Runs with the workspace default tools"
+      );
+      expect(document.querySelectorAll(".auChip")).toHaveLength(0);
     });
   });
 });

@@ -17,19 +17,25 @@
  * capabilities do not mistake 127.0.0.1 for the owner (issue #568 item A).
  */
 
-import crypto from 'node:crypto';
-import http from 'node:http';
+import crypto from "node:crypto";
+import http from "node:http";
 
-import type { DeviceStore, PairedDevice } from './device-store.js';
-import type { Accepting, Connection, Endpoint, RecvStream, SendStream } from './iroh.js';
-import { iroh } from './iroh.js';
+import type { DeviceStore, PairedDevice } from "./device-store.js";
+import type {
+  Accepting,
+  Connection,
+  Endpoint,
+  RecvStream,
+  SendStream,
+} from "./iroh.js";
+import { iroh } from "./iroh.js";
 import type {
   PairQrPayload,
   PairRequest,
   PairResponse,
   TunnelRequestHeader,
   TunnelResponseHeader,
-} from './protocol.js';
+} from "./protocol.js";
 import {
   alpnBytes,
   CLOSE_UNAUTHORIZED,
@@ -42,7 +48,7 @@ import {
   sanitizeHeaders,
   TUNNEL_ALPN,
   TUNNEL_FORWARDED_HEADER,
-} from './protocol.js';
+} from "./protocol.js";
 
 export interface TunnelUpstream {
   /** Loopback gateway base, e.g. `http://127.0.0.1:18789`. */
@@ -55,12 +61,15 @@ export interface DesktopTunnelOptions {
   /** 32-byte endpoint secret; omit to generate a fresh identity. */
   secretKey?: Uint8Array;
   /** Resolved per request so the tunnel follows gateway restarts/switches. */
-  upstream: () => TunnelUpstream | undefined | Promise<TunnelUpstream | undefined>;
+  upstream: () =>
+    | TunnelUpstream
+    | undefined
+    | Promise<TunnelUpstream | undefined>;
   deviceStore: DeviceStore;
   /** Shown to the phone on successful pairing. */
   desktopName?: string;
   /** `disabled` keeps tests offline; production uses the n0 relays + discovery. */
-  relays?: 'n0' | 'disabled';
+  relays?: "n0" | "disabled";
   onPaired?: (device: PairedDevice) => void;
 }
 
@@ -88,18 +97,19 @@ export interface DesktopTunnelHandle {
 const DEFAULT_PAIRING_TTL_MS = 10 * 60 * 1000;
 
 function timingSafeEqualStr(a: string, b: string): boolean {
-  const ab = Buffer.from(a, 'utf8');
-  const bb = Buffer.from(b, 'utf8');
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
   if (ab.length !== bb.length) return false;
   return crypto.timingSafeEqual(ab, bb);
 }
 
 export async function startDesktopTunnel(
-  options: DesktopTunnelOptions,
+  options: DesktopTunnelOptions
 ): Promise<DesktopTunnelHandle> {
   const builder = iroh.Endpoint.builder();
   builder.applyN0();
-  if (options.relays === 'disabled') builder.relayMode(iroh.RelayMode.disabled());
+  if (options.relays === "disabled")
+    builder.relayMode(iroh.RelayMode.disabled());
   if (options.secretKey) builder.secretKey(Array.from(options.secretKey));
   builder.alpns([alpnBytes(TUNNEL_ALPN), alpnBytes(PAIR_ALPN)]);
   const endpoint = await builder.bind();
@@ -112,11 +122,11 @@ export async function startDesktopTunnel(
 /** Prefer the Rust byte pump, but keep phone linking available on any target
  * supported by the upstream iroh binding when our own addon is unavailable. */
 export async function startPreferredDesktopTunnel(
-  options: DesktopTunnelOptions,
+  options: DesktopTunnelOptions
 ): Promise<DesktopTunnelHandle> {
   if (options.secretKey) {
     try {
-      const { startNativeDesktopTunnel } = await import('./native-relay.js');
+      const { startNativeDesktopTunnel } = await import("./native-relay.js");
       return await startNativeDesktopTunnel(options);
     } catch {
       // Fall through to the portable relay below.
@@ -135,14 +145,16 @@ class DesktopTunnel {
 
   constructor(
     private readonly endpoint: Endpoint,
-    private readonly options: DesktopTunnelOptions,
+    private readonly options: DesktopTunnelOptions
   ) {}
 
   handle(): DesktopTunnelHandle {
     return {
       endpointId: this.endpoint.id().toString(),
-      ticket: () => iroh.EndpointTicket.fromAddr(this.endpoint.addr()).toString(),
-      beginPairing: (ttlMs = DEFAULT_PAIRING_TTL_MS) => this.beginPairing(ttlMs),
+      ticket: () =>
+        iroh.EndpointTicket.fromAddr(this.endpoint.addr()).toString(),
+      beginPairing: (ttlMs = DEFAULT_PAIRING_TTL_MS) =>
+        this.beginPairing(ttlMs),
       activePairing: () => this.currentPairing(),
       cancelPairing: () => {
         this.pairing = undefined;
@@ -177,7 +189,7 @@ class DesktopTunnel {
   }
 
   private async routeConnection(accepting: Accepting): Promise<void> {
-    const alpn = Buffer.from(await accepting.alpn()).toString('utf8');
+    const alpn = Buffer.from(await accepting.alpn()).toString("utf8");
     const connection = await accepting.connect();
     if (alpn === PAIR_ALPN) {
       await this.handlePairConnection(connection);
@@ -189,10 +201,10 @@ class DesktopTunnel {
   // ---- pairing ----
 
   private beginPairing(ttlMs: number): ActivePairing {
-    const code = crypto.randomBytes(16).toString('base64url');
+    const code = crypto.randomBytes(16).toString("base64url");
     const payload: PairQrPayload = {
       v: 1,
-      kind: 'centraid-pair',
+      kind: "centraid-pair",
       ticket: iroh.EndpointTicket.fromAddr(this.endpoint.addr()).toString(),
       code,
     };
@@ -227,22 +239,29 @@ class DesktopTunnel {
     }
   }
 
-  private evaluatePairRequest(connection: Connection, request: PairRequest): PairResponse {
-    if (typeof request?.code !== 'string' || typeof request?.deviceName !== 'string') {
-      return { ok: false, error: 'bad_request' };
+  private evaluatePairRequest(
+    connection: Connection,
+    request: PairRequest
+  ): PairResponse {
+    if (
+      typeof request?.code !== "string" ||
+      typeof request?.deviceName !== "string"
+    ) {
+      return { ok: false, error: "bad_request" };
     }
     const pairing = this.pairing;
     if (!pairing || !timingSafeEqualStr(pairing.code, request.code)) {
-      return { ok: false, error: 'invalid_code' };
+      return { ok: false, error: "invalid_code" };
     }
     if (Date.now() > pairing.expiresAt) {
       this.pairing = undefined;
-      return { ok: false, error: 'expired_code' };
+      return { ok: false, error: "expired_code" };
     }
     this.pairing = undefined; // one-time: consumed on success
     const device = this.options.deviceStore.add({
       name: request.deviceName,
-      platform: typeof request.platform === 'string' ? request.platform : 'unknown',
+      platform:
+        typeof request.platform === "string" ? request.platform : "unknown",
       endpointId: connection.remoteId().toString(),
     });
     this.options.onPaired?.(device);
@@ -250,7 +269,7 @@ class DesktopTunnel {
       ok: true,
       gatewayId: this.endpoint.id().toString(),
       deviceId: device.deviceId,
-      desktopName: this.options.desktopName ?? 'Centraid Desktop',
+      desktopName: this.options.desktopName ?? "Centraid Desktop",
     };
   }
 
@@ -261,7 +280,7 @@ class DesktopTunnel {
     if (!removed) return undefined;
     for (const [stableId, live] of this.liveConnections) {
       if (live.endpointId === removed.endpointId) {
-        live.connection.close(CLOSE_UNAUTHORIZED, alpnBytes('revoked'));
+        live.connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
         this.liveConnections.delete(stableId);
       }
     }
@@ -271,7 +290,7 @@ class DesktopTunnel {
   private async handleTunnelConnection(connection: Connection): Promise<void> {
     const endpointId = connection.remoteId().toString();
     if (!this.options.deviceStore.findByEndpointId(endpointId)) {
-      connection.close(CLOSE_UNAUTHORIZED, alpnBytes('unauthorized'));
+      connection.close(CLOSE_UNAUTHORIZED, alpnBytes("unauthorized"));
       return;
     }
     const stableId = connection.stableId();
@@ -282,7 +301,7 @@ class DesktopTunnel {
         // Revocation guard: the allowlist is consulted per stream, so a
         // revoked device loses access even on a connection that predates it.
         if (!this.options.deviceStore.findByEndpointId(endpointId)) {
-          connection.close(CLOSE_UNAUTHORIZED, alpnBytes('revoked'));
+          connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
           return;
         }
         void this.serveStream(bi.send, bi.recv).catch(() => {
@@ -305,16 +324,18 @@ class DesktopTunnel {
       header = await readHeaderFrame<TunnelRequestHeader>(recv);
       body = await readBodyToEnd(recv);
     } catch {
-      await this.respondError(send, 400, 'bad_request');
+      await this.respondError(send, 400, "bad_request");
       return;
     }
-    const upstream = await Promise.resolve(this.options.upstream()).catch(() => undefined);
+    const upstream = await Promise.resolve(this.options.upstream()).catch(
+      () => undefined
+    );
     if (!upstream) {
-      await this.respondError(send, 503, 'gateway_unavailable');
+      await this.respondError(send, 503, "gateway_unavailable");
       return;
     }
-    if (typeof header.target !== 'string' || !header.target.startsWith('/')) {
-      await this.respondError(send, 400, 'bad_target');
+    if (typeof header.target !== "string" || !header.target.startsWith("/")) {
+      await this.respondError(send, 400, "bad_target");
       return;
     }
     const base = new URL(upstream.baseUrl);
@@ -327,11 +348,11 @@ class DesktopTunnel {
     // minting) refuse it rather than reading 127.0.0.1 as "the owner".
     delete headers[DEVICE_IDENTITY_HEADER];
     delete headers[DEVICE_PROOF_HEADER];
-    headers[TUNNEL_FORWARDED_HEADER] = '1';
+    headers[TUNNEL_FORWARDED_HEADER] = "1";
     headers.host = base.host;
     headers.authorization = `Bearer ${upstream.token}`;
-    if (body.length > 0) headers['content-length'] = String(body.length);
-    else delete headers['content-length'];
+    if (body.length > 0) headers["content-length"] = String(body.length);
+    else delete headers["content-length"];
 
     await new Promise<void>((resolve) => {
       const request = http.request(
@@ -346,7 +367,9 @@ class DesktopTunnel {
           void (async () => {
             const responseHeader: TunnelResponseHeader = {
               status: response.statusCode ?? 502,
-              headers: sanitizeHeaders(response.headers as Record<string, string | string[]>),
+              headers: sanitizeHeaders(
+                response.headers as Record<string, string | string[]>
+              ),
             };
             await send.writeAll(encodeHeaderFrame(responseHeader));
             // Sequential for-await keeps chunk ordering; SSE stays live
@@ -360,26 +383,32 @@ class DesktopTunnel {
               await send.reset(1n).catch(() => undefined);
             })
             .finally(resolve);
-        },
+        }
       );
-      request.on('error', () => {
-        void this.respondError(send, 502, 'upstream_unreachable').finally(resolve);
+      request.on("error", () => {
+        void this.respondError(send, 502, "upstream_unreachable").finally(
+          resolve
+        );
       });
       request.end(body);
     });
   }
 
-  private async respondError(send: SendStream, status: number, error: string): Promise<void> {
+  private async respondError(
+    send: SendStream,
+    status: number,
+    error: string
+  ): Promise<void> {
     try {
-      const body = Buffer.from(JSON.stringify({ error }), 'utf8');
+      const body = Buffer.from(JSON.stringify({ error }), "utf8");
       await send.writeAll(
         encodeHeaderFrame({
           status,
           headers: {
-            'content-type': 'application/json',
-            'content-length': String(body.length),
+            "content-type": "application/json",
+            "content-length": String(body.length),
           },
-        } satisfies TunnelResponseHeader),
+        } satisfies TunnelResponseHeader)
       );
       await send.writeAll(Array.from(body));
       await send.finish();

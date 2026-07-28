@@ -59,16 +59,20 @@
  * out when the manifest changes and the entry is rebuilt.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import * as esbuild from 'esbuild';
+import * as esbuild from "esbuild";
 
-import { computeEtag } from './asset-variants.js';
-import { prepareBundledIndex as prepareBundledIndexWith } from './app-bundled-index.js';
-import { compress, staticQualityForHost, type Encoding } from './compression.js';
-import { compileCssModule } from './css-module.js';
-import { resolveStaticPath, SHARED_ASSET_FILES } from './security.js';
+import { prepareBundledIndex as prepareBundledIndexWith } from "./app-bundled-index.js";
+import { computeEtag } from "./asset-variants.js";
+import {
+  compress,
+  staticQualityForHost,
+  type Encoding,
+} from "./compression.js";
+import { compileCssModule } from "./css-module.js";
+import { resolveStaticPath, SHARED_ASSET_FILES } from "./security.js";
 
 /**
  * Served rel path of a whole-app bundle: `_bundle.<16-hex>.js`. The leading
@@ -82,7 +86,12 @@ export const BUNDLE_REL_RE = /^_bundle\.(?<hash>[0-9a-f]{16})\.js$/u;
 /** Directories never part of the browser graph (mirror of the serving guards
  * — `queries`/`actions` are RESERVED_DIRS in security.ts, never served;
  * `automations` is node-side handler code the page can't import). */
-const NON_GRAPH_DIRS = new Set(['queries', 'actions', 'automations', 'node_modules']);
+const NON_GRAPH_DIRS = new Set([
+  "queries",
+  "actions",
+  "automations",
+  "node_modules",
+]);
 
 export interface BuiltBundle {
   ok: true;
@@ -116,7 +125,9 @@ export function clearBundleCaches(): void {
   inflight.clear();
 }
 
-async function statOrNull(file: string): Promise<import('node:fs').Stats | null> {
+async function statOrNull(
+  file: string
+): Promise<import("node:fs").Stats | null> {
   try {
     return await fs.stat(file);
   } catch {
@@ -135,7 +146,10 @@ async function statOrNull(file: string): Promise<import('node:fs').Stats | null>
  * CSS is inlined fresh per HTML response and the HTML itself is read per
  * request, so neither needs to invalidate the JS bundle.
  */
-async function computeManifest(appDir: string, sharedAssetsDir?: string): Promise<string> {
+async function computeManifest(
+  appDir: string,
+  sharedAssetsDir?: string
+): Promise<string> {
   const lines: string[] = [];
   async function walk(rel: string): Promise<void> {
     const entries = await fs.readdir(path.join(appDir, rel), {
@@ -143,39 +157,41 @@ async function computeManifest(appDir: string, sharedAssetsDir?: string): Promis
     });
     await Promise.all(
       entries.map(async (e) => {
-        if (e.name.startsWith('.')) return;
+        if (e.name.startsWith(".")) return;
         const r = rel ? `${rel}/${e.name}` : e.name;
         if (e.isDirectory()) {
           if (!NON_GRAPH_DIRS.has(e.name)) return walk(r);
           return;
         }
         if (
-          !r.endsWith('.js') &&
-          !r.endsWith('.jsx') &&
-          !r.endsWith('.ts') &&
-          !r.endsWith('.tsx') &&
-          !r.endsWith('.module.css')
+          !r.endsWith(".js") &&
+          !r.endsWith(".jsx") &&
+          !r.endsWith(".ts") &&
+          !r.endsWith(".tsx") &&
+          !r.endsWith(".module.css")
         ) {
           return;
         }
         const st = await statOrNull(path.join(appDir, r));
         if (st) lines.push(`${r}\0${st.mtimeMs}\0${st.size}`);
-      }),
+      })
     );
   }
-  await walk('');
+  await walk("");
   if (sharedAssetsDir) {
     await Promise.all(
       [...SHARED_ASSET_FILES]
         .sort()
-        .filter((f) => f.endsWith('.js'))
+        .filter((f) => f.endsWith(".js"))
         .map(async (f) => {
           const st = await statOrNull(path.join(sharedAssetsDir, f));
-          lines.push(`\0shared:${f}\0${st ? `${st.mtimeMs}\0${st.size}` : 'absent'}`);
-        }),
+          lines.push(
+            `\0shared:${f}\0${st ? `${st.mtimeMs}\0${st.size}` : "absent"}`
+          );
+        })
     );
   }
-  return lines.sort().join('\n');
+  return lines.sort().join("\n");
 }
 
 /**
@@ -198,9 +214,12 @@ async function computeManifest(appDir: string, sharedAssetsDir?: string): Promis
  *      importer-relative) maps to the root-level `jsx-runtime.js`, matching
  *      the depth-aware specifier rewrite of the per-file transform.
  */
-function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin {
+function appGraphPlugin(
+  root: string,
+  sharedRoot: string | null
+): esbuild.Plugin {
   return {
-    name: 'centraid-app-graph',
+    name: "centraid-app-graph",
     setup(build) {
       // A `*.module.css` in the graph is compiled to a JS module (style
       // injector + class-map default export, css-module.ts) BEFORE esbuild
@@ -220,7 +239,7 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
         const compiled = await compileCssModule(args.path, root);
         return {
           contents: compiled.js,
-          loader: 'js',
+          loader: "js",
           resolveDir: path.dirname(args.path),
         };
       });
@@ -231,30 +250,33 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
       // `require-unicode-regexp` fix does not apply here.
       // oxlint-disable-next-line require-unicode-regexp
       build.onResolve({ filter: /.*/ }, async (args) => {
-        if (args.kind === 'entry-point') return null;
+        if (args.kind === "entry-point") return null;
         const spec = args.path;
 
         // The importing file's *served* directory: shared-dir files serve at
         // the app root, everything else serves where it lives.
         const servedDir =
           sharedRoot &&
-          (args.resolveDir === sharedRoot || args.resolveDir.startsWith(sharedRoot + path.sep))
+          (args.resolveDir === sharedRoot ||
+            args.resolveDir.startsWith(sharedRoot + path.sep))
             ? root
             : args.resolveDir;
 
         // esbuild's automatic runtime emits `./jsx-runtime` (no extension).
         // Root-level file, app copy first — same as the per-file rewrite.
-        if (spec === './jsx-runtime' || spec.endsWith('/jsx-runtime')) {
-          const own = path.join(root, 'jsx-runtime.js');
+        if (spec === "./jsx-runtime" || spec.endsWith("/jsx-runtime")) {
+          const own = path.join(root, "jsx-runtime.js");
           if (await statOrNull(own)) return { path: own };
           return {
             errors: [{ text: `jsx-runtime.js not found for "${spec}"` }],
           };
         }
 
-        if (!spec.startsWith('./') && !spec.startsWith('../')) {
+        if (!spec.startsWith("./") && !spec.startsWith("../")) {
           return {
-            errors: [{ text: `bare import "${spec}" is not servable from an app dir` }],
+            errors: [
+              { text: `bare import "${spec}" is not servable from an app dir` },
+            ],
           };
         }
 
@@ -262,7 +284,9 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
         const rel = path.relative(root, target);
         // Same guards as serving: inside the app dir, not reserved, allowed
         // extension. resolveStaticPath returns null for any violation.
-        const resolved = rel.startsWith('..') ? null : resolveStaticPath(root, rel);
+        const resolved = rel.startsWith("..")
+          ? null
+          : resolveStaticPath(root, rel);
         if (resolved && (await statOrNull(resolved))) return { path: resolved };
 
         // Root-only shared fallback, mirroring serveStatic.
@@ -275,7 +299,7 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
         return {
           errors: [
             {
-              text: `cannot resolve "${spec}" from ${path.relative(root, servedDir) || '.'}`,
+              text: `cannot resolve "${spec}" from ${path.relative(root, servedDir) || "."}`,
             },
           ],
         };
@@ -287,7 +311,7 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
 async function buildBundle(
   appDir: string,
   entryRel: string,
-  sharedAssetsDir?: string,
+  sharedAssetsDir?: string
 ): Promise<BundleResult> {
   try {
     // esbuild reports importers' `resolveDir` as REALPATHS — a symlinked app
@@ -302,23 +326,23 @@ async function buildBundle(
       entryPoints: [path.join(root, entryRel)],
       bundle: true,
       write: false,
-      format: 'esm',
-      platform: 'browser',
+      format: "esm",
+      platform: "browser",
       // Same JSX config as the per-file transformJsx. Apps that use JSX own
       // their runtime; bundled system apps do not use this serving path.
-      jsx: 'automatic',
-      jsxImportSource: '.',
+      jsx: "automatic",
+      jsxImportSource: ".",
       // Wire size is handled by the compression layer, and source maps are out
       // of scope — an unminified bundle stays debuggable without them.
       minify: false,
       // Keeps esbuild's per-module path comments app-relative instead of
       // leaking the gateway's absolute worktree layout into served code.
       absWorkingDir: root,
-      logLevel: 'silent',
+      logLevel: "silent",
       plugins: [appGraphPlugin(root, sharedRoot)],
     });
     const out = result.outputFiles?.[0];
-    if (!out) return { ok: false, error: 'esbuild produced no output' };
+    if (!out) return { ok: false, error: "esbuild produced no output" };
     const code = Buffer.from(out.contents);
     const etag = computeEtag(code);
     const hash = etag.slice(1, 17); // first 16 hex of the sha256, sans quote
@@ -339,10 +363,12 @@ async function buildBundle(
 export async function bundleForEntry(
   appDir: string,
   entryRel: string,
-  sharedAssetsDir?: string,
+  sharedAssetsDir?: string
 ): Promise<BuiltBundle | null> {
   const dirKey = path.resolve(appDir);
-  const manifest = await computeManifest(dirKey, sharedAssetsDir).catch(() => null);
+  const manifest = await computeManifest(dirKey, sharedAssetsDir).catch(
+    () => null
+  );
   if (manifest === null) return null;
 
   let entry = bundleCache.get(dirKey);
@@ -357,7 +383,7 @@ export async function bundleForEntry(
   let pending = inflight.get(flightKey);
   if (!pending) {
     pending = buildBundle(dirKey, entryRel, sharedAssetsDir).finally(() =>
-      inflight.delete(flightKey),
+      inflight.delete(flightKey)
     );
     inflight.set(flightKey, pending);
   }
@@ -365,7 +391,8 @@ export async function bundleForEntry(
   // The cache entry may have been superseded by a concurrent manifest change;
   // only record against the entry that matches the manifest we built from.
   const current = bundleCache.get(dirKey);
-  if (current && current.manifest === manifest) current.bundles.set(entryRel, result);
+  if (current && current.manifest === manifest)
+    current.bundles.set(entryRel, result);
   return result.ok ? result : null;
 }
 
@@ -377,7 +404,10 @@ export async function bundleForEntry(
  * hold a stale hash across a redeploy, where a clean 404 (→ reload) beats
  * silently serving mixed versions.
  */
-export function findBundleByHash(appDir: string, hash: string): BuiltBundle | null {
+export function findBundleByHash(
+  appDir: string,
+  hash: string
+): BuiltBundle | null {
   const entry = bundleCache.get(path.resolve(appDir));
   if (!entry) return null;
   for (const b of entry.bundles.values()) {
@@ -393,14 +423,14 @@ export function findBundleByHash(appDir: string, hash: string): BuiltBundle | nu
  */
 export async function prewarmAppAssets(
   appDir: string,
-  sharedAssetsDir?: string,
+  sharedAssetsDir?: string
 ): Promise<{ bundles: number; variants: number }> {
-  const html = await fs.readFile(path.join(appDir, 'index.html'), 'utf8');
+  const html = await fs.readFile(path.join(appDir, "index.html"), "utf8");
   const prepared = await prepareBundledIndex(html, appDir, sharedAssetsDir);
   const hashes = new Set(
     [...prepared.matchAll(/_bundle\.(?<hash>[0-9a-f]{16})\.js/gu)].flatMap(
-      (match) => match.groups?.hash ?? [],
-    ),
+      (match) => match.groups?.hash ?? []
+    )
   );
   const variantCounts = await Promise.all(
     [...hashes].map(async (hash) => {
@@ -408,15 +438,18 @@ export async function prewarmAppAssets(
       if (!bundle) return 0;
       const quality = staticQualityForHost();
       const [br, gzip] = await Promise.all([
-        compress(bundle.code, 'br', quality),
-        compress(bundle.code, 'gzip', quality),
+        compress(bundle.code, "br", quality),
+        compress(bundle.code, "gzip", quality),
       ]);
-      bundle.variants.set('br', br);
-      bundle.variants.set('gzip', gzip);
+      bundle.variants.set("br", br);
+      bundle.variants.set("gzip", gzip);
       return 2;
-    }),
+    })
   );
-  const variants = variantCounts.reduce<number>((total, count) => total + count, 0);
+  const variants = variantCounts.reduce<number>(
+    (total, count) => total + count,
+    0
+  );
   return { bundles: hashes.size, variants };
 }
 
@@ -442,7 +475,7 @@ export async function prewarmAppAssets(
 export async function prepareBundledIndex(
   html: string,
   appDir: string,
-  sharedAssetsDir?: string,
+  sharedAssetsDir?: string
 ): Promise<string> {
   return prepareBundledIndexWith(html, appDir, sharedAssetsDir, bundleForEntry);
 }

@@ -55,18 +55,18 @@
   background: none;
   color: var(--ink-2);
 }
-.miniDay[data-outside='true'] {
+.miniDay[data-outside="true"] {
   color: var(--ink-3);
   opacity: 0.6;
 }
 .miniDay:hover {
   background: var(--bg-sunken);
 }
-.miniDay[data-selected='true'] {
+.miniDay[data-selected="true"] {
   background: var(--accent-soft);
   color: var(--accent-deep-fg);
 }
-.miniDay[data-today='true'] {
+.miniDay[data-today="true"] {
   background: var(--accent-deep);
   color: #fff;
   font-weight: 600;
@@ -81,7 +81,7 @@
   border-radius: 999px;
   background: var(--accent-deep-fg);
 }
-.miniDay[data-today='true'] .miniDot {
+.miniDay[data-today="true"] .miniDot {
   background: #fff;
 }
 
@@ -117,7 +117,7 @@
   border: 1.5px solid var(--line-strong);
   color: #fff;
 }
-.calBox[data-shown='true'] {
+.calBox[data-shown="true"] {
   border: none;
 }
 .calName {
@@ -127,7 +127,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.calName[data-shown='false'] {
+.calName[data-shown="false"] {
   color: var(--ink-3);
 }
 .calCount {

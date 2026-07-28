@@ -40,7 +40,7 @@
    actually gotten (a later stage's segment stays invisible until it mounts,
    which is what the staggered opacity already buys us for free). */
 .stage:not(:last-child)::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 22px;
   left: 10px;
@@ -48,7 +48,7 @@
   height: calc(100% + 14px - 22px);
   background: var(--line);
 }
-.stage[data-status='pass']:not(:last-child)::after {
+.stage[data-status="pass"]:not(:last-child)::after {
   background: color-mix(in srgb, var(--success) 55%, var(--line));
 }
 
@@ -65,21 +65,21 @@
   border: 1.5px solid var(--line);
   color: var(--ink-4);
 }
-.dot[data-status='pass'] {
+.dot[data-status="pass"] {
   border-color: transparent;
   background: var(--success);
   color: white;
 }
-.dot[data-status='fail'] {
+.dot[data-status="fail"] {
   border-color: transparent;
   background: var(--danger);
   color: white;
 }
-.dot[data-status='pending'] svg,
-.dot[data-status='skip'] {
+.dot[data-status="pending"] svg,
+.dot[data-status="skip"] {
   opacity: 0.5;
 }
-.dot[data-status='pending'] svg {
+.dot[data-status="pending"] svg {
   animation: ladderSpin 900ms linear infinite;
 }
 @keyframes ladderSpin {
@@ -101,7 +101,7 @@
   font-weight: 500;
   color: var(--ink);
 }
-.stage[data-status='skip'] .label {
+.stage[data-status="skip"] .label {
   color: var(--ink-4);
 }
 .detail {
@@ -110,7 +110,7 @@
   line-height: 1.4;
   color: var(--ink-3);
 }
-.stage[data-status='fail'] .detail {
+.stage[data-status="fail"] .detail {
   color: var(--danger);
 }
 
@@ -120,7 +120,7 @@
     animation-delay: 0ms;
     opacity: 1;
   }
-  .dot[data-status='pending'] svg {
+  .dot[data-status="pending"] svg {
     animation: none;
   }
 }

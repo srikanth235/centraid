@@ -1,17 +1,17 @@
-import type { BackupPolicy } from '../backup-policy.js';
-import { VaultBlobBackpressureError } from '../errors.js';
-import type { BlobCache } from './cache.js';
-import type { RemoteTier } from './custody-types.js';
-import type { RemoteBlobTransfer } from './remote-transfer.js';
-import type { BlobTransferState } from './transfer-state.js';
+import type { BackupPolicy } from "../backup-policy.js";
+import { VaultBlobBackpressureError } from "../errors.js";
+import type { BlobCache } from "./cache.js";
+import type { RemoteTier } from "./custody-types.js";
+import type { RemoteBlobTransfer } from "./remote-transfer.js";
+import type { BlobTransferState } from "./transfer-state.js";
 
-const AVAILABILITY_PROBE_SHA = '0'.repeat(64);
+const AVAILABILITY_PROBE_SHA = "0".repeat(64);
 
 /** A transfer interface alone is not availability; prove the provider answers a HEAD. */
 export async function requireRemote(
   remote: RemoteTier | null,
   capacityError: VaultBlobBackpressureError,
-  sha256?: string,
+  sha256?: string
 ): Promise<RemoteTier & { transfer: RemoteBlobTransfer }> {
   if (!remote?.transfer) throw capacityError;
   try {
@@ -31,7 +31,7 @@ export function assertSpoolAdmission(
     remoteConfigured: () => boolean;
   },
   incoming: number,
-  expectedShaSupplied: boolean,
+  expectedShaSupplied: boolean
 ): void {
   const policy = deps.policy();
   const status = deps.state.status();
@@ -59,12 +59,12 @@ export function assertSpoolAdmission(
   const availableBytes = Math.min(outboxAvailable, capacity.availableBytes);
   if (incoming <= availableBytes) return;
   throw new VaultBlobBackpressureError(
-    'blob ingress reservation',
+    "blob ingress reservation",
     `blob upload needs ${incoming} bytes but only ${availableBytes} bytes remain after ` +
       `${policy.reservedHeadroomBytes} bytes of disk headroom and the ${policy.outboxBudgetBytes}-byte outbox budget; ` +
       (expectedShaSupplied
-        ? 'declared-SHA stream-through is required'
-        : 'send X-Content-SHA256 to enable bounded stream-through'),
+        ? "declared-SHA stream-through is required"
+        : "send X-Content-SHA256 to enable bounded stream-through"),
     {
       needBytes: incoming,
       availableBytes,
@@ -72,6 +72,6 @@ export function assertSpoolAdmission(
       reservedHeadroomBytes: policy.reservedHeadroomBytes,
       outboxBudgetBytes: policy.outboxBudgetBytes,
       expectedShaRequired: !expectedShaSupplied,
-    },
+    }
   );
 }

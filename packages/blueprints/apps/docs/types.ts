@@ -52,7 +52,7 @@ export interface Folder {
  * because the sidebar render threads `nav.folderId` down unconditionally, and
  * the JS this ports read it as `undefined` for every non-folder view.
  */
-export type NavKind = 'all' | 'recent' | 'starred' | 'folder' | 'trash';
+export type NavKind = "all" | "recent" | "starred" | "folder" | "trash";
 export interface Nav {
   kind: NavKind;
   folderId?: string;
@@ -84,7 +84,7 @@ export interface DocFields {
 }
 
 /** The blob custody projection in owner-facing words + the CSS tone it keys. */
-export type CustodyTone = 'ok' | 'warn' | 'danger';
+export type CustodyTone = "ok" | "warn" | "danger";
 export interface CustodyInfo {
   label: string;
   tone: CustodyTone;
@@ -113,9 +113,9 @@ export interface AppData {
  * logic.ts/nav.ts close over this exact object at boot.
  */
 export interface AppState {
-  view: 'grid' | 'list';
+  view: "grid" | "list";
   nav: Nav;
-  sortKey: 'added' | 'name' | 'size';
+  sortKey: "added" | "name" | "size";
   sortDir: 1 | -1;
   type: string;
   tag: string;

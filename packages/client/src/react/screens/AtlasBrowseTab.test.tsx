@@ -1,43 +1,50 @@
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import AtlasBrowseTab from './AtlasBrowseTab.js';
+import AtlasBrowseTab from "./AtlasBrowseTab.js";
 
 // The Browse tab self-fetches through the vault client (its only prop is the
 // preselected table), so the client module is mocked wholesale and each helper
 // resolves from a per-test vi.fn. vitest hoists this above the import above.
-vi.mock(import('../../gateway-client.js'), () => ({
-  browseTables: (...a: Parameters<typeof browseTablesMock>) => browseTablesMock(...a),
-  browseColumns: (...a: Parameters<typeof browseColumnsMock>) => browseColumnsMock(...a),
+vi.mock(import("../../gateway-client.js"), () => ({
+  browseTables: (...a: Parameters<typeof browseTablesMock>) =>
+    browseTablesMock(...a),
+  browseColumns: (...a: Parameters<typeof browseColumnsMock>) =>
+    browseColumnsMock(...a),
   browseRows: (...a: Parameters<typeof browseRowsMock>) => browseRowsMock(...a),
   browseRow: (...a: Parameters<typeof browseRowMock>) => browseRowMock(...a),
-  browseRefSearch: (...a: Parameters<typeof browseRefSearchMock>) => browseRefSearchMock(...a),
-  browseDependents: (...a: Parameters<typeof browseDependentsMock>) => browseDependentsMock(...a),
-  browseInsertRow: (...a: Parameters<typeof browseInsertRowMock>) => browseInsertRowMock(...a),
-  browseUpdateRow: (...a: Parameters<typeof browseUpdateRowMock>) => browseUpdateRowMock(...a),
-  browseDeleteRow: (...a: Parameters<typeof browseDeleteRowMock>) => browseDeleteRowMock(...a),
+  browseRefSearch: (...a: Parameters<typeof browseRefSearchMock>) =>
+    browseRefSearchMock(...a),
+  browseDependents: (...a: Parameters<typeof browseDependentsMock>) =>
+    browseDependentsMock(...a),
+  browseInsertRow: (...a: Parameters<typeof browseInsertRowMock>) =>
+    browseInsertRowMock(...a),
+  browseUpdateRow: (...a: Parameters<typeof browseUpdateRowMock>) =>
+    browseUpdateRowMock(...a),
+  browseDeleteRow: (...a: Parameters<typeof browseDeleteRowMock>) =>
+    browseDeleteRowMock(...a),
 }));
 
 /** The mocked module, so each stub carries the helper's real signature. */
-type GatewayClient = typeof import('../../gateway-client.js');
+type GatewayClient = typeof import("../../gateway-client.js");
 
-const browseTablesMock = vi.fn<GatewayClient['browseTables']>();
-const browseColumnsMock = vi.fn<GatewayClient['browseColumns']>();
-const browseRowsMock = vi.fn<GatewayClient['browseRows']>();
-const browseRowMock = vi.fn<GatewayClient['browseRow']>();
-const browseRefSearchMock = vi.fn<GatewayClient['browseRefSearch']>();
-const browseDependentsMock = vi.fn<GatewayClient['browseDependents']>();
-const browseInsertRowMock = vi.fn<GatewayClient['browseInsertRow']>();
-const browseUpdateRowMock = vi.fn<GatewayClient['browseUpdateRow']>();
-const browseDeleteRowMock = vi.fn<GatewayClient['browseDeleteRow']>();
+const browseTablesMock = vi.fn<GatewayClient["browseTables"]>();
+const browseColumnsMock = vi.fn<GatewayClient["browseColumns"]>();
+const browseRowsMock = vi.fn<GatewayClient["browseRows"]>();
+const browseRowMock = vi.fn<GatewayClient["browseRow"]>();
+const browseRefSearchMock = vi.fn<GatewayClient["browseRefSearch"]>();
+const browseDependentsMock = vi.fn<GatewayClient["browseDependents"]>();
+const browseInsertRowMock = vi.fn<GatewayClient["browseInsertRow"]>();
+const browseUpdateRowMock = vi.fn<GatewayClient["browseUpdateRow"]>();
+const browseDeleteRowMock = vi.fn<GatewayClient["browseDeleteRow"]>();
 
-const SEALED = '«sealed»'; // «sealed»
+const SEALED = "«sealed»"; // «sealed»
 
 const col = (name: string, over: Record<string, unknown> = {}) => ({
   name,
-  type: 'TEXT',
+  type: "TEXT",
   notnull: false,
   pk: 0,
   defaultValue: null,
@@ -50,34 +57,34 @@ const col = (name: string, over: Record<string, unknown> = {}) => ({
 
 const TABLES = [
   {
-    logical: 'core.party',
-    physical: 'core_party',
-    pack: 'core',
-    packLabel: 'Core',
-    packKind: 'ontology' as const,
-    label: 'Party',
+    logical: "core.party",
+    physical: "core_party",
+    pack: "core",
+    packLabel: "Core",
+    packKind: "ontology" as const,
+    label: "Party",
     rows: 214,
     machinery: false,
     singlePk: true,
   },
   {
-    logical: 'knowledge.note',
-    physical: 'knowledge_note',
-    pack: 'knowledge',
-    packLabel: 'Knowledge',
-    packKind: 'ontology' as const,
-    label: 'Note',
+    logical: "knowledge.note",
+    physical: "knowledge_note",
+    pack: "knowledge",
+    packLabel: "Knowledge",
+    packKind: "ontology" as const,
+    label: "Note",
     rows: 88,
     machinery: false,
     singlePk: true,
   },
   {
-    logical: 'journal.segment',
-    physical: 'journal_segment',
-    pack: 'journal',
-    packLabel: 'Journal',
-    packKind: 'machinery' as const,
-    label: 'Segment',
+    logical: "journal.segment",
+    physical: "journal_segment",
+    pack: "journal",
+    packLabel: "Journal",
+    packKind: "machinery" as const,
+    label: "Segment",
     rows: 4021,
     machinery: true,
     singlePk: true,
@@ -85,30 +92,30 @@ const TABLES = [
 ];
 
 const PARTY_COLS = {
-  logical: 'core.party',
-  physical: 'core_party',
-  keysetKey: 'party_id',
-  displayField: 'display_name',
+  logical: "core.party",
+  physical: "core_party",
+  keysetKey: "party_id",
+  displayField: "display_name",
   machinery: false,
   columns: [
-    col('party_id', { pk: 1, notnull: true }),
-    col('display_name', { notnull: true }),
-    col('home_place_id', {
-      fkTable: 'core_place',
-      fkColumn: 'place_id',
-      fkLogical: 'core.place',
+    col("party_id", { pk: 1, notnull: true }),
+    col("display_name", { notnull: true }),
+    col("home_place_id", {
+      fkTable: "core_place",
+      fkColumn: "place_id",
+      fkLogical: "core.place",
     }),
-    col('secret', { sealed: true }),
+    col("secret", { sealed: true }),
   ],
 };
 
 const MACHINERY_COLS = {
-  logical: 'journal.segment',
-  physical: 'journal_segment',
-  keysetKey: 'seq',
-  displayField: 'seq',
+  logical: "journal.segment",
+  physical: "journal_segment",
+  keysetKey: "seq",
+  displayField: "seq",
   machinery: true,
-  columns: [col('seq', { type: 'INTEGER', pk: 1, notnull: true }), col('note')],
+  columns: [col("seq", { type: "INTEGER", pk: 1, notnull: true }), col("note")],
 };
 
 const partyRow = (id: string, name: string, place: string | null) => ({
@@ -118,52 +125,60 @@ const partyRow = (id: string, name: string, place: string | null) => ({
   secret: SEALED,
 });
 
-const partyPage = (rows: Record<string, unknown>[], nextCursor: string | null) => ({
-  logical: 'core.party',
-  physical: 'core_party',
+const partyPage = (
+  rows: Record<string, unknown>[],
+  nextCursor: string | null
+) => ({
+  logical: "core.party",
+  physical: "core_party",
   rows,
-  columns: ['party_id', 'display_name', 'home_place_id', 'secret'],
+  columns: ["party_id", "display_name", "home_place_id", "secret"],
   nextCursor,
-  orderBy: 'party_id',
-  dir: 'asc' as const,
-  keysetKey: 'party_id',
+  orderBy: "party_id",
+  dir: "asc" as const,
+  keysetKey: "party_id",
 });
 
-describe('screens/AtlasBrowseTab', () => {
+describe("screens/AtlasBrowseTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     browseTablesMock.mockResolvedValue(TABLES);
     browseColumnsMock.mockImplementation((t: string) =>
-      Promise.resolve(t === 'journal.segment' ? MACHINERY_COLS : PARTY_COLS),
+      Promise.resolve(t === "journal.segment" ? MACHINERY_COLS : PARTY_COLS)
     );
     browseRowsMock.mockImplementation(({ table }: { table: string }) =>
       Promise.resolve(
-        table === 'journal.segment'
+        table === "journal.segment"
           ? {
-              logical: 'journal.segment',
-              physical: 'journal_segment',
-              rows: [{ seq: 1, note: 'boot' }],
-              columns: ['seq', 'note'],
+              logical: "journal.segment",
+              physical: "journal_segment",
+              rows: [{ seq: 1, note: "boot" }],
+              columns: ["seq", "note"],
               nextCursor: null,
-              orderBy: 'seq',
-              dir: 'asc',
-              keysetKey: 'seq',
+              orderBy: "seq",
+              dir: "asc",
+              keysetKey: "seq",
             }
-          : partyPage([partyRow('p1', 'Alice', 'place-1'), partyRow('p2', 'Bob', null)], null),
-      ),
+          : partyPage(
+              [partyRow("p1", "Alice", "place-1"), partyRow("p2", "Bob", null)],
+              null
+            )
+      )
     );
-    browseRefSearchMock.mockResolvedValue([{ id: 'place-1', display: 'Alice’s Home' }]);
+    browseRefSearchMock.mockResolvedValue([
+      { id: "place-1", display: "Alice’s Home" },
+    ]);
     browseDependentsMock.mockResolvedValue({
-      logical: 'core.party',
-      physical: 'core_party',
-      id: 'p1',
+      logical: "core.party",
+      physical: "core_party",
+      id: "p1",
       dependents: [],
       hasEngineDependents: false,
       totalRows: 0,
     });
-    browseInsertRowMock.mockResolvedValue({ ok: true, id: 'new-1' });
-    browseUpdateRowMock.mockResolvedValue({ ok: true, id: 'p1' });
-    browseDeleteRowMock.mockResolvedValue({ ok: true, id: 'p1' });
+    browseInsertRowMock.mockResolvedValue({ ok: true, id: "new-1" });
+    browseUpdateRowMock.mockResolvedValue({ ok: true, id: "p1" });
+    browseDeleteRowMock.mockResolvedValue({ ok: true, id: "p1" });
   });
 
   let root: Root | null = null;
@@ -184,7 +199,7 @@ describe('screens/AtlasBrowseTab', () => {
   }
 
   async function mount(initialTable?: string): Promise<HTMLDivElement> {
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     await act(async () => {
       root = createRoot(container as HTMLDivElement);
@@ -195,15 +210,20 @@ describe('screens/AtlasBrowseTab', () => {
   }
 
   const click = async (node: Element | null | undefined): Promise<void> => {
-    await act(async () => node?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () =>
+      node?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     await settle(3);
   };
 
   function typeInto(input: Element | null, value: string): void {
     const el = input as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value"
+    )?.set;
     setter?.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   const type = async (input: Element | null, value: string): Promise<void> => {
@@ -213,50 +233,61 @@ describe('screens/AtlasBrowseTab', () => {
 
   const submitForm = async (form: Element | null): Promise<void> => {
     await act(async () =>
-      form?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+      form?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true })
+      )
     );
     await settle(3);
   };
 
-  const $ = (el: HTMLElement, sel: string) => el.querySelector<HTMLElement>(sel);
-  const $$ = (el: HTMLElement, sel: string) => [...el.querySelectorAll<HTMLElement>(sel)];
+  const $ = (el: HTMLElement, sel: string) =>
+    el.querySelector<HTMLElement>(sel);
+  const $$ = (el: HTMLElement, sel: string) => [
+    ...el.querySelectorAll<HTMLElement>(sel),
+  ];
 
-  describe('AtlasBrowseTab — table picker', () => {
-    it('groups ontology packs before machinery bands and preselects initialTable', async () => {
-      const el = await mount('core.party');
+  describe("AtlasBrowseTab — table picker", () => {
+    it("groups ontology packs before machinery bands and preselects initialTable", async () => {
+      const el = await mount("core.party");
       const opts = $$(el, '[data-testid="atlas-browse-table-option"]');
       const kinds = opts.map((o) => o.dataset.packKind);
-      const firstMachinery = kinds.indexOf('machinery');
+      const firstMachinery = kinds.indexOf("machinery");
       expect(firstMachinery).toBeGreaterThan(0);
       // every option before the first machinery option is ontology
-      expect(kinds.slice(0, firstMachinery).every((k) => k === 'ontology')).toBe(true);
+      expect(
+        kinds.slice(0, firstMachinery).every((k) => k === "ontology")
+      ).toBe(true);
       // the divider sits between the two bands
-      expect($(el, '[data-testid="atlas-browse-machinery-divider"]')).toBeTruthy();
+      expect(
+        $(el, '[data-testid="atlas-browse-machinery-divider"]')
+      ).toBeTruthy();
 
       // preselected: core.party is the active option and drives the header
-      const active = opts.find((o) => o.dataset.logical === 'core.party');
-      expect(active?.getAttribute('aria-current')).toBe('true');
-      expect(el.textContent).toContain('core.party');
+      const active = opts.find((o) => o.dataset.logical === "core.party");
+      expect(active?.getAttribute("aria-current")).toBe("true");
+      expect(el.textContent).toContain("core.party");
     });
 
-    it('reacts to initialTable changing while mounted', async () => {
-      const el = await mount('core.party');
-      expect(el.textContent).toContain('core.party');
+    it("reacts to initialTable changing while mounted", async () => {
+      const el = await mount("core.party");
+      expect(el.textContent).toContain("core.party");
       await act(async () => {
         root?.render(<AtlasBrowseTab initialTable="knowledge.note" />);
       });
       await settle();
-      expect(el.textContent).toContain('knowledge.note');
+      expect(el.textContent).toContain("knowledge.note");
     });
   });
 
-  describe('AtlasBrowseTab — grid', () => {
-    it('renders rows and appends the next keyset page on Load more', async () => {
+  describe("AtlasBrowseTab — grid", () => {
+    it("renders rows and appends the next keyset page on Load more", async () => {
       browseRowsMock
-        .mockResolvedValueOnce(partyPage([partyRow('p1', 'Alice', 'place-1')], 'cursor-1'))
-        .mockResolvedValueOnce(partyPage([partyRow('p2', 'Bob', null)], null));
+        .mockResolvedValueOnce(
+          partyPage([partyRow("p1", "Alice", "place-1")], "cursor-1")
+        )
+        .mockResolvedValueOnce(partyPage([partyRow("p2", "Bob", null)], null));
 
-      const el = await mount('core.party');
+      const el = await mount("core.party");
       expect($$(el, '[data-testid="atlas-browse-row"]')).toHaveLength(1);
 
       const more = $(el, '[data-testid="atlas-browse-load-more"]');
@@ -265,171 +296,204 @@ describe('screens/AtlasBrowseTab', () => {
 
       // the second call carried the prior nextCursor as `after` (keyset, no OFFSET)
       const secondCall = browseRowsMock.mock.calls.at(-1)![0];
-      expect(secondCall.after).toBe('cursor-1');
+      expect(secondCall.after).toBe("cursor-1");
       expect($$(el, '[data-testid="atlas-browse-row"]')).toHaveLength(2);
     });
 
-    it('round-trips orderBy when a column header is clicked', async () => {
-      const el = await mount('core.party');
-      const header = $(el, '[data-testid="atlas-browse-col"][data-col="display_name"]');
+    it("round-trips orderBy when a column header is clicked", async () => {
+      const el = await mount("core.party");
+      const header = $(
+        el,
+        '[data-testid="atlas-browse-col"][data-col="display_name"]'
+      );
       await click(header);
       const lastCall = browseRowsMock.mock.calls.at(-1)![0];
-      expect(lastCall.orderBy).toBe('display_name');
-      expect(lastCall.dir).toBe('asc');
+      expect(lastCall.orderBy).toBe("display_name");
+      expect(lastCall.dir).toBe("asc");
     });
 
-    it('renders a sealed cell as a chip, never the masked plaintext', async () => {
-      const el = await mount('core.party');
+    it("renders a sealed cell as a chip, never the masked plaintext", async () => {
+      const el = await mount("core.party");
       expect($(el, '[data-testid="atlas-sealed-chip"]')).toBeTruthy();
       const grid = $(el, '[data-testid="atlas-browse-grid"]');
       expect(grid?.textContent).not.toContain(SEALED);
-      expect(grid?.textContent).toContain('sealed');
+      expect(grid?.textContent).toContain("sealed");
     });
   });
 
-  describe('AtlasBrowseTab — row editor', () => {
-    it('updates only edited, non-primary, unsealed fields through browseUpdateRow', async () => {
-      const el = await mount('core.party');
+  describe("AtlasBrowseTab — row editor", () => {
+    it("updates only edited, non-primary, unsealed fields through browseUpdateRow", async () => {
+      const el = await mount("core.party");
       const row = $(el, '[data-testid="atlas-browse-row"][data-id="p1"]');
       await click($(row!, '[data-testid="atlas-row-edit"]'));
 
-      await type($(el, '[data-testid="atlas-field"][data-col="display_name"]'), 'Alice Cooper');
+      await type(
+        $(el, '[data-testid="atlas-field"][data-col="display_name"]'),
+        "Alice Cooper"
+      );
       await submitForm($(el, '[data-testid="atlas-row-editor"]'));
 
       expect(browseUpdateRowMock).toHaveBeenCalledExactlyOnceWith({
-        table: 'core.party',
-        id: 'p1',
-        set: { display_name: 'Alice Cooper' },
+        table: "core.party",
+        id: "p1",
+        set: { display_name: "Alice Cooper" },
       });
     });
 
-    it('FK field searches the target table and stores the picked id', async () => {
-      const el = await mount('core.party');
+    it("FK field searches the target table and stores the picked id", async () => {
+      const el = await mount("core.party");
       await click($(el, '[data-testid="atlas-browse-insert"]'));
       expect($(el, '[data-testid="atlas-row-editor"]')).toBeTruthy();
 
-      const fk = $(el, '[data-testid="atlas-fk-input"][data-col="home_place_id"]');
-      await type(fk, 'ali');
-      expect(browseRefSearchMock).toHaveBeenCalledWith('core_place', 'ali');
+      const fk = $(
+        el,
+        '[data-testid="atlas-fk-input"][data-col="home_place_id"]'
+      );
+      await type(fk, "ali");
+      expect(browseRefSearchMock).toHaveBeenCalledWith("core_place", "ali");
 
       const hit = $(el, '[data-testid="atlas-fk-hit"][data-id="place-1"]');
       expect(hit).toBeTruthy();
       await click(hit);
 
-      await type($(el, '[data-testid="atlas-field"][data-col="display_name"]'), 'Carol');
+      await type(
+        $(el, '[data-testid="atlas-field"][data-col="display_name"]'),
+        "Carol"
+      );
       await submitForm($(el, '[data-testid="atlas-row-editor"]'));
 
       expect(browseInsertRowMock).toHaveBeenCalledOnce();
       const arg = browseInsertRowMock.mock.calls[0]?.[0];
-      expect(arg?.table).toBe('core.party');
-      expect(arg?.values.home_place_id).toBe('place-1'); // the picked id, not the typed text
-      expect(arg?.values.display_name).toBe('Carol');
+      expect(arg?.table).toBe("core.party");
+      expect(arg?.values.home_place_id).toBe("place-1"); // the picked id, not the typed text
+      expect(arg?.values.display_name).toBe("Carol");
       expect(arg?.values.secret).toBeUndefined(); // sealed column never written
     });
 
-    it('surfaces a 400 write error inline instead of throwing', async () => {
+    it("surfaces a 400 write error inline instead of throwing", async () => {
       browseInsertRowMock.mockResolvedValue({
         ok: false,
-        error: 'NOT NULL constraint failed: core_party.display_name',
+        error: "NOT NULL constraint failed: core_party.display_name",
       });
-      const el = await mount('core.party');
+      const el = await mount("core.party");
       await click($(el, '[data-testid="atlas-browse-insert"]'));
-      await type($(el, '[data-testid="atlas-field"][data-col="display_name"]'), 'x');
+      await type(
+        $(el, '[data-testid="atlas-field"][data-col="display_name"]'),
+        "x"
+      );
       await submitForm($(el, '[data-testid="atlas-row-editor"]'));
 
       const err = $(el, '[data-testid="atlas-row-error"]');
-      expect(err?.textContent).toContain('NOT NULL constraint failed');
+      expect(err?.textContent).toContain("NOT NULL constraint failed");
       // editor stays open on failure
       expect($(el, '[data-testid="atlas-row-editor"]')).toBeTruthy();
     });
   });
 
-  describe('AtlasBrowseTab — delete flow', () => {
-    it('lists dependents with counts and blocks when engine FKs point at the row', async () => {
+  describe("AtlasBrowseTab — delete flow", () => {
+    it("lists dependents with counts and blocks when engine FKs point at the row", async () => {
       browseDependentsMock.mockResolvedValue({
-        logical: 'core.party',
-        physical: 'core_party',
-        id: 'p1',
+        logical: "core.party",
+        physical: "core_party",
+        id: "p1",
         dependents: [
           {
-            table: 'knowledge_note',
-            via: 'author_party_id',
+            table: "knowledge_note",
+            via: "author_party_id",
             count: 12,
-            mechanism: 'fk',
+            mechanism: "fk",
           },
-          { table: 'core_tag', via: 'target_id', count: 3, mechanism: 'poly' },
+          { table: "core_tag", via: "target_id", count: 3, mechanism: "poly" },
         ],
         hasEngineDependents: true,
         totalRows: 15,
       });
 
-      const el = await mount('core.party');
+      const el = await mount("core.party");
       const row = $(el, '[data-testid="atlas-browse-row"][data-id="p1"]');
       await click($(row!, '[data-testid="atlas-row-delete"]'));
 
-      expect(browseDependentsMock).toHaveBeenCalledWith('core.party', 'p1');
+      expect(browseDependentsMock).toHaveBeenCalledWith("core.party", "p1");
       const dialog = $(el, '[data-testid="atlas-delete-dialog"]');
       expect(dialog).toBeTruthy();
-      expect($(el, '[data-testid="atlas-delete-summary"]')?.textContent).toContain(
-        '2 tables reference this row (15 rows)',
-      );
+      expect(
+        $(el, '[data-testid="atlas-delete-summary"]')?.textContent
+      ).toContain("2 tables reference this row (15 rows)");
 
       const deps = $$(el, '[data-testid="atlas-dependent"]');
-      expect(deps.map((d) => d.dataset.mechanism)).toStrictEqual(['fk', 'poly']);
+      expect(deps.map((d) => d.dataset.mechanism)).toStrictEqual([
+        "fk",
+        "poly",
+      ]);
       // blocked: engine FKs present → confirm disabled + explanation shown
       expect($(el, '[data-testid="atlas-delete-blocked"]')).toBeTruthy();
-      expect(($(el, '[data-testid="atlas-delete-confirm"]') as HTMLButtonElement).disabled).toBe(
-        true,
-      );
+      expect(
+        ($(el, '[data-testid="atlas-delete-confirm"]') as HTMLButtonElement)
+          .disabled
+      ).toBe(true);
       expect(browseDeleteRowMock).not.toHaveBeenCalled();
     });
 
-    it('allows a delete when only polymorphic dependents exist', async () => {
+    it("allows a delete when only polymorphic dependents exist", async () => {
       browseDependentsMock.mockResolvedValue({
-        logical: 'core.party',
-        physical: 'core_party',
-        id: 'p1',
-        dependents: [{ table: 'core_tag', via: 'target_id', count: 3, mechanism: 'poly' }],
+        logical: "core.party",
+        physical: "core_party",
+        id: "p1",
+        dependents: [
+          { table: "core_tag", via: "target_id", count: 3, mechanism: "poly" },
+        ],
         hasEngineDependents: false,
         totalRows: 3,
       });
-      const el = await mount('core.party');
+      const el = await mount("core.party");
       const row = $(el, '[data-testid="atlas-browse-row"][data-id="p1"]');
       await click($(row!, '[data-testid="atlas-row-delete"]'));
 
       expect($(el, '[data-testid="atlas-delete-warn"]')).toBeTruthy();
-      const confirm = $(el, '[data-testid="atlas-delete-confirm"]') as HTMLButtonElement;
+      const confirm = $(
+        el,
+        '[data-testid="atlas-delete-confirm"]'
+      ) as HTMLButtonElement;
       expect(confirm.disabled).toBe(false);
       await click(confirm);
       expect(browseDeleteRowMock).toHaveBeenCalledWith({
-        table: 'core.party',
-        id: 'p1',
+        table: "core.party",
+        id: "p1",
       });
     });
   });
 
-  describe('AtlasBrowseTab — machinery', () => {
-    it('locks the editor for a machinery table until the unlock is toggled', async () => {
-      const el = await mount('journal.segment');
+  describe("AtlasBrowseTab — machinery", () => {
+    it("locks the editor for a machinery table until the unlock is toggled", async () => {
+      const el = await mount("journal.segment");
       expect($(el, '[data-testid="atlas-machinery-locked"]')).toBeTruthy();
-      const insert = $(el, '[data-testid="atlas-browse-insert"]') as HTMLButtonElement;
+      const insert = $(
+        el,
+        '[data-testid="atlas-browse-insert"]'
+      ) as HTMLButtonElement;
       expect(insert.disabled).toBe(true);
 
       await click($(el, '[data-testid="atlas-machinery-unlock"]'));
-      expect(($(el, '[data-testid="atlas-browse-insert"]') as HTMLButtonElement).disabled).toBe(
-        false,
-      );
+      expect(
+        ($(el, '[data-testid="atlas-browse-insert"]') as HTMLButtonElement)
+          .disabled
+      ).toBe(false);
     });
 
-    it('rides unlockMachinery on a write once unlocked', async () => {
-      const el = await mount('journal.segment');
+    it("rides unlockMachinery on a write once unlocked", async () => {
+      const el = await mount("journal.segment");
       await click($(el, '[data-testid="atlas-machinery-unlock"]'));
       await click($(el, '[data-testid="atlas-browse-insert"]'));
-      await type($(el, '[data-testid="atlas-field"][data-col="note"]'), 'hand edit');
+      await type(
+        $(el, '[data-testid="atlas-field"][data-col="note"]'),
+        "hand edit"
+      );
       await submitForm($(el, '[data-testid="atlas-row-editor"]'));
 
       expect(browseInsertRowMock).toHaveBeenCalledOnce();
-      expect(browseInsertRowMock.mock.calls[0]?.[0]?.unlockMachinery).toBe(true);
+      expect(browseInsertRowMock.mock.calls[0]?.[0]?.unlockMachinery).toBe(
+        true
+      );
     });
   });
 });

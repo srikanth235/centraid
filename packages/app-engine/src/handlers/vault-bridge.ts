@@ -24,16 +24,16 @@
  * preview or extracted text of one content item, never original bytes.
  */
 export type VaultOp =
-  | 'read'
-  | 'search'
-  | 'invoke'
-  | 'query'
-  | 'describe'
-  | 'parked'
-  | 'changes'
-  | 'resolve'
-  | 'reveal'
-  | 'content';
+  | "read"
+  | "search"
+  | "invoke"
+  | "query"
+  | "describe"
+  | "parked"
+  | "changes"
+  | "resolve"
+  | "reveal"
+  | "content";
 
 /** One proxied call: the op plus its request payload, verbatim from the worker. */
 export interface VaultCall {

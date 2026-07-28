@@ -19,7 +19,7 @@ import {
   type ReplicaSqliteDriver,
   type ReplicaStatus,
   type ReplicaStore,
-} from '@centraid/client/replica/native';
+} from "@centraid/client/replica/native";
 
 /**
  * In-process React Native replica store: the shared driver-neutral core over an
@@ -31,13 +31,16 @@ import {
 export class NativeReplicaStore implements ReplicaStore {
   constructor(private readonly core: ReplicaSqliteStore) {}
 
-  static create(driver: ReplicaSqliteDriver, vaultId: string): NativeReplicaStore {
+  static create(
+    driver: ReplicaSqliteDriver,
+    vaultId: string
+  ): NativeReplicaStore {
     return new NativeReplicaStore(new ReplicaSqliteStore(driver, vaultId));
   }
 
   status(): Promise<ReplicaStatus> {
     const { cursor, schemaEpoch } = this.core.status();
-    return Promise.resolve({ mode: 'native', cursor, schemaEpoch });
+    return Promise.resolve({ mode: "native", cursor, schemaEpoch });
   }
 
   catalog(): Promise<ReplicaShape[]> {
@@ -69,7 +72,7 @@ export class NativeReplicaStore implements ReplicaStore {
   async read(
     request: ReplicaReadRequest,
     mutations: OptimisticMutation[] = [],
-    guard: OnlineOnlyGuard = new OnlineOnlyGuard(),
+    guard: OnlineOnlyGuard = new OnlineOnlyGuard()
   ): Promise<ReplicaReadResult> {
     try {
       const result = this.core.read(request, mutations);
@@ -86,14 +89,14 @@ export class NativeReplicaStore implements ReplicaStore {
 
   readWire(
     request: ReplicaReadRequest,
-    mutations: OptimisticMutation[] = [],
+    mutations: OptimisticMutation[] = []
   ): Promise<ReplicaReadWireResult> {
     return Promise.resolve(this.core.read(request, mutations));
   }
 
   searchWire(
     request: ReplicaSearchRequest,
-    mutations: OptimisticMutation[] = [],
+    mutations: OptimisticMutation[] = []
   ): Promise<ReplicaSearchWireResult> {
     return Promise.resolve(this.core.search(request, mutations));
   }

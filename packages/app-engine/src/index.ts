@@ -14,7 +14,7 @@ export {
   workerPoolSizeFromEnv,
   workerResourceLimitsFromEnv,
   type WorkerResourceLimits,
-} from './handlers/worker-pool.js';
+} from "./handlers/worker-pool.js";
 export {
   Runtime,
   type RuntimeOptions,
@@ -24,7 +24,7 @@ export {
   type RunnerModel,
   type ModelTier,
   type SurfaceStatus,
-} from './runtime.js';
+} from "./runtime.js";
 
 // Ask-model picker (subsystem `ask`) — `GET`/`PUT /centraid/<id>/_turn/model`.
 // Backs the kit Ask panel's inline model picker off the same
@@ -34,7 +34,7 @@ export {
   type AskModelInfo,
   type AskModelOption,
   type AskModelPrefs,
-} from './http/turn-routes.js';
+} from "./http/turn-routes.js";
 
 // Per-app chat surface — `ConversationRunner` is the host-injected seam that
 // the gateway's unified conversation runner implements. The HTTP route
@@ -47,7 +47,7 @@ export type {
   ConversationTurnResult,
   TurnStreamEvent,
   AgentFailureClass,
-} from './conversation/runner.js';
+} from "./conversation/runner.js";
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in `@centraid/automation`. The model turn is injected as a
 // `RunTurnFn`; agent-runtime's `makeConversationRunner` and the gateway's
@@ -56,8 +56,11 @@ export {
   makeConversationRunnerCore,
   type ConversationRunnerCoreOptions,
   type TurnContext,
-} from './conversation/runner-core.js';
-export { buildExtraPrompt, type BuildExtraPromptInput } from './handlers/build-extra-prompt.js';
+} from "./conversation/runner-core.js";
+export {
+  buildExtraPrompt,
+  type BuildExtraPromptInput,
+} from "./handlers/build-extra-prompt.js";
 
 // Agent-turn contract — the host-agnostic interface between a run spine
 // (chat-runner core, automation fire) and the backend that drives one model
@@ -77,8 +80,8 @@ export type {
   VaultContentRunner,
   VaultSqlRunner,
   VaultSqlToolResult,
-} from './conversation/turn.js';
-export { RUNNER_KINDS, isRunnerKind } from './conversation/turn.js';
+} from "./conversation/turn.js";
+export { RUNNER_KINDS, isRunnerKind } from "./conversation/turn.js";
 
 export {
   startRuntimeHttpServer,
@@ -87,8 +90,8 @@ export {
   type RuntimeHttpServerOptions,
   type RuntimeHttpServerHandle,
   type BearerAuthorization,
-} from './http/http-server.js';
-export { COMPANION_GRANTS_HEADER } from './http/internal-headers.js';
+} from "./http/http-server.js";
+export { COMPANION_GRANTS_HEADER } from "./http/internal-headers.js";
 export {
   tuneGatewayHttpServer,
   GATEWAY_KEEP_ALIVE_TIMEOUT_MS,
@@ -96,9 +99,9 @@ export {
   GATEWAY_REQUEST_TIMEOUT_MS,
   GATEWAY_MAX_CONNECTIONS,
   GATEWAY_SHUTDOWN_GRACE_MS,
-} from './http/server-tuning.js';
-export { prewarmAppAssets } from './http/app-bundle.js';
-export { negotiateEncoding, type Encoding } from './http/compression.js';
+} from "./http/server-tuning.js";
+export { prewarmAppAssets } from "./http/app-bundle.js";
+export { negotiateEncoding, type Encoding } from "./http/compression.js";
 
 // Public handler types — apps written in TypeScript import these to type
 // their default exports.
@@ -118,13 +121,13 @@ export type {
   HandlerFn,
   ScopedFetch,
   CommonHandlerArgs,
-} from './types.js';
+} from "./types.js";
 
-export { appendLogs } from './data/log-store.js';
-export type { LogEntry, LogLevel } from './data/log-store.js';
+export { appendLogs } from "./data/log-store.js";
+export type { LogEntry, LogLevel } from "./data/log-store.js";
 
-export { Registry } from './registry/registry.js';
-export { appDataDir, isValidAppId } from './registry/app-paths.js';
+export { Registry } from "./registry/registry.js";
+export { appDataDir, isValidAppId } from "./registry/app-paths.js";
 
 // Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (logs,
 // settings.json, run blobs) after the registry entry is dropped. Hosts that
@@ -134,7 +137,7 @@ export {
   cleanupDeregisteredApp,
   type CleanupOutcome,
   type DeregisterLogger,
-} from './registry/deregister-cleanup.js';
+} from "./registry/deregister-cleanup.js";
 
 // App manifest + declared-handler dispatcher (issue #107, narrowed by
 // #286 phase 2: no `_sql` builtins, no live-schema reads).
@@ -162,7 +165,7 @@ export {
   type HandlerConfirmation,
   type JsonSchema,
   type ManifestValidationCode as AppManifestValidationCode,
-} from './registry/manifest.js';
+} from "./registry/manifest.js";
 export {
   Dispatcher,
   statusForToolError,
@@ -175,12 +178,17 @@ export {
   type ToolErrorResult,
   type ToolSuccessResult,
   type ToolResult,
-} from './handlers/dispatcher.js';
+} from "./handlers/dispatcher.js";
 
 // ctx.vault bridge contract (duaility §12). app-engine defines only the
 // shape; the gateway package implements it against @centraid/vault and
 // injects it via `RuntimeOptions.vaultFor`.
-export type { VaultBridge, VaultCall, VaultCallResult, VaultOp } from './handlers/vault-bridge.js';
+export type {
+  VaultBridge,
+  VaultCall,
+  VaultCallResult,
+  VaultOp,
+} from "./handlers/vault-bridge.js";
 
 // The worker-thread handler runner — exported for host surfaces that run an
 // app-authored module outside the dispatcher (the scenario-seed loader,
@@ -189,7 +197,7 @@ export {
   runHandler,
   type HandlerOutcome,
   type RunHandlerOptions,
-} from './handlers/handler-runner.js';
+} from "./handlers/handler-runner.js";
 
 // Worker-spawn admission control (issue #351 Tier 4 hygiene) — the cap on
 // concurrent app-handler workers `runHandler` enforces by default. Exported
@@ -203,18 +211,22 @@ export {
   WORKER_MAX_CONCURRENT,
   WORKER_MAX_QUEUE,
   WORKER_MAX_QUEUE_WAIT_MS,
-} from './handlers/worker-admission.js';
+} from "./handlers/worker-admission.js";
 
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler
 // already converts them to JSON error responses.)
-export { RegistryError } from './registry/registry.js';
+export { RegistryError } from "./registry/registry.js";
 
 // Per-app change notifications. Subscribed by the SSE endpoint at
 // /centraid/<appId>/_changes; emitted after successful app writes so views
 // re-derive. Hosts can subscribe from outside too —
 // `runtime.changeBus.subscribe(...)`.
-export { ChangeBus, type AppChange, type ChangeListener } from './changes/change-bus.js';
+export {
+  ChangeBus,
+  type AppChange,
+  type ChangeListener,
+} from "./changes/change-bus.js";
 // `_changes` SSE subscriber cap (issue #351 Tier 4 hygiene) — per-appId, not
 // global (a user can legitimately have several windows of the SAME app
 // open). `changesSubscriberCount()` is the accessor a host's health/metrics
@@ -223,7 +235,7 @@ export {
   changesSubscriberCount,
   ChangesSubscriberCap,
   CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP,
-} from './http/changes-sse.js';
+} from "./http/changes-sse.js";
 
 // Conversation-history store (the read/write facade backing the chat surface)
 // + its HTTP route dispatcher. Used in two places:
@@ -245,10 +257,10 @@ export {
   type RecordTurnInput,
   type RecordedTurnReplay,
   type SessionTranscript,
-} from './conversation/history.js';
+} from "./conversation/history.js";
 // Lazy archive rehydration seam (issue #438 wave 3): the gateway supplies the
 // vault's `db.blobs.open` as the reader; the standalone host omits it.
-export type { ArchiveBlobReader } from './conversation/rehydrate.js';
+export type { ArchiveBlobReader } from "./conversation/rehydrate.js";
 // LLM auto-titles (issue #420, Wave 3): a cheap one-shot inference names a
 // new conversation after its first turn. Provider-agnostic (tier token) and
 // fire-and-forget — the gateway owns the "apply only if still derived" guard.
@@ -256,8 +268,8 @@ export {
   generateConversationTitle,
   cleanTitle,
   type GenerateTitleDeps,
-} from './conversation/auto-title.js';
-export { makeConversationRouteHandler } from './http/conversation-routes.js';
+} from "./conversation/auto-title.js";
+export { makeConversationRouteHandler } from "./http/conversation-routes.js";
 // The shared SSE turn driver (stream framing + run-ledger fold) — the
 // per-app `_turn` route and the gateway's vault-assistant route both ride it.
 export {
@@ -268,10 +280,13 @@ export {
   validateTurnAttachmentRefs,
   type DriveTurnOptions,
   type TurnAttachmentRef,
-} from './http/turn-sse.js';
-export { parseAdditionalDirectories, parseWorkspaceKind } from './http/turn-sse-support.js';
+} from "./http/turn-sse.js";
+export {
+  parseAdditionalDirectories,
+  parseWorkspaceKind,
+} from "./http/turn-sse-support.js";
 // Idempotency replay (issue #420): recorded-turn → SSE event sequence.
-export { buildReplayEvents } from './http/turn-replay.js';
+export { buildReplayEvents } from "./http/turn-replay.js";
 // Per-vault turn-concurrency gate (issue #420): bounds concurrently-running
 // turns; over the ceiling the driver writes 429 + Retry-After.
 export {
@@ -279,13 +294,18 @@ export {
   writeTurnBusy,
   DEFAULT_MAX_CONCURRENT_TURNS,
   TURN_RETRY_AFTER_SECONDS,
-} from './http/turn-limiter.js';
+} from "./http/turn-limiter.js";
 
 // Blob content-addressed store for attachment bytes (issue #190). Bytes live
 // at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by
 // sha256; the `attachments` rows in the vault's `journal.db` carry the
 // metadata. GC is refcount-by-hash off `ConversationStore.referencedHashes`.
-export { BlobStore, blobUrl, hashBytes, type PutResult } from './data/blob-store.js';
+export {
+  BlobStore,
+  blobUrl,
+  hashBytes,
+  type PutResult,
+} from "./data/blob-store.js";
 
 // SQLite state — app-engine owns the conversation-ledger BAND of the vault's
 // `journal.db` (#280 shape, transcripts.db folded into the journal file):
@@ -301,7 +321,7 @@ export {
   ensureConversationLedger,
   CONVERSATION_LEDGER_DDL,
   type DatabaseProvider,
-} from './stores/gateway-db.js';
+} from "./stores/gateway-db.js";
 
 // Conversation-band archival engine (issue #438): the bounded, idempotent
 // maintenance pass that seals cold turn-ranges into the vault blob CAS
@@ -320,24 +340,27 @@ export {
   type ArchivedConversationSegment,
   type BlobSink,
   type CustodyProven,
-} from './conversation/archive/index.js';
+} from "./conversation/archive/index.js";
 
 // The per-vault workspace view app-engine operates in (#280): the gateway
 // resolves the ACTIVE vault and injects this shape; stores re-resolve per
 // call so a vault switch lands without reconstruction.
-export type { VaultWorkspace, WorkspaceProvider } from './stores/vault-workspace.js';
+export type {
+  VaultWorkspace,
+  WorkspaceProvider,
+} from "./stores/vault-workspace.js";
 
 // Run-summary DTO — the shape of one `run_summary` row (a VIEW over the
 // ledger tables; the old write-through sink is gone). The type stays at the
 // package root so the `insights/` boundary remains one-way (#151).
-export type { RunSummary } from './conversation/run-summary-sink.js';
+export type { RunSummary } from "./conversation/run-summary-sink.js";
 export {
   compileHydrationPlan,
   hydrationMessagesFromLedger,
   type HydrationMessage,
   type HydrationOptions,
   type HydrationPlan,
-} from './conversation/hydration.js';
+} from "./conversation/hydration.js";
 export {
   RunnerHealthStore,
   RUNNER_HEALTH_POLICIES,
@@ -345,12 +368,12 @@ export {
   type RunnerHealthEntry,
   type RunnerHealthPolicy,
   type RunnerHealthStatus,
-} from './conversation/runner-health.js';
+} from "./conversation/runner-health.js";
 export {
   ProviderEgressConsentStore,
   type ProviderEgressConsentController,
   type ProviderConsentSource,
-} from './conversation/provider-egress-consent.js';
+} from "./conversation/provider-egress-consent.js";
 
 // Device-prefs store + HTTP route dispatcher (a JSON file — #280 killed the
 // identity DB; the wire prefix stays `/_centraid-user` for the desktop client).
@@ -362,7 +385,7 @@ export {
   resolveSubsystemRunner,
   resolveSubsystemRunnerLadder,
   type ModelSubsystem,
-} from './stores/prefs-store.js';
+} from "./stores/prefs-store.js";
 
 // Per-app `settings.json` reader and the settings-merge pipeline that
 // turns layered prefs/settings into the `SettingsInject` payload baked into
@@ -375,9 +398,9 @@ export {
   automationEnabledKey,
   APP_SETTINGS_FILE,
   RUNTIME_KEY_PREFIX,
-} from './settings/app-settings.js';
-export { buildSettingsInject, KNOWN_KEYS } from './settings/settings-merge.js';
-export type { SettingsInject } from './http/static-server.js';
+} from "./settings/app-settings.js";
+export { buildSettingsInject, KNOWN_KEYS } from "./settings/settings-merge.js";
+export type { SettingsInject } from "./http/static-server.js";
 
 // Conversation ledger + ctx.state store (issue #190). The five tables
 // (`conversations`, `turns`, `items`, `attachments`, `automation_state`)
@@ -394,7 +417,7 @@ export {
   type CloseItemInput,
   type InsertAttachmentInput,
   type ListTurnsOptions,
-} from './conversation/store.js';
+} from "./conversation/store.js";
 export {
   AutomationTriggerStore,
   type AutomationTriggerCursor,
@@ -404,8 +427,8 @@ export {
   type TriggerIngressBounds,
   type TriggerIngressGap,
   type PruneIngressResult,
-} from './conversation/trigger-store.js';
-export type { AutomationTurnStreamEvent } from './conversation/automation-turn-stream-event.js';
+} from "./conversation/trigger-store.js";
+export type { AutomationTurnStreamEvent } from "./conversation/automation-turn-stream-event.js";
 export type {
   Conversation,
   Turn,
@@ -416,7 +439,7 @@ export type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './conversation/schema.js';
+} from "./conversation/schema.js";
 
 // Per-model token pricing. Prefer agent/ACP USD when present (`resolveItemCost`);
 // else catalog via `costForUsage`. Unknown → NULL. See #90 / #445 / #514.
@@ -432,11 +455,15 @@ export {
   type ResolvedItemCost,
   type PricingCatalog,
   type PricingEntry,
-} from './model-pricing.js';
+} from "./model-pricing.js";
 
 // Repricing backfill (#445) — bounded, idempotent pass that recomputes frozen
 // `items.cost_usd` from the current catalog and re-derives affected turn totals.
-export { repriceLedger, type RepriceResult, type RepriceOptions } from './conversation/reprice.js';
+export {
+  repriceLedger,
+  type RepriceResult,
+  type RepriceOptions,
+} from "./conversation/reprice.js";
 
 // Insights domain — AnalyticsStore + InsightsStore over the run ledger.
 // Lives in the `insights/` sub-module behind a one-way internal boundary:
@@ -445,6 +472,6 @@ export { repriceLedger, type RepriceResult, type RepriceOptions } from './conver
 // of app-engine never imports back into `insights/`. Folded in from the
 // former `@centraid/analytics` package (#151), kept as its own folder +
 // barrel.
-export * from './insights/index.js';
+export * from "./insights/index.js";
 
 // App scaffolders + clone moved to @centraid/blueprints (#151).

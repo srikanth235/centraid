@@ -29,7 +29,7 @@
 .routeRow + .routeRow {
   border-top: 1px solid var(--line);
 }
-.routeRow[data-default='true'] {
+.routeRow[data-default="true"] {
   background: color-mix(in oklab, var(--ink) 3%, transparent);
   border-bottom: 1px solid var(--line-strong);
 }
@@ -109,7 +109,7 @@
    This is the one genuine delta, passed as an extra class per CSS-CONVENTIONS
    rule 1: an inheriting lane reads its value from the default lane, so mute it
    and let the explicitly-set lanes be what the eye lands on. */
-.selectInherited[data-inherited='true'] {
+.selectInherited[data-inherited="true"] {
   color: var(--ink-3);
 }
 
@@ -124,7 +124,7 @@
   gap: 12px;
   padding: 14px 16px;
 }
-.row[data-unavail='true'] {
+.row[data-unavail="true"] {
   opacity: 0.55;
 }
 /* Identity chip: a rounded square tinted by the agent's accent, holding the
@@ -139,8 +139,13 @@
   width: 30px;
   height: 30px;
   border-radius: var(--r-md);
-  background: color-mix(in oklab, var(--row-accent, var(--accent)) 12%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--row-accent, var(--accent)) 30%, transparent);
+  background: color-mix(
+    in oklab,
+    var(--row-accent, var(--accent)) 12%,
+    transparent
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in oklab, var(--row-accent, var(--accent)) 30%, transparent);
 }
 .glyphTile svg {
   width: 18px;
@@ -148,7 +153,7 @@
 }
 /* Muted when the agent is unavailable: fall off the accent onto neutral ink,
    matching the row's own dimmed state. */
-.glyphTile[data-unavail='true'] {
+.glyphTile[data-unavail="true"] {
   background: color-mix(in oklab, var(--ink) 6%, transparent);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--ink) 12%, transparent);
 }
@@ -192,15 +197,19 @@
   text-transform: uppercase;
   font-family: var(--font-mono);
   color: var(--row-accent, var(--accent));
-  background: color-mix(in oklab, var(--row-accent, var(--accent)) 14%, transparent);
+  background: color-mix(
+    in oklab,
+    var(--row-accent, var(--accent)) 14%,
+    transparent
+  );
   border-radius: var(--r-sm);
   padding: 2px 6px;
 }
-.usedByChip[data-default='true'] {
+.usedByChip[data-default="true"] {
   color: var(--ink-2);
   background: color-mix(in oklab, var(--ink) 10%, transparent);
 }
-.usedByChip[data-warn='true'] {
+.usedByChip[data-warn="true"] {
   color: var(--c-amber);
   background: color-mix(in oklab, var(--c-amber) 16%, transparent);
 }

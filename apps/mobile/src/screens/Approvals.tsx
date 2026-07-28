@@ -1,18 +1,32 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  RefreshControl,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import Button from '../kit/components/Button';
-import Icon from '../kit/components/Icon';
-import { family, radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
+import Button from "../kit/components/Button";
+import Icon from "../kit/components/Icon";
+import {
+  family,
+  radii,
+  spacing,
+  t,
+  useTheme,
+  type ThemeColors,
+} from "../kit/theme";
 import {
   confirmParked,
   GatewayError,
   listParked,
   resolveGatewayBase,
   type ParkedInvocation,
-} from '../lib/gateway';
-import type { SettingsScreenProps } from '../navigation';
+} from "../lib/gateway";
+import type { SettingsScreenProps } from "../navigation";
 
 // Parked vault invocations awaiting the owner's say-so — medium+ acts that
 // apps/agents submitted get parked by the vault's consent gateway. This
@@ -20,38 +34,40 @@ import type { SettingsScreenProps } from '../navigation';
 // lets the owner approve or deny each one.
 
 type ApprovalsState =
-  | { kind: 'loading' }
-  | { kind: 'no-gateway' }
-  | { kind: 'ready'; rows: ParkedInvocation[] }
-  | { kind: 'error'; message: string };
+  | { kind: "loading" }
+  | { kind: "no-gateway" }
+  | { kind: "ready"; rows: ParkedInvocation[] }
+  | { kind: "error"; message: string };
 
 // The loader lives outside the component: it closes over nothing but the
 // (stable) state setter, so it needs no `useCallback` identity dance and the
 // mount effect below reads as a plain async kick-off.
-async function loadApprovals(setState: (next: ApprovalsState) => void): Promise<void> {
+async function loadApprovals(
+  setState: (next: ApprovalsState) => void
+): Promise<void> {
   try {
     const base = await resolveGatewayBase();
     if (!base) {
-      setState({ kind: 'no-gateway' });
+      setState({ kind: "no-gateway" });
       return;
     }
     const rows = await listParked();
-    setState({ kind: 'ready', rows });
+    setState({ kind: "ready", rows });
   } catch (err) {
     const message =
       err instanceof GatewayError || err instanceof Error
         ? err.message
-        : 'Could not load approvals.';
-    setState({ kind: 'error', message });
+        : "Could not load approvals.";
+    setState({ kind: "error", message });
   }
 }
 
 export default function ApprovalsScreen({
   navigation,
-}: SettingsScreenProps<'Approvals'>): React.JSX.Element {
+}: SettingsScreenProps<"Approvals">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [state, setState] = useState<ApprovalsState>({ kind: 'loading' });
+  const [state, setState] = useState<ApprovalsState>({ kind: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
 
@@ -66,25 +82,30 @@ export default function ApprovalsScreen({
     setRefreshing(false);
   }, []);
 
-  const decide = useCallback(async (invocationId: string, approve: boolean): Promise<void> => {
-    setActionError(undefined);
-    try {
-      await confirmParked(invocationId, approve);
-      setState((prev) =>
-        prev.kind === 'ready'
-          ? {
-              kind: 'ready',
-              rows: prev.rows.filter((r) => r.invocationId !== invocationId),
-            }
-          : prev,
-      );
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Could not record the decision.');
-    }
-  }, []);
+  const decide = useCallback(
+    async (invocationId: string, approve: boolean): Promise<void> => {
+      setActionError(undefined);
+      try {
+        await confirmParked(invocationId, approve);
+        setState((prev) =>
+          prev.kind === "ready"
+            ? {
+                kind: "ready",
+                rows: prev.rows.filter((r) => r.invocationId !== invocationId),
+              }
+            : prev
+        );
+      } catch (err) {
+        setActionError(
+          err instanceof Error ? err.message : "Could not record the decision."
+        );
+      }
+    },
+    []
+  );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.bar}>
         <Pressable
           onPress={() => navigation.goBack()}
@@ -92,7 +113,12 @@ export default function ApprovalsScreen({
           accessibilityLabel="Back"
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
         >
-          <Icon name="ArrowLeft" size={20} color={colors.ink} strokeWidth={1.75} />
+          <Icon
+            name="ArrowLeft"
+            size={20}
+            color={colors.ink}
+            strokeWidth={1.75}
+          />
         </Pressable>
         <Text style={styles.title}>Approvals</Text>
         <View style={styles.barSpacer} />
@@ -108,8 +134,15 @@ export default function ApprovalsScreen({
           />
         }
       >
-        {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
-        {renderBody(state, decide, () => navigation.navigate('Settings'), styles)}
+        {actionError ? (
+          <Text style={styles.actionError}>{actionError}</Text>
+        ) : null}
+        {renderBody(
+          state,
+          decide,
+          () => navigation.navigate("Settings"),
+          styles
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -119,23 +152,30 @@ function renderBody(
   state: ApprovalsState,
   decide: (invocationId: string, approve: boolean) => Promise<void>,
   openSettings: () => void,
-  styles: ReturnType<typeof makeStyles>,
+  styles: ReturnType<typeof makeStyles>
 ): React.JSX.Element {
-  if (state.kind === 'loading') {
+  if (state.kind === "loading") {
     return <Text style={styles.emptyCopy}>Loading…</Text>;
   }
-  if (state.kind === 'no-gateway') {
+  if (state.kind === "no-gateway") {
     return (
       <View>
         <Text style={styles.emptyTitle}>Not connected.</Text>
-        <Text style={styles.emptyCopy}>Pair with your desktop to review pending approvals.</Text>
+        <Text style={styles.emptyCopy}>
+          Pair with your desktop to review pending approvals.
+        </Text>
         <View style={styles.emptyAction}>
-          <Button label="Open Settings" icon="Settings" variant="soft" onPress={openSettings} />
+          <Button
+            label="Open Settings"
+            icon="Settings"
+            variant="soft"
+            onPress={openSettings}
+          />
         </View>
       </View>
     );
   }
-  if (state.kind === 'error') {
+  if (state.kind === "error") {
     return (
       <View>
         <Text style={styles.emptyTitle}>Could not load approvals.</Text>
@@ -150,7 +190,12 @@ function renderBody(
   return (
     <View style={styles.list}>
       {state.rows.map((row) => (
-        <ParkedCard key={row.invocationId} row={row} decide={decide} styles={styles} />
+        <ParkedCard
+          key={row.invocationId}
+          row={row}
+          decide={decide}
+          styles={styles}
+        />
       ))}
     </View>
   );
@@ -209,30 +254,30 @@ function formatWhen(iso: string): string {
 function summarizeInput(input: Record<string, unknown>): string {
   try {
     const json = JSON.stringify(input);
-    if (!json || json === '{}') return 'No payload.';
+    if (!json || json === "{}") return "No payload.";
     return json.length > 200 ? `${json.slice(0, 200)}…` : json;
   } catch {
-    return 'Payload unavailable.';
+    return "Payload unavailable.";
   }
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     actionError: {
-      ...t('small'),
+      ...t("small"),
       color: colors.danger,
       marginBottom: spacing[3],
     },
     backBtn: {
-      alignItems: 'center',
+      alignItems: "center",
       height: 36,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 36,
     },
     bar: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
       paddingHorizontal: 14,
       paddingVertical: spacing[2],
     },
@@ -246,24 +291,24 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing[4],
     },
     cardActions: {
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: spacing[3],
       marginTop: spacing[3],
     },
     cardBtn: { flex: 1 },
-    cardCaller: { ...t('small'), color: colors.ink3, marginTop: 2 },
-    cardCommand: { ...t('bodyStrong'), color: colors.ink },
+    cardCaller: { ...t("small"), color: colors.ink3, marginTop: 2 },
+    cardCommand: { ...t("bodyStrong"), color: colors.ink },
     cardPayload: {
-      ...t('small'),
+      ...t("small"),
       color: colors.ink2,
       fontFamily: family.monoRegular,
       marginTop: spacing[2],
     },
-    emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
-    emptyCopy: { ...t('body'), color: colors.ink2 },
-    emptyHint: { ...t('small'), color: colors.ink3, marginTop: spacing[2] },
-    emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+    emptyAction: { alignSelf: "stretch", marginTop: spacing[4] },
+    emptyCopy: { ...t("body"), color: colors.ink2 },
+    emptyHint: { ...t("small"), color: colors.ink3, marginTop: spacing[2] },
+    emptyTitle: { ...t("title"), color: colors.ink, marginBottom: spacing[2] },
     list: { gap: spacing[3] },
     safe: { backgroundColor: colors.bg, flex: 1 },
-    title: { ...t('title'), color: colors.ink },
+    title: { ...t("title"), color: colors.ink },
   });

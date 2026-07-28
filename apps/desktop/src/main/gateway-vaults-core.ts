@@ -18,33 +18,40 @@ export interface GatewayVaultEntry {
 
 export type ListGatewayVaultsResult =
   | { ok: true; vaults: GatewayVaultEntry[] }
-  | { ok: false; error: 'unreachable' | 'auth_failed' | 'bad_response' };
+  | { ok: false; error: "unreachable" | "auth_failed" | "bad_response" };
 
 /** Fold a raw HTTP status + parsed JSON body into a `ListGatewayVaultsResult`. */
-export function foldVaultsResponse(status: number, body: unknown): ListGatewayVaultsResult {
-  if (status === 401 || status === 403) return { ok: false, error: 'auth_failed' };
-  if (status !== 200) return { ok: false, error: 'unreachable' };
-  if (!body || typeof body !== 'object') return { ok: false, error: 'bad_response' };
+export function foldVaultsResponse(
+  status: number,
+  body: unknown
+): ListGatewayVaultsResult {
+  if (status === 401 || status === 403)
+    return { ok: false, error: "auth_failed" };
+  if (status !== 200) return { ok: false, error: "unreachable" };
+  if (!body || typeof body !== "object")
+    return { ok: false, error: "bad_response" };
   const raw = (body as Record<string, unknown>).vaults;
-  if (!Array.isArray(raw)) return { ok: false, error: 'bad_response' };
+  if (!Array.isArray(raw)) return { ok: false, error: "bad_response" };
   const vaults: GatewayVaultEntry[] = [];
   for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     const r = entry as Record<string, unknown>;
-    if (typeof r.vaultId !== 'string' || typeof r.name !== 'string') continue;
+    if (typeof r.vaultId !== "string" || typeof r.name !== "string") continue;
     vaults.push({
       vaultId: r.vaultId,
       name: r.name,
-      ...(typeof r.ownerPartyId === 'string' ? { ownerPartyId: r.ownerPartyId } : {}),
-      ...(typeof r.color === 'string' ? { color: r.color } : {}),
-      ...(typeof r.icon === 'string' ? { icon: r.icon } : {}),
-      ...(typeof r.blurb === 'string' ? { blurb: r.blurb } : {}),
+      ...(typeof r.ownerPartyId === "string"
+        ? { ownerPartyId: r.ownerPartyId }
+        : {}),
+      ...(typeof r.color === "string" ? { color: r.color } : {}),
+      ...(typeof r.icon === "string" ? { icon: r.icon } : {}),
+      ...(typeof r.blurb === "string" ? { blurb: r.blurb } : {}),
     });
   }
   return { ok: true, vaults };
 }
 
-const VAULTS_PATH = '/centraid/_vault/vaults';
+const VAULTS_PATH = "/centraid/_vault/vaults";
 const DEFAULT_TIMEOUT_MS = 3000;
 
 /**
@@ -57,7 +64,7 @@ export async function fetchGatewayVaults(
   baseUrl: string,
   token: string | undefined,
   fetchImpl: typeof fetch = fetch,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<ListGatewayVaultsResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -69,7 +76,7 @@ export async function fetchGatewayVaults(
         signal: controller.signal,
       });
     } catch {
-      return { ok: false, error: 'unreachable' };
+      return { ok: false, error: "unreachable" };
     }
     let body: unknown;
     try {

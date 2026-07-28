@@ -8,27 +8,27 @@
  * reads: owner steering bubble → “Revised instructions” → compile turn.
  */
 
-import { randomUUID } from 'node:crypto';
-import path from 'node:path';
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 
 import {
   resolveItemCost,
   type RunnerPrefs,
   type RunTurnFn,
   type TurnStreamEvent,
-} from '@centraid/app-engine';
-import type { Row as AutomationRow } from '@centraid/automation';
+} from "@centraid/app-engine";
+import type { Row as AutomationRow } from "@centraid/automation";
 
-import { journalConversationStore } from '../journal-stores.js';
+import { journalConversationStore } from "../journal-stores.js";
 
 const REWRITE_SYSTEM = [
-  'Rewrite one automation instruction document.',
-  'Return only the complete revised instruction text, with no preface, quotes, or code fence.',
-  'Honor the steering request while preserving all unaffected behavior, schedules, connector-account intent, and safety constraints.',
-  'Do not invent permissions or credentials.',
-].join(' ');
+  "Rewrite one automation instruction document.",
+  "Return only the complete revised instruction text, with no preface, quotes, or code fence.",
+  "Honor the steering request while preserving all unaffected behavior, schedules, connector-account intent, and safety constraints.",
+  "Do not invent permissions or credentials.",
+].join(" ");
 
-type UsageEvent = Extract<TurnStreamEvent, { type: 'usage' }>;
+type UsageEvent = Extract<TurnStreamEvent, { type: "usage" }>;
 
 function rewriteUsageFields(usage: UsageEvent | undefined): {
   model?: string;
@@ -38,7 +38,7 @@ function rewriteUsageFields(usage: UsageEvent | undefined): {
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
   costUsd?: number;
-  costSource?: 'agent' | 'estimated';
+  costSource?: "agent" | "estimated";
 } {
   if (!usage) return {};
   const cost =
@@ -54,15 +54,23 @@ function rewriteUsageFields(usage: UsageEvent | undefined): {
         })
       : {
           costUsd: usage.costUsd,
-          costSource: usage.costSource ?? ('agent' as const),
+          costSource: usage.costSource ?? ("agent" as const),
         };
   return {
     ...(usage.model === undefined ? {} : { model: usage.model }),
     ...(usage.provider === undefined ? {} : { provider: usage.provider }),
-    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
-    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
-    ...(usage.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }),
-    ...(usage.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: usage.cacheWriteTokens }),
+    ...(usage.inputTokens === undefined
+      ? {}
+      : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined
+      ? {}
+      : { outputTokens: usage.outputTokens }),
+    ...(usage.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: usage.cacheReadTokens }),
+    ...(usage.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: usage.cacheWriteTokens }),
     ...(cost.costUsd === undefined ? {} : { costUsd: cost.costUsd }),
     ...(cost.costSource === undefined ? {} : { costSource: cost.costSource }),
   };
@@ -70,20 +78,22 @@ function rewriteUsageFields(usage: UsageEvent | undefined): {
 
 export function rewriteWorkOrder(current: string, steering: string): string {
   return [
-    'Current standing instructions:',
+    "Current standing instructions:",
     current,
-    '',
-    'Steering request:',
+    "",
+    "Steering request:",
     steering,
-    '',
-    'Complete revised instructions:',
-  ].join('\n');
+    "",
+    "Complete revised instructions:",
+  ].join("\n");
 }
 
 export function cleanRewrittenInstructions(raw: string): string | undefined {
   let text = raw.trim();
-  text = text.replace(/^```(?:markdown|md|text)?\s*/iu, '').replace(/\s*```$/iu, '');
-  text = text.replace(/^revised instructions\s*:\s*/iu, '').trim();
+  text = text
+    .replace(/^```(?:markdown|md|text)?\s*/iu, "")
+    .replace(/\s*```$/iu, "");
+  text = text.replace(/^revised instructions\s*:\s*/iu, "").trim();
   return text || undefined;
 }
 
@@ -106,14 +116,14 @@ export interface RewriteAutomationInstructionsResult {
 }
 
 export async function rewriteAutomationInstructions(
-  opts: RewriteAutomationInstructionsOptions,
+  opts: RewriteAutomationInstructionsOptions
 ): Promise<RewriteAutomationInstructionsResult> {
   const store = journalConversationStore(opts.journalDbFile);
   const conversationId = store.ensureAutomationConversation(
     opts.row.ref,
     opts.row.ownerApp,
     opts.row.name,
-    opts.runnerPrefs.kind,
+    opts.runnerPrefs.kind
   );
   const revisionTurnId =
     opts.revisionTurnId ?? `${opts.row.ref}:revise:${randomUUID().slice(0, 8)}`;
@@ -121,59 +131,64 @@ export async function rewriteAutomationInstructions(
   store.insertTurn({
     turnId: revisionTurnId,
     conversationId,
-    triggerKind: 'interactive',
-    triggerOrigin: 'manual',
-    note: 'Revising instructions',
+    triggerKind: "interactive",
+    triggerOrigin: "manual",
+    note: "Revising instructions",
     startedAt,
   });
   store.insertMessageIn({
     turnId: revisionTurnId,
-    role: 'user',
+    role: "user",
     text: opts.steering,
     startedAt,
   });
 
-  let text = '';
+  let text = "";
   let error: string | undefined;
   let rawJson: string | undefined;
   let stopReason: string | undefined;
   let usage: UsageEvent | undefined;
   const onEvent = (event: TurnStreamEvent): void => {
-    if (event.type === 'assistant.delta') text += event.delta;
-    if (event.type === 'final') {
+    if (event.type === "assistant.delta") text += event.delta;
+    if (event.type === "final") {
       text ||= event.text;
       rawJson = event.rawJson;
       stopReason = event.stopReason;
     }
-    if (event.type === 'error') {
+    if (event.type === "error") {
       error = event.message;
       rawJson = event.rawJson;
       stopReason = event.stopReason;
     }
-    if (event.type === 'aborted') {
-      error = 'Instruction rewrite aborted.';
-      stopReason = 'cancelled';
+    if (event.type === "aborted") {
+      error = "Instruction rewrite aborted.";
+      stopReason = "cancelled";
     }
-    if (event.type === 'usage') usage = event;
+    if (event.type === "usage") usage = event;
   };
 
   try {
-    const cwd = path.join(opts.runnerSessionDir, 'automation-rewrites', randomUUID());
+    const cwd = path.join(
+      opts.runnerSessionDir,
+      "automation-rewrites",
+      randomUUID()
+    );
     await opts.runTurn(
       {
         cwd,
         message: rewriteWorkOrder(opts.row.manifest.prompt, opts.steering),
         extraSystemPrompt: REWRITE_SYSTEM,
         ...(opts.model ? { model: opts.model } : {}),
-        permissionPolicy: 'deny',
+        permissionPolicy: "deny",
         abortSignal: new AbortController().signal,
         onEvent,
       },
-      { prefs: opts.runnerPrefs },
+      { prefs: opts.runnerPrefs }
     );
     if (error) throw new Error(error);
     const prompt = cleanRewrittenInstructions(text);
-    if (!prompt) throw new Error('The instruction rewriter returned an empty result.');
+    if (!prompt)
+      throw new Error("The instruction rewriter returned an empty result.");
     await opts.persistPrompt(prompt);
 
     const endedAt = Date.now();
@@ -181,9 +196,9 @@ export async function rewriteAutomationInstructions(
       itemId: randomUUID(),
       turnId: revisionTurnId,
       ordinal: 1,
-      kind: 'step',
+      kind: "step",
       outputJson: JSON.stringify({
-        text: 'Revised instructions',
+        text: "Revised instructions",
         ...(stopReason === undefined ? {} : { stopReason }),
       }),
       ...(rawJson === undefined ? {} : { rawJson }),
@@ -197,7 +212,7 @@ export async function rewriteAutomationInstructions(
       turnId: revisionTurnId,
       endedAt,
       ok: true,
-      summary: 'Revised instructions',
+      summary: "Revised instructions",
       outputJson: JSON.stringify({
         prompt,
         ...(stopReason === undefined ? {} : { stopReason }),
@@ -211,7 +226,7 @@ export async function rewriteAutomationInstructions(
       itemId: randomUUID(),
       turnId: revisionTurnId,
       ordinal: 1,
-      kind: 'step',
+      kind: "step",
       outputJson: JSON.stringify({
         error: message,
         ...(text ? { text } : {}),
@@ -230,7 +245,7 @@ export async function rewriteAutomationInstructions(
       endedAt,
       ok: false,
       error: message,
-      summary: 'Instruction revision failed',
+      summary: "Instruction revision failed",
       ...(stopReason === undefined
         ? {}
         : { outputJson: JSON.stringify({ stopReason, error: message }) }),

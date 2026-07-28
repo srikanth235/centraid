@@ -9,9 +9,9 @@
 // Both phases no-op on a fresh vault (nothing is 90d idle), so a gateway that
 // never served conversations is unaffected.
 
-import { pruneCustodyProven, reclaimJournalPages } from './prune.js';
-import { archiveRange } from './segment.js';
-import { selectEligibleRanges } from './selector.js';
+import { pruneCustodyProven, reclaimJournalPages } from "./prune.js";
+import { archiveRange } from "./segment.js";
+import { selectEligibleRanges } from "./selector.js";
 import {
   DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS,
   DEFAULT_MAX_CONVERSATIONS_PER_RUN,
@@ -22,20 +22,25 @@ import {
   type ConversationArchivalOptions,
   type ConversationArchivalResult,
   type Row,
-} from './types.js';
+} from "./types.js";
 
 export function runConversationArchival(
   deps: ConversationArchivalDeps,
-  options: ConversationArchivalOptions = {},
+  options: ConversationArchivalOptions = {}
 ): ConversationArchivalResult {
   const { journal, blobSink, custodyProven } = deps;
-  const windowDays = options.windowDays ?? DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS;
+  const windowDays =
+    options.windowDays ?? DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS;
   if (windowDays <= 0)
-    throw new Error('conversation archival window must be a positive number of days');
+    throw new Error(
+      "conversation archival window must be a positive number of days"
+    );
   const nowMs = options.nowMs ?? Date.now();
   const cutoffMs = windowCutoffMs(nowMs, windowDays);
-  const maxConversations = options.maxConversations ?? DEFAULT_MAX_CONVERSATIONS_PER_RUN;
-  const maxPruneSegments = options.maxPruneSegments ?? DEFAULT_MAX_PRUNE_SEGMENTS_PER_RUN;
+  const maxConversations =
+    options.maxConversations ?? DEFAULT_MAX_CONVERSATIONS_PER_RUN;
+  const maxPruneSegments =
+    options.maxPruneSegments ?? DEFAULT_MAX_PRUNE_SEGMENTS_PER_RUN;
 
   // ── Phase A — archive (never deletes) ────────────────────────────────
   const ranges = selectEligibleRanges(journal, cutoffMs, maxConversations);
@@ -54,10 +59,10 @@ export function runConversationArchival(
     // Segment bytes ingest through the sink (idempotent by content address)
     // before the index/digest writes; both writes share one transaction so a
     // crash leaves neither a half-index nor a half-digest.
-    journal.exec('BEGIN IMMEDIATE');
+    journal.exec("BEGIN IMMEDIATE");
     try {
       const out = archiveRange(journal, blobSink, conv, range, nowMs);
-      journal.exec('COMMIT');
+      journal.exec("COMMIT");
       archived.push({
         conversationId: range.conversationId,
         seqFrom: range.seqFrom,
@@ -68,13 +73,18 @@ export function runConversationArchival(
       });
       turnsArchived += out.turnCount;
     } catch (err) {
-      journal.exec('ROLLBACK');
+      journal.exec("ROLLBACK");
       throw err;
     }
   }
 
   // ── Phase B — custody-gated prune (separate phase, same call) ─────────
-  const pruned = pruneCustodyProven(journal, custodyProven, nowMs, maxPruneSegments);
+  const pruned = pruneCustodyProven(
+    journal,
+    custodyProven,
+    nowMs,
+    maxPruneSegments
+  );
   const reclaim =
     pruned.segmentsPruned > 0
       ? reclaimJournalPages(journal)
@@ -91,8 +101,10 @@ export function runConversationArchival(
 }
 
 function reclaimModeOf(
-  journal: ConversationArchivalDeps['journal'],
-): 'incremental' | 'full' | 'none' {
-  const av = (journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum;
-  return av === 2 ? 'incremental' : av === 1 ? 'full' : 'none';
+  journal: ConversationArchivalDeps["journal"]
+): "incremental" | "full" | "none" {
+  const av = (
+    journal.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
+  ).auto_vacuum;
+  return av === 2 ? "incremental" : av === 1 ? "full" : "none";
 }

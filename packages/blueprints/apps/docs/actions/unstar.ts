@@ -8,18 +8,18 @@ export default async function unstar({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'core.unstar_document',
+      command: "core.unstar_document",
       input: {
-        document_id: String(input.document_id ?? ''),
+        document_id: String(input.document_id ?? ""),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

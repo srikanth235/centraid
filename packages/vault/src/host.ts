@@ -4,10 +4,10 @@
 // state of its own. Identity is v0 key-equality, so the host (which owns the
 // database files) recovers credentials by reading the enrolled rows back.
 
-import { enrollAgent, enrollApp, type BootstrapResult } from './bootstrap.js';
-import type { VaultDb } from './db.js';
-import type { FilterClause, Risk } from './gateway/types.js';
-import { nowIso } from './ids.js';
+import { enrollAgent, enrollApp, type BootstrapResult } from "./bootstrap.js";
+import type { VaultDb } from "./db.js";
+import type { FilterClause, Risk } from "./gateway/types.js";
+import { nowIso } from "./ids.js";
 
 export interface HostBootstrap extends BootstrapResult {
   /** true when this call created the vault; false when it recovered one. */
@@ -22,22 +22,32 @@ export interface HostBootstrap extends BootstrapResult {
  */
 export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
   const vaultRow = db.vault
-    .prepare('SELECT vault_id, owner_party_id, display_name FROM core_vault LIMIT 1')
-    .get() as { vault_id: string; owner_party_id: string; display_name: string } | undefined;
+    .prepare(
+      "SELECT vault_id, owner_party_id, display_name FROM core_vault LIMIT 1"
+    )
+    .get() as
+    | { vault_id: string; owner_party_id: string; display_name: string }
+    | undefined;
   if (!vaultRow) return undefined;
 
   const device = db.vault
     .prepare(
       `SELECT device_id, public_key FROM consent_device
-        WHERE owner_party_id = ? AND trust = 'full' ORDER BY enrolled_at LIMIT 1`,
+        WHERE owner_party_id = ? AND trust = 'full' ORDER BY enrolled_at LIMIT 1`
     )
-    .get(vaultRow.owner_party_id) as { device_id: string; public_key: string } | undefined;
+    .get(vaultRow.owner_party_id) as
+    | { device_id: string; public_key: string }
+    | undefined;
   if (!device) {
-    throw new Error('vault exists but has no full-trust owner device to recover');
+    throw new Error(
+      "vault exists but has no full-trust owner device to recover"
+    );
   }
   const concepts: Record<string, string> = {};
   const rows = db.vault
-    .prepare('SELECT notation, concept_id FROM core_concept ORDER BY concept_id')
+    .prepare(
+      "SELECT notation, concept_id FROM core_concept ORDER BY concept_id"
+    )
     .all() as { notation: string; concept_id: string }[];
   for (const row of rows) concepts[row.notation] ??= row.concept_id;
   return {
@@ -53,7 +63,7 @@ export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
 
 /** Rename the vault (owner act on `core_vault.display_name`). */
 export function renameVault(db: VaultDb, displayName: string): void {
-  db.vault.prepare('UPDATE core_vault SET display_name = ?').run(displayName);
+  db.vault.prepare("UPDATE core_vault SET display_name = ?").run(displayName);
 }
 
 /**
@@ -73,13 +83,15 @@ export interface VaultPresentation {
 
 /** Read the vault's settings bag (`core_vault.settings_json`), `{}` when unset. */
 export function readVaultSettings(db: VaultDb): Record<string, unknown> {
-  const row = db.vault.prepare('SELECT settings_json FROM core_vault LIMIT 1').get() as
-    | { settings_json: string | null }
-    | undefined;
+  const row = db.vault
+    .prepare("SELECT settings_json FROM core_vault LIMIT 1")
+    .get() as { settings_json: string | null } | undefined;
   if (!row?.settings_json) return {};
   try {
     const parsed = JSON.parse(row.settings_json) as unknown;
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+    return parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
   } catch {
@@ -90,12 +102,12 @@ export function readVaultSettings(db: VaultDb): Record<string, unknown> {
 /** The vault's presentation fields out of the settings bag. */
 export function readVaultPresentation(db: VaultDb): VaultPresentation {
   const bag = readVaultSettings(db).presentation;
-  if (bag === null || typeof bag !== 'object' || Array.isArray(bag)) return {};
+  if (bag === null || typeof bag !== "object" || Array.isArray(bag)) return {};
   const p = bag as Record<string, unknown>;
   return {
-    ...(typeof p.color === 'string' ? { color: p.color } : {}),
-    ...(typeof p.icon === 'string' ? { icon: p.icon } : {}),
-    ...(typeof p.blurb === 'string' ? { blurb: p.blurb } : {}),
+    ...(typeof p.color === "string" ? { color: p.color } : {}),
+    ...(typeof p.icon === "string" ? { icon: p.icon } : {}),
+    ...(typeof p.blurb === "string" ? { blurb: p.blurb } : {}),
   };
 }
 
@@ -105,18 +117,20 @@ export function readVaultPresentation(db: VaultDb): VaultPresentation {
  */
 export function updateVaultPresentation(
   db: VaultDb,
-  patch: Partial<Record<keyof VaultPresentation, string | null>>,
+  patch: Partial<Record<keyof VaultPresentation, string | null>>
 ): VaultPresentation {
   const settings = readVaultSettings(db);
   const current = readVaultPresentation(db) as Record<string, unknown>;
-  for (const key of ['color', 'icon', 'blurb'] as const) {
+  for (const key of ["color", "icon", "blurb"] as const) {
     if (!(key in patch)) continue;
     const v = patch[key];
-    if (v === null || v === undefined || v === '') delete current[key];
+    if (v === null || v === undefined || v === "") delete current[key];
     else current[key] = v;
   }
   settings.presentation = current;
-  db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
+  db.vault
+    .prepare("UPDATE core_vault SET settings_json = ?")
+    .run(JSON.stringify(settings));
   return current as VaultPresentation;
 }
 
@@ -131,18 +145,18 @@ export function updateBlobStoreSettings(
   db: VaultDb,
   patch: {
     blob_store?: Record<string, unknown> | null;
-    media_location?: 'keep' | 'strip' | null;
-  },
+    media_location?: "keep" | "strip" | null;
+  }
 ): Record<string, unknown> {
   const settings = readVaultSettings(db);
-  if ('blob_store' in patch) {
+  if ("blob_store" in patch) {
     if (patch.blob_store === null) delete settings.blob_store;
     else settings.blob_store = patch.blob_store;
   }
-  if ('media_location' in patch) {
+  if ("media_location" in patch) {
     const media =
       settings.media !== null &&
-      typeof settings.media === 'object' &&
+      typeof settings.media === "object" &&
       !Array.isArray(settings.media)
         ? (settings.media as Record<string, unknown>)
         : {};
@@ -150,19 +164,21 @@ export function updateBlobStoreSettings(
     else media.location = patch.media_location;
     settings.media = media;
   }
-  db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
+  db.vault
+    .prepare("UPDATE core_vault SET settings_json = ?")
+    .run(JSON.stringify(settings));
   return settings;
 }
 
 /** Enrichment tier per domain (issue #299 §2). Absent means `local`. */
-export type EnrichTier = 'off' | 'local' | 'model';
+export type EnrichTier = "off" | "local" | "model";
 
 export interface EnrichSettings {
   photos: EnrichTier;
   docs: EnrichTier;
 }
 
-const ENRICH_TIERS: readonly EnrichTier[] = ['off', 'local', 'model'];
+const ENRICH_TIERS: readonly EnrichTier[] = ["off", "local", "model"];
 
 /**
  * The owner's enrichment policy out of the settings bag. `local` is the
@@ -174,47 +190,52 @@ const ENRICH_TIERS: readonly EnrichTier[] = ['off', 'local', 'model'];
 export function readEnrichSettings(db: VaultDb): EnrichSettings {
   const bag = readVaultSettings(db).enrich;
   const e =
-    bag !== null && typeof bag === 'object' && !Array.isArray(bag)
+    bag !== null && typeof bag === "object" && !Array.isArray(bag)
       ? (bag as Record<string, unknown>)
       : {};
   const tier = (v: unknown): EnrichTier =>
-    typeof v === 'string' && (ENRICH_TIERS as readonly string[]).includes(v)
+    typeof v === "string" && (ENRICH_TIERS as readonly string[]).includes(v)
       ? (v as EnrichTier)
-      : 'local';
+      : "local";
   return { photos: tier(e.photos), docs: tier(e.docs) };
 }
 
 /** Merge an enrichment-policy patch into the settings bag (owner act). */
 export function updateEnrichSettings(
   db: VaultDb,
-  patch: Partial<Record<'photos' | 'docs', EnrichTier | null>>,
+  patch: Partial<Record<"photos" | "docs", EnrichTier | null>>
 ): EnrichSettings {
   const settings = readVaultSettings(db);
   const current =
     settings.enrich !== null &&
-    typeof settings.enrich === 'object' &&
+    typeof settings.enrich === "object" &&
     !Array.isArray(settings.enrich)
       ? (settings.enrich as Record<string, unknown>)
       : {};
-  for (const key of ['photos', 'docs'] as const) {
+  for (const key of ["photos", "docs"] as const) {
     if (!(key in patch)) continue;
     const v = patch[key];
     if (v === null || v === undefined) delete current[key];
     else if ((ENRICH_TIERS as readonly string[]).includes(v)) current[key] = v;
-    else throw new Error(`enrich.${key} must be one of ${ENRICH_TIERS.join(', ')}`);
+    else
+      throw new Error(
+        `enrich.${key} must be one of ${ENRICH_TIERS.join(", ")}`
+      );
   }
   settings.enrich = current;
-  db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
+  db.vault
+    .prepare("UPDATE core_vault SET settings_json = ?")
+    .run(JSON.stringify(settings));
   const resolved = readEnrichSettings(db);
   // Mirror into `enrich_policy` (issue #352 phase 3/4): the JSON settings bag
   // stays owner-only, but apps read this one column of it through the normal
   // consent-checked table read — see schema/enrich.ts's header.
   const now = nowIso();
-  for (const domain of ['photos', 'docs'] as const) {
+  for (const domain of ["photos", "docs"] as const) {
     db.vault
       .prepare(
         `INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, ?, ?)
-         ON CONFLICT (domain) DO UPDATE SET tier = excluded.tier, updated_at = excluded.updated_at`,
+         ON CONFLICT (domain) DO UPDATE SET tier = excluded.tier, updated_at = excluded.updated_at`
       )
       .run(domain, resolved[domain], now);
   }
@@ -246,15 +267,18 @@ export interface EnrolledApp {
 export function humanizeSlug(slug: string): string {
   const words = slug.split(/[-_]+/u).filter((w) => w.length > 0);
   if (words.length === 0) return slug;
-  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
 /** Find an active enrolled app by its host-side name (the Centraid app id). */
-export function lookupAppByName(db: VaultDb, name: string): EnrolledApp | undefined {
+export function lookupAppByName(
+  db: VaultDb,
+  name: string
+): EnrolledApp | undefined {
   const row = db.vault
     .prepare(
       `SELECT app_id, name, signing_key, status, risk_ceiling FROM consent_app
-        WHERE name = ? AND status = 'active' ORDER BY installed_at LIMIT 1`,
+        WHERE name = ? AND status = 'active' ORDER BY installed_at LIMIT 1`
     )
     .get(name) as
     | {
@@ -289,10 +313,10 @@ export function ensureAppEnrolled(
   db: VaultDb,
   name: string,
   options?: {
-    origin?: 'installed' | 'generated';
+    origin?: "installed" | "generated";
     riskCeiling?: Risk;
     displayName?: string;
-  },
+  }
 ): EnrolledApp & { created: boolean } {
   const resolvedDisplayName = options?.displayName ?? humanizeSlug(name);
   const existing = lookupAppByName(db, name);
@@ -300,23 +324,23 @@ export function ensureAppEnrolled(
     db.vault
       .prepare(
         `UPDATE consent_app SET display_name = ?
-          WHERE app_id = ? AND (display_name IS NULL OR display_name != ?)`,
+          WHERE app_id = ? AND (display_name IS NULL OR display_name != ?)`
       )
       .run(resolvedDisplayName, existing.appId, resolvedDisplayName);
     return { ...existing, created: false };
   }
   const enrolled = enrollApp(db, {
     name,
-    origin: options?.origin ?? 'generated',
-    riskCeiling: options?.riskCeiling ?? 'low',
+    origin: options?.origin ?? "generated",
+    riskCeiling: options?.riskCeiling ?? "low",
     displayName: resolvedDisplayName,
   });
   return {
     appId: enrolled.appId,
     signingKey: enrolled.signingKey,
     name,
-    status: 'active',
-    riskCeiling: options?.riskCeiling ?? 'low',
+    status: "active",
+    riskCeiling: options?.riskCeiling ?? "low",
     created: true,
   };
 }
@@ -338,15 +362,15 @@ export interface GrantSummary {
 /** One query, two grantee planes: apps match on app_id, agents on their party. */
 function grantSummariesBy(
   db: VaultDb,
-  granteeColumn: 'app_id' | 'grantee_party_id',
-  granteeId: string,
+  granteeColumn: "app_id" | "grantee_party_id",
+  granteeId: string
 ): GrantSummary[] {
   const grants = db.vault
     .prepare(
       `SELECT g.grant_id, g.purpose_concept_id, g.expires_at, c.notation
          FROM consent_access_grant g
          LEFT JOIN core_concept c ON c.concept_id = g.purpose_concept_id
-        WHERE g.${granteeColumn} = ? AND g.status = 'active' ORDER BY g.granted_at`,
+        WHERE g.${granteeColumn} = ? AND g.status = 'active' ORDER BY g.granted_at`
     )
     .all(granteeId) as {
     grant_id: string;
@@ -356,7 +380,7 @@ function grantSummariesBy(
   }[];
   const scopeStmt = db.vault.prepare(
     `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
-       FROM consent_grant_scope WHERE grant_id = ?`,
+       FROM consent_grant_scope WHERE grant_id = ?`
   );
   return grants.map((g) => ({
     grantId: g.grant_id,
@@ -375,23 +399,30 @@ function grantSummariesBy(
       schema: s.schema_name,
       table: s.table_name,
       verbs: s.verbs,
-      ...(s.row_filter_json ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] } : {}),
-      ...(s.field_mask_json ? { fieldMask: JSON.parse(s.field_mask_json) as string[] } : {}),
+      ...(s.row_filter_json
+        ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] }
+        : {}),
+      ...(s.field_mask_json
+        ? { fieldMask: JSON.parse(s.field_mask_json) as string[] }
+        : {}),
     })),
   }));
 }
 
 /** Active grants held by an app, with their scopes — the consent surface a host lists. */
 export function listActiveGrants(db: VaultDb, appId: string): GrantSummary[] {
-  return grantSummariesBy(db, 'app_id', appId);
+  return grantSummariesBy(db, "app_id", appId);
 }
 
 /**
  * Active grants held by a party (an enrolled agent's grantee side). Same
  * summary shape as `listActiveGrants` — the owner surface lists both.
  */
-export function listActiveAgentGrants(db: VaultDb, partyId: string): GrantSummary[] {
-  return grantSummariesBy(db, 'grantee_party_id', partyId);
+export function listActiveAgentGrants(
+  db: VaultDb,
+  partyId: string
+): GrantSummary[] {
+  return grantSummariesBy(db, "grantee_party_id", partyId);
 }
 
 export interface EnrolledAgent {
@@ -409,13 +440,16 @@ export interface EnrolledAgent {
  * on `agent_agent.host_key` — decoupled from `core_party.display_name`,
  * which is free to hold a pretty name without breaking this lookup.
  */
-export function lookupAgentByName(db: VaultDb, name: string): EnrolledAgent | undefined {
+export function lookupAgentByName(
+  db: VaultDb,
+  name: string
+): EnrolledAgent | undefined {
   const row = db.vault
     .prepare(
       `SELECT a.agent_id, a.party_id, p.display_name, a.status
          FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
         WHERE a.host_key = ? AND p.kind = 'agent' AND a.status = 'active'
-        ORDER BY a.enrolled_at LIMIT 1`,
+        ORDER BY a.enrolled_at LIMIT 1`
     )
     .get(name) as
     | {
@@ -450,7 +484,7 @@ export function lookupAgentByName(db: VaultDb, name: string): EnrolledAgent | un
 export function ensureAgentEnrolled(
   db: VaultDb,
   name: string,
-  options?: { modelRef?: string; version?: string; displayName?: string },
+  options?: { modelRef?: string; version?: string; displayName?: string }
 ): EnrolledAgent & { created: boolean } {
   const resolvedName = options?.displayName ?? humanizeSlug(name);
   const existing = lookupAgentByName(db, name);
@@ -467,7 +501,8 @@ export function ensureAgentEnrolled(
     // raw-slug display (`existing.name === name`, i.e. nobody has ever
     // enrolled this agent with anything nicer) — that still upgrades to the
     // humanized fallback, same as day one.
-    const mayOverwrite = options?.displayName !== undefined || existing.name === name;
+    const mayOverwrite =
+      options?.displayName !== undefined || existing.name === name;
     if (mayOverwrite && existing.name !== resolvedName) {
       db.vault
         .prepare(`UPDATE core_party SET display_name = ? WHERE party_id = ?`)
@@ -478,7 +513,7 @@ export function ensureAgentEnrolled(
   }
   const enrolled = enrollAgent(db, {
     name,
-    modelRef: options?.modelRef ?? 'centraid-automation',
+    modelRef: options?.modelRef ?? "centraid-automation",
     displayName: resolvedName,
     ...(options?.version ? { version: options.version } : {}),
   });
@@ -486,7 +521,7 @@ export function ensureAgentEnrolled(
     agentId: enrolled.agentId,
     partyId: enrolled.partyId,
     name: resolvedName,
-    status: 'active',
+    status: "active",
     created: true,
   };
 }
@@ -497,7 +532,9 @@ export function ensureAgentEnrolled(
  * The agent's party — and every receipt it left — remains.
  */
 export function markAgentRevoked(db: VaultDb, agentId: string): void {
-  db.vault.prepare(`UPDATE agent_agent SET status = 'revoked' WHERE agent_id = ?`).run(agentId);
+  db.vault
+    .prepare(`UPDATE agent_agent SET status = 'revoked' WHERE agent_id = ?`)
+    .run(agentId);
 }
 
 /** Key-free agent summary — safe to serialize onto an owner-facing surface. */
@@ -516,7 +553,7 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
     .prepare(
       `SELECT a.agent_id, a.host_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
          FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
-        WHERE a.status = 'active' ORDER BY a.enrolled_at`,
+        WHERE a.status = 'active' ORDER BY a.enrolled_at`
     )
     .all() as {
     agent_id: string;
@@ -537,9 +574,12 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
 }
 
 /** Resolve a purpose notation (e.g. `dpv:ServiceProvision`) to its concept id. */
-export function purposeConceptId(db: VaultDb, notation: string): string | undefined {
+export function purposeConceptId(
+  db: VaultDb,
+  notation: string
+): string | undefined {
   const row = db.vault
-    .prepare('SELECT concept_id FROM core_concept WHERE notation = ? LIMIT 1')
+    .prepare("SELECT concept_id FROM core_concept WHERE notation = ? LIMIT 1")
     .get(notation) as { concept_id: string } | undefined;
   return row?.concept_id;
 }
@@ -550,7 +590,9 @@ export function purposeConceptId(db: VaultDb, notation: string): string | undefi
  * identity row. A reinstall under the same name mints a fresh identity.
  */
 export function markAppRevoked(db: VaultDb, appId: string): void {
-  db.vault.prepare(`UPDATE consent_app SET status = 'revoked' WHERE app_id = ?`).run(appId);
+  db.vault
+    .prepare(`UPDATE consent_app SET status = 'revoked' WHERE app_id = ?`)
+    .run(appId);
 }
 
 /** One installed bundled app's enrollment key + its per-vault rename. */
@@ -571,7 +613,7 @@ export function listInstalledApps(db: VaultDb): InstalledAppRow[] {
   const rows = db.vault
     .prepare(
       `SELECT name, label FROM consent_app
-        WHERE origin = 'installed' AND status = 'active' ORDER BY installed_at`,
+        WHERE origin = 'installed' AND status = 'active' ORDER BY installed_at`
     )
     .all() as { name: string; label: string | null }[];
   return rows.map((r) => ({ name: r.name, label: r.label ?? null }));
@@ -583,10 +625,16 @@ export function listInstalledApps(db: VaultDb): InstalledAppRow[] {
  * isn't enrolled. Trims and coalesces empty strings to NULL so "clear" and
  * "rename to whitespace" both fall back to the manifest name.
  */
-export function setAppLabel(db: VaultDb, appId: string, label: string | null): void {
-  const trimmed = typeof label === 'string' ? label.trim() : '';
+export function setAppLabel(
+  db: VaultDb,
+  appId: string,
+  label: string | null
+): void {
+  const trimmed = typeof label === "string" ? label.trim() : "";
   db.vault
-    .prepare(`UPDATE consent_app SET label = ? WHERE name = ? AND status = 'active'`)
+    .prepare(
+      `UPDATE consent_app SET label = ? WHERE name = ? AND status = 'active'`
+    )
     .run(trimmed.length > 0 ? trimmed : null, appId);
 }
 
@@ -609,7 +657,7 @@ export function listEnrolledApps(db: VaultDb): AppSummary[] {
   const rows = db.vault
     .prepare(
       `SELECT app_id, name, status, origin, risk_ceiling, installed_at
-         FROM consent_app WHERE status = 'active' ORDER BY installed_at`,
+         FROM consent_app WHERE status = 'active' ORDER BY installed_at`
     )
     .all() as {
     app_id: string;

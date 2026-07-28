@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 /**
  * One-off screenshot capture of the per-app "Standing orders" popover
@@ -22,19 +22,19 @@ import { DatabaseSync } from 'node:sqlite';
  * Not part of CI — pure visual-regression aid. Run with:
  *   bun run scripts/screenshot-standing-orders.mjs
  */
-import { _electron } from 'playwright';
+import { _electron } from "playwright";
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
-const DESKTOP_ROOT = path.resolve(__dirname, '..');
-const OUT_DIR = path.join(__dirname, 'out');
-const OUT_FILE = path.join(OUT_DIR, 'standing-orders.png');
+const DESKTOP_ROOT = path.resolve(__dirname, "..");
+const OUT_DIR = path.join(__dirname, "out");
+const OUT_FILE = path.join(OUT_DIR, "standing-orders.png");
 
 async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
-  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-shot-'));
-  const userData = path.join(workspace, 'userData');
-  const appsDir = path.join(workspace, 'apps');
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "centraid-shot-"));
+  const userData = path.join(workspace, "userData");
+  const appsDir = path.join(workspace, "apps");
   await fs.mkdir(userData, { recursive: true });
   await fs.mkdir(appsDir, { recursive: true });
 
@@ -42,85 +42,91 @@ async function main() {
   // reads from the local SQLite mirror so the popover renders without a
   // live gateway.
   await fs.writeFile(
-    path.join(userData, 'centraid-settings.json'),
+    path.join(userData, "centraid-settings.json"),
     JSON.stringify(
       {
         appsDir,
-        gatewayUrl: 'http://127.0.0.1:1',
-        gatewayToken: crypto.randomBytes(8).toString('hex'),
-        remoteTemplatesUrl: '',
+        gatewayUrl: "http://127.0.0.1:1",
+        gatewayToken: crypto.randomBytes(8).toString("hex"),
+        remoteTemplatesUrl: "",
       },
       null,
-      2,
+      2
     ),
-    { mode: 0o600 },
+    { mode: 0o600 }
   );
 
   // Seed three automations into the gateway mirror. The path mirrors
   // localRuntimeGatewayDb() — keep this in sync if the local-runtime
   // moves the file.
-  const dbDir = path.join(userData, 'local-runtime');
+  const dbDir = path.join(userData, "local-runtime");
   await fs.mkdir(dbDir, { recursive: true });
-  const dbFile = path.join(dbDir, 'centraid-gateway.sqlite');
+  const dbFile = path.join(dbDir, "centraid-gateway.sqlite");
   await seedAutomations(dbFile);
 
   // Seed an app dir + the localStorage userApp entry that the home
   // grid renders from. The renderer reads localStorage in-process; we
   // write it via page.evaluate after the window loads.
-  const appId = 'journal';
+  const appId = "journal";
   await seedAppDir(appsDir, appId);
 
   const app = await _electron.launch({
     args: [DESKTOP_ROOT, `--user-data-dir=${userData}`],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: { ...process.env, NODE_ENV: "test" },
   });
   const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState("domcontentloaded");
 
   // Inject the userApp into localStorage and reload so the home grid
   // picks it up.
   await page.evaluate((id) => {
     localStorage.setItem(
-      'centraid.v1.home.userApps',
+      "centraid.v1.home.userApps",
       JSON.stringify([
         {
           id,
-          name: 'Journal',
-          desc: 'Daily entries with a weekly recap.',
-          iconKey: 'Book',
-          color: '#7a5cff',
-          colorKey: 'violet',
+          name: "Journal",
+          desc: "Daily entries with a weekly recap.",
+          iconKey: "Book",
+          color: "#7a5cff",
+          colorKey: "violet",
           centraidAppId: id,
         },
-      ]),
+      ])
     );
   }, appId);
   await page.reload();
-  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState("domcontentloaded");
 
   // Open the tile and then the gear popover. Home grid renders cards
   // as `.cd-app-card` inside `.cd-app-card-wrap[data-app-id]`.
-  const tile = page.locator(`.cd-app-card-wrap[data-app-id="${appId}"] .cd-app-card`).first();
-  await tile.waitFor({ state: 'visible', timeout: 15000 });
+  const tile = page
+    .locator(`.cd-app-card-wrap[data-app-id="${appId}"] .cd-app-card`)
+    .first();
+  await tile.waitFor({ state: "visible", timeout: 15000 });
   await tile.click();
   await page.locator('.cd-tb-btn[aria-label="App settings"]').click();
-  await page.locator('.cd-app-orders').waitFor({ state: 'visible', timeout: 10000 });
+  await page
+    .locator(".cd-app-orders")
+    .waitFor({ state: "visible", timeout: 10000 });
   // Brief pause so the toggle transition + hover hint settle before capture.
   await page.waitForTimeout(400);
 
   // Tight crop on the popover so the screenshot reads as the
   // component, not the chrome.
-  const panel = page.locator('.cd-app-settings-panel');
+  const panel = page.locator(".cd-app-settings-panel");
   await panel.screenshot({ path: OUT_FILE, omitBackground: false });
 
   await app.close();
-  await fs.rm(workspace, { recursive: true, force: true }).catch(() => undefined);
+  await fs
+    .rm(workspace, { recursive: true, force: true })
+    .catch(() => undefined);
   console.log(`wrote ${OUT_FILE}`); // governance: allow-repo-hygiene dev-only CLI prints output path for the caller
 }
 
 function seedAutomations(dbFile) {
   const db = new DatabaseSync(dbFile);
-  db.exec('PRAGMA foreign_keys=ON');
+  db.exec("PRAGMA foreign_keys=ON");
   // Bring the DB to migration v2 the same way the runtime does on first
   // open. Copy-pasted DDL — keep in sync with gateway-db.ts MIGRATIONS.
   db.exec(`
@@ -170,27 +176,28 @@ function seedAutomations(dbFile) {
   const now = Date.now();
   const rows = [
     {
-      name: 'weekly-recap',
+      name: "weekly-recap",
       prompt:
-        'Every Sunday at 8pm, summarize the last 7 days of journal entries into a short reflection.',
-      cronExpr: '0 20 * * 0',
+        "Every Sunday at 8pm, summarize the last 7 days of journal entries into a short reflection.",
+      cronExpr: "0 20 * * 0",
       enabled: 1,
-      action: 'weekly-recap.js',
+      action: "weekly-recap.js",
     },
     {
-      name: 'morning-prompt',
+      name: "morning-prompt",
       prompt:
-        'Every weekday at 7am, write one open-ended question to prompt today’s entry, based on yesterday’s mood.',
-      cronExpr: '0 7 * * 1-5',
+        "Every weekday at 7am, write one open-ended question to prompt today’s entry, based on yesterday’s mood.",
+      cronExpr: "0 7 * * 1-5",
       enabled: 1,
-      action: 'morning-prompt.js',
+      action: "morning-prompt.js",
     },
     {
-      name: 'monthly-archive',
-      prompt: 'On the first of every month, archive last month’s entries into a single file.',
-      cronExpr: '0 2 1 * *',
+      name: "monthly-archive",
+      prompt:
+        "On the first of every month, archive last month’s entries into a single file.",
+      cronExpr: "0 2 1 * *",
       enabled: 0,
-      action: 'monthly-archive.js',
+      action: "monthly-archive.js",
     },
   ];
 
@@ -201,21 +208,21 @@ function seedAutomations(dbFile) {
   for (const r of rows) {
     const manifest = {
       prompt: r.prompt,
-      trigger: { kind: 'cron', expr: r.cronExpr },
+      trigger: { kind: "cron", expr: r.cronExpr },
       action: r.action,
-      requires: { model: 'anthropic/claude-3-5-sonnet' },
+      requires: { model: "anthropic/claude-3-5-sonnet" },
       history: { keep: { count: 100 } },
-      generated: { by: 'template', at: '2026-05-19T00:00:00Z' },
+      generated: { by: "template", at: "2026-05-19T00:00:00Z" },
     };
     stmt.run(
-      'journal',
+      "journal",
       r.name,
       r.prompt,
       r.cronExpr,
       r.enabled,
       JSON.stringify(manifest),
       now,
-      now,
+      now
     );
   }
   db.close();
@@ -225,12 +232,16 @@ async function seedAppDir(appsDir, id) {
   const dir = path.join(appsDir, id);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
-    path.join(dir, 'app.json'),
-    JSON.stringify({ name: 'Journal', description: 'Daily entries with a weekly recap.' }, null, 2),
+    path.join(dir, "app.json"),
+    JSON.stringify(
+      { name: "Journal", description: "Daily entries with a weekly recap." },
+      null,
+      2
+    )
   );
   await fs.writeFile(
-    path.join(dir, 'index.html'),
-    '<!doctype html><meta charset="utf-8"><title>Journal</title><body style="font-family:system-ui;padding:24px;color:#888">(app preview blocked — gateway unreachable in screenshot mode)</body>',
+    path.join(dir, "index.html"),
+    '<!doctype html><meta charset="utf-8"><title>Journal</title><body style="font-family:system-ui;padding:24px;color:#888">(app preview blocked — gateway unreachable in screenshot mode)</body>'
   );
 }
 

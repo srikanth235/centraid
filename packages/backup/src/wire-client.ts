@@ -7,7 +7,10 @@
  * so a CAS consumer never needs to construct a `BackupProvider`.
  */
 
-import { BackupProviderError, type BackupProviderErrorCode } from './provider.js';
+import {
+  BackupProviderError,
+  type BackupProviderErrorCode,
+} from "./provider.js";
 
 export interface WireClientOptions {
   /** e.g. "https://api.clawgnition.com" — no trailing slash required. */
@@ -71,7 +74,7 @@ const SERVER_ERROR_DEFAULTS: Required<RetryBudget> = {
 
 function budget(
   override: RetryBudget | undefined,
-  defaults: Required<RetryBudget>,
+  defaults: Required<RetryBudget>
 ): Required<RetryBudget> {
   return {
     maxAttempts: override?.maxAttempts ?? defaults.maxAttempts,
@@ -107,10 +110,10 @@ export async function callProviderRoute<T>(
   opts: WireClientOptions,
   method: string,
   routePath: string,
-  body?: unknown,
+  body?: unknown
 ): Promise<T> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const baseUrl = opts.baseUrl.replace(/\/$/u, '');
+  const baseUrl = opts.baseUrl.replace(/\/$/u, "");
   const rateLimit = budget(opts.retry?.rateLimit, RATE_LIMIT_DEFAULTS);
   const serverError = budget(opts.retry?.serverError, SERVER_ERROR_DEFAULTS);
   const sleep = opts.retry?.sleep ?? defaultSleep;
@@ -127,7 +130,7 @@ export async function callProviderRoute<T>(
       method,
       headers: {
         authorization: `Bearer ${opts.apiKey}`,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
@@ -155,8 +158,13 @@ export async function callProviderRoute<T>(
     if (active) {
       const attempts = isRateLimit ? rateLimitAttempts : serverErrorAttempts;
       const waited = isRateLimit ? rateLimitWaited : serverErrorWaited;
-      const header = isRateLimit ? retryAfterMs(res.headers.get('retry-after')) : undefined;
-      const ceiling = Math.min(active.baseDelayMs * 2 ** attempts, active.maxDelayMs);
+      const header = isRateLimit
+        ? retryAfterMs(res.headers.get("retry-after"))
+        : undefined;
+      const ceiling = Math.min(
+        active.baseDelayMs * 2 ** attempts,
+        active.maxDelayMs
+      );
       // Rate limits get *equal* jitter (a floor of half the ceiling) so every
       // retry waits a meaningful amount and actually drains a saturated window
       // — the provider sends no Retry-After on the auth limiter, so a full-jitter
@@ -166,7 +174,10 @@ export async function callProviderRoute<T>(
         ? Math.round(ceiling / 2 + random() * (ceiling / 2))
         : Math.round(random() * ceiling);
       const backoff = header ?? jittered;
-      if (attempts < active.maxAttempts - 1 && waited + backoff <= active.maxTotalWaitMs) {
+      if (
+        attempts < active.maxAttempts - 1 &&
+        waited + backoff <= active.maxTotalWaitMs
+      ) {
         if (isRateLimit) {
           rateLimitAttempts++;
           rateLimitWaited += backoff;
@@ -181,7 +192,8 @@ export async function callProviderRoute<T>(
 
     if (!res.ok) {
       const envelope = parsed as ErrorEnvelope;
-      const code = (envelope.error?.code ?? 'provider_error') as BackupProviderErrorCode;
+      const code = (envelope.error?.code ??
+        "provider_error") as BackupProviderErrorCode;
       throw new BackupProviderError({
         status: res.status,
         code,

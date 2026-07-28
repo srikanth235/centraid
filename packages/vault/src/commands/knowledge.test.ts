@@ -1,25 +1,25 @@
-import { assert, beforeEach, describe, expect, test } from 'vitest';
+import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, Gateway } from '../gateway/gateway.js';
-import type { Credential } from '../gateway/types.js';
-import { registerKnowledgeCommands } from './knowledge.js';
-import { registerMediaCommands } from './media.js';
+import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { createGateway, Gateway } from "../gateway/gateway.js";
+import type { Credential } from "../gateway/types.js";
+import { registerKnowledgeCommands } from "./knowledge.js";
+import { registerMediaCommands } from "./media.js";
 
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-describe('knowledge', () => {
+describe("knowledge", () => {
   beforeEach(() => {
     db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: 'Priya' });
+    boot = bootstrapVault(db, { ownerName: "Priya" });
     gw = createGateway(db);
     registerKnowledgeCommands(gw);
     owner = {
-      kind: 'device',
+      kind: "device",
       deviceId: boot.deviceId,
       deviceKey: boot.deviceKey,
     };
@@ -29,16 +29,16 @@ describe('knowledge', () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
   }
 
   function createNotebook(name: string, parent?: string): string {
-    const outcome = invoke('knowledge.create_notebook', {
+    const outcome = invoke("knowledge.create_notebook", {
       name,
       ...(parent ? { parent_notebook_id: parent } : {}),
     });
-    expect(outcome.status).toBe('executed');
+    expect(outcome.status).toBe("executed");
     return (outcome as { output: { notebook_id: string } }).output.notebook_id;
   }
 
@@ -46,79 +46,91 @@ describe('knowledge', () => {
     note_id: string;
     body_content_id: string;
   } {
-    const outcome = invoke('knowledge.create_note', input);
-    expect(outcome.status).toBe('executed');
-    return (outcome as { output: { note_id: string; body_content_id: string } }).output;
+    const outcome = invoke("knowledge.create_note", input);
+    expect(outcome.status).toBe("executed");
+    return (outcome as { output: { note_id: string; body_content_id: string } })
+      .output;
   }
 
-  test('create_note stores the body as a canonical content item and defaults to plain', () => {
+  test("create_note stores the body as a canonical content item and defaults to plain", () => {
     const { note_id, body_content_id } = createNote({
-      title: 'Packing list',
-      body_text: 'Sunscreen & sandals',
+      title: "Packing list",
+      body_text: "Sunscreen & sandals",
     });
-    const note = db.vault.prepare('SELECT * FROM knowledge_note WHERE note_id = ?').get(note_id);
+    const note = db.vault
+      .prepare("SELECT * FROM knowledge_note WHERE note_id = ?")
+      .get(note_id);
     expect(note).toMatchObject({
-      title: 'Packing list',
-      format: 'plain',
+      title: "Packing list",
+      format: "plain",
       pinned: 0,
       body_content_id,
       author_party_id: boot.ownerPartyId,
     });
     const content = db.vault
-      .prepare('SELECT media_type, content_uri FROM core_content_item WHERE content_id = ?')
+      .prepare(
+        "SELECT media_type, content_uri FROM core_content_item WHERE content_id = ?"
+      )
       .get(body_content_id) as { media_type: string; content_uri: string };
-    expect(content.media_type).toBe('text/plain');
-    expect(decodeURIComponent(content.content_uri.split(',')[1] ?? '')).toBe('Sunscreen & sandals');
+    expect(content.media_type).toBe("text/plain");
+    expect(decodeURIComponent(content.content_uri.split(",")[1] ?? "")).toBe(
+      "Sunscreen & sandals"
+    );
   });
 
-  test('create_note dedupes identical bodies on sha256', () => {
-    const first = createNote({ title: 'One', body_text: 'same words' });
-    const second = createNote({ title: 'Two', body_text: 'same words' });
+  test("create_note dedupes identical bodies on sha256", () => {
+    const first = createNote({ title: "One", body_text: "same words" });
+    const second = createNote({ title: "Two", body_text: "same words" });
     expect(second.body_content_id).toBe(first.body_content_id);
-    const n = db.vault.prepare('SELECT count(*) AS n FROM core_content_item').get() as {
+    const n = db.vault
+      .prepare("SELECT count(*) AS n FROM core_content_item")
+      .get() as {
       n: number;
     };
     expect(n.n).toBe(1);
   });
 
-  test('create_note files into a notebook at the end; a missing notebook is refused', () => {
-    const nb = createNotebook('Travel');
-    const a = createNote({ title: 'A', body_text: 'a', notebook_id: nb });
-    const b = createNote({ title: 'B', body_text: 'b', notebook_id: nb });
+  test("create_note files into a notebook at the end; a missing notebook is refused", () => {
+    const nb = createNotebook("Travel");
+    const a = createNote({ title: "A", body_text: "a", notebook_id: nb });
+    const b = createNote({ title: "B", body_text: "b", notebook_id: nb });
     const placements = db.vault
       .prepare(
         `SELECT target_id, position FROM core_collection_entry
-        WHERE collection_id = ? AND target_type = 'knowledge.note' ORDER BY position`,
+        WHERE collection_id = ? AND target_type = 'knowledge.note' ORDER BY position`
       )
       .all(nb) as { target_id: string; position: number }[];
-    expect(placements.map((p) => p.target_id)).toStrictEqual([a.note_id, b.note_id]);
+    expect(placements.map((p) => p.target_id)).toStrictEqual([
+      a.note_id,
+      b.note_id,
+    ]);
     expect(placements[1]!.position).toBeGreaterThan(placements[0]!.position);
 
-    const orphan = invoke('knowledge.create_note', {
-      title: 'Lost',
-      body_text: 'x',
-      notebook_id: 'no-such-notebook',
+    const orphan = invoke("knowledge.create_note", {
+      title: "Lost",
+      body_text: "x",
+      notebook_id: "no-such-notebook",
     });
-    expect(orphan.status).toBe('failed');
-    assert(orphan.status === 'failed');
-    expect(orphan.predicate).toContain('notebook_exists_if_given');
+    expect(orphan.status).toBe("failed");
+    assert(orphan.status === "failed");
+    expect(orphan.predicate).toContain("notebook_exists_if_given");
   });
 
-  test('edit_note updates only the fields sent; a body edit re-points the reference', () => {
+  test("edit_note updates only the fields sent; a body edit re-points the reference", () => {
     const { note_id, body_content_id } = createNote({
-      title: 'Draft',
-      body_text: 'v1',
-      format: 'markdown',
+      title: "Draft",
+      body_text: "v1",
+      format: "markdown",
     });
-    const outcome = invoke('knowledge.edit_note', {
+    const outcome = invoke("knowledge.edit_note", {
       note_id,
-      body_text: 'v2',
+      body_text: "v2",
       pinned: 1,
     });
-    expect(outcome.status).toBe('executed');
+    expect(outcome.status).toBe("executed");
     const note = db.vault
       .prepare(
-        'SELECT title, format, pinned, body_content_id FROM knowledge_note WHERE note_id = ?',
+        "SELECT title, format, pinned, body_content_id FROM knowledge_note WHERE note_id = ?"
       )
       .get(note_id) as {
       title: string;
@@ -127,21 +139,21 @@ describe('knowledge', () => {
       body_content_id: string;
     };
     expect(note).toMatchObject({
-      title: 'Draft',
-      format: 'markdown',
+      title: "Draft",
+      format: "markdown",
       pinned: 1,
     });
     expect(note.body_content_id).not.toBe(body_content_id);
     const media = db.vault
-      .prepare('SELECT media_type FROM core_content_item WHERE content_id = ?')
+      .prepare("SELECT media_type FROM core_content_item WHERE content_id = ?")
       .get(note.body_content_id) as { media_type: string };
-    expect(media.media_type).toBe('text/markdown'); // inherits the note's format
+    expect(media.media_type).toBe("text/markdown"); // inherits the note's format
   });
 
-  test('edit_note records a revises link when the body actually changes (issue #352)', () => {
+  test("edit_note records a revises link when the body actually changes (issue #352)", () => {
     const { note_id, body_content_id: v1 } = createNote({
-      title: 'Draft',
-      body_text: 'v1',
+      title: "Draft",
+      body_text: "v1",
     });
     const revisesLinkCount = () =>
       (
@@ -150,132 +162,143 @@ describe('knowledge', () => {
             `SELECT count(*) AS n FROM core_link l
              JOIN core_concept c ON c.concept_id = l.relation_concept_id
             WHERE l.from_type = 'core.content_item' AND l.to_type = 'core.content_item'
-              AND c.notation = 'revises' AND l.valid_to IS NULL`,
+              AND c.notation = 'revises' AND l.valid_to IS NULL`
           )
           .get() as { n: number }
       ).n;
     expect(revisesLinkCount()).toBe(0);
-    const edited = invoke('knowledge.edit_note', { note_id, body_text: 'v2' });
-    expect(edited.status).toBe('executed');
-    const v2 = (edited as { output: { body_content_id: string } }).output.body_content_id;
+    const edited = invoke("knowledge.edit_note", { note_id, body_text: "v2" });
+    expect(edited.status).toBe("executed");
+    const v2 = (edited as { output: { body_content_id: string } }).output
+      .body_content_id;
     expect(v2).not.toBe(v1);
     expect(revisesLinkCount()).toBe(1);
     const link = db.vault
       .prepare(
         `SELECT from_id, to_id FROM core_link l
          JOIN core_concept c ON c.concept_id = l.relation_concept_id
-        WHERE c.notation = 'revises'`,
+        WHERE c.notation = 'revises'`
       )
       .get() as { from_id: string; to_id: string };
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
     expect({ ...link }).toStrictEqual({ from_id: v2, to_id: v1 });
     // A no-op edit (same words, dedup lands back on v2) records no new link.
-    invoke('knowledge.edit_note', { note_id, body_text: 'v2' });
+    invoke("knowledge.edit_note", { note_id, body_text: "v2" });
     expect(revisesLinkCount()).toBe(1);
   });
 
-  test('edit_note on an unknown note is refused by precondition', () => {
-    const outcome = invoke('knowledge.edit_note', {
-      note_id: 'ghost',
-      title: 'New',
+  test("edit_note on an unknown note is refused by precondition", () => {
+    const outcome = invoke("knowledge.edit_note", {
+      note_id: "ghost",
+      title: "New",
     });
-    expect(outcome.status).toBe('failed');
-    assert(outcome.status === 'failed');
-    expect(outcome.predicate).toContain('note_is_live');
+    expect(outcome.status).toBe("failed");
+    assert(outcome.status === "failed");
+    expect(outcome.predicate).toContain("note_is_live");
   });
 
-  test('move_note refiles, is single-placement, and omitting notebook_id unfiles', () => {
-    const travel = createNotebook('Travel');
-    const work = createNotebook('Work');
+  test("move_note refiles, is single-placement, and omitting notebook_id unfiles", () => {
+    const travel = createNotebook("Travel");
+    const work = createNotebook("Work");
     const { note_id } = createNote({
-      title: 'Itinerary',
-      body_text: 'x',
+      title: "Itinerary",
+      body_text: "x",
       notebook_id: travel,
     });
 
-    const moved = invoke('knowledge.move_note', { note_id, notebook_id: work });
-    expect(moved.status).toBe('executed');
+    const moved = invoke("knowledge.move_note", { note_id, notebook_id: work });
+    expect(moved.status).toBe("executed");
     const placements = db.vault
       .prepare(
         `SELECT collection_id FROM core_collection_entry
-        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+        WHERE target_type = 'knowledge.note' AND target_id = ?`
       )
       .all(note_id) as { collection_id: string }[];
-    expect(placements.map((row) => ({ ...row }))).toStrictEqual([{ collection_id: work }]);
+    expect(placements.map((row) => ({ ...row }))).toStrictEqual([
+      { collection_id: work },
+    ]);
 
-    const unfiled = invoke('knowledge.move_note', { note_id });
-    expect(unfiled.status).toBe('executed');
+    const unfiled = invoke("knowledge.move_note", { note_id });
+    expect(unfiled.status).toBe("executed");
     const none = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_collection_entry
-        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+        WHERE target_type = 'knowledge.note' AND target_id = ?`
       )
       .get(note_id) as { n: number };
     expect(none.n).toBe(0);
 
-    const badTarget = invoke('knowledge.move_note', {
+    const badTarget = invoke("knowledge.move_note", {
       note_id,
-      notebook_id: 'no-such-notebook',
+      notebook_id: "no-such-notebook",
     });
-    expect(badTarget.status).toBe('failed');
+    expect(badTarget.status).toBe("failed");
   });
 
-  test('create_notebook orders siblings and refuses a missing parent', () => {
-    const first = createNotebook('Alpha');
-    const second = createNotebook('Beta');
+  test("create_notebook orders siblings and refuses a missing parent", () => {
+    const first = createNotebook("Alpha");
+    const second = createNotebook("Beta");
     const rows = db.vault
-      .prepare('SELECT collection_id, sort_order FROM core_collection ORDER BY sort_order')
+      .prepare(
+        "SELECT collection_id, sort_order FROM core_collection ORDER BY sort_order"
+      )
       .all() as { collection_id: string; sort_order: number }[];
     expect(rows.map((r) => r.collection_id)).toStrictEqual([first, second]);
 
-    const child = createNotebook('Alpha / Nested', first);
+    const child = createNotebook("Alpha / Nested", first);
     const childRow = db.vault
-      .prepare('SELECT parent_collection_id FROM core_collection WHERE collection_id = ?')
+      .prepare(
+        "SELECT parent_collection_id FROM core_collection WHERE collection_id = ?"
+      )
       .get(child) as { parent_collection_id: string | null };
     expect(childRow.parent_collection_id).toBe(first);
 
-    const orphan = invoke('knowledge.create_notebook', {
-      name: 'Lost',
-      parent_notebook_id: 'no-such-notebook',
+    const orphan = invoke("knowledge.create_notebook", {
+      name: "Lost",
+      parent_notebook_id: "no-such-notebook",
     });
-    expect(orphan.status).toBe('failed');
-    assert(orphan.status === 'failed');
-    expect(orphan.predicate).toContain('parent_exists_if_given');
+    expect(orphan.status).toBe("failed");
+    assert(orphan.status === "failed");
+    expect(orphan.predicate).toContain("parent_exists_if_given");
   });
 
-  test('create_notebook refuses a name collision, same as rename_notebook', () => {
-    createNotebook('Scratchpad');
-    const dupe = invoke('knowledge.create_notebook', { name: 'Scratchpad' });
-    expect(dupe.status).toBe('failed');
-    assert(dupe.status === 'failed');
-    expect(dupe.predicate).toContain('name_unused');
+  test("create_notebook refuses a name collision, same as rename_notebook", () => {
+    createNotebook("Scratchpad");
+    const dupe = invoke("knowledge.create_notebook", { name: "Scratchpad" });
+    expect(dupe.status).toBe("failed");
+    assert(dupe.status === "failed");
+    expect(dupe.predicate).toContain("name_unused");
   });
 
-  test('create_note writes provenance for the note', () => {
-    const { note_id } = createNote({ title: 'Receipted', body_text: 'x' });
+  test("create_note writes provenance for the note", () => {
+    const { note_id } = createNote({ title: "Receipted", body_text: "x" });
     const prov = db.journal
       .prepare(
         `SELECT count(*) AS n FROM consent_provenance
-        WHERE entity_type='knowledge.note' AND entity_id=? AND prov_activity='command.knowledge.create_note'`,
+        WHERE entity_type='knowledge.note' AND entity_id=? AND prov_activity='command.knowledge.create_note'`
       )
       .get(note_id) as { n: number };
     expect(prov.n).toBe(1);
   });
 
-  test('delete_note is trash: reversible, edges kept, body released (issue #308 A6)', () => {
-    const notebook = createNotebook('Journal');
+  test("delete_note is trash: reversible, edges kept, body released (issue #308 A6)", () => {
+    const notebook = createNotebook("Journal");
     const { note_id, body_content_id } = createNote({
-      title: 'Ephemeral',
-      body_text: 'gone tomorrow',
+      title: "Ephemeral",
+      body_text: "gone tomorrow",
       notebook_id: notebook,
     });
-    const outcome = invoke('knowledge.delete_note', { note_id });
-    expect(outcome.status).toBe('executed');
-    expect((outcome as { output: { purge_at: string } }).output.purge_at).toBeTruthy();
+    const outcome = invoke("knowledge.delete_note", { note_id });
+    expect(outcome.status).toBe("executed");
+    expect(
+      (outcome as { output: { purge_at: string } }).output.purge_at
+    ).toBeTruthy();
     // The row survives, trashed — deletion is undoable, not a hard delete.
     const note = db.vault
-      .prepare('SELECT deleted_at, purge_at FROM knowledge_note WHERE note_id = ?')
+      .prepare(
+        "SELECT deleted_at, purge_at FROM knowledge_note WHERE note_id = ?"
+      )
       .get(note_id) as { deleted_at: string | null; purge_at: string | null };
     expect(note.deleted_at).not.toBeNull();
     expect(note.purge_at).not.toBeNull();
@@ -283,39 +306,45 @@ describe('knowledge', () => {
     const placements = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_collection_entry
-        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+        WHERE target_type = 'knowledge.note' AND target_id = ?`
       )
       .get(note_id) as { n: number };
     expect(placements.n).toBe(1);
     // The body was rented by this note alone, so its bytes soft-delete.
     const body = db.vault
-      .prepare('SELECT deleted_at FROM core_content_item WHERE content_id = ?')
+      .prepare("SELECT deleted_at FROM core_content_item WHERE content_id = ?")
       .get(body_content_id) as { deleted_at: string | null };
     expect(body.deleted_at).not.toBeNull();
     // A trashed note is frozen: no re-delete, no edit, no move.
-    expect(invoke('knowledge.delete_note', { note_id }).status).toBe('failed');
-    expect(invoke('knowledge.edit_note', { note_id, title: 'Nope' }).status).toBe('failed');
-    expect(invoke('knowledge.move_note', { note_id }).status).toBe('failed');
+    expect(invoke("knowledge.delete_note", { note_id }).status).toBe("failed");
+    expect(
+      invoke("knowledge.edit_note", { note_id, title: "Nope" }).status
+    ).toBe("failed");
+    expect(invoke("knowledge.move_note", { note_id }).status).toBe("failed");
   });
 
-  test('restore_note brings the note back whole — row, placement, body (issue #308 A6)', () => {
-    const notebook = createNotebook('Journal');
+  test("restore_note brings the note back whole — row, placement, body (issue #308 A6)", () => {
+    const notebook = createNotebook("Journal");
     const { note_id, body_content_id } = createNote({
-      title: 'Kept',
-      body_text: 'not gone after all',
+      title: "Kept",
+      body_text: "not gone after all",
       notebook_id: notebook,
     });
-    invoke('knowledge.delete_note', { note_id });
-    const restored = invoke('knowledge.restore_note', { note_id });
-    expect(restored.status).toBe('executed');
+    invoke("knowledge.delete_note", { note_id });
+    const restored = invoke("knowledge.restore_note", { note_id });
+    expect(restored.status).toBe("executed");
     const note = db.vault
-      .prepare('SELECT deleted_at, purge_at FROM knowledge_note WHERE note_id = ?')
+      .prepare(
+        "SELECT deleted_at, purge_at FROM knowledge_note WHERE note_id = ?"
+      )
       .get(note_id) as { deleted_at: string | null; purge_at: string | null };
     expect(note.deleted_at).toBeNull();
     expect(note.purge_at).toBeNull();
     // The body bytes are rented again.
     const body = db.vault
-      .prepare('SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?')
+      .prepare(
+        "SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?"
+      )
       .get(body_content_id) as {
       deleted_at: string | null;
       purge_at: string | null;
@@ -325,116 +354,132 @@ describe('knowledge', () => {
     const placements = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_collection_entry
-        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+        WHERE target_type = 'knowledge.note' AND target_id = ?`
       )
       .get(note_id) as { n: number };
     expect(placements.n).toBe(1);
-    expect(invoke('knowledge.edit_note', { note_id, title: 'Edited' }).status).toBe('executed');
+    expect(
+      invoke("knowledge.edit_note", { note_id, title: "Edited" }).status
+    ).toBe("executed");
     // Restoring a live note is a receipted refusal.
-    expect(invoke('knowledge.restore_note', { note_id }).status).toBe('failed');
+    expect(invoke("knowledge.restore_note", { note_id }).status).toBe("failed");
   });
 
-  test('delete_note keeps a body another note still rents (sha256 dedup)', () => {
-    const first = createNote({ title: 'One', body_text: 'shared words' });
-    const second = createNote({ title: 'Two', body_text: 'shared words' });
+  test("delete_note keeps a body another note still rents (sha256 dedup)", () => {
+    const first = createNote({ title: "One", body_text: "shared words" });
+    const second = createNote({ title: "Two", body_text: "shared words" });
     expect(second.body_content_id).toBe(first.body_content_id);
-    const outcome = invoke('knowledge.delete_note', { note_id: first.note_id });
-    expect(outcome.status).toBe('executed');
-    expect((outcome as { output: { body_released: number } }).output.body_released).toBe(0);
+    const outcome = invoke("knowledge.delete_note", { note_id: first.note_id });
+    expect(outcome.status).toBe("executed");
+    expect(
+      (outcome as { output: { body_released: number } }).output.body_released
+    ).toBe(0);
     const body = db.vault
-      .prepare('SELECT deleted_at FROM core_content_item WHERE content_id = ?')
+      .prepare("SELECT deleted_at FROM core_content_item WHERE content_id = ?")
       .get(first.body_content_id) as { deleted_at: string | null };
     expect(body.deleted_at).toBeNull();
   });
 
-  test('rename_notebook updates the name and refuses a collision with a sibling', () => {
-    const a = createNotebook('Recipes');
-    createNotebook('Travel');
-    expect(invoke('knowledge.rename_notebook', { notebook_id: a, name: 'Cooking' }).status).toBe(
-      'executed',
-    );
+  test("rename_notebook updates the name and refuses a collision with a sibling", () => {
+    const a = createNotebook("Recipes");
+    createNotebook("Travel");
+    expect(
+      invoke("knowledge.rename_notebook", { notebook_id: a, name: "Cooking" })
+        .status
+    ).toBe("executed");
     const row = db.vault
-      .prepare('SELECT name FROM core_collection WHERE collection_id = ?')
+      .prepare("SELECT name FROM core_collection WHERE collection_id = ?")
       .get(a) as { name: string };
-    expect(row.name).toBe('Cooking');
+    expect(row.name).toBe("Cooking");
     // Renaming onto another notebook's name is a receipted refusal.
-    expect(invoke('knowledge.rename_notebook', { notebook_id: a, name: 'Travel' }).status).toBe(
-      'failed',
-    );
+    expect(
+      invoke("knowledge.rename_notebook", { notebook_id: a, name: "Travel" })
+        .status
+    ).toBe("failed");
     // Renaming to its own current name is an idempotent no-op.
-    expect(invoke('knowledge.rename_notebook', { notebook_id: a, name: 'Cooking' }).status).toBe(
-      'executed',
-    );
+    expect(
+      invoke("knowledge.rename_notebook", { notebook_id: a, name: "Cooking" })
+        .status
+    ).toBe("executed");
   });
 
-  test('delete_notebook unfiles member notes without destroying them; children block it', () => {
-    const parent = createNotebook('Projects');
-    const child = createNotebook('Archive', parent);
+  test("delete_notebook unfiles member notes without destroying them; children block it", () => {
+    const parent = createNotebook("Projects");
+    const child = createNotebook("Archive", parent);
     const { note_id } = createNote({
-      title: 'Plan',
-      body_text: 'v1',
+      title: "Plan",
+      body_text: "v1",
       notebook_id: child,
     });
 
     // A notebook with children is refused until they go first.
-    expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('failed');
+    expect(
+      invoke("knowledge.delete_notebook", { notebook_id: parent }).status
+    ).toBe("failed");
 
-    const outcome = invoke('knowledge.delete_notebook', { notebook_id: child });
-    expect(outcome.status).toBe('executed');
-    expect((outcome as { output: { notes_unfiled: number } }).output.notes_unfiled).toBe(1);
+    const outcome = invoke("knowledge.delete_notebook", { notebook_id: child });
+    expect(outcome.status).toBe("executed");
+    expect(
+      (outcome as { output: { notes_unfiled: number } }).output.notes_unfiled
+    ).toBe(1);
     // The note survives, unfiled; the notebook and its placements are gone.
     const note = db.vault
-      .prepare('SELECT count(*) AS n FROM knowledge_note WHERE note_id = ?')
+      .prepare("SELECT count(*) AS n FROM knowledge_note WHERE note_id = ?")
       .get(note_id) as { n: number };
     expect(note.n).toBe(1);
     const placements = db.vault
       .prepare(
         `SELECT count(*) AS n FROM core_collection_entry
-        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+        WHERE target_type = 'knowledge.note' AND target_id = ?`
       )
       .get(note_id) as { n: number };
     expect(placements.n).toBe(0);
     // Now childless, the parent deletes cleanly; a re-delete is refused.
-    expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('executed');
-    expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('failed');
+    expect(
+      invoke("knowledge.delete_notebook", { notebook_id: parent }).status
+    ).toBe("executed");
+    expect(
+      invoke("knowledge.delete_notebook", { notebook_id: parent }).status
+    ).toBe("failed");
   });
 
   test('one collection holds a photo and a note together — the "Paris trip" the silos forbade', () => {
     registerMediaCommands(gw);
     const PIXEL =
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     // Created through the album surface…
-    const album = invoke('media.create_album', { title: 'Paris trip' });
-    expect(album.status).toBe('executed');
-    const collectionId = (album as { output: { album_id: string } }).output.album_id;
-    const photo = invoke('media.add_asset', { data_uri: PIXEL });
-    expect(photo.status).toBe('executed');
+    const album = invoke("media.create_album", { title: "Paris trip" });
+    expect(album.status).toBe("executed");
+    const collectionId = (album as { output: { album_id: string } }).output
+      .album_id;
+    const photo = invoke("media.add_asset", { data_uri: PIXEL });
+    expect(photo.status).toBe("executed");
     const assetId = (photo as { output: { asset_id: string } }).output.asset_id;
     expect(
-      invoke('media.add_to_album', {
+      invoke("media.add_to_album", {
         album_id: collectionId,
         asset_id: assetId,
-      }).status,
-    ).toBe('executed');
+      }).status
+    ).toBe("executed");
     // …and filed into from the notebook surface: same collection, mixed types.
     const note = createNote({
-      title: 'Packing list',
-      body_text: 'adapters, coats',
+      title: "Packing list",
+      body_text: "adapters, coats",
     });
     expect(
-      invoke('knowledge.move_note', {
+      invoke("knowledge.move_note", {
         note_id: note.note_id,
         notebook_id: collectionId,
-      }).status,
-    ).toBe('executed');
+      }).status
+    ).toBe("executed");
     const members = db.vault
       .prepare(
-        'SELECT target_type, position FROM core_collection_entry WHERE collection_id = ? ORDER BY position',
+        "SELECT target_type, position FROM core_collection_entry WHERE collection_id = ? ORDER BY position"
       )
       .all(collectionId) as { target_type: string; position: number }[];
     expect(members.map((m) => m.target_type)).toStrictEqual([
-      'media.media_asset',
-      'knowledge.note',
+      "media.media_asset",
+      "knowledge.note",
     ]);
     // One ordered list across types.
     expect(members[1]!.position).toBeGreaterThan(members[0]!.position);

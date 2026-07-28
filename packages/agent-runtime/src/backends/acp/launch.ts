@@ -11,11 +11,11 @@
  * flavours — headless presets and self-update suppressors are the same fact.
  */
 
-import type { TurnStreamEvent } from '@centraid/app-engine';
+import type { TurnStreamEvent } from "@centraid/app-engine";
 
-import { agentSpawnEnv } from '../../spawn-env.js';
-import { resolveAdapterEntry } from './adapter-bin.js';
-import type { AcpTurnConfig } from './types.js';
+import { agentSpawnEnv } from "../../spawn-env.js";
+import { resolveAdapterEntry } from "./adapter-bin.js";
+import type { AcpTurnConfig } from "./types.js";
 
 export interface LaunchPlan {
   bin: string;
@@ -34,7 +34,7 @@ export interface LaunchPlan {
 export function planLaunch(
   config: AcpTurnConfig,
   extraPath: string | undefined,
-  notices: TurnStreamEvent[],
+  notices: TurnStreamEvent[]
 ): LaunchPlan {
   const extraArgs = config.extraArgs ?? [];
   const adapter = config.adapter;
@@ -43,7 +43,7 @@ export function planLaunch(
     const bin = config.binPath ?? config.defaultBin;
     if (!bin) {
       throw new Error(
-        'No binary configured for the ACP runner — set its path in Settings → Agents.',
+        "No binary configured for the ACP runner — set its path in Settings → Agents."
       );
     }
     const nativeEnv = agentSpawnEnv({
@@ -63,7 +63,8 @@ export function planLaunch(
     ...(extraPath ? { extraPath } : {}),
   });
   Object.assign(env, config.env ?? {});
-  if (config.binPath && adapter.binPathEnvVar) env[adapter.binPathEnvVar] = config.binPath;
+  if (config.binPath && adapter.binPathEnvVar)
+    env[adapter.binPathEnvVar] = config.binPath;
 
   // The claude adapter computes `ALLOW_BYPASS = !IS_ROOT || !!IS_SANDBOX` at
   // module load and silently downgrades the requested mode when it is false.
@@ -72,15 +73,15 @@ export function planLaunch(
   // we opt in explicitly — and say so, rather than letting the user discover
   // it as a mysteriously stalled tool call.
   if (adapter.bypassNeedsSandboxWhenRoot && isRoot() && !env.IS_SANDBOX) {
-    env.IS_SANDBOX = '1';
+    env.IS_SANDBOX = "1";
     notices.push({
-      type: 'notice',
-      level: 'warn',
-      code: 'root_bypass_optin',
+      type: "notice",
+      level: "warn",
+      code: "root_bypass_optin",
       message:
-        'Running as root: the agent’s non-interactive permission mode was enabled explicitly ' +
-        '(IS_SANDBOX). Tool calls run without approval prompts — prefer running the gateway as ' +
-        'a normal user.',
+        "Running as root: the agent’s non-interactive permission mode was enabled explicitly " +
+        "(IS_SANDBOX). Tool calls run without approval prompts — prefer running the gateway as " +
+        "a normal user.",
     });
   }
 

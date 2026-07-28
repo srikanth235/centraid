@@ -23,25 +23,25 @@
  * stdin, sends SIGTERM, then SIGKILLs if the child ignores it).
  */
 
-import { spawn, type ChildProcessByStdio } from 'node:child_process';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import type { Readable, Writable } from 'node:stream';
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { Readable, Writable } from "node:stream";
 
-import type { RunnerModel } from '@centraid/app-engine';
+import type { RunnerModel } from "@centraid/app-engine";
 
-import { lowPriorityCommand } from '../../low-priority.js';
-import { ACP_PROTOCOL_VERSION, createAcpConnection } from './json-rpc.js';
-import { planLaunch } from './launch.js';
+import { lowPriorityCommand } from "../../low-priority.js";
+import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
+import { planLaunch } from "./launch.js";
 import {
   readConfigOptions,
   readOfferedModels,
   type InitializeResult,
   type OfferedModel,
   type SessionSetupResult,
-} from './session-config.js';
-import type { AcpTurnConfig } from './types.js';
+} from "./session-config.js";
+import type { AcpTurnConfig } from "./types.js";
 
 /**
  * Overall probe deadline. Generous — enumeration runs only through the
@@ -59,7 +59,9 @@ const KILL_GRACE_MS = 2_000;
  * are (same `planLaunch` → same adapter/env/binPath). Returns `[]` on any
  * failure; never throws; never leaves a child running.
  */
-export async function enumerateAcpModels(config: AcpTurnConfig): Promise<RunnerModel[]> {
+export async function enumerateAcpModels(
+  config: AcpTurnConfig
+): Promise<RunnerModel[]> {
   // Launch is impossible with no binary (or a missing adapter) — `planLaunch`
   // throws, and an unenumerable kind simply has no catalog. Notices are
   // irrelevant here (no transcript), so they are collected and dropped.
@@ -72,7 +74,7 @@ export async function enumerateAcpModels(config: AcpTurnConfig): Promise<RunnerM
 
   let cwd: string;
   try {
-    cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-acp-models-'));
+    cwd = await fs.mkdtemp(path.join(os.tmpdir(), "centraid-acp-models-"));
   } catch {
     return [];
   }
@@ -83,7 +85,7 @@ export async function enumerateAcpModels(config: AcpTurnConfig): Promise<RunnerM
     child = spawn(command.bin, command.args, {
       cwd,
       env: launch.env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     }) as ChildProcessByStdio<Writable, Readable, Readable>;
   } catch {
     await removeQuietly(cwd);
@@ -111,11 +113,11 @@ export async function enumerateAcpModels(config: AcpTurnConfig): Promise<RunnerM
     } catch {
       // stream already gone
     }
-    if (!child.killed) child.kill('SIGTERM');
+    if (!child.killed) child.kill("SIGTERM");
     // A child that ignores SIGTERM must still die, or `conn.exited` (and thus
     // this warm) would hang forever.
     const killTimer = setTimeout(() => {
-      if (!child.killed) child.kill('SIGKILL');
+      if (!child.killed) child.kill("SIGKILL");
     }, KILL_GRACE_MS);
     killTimer.unref?.();
     await conn.exited;
@@ -131,29 +133,31 @@ export async function enumerateAcpModels(config: AcpTurnConfig): Promise<RunnerM
  */
 async function probe(
   conn: ReturnType<typeof createAcpConnection>,
-  cwd: string,
+  cwd: string
 ): Promise<RunnerModel[]> {
-  await conn.request<InitializeResult>('initialize', {
+  await conn.request<InitializeResult>("initialize", {
     protocolVersion: ACP_PROTOCOL_VERSION,
     clientCapabilities: {
       fs: { readTextFile: false, writeTextFile: false },
       terminal: false,
     },
     clientInfo: {
-      name: 'centraid-local-runner',
-      title: 'Centraid',
-      version: '0.1.0',
+      name: "centraid-local-runner",
+      title: "Centraid",
+      version: "0.1.0",
     },
   });
 
   // No vault MCP servers: enumeration reads the agent's own catalog, not the
   // vault. The scratch cwd is a throwaway the agent never writes to.
-  const created = await conn.request<SessionSetupResult>('session/new', {
+  const created = await conn.request<SessionSetupResult>("session/new", {
     cwd,
     mcpServers: [],
   });
 
-  const { models, currentValue } = readOfferedModels(readConfigOptions(created));
+  const { models, currentValue } = readOfferedModels(
+    readConfigOptions(created)
+  );
   return mapOfferedModels(models, currentValue);
 }
 
@@ -163,7 +167,10 @@ async function probe(
  * option's `currentValue` flagged as the default selection. Dedupes by id and
  * drops blanks. Exported for tests.
  */
-export function mapOfferedModels(offered: OfferedModel[], currentValue?: string): RunnerModel[] {
+export function mapOfferedModels(
+  offered: OfferedModel[],
+  currentValue?: string
+): RunnerModel[] {
   const seen = new Set<string>();
   const models: RunnerModel[] = [];
   for (const entry of offered) {
@@ -183,7 +190,10 @@ export function mapOfferedModels(offered: OfferedModel[], currentValue?: string)
 async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error('acp model probe timed out')), ms);
+    timer = setTimeout(
+      () => reject(new Error("acp model probe timed out")),
+      ms
+    );
     timer.unref?.();
   });
   try {

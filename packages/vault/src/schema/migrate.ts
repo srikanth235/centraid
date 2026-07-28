@@ -10,34 +10,42 @@
 //
 // Tracked via PRAGMA user_version exactly as before; migrate() is unchanged.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { AGENT_DDL } from './agent.js';
-import { BLOB_TRANSFER_DDL } from './blob-transfer.js';
-import { BLOB_DDL } from './blob.js';
-import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from './consent.js';
-import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from './core.js';
-import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
-import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
-import { LOCKER_ALIAS_DDL, LOCKER_DDL } from './domains-locker.js';
-import { PEOPLE_DDL } from './domains-people.js';
-import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
-import { TALLY_DDL } from './domains-tally.js';
-import { ENRICH_DDL } from './enrich.js';
-import { APP_EXT_DDL } from './ext.js';
-import { FTS_DDL } from './fts.js';
-import { JOURNAL_DDL } from './journal.js';
-import { OUTBOX_DDL } from './outbox.js';
-import { REPLICA_DDL } from './replica.js';
-import { SEED_DDL } from './seed.js';
-import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from './sync.js';
+import { AGENT_DDL } from "./agent.js";
+import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
+import { BLOB_DDL } from "./blob.js";
+import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from "./consent.js";
+import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from "./core.js";
+import {
+  HEALTH_DDL,
+  FINANCE_DDL,
+  SCHEDULE_DDL,
+} from "./domains-health-finance-schedule.js";
+import { HOME_DDL, BUSINESS_DDL } from "./domains-home-business.js";
+import { LOCKER_ALIAS_DDL, LOCKER_DDL } from "./domains-locker.js";
+import { PEOPLE_DDL } from "./domains-people.js";
+import {
+  SOCIAL_DDL,
+  KNOWLEDGE_DDL,
+  MEDIA_DDL,
+} from "./domains-social-knowledge-media.js";
+import { TALLY_DDL } from "./domains-tally.js";
+import { ENRICH_DDL } from "./enrich.js";
+import { APP_EXT_DDL } from "./ext.js";
+import { FTS_DDL } from "./fts.js";
+import { JOURNAL_DDL } from "./journal.js";
+import { OUTBOX_DDL } from "./outbox.js";
+import { REPLICA_DDL } from "./replica.js";
+import { SEED_DDL } from "./seed.js";
+import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 
 /**
  * Ontology contract version stamped on rows (rule R07). Bumped to 1.4 for
  * issue #450's canonical People consolidation, target-pair convention, and
  * cross-table invariant guards.
  */
-export const ONTOLOGY_VERSION = '1.4';
+export const ONTOLOGY_VERSION = "1.4";
 
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), anchors ride with it;
@@ -86,7 +94,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     FTS_DDL,
     BLOB_TRANSFER_DDL,
     BLOB_DDL,
-  ].join('\n'),
+  ].join("\n"),
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];
@@ -102,18 +110,20 @@ export function repairSyncCredentialOauthMode(db: DatabaseSync): void {
   const table = db
     .prepare(
       `SELECT 1 AS present FROM sqlite_master
-        WHERE type = 'table' AND name = 'sync_connection_credential'`,
+        WHERE type = 'table' AND name = 'sync_connection_credential'`
     )
     .get();
   if (!table) return;
-  const columns = db.prepare(`PRAGMA table_info('sync_connection_credential')`).all() as {
+  const columns = db
+    .prepare(`PRAGMA table_info('sync_connection_credential')`)
+    .all() as {
     name: string;
   }[];
-  if (columns.some((column) => column.name === 'oauth_mode')) return;
+  if (columns.some((column) => column.name === "oauth_mode")) return;
   db.exec(
     `ALTER TABLE sync_connection_credential
        ADD COLUMN oauth_mode TEXT NOT NULL DEFAULT 'byo'
-       CHECK (oauth_mode IN ('byo','assist'))`,
+       CHECK (oauth_mode IN ('byo','assist'))`
   );
 }
 
@@ -123,7 +133,7 @@ export function repairConsentScopeTombstoneShape(db: DatabaseSync): void {
   const table = db
     .prepare(
       `SELECT 1 AS present FROM sqlite_master
-        WHERE type = 'table' AND name = 'consent_scope_tombstone'`,
+        WHERE type = 'table' AND name = 'consent_scope_tombstone'`
     )
     .get();
   if (!table) return;
@@ -132,20 +142,20 @@ export function repairConsentScopeTombstoneShape(db: DatabaseSync): void {
       db.prepare(`PRAGMA table_info('consent_scope_tombstone')`).all() as {
         name: string;
       }[]
-    ).map((column) => column.name),
+    ).map((column) => column.name)
   );
-  if (!columns.has('row_filter_json')) {
+  if (!columns.has("row_filter_json")) {
     db.exec(
       `ALTER TABLE consent_scope_tombstone
          ADD COLUMN row_filter_json TEXT
-         CHECK (row_filter_json IS NULL OR json_valid(row_filter_json))`,
+         CHECK (row_filter_json IS NULL OR json_valid(row_filter_json))`
     );
   }
-  if (!columns.has('field_mask_json')) {
+  if (!columns.has("field_mask_json")) {
     db.exec(
       `ALTER TABLE consent_scope_tombstone
          ADD COLUMN field_mask_json TEXT
-         CHECK (field_mask_json IS NULL OR json_valid(field_mask_json))`,
+         CHECK (field_mask_json IS NULL OR json_valid(field_mask_json))`
     );
   }
 }
@@ -158,7 +168,7 @@ export function migrateVault(db: DatabaseSync): void {
 }
 
 function currentVersion(db: DatabaseSync): number {
-  const row = db.prepare('PRAGMA user_version').get() as {
+  const row = db.prepare("PRAGMA user_version").get() as {
     user_version: number;
   };
   return row.user_version;
@@ -175,12 +185,12 @@ function currentVersion(db: DatabaseSync): number {
 export class VaultSchemaAheadError extends Error {
   constructor(
     readonly fileVersion: number,
-    readonly knownVersion: number,
+    readonly knownVersion: number
   ) {
     super(
-      `this vault was written by a newer version of Centraid (schema v${fileVersion}, this build understands v${knownVersion}) — refusing to open; upgrade the app instead`,
+      `this vault was written by a newer version of Centraid (schema v${fileVersion}, this build understands v${knownVersion}) — refusing to open; upgrade the app instead`
     );
-    this.name = 'VaultSchemaAheadError';
+    this.name = "VaultSchemaAheadError";
   }
 }
 
@@ -193,13 +203,13 @@ export function migrate(db: DatabaseSync, migrations: readonly string[]): void {
   while (version < migrations.length) {
     const ddl = migrations[version];
     if (ddl === undefined) break;
-    db.exec('BEGIN');
+    db.exec("BEGIN");
     try {
       db.exec(ddl);
       db.exec(`PRAGMA user_version = ${version + 1}`);
-      db.exec('COMMIT');
+      db.exec("COMMIT");
     } catch (err) {
-      db.exec('ROLLBACK');
+      db.exec("ROLLBACK");
       throw err;
     }
     version += 1;

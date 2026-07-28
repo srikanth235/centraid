@@ -5,10 +5,14 @@
 // the item is considered queued. If the process dies mid-hash the item was
 // never enqueued and nothing is lost; the next pass re-hashes.
 
-import { partCountFor, frameCountFor, sealedSizeFor } from './cbsf';
-import type { FileSourceOpener } from './file-source';
-import { IncrementalSha256 } from './incremental-sha256';
-import type { UploadFollowupFactory, UploadItem, UploadQueueStore } from './store';
+import { partCountFor, frameCountFor, sealedSizeFor } from "./cbsf";
+import type { FileSourceOpener } from "./file-source";
+import { IncrementalSha256 } from "./incremental-sha256";
+import type {
+  UploadFollowupFactory,
+  UploadItem,
+  UploadQueueStore,
+} from "./store";
 
 /** Hash window. Matches the seal frame size, so memory stays flat and bounded. */
 const HASH_CHUNK_BYTES = 4 * 1024 * 1024;
@@ -54,7 +58,7 @@ export interface EnqueueDeps {
 export async function sha256OfFile(
   openFile: FileSourceOpener,
   localUri: string,
-  createDigest: () => StreamingDigest = () => new IncrementalSha256(),
+  createDigest: () => StreamingDigest = () => new IncrementalSha256()
 ): Promise<{ sha256: string; size: number }> {
   const source = await openFile(localUri);
   try {
@@ -64,7 +68,9 @@ export async function sha256OfFile(
       const length = Math.min(HASH_CHUNK_BYTES, source.size - offset);
       const chunk = await source.read(offset, length);
       if (chunk.byteLength !== length) {
-        throw new Error(`read ${chunk.byteLength} bytes at ${offset}, expected ${length}`);
+        throw new Error(
+          `read ${chunk.byteLength} bytes at ${offset}, expected ${length}`
+        );
       }
       hash.update(chunk);
       return hashNextChunk(offset + HASH_CHUNK_BYTES);
@@ -79,17 +85,19 @@ export async function sha256OfFile(
 export async function enqueueLocalFile(
   deps: EnqueueDeps,
   input: EnqueueInput,
-  makeFollowup?: UploadFollowupFactory,
+  makeFollowup?: UploadFollowupFactory
 ): Promise<UploadItem> {
   const { sha256, size } =
     input.digest ??
     (await sha256OfFile(
       deps.openFile,
       input.localUri,
-      ...(deps.createDigest ? [deps.createDigest] : []),
+      ...(deps.createDigest ? [deps.createDigest] : [])
     ));
   if (size !== input.plaintextSize) {
-    throw new Error(`file is ${size} bytes, caller declared ${input.plaintextSize}`);
+    throw new Error(
+      `file is ${size} bytes, caller declared ${input.plaintextSize}`
+    );
   }
   const frameCount = frameCountFor(size);
   const upload = {

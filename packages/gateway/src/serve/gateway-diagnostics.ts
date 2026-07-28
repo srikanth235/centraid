@@ -26,9 +26,9 @@
  * a working diagnostics bundle into a failed one.
  */
 
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {
   dbSizeBreakdown,
@@ -36,17 +36,17 @@ import {
   type DbSizeBreakdown,
   type InlineBodyViolationScan,
   type VaultDb,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
-} from '../version.js';
-import type { GatewayLogEntry, GatewayLogStore } from './gateway-log-store.js';
-import type { HealthRegistry, HealthSnapshot } from './health-registry.js';
-import type { VaultRegistry } from './vault-registry.js';
+} from "../version.js";
+import type { GatewayLogEntry, GatewayLogStore } from "./gateway-log-store.js";
+import type { HealthRegistry, HealthSnapshot } from "./health-registry.js";
+import type { VaultRegistry } from "./vault-registry.js";
 
 /** Default + max entry counts for the embedded log tail. */
 export const DEFAULT_DIAGNOSTICS_LOG_LIMIT = 500;
@@ -119,14 +119,14 @@ export interface GatewayDiagnosticsOptions {
 const SECRET_KEY_PATTERN =
   /token|secret|password|passwd|credential|api[-_]?key|private[-_]?key|bearer|authorization|cookie/iu;
 
-const REDACTED = '[REDACTED]';
+const REDACTED = "[REDACTED]";
 
 /** Deep-redact secret-shaped keys in an arbitrary JSON-ish value. Cycles
  *  aren't a concern — `config` is always caller-assembled plain data
  *  (paths, flags, parsed config objects), never a live class instance. */
 function redact(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redact);
-  if (value !== null && typeof value === 'object') {
+  if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
       out[key] = SECRET_KEY_PATTERN.test(key) ? REDACTED : redact(v);
@@ -148,10 +148,10 @@ function fileSizeOrNull(file: string): number | null {
 
 function vaultFileSizes(dir: string): DiagnosticsVaultFileSizes {
   return {
-    vaultDbBytes: fileSizeOrNull(path.join(dir, 'vault.db')),
-    vaultDbWalBytes: fileSizeOrNull(path.join(dir, 'vault.db-wal')),
-    journalDbBytes: fileSizeOrNull(path.join(dir, 'journal.db')),
-    journalDbWalBytes: fileSizeOrNull(path.join(dir, 'journal.db-wal')),
+    vaultDbBytes: fileSizeOrNull(path.join(dir, "vault.db")),
+    vaultDbWalBytes: fileSizeOrNull(path.join(dir, "vault.db-wal")),
+    journalDbBytes: fileSizeOrNull(path.join(dir, "journal.db")),
+    journalDbWalBytes: fileSizeOrNull(path.join(dir, "journal.db-wal")),
   };
 }
 
@@ -161,7 +161,9 @@ function vaultFileSizes(dir: string): DiagnosticsVaultFileSizes {
  * true for every unit-test stub in this file's own tests, and a safe
  * degrade if a future caller ever hands this a plane mid-teardown.
  */
-function tableStatsFor(plane: { db?: VaultDb }): DiagnosticsTableStats | undefined {
+function tableStatsFor(plane: {
+  db?: VaultDb;
+}): DiagnosticsTableStats | undefined {
   try {
     const db = plane.db;
     if (!db) return undefined;
@@ -180,22 +182,27 @@ function tableStatsFor(plane: { db?: VaultDb }): DiagnosticsTableStats | undefin
  *  `health.snapshot()` only runs its registered probes (the same cost
  *  `_gateway/health` pays). */
 export async function buildDiagnosticsBundle(
-  options: GatewayDiagnosticsOptions,
+  options: GatewayDiagnosticsOptions
 ): Promise<DiagnosticsBundle> {
   const health = await options.health.snapshot();
   const logLimit = options.logLimit ?? DEFAULT_DIAGNOSTICS_LOG_LIMIT;
   const allLogs = options.logs.snapshot();
-  const logs = allLogs.length > logLimit ? allLogs.slice(allLogs.length - logLimit) : allLogs;
+  const logs =
+    allLogs.length > logLimit
+      ? allLogs.slice(allLogs.length - logLimit)
+      : allLogs;
 
-  const vaults: DiagnosticsVaultInfo[] = options.vaults.planesList().map((plane) => {
-    const tableStats = tableStatsFor(plane);
-    return {
-      vaultId: plane.boot.vaultId,
-      name: plane.name,
-      files: vaultFileSizes(plane.dir),
-      ...(tableStats ? { tableStats } : {}),
-    };
-  });
+  const vaults: DiagnosticsVaultInfo[] = options.vaults
+    .planesList()
+    .map((plane) => {
+      const tableStats = tableStatsFor(plane);
+      return {
+        vaultId: plane.boot.vaultId,
+        name: plane.name,
+        files: vaultFileSizes(plane.dir),
+        ...(tableStats ? { tableStats } : {}),
+      };
+    });
 
   return {
     generatedAt: new Date().toISOString(),

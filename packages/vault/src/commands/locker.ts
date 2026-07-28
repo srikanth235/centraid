@@ -21,16 +21,16 @@
 // Secret-bearing inputs are declared `sealedInput`, so the append-only
 // journal records keyed hash tokens, never values.
 
-import { createHmac } from 'node:crypto';
+import { createHmac } from "node:crypto";
 
-import type { Gateway } from '../gateway/gateway.js';
-import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { cleanupPolyRefs } from '../schema/poly-refs.js';
-import { SEALED_PLACEHOLDER } from '../schema/sealed.js';
-import { replaceMemo } from './annotations.js';
-import { setStarred } from './flags.js';
+import type { Gateway } from "../gateway/gateway.js";
+import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { cleanupPolyRefs } from "../schema/poly-refs.js";
+import { SEALED_PLACEHOLDER } from "../schema/sealed.js";
+import { replaceMemo } from "./annotations.js";
+import { setStarred } from "./flags.js";
 
-export const LOCKER_ITEM_TYPE = 'locker.item';
+export const LOCKER_ITEM_TYPE = "locker.item";
 
 /**
  * Free-form locker tags are SKOS concepts in this scheme, carried by
@@ -38,37 +38,38 @@ export const LOCKER_ITEM_TYPE = 'locker.item';
  * mechanism, not a second per-domain tag table. https URI, not urn:, for
  * the same colon-literal reason as the flags scheme.
  */
-export const LOCKER_TAGS_SCHEME_URI = 'https://centraid.dev/schemes/locker-tags';
+export const LOCKER_TAGS_SCHEME_URI =
+  "https://centraid.dev/schemes/locker-tags";
 
 const PURGE_WINDOW_DAYS = 30;
 
 /** Columns each item type owns; everything else is nulled on write. */
 const TYPE_FIELDS: Record<string, readonly string[]> = {
-  login: ['username', 'password', 'url', 'otp_seed', 'notes'],
-  card: ['cardholder', 'card_number', 'expiry', 'cvv', 'brand'],
-  note: ['content'],
-  identity: ['fullname', 'email', 'phone', 'address'],
-  wifi: ['network', 'password'],
-  password: ['password'],
+  login: ["username", "password", "url", "otp_seed", "notes"],
+  card: ["cardholder", "card_number", "expiry", "cvv", "brand"],
+  note: ["content"],
+  identity: ["fullname", "email", "phone", "address"],
+  wifi: ["network", "password"],
+  password: ["password"],
 };
 
 const ALL_FIELDS = [
-  'username',
-  'password',
-  'url',
-  'otp_seed',
-  'notes',
-  'cardholder',
-  'card_number',
-  'expiry',
-  'cvv',
-  'brand',
-  'content',
-  'fullname',
-  'email',
-  'phone',
-  'address',
-  'network',
+  "username",
+  "password",
+  "url",
+  "otp_seed",
+  "notes",
+  "cardholder",
+  "card_number",
+  "expiry",
+  "cvv",
+  "brand",
+  "content",
+  "fullname",
+  "email",
+  "phone",
+  "address",
+  "network",
 ] as const;
 
 /**
@@ -76,13 +77,20 @@ const ALL_FIELDS = [
  * keyed hash token at these paths, never the value. Mirrors the sealed
  * columns of `locker.item` in the schema registry.
  */
-const SEALED_INPUT = ['password', 'otp_seed', 'card_number', 'cvv', 'content'] as const;
+const SEALED_INPUT = [
+  "password",
+  "otp_seed",
+  "card_number",
+  "cvv",
+  "content",
+] as const;
 
-const ITEM_EXISTS_SQL = 'SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id';
+const ITEM_EXISTS_SQL =
+  "SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id";
 const ITEM_LIVE_SQL =
-  'SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NULL';
+  "SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NULL";
 const ITEM_TRASHED_SQL =
-  'SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NOT NULL';
+  "SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NOT NULL";
 
 /** An ISO instant `days` ahead of ctx.now, for the purge date. */
 function plusDays(iso: string, days: number): string {
@@ -94,14 +102,14 @@ function plusDays(iso: string, days: number): string {
 /** The locker-tags scheme, created on first use (the flags-scheme pattern). */
 function lockerTagsSchemeId(ctx: HandlerCtx): string {
   const existing = ctx.db
-    .prepare('SELECT scheme_id FROM core_concept_scheme WHERE uri = ?')
+    .prepare("SELECT scheme_id FROM core_concept_scheme WHERE uri = ?")
     .get(LOCKER_TAGS_SCHEME_URI) as { scheme_id: string } | undefined;
   if (existing) return existing.scheme_id;
   const schemeId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
-       VALUES (?, ?, 'Locker tags', 'centraid', '1')`,
+       VALUES (?, ?, 'Locker tags', 'centraid', '1')`
     )
     .run(schemeId, LOCKER_TAGS_SCHEME_URI);
   return schemeId;
@@ -114,18 +122,22 @@ function lockerTagsSchemeId(ctx: HandlerCtx): string {
  * and when come for free, and the graph sees locker items exactly the way
  * it sees tagged photos and documents.
  */
-function setTags(ctx: HandlerCtx, itemId: string, tags: readonly string[]): void {
+function setTags(
+  ctx: HandlerCtx,
+  itemId: string,
+  tags: readonly string[]
+): void {
   const schemeId = lockerTagsSchemeId(ctx);
   ctx.db
     .prepare(
       `DELETE FROM core_tag
         WHERE target_type = ? AND target_id = ?
-          AND concept_id IN (SELECT concept_id FROM core_concept WHERE scheme_id = ?)`,
+          AND concept_id IN (SELECT concept_id FROM core_concept WHERE scheme_id = ?)`
     )
     .run(LOCKER_ITEM_TYPE, itemId, schemeId);
-  const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
-    | { owner_party_id: string | null }
-    | undefined;
+  const owner = ctx.db
+    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+    .get() as { owner_party_id: string | null } | undefined;
   const seen = new Set<string>();
   for (const raw of tags) {
     const tag = String(raw).trim();
@@ -133,7 +145,9 @@ function setTags(ctx: HandlerCtx, itemId: string, tags: readonly string[]): void
     seen.add(tag);
     let conceptId = (
       ctx.db
-        .prepare('SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?')
+        .prepare(
+          "SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?"
+        )
         .get(schemeId, tag) as { concept_id: string } | undefined
     )?.concept_id;
     if (!conceptId) {
@@ -141,7 +155,7 @@ function setTags(ctx: HandlerCtx, itemId: string, tags: readonly string[]): void
       ctx.db
         .prepare(
           `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
-           VALUES (?, ?, ?, ?, NULL, NULL, NULL)`,
+           VALUES (?, ?, ?, ?, NULL, NULL, NULL)`
         )
         .run(conceptId, schemeId, tag, tag);
     }
@@ -149,10 +163,17 @@ function setTags(ctx: HandlerCtx, itemId: string, tags: readonly string[]): void
     ctx.db
       .prepare(
         `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-         VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+         VALUES (?, ?, ?, ?, ?, NULL, ?)`
       )
-      .run(tagId, LOCKER_ITEM_TYPE, itemId, conceptId, owner?.owner_party_id ?? null, ctx.now);
-    ctx.wrote('core.tag', tagId);
+      .run(
+        tagId,
+        LOCKER_ITEM_TYPE,
+        itemId,
+        conceptId,
+        owner?.owner_party_id ?? null,
+        ctx.now
+      );
+    ctx.wrote("core.tag", tagId);
   }
 }
 
@@ -161,17 +182,25 @@ function setTags(ctx: HandlerCtx, itemId: string, tags: readonly string[]): void
  * broker connection this credential is for. Validated live — an anchor to a
  * connection the vault does not hold would be the opaque pointer again.
  */
-function setConnection(ctx: HandlerCtx, itemId: string, connectionId: string): void {
+function setConnection(
+  ctx: HandlerCtx,
+  itemId: string,
+  connectionId: string
+): void {
   const trimmed = connectionId.trim();
   if (trimmed.length === 0) {
-    ctx.db.prepare('UPDATE locker_item SET connection_id = NULL WHERE item_id = ?').run(itemId);
+    ctx.db
+      .prepare("UPDATE locker_item SET connection_id = NULL WHERE item_id = ?")
+      .run(itemId);
     return;
   }
   const live = ctx.db
-    .prepare('SELECT 1 AS x FROM sync_connection WHERE connection_id = ?')
+    .prepare("SELECT 1 AS x FROM sync_connection WHERE connection_id = ?")
     .get(trimmed);
   if (!live) throw new Error(`no sync.connection with id ${trimmed}`);
-  ctx.db.prepare('UPDATE locker_item SET connection_id = ? WHERE item_id = ?').run(trimmed, itemId);
+  ctx.db
+    .prepare("UPDATE locker_item SET connection_id = ? WHERE item_id = ?")
+    .run(trimmed, itemId);
 }
 
 /**
@@ -181,29 +210,35 @@ function setConnection(ctx: HandlerCtx, itemId: string, connectionId: string): v
  * alias yields it: reassigning to a live item steals it.
  */
 function setAlias(ctx: HandlerCtx, itemId: string, alias: string): void {
-  ctx.db.prepare('DELETE FROM locker_item_alias WHERE item_id = ?').run(itemId);
+  ctx.db.prepare("DELETE FROM locker_item_alias WHERE item_id = ?").run(itemId);
   const trimmed = alias.trim();
   if (trimmed.length === 0) return; // cleared
   const clash = ctx.db
     .prepare(
       `SELECT a.item_id FROM locker_item_alias a
          JOIN locker_item i ON i.item_id = a.item_id
-        WHERE a.alias = ? AND i.deleted_at IS NULL AND a.item_id <> ?`,
+        WHERE a.alias = ? AND i.deleted_at IS NULL AND a.item_id <> ?`
     )
     .get(trimmed, itemId) as { item_id: string } | undefined;
-  if (clash) throw new Error(`alias "${trimmed}" is already used by another live item`);
+  if (clash)
+    throw new Error(`alias "${trimmed}" is already used by another live item`);
   ctx.db
-    .prepare('INSERT OR REPLACE INTO locker_item_alias (alias, item_id) VALUES (?, ?)')
+    .prepare(
+      "INSERT OR REPLACE INTO locker_item_alias (alias, item_id) VALUES (?, ?)"
+    )
     .run(trimmed, itemId);
 }
 
 /** The subset of `input` that is a real column for `type`, as column→value. */
-function fieldValues(type: string, input: Record<string, unknown>): Record<string, string | null> {
+function fieldValues(
+  type: string,
+  input: Record<string, unknown>
+): Record<string, string | null> {
   const cols = TYPE_FIELDS[type] ?? [];
   const out: Record<string, string | null> = {};
   for (const col of cols) {
     const v = input[col];
-    out[col] = v == null || v === '' ? null : String(v);
+    out[col] = v == null || v === "" ? null : String(v);
   }
   return out;
 }
@@ -217,55 +252,55 @@ function isPlaceholder(value: string | null): boolean {
   return value === SEALED_PLACEHOLDER;
 }
 
-const FIELD_SCHEMA: Record<string, { type: 'string' }> = Object.fromEntries(
-  ALL_FIELDS.map((f) => [f, { type: 'string' }]),
+const FIELD_SCHEMA: Record<string, { type: "string" }> = Object.fromEntries(
+  ALL_FIELDS.map((f) => [f, { type: "string" }])
 );
 
 const ADD_ITEM: CommandDefinition = {
-  name: 'locker.add_item',
-  ownerSchema: 'locker',
+  name: "locker.add_item",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['type', 'title'],
+    type: "object",
+    required: ["type", "title"],
     additionalProperties: false,
     properties: {
       type: {
-        type: 'string',
-        enum: ['login', 'card', 'note', 'identity', 'wifi', 'password'],
+        type: "string",
+        enum: ["login", "card", "note", "identity", "wifi", "password"],
       },
-      title: { type: 'string', minLength: 1 },
-      tags: { type: 'array', items: { type: 'string' } },
-      compromised: { type: 'boolean' },
+      title: { type: "string", minLength: 1 },
+      tags: { type: "array", items: { type: "string" } },
+      compromised: { type: "boolean" },
       // A stable connector-binding name (issue #298 item 4): letters, digits,
       // dot, dash, underscore — the token in `locker:@<alias>:<column>`.
-      alias: { type: 'string', pattern: '^[A-Za-z0-9._-]{1,64}$' },
+      alias: { type: "string", pattern: "^[A-Za-z0-9._-]{1,64}$" },
       // The service anchor (issue #310 S3): the broker connection this
       // credential is for, validated live.
-      connection_id: { type: 'string' },
+      connection_id: { type: "string" },
       url_match_policy: {
-        type: 'string',
-        enum: ['registrable-domain', 'exact-host'],
+        type: "string",
+        enum: ["registrable-domain", "exact-host"],
       },
       ...FIELD_SCHEMA,
     },
   },
   outputSchema: {
-    type: 'object',
-    required: ['item_id'],
-    properties: { item_id: { type: 'string' } },
+    type: "object",
+    required: ["item_id"],
+    properties: { item_id: { type: "string" } },
   },
   preconditions: [],
   postconditions: [
     {
-      name: 'item_created',
+      name: "item_created",
       sql: ITEM_EXISTS_SQL,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  idempotency: 'once',
-  risk: 'low',
+  idempotency: "once",
+  risk: "low",
   sealedInput: SEALED_INPUT,
   handler: (ctx) => {
     const input = ctx.input as Record<string, unknown>;
@@ -279,7 +314,7 @@ const ADD_ITEM: CommandDefinition = {
             cardholder, card_number, expiry, cvv, brand, content,
             fullname, email, phone, address, network, compromised, created_at, updated_at)
          VALUES
-           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         itemId,
@@ -288,7 +323,9 @@ const ADD_ITEM: CommandDefinition = {
         f.username ?? null,
         f.password ?? null,
         f.url ?? null,
-        input.url_match_policy === 'exact-host' ? 'exact-host' : 'registrable-domain',
+        input.url_match_policy === "exact-host"
+          ? "exact-host"
+          : "registrable-domain",
         f.otp_seed ?? null,
         f.notes ?? null,
         f.cardholder ?? null,
@@ -304,12 +341,15 @@ const ADD_ITEM: CommandDefinition = {
         f.network ?? null,
         input.compromised ? 1 : 0,
         ctx.now,
-        ctx.now,
+        ctx.now
       );
-    if (typeof input.alias === 'string' && input.alias.length > 0) {
+    if (typeof input.alias === "string" && input.alias.length > 0) {
       setAlias(ctx, itemId, input.alias);
     }
-    if (typeof input.connection_id === 'string' && input.connection_id.length > 0) {
+    if (
+      typeof input.connection_id === "string" &&
+      input.connection_id.length > 0
+    ) {
       setConnection(ctx, itemId, input.connection_id);
     }
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
@@ -324,54 +364,56 @@ const ADD_ITEM: CommandDefinition = {
 };
 
 const EDIT_ITEM: CommandDefinition = {
-  name: 'locker.edit_item',
-  ownerSchema: 'locker',
+  name: "locker.edit_item",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id'],
+    type: "object",
+    required: ["item_id"],
     additionalProperties: false,
     properties: {
-      item_id: { type: 'string', minLength: 1 },
-      title: { type: 'string', minLength: 1 },
-      tags: { type: 'array', items: { type: 'string' } },
-      compromised: { type: 'boolean' },
+      item_id: { type: "string", minLength: 1 },
+      title: { type: "string", minLength: 1 },
+      tags: { type: "array", items: { type: "string" } },
+      compromised: { type: "boolean" },
       // Set to re-point a connector binding at this item; '' clears it.
-      alias: { type: 'string', pattern: '^[A-Za-z0-9._-]{0,64}$' },
+      alias: { type: "string", pattern: "^[A-Za-z0-9._-]{0,64}$" },
       // Set to re-anchor the service connection; '' clears it.
-      connection_id: { type: 'string' },
+      connection_id: { type: "string" },
       url_match_policy: {
-        type: 'string',
-        enum: ['registrable-domain', 'exact-host'],
+        type: "string",
+        enum: ["registrable-domain", "exact-host"],
       },
       ...FIELD_SCHEMA,
     },
   },
-  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
-  preconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: { type: "object", properties: { item_id: { type: "string" } } },
+  preconditions: [
+    { name: "item_live", sql: ITEM_LIVE_SQL, column: "n", op: "eq", value: 1 },
+  ],
   postconditions: [],
-  idempotency: 'idempotent',
-  risk: 'low',
+  idempotency: "idempotent",
+  risk: "low",
   sealedInput: SEALED_INPUT,
   handler: (ctx) => {
     const input = ctx.input as Record<string, unknown>;
     const itemId = String(input.item_id);
-    const row = ctx.db.prepare('SELECT type FROM locker_item WHERE item_id = ?').get(itemId) as
-      | { type: string }
-      | undefined;
-    if (!row) throw new Error('item not found');
+    const row = ctx.db
+      .prepare("SELECT type FROM locker_item WHERE item_id = ?")
+      .get(itemId) as { type: string } | undefined;
+    if (!row) throw new Error("item not found");
     const f = fieldValues(row.type, input);
     // Only overwrite the type's own columns + title/compromised; leave others.
-    const sets: string[] = ['updated_at = :now'];
+    const sets: string[] = ["updated_at = :now"];
     const params: Record<string, string | number | null> = {
       item_id: itemId,
       now: ctx.now,
     };
     if (input.title != null) {
-      sets.push('title = :title');
+      sets.push("title = :title");
       params.title = String(input.title);
     }
     if (input.compromised != null) {
-      sets.push('compromised = :compromised');
+      sets.push("compromised = :compromised");
       params.compromised = input.compromised ? 1 : 0;
     }
     if (input.alias != null) {
@@ -382,8 +424,9 @@ const EDIT_ITEM: CommandDefinition = {
       setConnection(ctx, itemId, String(input.connection_id));
     }
     if (input.url_match_policy != null) {
-      if (row.type !== 'login') throw new Error('url_match_policy is login-only');
-      sets.push('url_match_policy = :url_match_policy');
+      if (row.type !== "login")
+        throw new Error("url_match_policy is login-only");
+      sets.push("url_match_policy = :url_match_policy");
       params.url_match_policy = String(input.url_match_policy);
     }
     for (const [col, val] of Object.entries(f)) {
@@ -392,7 +435,9 @@ const EDIT_ITEM: CommandDefinition = {
       params[col] = val;
     }
     ctx.db
-      .prepare(`UPDATE locker_item SET ${sets.join(', ')} WHERE item_id = :item_id`)
+      .prepare(
+        `UPDATE locker_item SET ${sets.join(", ")} WHERE item_id = :item_id`
+      )
       .run(params);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     if (Array.isArray(input.tags)) setTags(ctx, itemId, input.tags as string[]);
@@ -401,32 +446,34 @@ const EDIT_ITEM: CommandDefinition = {
 };
 
 const TRASH_ITEM: CommandDefinition = {
-  name: 'locker.trash_item',
-  ownerSchema: 'locker',
+  name: "locker.trash_item",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id'],
+    type: "object",
+    required: ["item_id"],
     additionalProperties: false,
-    properties: { item_id: { type: 'string', minLength: 1 } },
+    properties: { item_id: { type: "string", minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
-  preconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: { type: "object", properties: { item_id: { type: "string" } } },
+  preconditions: [
+    { name: "item_live", sql: ITEM_LIVE_SQL, column: "n", op: "eq", value: 1 },
+  ],
   postconditions: [
     {
-      name: 'item_trashed',
+      name: "item_trashed",
       sql: ITEM_TRASHED_SQL,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  idempotency: 'idempotent',
-  risk: 'low',
+  idempotency: "idempotent",
+  risk: "low",
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     ctx.db
       .prepare(
-        'UPDATE locker_item SET deleted_at = :now, purge_at = :purge, updated_at = :now WHERE item_id = :item_id',
+        "UPDATE locker_item SET deleted_at = :now, purge_at = :purge, updated_at = :now WHERE item_id = :item_id"
       )
       .run({
         item_id: itemId,
@@ -439,32 +486,34 @@ const TRASH_ITEM: CommandDefinition = {
 };
 
 const RESTORE_ITEM: CommandDefinition = {
-  name: 'locker.restore_item',
-  ownerSchema: 'locker',
+  name: "locker.restore_item",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id'],
+    type: "object",
+    required: ["item_id"],
     additionalProperties: false,
-    properties: { item_id: { type: 'string', minLength: 1 } },
+    properties: { item_id: { type: "string", minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
+  outputSchema: { type: "object", properties: { item_id: { type: "string" } } },
   preconditions: [
     {
-      name: 'item_trashed',
+      name: "item_trashed",
       sql: ITEM_TRASHED_SQL,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  postconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
-  idempotency: 'idempotent',
-  risk: 'low',
+  postconditions: [
+    { name: "item_live", sql: ITEM_LIVE_SQL, column: "n", op: "eq", value: 1 },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     ctx.db
       .prepare(
-        'UPDATE locker_item SET deleted_at = NULL, purge_at = NULL, updated_at = :now WHERE item_id = :item_id',
+        "UPDATE locker_item SET deleted_at = NULL, purge_at = NULL, updated_at = :now WHERE item_id = :item_id"
       )
       .run({ item_id: itemId, now: ctx.now });
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
@@ -473,35 +522,35 @@ const RESTORE_ITEM: CommandDefinition = {
 };
 
 const PURGE_ITEM: CommandDefinition = {
-  name: 'locker.purge_item',
-  ownerSchema: 'locker',
+  name: "locker.purge_item",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id'],
+    type: "object",
+    required: ["item_id"],
     additionalProperties: false,
-    properties: { item_id: { type: 'string', minLength: 1 } },
+    properties: { item_id: { type: "string", minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
+  outputSchema: { type: "object", properties: { item_id: { type: "string" } } },
   preconditions: [
     {
-      name: 'item_exists',
+      name: "item_exists",
       sql: ITEM_EXISTS_SQL,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
   postconditions: [
     {
-      name: 'item_gone',
+      name: "item_gone",
       sql: ITEM_EXISTS_SQL,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 0,
     },
   ],
-  idempotency: 'once',
-  risk: 'medium',
+  idempotency: "once",
+  risk: "medium",
   // Destructive and irreversible (issue #306 decision 2) — parks for owner
   // confirmation on every non-owner-device invocation, matching the
   // "confirmation": "required" the app manifest already advertises. Without
@@ -514,7 +563,7 @@ const PURGE_ITEM: CommandDefinition = {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, false);
     setTags(ctx, itemId, []); // core_tag rows are polymorphic — no CASCADE
-    ctx.db.prepare('DELETE FROM locker_item WHERE item_id = ?').run(itemId);
+    ctx.db.prepare("DELETE FROM locker_item WHERE item_id = ?").run(itemId);
     cleanupPolyRefs(ctx.db, ctx.now, LOCKER_ITEM_TYPE, itemId);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     return { item_id: itemId };
@@ -522,19 +571,21 @@ const PURGE_ITEM: CommandDefinition = {
 };
 
 const STAR_ITEM: CommandDefinition = {
-  name: 'locker.star_item',
-  ownerSchema: 'locker',
+  name: "locker.star_item",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id'],
+    type: "object",
+    required: ["item_id"],
     additionalProperties: false,
-    properties: { item_id: { type: 'string', minLength: 1 } },
+    properties: { item_id: { type: "string", minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
-  preconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: { type: "object", properties: { item_id: { type: "string" } } },
+  preconditions: [
+    { name: "item_live", sql: ITEM_LIVE_SQL, column: "n", op: "eq", value: 1 },
+  ],
   postconditions: [],
-  idempotency: 'idempotent',
-  risk: 'low',
+  idempotency: "idempotent",
+  risk: "low",
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, true);
@@ -543,19 +594,21 @@ const STAR_ITEM: CommandDefinition = {
 };
 
 const UNSTAR_ITEM: CommandDefinition = {
-  name: 'locker.unstar_item',
-  ownerSchema: 'locker',
+  name: "locker.unstar_item",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id'],
+    type: "object",
+    required: ["item_id"],
     additionalProperties: false,
-    properties: { item_id: { type: 'string', minLength: 1 } },
+    properties: { item_id: { type: "string", minLength: 1 } },
   },
-  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
-  preconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: { type: "object", properties: { item_id: { type: "string" } } },
+  preconditions: [
+    { name: "item_live", sql: ITEM_LIVE_SQL, column: "n", op: "eq", value: 1 },
+  ],
   postconditions: [],
-  idempotency: 'idempotent',
-  risk: 'low',
+  idempotency: "idempotent",
+  risk: "low",
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, false);
@@ -567,14 +620,14 @@ const UNSTAR_ITEM: CommandDefinition = {
 
 /** RFC 4648 base32 decode (case-insensitive, spaces and padding ignored). */
 function base32Decode(seed: string): Buffer {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const clean = seed.toUpperCase().replace(/[\s=-]/gu, '');
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const clean = seed.toUpperCase().replace(/[\s=-]/gu, "");
   let bits = 0;
   let value = 0;
   const bytes: number[] = [];
   for (const ch of clean) {
     const idx = alphabet.indexOf(ch);
-    if (idx < 0) throw new Error('otp seed is not valid base32');
+    if (idx < 0) throw new Error("otp seed is not valid base32");
     value = (value << 5) | idx;
     bits += 5;
     if (bits >= 8) {
@@ -589,65 +642,71 @@ const TOTP_PERIOD_S = 30;
 const TOTP_DIGITS = 6;
 
 /** RFC 6238 TOTP (HMAC-SHA1, 30s step, 6 digits) for one instant. */
-export function totpAt(seed: string, epochMs: number): { code: string; remaining: number } {
+export function totpAt(
+  seed: string,
+  epochMs: number
+): { code: string; remaining: number } {
   const step = Math.floor(epochMs / 1000 / TOTP_PERIOD_S);
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(step));
-  const digest = createHmac('sha1', base32Decode(seed)).update(counter).digest();
+  const digest = createHmac("sha1", base32Decode(seed))
+    .update(counter)
+    .digest();
   const offset = digest[digest.length - 1]! & 0x0f;
   const dbc =
     ((digest[offset]! & 0x7f) << 24) |
     (digest[offset + 1]! << 16) |
     (digest[offset + 2]! << 8) |
     digest[offset + 3]!;
-  const code = String(dbc % 10 ** TOTP_DIGITS).padStart(TOTP_DIGITS, '0');
-  const remaining = TOTP_PERIOD_S - (Math.floor(epochMs / 1000) % TOTP_PERIOD_S);
+  const code = String(dbc % 10 ** TOTP_DIGITS).padStart(TOTP_DIGITS, "0");
+  const remaining =
+    TOTP_PERIOD_S - (Math.floor(epochMs / 1000) % TOTP_PERIOD_S);
   return { code, remaining };
 }
 
 const ITEM_HAS_SEED_SQL = `SELECT count(*) AS n FROM locker_item WHERE item_id = :item_id AND deleted_at IS NULL AND otp_seed IS NOT NULL`;
 
 const TOTP_CODE: CommandDefinition = {
-  name: 'locker.totp_code',
-  ownerSchema: 'locker',
+  name: "locker.totp_code",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id'],
+    type: "object",
+    required: ["item_id"],
     additionalProperties: false,
-    properties: { item_id: { type: 'string', minLength: 1 } },
+    properties: { item_id: { type: "string", minLength: 1 } },
   },
   outputSchema: {
-    type: 'object',
-    required: ['code', 'period', 'remaining'],
+    type: "object",
+    required: ["code", "period", "remaining"],
     properties: {
-      code: { type: 'string' },
-      period: { type: 'number' },
-      remaining: { type: 'number' },
+      code: { type: "string" },
+      period: { type: "number" },
+      remaining: { type: "number" },
     },
   },
   preconditions: [
     {
-      name: 'item_has_seed',
+      name: "item_has_seed",
       sql: ITEM_HAS_SEED_SQL,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
   postconditions: [],
-  idempotency: 'retry-safe',
-  risk: 'low',
+  idempotency: "retry-safe",
+  risk: "low",
   // The exemplar of the sealed class (issue #293): the seed unseals INSIDE
   // the command and only the 6 digits emerge; the unseal is receipted.
-  unseals: ['locker.item.otp_seed'],
+  unseals: ["locker.item.otp_seed"],
   // The 6-digit code is secret-derived (issue #298 item 6): the caller gets
   // the live value, but it is redacted from the durable journal receipt so a
   // one-time code never persists in a replayable store.
   transcriptSensitive: true,
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
-    const seed = ctx.unseal(LOCKER_ITEM_TYPE, itemId, 'otp_seed');
-    if (!seed) throw new Error('item has no otp seed');
+    const seed = ctx.unseal(LOCKER_ITEM_TYPE, itemId, "otp_seed");
+    if (!seed) throw new Error("item has no otp seed");
     const { code, remaining } = totpAt(seed, Date.parse(ctx.now));
     return { code, period: TOTP_PERIOD_S, remaining };
   },
@@ -666,46 +725,48 @@ export function strengthScore(pw: string): number {
 }
 
 const WATCHTOWER: CommandDefinition = {
-  name: 'locker.watchtower',
-  ownerSchema: 'locker',
-  inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  name: "locker.watchtower",
+  ownerSchema: "locker",
+  inputSchema: { type: "object", additionalProperties: false, properties: {} },
   outputSchema: {
-    type: 'object',
-    required: ['items'],
-    properties: { items: { type: 'array' } },
+    type: "object",
+    required: ["items"],
+    properties: { items: { type: "array" } },
   },
   preconditions: [],
   postconditions: [],
-  idempotency: 'retry-safe',
-  risk: 'low',
+  idempotency: "retry-safe",
+  risk: "low",
   // Weak/reused/last4 are computed inside the sealed boundary — only
   // booleans and a card's last four digits emerge (issue #293 decision 5).
-  unseals: ['locker.item.password', 'locker.item.card_number'],
+  unseals: ["locker.item.password", "locker.item.card_number"],
   handler: (ctx) => {
     const rows = ctx.db
       .prepare(
         `SELECT item_id, type FROM locker_item WHERE deleted_at IS NULL
-          AND (type IN ('login','card') OR (type IN ('wifi','password') AND password IS NOT NULL))`,
+          AND (type IN ('login','card') OR (type IN ('wifi','password') AND password IS NOT NULL))`
       )
       .all() as { item_id: string; type: string }[];
     const passwords = new Map<string, string | null>();
     for (const r of rows) {
-      if (r.type === 'card') continue;
-      passwords.set(r.item_id, ctx.unseal(LOCKER_ITEM_TYPE, r.item_id, 'password'));
+      if (r.type === "card") continue;
+      passwords.set(
+        r.item_id,
+        ctx.unseal(LOCKER_ITEM_TYPE, r.item_id, "password")
+      );
     }
     // Reused: a login password appearing on ≥2 non-trashed logins.
     const loginPwCount = new Map<string, number>();
     for (const r of rows) {
-      if (r.type !== 'login') continue;
+      if (r.type !== "login") continue;
       const pw = passwords.get(r.item_id);
       if (pw) loginPwCount.set(pw, (loginPwCount.get(pw) ?? 0) + 1);
     }
     const items = rows.map((r) => {
-      if (r.type === 'card') {
-        const digits = (ctx.unseal(LOCKER_ITEM_TYPE, r.item_id, 'card_number') ?? '').replace(
-          /\s/gu,
-          '',
-        );
+      if (r.type === "card") {
+        const digits = (
+          ctx.unseal(LOCKER_ITEM_TYPE, r.item_id, "card_number") ?? ""
+        ).replace(/\s/gu, "");
         return {
           item_id: r.item_id,
           weak: false,
@@ -716,8 +777,8 @@ const WATCHTOWER: CommandDefinition = {
       const pw = passwords.get(r.item_id);
       return {
         item_id: r.item_id,
-        weak: r.type === 'login' && !!pw && strengthScore(pw) <= 2,
-        reused: r.type === 'login' && !!pw && (loginPwCount.get(pw) ?? 0) >= 2,
+        weak: r.type === "login" && !!pw && strengthScore(pw) <= 2,
+        reused: r.type === "login" && !!pw && (loginPwCount.get(pw) ?? 0) >= 2,
       };
     });
     return { items };
@@ -725,23 +786,25 @@ const WATCHTOWER: CommandDefinition = {
 };
 
 const SET_MEMO: CommandDefinition = {
-  name: 'locker.set_memo',
-  ownerSchema: 'locker',
+  name: "locker.set_memo",
+  ownerSchema: "locker",
   inputSchema: {
-    type: 'object',
-    required: ['item_id', 'note'],
+    type: "object",
+    required: ["item_id", "note"],
     additionalProperties: false,
     properties: {
-      item_id: { type: 'string', minLength: 1 },
+      item_id: { type: "string", minLength: 1 },
       // '' clears the memo (the one-running-memo-per-entity semantic).
-      note: { type: 'string' },
+      note: { type: "string" },
     },
   },
-  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
-  preconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  outputSchema: { type: "object", properties: { item_id: { type: "string" } } },
+  preconditions: [
+    { name: "item_live", sql: ITEM_LIVE_SQL, column: "n", op: "eq", value: 1 },
+  ],
   postconditions: [],
-  idempotency: 'idempotent',
-  risk: 'low',
+  idempotency: "idempotent",
+  risk: "low",
   handler: (ctx) => {
     // The owner's remark ABOUT an item — "rotated after the breach" — is a
     // knowledge.annotation on the canonical row (issue #310 C6), plaintext

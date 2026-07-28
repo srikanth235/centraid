@@ -1,22 +1,29 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync } from "node:fs";
+import path from "node:path";
 
-import { appendLogs, type LogEntry } from '../data/log-store.js';
-import type { AppRef } from '../types.js';
-import type { VaultBridge, VaultOp } from './vault-bridge.js';
-import { sharedWorkerAdmission, type WorkerAdmission } from './worker-admission.js';
-import { WorkerPool, workerPoolSizeFromEnv, workerResourceLimitsFromEnv } from './worker-pool.js';
+import { appendLogs, type LogEntry } from "../data/log-store.js";
+import type { AppRef } from "../types.js";
+import type { VaultBridge, VaultOp } from "./vault-bridge.js";
+import {
+  sharedWorkerAdmission,
+  type WorkerAdmission,
+} from "./worker-admission.js";
+import {
+  WorkerPool,
+  workerPoolSizeFromEnv,
+  workerResourceLimitsFromEnv,
+} from "./worker-pool.js";
 
 function resolveWorkerFile(): string {
   // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
   // the worker runner lives one level up under `worker/`.
   const here = import.meta.dirname;
-  const jsPath = path.join(here, '..', 'worker', 'runner.js');
+  const jsPath = path.join(here, "..", "worker", "runner.js");
   if (existsSync(jsPath)) return jsPath;
   // Running tests via tsx from src/ where .js isn't emitted — fall back to
   // the .ts source. tsx propagates its loader to spawned Workers via
   // NODE_OPTIONS, so this works under `tsx --test`.
-  return path.join(here, '..', 'worker', 'runner.ts');
+  return path.join(here, "..", "worker", "runner.ts");
 }
 
 const WORKER_FILE = resolveWorkerFile();
@@ -40,7 +47,7 @@ function sharedWorkerPool(): WorkerPool {
     sharedWorkerPoolInstance = new WorkerPool(
       WORKER_FILE,
       workerPoolSizeFromEnv(),
-      workerResourceLimitsFromEnv(),
+      workerResourceLimitsFromEnv()
     );
     sharedWorkerPoolInstance.prewarm();
   }
@@ -50,7 +57,7 @@ function sharedWorkerPool(): WorkerPool {
 export interface RunHandlerOptions {
   app: AppRef;
   handlerFile: string;
-  handlerKind: 'query' | 'action';
+  handlerKind: "query" | "action";
   args: Record<string, unknown>;
   timeoutMs?: number;
   /**
@@ -82,7 +89,7 @@ export interface HandlerOutcome {
   ok: boolean;
   value?: unknown;
   error?: string;
-  logs: Array<{ level: 'info' | 'warn' | 'error'; msg: string }>;
+  logs: Array<{ level: "info" | "warn" | "error"; msg: string }>;
   /** Set when `ok` is false because admission refused a worker slot (issue #351) — no worker ever spawned. */
   busy?: boolean;
 }
@@ -93,7 +100,9 @@ export interface HandlerOutcome {
  * credential. No SQLite handle, no file path: the silo is gone (issue
  * #286 phase 2).
  */
-export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcome> {
+export async function runHandler(
+  opts: RunHandlerOptions
+): Promise<HandlerOutcome> {
   const admission = opts.admission ?? sharedWorkerAdmission();
   // Admission gates the WORKER SPAWN itself (issue #351) — a saturated
   // gateway must fail fast here, before a single extra worker thread comes
@@ -115,7 +124,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     admission.release();
   };
 
-  const logs: HandlerOutcome['logs'] = [];
+  const logs: HandlerOutcome["logs"] = [];
 
   // Take a pre-booted, single-use worker from the warm-spare pool and hand it
   // the request. The pool has already paid the thread/module boot on a spare
@@ -124,7 +133,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const pool = opts.pool ?? sharedWorkerPool();
   const worker = pool.acquire();
   const runMessage = {
-    type: 'run',
+    type: "run",
     request: {
       handlerFile: opts.handlerFile,
       handlerKind: opts.handlerKind,
@@ -141,7 +150,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     }, opts.timeoutMs);
   }
 
-  const handlerName = path.basename(opts.handlerFile).replace(/\.(?:ts|js)$/u, '');
+  const handlerName = path
+    .basename(opts.handlerFile)
+    .replace(/\.(?:ts|js)$/u, "");
   const persistedEntries: LogEntry[] = [];
 
   return await new Promise<HandlerOutcome>((resolve) => {
@@ -154,7 +165,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       // Notify only on successful action turns — the app acted, views
       // should re-derive. The notifier is wrapped so a thrown listener
       // can't change the handler outcome.
-      if (opts.onWrite && opts.handlerKind !== 'query' && outcome.ok) {
+      if (opts.onWrite && opts.handlerKind !== "query" && outcome.ok) {
         try {
           opts.onWrite([]);
         } catch {
@@ -173,8 +184,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       resolve(outcome);
     };
 
-    worker.on('message', (msg: { type: string }) => {
-      if (msg.type === 'vault') {
+    worker.on("message", (msg: { type: string }) => {
+      if (msg.type === "vault") {
         const call = msg as unknown as {
           id: number;
           op: VaultOp;
@@ -183,22 +194,24 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         const bridge = opts.vault;
         void (async () => {
           const reply = bridge
-            ? await bridge({ op: call.op, payload: call.payload ?? {} }).catch((err: unknown) => ({
-                ok: false,
-                code: 'VAULT_ERROR',
-                error: err instanceof Error ? err.message : String(err),
-              }))
+            ? await bridge({ op: call.op, payload: call.payload ?? {} }).catch(
+                (err: unknown) => ({
+                  ok: false,
+                  code: "VAULT_ERROR",
+                  error: err instanceof Error ? err.message : String(err),
+                })
+              )
             : {
                 ok: false,
-                code: 'VAULT_UNAVAILABLE',
-                error: 'no vault plane is mounted on this gateway',
+                code: "VAULT_UNAVAILABLE",
+                error: "no vault plane is mounted on this gateway",
               };
           // eslint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
-          worker.postMessage({ type: 'vault-reply', id: call.id, ...reply });
+          worker.postMessage({ type: "vault-reply", id: call.id, ...reply });
         })();
-      } else if (msg.type === 'log') {
+      } else if (msg.type === "log") {
         const m = msg as unknown as {
-          level: 'info' | 'warn' | 'error';
+          level: "info" | "warn" | "error";
           msg: string;
         };
         logs.push({ level: m.level, msg: m.msg });
@@ -209,7 +222,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           source: opts.handlerKind,
           handler: handlerName,
         });
-      } else if (msg.type === 'result') {
+      } else if (msg.type === "result") {
         const r = msg as unknown as {
           ok: boolean;
           value?: unknown;
@@ -220,7 +233,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         if (!r.ok && r.error) {
           persistedEntries.push({
             ts: Date.now(),
-            level: 'error',
+            level: "error",
             msg: `${opts.handlerKind} handler failed: ${r.error}`,
             source: opts.handlerKind,
             handler: handlerName,
@@ -229,24 +242,24 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         finish({ ok: r.ok, value: r.value, error: r.error, logs });
       }
     });
-    worker.on('error', (err) => {
+    worker.on("error", (err) => {
       // @types/node 26 types this callback's argument as `unknown` — a worker
       // can reject with any value, not only an Error.
       const message = err instanceof Error ? err.message : String(err);
       persistedEntries.push({
         ts: Date.now(),
-        level: 'error',
+        level: "error",
         msg: `worker error: ${message}`,
         source: opts.handlerKind,
         handler: handlerName,
       });
       finish({ ok: false, error: message, logs });
     });
-    worker.on('exit', (code) => {
+    worker.on("exit", (code) => {
       if (code !== 0) {
         persistedEntries.push({
           ts: Date.now(),
-          level: 'error',
+          level: "error",
           msg: `worker exited with code ${code}`,
           source: opts.handlerKind,
           handler: handlerName,

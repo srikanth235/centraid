@@ -10,9 +10,9 @@ on:
   workflow_call:
     inputs:
       ref:
-        description: 'Git ref to build (default: current)'
+        description: "Git ref to build (default: current)"
         required: false
-        default: ''
+        default: ""
         type: string
 
 permissions:

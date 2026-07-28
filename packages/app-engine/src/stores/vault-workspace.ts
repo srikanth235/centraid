@@ -17,7 +17,7 @@
  * gateway or vault packages.
  */
 
-import type { DatabaseProvider } from './gateway-db.js';
+import type { DatabaseProvider } from "./gateway-db.js";
 
 export interface VaultWorkspace {
   /** The vault's id (`core_vault.vault_id`) — the cache key across switches. */

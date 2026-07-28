@@ -31,7 +31,7 @@
  * knows exactly which binary it wants, and we should not second-guess it.
  */
 
-import path from 'node:path';
+import path from "node:path";
 
 /** Matches a PATH entry that is (or ends in) a `node_modules/.bin` dir, either separator. */
 const NODE_MODULES_BIN_RE = /[\\/]node_modules[\\/]\.bin[\\/]?$/u;
@@ -42,7 +42,7 @@ const NODE_MODULES_BIN_RE = /[\\/]node_modules[\\/]\.bin[\\/]?$/u;
  * unit tests; most callers want `agentSpawnEnv` instead.
  */
 export function sanitizeAgentPath(pathValue: string | undefined): string {
-  if (!pathValue) return '';
+  if (!pathValue) return "";
   return pathValue
     .split(path.delimiter)
     .filter((entry) => !NODE_MODULES_BIN_RE.test(entry))
@@ -72,9 +72,11 @@ export interface AgentSpawnEnvOptions {
  * opts out. Always returns a fresh object; never mutates `baseEnv` /
  * `process.env`, so concurrent turns can't race on `PATH`.
  */
-export function agentSpawnEnv(opts: AgentSpawnEnvOptions = {}): NodeJS.ProcessEnv {
+export function agentSpawnEnv(
+  opts: AgentSpawnEnvOptions = {}
+): NodeJS.ProcessEnv {
   const base = opts.baseEnv ?? process.env;
-  const currentPath = base.PATH ?? '';
+  const currentPath = base.PATH ?? "";
   const sanitized = opts.binPath ? currentPath : sanitizeAgentPath(currentPath);
   const finalPath = opts.extraPath
     ? sanitized

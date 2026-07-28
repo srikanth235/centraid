@@ -1,22 +1,32 @@
-import type { IconName } from '@centraid/design-tokens';
+import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connectors gallery surface; splitting would fragment one visual unit
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
 
-import { ASSIST_HANDOFF_EVENT, type AssistHandoffResult } from '../../assist-oauth-events.js';
-import { relativeTime } from '../format.js';
-import { cx } from '../ui/cx.js';
-import { Button, Icon } from '../ui/index.js';
-import { ConnectorBrandGlyph } from './connectorBrandMarks.js';
+import {
+  ASSIST_HANDOFF_EVENT,
+  type AssistHandoffResult,
+} from "../../assist-oauth-events.js";
+import { relativeTime } from "../format.js";
+import { cx } from "../ui/cx.js";
+import { Button, Icon } from "../ui/index.js";
+import { ConnectorBrandGlyph } from "./connectorBrandMarks.js";
 
-import controlsCss from '../styles/controls.module.css';
-import styles from './SettingsConnectionsScreen.module.css';
+import controlsCss from "../styles/controls.module.css";
+import styles from "./SettingsConnectionsScreen.module.css";
 
 // Connectors gallery (issue #304 renderer half; primary sidebar page). Featured
 // tile grid of gateway provider connectors (Gmail, Calendar, Drive, GitHub, …)
 // with a detail/Connect sheet — not a sparse settings list. Same gateway I/O
 // surface as before: configure / pause / authorize / remove.
 
-export type ConnectionHealth = 'ok' | 'needs-auth' | 'paused' | 'failing';
+export type ConnectionHealth = "ok" | "needs-auth" | "paused" | "failing";
 
 export interface ConnectionRowDTO {
   connectionId: string;
@@ -26,8 +36,8 @@ export interface ConnectionRowDTO {
   health: ConnectionHealth;
   /** `null` = no credential attached — the connection rides the
    *  harness-ambient lane rather than a BYO one. */
-  credKind: 'oauth2' | 'api_key' | null;
-  oauthMode?: 'byo' | 'assist' | null;
+  credKind: "oauth2" | "api_key" | null;
+  oauthMode?: "byo" | "assist" | null;
   provider: string | null;
   authNote: string | null;
   lastRunAt: string | null;
@@ -54,14 +64,14 @@ export interface ProviderActionCapabilityDTO {
   toolName: string;
   kind: string;
   templateId?: string;
-  approval?: 'outbox';
+  approval?: "outbox";
   scope?: string;
 }
 
 export interface ProviderOptionDTO {
   id: string;
   name: string;
-  credKind: 'oauth2' | 'api_key';
+  credKind: "oauth2" | "api_key";
   authUrl?: string;
   tokenUrl?: string;
   scopes?: string;
@@ -76,7 +86,7 @@ export interface ProviderOptionDTO {
     | { enabled: false }
     | {
         enabled: true;
-        provider: 'google';
+        provider: "google";
         callbackUrl: string;
         restrictedScopesEnabled: boolean;
         scopeTiers: { standard: string[]; restricted: string[] };
@@ -101,8 +111,8 @@ export interface ConnectionFormInput {
   providerId: string;
   connectorKind: string;
   label: string;
-  credKind: 'oauth2' | 'api_key';
-  oauthMode?: 'byo' | 'assist';
+  credKind: "oauth2" | "api_key";
+  oauthMode?: "byo" | "assist";
   authUrl?: string;
   tokenUrl?: string;
   /** The connector's specific scope when the preset names one per
@@ -119,17 +129,26 @@ export interface SettingsConnectionsBridgeProps {
   loadProviders: () => Promise<ProviderOptionDTO[]>;
   /** Returns connectionId so oauth2 can open the authorize URL immediately. */
   configureConnection: (
-    input: ConnectionFormInput,
+    input: ConnectionFormInput
   ) => Promise<{ connectionId: string; status?: string } | void>;
-  setConnectionStatus: (connectionId: string, status: 'active' | 'paused') => Promise<void>;
+  setConnectionStatus: (
+    connectionId: string,
+    status: "active" | "paused"
+  ) => Promise<void>;
   /** Named `detachConnection` for historical reasons but performs the real
    *  removal (`sync.remove_connection`) — see `settingsConnectionsData.ts`. */
-  detachConnection: (connectionId: string, kind: string, label: string) => Promise<void>;
+  detachConnection: (
+    connectionId: string,
+    kind: string,
+    label: string
+  ) => Promise<void>;
   /** Begins the PKCE ceremony, returning the URL the owner's browser must
    *  visit. This screen opens it (`window.open`) — never navigates the app. */
   beginAuthorize: (connectionId: string) => Promise<string>;
   /** Manual desktop fallback when the custom-scheme launch is blocked. */
-  completeAssistReturnLink?: (rawUrl: string) => Promise<{ connectionId: string }>;
+  completeAssistReturnLink?: (
+    rawUrl: string
+  ) => Promise<{ connectionId: string }>;
   showToast: (message: string) => void;
   /** Linked pull automations for a connection (detail sheet). Optional. */
   loadLinkedSyncs?: (connection: ConnectionRowDTO) => Promise<LinkedSyncDTO[]>;
@@ -143,15 +162,15 @@ export interface SettingsConnectionsBridgeProps {
 }
 
 const HEALTH_LABEL: Record<ConnectionHealth, string> = {
-  failing: 'Failing',
-  'needs-auth': 'Needs authorization',
-  ok: 'Connected',
-  paused: 'Paused',
+  failing: "Failing",
+  "needs-auth": "Needs authorization",
+  ok: "Connected",
+  paused: "Paused",
 };
 
 const POLL_MS = 2000;
 const POLL_WINDOW_MS = 45_000;
-const ASSIST_PWA_ORIGIN = 'https://app.centraid.dev';
+const ASSIST_PWA_ORIGIN = "https://app.centraid.dev";
 
 /**
  * Poll a connection until it stops reporting `needs-auth` (or the window
@@ -168,7 +187,7 @@ function pollUntilAuthorized(
     loadConnections: () => Promise<ConnectionRowDTO[]>;
     onRows: (rows: ConnectionRowDTO[]) => void;
     onSettled: (connectionId: string) => void;
-  },
+  }
 ): void {
   const { pollTimer, pollDeadline, loadConnections, onRows, onSettled } = io;
   pollDeadline.current = Date.now() + POLL_WINDOW_MS;
@@ -177,7 +196,7 @@ function pollUntilAuthorized(
       .then((freshRows) => {
         onRows(freshRows);
         const row = freshRows.find((r) => r.connectionId === connectionId);
-        const done = !row || row.health !== 'needs-auth';
+        const done = !row || row.health !== "needs-auth";
         if (done) {
           onSettled(connectionId);
           return;
@@ -202,7 +221,7 @@ function pollUntilAuthorized(
 function assertAssistWebOrigin(): void {
   if (window.location.origin !== ASSIST_PWA_ORIGIN) {
     throw new Error(
-      'Connect with Centraid is available in the desktop app or at app.centraid.dev. Use Advanced with your own OAuth client on this web origin.',
+      "Connect with Centraid is available in the desktop app or at app.centraid.dev. Use Advanced with your own OAuth client on this web origin."
     );
   }
 }
@@ -219,148 +238,159 @@ interface FeaturedMeta {
 }
 
 const FEATURED_META: Record<string, FeaturedMeta> = {
-  'pull.gmail': {
-    name: 'Gmail',
-    short: 'Productivity',
-    blurb: 'Search your inbox, summarize unread mail, and find messages from specific people.',
-    accessTitle: 'Search your emails',
-    accessDesc:
-      'Search your inbox, summarize unread emails, and find messages from specific people.',
-    tone: 'gmail',
-    letter: 'M',
-  },
-  'pull.gcal': {
-    name: 'Google Calendar',
-    short: 'Productivity',
-    blurb: 'Read calendar events and keep schedules in sync with the vault.',
-    accessTitle: 'Access your calendar',
-    accessDesc: 'Search events, summarize upcoming meetings, and keep the vault in sync.',
-    tone: 'gcal',
-    letter: '31',
-  },
-  'pull.gcontacts': {
-    name: 'Google Contacts',
-    short: 'Productivity',
-    blurb: 'Pull people and contact details into the vault.',
-    accessTitle: 'Access your contacts',
-    accessDesc: 'Import people and contact details for vault-wide search.',
-    tone: 'gcontacts',
-    letter: 'P',
-  },
-  'pull.gdrive': {
-    name: 'Google Drive',
-    short: 'Productivity',
-    blurb: 'Search for documents, summarize presentations, and ask questions about Drive files.',
-    accessTitle: 'Access your files',
-    accessDesc:
-      'Search for documents, summarize presentations, and ask questions about your Drive files.',
-    tone: 'gdrive',
-    letter: 'D',
-  },
-  'pull.github': {
-    name: 'GitHub',
-    short: 'Developer',
+  "pull.gmail": {
+    name: "Gmail",
+    short: "Productivity",
     blurb:
-      'Search repositories and code, explore issues and PRs, and keep project activity in the vault.',
-    accessTitle: 'Access repositories',
-    accessDesc: 'Search repositories and code, explore issues and PRs, and track project activity.',
-    tone: 'github',
-    letter: 'GH',
+      "Search your inbox, summarize unread mail, and find messages from specific people.",
+    accessTitle: "Search your emails",
+    accessDesc:
+      "Search your inbox, summarize unread emails, and find messages from specific people.",
+    tone: "gmail",
+    letter: "M",
   },
-  'pull.outlook': {
-    name: 'Outlook Mail',
-    short: 'Productivity',
-    blurb: 'Search Outlook / Microsoft 365 mail and keep threads in the vault.',
-    accessTitle: 'Search your emails',
-    accessDesc: 'Read recent Outlook messages and stage them for vault-wide search.',
-    tone: 'outlook',
-    letter: 'O',
+  "pull.gcal": {
+    name: "Google Calendar",
+    short: "Productivity",
+    blurb: "Read calendar events and keep schedules in sync with the vault.",
+    accessTitle: "Access your calendar",
+    accessDesc:
+      "Search events, summarize upcoming meetings, and keep the vault in sync.",
+    tone: "gcal",
+    letter: "31",
   },
-  'pull.outlookcal': {
-    name: 'Outlook Calendar',
-    short: 'Productivity',
-    blurb: 'Pull Outlook calendar events into Agenda.',
-    accessTitle: 'Access your calendar',
-    accessDesc: 'Import events from your Microsoft 365 calendar.',
-    tone: 'outlookcal',
-    letter: '31',
+  "pull.gcontacts": {
+    name: "Google Contacts",
+    short: "Productivity",
+    blurb: "Pull people and contact details into the vault.",
+    accessTitle: "Access your contacts",
+    accessDesc: "Import people and contact details for vault-wide search.",
+    tone: "gcontacts",
+    letter: "P",
   },
-  'pull.outlookcontacts': {
-    name: 'Outlook Contacts',
-    short: 'Productivity',
-    blurb: 'Import Outlook people into your vault CRM.',
-    accessTitle: 'Access your contacts',
-    accessDesc: 'Pull Microsoft contacts as people, merge-aware on email and phone.',
-    tone: 'outlookcontacts',
-    letter: 'P',
+  "pull.gdrive": {
+    name: "Google Drive",
+    short: "Productivity",
+    blurb:
+      "Search for documents, summarize presentations, and ask questions about Drive files.",
+    accessTitle: "Access your files",
+    accessDesc:
+      "Search for documents, summarize presentations, and ask questions about your Drive files.",
+    tone: "gdrive",
+    letter: "D",
   },
-  'pull.onedrive': {
-    name: 'OneDrive',
-    short: 'Productivity',
-    blurb: 'Recent OneDrive files as searchable vault messages.',
-    accessTitle: 'Access your files',
-    accessDesc: 'List recent OneDrive files so the assistant can find and summarize them.',
-    tone: 'onedrive',
-    letter: '☁',
+  "pull.github": {
+    name: "GitHub",
+    short: "Developer",
+    blurb:
+      "Search repositories and code, explore issues and PRs, and keep project activity in the vault.",
+    accessTitle: "Access repositories",
+    accessDesc:
+      "Search repositories and code, explore issues and PRs, and track project activity.",
+    tone: "github",
+    letter: "GH",
   },
-  'pull.gitlab': {
-    name: 'GitLab',
-    short: 'Developer',
-    blurb: 'Issues and merge requests you are involved in, as vault threads.',
-    accessTitle: 'Access projects',
-    accessDesc: 'Pull GitLab issues and MRs with a personal access token.',
-    tone: 'gitlab',
-    letter: 'GL',
+  "pull.outlook": {
+    name: "Outlook Mail",
+    short: "Productivity",
+    blurb: "Search Outlook / Microsoft 365 mail and keep threads in the vault.",
+    accessTitle: "Search your emails",
+    accessDesc:
+      "Read recent Outlook messages and stage them for vault-wide search.",
+    tone: "outlook",
+    letter: "O",
   },
-  'pull.linear': {
-    name: 'Linear',
-    short: 'Developer',
-    blurb: 'Linear issues land as searchable threads in the vault.',
-    accessTitle: 'Access issues',
-    accessDesc: 'List issues from your Linear workspaces via personal API key.',
-    tone: 'linear',
-    letter: 'Li',
+  "pull.outlookcal": {
+    name: "Outlook Calendar",
+    short: "Productivity",
+    blurb: "Pull Outlook calendar events into Agenda.",
+    accessTitle: "Access your calendar",
+    accessDesc: "Import events from your Microsoft 365 calendar.",
+    tone: "outlookcal",
+    letter: "31",
   },
-  'pull.notion': {
-    name: 'Notion',
-    short: 'Notes',
-    blurb: 'Pages shared with your integration become searchable vault messages.',
-    accessTitle: 'Access pages',
-    accessDesc: 'Only pages you explicitly connect to the integration are imported.',
-    tone: 'notion',
-    letter: 'N',
+  "pull.outlookcontacts": {
+    name: "Outlook Contacts",
+    short: "Productivity",
+    blurb: "Import Outlook people into your vault CRM.",
+    accessTitle: "Access your contacts",
+    accessDesc:
+      "Pull Microsoft contacts as people, merge-aware on email and phone.",
+    tone: "outlookcontacts",
+    letter: "P",
   },
-  'pull.todoist': {
-    name: 'Todoist',
-    short: 'Tasks',
-    blurb: 'Active Todoist tasks stage into the vault for search and agents.',
-    accessTitle: 'Access tasks',
-    accessDesc: 'List open Todoist tasks (completed history is not bulk-imported).',
-    tone: 'todoist',
-    letter: '✓',
+  "pull.onedrive": {
+    name: "OneDrive",
+    short: "Productivity",
+    blurb: "Recent OneDrive files as searchable vault messages.",
+    accessTitle: "Access your files",
+    accessDesc:
+      "List recent OneDrive files so the assistant can find and summarize them.",
+    tone: "onedrive",
+    letter: "☁",
   },
-  'pull.slack': {
-    name: 'Slack',
-    short: 'Communication',
-    blurb: 'Recent DMs and channel messages land as vault threads.',
-    accessTitle: 'Access conversations',
-    accessDesc: 'Read recent Slack history you already can see — never posts.',
-    tone: 'slack',
-    letter: '#',
+  "pull.gitlab": {
+    name: "GitLab",
+    short: "Developer",
+    blurb: "Issues and merge requests you are involved in, as vault threads.",
+    accessTitle: "Access projects",
+    accessDesc: "Pull GitLab issues and MRs with a personal access token.",
+    tone: "gitlab",
+    letter: "GL",
   },
-  'pull.dropbox': {
-    name: 'Dropbox',
-    short: 'Files',
-    blurb: 'Dropbox folder metadata for vault search — no bulk download.',
-    accessTitle: 'Access files',
-    accessDesc: 'List file metadata from your Dropbox so agents can find paths and names.',
-    tone: 'dropbox',
-    letter: 'Db',
+  "pull.linear": {
+    name: "Linear",
+    short: "Developer",
+    blurb: "Linear issues land as searchable threads in the vault.",
+    accessTitle: "Access issues",
+    accessDesc: "List issues from your Linear workspaces via personal API key.",
+    tone: "linear",
+    letter: "Li",
+  },
+  "pull.notion": {
+    name: "Notion",
+    short: "Notes",
+    blurb:
+      "Pages shared with your integration become searchable vault messages.",
+    accessTitle: "Access pages",
+    accessDesc:
+      "Only pages you explicitly connect to the integration are imported.",
+    tone: "notion",
+    letter: "N",
+  },
+  "pull.todoist": {
+    name: "Todoist",
+    short: "Tasks",
+    blurb: "Active Todoist tasks stage into the vault for search and agents.",
+    accessTitle: "Access tasks",
+    accessDesc:
+      "List open Todoist tasks (completed history is not bulk-imported).",
+    tone: "todoist",
+    letter: "✓",
+  },
+  "pull.slack": {
+    name: "Slack",
+    short: "Communication",
+    blurb: "Recent DMs and channel messages land as vault threads.",
+    accessTitle: "Access conversations",
+    accessDesc: "Read recent Slack history you already can see — never posts.",
+    tone: "slack",
+    letter: "#",
+  },
+  "pull.dropbox": {
+    name: "Dropbox",
+    short: "Files",
+    blurb: "Dropbox folder metadata for vault search — no bulk download.",
+    accessTitle: "Access files",
+    accessDesc:
+      "List file metadata from your Dropbox so agents can find paths and names.",
+    tone: "dropbox",
+    letter: "Db",
   },
 };
 
 function kindLabelFallback(kind: string): string {
-  const tail = kind.includes('.') ? kind.slice(kind.indexOf('.') + 1) : kind;
+  const tail = kind.includes(".") ? kind.slice(kind.indexOf(".") + 1) : kind;
   return tail.charAt(0).toUpperCase() + tail.slice(1);
 }
 
@@ -368,11 +398,12 @@ function metaFor(kind: string): FeaturedMeta {
   return (
     FEATURED_META[kind] ?? {
       name: kindLabelFallback(kind),
-      short: 'Connector',
-      blurb: 'Connect this data source to the vault.',
-      accessTitle: 'Access your data',
-      accessDesc: 'Authorize Centraid to read from this service on a schedule you set.',
-      tone: 'default',
+      short: "Connector",
+      blurb: "Connect this data source to the vault.",
+      accessTitle: "Access your data",
+      accessDesc:
+        "Authorize Centraid to read from this service on a schedule you set.",
+      tone: "default",
       letter: kindLabelFallback(kind).slice(0, 1),
     }
   );
@@ -400,8 +431,10 @@ function buildFeatured(providers: ProviderOptionDTO[]): FeaturedConnector[] {
       if (seen.has(key)) continue;
       // Skip send-only template ids when a pull of the same kind already exists.
       if (
-        c.templateId.endsWith('-send') &&
-        p.connectors.some((x) => x.kind === c.kind && !x.templateId.endsWith('-send'))
+        c.templateId.endsWith("-send") &&
+        p.connectors.some(
+          (x) => x.kind === c.kind && !x.templateId.endsWith("-send")
+        )
       ) {
         continue;
       }
@@ -437,19 +470,26 @@ function ConnectionRow({
   onReconnect: () => void;
   onOpenDetail: () => void;
 }): JSX.Element {
-  const needsReconnect = row.health === 'needs-auth' || row.health === 'failing';
+  const needsReconnect =
+    row.health === "needs-auth" || row.health === "failing";
   return (
-    <div className={styles.row} data-health={row.health} data-testid="connector-row">
+    <div
+      className={styles.row}
+      data-health={row.health}
+      data-testid="connector-row"
+    >
       <button type="button" className={styles.rowMain} onClick={onOpenDetail}>
         <span className={styles.dot} data-health={row.health} />
         <div className={styles.rowMeta}>
           <div className={styles.rowName}>{row.label}</div>
           <span className={styles.rowSub}>
-            {`${row.kind}${row.principal ? ` · ${row.principal}` : ''}${
-              row.lastRunAt ? ` · last run ${relativeTime(row.lastRunAt)}` : ''
+            {`${row.kind}${row.principal ? ` · ${row.principal}` : ""}${
+              row.lastRunAt ? ` · last run ${relativeTime(row.lastRunAt)}` : ""
             }`}
           </span>
-          {row.authNote ? <span className={styles.rowAuthNote}>{row.authNote}</span> : null}
+          {row.authNote ? (
+            <span className={styles.rowAuthNote}>{row.authNote}</span>
+          ) : null}
         </div>
         <span className={styles.healthLabel} data-health={row.health}>
           {HEALTH_LABEL[row.health]}
@@ -463,10 +503,10 @@ function ConnectionRow({
               size="sm"
               label={
                 authorizing
-                  ? 'Still waiting…'
-                  : row.oauthMode === 'assist'
-                    ? 'Reconnect with Centraid Assist'
-                    : 'Reconnect'
+                  ? "Still waiting…"
+                  : row.oauthMode === "assist"
+                    ? "Reconnect with Centraid Assist"
+                    : "Reconnect"
               }
               disabled={busy}
               onClick={onReconnect}
@@ -476,7 +516,7 @@ function ConnectionRow({
         <Button
           variant="soft"
           size="sm"
-          label={row.health === 'paused' ? 'Resume' : 'Pause'}
+          label={row.health === "paused" ? "Resume" : "Pause"}
           disabled={busy}
           onClick={onToggleStatus}
         />
@@ -498,9 +538,13 @@ function SetupGuide({ steps }: { steps: string[] }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
     <div className={styles.setupGuide}>
-      <button type="button" className={styles.setupToggle} onClick={() => setOpen((o) => !o)}>
+      <button
+        type="button"
+        className={styles.setupToggle}
+        onClick={() => setOpen((o) => !o)}
+      >
         <Icon name="ChevronDown" size={12} />
-        <span>{open ? 'Hide setup guide' : 'Show setup guide'}</span>
+        <span>{open ? "Hide setup guide" : "Show setup guide"}</span>
       </button>
       {open ? (
         <ol className={styles.setupList}>
@@ -530,7 +574,10 @@ function withUniqueLabel(base: string, taken: readonly string[]): string {
 }
 
 /** Labels of existing connections for a connector kind — powers multi-account uniqueness. */
-function labelsForKind(rows: ConnectionRowDTO[] | null, kind: string): string[] {
+function labelsForKind(
+  rows: ConnectionRowDTO[] | null,
+  kind: string
+): string[] {
   return (rows ?? []).filter((r) => r.kind === kind).map((r) => r.label);
 }
 
@@ -552,19 +599,19 @@ function ConnectForm({
   onSubmit: (input: ConnectionFormInput) => void;
 }): JSX.Element {
   const provider = featured.provider;
-  const isOauth = provider.credKind === 'oauth2';
+  const isOauth = provider.credKind === "oauth2";
   const [label, setLabel] = useState(() =>
     withUniqueLabel(
-      `${provider.name.split(' (')[0] ?? provider.name} · ${featured.meta.name}`,
-      existingLabels,
-    ),
+      `${provider.name.split(" (")[0] ?? provider.name} · ${featured.meta.name}`,
+      existingLabels
+    )
   );
   const labelTaken = existingLabels.some(
-    (l) => l.trim().toLowerCase() === label.trim().toLowerCase(),
+    (l) => l.trim().toLowerCase() === label.trim().toLowerCase()
   );
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [apiKey, setApiKey] = useState("");
 
   const ready =
     label.trim().length > 0 &&
@@ -582,7 +629,7 @@ function ConnectForm({
       clientSecret: isOauth ? clientSecret.trim() : undefined,
       connectorKind: featured.kind,
       credKind: provider.credKind,
-      oauthMode: isOauth ? 'byo' : undefined,
+      oauthMode: isOauth ? "byo" : undefined,
       label: label.trim(),
       providerId: provider.id,
       scopes: featured.scope ?? provider.scopes,
@@ -601,14 +648,17 @@ function ConnectForm({
           onChange={(e) => setLabel(e.target.value)}
           data-testid="connector-label-input"
         />
-        <span className={styles.wizardHint} data-tone={labelTaken ? 'warn' : undefined}>
+        <span
+          className={styles.wizardHint}
+          data-tone={labelTaken ? "warn" : undefined}
+        >
           {labelTaken
-            ? 'A connection with this label already exists — saving will update it. Rename to add a separate account.'
+            ? "A connection with this label already exists — saving will update it. Rename to add a separate account."
             : existingLabels.length > 0
               ? `You already have ${existingLabels.length} ${
-                  existingLabels.length === 1 ? 'account' : 'accounts'
+                  existingLabels.length === 1 ? "account" : "accounts"
                 } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
-              : 'Name this connection. Use a distinct label per account to connect more than one.'}
+              : "Name this connection. Use a distinct label per account to connect more than one."}
         </span>
       </label>
 
@@ -616,7 +666,9 @@ function ConnectForm({
         <>
           {oauthCallbackUri ? (
             <label className={styles.wizardField}>
-              <span className={styles.wizardLabel}>Redirect URI (add this to your OAuth app)</span>
+              <span className={styles.wizardLabel}>
+                Redirect URI (add this to your OAuth app)
+              </span>
               <input
                 className={styles.textInput}
                 type="text"
@@ -636,7 +688,11 @@ function ConnectForm({
                 autoComplete="off"
                 value={clientId}
                 onChange={(e) => setClientId(e.target.value)}
-                placeholder={provider.id === 'google' ? '….apps.googleusercontent.com' : undefined}
+                placeholder={
+                  provider.id === "google"
+                    ? "….apps.googleusercontent.com"
+                    : undefined
+                }
               />
             </label>
             <label className={styles.wizardField}>
@@ -671,7 +727,9 @@ function ConnectForm({
         <Button
           variant="primary"
           size="sm"
-          label={busy ? 'Saving…' : isOauth ? 'Save & authorize' : 'Save connection'}
+          label={
+            busy ? "Saving…" : isOauth ? "Save & authorize" : "Save connection"
+          }
           disabled={!ready || busy}
           onClick={submit}
         />
@@ -681,11 +739,12 @@ function ConnectForm({
 }
 
 function scopeLabel(scope: string): string {
-  if (scope.endsWith('/calendar.readonly')) return 'Read Google Calendar';
-  if (scope.endsWith('/contacts.readonly')) return 'Read Google Contacts';
-  if (scope.endsWith('/gmail.readonly')) return 'Read Gmail';
-  if (scope.endsWith('/gmail.send')) return 'Send Gmail (owner approval still required)';
-  if (scope.endsWith('/drive.readonly')) return 'Read Google Drive';
+  if (scope.endsWith("/calendar.readonly")) return "Read Google Calendar";
+  if (scope.endsWith("/contacts.readonly")) return "Read Google Contacts";
+  if (scope.endsWith("/gmail.readonly")) return "Read Gmail";
+  if (scope.endsWith("/gmail.send"))
+    return "Send Gmail (owner approval still required)";
+  if (scope.endsWith("/drive.readonly")) return "Read Google Drive";
   return scope;
 }
 
@@ -709,13 +768,13 @@ function AssistConnectForm({
   const connectorScopes = new Set(
     featured.provider.connectors
       .filter((connector) => connector.kind === featured.kind)
-      .flatMap((connector) => (connector.scope ? [connector.scope] : [])),
+      .flatMap((connector) => (connector.scope ? [connector.scope] : []))
   );
   const permitted = [
-    ...standardScopes.map((scope) => ({ scope, tier: 'standard' as const })),
+    ...standardScopes.map((scope) => ({ scope, tier: "standard" as const })),
     ...restrictedScopes.map((scope) => ({
       scope,
-      tier: 'restricted' as const,
+      tier: "restricted" as const,
     })),
   ].filter(({ scope }) => connectorScopes.has(scope));
   const initialScope =
@@ -723,19 +782,19 @@ function AssistConnectForm({
     permitted.some(
       (entry) =>
         entry.scope === featured.scope &&
-        (entry.tier !== 'restricted' ||
-          (assist?.enabled === true && assist.restrictedScopesEnabled)),
+        (entry.tier !== "restricted" ||
+          (assist?.enabled === true && assist.restrictedScopesEnabled))
     )
       ? featured.scope
-      : permitted.find((entry) => entry.tier === 'standard')?.scope;
+      : permitted.find((entry) => entry.tier === "standard")?.scope;
   const [label, setLabel] = useState(() =>
-    withUniqueLabel(`Google · ${featured.meta.name}`, existingLabels),
+    withUniqueLabel(`Google · ${featured.meta.name}`, existingLabels)
   );
   const labelTaken = existingLabels.some(
-    (l) => l.trim().toLowerCase() === label.trim().toLowerCase(),
+    (l) => l.trim().toLowerCase() === label.trim().toLowerCase()
   );
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(initialScope ? [initialScope] : []),
+    () => new Set(initialScope ? [initialScope] : [])
   );
   const toggle = (scope: string): void => {
     setSelected((current) => {
@@ -747,7 +806,11 @@ function AssistConnectForm({
   };
   const ready = label.trim().length > 0 && selected.size > 0;
   if (!assist?.enabled) {
-    return <div className={styles.emptyNote}>Centraid Assist is unavailable on this gateway.</div>;
+    return (
+      <div className={styles.emptyNote}>
+        Centraid Assist is unavailable on this gateway.
+      </div>
+    );
   }
   return (
     <div className={styles.wizard} data-testid="connector-assist-wizard">
@@ -760,22 +823,30 @@ function AssistConnectForm({
           onChange={(event) => setLabel(event.target.value)}
           data-testid="connector-label-input"
         />
-        <span className={styles.wizardHint} data-tone={labelTaken ? 'warn' : undefined}>
+        <span
+          className={styles.wizardHint}
+          data-tone={labelTaken ? "warn" : undefined}
+        >
           {labelTaken
-            ? 'A connection with this label already exists — saving will update it. Rename to add a separate account.'
+            ? "A connection with this label already exists — saving will update it. Rename to add a separate account."
             : existingLabels.length > 0
               ? `You already have ${existingLabels.length} ${
-                  existingLabels.length === 1 ? 'account' : 'accounts'
+                  existingLabels.length === 1 ? "account" : "accounts"
                 } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
-              : 'Name this connection. Use a distinct label per account to connect more than one.'}
+              : "Name this connection. Use a distinct label per account to connect more than one."}
         </span>
       </label>
       <fieldset className={styles.scopePicker}>
         <legend className={styles.wizardLabel}>Google capabilities</legend>
         {permitted.map(({ scope, tier }) => {
-          const disabled = tier === 'restricted' && !assist.restrictedScopesEnabled;
+          const disabled =
+            tier === "restricted" && !assist.restrictedScopesEnabled;
           return (
-            <label key={scope} className={styles.scopeOption} data-disabled={disabled}>
+            <label
+              key={scope}
+              className={styles.scopeOption}
+              data-disabled={disabled}
+            >
               <input
                 type="checkbox"
                 checked={selected.has(scope)}
@@ -784,11 +855,11 @@ function AssistConnectForm({
               />
               <span>
                 {scopeLabel(scope)}
-                {tier === 'restricted' ? (
+                {tier === "restricted" ? (
                   <small>
                     {assist.restrictedScopesEnabled
-                      ? 'Restricted Google scope'
-                      : 'Available after Google verification'}
+                      ? "Restricted Google scope"
+                      : "Available after Google verification"}
                   </small>
                 ) : (
                   <small>Sensitive scope · standard Assist tier</small>
@@ -799,14 +870,18 @@ function AssistConnectForm({
         })}
       </fieldset>
       <p className={styles.sheetNote}>
-        Centraid does not request Google identity scopes (openid, email, or profile). Disconnect or
-        reconnect at any time.
+        Centraid does not request Google identity scopes (openid, email, or
+        profile). Disconnect or reconnect at any time.
       </p>
       {permitted.length > 0 &&
-      permitted.every((entry) => entry.tier === 'restricted' && !assist.restrictedScopesEnabled) ? (
+      permitted.every(
+        (entry) =>
+          entry.tier === "restricted" && !assist.restrictedScopesEnabled
+      ) ? (
         <p className={styles.sheetNote}>
-          This connector remains unavailable until Google restricted-scope verification is complete.
-          You can use your own OAuth client from Advanced now.
+          This connector remains unavailable until Google restricted-scope
+          verification is complete. You can use your own OAuth client from
+          Advanced now.
         </p>
       ) : null}
       <div className={styles.wizardFoot}>
@@ -814,17 +889,17 @@ function AssistConnectForm({
         <Button
           variant="primary"
           size="sm"
-          label={busy ? 'Starting…' : 'Continue to Google'}
+          label={busy ? "Starting…" : "Continue to Google"}
           disabled={!ready || busy}
           onClick={() =>
             onSubmit({
               allowedHosts: featured.provider.allowedHosts,
               connectorKind: featured.kind,
-              credKind: 'oauth2',
+              credKind: "oauth2",
               label: label.trim(),
-              oauthMode: 'assist',
-              providerId: 'google',
-              scopes: [...selected].join(' '),
+              oauthMode: "assist",
+              providerId: "google",
+              scopes: [...selected].join(" "),
             })
           }
         />
@@ -840,13 +915,14 @@ function ManualAssistHandoff({
   busy: boolean;
   onSubmit: (rawUrl: string) => void;
 }): JSX.Element {
-  const [returnLink, setReturnLink] = useState('');
+  const [returnLink, setReturnLink] = useState("");
   return (
     <details className={styles.manualHandoff}>
       <summary>Centraid did not reopen?</summary>
       <p>
-        Copy the complete <code>centraid://oauth/finish</code> return link from the browser and
-        paste it here. It is delivered directly to this gateway and is not saved.
+        Copy the complete <code>centraid://oauth/finish</code> return link from
+        the browser and paste it here. It is delivered directly to this gateway
+        and is not saved.
       </p>
       <div className={styles.manualHandoffRow}>
         <input
@@ -862,7 +938,7 @@ function ManualAssistHandoff({
         <Button
           variant="soft"
           size="sm"
-          label={busy ? 'Finishing…' : 'Finish connecting'}
+          label={busy ? "Finishing…" : "Finish connecting"}
           disabled={busy || returnLink.trim().length === 0}
           onClick={() => onSubmit(returnLink)}
         />
@@ -871,7 +947,13 @@ function ManualAssistHandoff({
   );
 }
 
-function BrandMark({ meta, size = 36 }: { meta: FeaturedMeta; size?: number }): JSX.Element {
+function BrandMark({
+  meta,
+  size = 36,
+}: {
+  meta: FeaturedMeta;
+  size?: number;
+}): JSX.Element {
   // ~70% of the soft tile so multicolor marks stay legible on dark chrome.
   const glyph = Math.round(size * 0.7);
   return (
@@ -887,15 +969,15 @@ function BrandMark({ meta, size = 36 }: { meta: FeaturedMeta; size?: number }): 
 }
 
 type SheetMode =
-  | { kind: 'closed' }
-  | { kind: 'picker' }
+  | { kind: "closed" }
+  | { kind: "picker" }
   | {
-      kind: 'detail';
+      kind: "detail";
       featured: FeaturedConnector;
-      connecting: false | 'assist' | 'byo';
+      connecting: false | "assist" | "byo";
     }
   | {
-      kind: 'connection';
+      kind: "connection";
       row: ConnectionRowDTO;
       featured: FeaturedConnector | null;
       reconnecting: boolean;
@@ -916,8 +998,8 @@ export default function SettingsConnectionsScreen({
 }: SettingsConnectionsBridgeProps): JSX.Element {
   const [rows, setRows] = useState<ConnectionRowDTO[] | null>(null);
   const [providers, setProviders] = useState<ProviderOptionDTO[] | null>(null);
-  const [query, setQuery] = useState('');
-  const [sheet, setSheet] = useState<SheetMode>({ kind: 'closed' });
+  const [query, setQuery] = useState("");
+  const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const [saving, setSaving] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [authorizingIds, setAuthorizingIds] = useState<Set<string>>(new Set());
@@ -931,14 +1013,18 @@ export default function SettingsConnectionsScreen({
   const refresh = useCallback((): void => {
     void loadConnections()
       .then(setRows)
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      );
   }, [loadConnections, showToast]);
 
   useEffect(() => {
     refresh();
     void loadProviders()
       .then(setProviders)
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      );
     if (loadOAuthCallbackUri) {
       void loadOAuthCallbackUri()
         .then(setOauthCallbackUri)
@@ -947,20 +1033,26 @@ export default function SettingsConnectionsScreen({
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-  }, [loadConnections, loadProviders, loadOAuthCallbackUri, refresh, showToast]);
+  }, [
+    loadConnections,
+    loadProviders,
+    loadOAuthCallbackUri,
+    refresh,
+    showToast,
+  ]);
 
   useEffect(() => {
     const onHandoff = (event: Event): void => {
       const result = (event as CustomEvent<AssistHandoffResult>).detail;
-      if (result.status === 'complete') {
+      if (result.status === "complete") {
         setAuthorizingIds((current) => {
           const next = new Set(current);
           next.delete(result.connectionId);
           return next;
         });
-        showToast('Connected with Centraid Assist.');
+        showToast("Connected with Centraid Assist.");
         refresh();
-      } else if (result.status === 'error') {
+      } else if (result.status === "error") {
         setAuthorizingIds(new Set());
         showToast(result.message);
       }
@@ -969,7 +1061,10 @@ export default function SettingsConnectionsScreen({
     return () => window.removeEventListener(ASSIST_HANDOFF_EVENT, onHandoff);
   }, [refresh, showToast]);
 
-  const featured = useMemo(() => (providers ? buildFeatured(providers) : []), [providers]);
+  const featured = useMemo(
+    () => (providers ? buildFeatured(providers) : []),
+    [providers]
+  );
 
   const connectedKinds = useMemo(() => {
     const s = new Set<string>();
@@ -985,7 +1080,7 @@ export default function SettingsConnectionsScreen({
         f.meta.name.toLowerCase().includes(q) ||
         f.meta.short.toLowerCase().includes(q) ||
         f.kind.toLowerCase().includes(q) ||
-        f.provider.name.toLowerCase().includes(q),
+        f.provider.name.toLowerCase().includes(q)
     );
   }, [featured, q]);
 
@@ -996,14 +1091,16 @@ export default function SettingsConnectionsScreen({
       (r) =>
         r.label.toLowerCase().includes(q) ||
         r.kind.toLowerCase().includes(q) ||
-        (r.principal?.toLowerCase().includes(q) ?? false),
+        (r.principal?.toLowerCase().includes(q) ?? false)
     );
   }, [rows, q]);
 
   const withBusy = (id: string, fn: () => Promise<void>): void => {
     setBusyIds((s) => new Set(s).add(id));
     void fn()
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => {
         setBusyIds((s) => {
           const next = new Set(s);
@@ -1033,15 +1130,15 @@ export default function SettingsConnectionsScreen({
     setAuthorizingIds((s) => new Set(s).add(row.connectionId));
     void beginAuthorize(row.connectionId)
       .then(async (authUrl) => {
-        if (row.oauthMode === 'assist') {
+        if (row.oauthMode === "assist") {
           const host = await window.CentraidApi.getHostCapabilities?.();
-          if (host?.platform === 'web') {
+          if (host?.platform === "web") {
             assertAssistWebOrigin();
             window.location.assign(authUrl);
             return;
           }
         }
-        window.open(authUrl, '_blank', 'noopener');
+        window.open(authUrl, "_blank", "noopener");
         pollAfterAuthorize(row.connectionId);
       })
       .catch((err: unknown) => {
@@ -1057,7 +1154,11 @@ export default function SettingsConnectionsScreen({
   const featuredForRow = (row: ConnectionRowDTO): FeaturedConnector | null => {
     const list = providers ? buildFeatured(providers) : [];
     return (
-      list.find((f) => f.kind === row.kind && (!row.provider || f.providerId === row.provider)) ??
+      list.find(
+        (f) =>
+          f.kind === row.kind &&
+          (!row.provider || f.providerId === row.provider)
+      ) ??
       list.find((f) => f.kind === row.kind) ??
       null
     );
@@ -1066,7 +1167,7 @@ export default function SettingsConnectionsScreen({
   const openConnectionDetail = (row: ConnectionRowDTO): void => {
     setLinkedSyncs(null);
     setSheet({
-      kind: 'connection',
+      kind: "connection",
       row,
       featured: featuredForRow(row),
       reconnecting: false,
@@ -1081,17 +1182,19 @@ export default function SettingsConnectionsScreen({
   };
 
   const onReconnect = (row: ConnectionRowDTO): void => {
-    if (row.credKind === 'oauth2') {
+    if (row.credKind === "oauth2") {
       onAuthorize(row);
       return;
     }
     // api_key: re-open credential form without delete/recreate.
     const featured = featuredForRow(row);
     if (!featured) {
-      showToast('No provider preset for this connection — reconfigure from Featured.');
+      showToast(
+        "No provider preset for this connection — reconfigure from Featured."
+      );
       return;
     }
-    setSheet({ kind: 'connection', row, featured, reconnecting: true });
+    setSheet({ kind: "connection", row, featured, reconnecting: true });
   };
 
   const onManualAssistHandoff = (rawUrl: string): void => {
@@ -1104,11 +1207,13 @@ export default function SettingsConnectionsScreen({
           next.delete(connectionId);
           return next;
         });
-        setSheet({ kind: 'closed' });
-        showToast('Connected with Centraid Assist.');
+        setSheet({ kind: "closed" });
+        showToast("Connected with Centraid Assist.");
         refresh();
       })
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => setFinishingManualHandoff(false));
   };
 
@@ -1117,31 +1222,31 @@ export default function SettingsConnectionsScreen({
     void configureConnection(input)
       .then(async (result) => {
         const connectionId =
-          result && typeof result === 'object' && 'connectionId' in result
+          result && typeof result === "object" && "connectionId" in result
             ? result.connectionId
             : undefined;
         refresh();
         // oauth2: credentials alone are not enough — open the provider consent
         // screen so Gmail/Calendar/Drive actually authorize (needs-auth → ok).
-        if (input.credKind === 'oauth2' && connectionId) {
-          setSheet({ kind: 'closed' });
+        if (input.credKind === "oauth2" && connectionId) {
+          setSheet({ kind: "closed" });
           setAuthorizingIds((s) => new Set(s).add(connectionId));
           try {
             const authUrl = await beginAuthorize(connectionId);
-            if (input.oauthMode === 'assist') {
+            if (input.oauthMode === "assist") {
               const host = await window.CentraidApi.getHostCapabilities?.();
-              if (host?.platform === 'web') {
+              if (host?.platform === "web") {
                 assertAssistWebOrigin();
                 window.location.assign(authUrl);
                 return;
               }
             }
-            window.open(authUrl, '_blank', 'noopener');
+            window.open(authUrl, "_blank", "noopener");
             pollAfterAuthorize(connectionId);
             showToast(
-              input.oauthMode === 'assist'
+              input.oauthMode === "assist"
                 ? `Finish connecting ${input.label} in your browser…`
-                : `Authorize ${input.label} in the browser window…`,
+                : `Authorize ${input.label} in the browser window…`
             );
           } catch (err: unknown) {
             showToast(err instanceof Error ? err.message : String(err));
@@ -1153,18 +1258,23 @@ export default function SettingsConnectionsScreen({
           }
           return;
         }
-        setSheet({ kind: 'closed' });
+        setSheet({ kind: "closed" });
         showToast(`Connected · ${input.label}`);
       })
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => setSaving(false));
   };
 
   const openDetail = (f: FeaturedConnector): void => {
-    setSheet({ kind: 'detail', featured: f, connecting: false });
+    setSheet({ kind: "detail", featured: f, connecting: false });
   };
 
-  const onInstallSync = (sync: LinkedSyncDTO, connection: ConnectionRowDTO): void => {
+  const onInstallSync = (
+    sync: LinkedSyncDTO,
+    connection: ConnectionRowDTO
+  ): void => {
     if (!installSync) return;
     setInstallingSync(sync.capabilityId);
     void installSync({ templateId: sync.templateId, connection })
@@ -1172,7 +1282,9 @@ export default function SettingsConnectionsScreen({
         showToast(`Enabled · ${sync.title}`);
         return loadLinkedSyncs?.(connection).then(setLinkedSyncs);
       })
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => setInstallingSync(null));
   };
 
@@ -1182,13 +1294,13 @@ export default function SettingsConnectionsScreen({
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>Connectors</h1>
           <p className={styles.subtitle}>
-            Data sources the vault pulls from — Gmail, Calendar, GitHub, and anything else you
-            connect yourself.
+            Data sources the vault pulls from — Gmail, Calendar, GitHub, and
+            anything else you connect yourself.
           </p>
         </div>
         <div className={styles.toolbarActions}>
           <label className={styles.searchWrap}>
-            <Icon name={'Search' as IconName} size={14} />
+            <Icon name={"Search" as IconName} size={14} />
             <input
               className={styles.searchInput}
               type="search"
@@ -1202,7 +1314,7 @@ export default function SettingsConnectionsScreen({
             variant="primary"
             size="sm"
             label="New Connector"
-            onClick={() => setSheet({ kind: 'picker' })}
+            onClick={() => setSheet({ kind: "picker" })}
           />
         </div>
       </header>
@@ -1210,17 +1322,19 @@ export default function SettingsConnectionsScreen({
       {/* Connected — unhealthy first (attention queue via sortConnectionsByAttention). */}
       <section className={styles.section}>
         <div className={styles.sectionLabel}>
-          {filteredRows?.some((r) => r.health === 'needs-auth' || r.health === 'failing')
-            ? 'Your connections · needs attention'
-            : 'Your connections'}
+          {filteredRows?.some(
+            (r) => r.health === "needs-auth" || r.health === "failing"
+          )
+            ? "Your connections · needs attention"
+            : "Your connections"}
         </div>
         {filteredRows === null ? (
           <div className={styles.emptyNote}>Reading connectors…</div>
         ) : filteredRows.length === 0 ? (
           <div className={styles.emptyNote}>
             {rows && rows.length === 0
-              ? 'No connectors configured yet. Pick one from Featured below.'
-              : 'No connected connectors match your search.'}
+              ? "No connectors configured yet. Pick one from Featured below."
+              : "No connected connectors match your search."}
           </div>
         ) : (
           <div className={styles.connectedList}>
@@ -1234,15 +1348,15 @@ export default function SettingsConnectionsScreen({
                 onOpenDetail={() => openConnectionDetail(row)}
                 onDetach={() =>
                   withBusy(row.connectionId, () =>
-                    detachConnection(row.connectionId, row.kind, row.label),
+                    detachConnection(row.connectionId, row.kind, row.label)
                   )
                 }
                 onToggleStatus={() =>
                   withBusy(row.connectionId, () =>
                     setConnectionStatus(
                       row.connectionId,
-                      row.health === 'paused' ? 'active' : 'paused',
-                    ),
+                      row.health === "paused" ? "active" : "paused"
+                    )
                   )
                 }
               />
@@ -1259,19 +1373,23 @@ export default function SettingsConnectionsScreen({
         ) : filteredFeatured.length === 0 ? (
           <div className={styles.emptyNote}>
             {featured.length === 0
-              ? 'No providers configured on this gateway.'
-              : 'No connectors match your search.'}
+              ? "No providers configured on this gateway."
+              : "No connectors match your search."}
           </div>
         ) : (
           <div className={styles.grid} data-testid="connectors-featured">
             {filteredFeatured.map((f) => {
               const connected = connectedKinds.has(f.kind);
-              const authLabel = f.provider.credKind === 'oauth2' ? 'OAuth 2.0' : 'API key';
+              const authLabel =
+                f.provider.credKind === "oauth2" ? "OAuth 2.0" : "API key";
               return (
                 <button
                   key={f.key}
                   type="button"
-                  className={cx(styles.tile, connected ? styles.tileConnected : undefined)}
+                  className={cx(
+                    styles.tile,
+                    connected ? styles.tileConnected : undefined
+                  )}
                   data-testid="connector-tile"
                   data-cred-kind={f.provider.credKind}
                   onClick={() => openDetail(f)}
@@ -1296,12 +1414,12 @@ export default function SettingsConnectionsScreen({
       </section>
 
       {/* Detail / picker sheet */}
-      {sheet.kind === 'closed' ? null : (
+      {sheet.kind === "closed" ? null : (
         <div
           className={styles.backdrop}
           role="presentation"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setSheet({ kind: 'closed' });
+            if (e.target === e.currentTarget) setSheet({ kind: "closed" });
           }}
         >
           <dialog
@@ -1311,12 +1429,15 @@ export default function SettingsConnectionsScreen({
             aria-labelledby="connector-sheet-title"
             data-testid="connector-sheet"
           >
-            {sheet.kind === 'picker' ? (
+            {sheet.kind === "picker" ? (
               <>
                 <div className={styles.sheetHead}>
                   <div className={styles.sheetIdentity}>
                     <div>
-                      <h2 id="connector-sheet-title" className={styles.sheetTitle}>
+                      <h2
+                        id="connector-sheet-title"
+                        className={styles.sheetTitle}
+                      >
                         New Connector
                       </h2>
                       <p className={styles.sheetTag}>Choose a data source</p>
@@ -1326,7 +1447,7 @@ export default function SettingsConnectionsScreen({
                     type="button"
                     className={styles.sheetClose}
                     aria-label="Close"
-                    onClick={() => setSheet({ kind: 'closed' })}
+                    onClick={() => setSheet({ kind: "closed" })}
                   >
                     ×
                   </button>
@@ -1342,26 +1463,35 @@ export default function SettingsConnectionsScreen({
                       >
                         <BrandMark meta={f.meta} size={32} />
                         <span className={styles.tileMain}>
-                          <span className={styles.pickerName}>{f.meta.name}</span>
-                          <span className={styles.pickerSub}>{f.meta.short}</span>
+                          <span className={styles.pickerName}>
+                            {f.meta.name}
+                          </span>
+                          <span className={styles.pickerSub}>
+                            {f.meta.short}
+                          </span>
                         </span>
                       </button>
                     ))}
                   </div>
                 </div>
               </>
-            ) : sheet.kind === 'connection' ? (
+            ) : sheet.kind === "connection" ? (
               <>
                 <div className={styles.sheetHead}>
                   <div className={styles.sheetIdentity}>
-                    {sheet.featured ? <BrandMark meta={sheet.featured.meta} size={40} /> : null}
+                    {sheet.featured ? (
+                      <BrandMark meta={sheet.featured.meta} size={40} />
+                    ) : null}
                     <div>
-                      <h2 id="connector-sheet-title" className={styles.sheetTitle}>
+                      <h2
+                        id="connector-sheet-title"
+                        className={styles.sheetTitle}
+                      >
                         {sheet.row.label}
                       </h2>
                       <p className={styles.sheetTag}>
                         {HEALTH_LABEL[sheet.row.health]}
-                        {sheet.row.principal ? ` · ${sheet.row.principal}` : ''}
+                        {sheet.row.principal ? ` · ${sheet.row.principal}` : ""}
                       </p>
                     </div>
                   </div>
@@ -1369,35 +1499,40 @@ export default function SettingsConnectionsScreen({
                     type="button"
                     className={styles.sheetClose}
                     aria-label="Close"
-                    onClick={() => setSheet({ kind: 'closed' })}
+                    onClick={() => setSheet({ kind: "closed" })}
                   >
                     ×
                   </button>
                 </div>
-                <div className={styles.sheetBody} data-testid="connection-detail">
+                <div
+                  className={styles.sheetBody}
+                  data-testid="connection-detail"
+                >
                   <div className={styles.healthBlock}>
                     {sheet.row.lastRunAt
                       ? `Last run ${relativeTime(sheet.row.lastRunAt)}`
-                      : 'No successful run yet'}
-                    {sheet.row.authNote ? ` · ${sheet.row.authNote}` : ''}
+                      : "No successful run yet"}
+                    {sheet.row.authNote ? ` · ${sheet.row.authNote}` : ""}
                   </div>
-                  {(sheet.row.health === 'needs-auth' || sheet.row.health === 'failing') &&
+                  {(sheet.row.health === "needs-auth" ||
+                    sheet.row.health === "failing") &&
                   !sheet.reconnecting ? (
                     <>
                       <div className={styles.sheetFoot}>
                         <Button
                           variant="primary"
                           label={
-                            sheet.row.oauthMode === 'assist'
+                            sheet.row.oauthMode === "assist"
                               ? authorizingIds.has(sheet.row.connectionId)
-                                ? 'Still waiting…'
-                                : 'Reconnect with Centraid Assist'
-                              : 'Reconnect'
+                                ? "Still waiting…"
+                                : "Reconnect with Centraid Assist"
+                              : "Reconnect"
                           }
                           onClick={() => onReconnect(sheet.row)}
                         />
                       </div>
-                      {sheet.row.oauthMode === 'assist' && completeAssistReturnLink ? (
+                      {sheet.row.oauthMode === "assist" &&
+                      completeAssistReturnLink ? (
                         <ManualAssistHandoff
                           busy={finishingManualHandoff}
                           onSubmit={onManualAssistHandoff}
@@ -1415,7 +1550,7 @@ export default function SettingsConnectionsScreen({
                       existingLabels={[]}
                       onCancel={() =>
                         setSheet({
-                          kind: 'connection',
+                          kind: "connection",
                           row: sheet.row,
                           featured: sheet.featured,
                           reconnecting: false,
@@ -1427,23 +1562,33 @@ export default function SettingsConnectionsScreen({
                     <>
                       <div className={styles.aboutHead}>Syncs</div>
                       {linkedSyncs === null ? (
-                        <div className={styles.emptyNote}>Loading linked syncs…</div>
+                        <div className={styles.emptyNote}>
+                          Loading linked syncs…
+                        </div>
                       ) : linkedSyncs.length === 0 ? (
                         <div className={styles.emptyNote}>
                           No pull syncs declared for this connector yet.
                         </div>
                       ) : (
-                        <div className={styles.syncList} data-testid="connection-linked-syncs">
+                        <div
+                          className={styles.syncList}
+                          data-testid="connection-linked-syncs"
+                        >
                           {linkedSyncs.map((s) => (
-                            <div key={s.capabilityId} className={styles.syncRow}>
+                            <div
+                              key={s.capabilityId}
+                              className={styles.syncRow}
+                            >
                               <div>
-                                <div className={styles.syncTitle}>{s.title}</div>
+                                <div className={styles.syncTitle}>
+                                  {s.title}
+                                </div>
                                 <div className={styles.syncMeta}>
                                   {s.installedRef
                                     ? s.installedEnabled
                                       ? `Installed · ${s.installedRef}`
                                       : `Installed (paused) · ${s.installedRef}`
-                                    : 'Not installed'}
+                                    : "Not installed"}
                                 </div>
                               </div>
                               {s.installedRef ? null : (
@@ -1451,9 +1596,13 @@ export default function SettingsConnectionsScreen({
                                   variant="primary"
                                   size="sm"
                                   label={
-                                    installingSync === s.capabilityId ? 'Enabling…' : 'Enable sync'
+                                    installingSync === s.capabilityId
+                                      ? "Enabling…"
+                                      : "Enable sync"
                                   }
-                                  disabled={!installSync || installingSync !== null}
+                                  disabled={
+                                    !installSync || installingSync !== null
+                                  }
                                   onClick={() => onInstallSync(s, sheet.row)}
                                 />
                               )}
@@ -1471,54 +1620,67 @@ export default function SettingsConnectionsScreen({
                   <div className={styles.sheetIdentity}>
                     <BrandMark meta={sheet.featured.meta} size={40} />
                     <div>
-                      <h2 id="connector-sheet-title" className={styles.sheetTitle}>
+                      <h2
+                        id="connector-sheet-title"
+                        className={styles.sheetTitle}
+                      >
                         {sheet.featured.meta.name}
                       </h2>
-                      <p className={styles.sheetTag}>{sheet.featured.meta.short}</p>
+                      <p className={styles.sheetTag}>
+                        {sheet.featured.meta.short}
+                      </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     className={styles.sheetClose}
                     aria-label="Close"
-                    onClick={() => setSheet({ kind: 'closed' })}
+                    onClick={() => setSheet({ kind: "closed" })}
                   >
                     ×
                   </button>
                 </div>
                 <div className={styles.sheetBody}>
-                  <p className={styles.sheetBlurb}>{sheet.featured.meta.blurb}</p>
+                  <p className={styles.sheetBlurb}>
+                    {sheet.featured.meta.blurb}
+                  </p>
                   <div
                     className={styles.authKindBanner}
                     data-kind={sheet.featured.provider.credKind}
                     data-testid="connector-auth-kind"
                   >
-                    {sheet.featured.provider.credKind === 'oauth2' ? (
+                    {sheet.featured.provider.credKind === "oauth2" ? (
                       <>
                         <strong>OAuth 2.0</strong>
                         <span>
                           {sheet.featured.provider.assist?.enabled
-                            ? 'Connect through Centraid Assist, or use your own OAuth client from Advanced.'
-                            : 'Connect with your own Google / Microsoft / Dropbox OAuth client. You will sign in at the provider after saving credentials.'}
+                            ? "Connect through Centraid Assist, or use your own OAuth client from Advanced."
+                            : "Connect with your own Google / Microsoft / Dropbox OAuth client. You will sign in at the provider after saving credentials."}
                         </span>
                       </>
                     ) : (
                       <>
                         <strong>API key</strong>
-                        <span>Connect with a personal access token or integration secret.</span>
+                        <span>
+                          Connect with a personal access token or integration
+                          secret.
+                        </span>
                       </>
                     )}
                   </div>
 
                   {sheet.connecting ? (
-                    sheet.connecting === 'assist' ? (
+                    sheet.connecting === "assist" ? (
                       <AssistConnectForm
                         featured={sheet.featured}
                         busy={saving}
-                        existingLabels={labelsForKind(rows, sheet.featured.kind)}
+                        existingLabels={labelsForKind(
+                          rows,
+                          sheet.featured.kind
+                        )}
                         onCancel={() =>
                           setSheet({
-                            kind: 'detail',
+                            kind: "detail",
                             featured: sheet.featured,
                             connecting: false,
                           })
@@ -1530,10 +1692,13 @@ export default function SettingsConnectionsScreen({
                         featured={sheet.featured}
                         busy={saving}
                         oauthCallbackUri={oauthCallbackUri}
-                        existingLabels={labelsForKind(rows, sheet.featured.kind)}
+                        existingLabels={labelsForKind(
+                          rows,
+                          sheet.featured.kind
+                        )}
                         onCancel={() =>
                           setSheet({
-                            kind: 'detail',
+                            kind: "detail",
                             featured: sheet.featured,
                             connecting: false,
                           })
@@ -1544,7 +1709,9 @@ export default function SettingsConnectionsScreen({
                   ) : (
                     <>
                       <div className={styles.about}>
-                        <div className={styles.aboutHead}>About this Connector</div>
+                        <div className={styles.aboutHead}>
+                          About this Connector
+                        </div>
                         <div className={styles.aboutItem}>
                           <span className={styles.aboutIcon} aria-hidden="true">
                             <Icon name="Folder" size={14} />
@@ -1564,18 +1731,18 @@ export default function SettingsConnectionsScreen({
                           </span>
                           <div className={styles.aboutText}>
                             <span className={styles.aboutTitle}>
-                              {sheet.featured.provider.credKind === 'oauth2'
+                              {sheet.featured.provider.credKind === "oauth2"
                                 ? sheet.featured.provider.assist?.enabled
-                                  ? 'Centraid Assist or your own OAuth client'
-                                  : 'OAuth 2.0 (your client)'
-                                : 'API key / token'}
+                                  ? "Centraid Assist or your own OAuth client"
+                                  : "OAuth 2.0 (your client)"
+                                : "API key / token"}
                             </span>
                             <span className={styles.aboutDesc}>
-                              {sheet.featured.provider.credKind === 'oauth2'
+                              {sheet.featured.provider.credKind === "oauth2"
                                 ? sheet.featured.provider.assist?.enabled
-                                  ? 'Assist keeps the shared Google client secret in a stateless Cloudflare Worker. Your gateway alone stores tokens.'
-                                  : 'Register a Web application OAuth client with this gateway’s redirect URI, paste Client ID + secret here, then authorize in the browser.'
-                                : 'Credentials stay sealed on your gateway — never shared as training data.'}
+                                  ? "Assist keeps the shared Google client secret in a stateless Cloudflare Worker. Your gateway alone stores tokens."
+                                  : "Register a Web application OAuth client with this gateway’s redirect URI, paste Client ID + secret here, then authorize in the browser."
+                                : "Credentials stay sealed on your gateway — never shared as training data."}
                             </span>
                           </div>
                         </div>
@@ -1584,52 +1751,55 @@ export default function SettingsConnectionsScreen({
                             <Icon name="CheckCircle" size={14} />
                           </span>
                           <div className={styles.aboutText}>
-                            <span className={styles.aboutTitle}>You control your data</span>
+                            <span className={styles.aboutTitle}>
+                              You control your data
+                            </span>
                             <span className={styles.aboutDesc}>
-                              Disconnect anytime. Reads only, on a schedule the automation sets.
+                              Disconnect anytime. Reads only, on a schedule the
+                              automation sets.
                             </span>
                           </div>
                         </div>
                       </div>
                       <p className={styles.sheetNote}>
-                        {sheet.featured.provider.credKind === 'oauth2'
+                        {sheet.featured.provider.credKind === "oauth2"
                           ? sheet.featured.provider.assist?.enabled
-                            ? 'Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage. BYO remains available under Advanced.'
-                            : 'OAuth 2.0 uses your own developer client (BYO).'
-                          : 'Paste an API key or personal token. Review scopes before connecting.'}
+                            ? "Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage. BYO remains available under Advanced."
+                            : "OAuth 2.0 uses your own developer client (BYO)."
+                          : "Paste an API key or personal token. Review scopes before connecting."}
                       </p>
                       <div className={styles.sheetFoot}>
                         <Button
                           variant="primary"
                           label={
-                            sheet.featured.provider.credKind === 'oauth2'
+                            sheet.featured.provider.credKind === "oauth2"
                               ? sheet.featured.provider.assist?.enabled
-                                ? 'Connect with Centraid'
-                                : 'Connect with OAuth 2.0 (Advanced)'
-                              : 'Connect'
+                                ? "Connect with Centraid"
+                                : "Connect with OAuth 2.0 (Advanced)"
+                              : "Connect"
                           }
                           onClick={() =>
                             setSheet({
-                              kind: 'detail',
+                              kind: "detail",
                               featured: sheet.featured,
                               connecting:
-                                sheet.featured.provider.credKind === 'oauth2' &&
+                                sheet.featured.provider.credKind === "oauth2" &&
                                 sheet.featured.provider.assist?.enabled
-                                  ? 'assist'
-                                  : 'byo',
+                                  ? "assist"
+                                  : "byo",
                             })
                           }
                         />
-                        {sheet.featured.provider.credKind === 'oauth2' &&
+                        {sheet.featured.provider.credKind === "oauth2" &&
                         sheet.featured.provider.assist?.enabled ? (
                           <Button
                             variant="soft"
                             label="Use my own OAuth app (Advanced)"
                             onClick={() =>
                               setSheet({
-                                kind: 'detail',
+                                kind: "detail",
                                 featured: sheet.featured,
-                                connecting: 'byo',
+                                connecting: "byo",
                               })
                             }
                           />

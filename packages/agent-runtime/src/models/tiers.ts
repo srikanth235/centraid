@@ -19,20 +19,21 @@
  * OpenAI-compatible endpoint still surfaces its live `/models` separately).
  */
 
-import type { RunnerModel } from '@centraid/app-engine';
+import type { RunnerModel } from "@centraid/app-engine";
 
-import type { RunnerKind } from '../types.js';
+import type { RunnerKind } from "../types.js";
 
 /** Capability tier tokens understood by the runner adapters. */
-export type CapabilityTier = 'smart' | 'balanced' | 'fast';
+export type CapabilityTier = "smart" | "balanced" | "fast";
 
-export const RUNNER_TIERS: Partial<Record<RunnerKind, readonly RunnerModel[]>> = {
-  'claude-code': [
-    { id: 'smart', name: 'Most capable', default: true },
-    { id: 'balanced', name: 'Balanced' },
-    { id: 'fast', name: 'Fastest' },
-  ],
-};
+export const RUNNER_TIERS: Partial<Record<RunnerKind, readonly RunnerModel[]>> =
+  {
+    "claude-code": [
+      { id: "smart", name: "Most capable", default: true },
+      { id: "balanced", name: "Balanced" },
+      { id: "fast", name: "Fastest" },
+    ],
+  };
 
 /**
  * Map a capability tier to the Claude CLI's built-in model aliases (it
@@ -41,9 +42,9 @@ export const RUNNER_TIERS: Partial<Record<RunnerKind, readonly RunnerModel[]>> =
  * the caller supplies still work.
  */
 const CLAUDE_TIER_ALIAS: Record<CapabilityTier, string> = {
-  smart: 'opus',
-  balanced: 'sonnet',
-  fast: 'haiku',
+  smart: "opus",
+  balanced: "sonnet",
+  fast: "haiku",
 };
 
 export function resolveClaudeModel(model: string): string {

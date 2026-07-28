@@ -1,31 +1,31 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { resolveToken } from './auth.ts';
+import { resolveToken } from "./auth.ts";
 
-describe('auth', () => {
-  test('resolveToken prefers --token over the environment', () => {
+describe("auth", () => {
+  test("resolveToken prefers --token over the environment", () => {
     const token = resolveToken({
-      token: 'explicit',
-      env: { CENTRAID_TOKEN: 'from-env', CENTRAID_GATEWAY_TOKEN: 'from-gw' },
+      token: "explicit",
+      env: { CENTRAID_TOKEN: "from-env", CENTRAID_GATEWAY_TOKEN: "from-gw" },
     });
-    expect(token).toBe('explicit');
+    expect(token).toBe("explicit");
   });
 
-  test('resolveToken uses CENTRAID_TOKEN when no --token', () => {
-    const token = resolveToken({ env: { CENTRAID_TOKEN: 'env-token' } });
-    expect(token).toBe('env-token');
+  test("resolveToken uses CENTRAID_TOKEN when no --token", () => {
+    const token = resolveToken({ env: { CENTRAID_TOKEN: "env-token" } });
+    expect(token).toBe("env-token");
   });
 
-  test('resolveToken falls back to CENTRAID_GATEWAY_TOKEN (the daemon loopback secret)', () => {
+  test("resolveToken falls back to CENTRAID_GATEWAY_TOKEN (the daemon loopback secret)", () => {
     // Issue #505 phase 7: there is no on-disk token.bin to auto-read; an operator
     // reuses the loopback secret the daemon was started with.
     const token = resolveToken({
-      env: { CENTRAID_GATEWAY_TOKEN: 'gw-secret' },
+      env: { CENTRAID_GATEWAY_TOKEN: "gw-secret" },
     });
-    expect(token).toBe('gw-secret');
+    expect(token).toBe("gw-secret");
   });
 
-  test('resolveToken returns undefined when nothing is supplied', () => {
+  test("resolveToken returns undefined when nothing is supplied", () => {
     expect(resolveToken({ env: {} })).toBeUndefined();
   });
 });

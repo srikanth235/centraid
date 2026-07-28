@@ -1,10 +1,10 @@
-import { Feather } from '@expo/vector-icons';
-import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from "@expo/vector-icons";
+import React from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useTheme } from '../theme';
-import GlassBar from './GlassBar';
+import { useTheme } from "../theme";
+import GlassBar from "./GlassBar";
 
 // The one "leave this mini-app for your apps" key, shared by every full-page app
 // cover so the escape hatch looks and lands the same everywhere. Design grammar:
@@ -32,7 +32,7 @@ import GlassBar from './GlassBar';
 // furniture, not a shouting button (no solid fill). Like GlassBar's TINT it is
 // hardcoded because the palette tokens are opaque and a wash must be translucent;
 // this is the same teal as `accent` on both schemes (see theme/resolve.ts).
-const TEAL_WASH = 'rgba(18, 138, 120, 0.08)';
+const TEAL_WASH = "rgba(18, 138, 120, 0.08)";
 
 // Diameter of the floating disc. ≥44 keeps it a comfortable tap target; the
 // GlassBar radius is half this so the pill clips to a true circle.
@@ -49,16 +49,19 @@ const BAR_SIZE = 56;
 
 export interface HomeKeyProps {
   onPress: () => void;
-  variant: 'floating' | 'leave' | 'bar';
+  variant: "floating" | "leave" | "bar";
 }
 
-export default function HomeKey({ onPress, variant }: HomeKeyProps): React.JSX.Element {
+export default function HomeKey({
+  onPress,
+  variant,
+}: HomeKeyProps): React.JSX.Element {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   // Leave: a bare glass disc the caller seats as the leading control of a header
   // row (Assistant/Automations/Docs/Agenda).
-  if (variant === 'leave') {
+  if (variant === "leave") {
     return (
       <GlassBar radius={HEADER_SIZE / 2}>
         <Pressable
@@ -75,7 +78,7 @@ export default function HomeKey({ onPress, variant }: HomeKeyProps): React.JSX.E
   }
 
   // Bar: a larger inline disc, detached to the left of an app's tab pill.
-  if (variant === 'bar') {
+  if (variant === "bar") {
     return (
       <GlassBar radius={BAR_SIZE / 2}>
         <Pressable
@@ -117,31 +120,31 @@ export default function HomeKey({ onPress, variant }: HomeKeyProps): React.JSX.E
 
 const styles = StyleSheet.create({
   barKey: {
-    alignItems: 'center',
+    alignItems: "center",
     height: BAR_SIZE,
-    justifyContent: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    overflow: "hidden",
     width: BAR_SIZE,
   },
   floatKey: {
-    alignItems: 'center',
+    alignItems: "center",
     height: FLOAT_SIZE,
-    justifyContent: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    overflow: "hidden",
     width: FLOAT_SIZE,
   },
   floatWrap: {
-    alignItems: 'center',
+    alignItems: "center",
     bottom: 0,
     left: 0,
-    position: 'absolute',
+    position: "absolute",
     right: 0,
   },
   headerKey: {
-    alignItems: 'center',
+    alignItems: "center",
     height: HEADER_SIZE,
-    justifyContent: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    overflow: "hidden",
     width: HEADER_SIZE,
   },
   wash: { ...StyleSheet.absoluteFill, backgroundColor: TEAL_WASH },

@@ -25,12 +25,12 @@
 // into the app repo's history — every commit is attributable to the
 // agent identity per the issue's "Commit authorship" decision.
 
-import { spawn } from 'node:child_process';
+import { spawn } from "node:child_process";
 
 /** Author + committer identity stamped on every commit. */
 export const AGENT_IDENTITY = {
-  name: 'Centraid Agent',
-  email: 'bot@centraid',
+  name: "Centraid Agent",
+  email: "bot@centraid",
 } as const;
 
 export interface GitRunOptions {
@@ -69,12 +69,12 @@ export class GitError extends Error {
     public readonly args: readonly string[],
     public readonly code: number,
     public readonly stdout: string,
-    public readonly stderr: string,
+    public readonly stderr: string
   ) {
     super(
-      `git ${args.join(' ')} exited with code ${code}: ${stderr.trim() || stdout.trim() || '(no output)'}`,
+      `git ${args.join(" ")} exited with code ${code}: ${stderr.trim() || stdout.trim() || "(no output)"}`
     );
-    this.name = 'GitError';
+    this.name = "GitError";
   }
 }
 
@@ -83,15 +83,21 @@ export class GitError extends Error {
  * exit unless `allowNonZero` is set. Returns the trimmed stdout
  * (full result via `runRaw` when callers need stderr too).
  */
-export async function run(args: readonly string[], opts: GitRunOptions): Promise<string> {
+export async function run(
+  args: readonly string[],
+  opts: GitRunOptions
+): Promise<string> {
   const result = await runRaw(args, opts);
   if (result.code !== 0 && !opts.allowNonZero) {
     throw new GitError(args, result.code, result.stdout, result.stderr);
   }
-  return result.stdout.replace(/\n+$/u, '');
+  return result.stdout.replace(/\n+$/u, "");
 }
 
-export function runRaw(args: readonly string[], opts: GitRunOptions): Promise<GitRunResult> {
+export function runRaw(
+  args: readonly string[],
+  opts: GitRunOptions
+): Promise<GitRunResult> {
   return new Promise<GitRunResult>((resolve, reject) => {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -105,26 +111,26 @@ export function runRaw(args: readonly string[], opts: GitRunOptions): Promise<Gi
       GIT_COMMITTER_EMAIL: AGENT_IDENTITY.email,
       // No interactive prompts (askpass, credential helpers, editor)
       // — every operation has to be fully scripted.
-      GIT_TERMINAL_PROMPT: '0',
-      GIT_ASKPASS: 'true',
-      GIT_EDITOR: 'true',
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_ASKPASS: "true",
+      GIT_EDITOR: "true",
       ...opts.env,
     };
-    const child = spawn('git', args as string[], {
+    const child = spawn("git", args as string[], {
       cwd: opts.cwd,
       env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
     });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
     });
-    child.on('error', (err) => reject(err));
-    child.on('close', (code) => {
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => {
       resolve({ code: code ?? -1, stdout, stderr });
     });
     if (opts.stdin === undefined) {
@@ -140,8 +146,11 @@ export function runRaw(args: readonly string[], opts: GitRunOptions): Promise<Gi
  * ref doesn't resolve. Used as the canonical "does this ref exist"
  * probe — `for-each-ref` works too but rev-parse is a single fork.
  */
-export async function revParse(cwd: string, ref: string): Promise<string | undefined> {
-  const result = await runRaw(['rev-parse', '--verify', '--quiet', ref], {
+export async function revParse(
+  cwd: string,
+  ref: string
+): Promise<string | undefined> {
+  const result = await runRaw(["rev-parse", "--verify", "--quiet", ref], {
     cwd,
     allowNonZero: true,
   });

@@ -20,27 +20,33 @@ function esc(s) {
 
 const KW = (s) => new Set(s.split(/\s+/u).filter(Boolean));
 
-const JS_KW = KW(`await break case catch class const continue debugger default delete do else
+const JS_KW =
+  KW(`await break case catch class const continue debugger default delete do else
   export extends finally for function if import in instanceof let new return super switch this
   throw try typeof var void while with yield async of as from static get set
   interface type enum namespace declare implements private public protected readonly abstract
   true false null undefined NaN Infinity`);
-const PY_KW = KW(`False None True and as assert async await break class continue def del elif
+const PY_KW =
+  KW(`False None True and as assert async await break class continue def del elif
   else except finally for from global if import in is lambda nonlocal not or pass raise return
   try while with yield match case self`);
-const SQL_KW = KW(`select from where insert into values update set delete create table drop alter
+const SQL_KW =
+  KW(`select from where insert into values update set delete create table drop alter
   add column index view join inner left right outer full on group by order having limit offset
   distinct union all as and or not null is in like between exists count sum avg min max case when
   then else end asc desc primary key foreign references default unique constraint begin commit
   rollback transaction with returning`);
-const SH_KW = KW(`if then else elif fi for while do done case esac in function select until
+const SH_KW =
+  KW(`if then else elif fi for while do done case esac in function select until
   return break continue local export readonly declare echo cd exit set unset source alias`);
-const RS_KW = KW(`as break const continue crate dyn else enum extern false fn for if impl in let
+const RS_KW =
+  KW(`as break const continue crate dyn else enum extern false fn for if impl in let
   loop match mod move mut pub ref return self Self static struct super trait true type unsafe use
   where while async await where`);
-const GO_KW = KW(`break case chan const continue default defer else fallthrough for func go goto
+const GO_KW =
+  KW(`break case chan const continue default defer else fallthrough for func go goto
   if import interface map package range return select struct switch type var true false nil iota`);
-const CSS_KW = KW('');
+const CSS_KW = KW("");
 
 /**
  * Per-language scanner config. `line`/`block` are comment markers, `strings`
@@ -48,59 +54,59 @@ const CSS_KW = KW('');
  * keyword match (SQL), `dollar` a shell `$VAR` pass.
  */
 const LANGS = {
-  js: { line: '//', block: ['/*', '*/'], strings: `"'\``, kw: JS_KW },
-  json: { strings: '"', kw: KW('true false null') },
-  python: { line: '#', strings: `"'`, kw: PY_KW, triple: true },
-  sql: { line: '--', block: ['/*', '*/'], strings: `'`, kw: SQL_KW, ci: true },
-  bash: { line: '#', strings: `"'`, kw: SH_KW, dollar: true },
-  html: { block: ['<!--', '-->'], strings: `"'`, kw: CSS_KW },
-  css: { block: ['/*', '*/'], strings: `"'`, kw: CSS_KW },
-  rust: { line: '//', block: ['/*', '*/'], strings: `"`, kw: RS_KW },
-  go: { line: '//', block: ['/*', '*/'], strings: `"\``, kw: GO_KW },
+  js: { line: "//", block: ["/*", "*/"], strings: `"'\``, kw: JS_KW },
+  json: { strings: '"', kw: KW("true false null") },
+  python: { line: "#", strings: `"'`, kw: PY_KW, triple: true },
+  sql: { line: "--", block: ["/*", "*/"], strings: `'`, kw: SQL_KW, ci: true },
+  bash: { line: "#", strings: `"'`, kw: SH_KW, dollar: true },
+  html: { block: ["<!--", "-->"], strings: `"'`, kw: CSS_KW },
+  css: { block: ["/*", "*/"], strings: `"'`, kw: CSS_KW },
+  rust: { line: "//", block: ["/*", "*/"], strings: `"`, kw: RS_KW },
+  go: { line: "//", block: ["/*", "*/"], strings: `"\``, kw: GO_KW },
 };
 
 /** Alias map → canonical config key. Unknown languages resolve to `undefined`. */
 const ALIAS = {
-  js: 'js',
-  javascript: 'js',
-  ts: 'js',
-  typescript: 'js',
-  jsx: 'js',
-  tsx: 'js',
-  mjs: 'js',
-  cjs: 'js',
-  json: 'json',
-  json5: 'json',
-  py: 'python',
-  python: 'python',
-  sql: 'sql',
-  psql: 'sql',
-  mysql: 'sql',
-  sqlite: 'sql',
-  sh: 'bash',
-  bash: 'bash',
-  shell: 'bash',
-  zsh: 'bash',
-  html: 'html',
-  xml: 'html',
-  svg: 'html',
-  css: 'css',
-  scss: 'css',
-  rust: 'rust',
-  rs: 'rust',
-  go: 'go',
-  golang: 'go',
+  js: "js",
+  javascript: "js",
+  ts: "js",
+  typescript: "js",
+  jsx: "js",
+  tsx: "js",
+  mjs: "js",
+  cjs: "js",
+  json: "json",
+  json5: "json",
+  py: "python",
+  python: "python",
+  sql: "sql",
+  psql: "sql",
+  mysql: "sql",
+  sqlite: "sql",
+  sh: "bash",
+  bash: "bash",
+  shell: "bash",
+  zsh: "bash",
+  html: "html",
+  xml: "html",
+  svg: "html",
+  css: "css",
+  scss: "css",
+  rust: "rust",
+  rs: "rust",
+  go: "go",
+  golang: "go",
 };
 
 /** Resolve a fenced-code language tag to a scanner config, or null. */
 export function configFor(lang) {
-  const key = ALIAS[String(lang || '').toLowerCase()];
+  const key = ALIAS[String(lang || "").toLowerCase()];
   return key ? LANGS[key] : null;
 }
 
 const isIdentStart = (c) => /[A-Za-z_$]/u.test(c);
 const isIdent = (c) => /[\w$]/u.test(c);
-const isDigit = (c) => c >= '0' && c <= '9';
+const isDigit = (c) => c >= "0" && c <= "9";
 
 /**
  * Highlight `code` for a known `lang`, returning an HTML string (escaped text +
@@ -114,7 +120,7 @@ export function highlightCode(code, lang) {
   if (!cfg) return null;
   const src = String(code);
   const n = src.length;
-  let out = '';
+  let out = "";
   let i = 0;
   const span = (cls, text) => `<span class="${cls}">${esc(text)}</span>`;
   const matchAt = (tok) => tok && src.startsWith(tok, i);
@@ -123,16 +129,16 @@ export function highlightCode(code, lang) {
     const c = src[i];
     // Comments — line then block.
     if (cfg.line && matchAt(cfg.line)) {
-      let j = src.indexOf('\n', i);
+      let j = src.indexOf("\n", i);
       if (j < 0) j = n;
-      out += span('hlComment', src.slice(i, j));
+      out += span("hlComment", src.slice(i, j));
       i = j;
       continue;
     }
     if (cfg.block && matchAt(cfg.block[0])) {
       let j = src.indexOf(cfg.block[1], i + cfg.block[0].length);
       j = j < 0 ? n : j + cfg.block[1].length;
-      out += span('hlComment', src.slice(i, j));
+      out += span("hlComment", src.slice(i, j));
       i = j;
       continue;
     }
@@ -142,7 +148,7 @@ export function highlightCode(code, lang) {
       const delim = triple ? c + c + c : c;
       let j = i + delim.length;
       while (j < n) {
-        if (!triple && src[j] === '\\') {
+        if (!triple && src[j] === "\\") {
           j += 2;
           continue;
         }
@@ -150,33 +156,42 @@ export function highlightCode(code, lang) {
           j += delim.length;
           break;
         }
-        if (!triple && src[j] === '\n') break;
+        if (!triple && src[j] === "\n") break;
         j += 1;
       }
-      out += span('hlString', src.slice(i, Math.min(j, n)));
+      out += span("hlString", src.slice(i, Math.min(j, n)));
       i = Math.min(j, n);
       continue;
     }
     // Shell variables ($VAR / ${VAR}).
-    if (cfg.dollar && c === '$' && i + 1 < n && /[A-Za-z_{]/u.test(src[i + 1])) {
+    if (
+      cfg.dollar &&
+      c === "$" &&
+      i + 1 < n &&
+      /[A-Za-z_{]/u.test(src[i + 1])
+    ) {
       let j = i + 1;
-      if (src[j] === '{') {
-        const close = src.indexOf('}', j);
+      if (src[j] === "{") {
+        const close = src.indexOf("}", j);
         j = close < 0 ? n : close + 1;
       } else while (j < n && isIdent(src[j])) j += 1;
-      out += span('hlBuiltin', src.slice(i, j));
+      out += span("hlBuiltin", src.slice(i, j));
       i = j;
       continue;
     }
     // Numbers (leading digit; a dotted/hex/exponent run).
-    if (isDigit(c) || (c === '.' && isDigit(src[i + 1] || ''))) {
+    if (isDigit(c) || (c === "." && isDigit(src[i + 1] || ""))) {
       let j = i;
       while (j < n && /[0-9a-fA-FxXbBoO._+-]/u.test(src[j])) {
         // Stop a trailing sign unless it's an exponent.
-        if ((src[j] === '+' || src[j] === '-') && !/[eE]/u.test(src[j - 1] || '')) break;
+        if (
+          (src[j] === "+" || src[j] === "-") &&
+          !/[eE]/u.test(src[j - 1] || "")
+        )
+          break;
         j += 1;
       }
-      out += span('hlNumber', src.slice(i, j));
+      out += span("hlNumber", src.slice(i, j));
       i = j;
       continue;
     }
@@ -186,7 +201,7 @@ export function highlightCode(code, lang) {
       while (j < n && isIdent(src[j])) j += 1;
       const word = src.slice(i, j);
       const probe = cfg.ci ? word.toLowerCase() : word;
-      out += cfg.kw.has(probe) ? span('hlKeyword', word) : esc(word);
+      out += cfg.kw.has(probe) ? span("hlKeyword", word) : esc(word);
       i = j;
       continue;
     }

@@ -15,9 +15,9 @@ import {
   startLocalProxy,
   type LocalProxyHandle,
   type TunnelClient,
-} from '@centraid/tunnel';
+} from "@centraid/tunnel";
 
-import { deviceIrohKeyPersistence } from './gateway-secrets.js';
+import { deviceIrohKeyPersistence } from "./gateway-secrets.js";
 
 interface IrohConnection {
   client: TunnelClient;
@@ -28,7 +28,11 @@ interface IrohConnection {
 const connections = new Map<string, IrohConnection>();
 const starting = new Map<string, Promise<IrohConnection>>();
 let testProxyResolver:
-  | ((connectionId: string, endpointId: string, relayHint?: string) => Promise<string>)
+  | ((
+      connectionId: string,
+      endpointId: string,
+      relayHint?: string
+    ) => Promise<string>)
   | undefined;
 
 /**
@@ -39,10 +43,16 @@ let testProxyResolver:
  * @public
  */
 export function setIrohProxyResolverForTests(
-  resolver: (connectionId: string, endpointId: string, relayHint?: string) => Promise<string>,
+  resolver: (
+    connectionId: string,
+    endpointId: string,
+    relayHint?: string
+  ) => Promise<string>
 ): void {
-  if (process.env.NODE_ENV !== 'test') {
-    throw new Error('the iroh proxy test resolver is available only with NODE_ENV=test');
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error(
+      "the iroh proxy test resolver is available only with NODE_ENV=test"
+    );
   }
   testProxyResolver = resolver;
 }
@@ -50,7 +60,7 @@ export function setIrohProxyResolverForTests(
 export function ensureIrohDeviceKey(connectionId: string): Uint8Array {
   return loadEndpointSecret({
     persistence: deviceIrohKeyPersistence(connectionId),
-    onCorrupt: 'remint',
+    onCorrupt: "remint",
     label: `device iroh key for ${connectionId}`,
     warn: (message) => console.warn(`iroh dialer: ${message}`),
   });
@@ -59,9 +69,10 @@ export function ensureIrohDeviceKey(connectionId: string): Uint8Array {
 export async function ensureIrohProxy(
   connectionId: string,
   endpointId: string,
-  relayHint?: string,
+  relayHint?: string
 ): Promise<string> {
-  if (testProxyResolver) return testProxyResolver(connectionId, endpointId, relayHint);
+  if (testProxyResolver)
+    return testProxyResolver(connectionId, endpointId, relayHint);
   const ready = connections.get(connectionId);
   if (ready) return ready.baseUrl;
   const inFlight = starting.get(connectionId);
@@ -71,7 +82,7 @@ export async function ensureIrohProxy(
       secretKey: ensureIrohDeviceKey(connectionId),
     });
     const proxy = await startLocalProxy(() =>
-      client.connect(endpointTicketFor(endpointId, relayHint)),
+      client.connect(endpointTicketFor(endpointId, relayHint))
     );
     const conn: IrohConnection = {
       client,
@@ -93,10 +104,12 @@ export async function closeIrohDialer(connectionId: string): Promise<void> {
   await conn.client.close().catch(() => undefined);
 }
 
-export async function closeAllIrohDialersExcept(exceptId?: string): Promise<void> {
+export async function closeAllIrohDialersExcept(
+  exceptId?: string
+): Promise<void> {
   await Promise.all(
     [...connections.keys()]
       .filter((connectionId) => connectionId !== exceptId)
-      .map((connectionId) => closeIrohDialer(connectionId)),
+      .map((connectionId) => closeIrohDialer(connectionId))
   );
 }

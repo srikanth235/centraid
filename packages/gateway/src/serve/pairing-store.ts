@@ -7,13 +7,17 @@
  * in-process mutex.
  */
 
-import crypto from 'node:crypto';
-import path from 'node:path';
-import type { DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
-import type { MemberGrant } from './member-store.js';
-import { GatewayDatabase } from './gateway-db.js';
+import crypto from "node:crypto";
+import path from "node:path";
 
-export { encodePairingTicket, parsePairingTicket } from './pairing-ticket-codec.js';
+import type { DeviceEnrollment, EnrollmentStore } from "./enrollment-store.js";
+import { GatewayDatabase } from "./gateway-db.js";
+import type { MemberGrant } from "./member-store.js";
+
+export {
+  encodePairingTicket,
+  parsePairingTicket,
+} from "./pairing-ticket-codec.js";
 
 export const DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000;
 
@@ -26,7 +30,8 @@ interface TicketRow {
   expires_at: number;
 }
 
-const TICKET_COLUMNS = 'ticket_id, secret_hash, member_id, grants_json, created_at, expires_at';
+const TICKET_COLUMNS =
+  "ticket_id, secret_hash, member_id, grants_json, created_at, expires_at";
 
 /** An invitation: which member joins, and the exact authority they hold. */
 export interface TicketInvitation {
@@ -36,14 +41,16 @@ export interface TicketInvitation {
 
 function parseGrants(raw: string): MemberGrant[] {
   const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed)) throw new Error('ticket grants are not a list');
+  if (!Array.isArray(parsed)) throw new Error("ticket grants are not a list");
   return parsed.map((entry) => {
     const grant = entry as { vaultId?: unknown; role?: unknown };
     if (
-      typeof grant.vaultId !== 'string' ||
-      (grant.role !== 'admin' && grant.role !== 'write' && grant.role !== 'read')
+      typeof grant.vaultId !== "string" ||
+      (grant.role !== "admin" &&
+        grant.role !== "write" &&
+        grant.role !== "read")
     ) {
-      throw new Error('ticket grant must be {vaultId, role}');
+      throw new Error("ticket grant must be {vaultId, role}");
     }
     return { vaultId: grant.vaultId, role: grant.role };
   });
@@ -55,7 +62,7 @@ function invitationOf(row: TicketRow): TicketInvitation {
 }
 
 function hashSecret(secret: string): string {
-  return crypto.createHash('sha256').update(secret, 'utf8').digest('hex');
+  return crypto.createHash("sha256").update(secret, "utf8").digest("hex");
 }
 
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
@@ -82,10 +89,10 @@ export class PairingTicketStore {
    */
   mint(
     invitation: TicketInvitation,
-    ttlMs = DEFAULT_TICKET_TTL_MS,
+    ttlMs = DEFAULT_TICKET_TTL_MS
   ): { ticketId: string; secret: string; expiresAt: number } {
     if (invitation.grants.length === 0) {
-      throw new Error('an invitation must carry at least one vault grant');
+      throw new Error("an invitation must carry at least one vault grant");
     }
     return this.insert(ttlMs, invitation.memberId, invitation.grants);
   }
@@ -112,10 +119,10 @@ export class PairingTicketStore {
       rememberDevice?: boolean;
       grantProfile?: string[];
     },
-    beforeEnroll?: () => void,
+    beforeEnroll?: () => void
   ): DeviceEnrollment[] | undefined {
     if (enrollments.gatewayDatabase.file !== this.gatewayDatabase.file) {
-      throw new Error('ticket and enrollment stores must share gateway.db');
+      throw new Error("ticket and enrollment stores must share gateway.db");
     }
     return this.gatewayDatabase.transaction(() => {
       const row = this.consumeWithinTransaction(ticketId, secret);
@@ -128,8 +135,12 @@ export class PairingTicketStore {
         grants: invitation.grants,
         label: input.label,
         ...(input.platform === undefined ? {} : { platform: input.platform }),
-        ...(input.rememberDevice === undefined ? {} : { rememberDevice: input.rememberDevice }),
-        ...(input.grantProfile === undefined ? {} : { grantProfile: input.grantProfile }),
+        ...(input.rememberDevice === undefined
+          ? {}
+          : { rememberDevice: input.rememberDevice }),
+        ...(input.grantProfile === undefined
+          ? {}
+          : { grantProfile: input.grantProfile }),
       });
     });
   }
@@ -145,7 +156,7 @@ export class PairingTicketStore {
       this.gatewayDatabase.db
         .prepare(
           `SELECT ${TICKET_COLUMNS}
-             FROM tickets WHERE expires_at > ? ORDER BY created_at`,
+             FROM tickets WHERE expires_at > ? ORDER BY created_at`
         )
         .all(now) as unknown as TicketRow[]
     ).map((row) => ({
@@ -158,16 +169,16 @@ export class PairingTicketStore {
   private insert(
     ttlMs: number,
     memberId: string,
-    grants: readonly MemberGrant[],
+    grants: readonly MemberGrant[]
   ): { ticketId: string; secret: string; expiresAt: number } {
     const ticketId = crypto.randomUUID();
-    const secret = crypto.randomBytes(32).toString('base64url');
+    const secret = crypto.randomBytes(32).toString("base64url");
     const expiresAt = Date.now() + ttlMs;
     this.gatewayDatabase.db
       .prepare(
         `INSERT INTO tickets (
           ticket_id, secret_hash, member_id, grants_json, created_at, expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?)`
       )
       .run(
         ticketId,
@@ -175,32 +186,40 @@ export class PairingTicketStore {
         memberId,
         JSON.stringify(grants),
         new Date().toISOString(),
-        expiresAt,
+        expiresAt
       );
     return { ticketId, secret, expiresAt };
   }
 
   private consume(ticketId: string, secret: string): TicketRow | undefined {
-    return this.gatewayDatabase.transaction(() => this.consumeWithinTransaction(ticketId, secret));
+    return this.gatewayDatabase.transaction(() =>
+      this.consumeWithinTransaction(ticketId, secret)
+    );
   }
 
-  private consumeWithinTransaction(ticketId: string, secret: string): TicketRow | undefined {
+  private consumeWithinTransaction(
+    ticketId: string,
+    secret: string
+  ): TicketRow | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
         `SELECT ${TICKET_COLUMNS}
            FROM tickets
-          WHERE ticket_id = ?`,
+          WHERE ticket_id = ?`
       )
       .get(ticketId) as TicketRow | undefined;
     if (!row) return undefined;
     if (row.expires_at <= Date.now()) return undefined;
-    const expected = Buffer.from(row.secret_hash, 'hex');
-    const actual = Buffer.from(hashSecret(secret), 'hex');
-    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    const expected = Buffer.from(row.secret_hash, "hex");
+    const actual = Buffer.from(hashSecret(secret), "hex");
+    if (
+      expected.length !== actual.length ||
+      !crypto.timingSafeEqual(expected, actual)
+    ) {
       return undefined;
     }
     const deleted = this.gatewayDatabase.db
-      .prepare('DELETE FROM tickets WHERE ticket_id = ?')
+      .prepare("DELETE FROM tickets WHERE ticket_id = ?")
       .run(ticketId);
     // BEGIN IMMEDIATE serializes contenders. The affected row count, rather
     // than any in-process mutex, is the single-use authority.

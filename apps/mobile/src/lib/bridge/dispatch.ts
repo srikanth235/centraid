@@ -4,55 +4,60 @@
 // side) or throws a `BridgeFailureError` with a stable code. The dispatcher
 // converts both into the wire `BridgeResponse` envelope.
 
-import { EncodingType, File, Paths, UploadType } from 'expo-file-system';
-import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
-import { SchedulableTriggerInputTypes } from 'expo-notifications';
+import { EncodingType, File, Paths, UploadType } from "expo-file-system";
+import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
+import { SchedulableTriggerInputTypes } from "expo-notifications";
 
-import type { BridgeMethod, BridgeRequest, BridgeResponse } from './protocol';
-import { assertGatewayMintedUploadUrl, type BackgroundTransferScope } from './transfer-policy';
+import type { BridgeMethod, BridgeRequest, BridgeResponse } from "./protocol";
+import {
+  assertGatewayMintedUploadUrl,
+  type BackgroundTransferScope,
+} from "./transfer-policy";
 
 class BridgeFailureError extends Error {
   constructor(
     public readonly code: string,
-    message: string,
+    message: string
   ) {
     super(message);
-    this.name = 'BridgeFailureError';
+    this.name = "BridgeFailureError";
   }
 }
 
 // --- Helpers ---
 
 function asObject(args: unknown): Record<string, unknown> {
-  return args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
+  return args && typeof args === "object"
+    ? (args as Record<string, unknown>)
+    : {};
 }
 
 function requireString(obj: Record<string, unknown>, key: string): string {
   const v = obj[key];
-  if (typeof v !== 'string' || v.length === 0) {
-    throw new BridgeFailureError('invalid_args', `Missing or invalid "${key}"`);
+  if (typeof v !== "string" || v.length === 0) {
+    throw new BridgeFailureError("invalid_args", `Missing or invalid "${key}"`);
   }
   return v;
 }
 
 function requireDate(obj: Record<string, unknown>, key: string): Date {
   const v = obj[key];
-  if (typeof v === 'number') return new Date(v);
-  if (typeof v === 'string') {
+  if (typeof v === "number") return new Date(v);
+  if (typeof v === "string") {
     const d = new Date(v);
     if (!Number.isNaN(d.getTime())) return d;
   }
   throw new BridgeFailureError(
-    'invalid_args',
-    `Missing or invalid "${key}" (expected Date | number)`,
+    "invalid_args",
+    `Missing or invalid "${key}" (expected Date | number)`
   );
 }
 
 function requireNumber(obj: Record<string, unknown>, key: string): number {
   const v = obj[key];
-  if (typeof v !== 'number' || !Number.isFinite(v)) {
-    throw new BridgeFailureError('invalid_args', `Missing or invalid "${key}"`);
+  if (typeof v !== "number" || !Number.isFinite(v)) {
+    throw new BridgeFailureError("invalid_args", `Missing or invalid "${key}"`);
   }
   return v;
 }
@@ -69,34 +74,44 @@ const MAX_BACKGROUND_PART_BASE64_CHARS = 24 * 1024 * 1024;
 async function handleBackgroundPut(
   appId: string,
   args: unknown,
-  scope?: BackgroundTransferScope,
+  scope?: BackgroundTransferScope
 ): Promise<{
   status: number;
   headers: Record<string, string>;
 }> {
   const a = asObject(args);
-  const url = requireString(a, 'url');
-  const transferId = requireString(a, 'transferId');
-  const bodyBase64 = requireString(a, 'bodyBase64');
-  if (!scope) throw new BridgeFailureError('unavailable', 'Gateway transfer scope is unavailable.');
+  const url = requireString(a, "url");
+  const transferId = requireString(a, "transferId");
+  const bodyBase64 = requireString(a, "bodyBase64");
+  if (!scope)
+    throw new BridgeFailureError(
+      "unavailable",
+      "Gateway transfer scope is unavailable."
+    );
   let uploadUrl: URL;
   try {
     uploadUrl = await assertGatewayMintedUploadUrl(url, scope);
   } catch (error) {
     throw new BridgeFailureError(
-      'transfer_scope_denied',
-      error instanceof Error ? error.message : String(error),
+      "transfer_scope_denied",
+      error instanceof Error ? error.message : String(error)
     );
   }
   if (!/^[a-zA-Z0-9._-]{1,160}$/u.test(transferId)) {
-    throw new BridgeFailureError('invalid_args', 'Background transfer id is invalid.');
+    throw new BridgeFailureError(
+      "invalid_args",
+      "Background transfer id is invalid."
+    );
   }
   if (bodyBase64.length > MAX_BACKGROUND_PART_BASE64_CHARS) {
-    throw new BridgeFailureError('invalid_args', 'Background upload part exceeds 18 MiB.');
+    throw new BridgeFailureError(
+      "invalid_args",
+      "Background upload part exceeds 18 MiB."
+    );
   }
   const spool = new File(
     Paths.cache,
-    `centraid-transfer-${encodeURIComponent(appId)}-${transferId}.cbsf`,
+    `centraid-transfer-${encodeURIComponent(appId)}-${transferId}.cbsf`
   );
   // A retried transfer id must overwrite its own leftovers, never append to them.
   spool.create({ overwrite: true });
@@ -105,15 +120,15 @@ async function handleBackgroundPut(
     // Streams from the file through the native background session, so the
     // spooled part is never re-materialized in JavaScript.
     const response = await spool.upload(uploadUrl.toString(), {
-      httpMethod: 'PUT',
+      httpMethod: "PUT",
       uploadType: UploadType.BINARY_CONTENT,
-      sessionType: 'background',
-      headers: { 'content-type': 'application/octet-stream' },
+      sessionType: "background",
+      headers: { "content-type": "application/octet-stream" },
     });
     if (response.status < 200 || response.status >= 300) {
       throw new BridgeFailureError(
-        'upload_refused',
-        `Background upload refused (${response.status}).`,
+        "upload_refused",
+        `Background upload refused (${response.status}).`
       );
     }
     return { status: response.status, headers: response.headers };
@@ -140,14 +155,17 @@ async function ensureNotificationsPermission(): Promise<void> {
   if (current.canAskAgain === false) {
     cachedNotifyPermission = false;
     throw new BridgeFailureError(
-      'permission_denied',
-      'Notification permission denied. Enable it in system settings.',
+      "permission_denied",
+      "Notification permission denied. Enable it in system settings."
     );
   }
   const next = await Notifications.requestPermissionsAsync();
   if (!next.granted) {
     cachedNotifyPermission = false;
-    throw new BridgeFailureError('permission_denied', 'Notification permission denied.');
+    throw new BridgeFailureError(
+      "permission_denied",
+      "Notification permission denied."
+    );
   }
   cachedNotifyPermission = true;
 }
@@ -162,12 +180,15 @@ function scopedId(appId: string, id: string): string {
   return `${appId}::${id}`;
 }
 
-async function handleNotifySchedule(appId: string, args: unknown): Promise<void> {
+async function handleNotifySchedule(
+  appId: string,
+  args: unknown
+): Promise<void> {
   const a = asObject(args);
-  const id = requireString(a, 'id');
-  const title = requireString(a, 'title');
-  const body = typeof a.body === 'string' ? a.body : '';
-  const at = requireDate(a, 'at');
+  const id = requireString(a, "id");
+  const title = requireString(a, "title");
+  const body = typeof a.body === "string" ? a.body : "";
+  const at = requireDate(a, "at");
   await ensureNotificationsPermission();
 
   await Notifications.scheduleNotificationAsync({
@@ -179,7 +200,7 @@ async function handleNotifySchedule(appId: string, args: unknown): Promise<void>
 
 async function handleNotifyCancel(appId: string, args: unknown): Promise<void> {
   const a = asObject(args);
-  const id = requireString(a, 'id');
+  const id = requireString(a, "id");
   await Notifications.cancelScheduledNotificationAsync(scopedId(appId, id));
 }
 
@@ -191,7 +212,7 @@ async function handleHapticImpact(args: unknown): Promise<void> {
     light: Haptics.ImpactFeedbackStyle.Light,
     medium: Haptics.ImpactFeedbackStyle.Medium,
   };
-  const chosen = typeof style === 'string' ? map[style] : undefined;
+  const chosen = typeof style === "string" ? map[style] : undefined;
   await Haptics.impactAsync(chosen ?? Haptics.ImpactFeedbackStyle.Light);
 }
 
@@ -210,15 +231,18 @@ async function handleHapticSuccess(): Promise<void> {
  * app state. Foreground apps can still implement their own UI countdown;
  * this just guarantees the *completion event* reaches the user.
  */
-async function handleTimerStartBackground(appId: string, args: unknown): Promise<void> {
+async function handleTimerStartBackground(
+  appId: string,
+  args: unknown
+): Promise<void> {
   const a = asObject(args);
-  const id = requireString(a, 'id');
-  const durationMs = requireNumber(a, 'durationMs');
+  const id = requireString(a, "id");
+  const durationMs = requireNumber(a, "durationMs");
   if (durationMs <= 0) {
-    throw new BridgeFailureError('invalid_args', '"durationMs" must be > 0');
+    throw new BridgeFailureError("invalid_args", '"durationMs" must be > 0');
   }
-  const title = typeof a.title === 'string' ? a.title : 'Timer finished';
-  const body = typeof a.body === 'string' ? a.body : '';
+  const title = typeof a.title === "string" ? a.title : "Timer finished";
+  const body = typeof a.body === "string" ? a.body : "";
   await ensureNotificationsPermission();
 
   const at = new Date(Date.now() + durationMs);
@@ -231,36 +255,42 @@ async function handleTimerStartBackground(appId: string, args: unknown): Promise
 
 async function handleTimerCancel(appId: string, args: unknown): Promise<void> {
   const a = asObject(args);
-  const id = requireString(a, 'id');
-  await Notifications.cancelScheduledNotificationAsync(scopedId(appId, `timer:${id}`));
+  const id = requireString(a, "id");
+  await Notifications.cancelScheduledNotificationAsync(
+    scopedId(appId, `timer:${id}`)
+  );
 }
 
 // --- Public entry ---
 
 const HANDLERS: Record<
   BridgeMethod,
-  (appId: string, args: unknown, scope?: BackgroundTransferScope) => Promise<unknown>
+  (
+    appId: string,
+    args: unknown,
+    scope?: BackgroundTransferScope
+  ) => Promise<unknown>
 > = {
-  'haptic.impact': (_appId, args) => handleHapticImpact(args),
-  'haptic.selection': () => handleHapticSelection(),
-  'haptic.success': () => handleHapticSuccess(),
-  'notify.cancel': handleNotifyCancel,
-  'notify.schedule': handleNotifySchedule,
-  'transfer.putBackground': handleBackgroundPut,
-  'timer.cancel': handleTimerCancel,
-  'timer.startBackground': handleTimerStartBackground,
+  "haptic.impact": (_appId, args) => handleHapticImpact(args),
+  "haptic.selection": () => handleHapticSelection(),
+  "haptic.success": () => handleHapticSuccess(),
+  "notify.cancel": handleNotifyCancel,
+  "notify.schedule": handleNotifySchedule,
+  "transfer.putBackground": handleBackgroundPut,
+  "timer.cancel": handleTimerCancel,
+  "timer.startBackground": handleTimerStartBackground,
 };
 
 export async function dispatch(
   appId: string,
   req: BridgeRequest,
-  scope?: BackgroundTransferScope,
+  scope?: BackgroundTransferScope
 ): Promise<BridgeResponse> {
   const handler = HANDLERS[req.method];
   if (!handler) {
     return {
       error: {
-        code: 'unknown_method',
+        code: "unknown_method",
         message: `Unknown method "${req.method}"`,
       },
       id: req.id,
@@ -280,7 +310,7 @@ export async function dispatch(
     }
     return {
       error: {
-        code: 'unhandled',
+        code: "unhandled",
         message: err instanceof Error ? err.message : String(err),
       },
       id: req.id,

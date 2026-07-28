@@ -63,22 +63,22 @@ interface Reminder {
   month_day: string;
 }
 
-const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
-const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
+const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
+const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 
 export default async function peopleHandler({ input, ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     const [profiles, concepts, schemes] = await Promise.all([
       ctx.vault.read({
-        entity: 'people.profile',
-        orderBy: { column: 'created_at', dir: 'desc' },
+        entity: "people.profile",
+        orderBy: { column: "created_at", dir: "desc" },
         limit: window,
         purpose,
       }),
-      ctx.vault.read({ entity: 'core.concept', purpose }),
-      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+      ctx.vault.read({ entity: "core.concept", purpose }),
+      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
     ]);
 
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -87,41 +87,46 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     // Lists are owner-curated SKOS concepts — small and unbounded.
     const listScheme = schemeRows.find((s) => s.uri === LIST_SCHEME_URI);
     const listConcepts = conceptRows.filter(
-      (c) => listScheme && c.scheme_id === listScheme.scheme_id,
+      (c) => listScheme && c.scheme_id === listScheme.scheme_id
     );
     const lists = listConcepts
       .map((c) => ({ list_id: c.concept_id, name: c.pref_label }))
       .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
-    const listConceptIds = new Set<string>(listConcepts.map((c) => c.concept_id));
+    const listConceptIds = new Set<string>(
+      listConcepts.map((c) => c.concept_id)
+    );
     const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
     const starredConceptId = flagsScheme
-      ? (conceptRows.find((c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred')
-          ?.concept_id ?? null)
+      ? (conceptRows.find(
+          (c) =>
+            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
+        )?.concept_id ?? null)
       : null;
 
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const partyIds = profileRows.map((p) => p.party_id);
-    if (partyIds.length === 0) return { people: [], lists, truncated: false, window };
+    if (partyIds.length === 0)
+      return { people: [], lists, truncated: false, window };
 
     const [parties, tags, dates] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.party',
-        where: [{ column: 'party_id', op: 'in', value: partyIds }],
+        entity: "core.party",
+        where: [{ column: "party_id", op: "in", value: partyIds }],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.tag',
+        entity: "core.tag",
         where: [
-          { column: 'target_type', op: 'eq', value: 'core.party' },
-          { column: 'target_id', op: 'in', value: partyIds },
+          { column: "target_type", op: "eq", value: "core.party" },
+          { column: "target_id", op: "in", value: partyIds },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'people.important_date',
+        entity: "people.important_date",
         where: [
-          { column: 'party_id', op: 'in', value: partyIds },
-          { column: 'deleted_at', op: 'is-null' },
+          { column: "party_id", op: "in", value: partyIds },
+          { column: "deleted_at", op: "is-null" },
         ],
         purpose,
       }),
@@ -132,12 +137,13 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     const dateRows = (dates.rows ?? []) as unknown as RawDate[];
 
     const nameById = new Map<string, string>(
-      partyRows.map((p) => [p.party_id, p.display_name] as const),
+      partyRows.map((p) => [p.party_id, p.display_name] as const)
     );
     const listByParty = new Map<string, string>();
     const starredParties = new Set<string>();
     for (const t of tagRows) {
-      if (listConceptIds.has(t.concept_id)) listByParty.set(t.target_id, t.concept_id);
+      if (listConceptIds.has(t.concept_id))
+        listByParty.set(t.target_id, t.concept_id);
       if (starredConceptId != null && t.concept_id === starredConceptId)
         starredParties.add(t.target_id);
     }
@@ -151,8 +157,8 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
 
     const people = profileRows.map((pr) => ({
       party_id: pr.party_id,
-      name: nameById.get(pr.party_id) ?? '—',
-      role: pr.role ?? '',
+      name: nameById.get(pr.party_id) ?? "—",
+      role: pr.role ?? "",
       avatar_color: pr.avatar_color ?? null,
       cadence_days: pr.cadence_days,
       last_contacted_at: pr.last_contacted_at ?? null,

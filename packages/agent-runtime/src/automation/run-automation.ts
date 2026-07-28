@@ -18,7 +18,7 @@
  * `ctx.agent` starts zero child processes and zero HTTP servers.
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
 import {
   isRunnerKind,
@@ -29,11 +29,14 @@ import {
   type RunnerHealthController,
   type RunnerPrefs,
   type VaultBridge,
-} from '@centraid/app-engine';
-import * as automation from '@centraid/automation';
+} from "@centraid/app-engine";
+import * as automation from "@centraid/automation";
 
-import type { RunnerKind } from '../types.js';
-import { parseAutomationAgentFailure, startLiveDispatch } from './run-automation-live-dispatch.js';
+import type { RunnerKind } from "../types.js";
+import {
+  parseAutomationAgentFailure,
+  startLiveDispatch,
+} from "./run-automation-live-dispatch.js";
 
 export interface RunAutomationOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
@@ -65,7 +68,7 @@ export interface RunAutomationOptions {
    */
   vaultFor?: (
     appId: string,
-    automationRef: string,
+    automationRef: string
   ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
   /** Which CLI to drive. Defaults to codex. */
   runner?: RunnerKind;
@@ -75,7 +78,7 @@ export interface RunAutomationOptions {
    * consent for unattended egress; a manifest pin must still be a live ladder
    * member or carry an existing grant (#567 D13).
    */
-  runnerSelectionSource?: 'prefs' | 'manifest';
+  runnerSelectionSource?: "prefs" | "manifest";
   /**
    * Fallback model id/alias for this fire's `ctx.agent` calls, applied only
    * when the automation's manifest doesn't set `requires.model` (that always
@@ -109,7 +112,7 @@ export interface RunAutomationOptions {
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
   /** Optional logger. */
-  onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  onLog?: (level: "info" | "warn" | "error", msg: string) => void;
   /** Live run-stream sink (issue #158); forwarded to the fire spine. */
   onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   /**
@@ -155,13 +158,17 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
   outcome: automation.HandlerOutcome;
   record: automation.RunRecord;
 }> {
-  const primary: RunnerKind = opts.runner ?? 'codex';
+  const primary: RunnerKind = opts.runner ?? "codex";
   const ladder: RunnerKind[] = [];
   for (const kind of [primary, ...(opts.runnerLadder ?? [])]) {
     if (!ladder.includes(kind)) ladder.push(kind);
   }
-  const baseRunId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
-  let last: { outcome: automation.HandlerOutcome; record: automation.RunRecord } | undefined;
+  const baseRunId =
+    opts.runId ??
+    `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+  let last:
+    | { outcome: automation.HandlerOutcome; record: automation.RunRecord }
+    | undefined;
   let failoverNotice: string | undefined;
   const condemned: string[] = [];
 
@@ -175,17 +182,20 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     // context the dispatcher uses — otherwise the keys would not match and the
     // dispatcher's check stays the only honest one.
     if (opts.runnerHealthContext && opts.runnerHealth) {
-      const breaker = opts.runnerHealth.canAttempt(opts.runnerHealthContext, runner);
+      const breaker = opts.runnerHealth.canAttempt(
+        opts.runnerHealthContext,
+        runner
+      );
       if (!breaker.allowed) {
         const reason =
-          `${runner} is circuit-broken (${breaker.failureClass ?? 'unknown'})` +
-          `${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ''}`;
+          `${runner} is circuit-broken (${breaker.failureClass ?? "unknown"})` +
+          `${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}`;
         condemned.push(reason);
         const next = ladder[index + 1];
         opts.onLog?.(
-          'warn',
+          "warn",
           `${reason}; skipping it for ${opts.automationRef}` +
-            `${next ? ` and continuing with ${next}` : ''}`,
+            `${next ? ` and continuing with ${next}` : ""}`
         );
         failoverNotice = next
           ? `${reason}. Skipped without running the handler; continuing with ${next}.`
@@ -195,8 +205,11 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
             automationRef: opts.automationRef,
             from: runner,
             to: next,
-            failureClass: breaker.failureClass ?? 'unknown',
-            failedRunId: index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`,
+            failureClass: breaker.failureClass ?? "unknown",
+            failedRunId:
+              index === 0
+                ? baseRunId
+                : `${baseRunId}:failover:${index}:${runner}`,
             nextRunId: `${baseRunId}:failover:${index + 1}:${next}`,
           });
           return runRung(index + 1);
@@ -207,7 +220,8 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     const prefs = await opts.runnerPrefsFor?.(runner);
     const model = isPrimary ? opts.model : undefined;
     const configPins = isPrimary ? opts.configPins : prefs?.configPins;
-    const runId = index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`;
+    const runId =
+      index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`;
     const openDispatch: automation.OpenDispatch = (args) =>
       startLiveDispatch({
         workdir: args.workdir,
@@ -218,10 +232,14 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         // A manifest capability tier, when present, still wins. Provider-
         // specific owner pins are deliberately cleared after the first rung.
         ...((args.model ?? model) ? { model: args.model ?? model } : {}),
-        ...((args.configPins ?? configPins) ? { configPins: args.configPins ?? configPins } : {}),
+        ...((args.configPins ?? configPins)
+          ? { configPins: args.configPins ?? configPins }
+          : {}),
         ...(opts.runnerPrefsFor ? { runnerPrefsFor: opts.runnerPrefsFor } : {}),
         ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
-        ...(opts.runnerHealthContext ? { runnerHealthContext: opts.runnerHealthContext } : {}),
+        ...(opts.runnerHealthContext
+          ? { runnerHealthContext: opts.runnerHealthContext }
+          : {}),
         ...(opts.providerEgressConsent
           ? { providerEgressConsent: opts.providerEgressConsent }
           : {}),
@@ -231,11 +249,16 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         // A manifest-pinned primary is not user-authored consent; it may still
         // egress if the user's live failover ladder contains that runner, which
         // is exactly what `recordDerived('ladder', …)` verifies.
-        consentSource: isPrimary && opts.runnerSelectionSource !== 'manifest' ? 'direct' : 'ladder',
+        consentSource:
+          isPrimary && opts.runnerSelectionSource !== "manifest"
+            ? "direct"
+            : "ladder",
         onLog: args.onLog,
       });
 
-    const turnNote = [failoverNotice, opts.note].filter((part) => !!part).join(' ');
+    const turnNote = [failoverNotice, opts.note]
+      .filter((part) => !!part)
+      .join(" ");
 
     last = await automation.runFire(
       {
@@ -260,13 +283,20 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
         ...(failoverNotice ? { failoverNotice } : {}),
         ...(opts.input === undefined ? {} : { input: opts.input }),
         ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-        ...(opts.failureDepth === undefined ? {} : { failureDepth: opts.failureDepth }),
-        ...(opts.resolveConnection ? { resolveConnection: opts.resolveConnection } : {}),
-        ...(opts.resolveNestedRuntime ? { resolveNestedRuntime: opts.resolveNestedRuntime } : {}),
+        ...(opts.failureDepth === undefined
+          ? {}
+          : { failureDepth: opts.failureDepth }),
+        ...(opts.resolveConnection
+          ? { resolveConnection: opts.resolveConnection }
+          : {}),
+        ...(opts.resolveNestedRuntime
+          ? { resolveNestedRuntime: opts.resolveNestedRuntime }
+          : {}),
         deferOnFailure: (outcome) =>
-          index < ladder.length - 1 && parseAutomationAgentFailure(outcome.error) !== undefined,
+          index < ladder.length - 1 &&
+          parseAutomationAgentFailure(outcome.error) !== undefined,
       },
-      { openDispatch },
+      { openDispatch }
     );
 
     const failure = parseAutomationAgentFailure(last.outcome.error);
@@ -274,9 +304,9 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     if (!failure || !next) return;
     const nextRunId = `${baseRunId}:failover:${index + 1}:${next}`;
     opts.onLog?.(
-      'warn',
+      "warn",
       `${runner} failed at automation fire boundary (${failure.failureClass}); ` +
-        `re-entering ${opts.automationRef} with ${next} as ${nextRunId}`,
+        `re-entering ${opts.automationRef} with ${next} as ${nextRunId}`
     );
     failoverNotice =
       `${runner} failed at the automation fire boundary (${failure.failureClass}). ` +
@@ -299,7 +329,7 @@ export async function runAutomation(opts: RunAutomationOptions): Promise<{
     // closes the run stream and records the health error — instead of inventing
     // a run record for work that never started.
     throw new Error(
-      `automation ${opts.automationRef}: no runner available — ${condemned.join('; ')}`,
+      `automation ${opts.automationRef}: no runner available — ${condemned.join("; ")}`
     );
   }
   return last;

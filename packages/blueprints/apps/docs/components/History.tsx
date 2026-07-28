@@ -9,13 +9,13 @@
 // content id, which remounts this component and re-triggers its fetch, so
 // the panel always reflects the freshly-recorded chain without any extra
 // wiring back to app.tsx's refresh().
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-import { fmtBytes, fmtFull, loadable, typeMeta } from '../format.ts';
-import type { VersionEntry } from '../types.ts';
+import { fmtBytes, fmtFull, loadable, typeMeta } from "../format.ts";
+import type { VersionEntry } from "../types.ts";
 
-import styles from './History.module.css';
-import shared from './shared.module.css';
+import styles from "./History.module.css";
+import shared from "./shared.module.css";
 
 interface HistoryResult {
   versions?: VersionEntry[];
@@ -23,11 +23,11 @@ interface HistoryResult {
 }
 
 function VersionPreview({ v }: { v: VersionEntry }) {
-  const t = String(v.media_type ?? '');
+  const t = String(v.media_type ?? "");
   if (!loadable(v.content_uri)) return null;
-  if (t.startsWith('image/'))
+  if (t.startsWith("image/"))
     return <img className={styles.versionPreview} src={v.content_uri} alt="" />;
-  if (t.startsWith('video/'))
+  if (t.startsWith("video/"))
     return (
       <video
         className={styles.versionPreview}
@@ -41,15 +41,20 @@ function VersionPreview({ v }: { v: VersionEntry }) {
         <track kind="captions" />
       </video>
     );
-  if (t.startsWith('audio/'))
+  if (t.startsWith("audio/"))
     return (
-      <audio className={styles.versionAudio} src={v.content_uri} controls preload="metadata">
+      <audio
+        className={styles.versionAudio}
+        src={v.content_uri}
+        controls
+        preload="metadata"
+      >
         {/* The vault has no caption sidecar for a version yet; this is the
             wiring point for its `src` when it does. */}
         <track kind="captions" />
       </audio>
     );
-  if (t === 'application/pdf')
+  if (t === "application/pdf")
     return (
       <iframe
         className={styles.versionPreviewFrame}
@@ -82,7 +87,13 @@ function VersionRow({
   const [open, setOpen] = useState(false);
   const m = typeMeta(v.media_type);
   return (
-    <div className={v.current ? `${styles.version} ${styles.versionCurrent}` : styles.version}>
+    <div
+      className={
+        v.current
+          ? `${styles.version} ${styles.versionCurrent}`
+          : styles.version
+      }
+    >
       <button
         type="button"
         className={styles.versionRow}
@@ -141,9 +152,14 @@ export function History({
     // (#360) loadVersions/documentId read once at mount; Details.tsx keys this component by content_id, so a real version change already remounts it fresh instead of re-running this effect
   }, [documentId, loadVersions]);
 
-  if (versions === null) return <div className={styles.versionStatus}>Loading history…</div>;
+  if (versions === null)
+    return <div className={styles.versionStatus}>Loading history…</div>;
   if (denied)
-    return <div className={styles.versionStatus}>Ask the owner to approve history access.</div>;
+    return (
+      <div className={styles.versionStatus}>
+        Ask the owner to approve history access.
+      </div>
+    );
   if (versions.length <= 1)
     return <div className={styles.versionStatus}>No earlier versions yet.</div>;
 

@@ -8,11 +8,11 @@
 // of some index — an explicit one, or the implicit index SQLite gives a
 // rowid table's TEXT PRIMARY KEY / UNIQUE constraint, or a WITHOUT ROWID
 // table's own PRIMARY KEY.
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from "node:sqlite";
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { openVaultDb } from '../db.js';
+import { openVaultDb } from "../db.js";
 
 interface UncoveredFk {
   table: string;
@@ -31,7 +31,9 @@ interface IndexColumns {
 function findUncoveredForeignKeys(db: DatabaseSync): UncoveredFk[] {
   const tables = (
     db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+      )
       .all() as { name: string }[]
   ).map((r) => r.name);
 
@@ -67,7 +69,7 @@ function findUncoveredForeignKeys(db: DatabaseSync): UncoveredFk[] {
     // covers its column sequence as an index even though it may not
     // (always, for the rowid-alias case) surface in PRAGMA index_list.
     if (pkColumns.length > 0) {
-      indexColumnSets.push({ name: '(primary key)', columns: pkColumns });
+      indexColumnSets.push({ name: "(primary key)", columns: pkColumns });
     }
 
     const fkRows = db.prepare(`PRAGMA foreign_key_list(${table})`).all() as {
@@ -101,17 +103,19 @@ function findUncoveredForeignKeys(db: DatabaseSync): UncoveredFk[] {
 }
 
 function describeUncovered(items: UncoveredFk[]): string {
-  return items.map((u) => `${u.table}.${u.columns.join(',')} -> ${u.toTable}`).join('\n  ');
+  return items
+    .map((u) => `${u.table}.${u.columns.join(",")} -> ${u.toTable}`)
+    .join("\n  ");
 }
 
-describe('fk-index', () => {
-  test('every vault.db FK child column-set is covered by a leftmost index prefix', () => {
+describe("fk-index", () => {
+  test("every vault.db FK child column-set is covered by a leftmost index prefix", () => {
     const { vault, journal, close } = openVaultDb();
     try {
       const uncovered = findUncoveredForeignKeys(vault);
       expect(
         uncovered,
-        `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`,
+        `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`
       ).toStrictEqual([]);
     } finally {
       close();
@@ -121,13 +125,13 @@ describe('fk-index', () => {
     }
   });
 
-  test('every journal.db FK child column-set is covered by a leftmost index prefix', () => {
+  test("every journal.db FK child column-set is covered by a leftmost index prefix", () => {
     const { journal, close } = openVaultDb();
     try {
       const uncovered = findUncoveredForeignKeys(journal);
       expect(
         uncovered,
-        `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`,
+        `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`
       ).toStrictEqual([]);
     } finally {
       close();

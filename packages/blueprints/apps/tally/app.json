@@ -60,7 +60,14 @@
             }
           }
         },
-        "required": ["group_id", "description", "amount_minor", "paid_by", "category", "splits"],
+        "required": [
+          "group_id",
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "splits"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -99,7 +106,14 @@
             }
           }
         },
-        "required": ["expense_id", "description", "amount_minor", "paid_by", "category", "splits"],
+        "required": [
+          "expense_id",
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "splits"
+        ],
         "additionalProperties": false
       },
       "output": {

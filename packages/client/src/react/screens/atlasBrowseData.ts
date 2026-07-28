@@ -4,14 +4,18 @@
 // cell values, and computes row identity from column metadata so the editor and
 // the delete flow agree on what "this row" means.
 
-import type { BrowseColumn, BrowseDependent, BrowseTableEntry } from '../../gateway-client.js';
+import type {
+  BrowseColumn,
+  BrowseDependent,
+  BrowseTableEntry,
+} from "../../gateway-client.js";
 
 /**
  * The masked value a sealed column reads back as (#293/#298). The backend never
  * returns the plaintext; the grid styles this sentinel as a chip rather than
  * printing it, and the editor refuses to write it.
  */
-export const SEALED_SENTINEL = '«sealed»';
+export const SEALED_SENTINEL = "«sealed»";
 
 /** One pack's worth of tables in the picker — a pack header + its tables. */
 export interface BrowsePackGroup {
@@ -33,10 +37,13 @@ export interface GroupedBrowseTables {
  * an empty pack after filtering is dropped so the divider never floats over
  * nothing.
  */
-export function groupBrowseTables(tables: BrowseTableEntry[], query: string): GroupedBrowseTables {
+export function groupBrowseTables(
+  tables: BrowseTableEntry[],
+  query: string
+): GroupedBrowseTables {
   const q = query.trim().toLowerCase();
   const match = (t: BrowseTableEntry): boolean =>
-    q === '' ||
+    q === "" ||
     t.logical.toLowerCase().includes(q) ||
     t.label.toLowerCase().includes(q) ||
     t.physical.toLowerCase().includes(q);
@@ -74,8 +81,8 @@ export function isSealedValue(value: unknown): boolean {
 
 /** Render any cell scalar as the string the grid shows (null → empty). */
 export function cellText(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'object') return JSON.stringify(value);
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 
@@ -89,11 +96,14 @@ export function pkColumns(columns: BrowseColumn[]): BrowseColumn[] {
  * pk passes its bare value; a composite pk passes a JSON array of its parts in
  * key order (the shape `row?id=` / delete accept).
  */
-export function rowIdOf(row: Record<string, unknown>, columns: BrowseColumn[]): string {
+export function rowIdOf(
+  row: Record<string, unknown>,
+  columns: BrowseColumn[]
+): string {
   const pks = pkColumns(columns);
   if (pks.length <= 1) {
     const only = pks[0];
-    return only ? cellText(row[only.name]) : '';
+    return only ? cellText(row[only.name]) : "";
   }
   return JSON.stringify(pks.map((c) => row[c.name] ?? null));
 }
@@ -110,8 +120,8 @@ export function isNumericColumn(col: BrowseColumn): boolean {
 }
 
 /** Human label for a dependent's mechanism badge in the delete dialog. */
-export function mechanismLabel(mechanism: 'fk' | 'poly'): string {
-  return mechanism === 'fk' ? 'reference' : 'authored';
+export function mechanismLabel(mechanism: "fk" | "poly"): string {
+  return mechanism === "fk" ? "reference" : "authored";
 }
 
 /**
@@ -120,8 +130,8 @@ export function mechanismLabel(mechanism: 'fk' | 'poly'): string {
  * orchestrating tab agree on the shape.
  */
 export type EditorState =
-  | { mode: 'insert' }
-  | { mode: 'edit'; id: string; row: Record<string, unknown> }
+  | { mode: "insert" }
+  | { mode: "edit"; id: string; row: Record<string, unknown> }
   | null;
 
 /** In-flight delete confirmation state — the target id, the discovered dependents,

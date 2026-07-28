@@ -5,7 +5,7 @@
 // (`custodyProven`) — through the seams below. No user-facing knobs: every
 // bound is an internal constant (five-metric discipline, #436 §6).
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 /**
  * Turns whose FINISH time is older than this many days are cold enough to
@@ -87,7 +87,7 @@ export interface ConversationArchivalResult {
   /** Phase B — archive rows whose raw turns were custody-gated-deleted. */
   segmentsPruned: number;
   turnsPruned: number;
-  reclaim: { mode: 'incremental' | 'full' | 'none'; ranVacuum: boolean };
+  reclaim: { mode: "incremental" | "full" | "none"; ranVacuum: boolean };
 }
 
 /** A raw sqlite row (`SELECT *` shape) — stored verbatim in a segment. */

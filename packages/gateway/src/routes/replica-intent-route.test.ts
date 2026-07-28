@@ -1,20 +1,26 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive route regression suite; decomposition is outside issue #417
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
-import { Readable } from 'node:stream';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+import { Readable } from "node:stream";
 
-import { Dispatcher, Registry, type ToolResult } from '@centraid/app-engine';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { plainSqliteRow, plainSqliteRows } from '@centraid/test-kit/sqlite';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { readReplicaIntentOutcome, recordReplicaIntentOutcome } from '@centraid/vault';
-import { describe, afterEach, expect, test, vi } from 'vitest';
+import { Dispatcher, Registry, type ToolResult } from "@centraid/app-engine";
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { plainSqliteRow, plainSqliteRows } from "@centraid/test-kit/sqlite";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import {
+  readReplicaIntentOutcome,
+  recordReplicaIntentOutcome,
+} from "@centraid/vault";
+import { describe, afterEach, expect, test, vi } from "vitest";
 
-import { replicaDispatchOutcome } from '../serve/build-gateway.js';
-import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
-import { handleReplicaIntent, type ReplicaIntentDispatcher } from './replica-intent-route.js';
+import { replicaDispatchOutcome } from "../serve/build-gateway.js";
+import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import {
+  handleReplicaIntent,
+  type ReplicaIntentDispatcher,
+} from "./replica-intent-route.js";
 
 const logger = {
   info: () => undefined,
@@ -22,9 +28,11 @@ const logger = {
   error: () => undefined,
 };
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('replica-intent-route suite', () => {
+describe("replica-intent-route suite", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
 
   async function plane(): Promise<VaultPlane> {
@@ -37,7 +45,7 @@ describe('replica-intent-route suite', () => {
     });
     cleanups.push(
       () => fs.rm(dir, { recursive: true, force: true }),
-      () => opened.stop(),
+      () => opened.stop()
     );
     return opened;
   }
@@ -45,8 +53,8 @@ describe('replica-intent-route suite', () => {
   function request(body: unknown): IncomingMessage {
     return Object.assign(Readable.from([JSON.stringify(body)]), {
       headers: {},
-      method: 'POST',
-      url: '/centraid/_vault/replica/intents',
+      method: "POST",
+      url: "/centraid/_vault/replica/intents",
     }) as unknown as IncomingMessage;
   }
 
@@ -54,12 +62,12 @@ describe('replica-intent-route suite', () => {
     res: ServerResponse;
     body: () => Record<string, unknown>;
   } {
-    let output = '';
+    let output = "";
     const res = {
       statusCode: 0,
-      setHeader: vi.fn<ServerResponse['setHeader']>(),
+      setHeader: vi.fn<ServerResponse["setHeader"]>(),
       end: (value?: string) => {
-        output = value ?? '';
+        output = value ?? "";
       },
     } as unknown as ServerResponse;
     return { res, body: () => JSON.parse(output) as Record<string, unknown> };
@@ -67,42 +75,48 @@ describe('replica-intent-route suite', () => {
 
   function replicaInvocationId(intentId: string, ordinal: number): string {
     return `replica:v1:${crypto
-      .createHash('sha256')
-      .update(JSON.stringify(['centraid.replica-invocation.v1', intentId, ordinal]))
-      .digest('hex')}`;
+      .createHash("sha256")
+      .update(
+        JSON.stringify(["centraid.replica-invocation.v1", intentId, ordinal])
+      )
+      .digest("hex")}`;
   }
 
   async function bridgeFinalizationFixture() {
     const vault = await plane();
-    vault.approveGrant('planner', {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'schedule', verbs: 'act' }],
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", verbs: "act" }],
     });
-    const registryDir = await tempDir(`replica-intent-registry-${crypto.randomUUID()}-`);
-    const codeDir = await tempDir(`replica-intent-code-${crypto.randomUUID()}-`);
+    const registryDir = await tempDir(
+      `replica-intent-registry-${crypto.randomUUID()}-`
+    );
+    const codeDir = await tempDir(
+      `replica-intent-code-${crypto.randomUUID()}-`
+    );
     cleanups.push(
       () => fs.rm(registryDir, { recursive: true, force: true }),
-      () => fs.rm(codeDir, { recursive: true, force: true }),
+      () => fs.rm(codeDir, { recursive: true, force: true })
     );
-    await fs.mkdir(path.join(codeDir, 'actions'), { recursive: true });
+    await fs.mkdir(path.join(codeDir, "actions"), { recursive: true });
     await fs.writeFile(
-      path.join(codeDir, 'app.json'),
+      path.join(codeDir, "app.json"),
       JSON.stringify({
         manifestVersion: 1,
-        id: 'planner',
-        name: 'Planner',
-        version: '0.1.0',
+        id: "planner",
+        name: "Planner",
+        version: "0.1.0",
         actions: [
           {
-            name: 'add_task',
-            confirmation: 'none',
+            name: "add_task",
+            confirmation: "none",
             input: {
-              type: 'object',
-              required: ['title'],
+              type: "object",
+              required: ["title"],
               properties: {
-                title: { type: 'string' },
-                deny_second: { type: 'boolean' },
-                double: { type: 'boolean' },
+                title: { type: "string" },
+                deny_second: { type: "boolean" },
+                double: { type: "boolean" },
               },
               additionalProperties: false,
             },
@@ -110,10 +124,10 @@ describe('replica-intent-route suite', () => {
         ],
         queries: [],
       }),
-      'utf8',
+      "utf8"
     );
     await fs.writeFile(
-      path.join(codeDir, 'actions', 'add_task.js'),
+      path.join(codeDir, "actions", "add_task.js"),
       `export default async ({ body, ctx }) => {
        try {
          const title = String(body?.title ?? '');
@@ -127,11 +141,11 @@ describe('replica-intent-route suite', () => {
          return { status: 200, body: outcome };
        } catch (err) { return { status: 200, body: { status: 'denied', reason: err.message, code: err.code } }; }
      };\n`,
-      'utf8',
+      "utf8"
     );
     const registry = new Registry(registryDir);
     await registry.load();
-    await registry.ensureUploaded('planner');
+    await registry.ensureUploaded("planner");
     const dispatcher = new Dispatcher({
       registry,
       codeDirOverride: async () => codeDir,
@@ -155,41 +169,43 @@ describe('replica-intent-route suite', () => {
       context: {
         plane: vault,
         access: {
-          role: 'write' as const,
+          role: "write" as const,
           rememberDevice: true,
-          deviceId: 'device-bridge-finalization',
-          appId: 'planner',
+          deviceId: "device-bridge-finalization",
+          appId: "planner",
         },
         dispatch,
       },
     };
   }
 
-  test('a crash-left sending row deterministically re-dispatches, then terminal retry dedupes', async () => {
+  test("a crash-left sending row deterministically re-dispatches, then terminal retry dedupes", async () => {
     const vault = await plane();
-    vault.approveGrant('planner', {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
-    const input = { title: 'offline task' };
+    const input = { title: "offline task" };
     const payloadHash = crypto
-      .createHash('sha256')
-      .update('{"action":"add_task","appId":"planner","input":{"title":"offline task"}}')
-      .digest('hex');
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"offline task"}}'
+      )
+      .digest("hex");
     const identity = {
-      intentId: 'intent-retry-1',
-      deviceId: 'device-a',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "intent-retry-1",
+      deviceId: "device-a",
+      appId: "planner",
+      action: "add_task",
       payloadHash,
     };
     recordReplicaIntentOutcome(vault.db.vault, {
       ...identity,
-      status: 'sending',
+      status: "sending",
     });
     const dispatch = vi
       .fn<ReplicaIntentDispatcher>()
-      .mockResolvedValue({ status: 'executed', output: { taskId: 'task-1' } });
+      .mockResolvedValue({ status: "executed", output: { taskId: "task-1" } });
     const body = {
       intentId: identity.intentId,
       appId: identity.appId,
@@ -202,10 +218,10 @@ describe('replica-intent-route suite', () => {
     await handleReplicaIntent(request(body), first.res, {
       plane: vault,
       access: {
-        role: 'write',
+        role: "write",
         rememberDevice: true,
         deviceId: identity.deviceId,
-        appId: 'planner',
+        appId: "planner",
       },
       dispatch,
     });
@@ -213,8 +229,8 @@ describe('replica-intent-route suite', () => {
     expect(first.body()).toMatchObject({
       outcome: {
         intentId: identity.intentId,
-        status: 'executed',
-        output: { taskId: 'task-1' },
+        status: "executed",
+        output: { taskId: "task-1" },
       },
     });
     expect(dispatch).toHaveBeenCalledOnce();
@@ -223,42 +239,44 @@ describe('replica-intent-route suite', () => {
     await handleReplicaIntent(request(body), retry.res, {
       plane: vault,
       access: {
-        role: 'write',
+        role: "write",
         rememberDevice: true,
         deviceId: identity.deviceId,
-        appId: 'planner',
+        appId: "planner",
       },
       dispatch,
     });
     expect(retry.res.statusCode).toBe(200);
-    expect(retry.body()).toMatchObject({ outcome: { status: 'executed' } });
-    expect(retry.body()).not.toHaveProperty('outcome.output');
+    expect(retry.body()).toMatchObject({ outcome: { status: "executed" } });
+    expect(retry.body()).not.toHaveProperty("outcome.output");
     expect(dispatch).toHaveBeenCalledOnce();
   });
 
-  test('a foreign intent id looks in-flight and never dispatches or mutates its owner row', async () => {
+  test("a foreign intent id looks in-flight and never dispatches or mutates its owner row", async () => {
     const vault = await plane();
-    const input = { title: 'collision probe' };
+    const input = { title: "collision probe" };
     const payloadHash = crypto
-      .createHash('sha256')
-      .update('{"action":"add_task","appId":"planner","input":{"title":"collision probe"}}')
-      .digest('hex');
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"collision probe"}}'
+      )
+      .digest("hex");
     recordReplicaIntentOutcome(vault.db.vault, {
-      intentId: 'foreign-intent',
-      deviceId: 'device-owner',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "foreign-intent",
+      deviceId: "device-owner",
+      appId: "planner",
+      action: "add_task",
       payloadHash,
-      status: 'sending',
+      status: "sending",
     });
     const dispatch = vi.fn<ReplicaIntentDispatcher>();
     const result = response();
 
     await handleReplicaIntent(
       request({
-        intentId: 'foreign-intent',
-        appId: 'planner',
-        action: 'add_task',
+        intentId: "foreign-intent",
+        appId: "planner",
+        action: "add_task",
         input,
         payloadHash,
       }),
@@ -266,60 +284,64 @@ describe('replica-intent-route suite', () => {
       {
         plane: vault,
         access: {
-          role: 'write',
+          role: "write",
           rememberDevice: true,
-          deviceId: 'device-prober',
-          appId: 'planner',
+          deviceId: "device-prober",
+          appId: "planner",
         },
         dispatch,
-      },
+      }
     );
 
     expect(result.res.statusCode).toBe(202);
     expect(result.body()).toMatchObject({
       accepted: true,
-      outcome: { intentId: 'foreign-intent', status: 'in-flight' },
+      outcome: { intentId: "foreign-intent", status: "in-flight" },
     });
     expect(dispatch).not.toHaveBeenCalled();
     expect(
-      readReplicaIntentOutcome(vault.db.vault, 'foreign-intent', 'device-owner'),
+      readReplicaIntentOutcome(vault.db.vault, "foreign-intent", "device-owner")
     ).toMatchObject({
-      status: 'sending',
+      status: "sending",
     });
   });
 
-  test('a dispatch exception stays in-flight, then retry terminalizes without durable output', async () => {
+  test("a dispatch exception stays in-flight, then retry terminalizes without durable output", async () => {
     const vault = await plane();
-    vault.approveGrant('planner', {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
-    const input = { title: 'ambiguous offline task' };
+    const input = { title: "ambiguous offline task" };
     const payloadHash = crypto
-      .createHash('sha256')
-      .update('{"action":"add_task","appId":"planner","input":{"title":"ambiguous offline task"}}')
-      .digest('hex');
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"ambiguous offline task"}}'
+      )
+      .digest("hex");
     const body = {
-      intentId: 'intent-ambiguous-1',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "intent-ambiguous-1",
+      appId: "planner",
+      action: "add_task",
       input,
       payloadHash,
     };
     const dispatch = vi
       .fn<ReplicaIntentDispatcher>()
-      .mockRejectedValueOnce(new Error('response channel closed after canonical commit'))
+      .mockRejectedValueOnce(
+        new Error("response channel closed after canonical commit")
+      )
       .mockResolvedValueOnce({
-        status: 'executed',
-        output: { secretDerivative: 'must-not-be-durable' },
+        status: "executed",
+        output: { secretDerivative: "must-not-be-durable" },
       });
     const context = {
       plane: vault,
       access: {
-        role: 'write' as const,
+        role: "write" as const,
         rememberDevice: true,
-        deviceId: 'device-ambiguous',
-        appId: 'planner',
+        deviceId: "device-ambiguous",
+        appId: "planner",
       },
       dispatch,
     };
@@ -328,75 +350,87 @@ describe('replica-intent-route suite', () => {
     await handleReplicaIntent(request(body), ambiguous.res, context);
     expect(ambiguous.res.statusCode).toBe(202);
     expect(ambiguous.body()).toMatchObject({
-      outcome: { status: 'in-flight' },
+      outcome: { status: "in-flight" },
     });
     expect(
-      readReplicaIntentOutcome(vault.db.vault, body.intentId, context.access.deviceId),
-    ).toMatchObject({ status: 'sending' });
+      readReplicaIntentOutcome(
+        vault.db.vault,
+        body.intentId,
+        context.access.deviceId
+      )
+    ).toMatchObject({ status: "sending" });
 
     const retried = response();
     await handleReplicaIntent(request(body), retried.res, context);
     expect(retried.res.statusCode).toBe(200);
     expect(retried.body()).toMatchObject({
       outcome: {
-        status: 'executed',
-        output: { secretDerivative: 'must-not-be-durable' },
+        status: "executed",
+        output: { secretDerivative: "must-not-be-durable" },
       },
     });
     expect(
-      readReplicaIntentOutcome(vault.db.vault, body.intentId, context.access.deviceId),
-    ).not.toHaveProperty('output');
+      readReplicaIntentOutcome(
+        vault.db.vault,
+        body.intentId,
+        context.access.deviceId
+      )
+    ).not.toHaveProperty("output");
     expect(
       plainSqliteRow(
         vault.db.vault
           .prepare(
             `SELECT count(*) AS n
            FROM pragma_table_info('replica_intent_outcome')
-          WHERE name = 'output_json'`,
+          WHERE name = 'output_json'`
           )
-          .get(),
-      ),
+          .get()
+      )
     ).toStrictEqual({ n: 0 });
 
     const terminalRetry = response();
     await handleReplicaIntent(request(body), terminalRetry.res, context);
     expect(terminalRetry.res.statusCode).toBe(200);
-    expect(terminalRetry.body()).not.toHaveProperty('outcome.output');
+    expect(terminalRetry.body()).not.toHaveProperty("outcome.output");
     expect(dispatch).toHaveBeenCalledTimes(2);
   });
 
-  test('a live replica response is redacted from the durable outcome and terminal replay', async () => {
+  test("a live replica response is redacted from the durable outcome and terminal replay", async () => {
     const vault = await plane();
-    vault.approveGrant('planner', {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'schedule', verbs: 'act' }],
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", verbs: "act" }],
     });
 
-    const registryDir = await tempDir(`replica-intent-registry-${crypto.randomUUID()}-`);
-    const codeDir = await tempDir(`replica-intent-code-${crypto.randomUUID()}-`);
+    const registryDir = await tempDir(
+      `replica-intent-registry-${crypto.randomUUID()}-`
+    );
+    const codeDir = await tempDir(
+      `replica-intent-code-${crypto.randomUUID()}-`
+    );
     cleanups.push(
       () => fs.rm(registryDir, { recursive: true, force: true }),
-      () => fs.rm(codeDir, { recursive: true, force: true }),
+      () => fs.rm(codeDir, { recursive: true, force: true })
     );
-    await fs.mkdir(path.join(codeDir, 'actions'), { recursive: true });
+    await fs.mkdir(path.join(codeDir, "actions"), { recursive: true });
     await fs.writeFile(
-      path.join(codeDir, 'app.json'),
+      path.join(codeDir, "app.json"),
       JSON.stringify({
         manifestVersion: 1,
-        id: 'planner',
-        name: 'Planner',
-        version: '0.1.0',
+        id: "planner",
+        name: "Planner",
+        version: "0.1.0",
         actions: [
           {
-            name: 'add_task',
-            confirmation: 'none',
+            name: "add_task",
+            confirmation: "none",
             input: {
-              type: 'object',
-              required: ['title'],
+              type: "object",
+              required: ["title"],
               properties: {
-                title: { type: 'string' },
-                deny_second: { type: 'boolean' },
-                double: { type: 'boolean' },
+                title: { type: "string" },
+                deny_second: { type: "boolean" },
+                double: { type: "boolean" },
               },
               additionalProperties: false,
             },
@@ -404,10 +438,10 @@ describe('replica-intent-route suite', () => {
         ],
         queries: [],
       }),
-      'utf8',
+      "utf8"
     );
     await fs.writeFile(
-      path.join(codeDir, 'actions', 'add_task.js'),
+      path.join(codeDir, "actions", "add_task.js"),
       `export default async ({ body, ctx }) => {
        try {
          const title = String(body?.title ?? '');
@@ -436,11 +470,11 @@ describe('replica-intent-route suite', () => {
          };
        }
      };\n`,
-      'utf8',
+      "utf8"
     );
     const registry = new Registry(registryDir);
     await registry.load();
-    await registry.ensureUploaded('planner');
+    await registry.ensureUploaded("planner");
     const dispatcher = new Dispatcher({
       registry,
       codeDirOverride: async () => codeDir,
@@ -460,65 +494,76 @@ describe('replica-intent-route suite', () => {
     const context = {
       plane: vault,
       access: {
-        role: 'write' as const,
+        role: "write" as const,
         rememberDevice: true,
-        deviceId: 'device-bridge-finalization',
-        appId: 'planner',
+        deviceId: "device-bridge-finalization",
+        appId: "planner",
       },
       dispatch,
     };
 
     // A first successful replica HTTP response carries the live handler value,
     // but neither the durable outcome nor a terminal retry can reproduce it.
-    const liveInput = { title: 'live output task' };
+    const liveInput = { title: "live output task" };
     const liveBody = {
-      intentId: 'intent-live-output-1',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "intent-live-output-1",
+      appId: "planner",
+      action: "add_task",
       input: liveInput,
       payloadHash: crypto
-        .createHash('sha256')
-        .update('{"action":"add_task","appId":"planner","input":{"title":"live output task"}}')
-        .digest('hex'),
+        .createHash("sha256")
+        .update(
+          '{"action":"add_task","appId":"planner","input":{"title":"live output task"}}'
+        )
+        .digest("hex"),
     };
     const live = response();
     await handleReplicaIntent(request(liveBody), live.res, context);
     expect(live.res.statusCode).toBe(200);
     expect(live.body()).toMatchObject({
-      outcome: { status: 'executed', output: { task_id: expect.any(String) } },
+      outcome: { status: "executed", output: { task_id: expect.any(String) } },
     });
     expect(
-      readReplicaIntentOutcome(vault.db.vault, liveBody.intentId, context.access.deviceId),
-    ).not.toHaveProperty('output');
+      readReplicaIntentOutcome(
+        vault.db.vault,
+        liveBody.intentId,
+        context.access.deviceId
+      )
+    ).not.toHaveProperty("output");
     const liveReceipt = vault.db.journal
-      .prepare(`SELECT detail_json FROM consent_receipt WHERE invocation_id = ?`)
+      .prepare(
+        `SELECT detail_json FROM consent_receipt WHERE invocation_id = ?`
+      )
       .get(replicaInvocationId(liveBody.intentId, 0)) as {
       detail_json: string;
     };
-    expect(JSON.parse(liveReceipt.detail_json)).not.toHaveProperty('output');
+    expect(JSON.parse(liveReceipt.detail_json)).not.toHaveProperty("output");
     const liveReplay = response();
     await handleReplicaIntent(request(liveBody), liveReplay.res, context);
     expect(liveReplay.res.statusCode).toBe(200);
-    expect(liveReplay.body()).not.toHaveProperty('outcome.output');
+    expect(liveReplay.body()).not.toHaveProperty("outcome.output");
     expect(dispatch).toHaveBeenCalledOnce();
   });
 
-  test('a bridge-finalization error stays retryable and replays exactly once', async () => {
-    const { vault, rawResults, dispatch, context } = await bridgeFinalizationFixture();
+  test("a bridge-finalization error stays retryable and replays exactly once", async () => {
+    const { vault, rawResults, dispatch, context } =
+      await bridgeFinalizationFixture();
 
     vault.db.journal.exec(`CREATE TEMP TRIGGER fail_replica_finalization_receipt
     BEFORE INSERT ON consent_receipt BEGIN
       SELECT RAISE(ABORT, 'synthetic bridge finalization failure');
     END`);
-    const input = { title: 'ambiguous bridge task' };
+    const input = { title: "ambiguous bridge task" };
     const payloadHash = crypto
-      .createHash('sha256')
-      .update('{"action":"add_task","appId":"planner","input":{"title":"ambiguous bridge task"}}')
-      .digest('hex');
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"ambiguous bridge task"}}'
+      )
+      .digest("hex");
     const body = {
-      intentId: 'intent-bridge-finalization-1',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "intent-bridge-finalization-1",
+      appId: "planner",
+      action: "add_task",
       input,
       payloadHash,
     };
@@ -531,22 +576,28 @@ describe('replica-intent-route suite', () => {
     expect(rawResults.at(0)).toMatchObject({
       isError: false,
       structuredContent: {
-        status: 'denied',
-        code: 'VAULT_ERROR',
-        reason: expect.stringContaining('synthetic bridge finalization failure'),
+        status: "denied",
+        code: "VAULT_ERROR",
+        reason: expect.stringContaining(
+          "synthetic bridge finalization failure"
+        ),
       },
     });
     expect(ambiguous.res.statusCode).toBe(202);
     expect(ambiguous.body()).toMatchObject({
-      outcome: { status: 'in-flight' },
+      outcome: { status: "in-flight" },
     });
     expect(
-      readReplicaIntentOutcome(vault.db.vault, body.intentId, context.access.deviceId),
-    ).toMatchObject({ status: 'sending' });
+      readReplicaIntentOutcome(
+        vault.db.vault,
+        body.intentId,
+        context.access.deviceId
+      )
+    ).toMatchObject({ status: "sending" });
     const ambiguousMarker = vault.db.vault
       .prepare(
         `SELECT invocation_id, intent_id, journal_finalized_at
-         FROM replica_invocation_commit WHERE intent_id = ?`,
+         FROM replica_invocation_commit WHERE intent_id = ?`
       )
       .get(body.intentId) as {
       invocation_id: string;
@@ -558,65 +609,74 @@ describe('replica-intent-route suite', () => {
       journal_finalized_at: null,
     });
     expect(ambiguousMarker.invocation_id).toMatch(/^replica:v1:[a-f0-9]{64}$/u);
-    expect(ambiguousMarker.invocation_id).not.toBe('handler-selected-first');
+    expect(ambiguousMarker.invocation_id).not.toBe("handler-selected-first");
     expect(
       plainSqliteRow(
         vault.db.vault
           .prepare(`SELECT count(*) AS n FROM schedule_task WHERE title = ?`)
-          .get(input.title),
-      ),
+          .get(input.title)
+      )
     ).toStrictEqual({ n: 1 });
 
-    vault.db.journal.exec('DROP TRIGGER fail_replica_finalization_receipt');
+    vault.db.journal.exec("DROP TRIGGER fail_replica_finalization_receipt");
     const retried = response();
     await handleReplicaIntent(request(body), retried.res, context);
 
     expect(rawResults.at(1)).toMatchObject({
       isError: false,
-      structuredContent: { status: 'replayed', output: null },
+      structuredContent: { status: "replayed", output: null },
     });
     expect(retried.res.statusCode).toBe(200);
-    expect(retried.body()).toMatchObject({ outcome: { status: 'executed' } });
-    expect(JSON.stringify(retried.body())).not.toContain('task_id');
+    expect(retried.body()).toMatchObject({ outcome: { status: "executed" } });
+    expect(JSON.stringify(retried.body())).not.toContain("task_id");
     expect(
-      readReplicaIntentOutcome(vault.db.vault, body.intentId, context.access.deviceId),
-    ).not.toHaveProperty('output');
+      readReplicaIntentOutcome(
+        vault.db.vault,
+        body.intentId,
+        context.access.deviceId
+      )
+    ).not.toHaveProperty("output");
     expect(dispatch).toHaveBeenCalledTimes(2);
     expect(
       plainSqliteRow(
         vault.db.vault
           .prepare(`SELECT count(*) AS n FROM schedule_task WHERE title = ?`)
-          .get(input.title),
-      ),
+          .get(input.title)
+      )
     ).toStrictEqual({ n: 1 });
     expect(
       vault.db.vault
-        .prepare(`SELECT 1 AS present FROM replica_invocation_commit WHERE intent_id = ?`)
-        .get(body.intentId),
+        .prepare(
+          `SELECT 1 AS present FROM replica_invocation_commit WHERE intent_id = ?`
+        )
+        .get(body.intentId)
     ).toBeUndefined();
     expect(
       plainSqliteRow(
         vault.db.journal
-          .prepare(`SELECT count(*) AS n FROM consent_receipt WHERE invocation_id = ?`)
-          .get(ambiguousMarker.invocation_id),
-      ),
+          .prepare(
+            `SELECT count(*) AS n FROM consent_receipt WHERE invocation_id = ?`
+          )
+          .get(ambiguousMarker.invocation_id)
+      )
     ).toStrictEqual({ n: 1 });
   });
 
-  test('a later invocation finalization error replays the complete action exactly once', async () => {
-    const { vault, rawResults, dispatch, context } = await bridgeFinalizationFixture();
-    const multiInput = { title: 'multi ambiguity', double: true };
+  test("a later invocation finalization error replays the complete action exactly once", async () => {
+    const { vault, rawResults, dispatch, context } =
+      await bridgeFinalizationFixture();
+    const multiInput = { title: "multi ambiguity", double: true };
     const multiBody = {
-      intentId: 'intent-multi-finalization-1',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "intent-multi-finalization-1",
+      appId: "planner",
+      action: "add_task",
       input: multiInput,
       payloadHash: crypto
-        .createHash('sha256')
+        .createHash("sha256")
         .update(
-          '{"action":"add_task","appId":"planner","input":{"double":true,"title":"multi ambiguity"}}',
+          '{"action":"add_task","appId":"planner","input":{"double":true,"title":"multi ambiguity"}}'
         )
-        .digest('hex'),
+        .digest("hex"),
     };
     const multiInvocationIds = [
       replicaInvocationId(multiBody.intentId, 0),
@@ -634,65 +694,73 @@ describe('replica-intent-route suite', () => {
     expect(rawResults.at(0)).toMatchObject({
       isError: false,
       structuredContent: {
-        status: 'denied',
-        code: 'VAULT_ERROR',
-        reason: expect.stringContaining('second invocation finalization failure'),
+        status: "denied",
+        code: "VAULT_ERROR",
+        reason: expect.stringContaining(
+          "second invocation finalization failure"
+        ),
       },
     });
     expect(multiAmbiguous.res.statusCode).toBe(202);
     expect(multiAmbiguous.body()).toMatchObject({
-      outcome: { status: 'in-flight' },
+      outcome: { status: "in-flight" },
     });
     const multiMarkers = vault.db.vault
       .prepare(
         `SELECT invocation_id, journal_finalized_at
-         FROM replica_invocation_commit WHERE intent_id = ?`,
+         FROM replica_invocation_commit WHERE intent_id = ?`
       )
       .all(multiBody.intentId) as unknown as Array<{
       invocation_id: string;
       journal_finalized_at: string | null;
     }>;
     expect(multiMarkers).toHaveLength(2);
-    expect(multiMarkers.filter((marker) => marker.journal_finalized_at !== null)).toHaveLength(1);
-    expect(multiMarkers.filter((marker) => marker.journal_finalized_at === null)).toHaveLength(1);
-    expect(new Set(multiMarkers.map((marker) => marker.invocation_id))).toStrictEqual(
-      new Set(multiInvocationIds),
-    );
     expect(
-      multiMarkers.every((marker) => /^replica:v1:[a-f0-9]{64}$/u.test(marker.invocation_id)),
+      multiMarkers.filter((marker) => marker.journal_finalized_at !== null)
+    ).toHaveLength(1);
+    expect(
+      multiMarkers.filter((marker) => marker.journal_finalized_at === null)
+    ).toHaveLength(1);
+    expect(
+      new Set(multiMarkers.map((marker) => marker.invocation_id))
+    ).toStrictEqual(new Set(multiInvocationIds));
+    expect(
+      multiMarkers.every((marker) =>
+        /^replica:v1:[a-f0-9]{64}$/u.test(marker.invocation_id)
+      )
     ).toBe(true);
     expect(
       plainSqliteRows(
         vault.db.vault
           .prepare(
             `SELECT title, count(*) AS n FROM schedule_task
-          WHERE title IN (?, ?) GROUP BY title ORDER BY title`,
+          WHERE title IN (?, ?) GROUP BY title ORDER BY title`
           )
-          .all(`${multiInput.title} first`, `${multiInput.title} second`),
-      ),
+          .all(`${multiInput.title} first`, `${multiInput.title} second`)
+      )
     ).toStrictEqual([
       { title: `${multiInput.title} first`, n: 1 },
       { title: `${multiInput.title} second`, n: 1 },
     ]);
 
-    vault.db.journal.exec('DROP TRIGGER fail_second_replica_finalization');
+    vault.db.journal.exec("DROP TRIGGER fail_second_replica_finalization");
     const multiRetry = response();
     await handleReplicaIntent(request(multiBody), multiRetry.res, context);
     expect(multiRetry.res.statusCode).toBe(200);
     expect(multiRetry.body()).toMatchObject({
-      outcome: { status: 'executed' },
+      outcome: { status: "executed" },
     });
-    expect(multiRetry.body()).not.toHaveProperty('outcome.output');
+    expect(multiRetry.body()).not.toHaveProperty("outcome.output");
     expect(dispatch).toHaveBeenCalledTimes(2);
     expect(
       plainSqliteRows(
         vault.db.vault
           .prepare(
             `SELECT title, count(*) AS n FROM schedule_task
-          WHERE title IN (?, ?) GROUP BY title ORDER BY title`,
+          WHERE title IN (?, ?) GROUP BY title ORDER BY title`
           )
-          .all(`${multiInput.title} first`, `${multiInput.title} second`),
-      ),
+          .all(`${multiInput.title} first`, `${multiInput.title} second`)
+      )
     ).toStrictEqual([
       { title: `${multiInput.title} first`, n: 1 },
       { title: `${multiInput.title} second`, n: 1 },
@@ -700,7 +768,7 @@ describe('replica-intent-route suite', () => {
     const multiReceipts = vault.db.journal
       .prepare(
         `SELECT invocation_id, count(*) AS n FROM consent_receipt
-        WHERE invocation_id IN (?, ?) GROUP BY invocation_id`,
+        WHERE invocation_id IN (?, ?) GROUP BY invocation_id`
       )
       .all(...multiInvocationIds) as unknown as Array<{
       invocation_id: string;
@@ -711,103 +779,128 @@ describe('replica-intent-route suite', () => {
     expect(
       plainSqliteRow(
         vault.db.vault
-          .prepare(`SELECT count(*) AS n FROM replica_invocation_commit WHERE intent_id = ?`)
-          .get(multiBody.intentId),
-      ),
+          .prepare(
+            `SELECT count(*) AS n FROM replica_invocation_commit WHERE intent_id = ?`
+          )
+          .get(multiBody.intentId)
+      )
     ).toStrictEqual({ n: 0 });
     const multiTerminalRetry = response();
-    await handleReplicaIntent(request(multiBody), multiTerminalRetry.res, context);
+    await handleReplicaIntent(
+      request(multiBody),
+      multiTerminalRetry.res,
+      context
+    );
     expect(multiTerminalRetry.res.statusCode).toBe(200);
     expect(dispatch).toHaveBeenCalledTimes(2);
   });
 
-  test('a post-invoke denial is durable and does not re-dispatch on retry', async () => {
-    const { vault, rawResults, dispatch, context } = await bridgeFinalizationFixture();
-    const postInvokeInput = { title: 'partial denial task', deny_second: true };
+  test("a post-invoke denial is durable and does not re-dispatch on retry", async () => {
+    const { vault, rawResults, dispatch, context } =
+      await bridgeFinalizationFixture();
+    const postInvokeInput = { title: "partial denial task", deny_second: true };
     const postInvokeBody = {
-      intentId: 'intent-post-invoke-failure-1',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "intent-post-invoke-failure-1",
+      appId: "planner",
+      action: "add_task",
       input: postInvokeInput,
       payloadHash: crypto
-        .createHash('sha256')
+        .createHash("sha256")
         .update(
-          '{"action":"add_task","appId":"planner","input":{"deny_second":true,"title":"partial denial task"}}',
+          '{"action":"add_task","appId":"planner","input":{"deny_second":true,"title":"partial denial task"}}'
         )
-        .digest('hex'),
+        .digest("hex"),
     };
 
     const postInvokeFailure = response();
-    await handleReplicaIntent(request(postInvokeBody), postInvokeFailure.res, context);
+    await handleReplicaIntent(
+      request(postInvokeBody),
+      postInvokeFailure.res,
+      context
+    );
     expect(rawResults.at(0)).toMatchObject({
       isError: false,
       structuredContent: {
-        status: 'denied',
-        reason: expect.stringContaining('no grant_scope covers knowledge'),
+        status: "denied",
+        reason: expect.stringContaining("no grant_scope covers knowledge"),
       },
     });
     expect(postInvokeFailure.res.statusCode).toBe(200);
     expect(postInvokeFailure.body()).toMatchObject({
       outcome: {
-        status: 'denied',
-        reason: expect.stringContaining('no grant_scope covers knowledge'),
+        status: "denied",
+        reason: expect.stringContaining("no grant_scope covers knowledge"),
       },
     });
     expect(
-      readReplicaIntentOutcome(vault.db.vault, postInvokeBody.intentId, context.access.deviceId),
+      readReplicaIntentOutcome(
+        vault.db.vault,
+        postInvokeBody.intentId,
+        context.access.deviceId
+      )
     ).toMatchObject({
-      status: 'denied',
-      reason: expect.stringContaining('no grant_scope covers knowledge'),
+      status: "denied",
+      reason: expect.stringContaining("no grant_scope covers knowledge"),
     });
     expect(
       plainSqliteRow(
         vault.db.vault
           .prepare(`SELECT count(*) AS n FROM schedule_task WHERE title = ?`)
-          .get(postInvokeInput.title),
-      ),
+          .get(postInvokeInput.title)
+      )
     ).toStrictEqual({ n: 1 });
 
     expect(
       vault.db.vault
-        .prepare(`SELECT 1 AS present FROM replica_invocation_commit WHERE intent_id = ?`)
-        .get(postInvokeBody.intentId),
+        .prepare(
+          `SELECT 1 AS present FROM replica_invocation_commit WHERE intent_id = ?`
+        )
+        .get(postInvokeBody.intentId)
     ).toBeUndefined();
     expect(
       plainSqliteRow(
         vault.db.journal
-          .prepare(`SELECT count(*) AS n FROM consent_receipt WHERE invocation_id = ?`)
-          .get(replicaInvocationId(postInvokeBody.intentId, 0)),
-      ),
+          .prepare(
+            `SELECT count(*) AS n FROM consent_receipt WHERE invocation_id = ?`
+          )
+          .get(replicaInvocationId(postInvokeBody.intentId, 0))
+      )
     ).toStrictEqual({ n: 1 });
 
     const postInvokeTerminalRetry = response();
-    await handleReplicaIntent(request(postInvokeBody), postInvokeTerminalRetry.res, context);
+    await handleReplicaIntent(
+      request(postInvokeBody),
+      postInvokeTerminalRetry.res,
+      context
+    );
     expect(postInvokeTerminalRetry.res.statusCode).toBe(200);
     expect(postInvokeTerminalRetry.body()).toMatchObject({
-      outcome: { status: 'denied' },
+      outcome: { status: "denied" },
     });
     expect(dispatch).toHaveBeenCalledOnce();
   });
 
-  test('read-only policy denial is a durable outcome, not a revocation-shaped 403', async () => {
+  test("read-only policy denial is a durable outcome, not a revocation-shaped 403", async () => {
     const vault = await plane();
-    vault.approveGrant('planner', {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
-    const input = { title: 'blocked task' };
+    const input = { title: "blocked task" };
     const payloadHash = crypto
-      .createHash('sha256')
-      .update('{"action":"add_task","appId":"planner","input":{"title":"blocked task"}}')
-      .digest('hex');
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"blocked task"}}'
+      )
+      .digest("hex");
     const dispatch = vi.fn<ReplicaIntentDispatcher>();
     const reply = response();
 
     await handleReplicaIntent(
       request({
-        intentId: 'readonly-1',
-        appId: 'planner',
-        action: 'add_task',
+        intentId: "readonly-1",
+        appId: "planner",
+        action: "add_task",
         input,
         payloadHash,
       }),
@@ -815,39 +908,43 @@ describe('replica-intent-route suite', () => {
       {
         plane: vault,
         access: {
-          role: 'read',
+          role: "read",
           rememberDevice: true,
-          deviceId: 'device-readonly',
-          appId: 'planner',
+          deviceId: "device-readonly",
+          appId: "planner",
         },
         dispatch,
-      },
+      }
     );
 
     expect(reply.res.statusCode).toBe(200);
-    expect(reply.body()).toMatchObject({ outcome: { status: 'denied' } });
+    expect(reply.body()).toMatchObject({ outcome: { status: "denied" } });
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  test('owner role may act — it is full plus admin, not a lesser tier', async () => {
+  test("owner role may act — it is full plus admin, not a lesser tier", async () => {
     const vault = await plane();
-    vault.approveGrant('planner', {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", table: "task", verbs: "read+act" }],
     });
-    const input = { title: 'owner task' };
+    const input = { title: "owner task" };
     const payloadHash = crypto
-      .createHash('sha256')
-      .update('{"action":"add_task","appId":"planner","input":{"title":"owner task"}}')
-      .digest('hex');
-    const dispatch = vi.fn<ReplicaIntentDispatcher>().mockResolvedValue({ status: 'executed' });
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"owner task"}}'
+      )
+      .digest("hex");
+    const dispatch = vi
+      .fn<ReplicaIntentDispatcher>()
+      .mockResolvedValue({ status: "executed" });
     const reply = response();
 
     await handleReplicaIntent(
       request({
-        intentId: 'owner-1',
-        appId: 'planner',
-        action: 'add_task',
+        intentId: "owner-1",
+        appId: "planner",
+        action: "add_task",
         input,
         payloadHash,
       }),
@@ -855,39 +952,43 @@ describe('replica-intent-route suite', () => {
       {
         plane: vault,
         access: {
-          role: 'admin',
+          role: "admin",
           rememberDevice: false,
-          deviceId: 'device-owner',
-          appId: 'planner',
+          deviceId: "device-owner",
+          appId: "planner",
         },
         dispatch,
-      },
+      }
     );
 
     expect(reply.res.statusCode).toBe(200);
-    expect(reply.body()).toMatchObject({ outcome: { status: 'executed' } });
+    expect(reply.body()).toMatchObject({ outcome: { status: "executed" } });
     expect(dispatch).toHaveBeenCalledOnce();
   });
 
-  test('act-only consent reaches the canonical dispatcher without requiring a read shape', async () => {
+  test("act-only consent reaches the canonical dispatcher without requiring a read shape", async () => {
     const vault = await plane();
-    vault.approveGrant('planner', {
-      purpose: 'dpv:ServiceProvision',
-      scopes: [{ schema: 'schedule', table: 'task', verbs: 'act' }],
+    vault.approveGrant("planner", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "schedule", table: "task", verbs: "act" }],
     });
-    const input = { title: 'private offline task' };
+    const input = { title: "private offline task" };
     const payloadHash = crypto
-      .createHash('sha256')
-      .update('{"action":"add_task","appId":"planner","input":{"title":"private offline task"}}')
-      .digest('hex');
-    const dispatch = vi.fn<ReplicaIntentDispatcher>().mockResolvedValue({ status: 'executed' });
+      .createHash("sha256")
+      .update(
+        '{"action":"add_task","appId":"planner","input":{"title":"private offline task"}}'
+      )
+      .digest("hex");
+    const dispatch = vi
+      .fn<ReplicaIntentDispatcher>()
+      .mockResolvedValue({ status: "executed" });
     const reply = response();
 
     await handleReplicaIntent(
       request({
-        intentId: 'act-only-1',
-        appId: 'planner',
-        action: 'add_task',
+        intentId: "act-only-1",
+        appId: "planner",
+        action: "add_task",
         input,
         payloadHash,
       }),
@@ -895,21 +996,21 @@ describe('replica-intent-route suite', () => {
       {
         plane: vault,
         access: {
-          role: 'write',
+          role: "write",
           rememberDevice: false,
-          deviceId: 'device-act-only',
-          appId: 'planner',
+          deviceId: "device-act-only",
+          appId: "planner",
         },
         dispatch,
-      },
+      }
     );
 
     expect(reply.res.statusCode).toBe(200);
-    expect(reply.body()).toMatchObject({ outcome: { status: 'executed' } });
+    expect(reply.body()).toMatchObject({ outcome: { status: "executed" } });
     expect(dispatch).toHaveBeenCalledWith({
-      intentId: 'act-only-1',
-      appId: 'planner',
-      action: 'add_task',
+      intentId: "act-only-1",
+      appId: "planner",
+      action: "add_task",
       input,
     });
   });

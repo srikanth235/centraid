@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 
 import {
   browseColumns,
@@ -8,20 +8,20 @@ import {
   browseTables,
   type BrowseColumnsResult,
   type BrowseTableEntry,
-} from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
+} from "../../gateway-client.js";
+import Icon from "../ui/Icon.js";
 import {
   groupBrowseTables,
   rowIdOf,
   type DeleteState,
   type EditorState,
-} from './atlasBrowseData.js';
-import { DeleteDialog } from './AtlasBrowseDeleteDialog.js';
-import { Grid, MachineryBar } from './AtlasBrowseGrid.js';
-import { RowEditor } from './AtlasBrowseRowEditor.js';
-import { TablePicker } from './AtlasBrowseTablePicker.js';
+} from "./atlasBrowseData.js";
+import { DeleteDialog } from "./AtlasBrowseDeleteDialog.js";
+import { Grid, MachineryBar } from "./AtlasBrowseGrid.js";
+import { RowEditor } from "./AtlasBrowseRowEditor.js";
+import { TablePicker } from "./AtlasBrowseTablePicker.js";
 
-import styles from './AtlasBrowseTab.module.css';
+import styles from "./AtlasBrowseTab.module.css";
 
 // Browse tab — the vault-aware table editor (issue #441 B3). A table picker
 // (left rail on desktop, a collapsible sheet on narrow), a keyset-paginated
@@ -38,19 +38,22 @@ export interface AtlasBrowseTabProps {
   initialTable?: string;
 }
 
-const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+const errText = (e: unknown): string =>
+  e instanceof Error ? e.message : String(e);
 
-export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): JSX.Element {
+export default function AtlasBrowseTab({
+  initialTable,
+}: AtlasBrowseTabProps): JSX.Element {
   const [tables, setTables] = useState<BrowseTableEntry[] | null>(null);
   const [tablesError, setTablesError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState<string | undefined>(initialTable);
 
   const [cols, setCols] = useState<BrowseColumnsResult | null>(null);
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [orderBy, setOrderBy] = useState<string | null>(null);
-  const [dir, setDir] = useState<'asc' | 'desc'>('asc');
+  const [dir, setDir] = useState<"asc" | "desc">("asc");
   const [cursor, setCursor] = useState<string | null>(null);
   const [gridError, setGridError] = useState<string | null>(null);
   // A preselected table means the mount read is already in flight on the first
@@ -102,10 +105,10 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
   const fetchRows = useCallback(
     async (
       logical: string,
-      opts: { orderBy?: string; dir?: 'asc' | 'desc'; after?: string },
-      mode: 'replace' | 'append',
+      opts: { orderBy?: string; dir?: "asc" | "desc"; after?: string },
+      mode: "replace" | "append"
     ) => {
-      if (mode === 'append') setMoreLoading(true);
+      if (mode === "append") setMoreLoading(true);
       else setGridLoading(true);
       setGridError(null);
       try {
@@ -116,7 +119,9 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
           ...(opts.after ? { after: opts.after } : {}),
         });
         if (!mountedRef.current) return;
-        setRows((prev) => (mode === 'append' ? [...prev, ...page.rows] : page.rows));
+        setRows((prev) =>
+          mode === "append" ? [...prev, ...page.rows] : page.rows
+        );
         setOrderBy(page.orderBy);
         setDir(page.dir);
         setCursor(page.nextCursor);
@@ -129,7 +134,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
         }
       }
     },
-    [],
+    []
   );
 
   // A selection change resets everything table-scoped. Done during render so
@@ -142,7 +147,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
     setRows([]);
     if (selected) {
       setOrderBy(null);
-      setDir('asc');
+      setDir("asc");
       setCursor(null);
       setUnlockMachinery(false);
       setEditor(null);
@@ -170,7 +175,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
         }
         return;
       }
-      await fetchRows(selected, {}, 'replace');
+      await fetchRows(selected, {}, "replace");
     })();
     return () => {
       cancelled = true;
@@ -180,20 +185,29 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
   const onSort = useCallback(
     (col: string) => {
       if (!selected) return;
-      const nextDir: 'asc' | 'desc' = orderBy === col && dir === 'asc' ? 'desc' : 'asc';
-      void fetchRows(selected, { orderBy: col, dir: nextDir }, 'replace');
+      const nextDir: "asc" | "desc" =
+        orderBy === col && dir === "asc" ? "desc" : "asc";
+      void fetchRows(selected, { orderBy: col, dir: nextDir }, "replace");
     },
-    [selected, orderBy, dir, fetchRows],
+    [selected, orderBy, dir, fetchRows]
   );
 
   const loadMore = useCallback(() => {
     if (!selected || !cursor) return;
-    void fetchRows(selected, { after: cursor, ...(orderBy ? { orderBy } : {}), dir }, 'append');
+    void fetchRows(
+      selected,
+      { after: cursor, ...(orderBy ? { orderBy } : {}), dir },
+      "append"
+    );
   }, [selected, cursor, orderBy, dir, fetchRows]);
 
   const refresh = useCallback(() => {
     if (!selected) return;
-    void fetchRows(selected, { ...(orderBy ? { orderBy } : {}), dir }, 'replace');
+    void fetchRows(
+      selected,
+      { ...(orderBy ? { orderBy } : {}), dir },
+      "replace"
+    );
   }, [selected, orderBy, dir, fetchRows]);
 
   const toggleExpand = useCallback((key: string) => {
@@ -234,18 +248,20 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
             hasEngineDependents: dep.hasEngineDependents,
             totalRows: dep.totalRows,
             blockedReason: dep.hasEngineDependents
-              ? 'Engine foreign keys still point at this row — the database refuses the delete until they are cleared.'
+              ? "Engine foreign keys still point at this row — the database refuses the delete until they are cleared."
               : null,
             error: null,
           });
         })
         .catch((e) => {
           if (mountedRef.current) {
-            setDel((d) => (d ? { ...d, loading: false, error: errText(e) } : d));
+            setDel((d) =>
+              d ? { ...d, loading: false, error: errText(e) } : d
+            );
           }
         });
     },
-    [selected, cols],
+    [selected, cols]
   );
 
   const confirmDelete = useCallback(() => {
@@ -273,15 +289,15 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
               dependents: res.dependents ?? d.dependents,
               totalRows: res.totalRows ?? d.totalRows,
               hasEngineDependents: (res.dependents ?? d.dependents).some(
-                (x) => x.mechanism === 'fk',
+                (x) => x.mechanism === "fk"
               ),
               blockedReason:
-                res.error === 'has_dependents'
-                  ? 'Other rows still reference this one — clear them first.'
-                  : (res.error ?? 'Delete was refused.'),
+                res.error === "has_dependents"
+                  ? "Other rows still reference this one — clear them first."
+                  : (res.error ?? "Delete was refused."),
               error: null,
             }
-          : d,
+          : d
       );
     });
   }, [selected, del, unlockMachinery, refresh]);
@@ -290,7 +306,10 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
   if (tablesError && !tables) {
     return (
       <div className={styles.tab}>
-        <div className={styles.gridError} data-testid="atlas-browse-tables-error">
+        <div
+          className={styles.gridError}
+          data-testid="atlas-browse-tables-error"
+        >
           Couldn’t list your vault’s tables: {tablesError}
         </div>
       </div>
@@ -325,9 +344,13 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
             <>
               <header className={styles.mainHead}>
                 <div className={styles.mainTitle}>
-                  <h2 className={styles.mainName}>{selectedEntry?.label ?? selected}</h2>
+                  <h2 className={styles.mainName}>
+                    {selectedEntry?.label ?? selected}
+                  </h2>
                   <code className={styles.mainLogical}>{selected}</code>
-                  {isMachinery ? <span className={styles.machineryTag}>machinery</span> : null}
+                  {isMachinery ? (
+                    <span className={styles.machineryTag}>machinery</span>
+                  ) : null}
                 </div>
                 <div className={styles.headActions}>
                   <button
@@ -342,7 +365,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
                   <button
                     type="button"
                     className={styles.primaryBtn}
-                    onClick={() => setEditor({ mode: 'insert' })}
+                    onClick={() => setEditor({ mode: "insert" })}
                     disabled={writesLocked || !cols}
                     data-testid="atlas-browse-insert"
                   >
@@ -360,7 +383,10 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
               ) : null}
 
               {gridError ? (
-                <div className={styles.gridError} data-testid="atlas-browse-grid-error">
+                <div
+                  className={styles.gridError}
+                  data-testid="atlas-browse-grid-error"
+                >
                   {gridError}
                 </div>
               ) : null}
@@ -378,7 +404,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
                   writesLocked={writesLocked}
                   onEdit={(row) =>
                     setEditor({
-                      mode: 'edit',
+                      mode: "edit",
                       id: rowIdOf(row, cols.columns),
                       row,
                     })
@@ -397,7 +423,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
                   disabled={moreLoading}
                   data-testid="atlas-browse-load-more"
                 >
-                  {moreLoading ? 'Loading…' : 'Load more'}
+                  {moreLoading ? "Loading…" : "Load more"}
                 </button>
               ) : null}
             </>
@@ -407,8 +433,8 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
                 <Icon name="Braces" size={22} />
               </span>
               <p className={styles.promptText}>
-                Pick a table to page through its rows and edit them through the vault’s journalled
-                write path — never raw SQL.
+                Pick a table to page through its rows and edit them through the
+                vault’s journalled write path — never raw SQL.
               </p>
             </div>
           )}
@@ -417,7 +443,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
 
       {editor && cols && selected ? (
         <RowEditor
-          key={editor.mode === 'edit' ? editor.id : 'insert'}
+          key={editor.mode === "edit" ? editor.id : "insert"}
           table={selected}
           cols={cols}
           editor={editor}
@@ -428,9 +454,9 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
             refresh();
           }}
           onDelete={
-            editor.mode === 'edit'
+            editor.mode === "edit"
               ? () => {
-                  if (editor.mode === 'edit') askDelete(editor.row);
+                  if (editor.mode === "edit") askDelete(editor.row);
                 }
               : undefined
           }
@@ -438,7 +464,11 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
       ) : null}
 
       {del ? (
-        <DeleteDialog state={del} onCancel={() => setDel(null)} onConfirm={confirmDelete} />
+        <DeleteDialog
+          state={del}
+          onCancel={() => setDel(null)}
+          onConfirm={confirmDelete}
+        />
       ) : null}
     </div>
   );

@@ -10,19 +10,20 @@
 // ignores --password-store passed via argv, and XDG_CURRENT_DESKTOP detection
 // is unreliable in Electron 37. The switch is a no-op on macOS/Windows, which
 // use the native Keychain/DPAPI, so it needs no platform guard.
-import { app } from 'electron';
+import { app } from "electron";
 
-const proxyMap = JSON.parse(process.env.CENTRAID_E2E_IROH_PROXY_MAP ?? '{}');
-const { setIrohProxyResolverForTests } = await import('../../dist/main/iroh-dialer.js');
+const proxyMap = JSON.parse(process.env.CENTRAID_E2E_IROH_PROXY_MAP ?? "{}");
+const { setIrohProxyResolverForTests } =
+  await import("../../dist/main/iroh-dialer.js");
 setIrohProxyResolverForTests(async (connectionId) => {
   const url = proxyMap[connectionId];
-  if (typeof url !== 'string' || url.length === 0) {
+  if (typeof url !== "string" || url.length === 0) {
     throw new Error(`E2E has no iroh proxy target for ${connectionId}`);
   }
   return url;
 });
 
-app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
+app.commandLine.appendSwitch("password-store", "gnome-libsecret");
 
 // "Headless" for local runs without touching main.ts. Electron has no real
 // headless mode, but on a dev's Mac we don't want the window stealing focus.
@@ -37,13 +38,13 @@ app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
 // nightly run is green on. Hiding it there would re-enter the throttling that
 // caused the earlier 6-minute slowdown, so we leave CI alone. Locally, opt out
 // with E2E_SHOW_WINDOW=1 to watch a run.
-if (!process.env.CI && process.env.E2E_SHOW_WINDOW !== '1') {
-  app.on('browser-window-created', (_event, win) => {
+if (!process.env.CI && process.env.E2E_SHOW_WINDOW !== "1") {
+  app.on("browser-window-created", (_event, win) => {
     win.webContents.setBackgroundThrottling(false);
-    win.once('ready-to-show', () => win.hide());
+    win.once("ready-to-show", () => win.hide());
     win.hide();
   });
 }
 
 // Hand off to the real, unmodified app entry.
-await import('../../dist/main.js');
+await import("../../dist/main.js");

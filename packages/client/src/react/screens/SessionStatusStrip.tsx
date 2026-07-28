@@ -1,6 +1,6 @@
-import type { JSX, ReactNode } from 'react';
+import type { JSX, ReactNode } from "react";
 
-import styles from './SessionStatusStrip.module.css';
+import styles from "./SessionStatusStrip.module.css";
 
 export interface SessionStatusStripProps {
   leading?: ReactNode;
@@ -22,7 +22,9 @@ export default function SessionStatusStrip({
   busy,
 }: SessionStatusStripProps): JSX.Element {
   const ratio =
-    context && context.size > 0 ? Math.min(1, Math.max(0, context.used / context.size)) : 0;
+    context && context.size > 0
+      ? Math.min(1, Math.max(0, context.used / context.size))
+      : 0;
   const percentage = Math.round(ratio * 100);
   return (
     <div className={styles.strip} data-testid="session-status-strip">
@@ -35,14 +37,17 @@ export default function SessionStatusStrip({
             title={`${context.used.toLocaleString()} / ${context.size.toLocaleString()} context tokens`}
           >
             <span className={styles.contextTrack}>
-              <span className={styles.contextFill} style={{ width: `${percentage}%` }} />
+              <span
+                className={styles.contextFill}
+                style={{ width: `${percentage}%` }}
+              />
             </span>
             <span>{percentage}%</span>
           </span>
         ) : null}
-        <span className={styles.activity} data-busy={busy ? 'true' : undefined}>
+        <span className={styles.activity} data-busy={busy ? "true" : undefined}>
           <span className={styles.activityDot} />
-          {busy ? 'Working' : 'Ready'}
+          {busy ? "Working" : "Ready"}
         </span>
         {model}
         {effort}

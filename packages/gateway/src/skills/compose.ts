@@ -13,9 +13,9 @@
  * safety-valve path once native progressive disclosure is wired on each backend.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Metadata parsed from a skill's `SKILL.md` frontmatter. */
 export interface SkillMeta {
@@ -27,7 +27,7 @@ export interface SkillMeta {
   path: string;
 }
 
-const SKILL_FILE = 'SKILL.md';
+const SKILL_FILE = "SKILL.md";
 const FRONTMATTER_RE = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---\r?\n?/u;
 
 /**
@@ -38,7 +38,7 @@ const FRONTMATTER_RE = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---\r?\n?/u;
  * lands on the catalog either way.
  */
 export function skillsDir(): string {
-  return fileURLToPath(new URL('../../skills', import.meta.url));
+  return fileURLToPath(new URL("../../skills", import.meta.url));
 }
 
 /** Split a `SKILL.md` into its frontmatter map and its markdown body. */
@@ -49,8 +49,8 @@ export function parseSkillFile(raw: string): {
   const m = FRONTMATTER_RE.exec(raw);
   if (!m) return { meta: {}, body: raw.trim() };
   const meta: Record<string, string> = {};
-  for (const line of (m.groups?.frontmatter ?? '').split('\n')) {
-    const idx = line.indexOf(':');
+  for (const line of (m.groups?.frontmatter ?? "").split("\n")) {
+    const idx = line.indexOf(":");
     if (idx === -1) continue;
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim();
@@ -73,14 +73,14 @@ export function listSkills(dir: string = skillsDir()): SkillMeta[] {
     let raw: string;
     try {
       if (!statSync(path.join(dir, entry)).isDirectory()) continue;
-      raw = readFileSync(skillPath, 'utf8');
+      raw = readFileSync(skillPath, "utf8");
     } catch {
       continue;
     }
     const { meta } = parseSkillFile(raw);
     out.push({
       name: meta.name ?? entry,
-      description: meta.description ?? '',
+      description: meta.description ?? "",
       path: skillPath,
     });
   }
@@ -92,11 +92,14 @@ export function listSkills(dir: string = skillsDir()): SkillMeta[] {
  * given order, joined by a blank line. Throws when a name has no `SKILL.md` —
  * a missing grounding skill is a programming error, not a soft-fail.
  */
-export function composeSkills(names: readonly string[], dir: string = skillsDir()): string {
+export function composeSkills(
+  names: readonly string[],
+  dir: string = skillsDir()
+): string {
   return names
     .map((name) => {
-      const raw = readFileSync(path.join(dir, name, SKILL_FILE), 'utf8');
+      const raw = readFileSync(path.join(dir, name, SKILL_FILE), "utf8");
       return parseSkillFile(raw).body;
     })
-    .join('\n\n');
+    .join("\n\n");
 }

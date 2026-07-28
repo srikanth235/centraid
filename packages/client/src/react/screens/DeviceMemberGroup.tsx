@@ -1,14 +1,17 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX } from "react";
 
-import type { CentraidGatewayDevice, GatewayVaultGrant } from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import { lastAdminSpace, roleLabel } from './device-roles.js';
-import DeviceRow, { ageLabel } from './DeviceRow.js';
+import type {
+  CentraidGatewayDevice,
+  GatewayVaultGrant,
+} from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { lastAdminSpace, roleLabel } from "./device-roles.js";
+import DeviceRow, { ageLabel } from "./DeviceRow.js";
 
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './DevicesCard.module.css';
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./DevicesCard.module.css";
 
 /*
  * One person and the devices acting as them (issue #599 L2 / Decision 10).
@@ -31,8 +34,14 @@ export interface DeviceMemberGroupProps {
   /** True for the group holding the device making this request. */
   isSelf: boolean;
   now: number;
-  onRevokeDevice: (device: CentraidGatewayDevice, confirmLastAdmin?: string) => Promise<void>;
-  onUpdateCompute?: (device: CentraidGatewayDevice, enabled: boolean) => Promise<void>;
+  onRevokeDevice: (
+    device: CentraidGatewayDevice,
+    confirmLastAdmin?: string
+  ) => Promise<void>;
+  onUpdateCompute?: (
+    device: CentraidGatewayDevice,
+    enabled: boolean
+  ) => Promise<void>;
   /** Absent when the gateway exposes no roster surface to remove people with. */
   onRemoveMember?: (confirmLastAdmin?: string) => Promise<void>;
 }
@@ -95,13 +104,13 @@ export default function DeviceMemberGroup({
               <span data-quiet="true">no access yet</span>
             )}
             <span data-quiet="true">
-              {devices.length} device{devices.length === 1 ? '' : 's'}
+              {devices.length} device{devices.length === 1 ? "" : "s"}
             </span>
           </div>
           {strandedSpace ? (
             <div className={styles.rowWarn}>
-              {label} is the last owner of {strandedSpace}. Getting back in would need the gateway
-              machine and its command line.
+              {label} is the last owner of {strandedSpace}. Getting back in
+              would need the gateway machine and its command line.
             </div>
           ) : null}
           {error ? <div className={styles.rowError}>{error}</div> : null}
@@ -112,7 +121,7 @@ export default function DeviceMemberGroup({
               <div className={styles.confirm}>
                 <span className={styles.confirmAsk}>
                   Remove {label} and their {devices.length} device
-                  {devices.length === 1 ? '' : 's'}?
+                  {devices.length === 1 ? "" : "s"}?
                 </span>
                 <button
                   type="button"
@@ -125,9 +134,9 @@ export default function DeviceMemberGroup({
                       <Icon name="Loader" size={13} />
                     </span>
                   ) : strandedSpace ? (
-                    'Remove anyway'
+                    "Remove anyway"
                   ) : (
-                    'Remove'
+                    "Remove"
                   )}
                 </button>
                 <button
@@ -145,7 +154,12 @@ export default function DeviceMemberGroup({
             ) : (
               <button
                 type="button"
-                className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft, styles.revokeBtn)}
+                className={cx(
+                  buttonCss.btn,
+                  buttonCss.sm,
+                  controlsCss.soft,
+                  styles.revokeBtn
+                )}
                 onClick={() => setConfirming(true)}
               >
                 <Icon name="Trash" size={13} />
@@ -177,7 +191,7 @@ export default function DeviceMemberGroup({
       {revoked.length > 0 ? (
         <details className={styles.tombstones}>
           <summary>
-            {revoked.length} revoked device{revoked.length === 1 ? '' : 's'}
+            {revoked.length} revoked device{revoked.length === 1 ? "" : "s"}
           </summary>
           <ul>
             {revoked.map((device) => (
@@ -185,7 +199,9 @@ export default function DeviceMemberGroup({
                 <span>{device.label}</span>
                 <span data-quiet="true">
                   {device.vaultName ?? device.vaultId}
-                  {device.addedAt ? ` · paired ${ageLabel(device.addedAt, now)}` : ''}
+                  {device.addedAt
+                    ? ` · paired ${ageLabel(device.addedAt, now)}`
+                    : ""}
                 </span>
               </li>
             ))}

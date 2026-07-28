@@ -8,26 +8,31 @@
  * runner kind nor the model is chosen until the turn actually runs.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from "vitest";
 
-import type { Dispatcher } from '../handlers/dispatcher.js';
-import type { ModelSubsystem } from '../stores/prefs-store.js';
-import { makeConversationRunnerCore, type ConversationRunnerCoreOptions } from './runner-core.js';
-import type { ConversationTurnInput } from './runner.js';
-import type { RunnerPrefs, RunTurnFn, TurnInput } from './turn.js';
+import type { Dispatcher } from "../handlers/dispatcher.js";
+import type { ModelSubsystem } from "../stores/prefs-store.js";
+import {
+  makeConversationRunnerCore,
+  type ConversationRunnerCoreOptions,
+} from "./runner-core.js";
+import type { ConversationTurnInput } from "./runner.js";
+import type { RunnerPrefs, RunTurnFn, TurnInput } from "./turn.js";
 
-type PrefsLoader = ConversationRunnerCoreOptions['prefsLoader'];
+type PrefsLoader = ConversationRunnerCoreOptions["prefsLoader"];
 
 const dispatcher = {} as Dispatcher;
 
-function turnInput(over: Partial<ConversationTurnInput> = {}): ConversationTurnInput {
+function turnInput(
+  over: Partial<ConversationTurnInput> = {}
+): ConversationTurnInput {
   return {
-    appId: 'demo',
-    dataDir: '/tmp/demo',
-    conversationId: 'conv-1',
-    sessionFile: '/tmp/demo/conv-1.jsonl',
-    message: 'hi',
-    extraSystemPrompt: 'preamble',
+    appId: "demo",
+    dataDir: "/tmp/demo",
+    conversationId: "conv-1",
+    sessionFile: "/tmp/demo/conv-1.jsonl",
+    message: "hi",
+    extraSystemPrompt: "preamble",
     abortSignal: new AbortController().signal,
     onEvent: () => undefined,
     ...over,
@@ -39,7 +44,7 @@ function build(opts: { prefsLoader: PrefsLoader; subsystem?: ModelSubsystem }) {
   const seen: TurnInput[] = [];
   const runTurn = vi.fn<RunTurnFn>(async (input) => {
     seen.push(input);
-    return { adapterKind: 'codex', sessionId: 'new-session' };
+    return { adapterKind: "codex", sessionId: "new-session" };
   });
   const runner = makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
@@ -51,12 +56,12 @@ function build(opts: { prefsLoader: PrefsLoader; subsystem?: ModelSubsystem }) {
   return { runner, seen, runTurn };
 }
 
-describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
+describe("makeConversationRunnerCore — per-subsystem prefs loading", () => {
   it("passes the register's subsystem to the prefs loader on every turn", async () => {
     const prefsLoader = vi.fn<PrefsLoader>(async () => ({
-      kind: 'claude-code' as const,
+      kind: "claude-code" as const,
     }));
-    const { runner } = build({ prefsLoader, subsystem: 'ask' });
+    const { runner } = build({ prefsLoader, subsystem: "ask" });
 
     await runner.run(turnInput());
     await runner.run(turnInput());
@@ -64,13 +69,13 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
     // Called PER TURN (not once at construction) and always tagged with the
     // register's subsystem — that's the seam per-subsystem selection rides.
     expect(prefsLoader).toHaveBeenCalledTimes(2);
-    expect(prefsLoader).toHaveBeenNthCalledWith(1, 'ask');
-    expect(prefsLoader).toHaveBeenNthCalledWith(2, 'ask');
+    expect(prefsLoader).toHaveBeenNthCalledWith(1, "ask");
+    expect(prefsLoader).toHaveBeenNthCalledWith(2, "ask");
   });
 
-  it('calls the loader bare when the register has no subsystem (back-compat)', async () => {
+  it("calls the loader bare when the register has no subsystem (back-compat)", async () => {
     const prefsLoader = vi.fn<PrefsLoader>(async () => ({
-      kind: 'codex' as const,
+      kind: "codex" as const,
     }));
     const { runner } = build({ prefsLoader });
 
@@ -81,103 +86,105 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
     expect(prefsLoader).toHaveBeenCalledWith(undefined);
   });
 
-  it('picks up a runner re-pin mid-session, with no restart', async () => {
-    let kind: RunnerPrefs['kind'] = 'codex';
+  it("picks up a runner re-pin mid-session, with no restart", async () => {
+    let kind: RunnerPrefs["kind"] = "codex";
     const { runner, runTurn } = build({
       prefsLoader: async () => ({ kind }),
-      subsystem: 'assistant',
+      subsystem: "assistant",
     });
 
     await runner.run(turnInput());
     expect(runTurn.mock.calls[0]![1]).toStrictEqual({
-      prefs: { kind: 'codex' },
+      prefs: { kind: "codex" },
     });
 
     // The owner re-pins `runner.assistant` between turns.
-    kind = 'claude-code';
+    kind = "claude-code";
     await runner.run(turnInput());
     expect(runTurn.mock.calls[1]![1]).toStrictEqual({
-      prefs: { kind: 'claude-code' },
+      prefs: { kind: "claude-code" },
     });
   });
 
-  it('lets a validated automation turn override only the loaded runner kind', async () => {
+  it("lets a validated automation turn override only the loaded runner kind", async () => {
     const prefsLoader = vi.fn<PrefsLoader>(
-      async (_subsystem?: ModelSubsystem, requested?: RunnerPrefs['kind']) =>
-        requested === 'claude-code'
+      async (_subsystem?: ModelSubsystem, requested?: RunnerPrefs["kind"]) =>
+        requested === "claude-code"
           ? {
-              kind: 'claude-code' as const,
-              binPath: '/configured/claude',
-              extraArgs: ['--profile', 'work'],
+              kind: "claude-code" as const,
+              binPath: "/configured/claude",
+              extraArgs: ["--profile", "work"],
             }
-          : { kind: 'codex' as const, binPath: '/configured/codex' },
+          : { kind: "codex" as const, binPath: "/configured/codex" }
     );
     const { runner, runTurn } = build({
       prefsLoader,
-      subsystem: 'automations',
+      subsystem: "automations",
     });
 
-    await runner.run(turnInput({ runnerKind: 'claude-code', model: 'claude-custom' }));
+    await runner.run(
+      turnInput({ runnerKind: "claude-code", model: "claude-custom" })
+    );
 
     expect(runTurn.mock.calls[0]![1]).toStrictEqual({
       prefs: {
-        kind: 'claude-code',
-        binPath: '/configured/claude',
-        extraArgs: ['--profile', 'work'],
+        kind: "claude-code",
+        binPath: "/configured/claude",
+        extraArgs: ["--profile", "work"],
       },
     });
-    expect(prefsLoader).toHaveBeenCalledWith('automations', 'claude-code');
-    expect(runTurn.mock.calls[0]![0].model).toBe('claude-custom');
+    expect(prefsLoader).toHaveBeenCalledWith("automations", "claude-code");
+    expect(runTurn.mock.calls[0]![0].model).toBe("claude-custom");
   });
 
   it("drops another runner's launch settings when a legacy loader ignores the override", async () => {
     const { runner, runTurn } = build({
       prefsLoader: async () => ({
-        kind: 'codex',
-        binPath: '/configured/codex',
-        extraArgs: ['--codex-only'],
+        kind: "codex",
+        binPath: "/configured/codex",
+        extraArgs: ["--codex-only"],
       }),
-      subsystem: 'automations',
+      subsystem: "automations",
     });
 
-    await runner.run(turnInput({ runnerKind: 'claude-code' }));
+    await runner.run(turnInput({ runnerKind: "claude-code" }));
 
     expect(runTurn.mock.calls[0]![1]).toStrictEqual({
-      prefs: { kind: 'claude-code' },
+      prefs: { kind: "claude-code" },
     });
   });
 });
 
-describe('makeConversationRunnerCore — hydration accounting', () => {
-  it('returns the estimated tokens of the plan the backend actually consumed', async () => {
+describe("makeConversationRunnerCore — hydration accounting", () => {
+  it("returns the estimated tokens of the plan the backend actually consumed", async () => {
     const runner = makeConversationRunnerCore({
-      prefsLoader: async () => ({ kind: 'codex' }),
+      prefsLoader: async () => ({ kind: "codex" }),
       getDispatcher: () => dispatcher,
       resolveCwd: (input) => input.dataDir,
       runTurn: async () => ({
-        adapterKind: 'codex',
-        sessionId: 'fresh',
+        adapterKind: "codex",
+        sessionId: "fresh",
         hydrated: true,
-        hydrationKind: 'recovery',
+        hydrationKind: "recovery",
       }),
     });
     const result = await runner.run(
       turnInput({
-        prevAdapterKind: 'codex',
-        prevAdapterSessionId: 'expired',
+        prevAdapterKind: "codex",
+        prevAdapterSessionId: "expired",
         hydrationContext: {
-          prompt: 'delta',
+          prompt: "delta",
           includedTurns: 1,
           omittedTurns: 0,
           estimatedTokens: 10,
         },
         recoveryHydrationContext: {
-          prompt: 'full',
+          prompt: "full",
           includedTurns: 4,
           omittedTurns: 0,
           estimatedTokens: 40,
         },
-      }),
+      })
     );
     expect(result).toMatchObject({
       hydrated: true,
@@ -186,39 +193,39 @@ describe('makeConversationRunnerCore — hydration accounting', () => {
   });
 });
 
-describe('makeConversationRunnerCore — session resume gating', () => {
-  it('resumes when the previous turn used the same runner kind', async () => {
+describe("makeConversationRunnerCore — session resume gating", () => {
+  it("resumes when the previous turn used the same runner kind", async () => {
     const { runner, seen } = build({
-      prefsLoader: async () => ({ kind: 'codex' }),
-      subsystem: 'assistant',
+      prefsLoader: async () => ({ kind: "codex" }),
+      subsystem: "assistant",
     });
 
     await runner.run(
       turnInput({
-        prevAdapterKind: 'codex',
-        prevAdapterSessionId: 'thread-abc',
-      }),
+        prevAdapterKind: "codex",
+        prevAdapterSessionId: "thread-abc",
+      })
     );
 
-    expect(seen[0]!.prevSessionId).toBe('thread-abc');
+    expect(seen[0]!.prevSessionId).toBe("thread-abc");
   });
 
-  it('forwards the persisted usage baseline only with its matching session', async () => {
+  it("forwards the persisted usage baseline only with its matching session", async () => {
     const { runner, seen } = build({
-      prefsLoader: async () => ({ kind: 'codex' }),
-      subsystem: 'assistant',
+      prefsLoader: async () => ({ kind: "codex" }),
+      subsystem: "assistant",
     });
     const snapshot = {
       inputTokens: 90,
-      cost: { amount: 0.2, currency: 'USD' },
+      cost: { amount: 0.2, currency: "USD" },
     };
 
     await runner.run(
       turnInput({
-        prevAdapterKind: 'codex',
-        prevAdapterSessionId: 'thread-abc',
+        prevAdapterKind: "codex",
+        prevAdapterSessionId: "thread-abc",
         prevAdapterUsageSnapshot: snapshot,
-      }),
+      })
     );
 
     expect(seen[0]!.prevUsageSnapshot).toStrictEqual(snapshot);
@@ -229,49 +236,49 @@ describe('makeConversationRunnerCore — session resume gating', () => {
     // since pinned `runner.assistant` to claude-code. Resuming a codex thread
     // against the Claude backend is meaningless — the turn must start fresh.
     const { runner, seen } = build({
-      prefsLoader: async () => ({ kind: 'claude-code' }),
-      subsystem: 'assistant',
+      prefsLoader: async () => ({ kind: "claude-code" }),
+      subsystem: "assistant",
     });
 
     await runner.run(
       turnInput({
-        prevAdapterKind: 'codex',
-        prevAdapterSessionId: 'thread-abc',
-      }),
+        prevAdapterKind: "codex",
+        prevAdapterSessionId: "thread-abc",
+      })
     );
 
     expect(seen[0]!.prevSessionId).toBeUndefined();
     expect(seen[0]!.prevUsageSnapshot).toBeUndefined();
   });
 
-  it('invalidates independently per subsystem', async () => {
+  it("invalidates independently per subsystem", async () => {
     // Two registers over the same spine: ask has been re-pinned to
     // claude-code, the builder still rides codex. The builder's session
     // must survive the ask re-pin — cross-subsystem isolation.
     const ask = build({
-      prefsLoader: async () => ({ kind: 'claude-code' }),
-      subsystem: 'ask',
+      prefsLoader: async () => ({ kind: "claude-code" }),
+      subsystem: "ask",
     });
     const builder = build({
-      prefsLoader: async () => ({ kind: 'codex' }),
-      subsystem: 'builder',
+      prefsLoader: async () => ({ kind: "codex" }),
+      subsystem: "builder",
     });
     const prior = {
-      prevAdapterKind: 'codex',
-      prevAdapterSessionId: 'thread-abc',
+      prevAdapterKind: "codex",
+      prevAdapterSessionId: "thread-abc",
     };
 
     await ask.runner.run(turnInput(prior));
     await builder.runner.run(turnInput(prior));
 
     expect(ask.seen[0]!.prevSessionId).toBeUndefined();
-    expect(builder.seen[0]!.prevSessionId).toBe('thread-abc');
+    expect(builder.seen[0]!.prevSessionId).toBe("thread-abc");
   });
 
-  it('starts fresh when there is no prior session at all', async () => {
+  it("starts fresh when there is no prior session at all", async () => {
     const { runner, seen } = build({
-      prefsLoader: async () => ({ kind: 'codex' }),
-      subsystem: 'assistant',
+      prefsLoader: async () => ({ kind: "codex" }),
+      subsystem: "assistant",
     });
 
     await runner.run(turnInput());

@@ -19,8 +19,11 @@
 // type-checks when it crosses up to a sibling cover (e.g. Docs → Approvals) or
 // back to Home.
 
-import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type {
+  CompositeScreenProps,
+  NavigatorScreenParams,
+} from "@react-navigation/native";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 export type PhotosStackParamList = {
   PhotosHome: undefined;
@@ -32,7 +35,7 @@ export type PhotosStackParamList = {
   FaceReview: undefined;
   DuplicateReview: undefined;
   AlbumDetail: { albumId: string };
-  PhotoStateView: { mode: 'favorites' | 'archive' | 'trash' };
+  PhotoStateView: { mode: "favorites" | "archive" | "trash" };
 };
 
 export type DocsStackParamList = {
@@ -65,36 +68,28 @@ export type RootStackParamList = {
   MobileFallback: undefined;
 };
 
-export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<
-  RootStackParamList,
-  T
->;
+export type RootScreenProps<T extends keyof RootStackParamList> =
+  NativeStackScreenProps<RootStackParamList, T>;
 
 // Root-level screens (no nested stack of their own).
-export type HomeScreenProps = RootScreenProps<'Home'>;
-export type AppDetailScreenProps = RootScreenProps<'AppDetail'>;
-export type AssistantScreenProps = RootScreenProps<'Assistant'>;
-export type AutomationsScreenProps = RootScreenProps<'Automations'>;
-export type InsightsScreenProps = RootScreenProps<'Insights'>;
+export type HomeScreenProps = RootScreenProps<"Home">;
+export type AppDetailScreenProps = RootScreenProps<"AppDetail">;
+export type AssistantScreenProps = RootScreenProps<"Assistant">;
+export type AutomationsScreenProps = RootScreenProps<"Automations">;
+export type InsightsScreenProps = RootScreenProps<"Insights">;
 
 // Shared outer context for any nested-stack screen: the root stack, so a screen
 // deep inside a cover can still navigate to a sibling cover or back to Home.
 type Root = RootScreenProps<keyof RootStackParamList>;
 
-export type PhotosScreenProps<T extends keyof PhotosStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<PhotosStackParamList, T>,
-  Root
->;
+export type PhotosScreenProps<T extends keyof PhotosStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<PhotosStackParamList, T>, Root>;
 
-export type DocsScreenProps<T extends keyof DocsStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<DocsStackParamList, T>,
-  Root
->;
+export type DocsScreenProps<T extends keyof DocsStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<DocsStackParamList, T>, Root>;
 
-export type AgendaScreenProps<T extends keyof AgendaStackParamList> = CompositeScreenProps<
-  NativeStackScreenProps<AgendaStackParamList, T>,
-  Root
->;
+export type AgendaScreenProps<T extends keyof AgendaStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<AgendaStackParamList, T>, Root>;
 
 // The Settings cover's screens are intentionally NOT composed with the root
 // stack: the root route that presents this cover is itself named `Settings`, so
@@ -102,10 +97,8 @@ export type AgendaScreenProps<T extends keyof AgendaStackParamList> = CompositeS
 // screen's params to `never`. These screens never navigate out to a sibling
 // cover — they move between Settings and Approvals and dismiss via
 // `navigation.getParent()?.goBack()` — so the plain stack props are sufficient.
-export type SettingsScreenProps<T extends keyof SettingsStackParamList> = NativeStackScreenProps<
-  SettingsStackParamList,
-  T
->;
+export type SettingsScreenProps<T extends keyof SettingsStackParamList> =
+  NativeStackScreenProps<SettingsStackParamList, T>;
 
 declare global {
   // Makes `useNavigation()` infer the right list everywhere.

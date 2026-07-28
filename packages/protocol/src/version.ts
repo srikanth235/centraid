@@ -14,7 +14,7 @@
  * Product version string. Mirrors root monorepo package version.
  * Display / about / changelog only — **not** a connect gate.
  */
-export const GATEWAY_VERSION = '0.1.0';
+export const GATEWAY_VERSION = "0.1.0";
 
 /**
  * Wire protocol version (CapVer-style integer).

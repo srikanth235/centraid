@@ -1,8 +1,8 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext } from "react";
 
-import type { ShellRoute } from '../../app-shell-context.js';
-import type { ConfirmOpts } from './confirm.js';
-import type { ShellMenuAnchor } from './Sidebar.js';
+import type { ShellRoute } from "../../app-shell-context.js";
+import type { ConfirmOpts } from "./confirm.js";
+import type { ShellMenuAnchor } from "./Sidebar.js";
 
 // The cross-cutting action surface the route wrappers consume — the React
 // equivalent of the vanilla ShellContext's action entries. Navigation is NOT
@@ -18,7 +18,10 @@ export interface ShellActions {
    *  it; the underlying machinery stays wired regardless. */
   builderEnabled: boolean;
   /** Open the builder (new app, or editing an existing one). */
-  enterBuilder: (opts: { appContext?: AppMetaResolvedType; initialPrompt?: string }) => void;
+  enterBuilder: (opts: {
+    appContext?: AppMetaResolvedType;
+    initialPrompt?: string;
+  }) => void;
   /** The new-app sheet (⌘N / sidebar Build new). */
   openNewAppSheet: () => void;
   /** ⌘K command palette. */
@@ -46,6 +49,9 @@ export const ShellActionsProvider = ShellActionsContext.Provider;
 
 export function useShellActions(): ShellActions {
   const ctx = useContext(ShellActionsContext);
-  if (!ctx) throw new Error('useShellActions must be used within a ShellActionsProvider');
+  if (!ctx)
+    throw new Error(
+      "useShellActions must be used within a ShellActionsProvider"
+    );
   return ctx;
 }

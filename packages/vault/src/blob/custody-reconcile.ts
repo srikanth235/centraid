@@ -6,11 +6,15 @@
 // re-pushes a missing live sha to the store class it BELONGS in (so a derivative
 // re-lands under the derived prefix, an original under cas).
 
-import type { BlobCache } from './cache.js';
-import type { ReconcileOptions, ReconcileResult, RemoteTier } from './custody-types.js';
-import type { LocalBlobStore } from './local.js';
-import type { OrphanTombstoneIndex } from './orphan-tombstone.js';
-import type { ReplicaStore } from './replica-index.js';
+import type { BlobCache } from "./cache.js";
+import type {
+  ReconcileOptions,
+  ReconcileResult,
+  RemoteTier,
+} from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import type { OrphanTombstoneIndex } from "./orphan-tombstone.js";
+import type { ReplicaStore } from "./replica-index.js";
 
 export interface ReconcileContext {
   remote: RemoteTier | null;
@@ -42,7 +46,7 @@ export interface ReconcileContext {
 export async function reconcileCustody(
   ctx: ReconcileContext,
   liveShas: Set<string>,
-  options: ReconcileOptions,
+  options: ReconcileOptions
 ): Promise<ReconcileResult> {
   const result: ReconcileResult = {
     orphansDeleted: [],
@@ -53,7 +57,9 @@ export async function reconcileCustody(
   };
   const { remote, local, cache } = ctx;
   const now = options.now ?? Date.now;
-  const casShas = remote ? new Set(await remote.store.list()) : new Set<string>();
+  const casShas = remote
+    ? new Set(await remote.store.list())
+    : new Set<string>();
   const derivedShas = remote?.derivedStore
     ? new Set(await remote.derivedStore.list())
     : new Set<string>();
@@ -65,10 +71,10 @@ export async function reconcileCustody(
       class: ReplicaStore;
       listed: Set<string>;
       surviving: Set<string>;
-      store: NonNullable<RemoteTier['derivedStore']>;
+      store: NonNullable<RemoteTier["derivedStore"]>;
     }[] = [
       {
-        class: 'cas',
+        class: "cas",
         listed: casShas,
         surviving: survivingCas,
         store: remote.store,
@@ -76,7 +82,7 @@ export async function reconcileCustody(
     ];
     if (remote.derivedStore) {
       stores.push({
-        class: 'derived',
+        class: "derived",
         listed: derivedShas,
         surviving: survivingDerived,
         store: remote.derivedStore,
@@ -144,16 +150,23 @@ export async function reconcileCustody(
   // listing is truth, the index a cache of evidence.
   if (cache && remote) {
     const sizeOf = (sha: string): number => local.statSync(sha)?.size ?? 0;
-    cache.replica.heal('cas', survivingCas, sizeOf);
-    if (remote.derivedStore) cache.replica.heal('derived', survivingDerived, sizeOf);
+    cache.replica.heal("cas", survivingCas, sizeOf);
+    if (remote.derivedStore)
+      cache.replica.heal("derived", survivingDerived, sizeOf);
   }
 
-  const reconcileLiveSha = async (shas: readonly string[], index: number): Promise<void> => {
+  const reconcileLiveSha = async (
+    shas: readonly string[],
+    index: number
+  ): Promise<void> => {
     const sha = shas[index];
     if (sha === undefined) return;
     const localHas = local.hasSync(sha);
     const belongs = ctx.desiredStore(sha);
-    const listing = belongs === 'derived' && remote?.derivedStore ? survivingDerived : survivingCas;
+    const listing =
+      belongs === "derived" && remote?.derivedStore
+        ? survivingDerived
+        : survivingCas;
     const remoteHas = remote ? listing.has(sha) : false;
     if (!localHas && remoteHas) {
       await ctx.open(sha); // re-cache from the store it belongs in

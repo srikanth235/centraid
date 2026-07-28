@@ -1,4 +1,4 @@
-import { useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from "react";
 
 import {
   availabilityPct,
@@ -10,23 +10,23 @@ import {
   reconcileStatus,
   type GatewayRuntimeSnapshot,
   type ReconciledStatus,
-} from '../shell/routes/gatewayData.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import GatewayAlertsTab from './GatewayAlertsTab.js';
-import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
+} from "../shell/routes/gatewayData.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import GatewayAlertsTab from "./GatewayAlertsTab.js";
+import LogsScreen, { type LogsBridgeProps } from "./LogsScreen.js";
 import ResourceModeCard, {
   type ResourceMode,
   type ResourceModeCardProps,
-} from './ResourceModeCard.js';
-import RestartGatewayButton from './RestartGatewayButton.js';
+} from "./ResourceModeCard.js";
+import RestartGatewayButton from "./RestartGatewayButton.js";
 import SettingsDiagnosticsScreen, {
   type GatewayHealthDTO,
   type SettingsDiagnosticsBridgeProps,
-} from './SettingsDiagnosticsScreen.js';
+} from "./SettingsDiagnosticsScreen.js";
 
-import a11y from '../styles/a11y.module.css';
-import styles from './GatewayScreen.module.css';
+import a11y from "../styles/a11y.module.css";
+import styles from "./GatewayScreen.module.css";
 
 // Gateway runtime, component health, logs, and alerts share one instrument
 // panel (#341/#344/#347). Backup/storage custody used to live on the Overview
@@ -51,8 +51,8 @@ export interface GatewayScreenProps {
   /** Polled component-health summary — reconciles the Overview orb and
    *  badges the Components tab. `null` before the first poll lands. */
   health: GatewayHealthDTO | null;
-  loadHealth: SettingsDiagnosticsBridgeProps['loadHealth'];
-  streamLogs: LogsBridgeProps['streamLogs'];
+  loadHealth: SettingsDiagnosticsBridgeProps["loadHealth"];
+  streamLogs: LogsBridgeProps["streamLogs"];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
    * status). Refused for a remote gateway — main answers `{ok: false}`
@@ -61,7 +61,7 @@ export interface GatewayScreenProps {
   onRestartGateway: () => Promise<{ ok: boolean; error?: string }>;
   /** Save `/centraid/_gateway/diagnostics` through a native dialog (Logs
    *  tab toolbar). `canceled` when the user dismissed the dialog. */
-  onExportDiagnostics: LogsBridgeProps['onExportDiagnostics'];
+  onExportDiagnostics: LogsBridgeProps["onExportDiagnostics"];
   /**
    * Resource mode (#521) — durable owner preference for how hard the gateway
    * may use this machine. Optional so older hosts/tests keep rendering.
@@ -74,7 +74,7 @@ export interface GatewayScreenProps {
    * snapshot carrying `metrics.backgroundPause`.
    */
   onPauseBackgroundWork?: (
-    durationMs?: number,
+    durationMs?: number
   ) => Promise<{ paused: boolean; until: string | null }>;
   onResumeBackgroundWork?: () => Promise<{ paused: boolean }>;
   /**
@@ -82,24 +82,24 @@ export interface GatewayScreenProps {
    * hosts/tests keep rendering; the Advanced section also gates on the health
    * profile carrying `sources` + `bounds`.
    */
-  loadKnobPrefs?: ResourceModeCardProps['loadKnobPrefs'];
-  saveKnobPrefs?: ResourceModeCardProps['saveKnobPrefs'];
+  loadKnobPrefs?: ResourceModeCardProps["loadKnobPrefs"];
+  saveKnobPrefs?: ResourceModeCardProps["saveKnobPrefs"];
 }
 
-type TabId = 'overview' | 'components' | 'logs' | 'alerts';
+type TabId = "overview" | "components" | "logs" | "alerts";
 
 const TABS: readonly { id: TabId; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'components', label: 'Components' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'alerts', label: 'Alerts' },
+  { id: "overview", label: "Overview" },
+  { id: "components", label: "Components" },
+  { id: "logs", label: "Logs" },
+  { id: "alerts", label: "Alerts" },
 ];
 
 const STATUS_WORD: Record<ReconciledStatus, string> = {
-  up: 'Operational',
-  degraded: 'Degraded',
-  down: 'Unreachable',
-  unknown: 'Listening…',
+  up: "Operational",
+  degraded: "Degraded",
+  down: "Unreachable",
+  unknown: "Listening…",
 };
 
 /** Only the tail of the sample ring fits the strip comfortably. */
@@ -127,17 +127,19 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   const { snapshot, now, health } = props;
   const heartbeat = snapshot.status;
   const overall = reconcileStatus(heartbeat, health);
-  const unhealthyCount = health ? health.components.filter((c) => c.status !== 'ok').length : 0;
+  const unhealthyCount = health
+    ? health.components.filter((c) => c.status !== "ok").length
+    : 0;
 
-  const [tab, setTab] = useState<TabId>('overview');
-  const [logsFocus, setLogsFocus] = useState<{ text: string; nonce: number } | undefined>(
-    undefined,
-  );
+  const [tab, setTab] = useState<TabId>("overview");
+  const [logsFocus, setLogsFocus] = useState<
+    { text: string; nonce: number } | undefined
+  >(undefined);
   const jumpNonceRef = useRef(0);
   const jumpToLogs = (component: string): void => {
     jumpNonceRef.current += 1;
     setLogsFocus({ text: component, nonce: jumpNonceRef.current });
-    setTab('logs');
+    setTab("logs");
   };
 
   // The gateway's own uptime clock, advanced from the last heartbeat so it
@@ -145,7 +147,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   // can't distort it. Keyed off the raw heartbeat, not the reconciled
   // status — a degraded component doesn't blank the uptime figure.
   const uptimeMs =
-    heartbeat === 'up' &&
+    heartbeat === "up" &&
     snapshot.gatewayUptimeMs !== undefined &&
     snapshot.lastCheckAt !== undefined
       ? snapshot.gatewayUptimeMs + Math.max(0, now - snapshot.lastCheckAt)
@@ -154,7 +156,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   const outageRows = buildOutageRows(snapshot, now);
   const samples = snapshot.samples.slice(-STRIP_SAMPLES);
   const stripSpanMs =
-    samples.length >= 2 ? (samples[samples.length - 1]?.at ?? 0) - (samples[0]?.at ?? 0) : 0;
+    samples.length >= 2
+      ? (samples[samples.length - 1]?.at ?? 0) - (samples[0]?.at ?? 0)
+      : 0;
 
   return (
     <div className={styles.page} data-status={overall}>
@@ -168,7 +172,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         <div className={styles.headMeta}>
           heartbeat · every {Math.round(snapshot.pollIntervalMs / 1000)}s
           {snapshot.lastCheckAt === undefined
-            ? ''
+            ? ""
             : ` · checked ${formatAgo(snapshot.lastCheckAt, now)}`}
         </div>
       </div>
@@ -184,14 +188,14 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             onClick={() => setTab(t.id)}
           >
             {t.label}
-            {t.id === 'components' && unhealthyCount > 0 ? (
+            {t.id === "components" && unhealthyCount > 0 ? (
               <span className={styles.tabBadge}>{unhealthyCount}</span>
             ) : null}
           </button>
         ))}
       </div>
 
-      {tab === 'overview' ? (
+      {tab === "overview" ? (
         <>
           {/* Hero — orb + status word on the left, the gauge cluster on the
               right, heartbeat strip across the bottom. */}
@@ -202,20 +206,25 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   <span className={styles.orbCore} />
                 </span>
                 <div>
-                  <div className={styles.statusWord}>{STATUS_WORD[overall]}</div>
+                  <div className={styles.statusWord}>
+                    {STATUS_WORD[overall]}
+                  </div>
                   <div className={styles.statusSub}>
                     {snapshot.statusSince === undefined
-                      ? ''
+                      ? ""
                       : `for ${formatDuration(now - snapshot.statusSince)} · `}
                     {snapshot.gatewayKind} gateway “{snapshot.gatewayLabel}”
                   </div>
-                  {heartbeat === 'down' && snapshot.lastError ? (
-                    <div className={styles.statusError}>{snapshot.lastError}</div>
+                  {heartbeat === "down" && snapshot.lastError ? (
+                    <div className={styles.statusError}>
+                      {snapshot.lastError}
+                    </div>
                   ) : null}
-                  {overall === 'degraded' ? (
+                  {overall === "degraded" ? (
                     <div className={styles.statusDegraded}>
                       {unhealthyCount} component
-                      {unhealthyCount === 1 ? '' : 's'} reporting trouble — see Components
+                      {unhealthyCount === 1 ? "" : "s"} reporting trouble — see
+                      Components
                     </div>
                   ) : null}
                 </div>
@@ -223,22 +232,27 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               <div className={styles.figures}>
                 <Figure
                   label="Gateway uptime"
-                  value={uptimeMs === undefined ? '——' : formatUptime(uptimeMs)}
-                  {...(snapshot.gatewayStartedAt !== undefined && uptimeMs !== undefined
+                  value={uptimeMs === undefined ? "——" : formatUptime(uptimeMs)}
+                  {...(snapshot.gatewayStartedAt !== undefined &&
+                  uptimeMs !== undefined
                     ? { sub: `since ${formatClock(now - uptimeMs)}` }
                     : {})}
                 />
                 <Figure
                   label="Latency"
                   value={
-                    heartbeat === 'up' && snapshot.latencyMs !== undefined
+                    heartbeat === "up" && snapshot.latencyMs !== undefined
                       ? `${snapshot.latencyMs} ms`
-                      : '——'
+                      : "——"
                   }
                 />
                 <Figure
                   label="Availability"
-                  value={availability === undefined ? '——' : `${availability.toFixed(1)}%`}
+                  value={
+                    availability === undefined
+                      ? "——"
+                      : `${availability.toFixed(1)}%`
+                  }
                   sub={`${snapshot.checksTotal} checks this session`}
                 />
               </div>
@@ -254,16 +268,20 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   <span
                     key={s.at}
                     className={styles.beat}
-                    data-ok={s.ok ? 'true' : 'false'}
-                    title={`${formatClock(s.at)} — ${s.ok ? `ok, ${s.latencyMs ?? '—'} ms` : 'no answer'}`}
+                    data-ok={s.ok ? "true" : "false"}
+                    title={`${formatClock(s.at)} — ${s.ok ? `ok, ${s.latencyMs ?? "—"} ms` : "no answer"}`}
                   />
                 ))
               ) : (
-                <span className={styles.stripEmpty}>waiting for the first heartbeat…</span>
+                <span className={styles.stripEmpty}>
+                  waiting for the first heartbeat…
+                </span>
               )}
             </div>
             <div className={styles.stripAxis}>
-              <span>{stripSpanMs > 0 ? `${formatDuration(stripSpanMs)} ago` : ''}</span>
+              <span>
+                {stripSpanMs > 0 ? `${formatDuration(stripSpanMs)} ago` : ""}
+              </span>
               <span>now</span>
             </div>
           </section>
@@ -277,8 +295,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 <div className={styles.panelHead}>
                   <h2>Outage log</h2>
                   <span className={styles.panelMeta}>
-                    since {formatClock(snapshot.trackingSince)} · {snapshot.checksFailed} failed{' '}
-                    {snapshot.checksFailed === 1 ? 'check' : 'checks'}
+                    since {formatClock(snapshot.trackingSince)} ·{" "}
+                    {snapshot.checksFailed} failed{" "}
+                    {snapshot.checksFailed === 1 ? "check" : "checks"}
                   </span>
                 </div>
                 {outageRows.length > 0 ? (
@@ -290,19 +309,23 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                         data-ongoing={o.ongoing || undefined}
                       >
                         <span className={styles.outageDot} />
-                        <span className={styles.outageStart}>{o.startedLabel}</span>
+                        <span className={styles.outageStart}>
+                          {o.startedLabel}
+                        </span>
                         <span className={styles.outageDuration}>
                           {o.durationLabel}
-                          {o.ongoing ? ' — ongoing' : ''}
+                          {o.ongoing ? " — ongoing" : ""}
                         </span>
-                        {o.alerted ? <span className={styles.outageBadge}>notified</span> : null}
+                        {o.alerted ? (
+                          <span className={styles.outageBadge}>notified</span>
+                        ) : null}
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className={styles.panelEmpty}>
-                    No downtime recorded this session. The log resets when the app relaunches or you
-                    switch gateways.
+                    No downtime recorded this session. The log resets when the
+                    app relaunches or you switch gateways.
                   </div>
                 )}
               </section>
@@ -326,12 +349,18 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   {...(health?.metrics?.powerContext
                     ? { powerContext: health.metrics.powerContext }
                     : {})}
-                  {...(props.onPauseBackgroundWork ? { onPause: props.onPauseBackgroundWork } : {})}
+                  {...(props.onPauseBackgroundWork
+                    ? { onPause: props.onPauseBackgroundWork }
+                    : {})}
                   {...(props.onResumeBackgroundWork
                     ? { onResume: props.onResumeBackgroundWork }
                     : {})}
-                  {...(props.loadKnobPrefs ? { loadKnobPrefs: props.loadKnobPrefs } : {})}
-                  {...(props.saveKnobPrefs ? { saveKnobPrefs: props.saveKnobPrefs } : {})}
+                  {...(props.loadKnobPrefs
+                    ? { loadKnobPrefs: props.loadKnobPrefs }
+                    : {})}
+                  {...(props.saveKnobPrefs
+                    ? { saveKnobPrefs: props.saveKnobPrefs }
+                    : {})}
                 />
               ) : null}
             </div>
@@ -354,20 +383,25 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   <div className={styles.idRow}>
                     <dt>Version</dt>
                     <dd className={styles.idMono}>
-                      {snapshot.version ?? '—'}
-                      {snapshot.schemaEpoch === undefined ? '' : ` · epoch ${snapshot.schemaEpoch}`}
+                      {snapshot.version ?? "—"}
+                      {snapshot.schemaEpoch === undefined
+                        ? ""
+                        : ` · epoch ${snapshot.schemaEpoch}`}
                     </dd>
                   </div>
                   <div className={styles.idRow}>
                     <dt>Started</dt>
                     <dd className={styles.idMono}>
-                      {uptimeMs === undefined ? '—' : formatClock(now - uptimeMs)}
+                      {uptimeMs === undefined
+                        ? "—"
+                        : formatClock(now - uptimeMs)}
                     </dd>
                   </div>
                   <div className={styles.idRow}>
                     <dt>Checks</dt>
                     <dd className={styles.idMono}>
-                      {snapshot.checksTotal} run · {snapshot.checksFailed} failed
+                      {snapshot.checksTotal} run · {snapshot.checksFailed}{" "}
+                      failed
                     </dd>
                   </div>
                 </dl>
@@ -380,13 +414,16 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </>
       ) : null}
 
-      {tab === 'components' ? (
+      {tab === "components" ? (
         <div className={styles.tabPane}>
-          <SettingsDiagnosticsScreen loadHealth={props.loadHealth} onJumpToLogs={jumpToLogs} />
+          <SettingsDiagnosticsScreen
+            loadHealth={props.loadHealth}
+            onJumpToLogs={jumpToLogs}
+          />
         </div>
       ) : null}
 
-      {tab === 'logs' ? (
+      {tab === "logs" ? (
         <div className={styles.tabPane}>
           <LogsScreen
             streamLogs={props.streamLogs}
@@ -396,7 +433,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
       ) : null}
 
-      {tab === 'alerts' ? (
+      {tab === "alerts" ? (
         <GatewayAlertsTab
           snapshot={snapshot}
           savingAlert={props.savingAlert}

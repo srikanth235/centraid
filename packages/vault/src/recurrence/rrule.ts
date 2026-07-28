@@ -8,11 +8,11 @@
 // Dates are ISO 8601 strings throughout, UTC, no timezone math — start_tz is
 // carried separately by the caller and never enters this module.
 
-const DAY_TOKENS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const;
+const DAY_TOKENS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 type DayToken = (typeof DAY_TOKENS)[number];
 
 export interface ParsedRrule {
-  freq: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   count?: number;
   until?: string;
@@ -22,23 +22,36 @@ export interface ParsedRrule {
 /** Parse `FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10` into structured parts, or null if unparseable. */
 export function parseRrule(rrule: string): ParsedRrule | null {
   const parts = new Map<string, string>();
-  for (const seg of rrule.split(';')) {
-    const eq = seg.indexOf('=');
+  for (const seg of rrule.split(";")) {
+    const eq = seg.indexOf("=");
     if (eq < 0) continue;
     parts.set(seg.slice(0, eq).trim().toUpperCase(), seg.slice(eq + 1).trim());
   }
-  const freq = parts.get('FREQ');
-  if (freq !== 'DAILY' && freq !== 'WEEKLY' && freq !== 'MONTHLY' && freq !== 'YEARLY') return null;
-  const interval = Math.max(1, Math.trunc(Number(parts.get('INTERVAL') ?? '1')) || 1);
-  const countRaw = parts.get('COUNT');
-  const count = countRaw ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined : undefined;
-  const until = parts.get('UNTIL') || undefined;
-  const byDayRaw = parts.get('BYDAY');
+  const freq = parts.get("FREQ");
+  if (
+    freq !== "DAILY" &&
+    freq !== "WEEKLY" &&
+    freq !== "MONTHLY" &&
+    freq !== "YEARLY"
+  )
+    return null;
+  const interval = Math.max(
+    1,
+    Math.trunc(Number(parts.get("INTERVAL") ?? "1")) || 1
+  );
+  const countRaw = parts.get("COUNT");
+  const count = countRaw
+    ? Math.max(1, Math.trunc(Number(countRaw)) || 0) || undefined
+    : undefined;
+  const until = parts.get("UNTIL") || undefined;
+  const byDayRaw = parts.get("BYDAY");
   const byDay = byDayRaw
     ? (byDayRaw
-        .split(',')
+        .split(",")
         .map((d) => d.trim().toUpperCase())
-        .filter((d): d is DayToken => (DAY_TOKENS as readonly string[]).includes(d)) as DayToken[])
+        .filter((d): d is DayToken =>
+          (DAY_TOKENS as readonly string[]).includes(d)
+        ) as DayToken[])
     : undefined;
   return {
     freq,
@@ -63,14 +76,21 @@ function parseIcalInstant(value: string): Date | null {
   if (!Number.isNaN(direct)) return new Date(direct);
   const match = ICAL_INSTANT_RE.exec(value.trim());
   if (!match) return null;
-  const { year, month, day, hour = '00', minute = '00', second = '00' } = match.groups!;
+  const {
+    year,
+    month,
+    day,
+    hour = "00",
+    minute = "00",
+    second = "00",
+  } = match.groups!;
   const ms = Date.UTC(
     Number(year),
     Number(month) - 1,
     Number(day),
     Number(hour),
     Number(minute),
-    Number(second),
+    Number(second)
   );
   return Number.isNaN(ms) ? null : new Date(ms);
 }
@@ -87,7 +107,7 @@ function addMonths(d: Date, n: number): Date {
   next.setUTCDate(1);
   next.setUTCMonth(next.getUTCMonth() + n);
   const daysInMonth = new Date(
-    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)
   ).getUTCDate();
   next.setUTCDate(Math.min(day, daysInMonth));
   return next;
@@ -105,7 +125,7 @@ export function expandRrule(
   dtstartIso: string,
   rangeFromIso: string,
   rangeToIso: string,
-  maxInstances = 366,
+  maxInstances = 366
 ): string[] {
   const parsed = parseRrule(rrule);
   const dtstart = new Date(dtstartIso);
@@ -121,20 +141,20 @@ export function expandRrule(
   // Feb 28 → Mar 28 instead of the RFC 5545-correct Jan 31 → Feb 28 → Mar 31.
   const cursorAt = (k: number): Date => {
     switch (parsed.freq) {
-      case 'DAILY':
+      case "DAILY":
         return addDays(dtstart, k * parsed.interval);
-      case 'WEEKLY':
+      case "WEEKLY":
         return addDays(dtstart, k * 7 * parsed.interval);
-      case 'MONTHLY':
+      case "MONTHLY":
         return addMonths(dtstart, k * parsed.interval);
-      case 'YEARLY':
+      case "YEARLY":
         return addMonths(dtstart, k * 12 * parsed.interval);
     }
   };
 
   // Weekly + BYDAY expands each anchor week into its named weekdays, so the
   // walk is per-week rather than per-occurrence.
-  if (parsed.freq === 'WEEKLY' && parsed.byDay) {
+  if (parsed.freq === "WEEKLY" && parsed.byDay) {
     const weekStart = addDays(dtstart, -dtstart.getUTCDay());
     let week = weekStart;
     let guard = 0;
@@ -145,9 +165,13 @@ export function expandRrule(
         const d = addDays(week, offset);
         if (d.getTime() < dtstart.getTime()) continue;
         if (until && d.getTime() > until.getTime()) continue;
-        if (parsed.count !== undefined && occurrenceIndex >= parsed.count) continue;
+        if (parsed.count !== undefined && occurrenceIndex >= parsed.count)
+          continue;
         occurrenceIndex += 1;
-        if (d.getTime() >= rangeFrom.getTime() && d.getTime() < rangeTo.getTime()) {
+        if (
+          d.getTime() >= rangeFrom.getTime() &&
+          d.getTime() < rangeTo.getTime()
+        ) {
           out.push(d.toISOString());
         }
       }
@@ -191,15 +215,30 @@ export function expandRrule(
  * use this on completion — one row advances in place rather than a
  * calendar-style range materializing many instances at once.
  */
-export function nextOccurrence(rrule: string, dtstartIso: string, afterIso: string): string | null {
+export function nextOccurrence(
+  rrule: string,
+  dtstartIso: string,
+  afterIso: string
+): string | null {
   const parsed = parseRrule(rrule);
   const dtstart = new Date(dtstartIso);
   const after = new Date(afterIso);
-  if (!parsed || Number.isNaN(dtstart.getTime()) || Number.isNaN(after.getTime())) return null;
+  if (
+    !parsed ||
+    Number.isNaN(dtstart.getTime()) ||
+    Number.isNaN(after.getTime())
+  )
+    return null;
   // A year of headroom past `after` is enough runway for every supported
   // cadence (including YEARLY×1) to surface its next hit, if one exists.
   const horizon = new Date(after.getTime() + 366 * 86400000 + 1).toISOString();
-  const hits = expandRrule(rrule, dtstartIso, after.toISOString(), horizon, 400);
+  const hits = expandRrule(
+    rrule,
+    dtstartIso,
+    after.toISOString(),
+    horizon,
+    400
+  );
   const next = hits.find((h) => new Date(h).getTime() > after.getTime());
   return next ?? null;
 }

@@ -8,8 +8,8 @@ export {
   type VaultDb,
   type OpenVaultOptions,
   type BlobStoreSettings,
-} from './db.js';
-export * from './backup-policy.js';
+} from "./db.js";
+export * from "./backup-policy.js";
 export {
   isDiskFullError,
   asVaultDiskFullError,
@@ -23,7 +23,7 @@ export {
   DiskFullTracker,
   sharedDiskFullTracker,
   type DiskFullEvent,
-} from './errors.js';
+} from "./errors.js";
 export {
   BLOB_URI_PREFIX,
   assertSha,
@@ -34,13 +34,13 @@ export {
   type BlobStore,
   type BlobRange,
   type BlobStat,
-} from './blob/store.js';
+} from "./blob/store.js";
 export {
   FsBlobStore,
   MemoryBlobStore,
   type BlobLinkOutcome,
   type LocalBlobStore,
-} from './blob/local.js';
+} from "./blob/local.js";
 // Issue #599 decision 11: share-by-placement. The gateway's cross-vault share
 // plane calls these; they sit outside the per-vault handler path by design.
 export {
@@ -53,8 +53,11 @@ export {
   type UnshareFromVaultInput,
   type UnshareFromVaultResult,
   type ShareOriginRecord,
-} from './share/placement.js';
-export { isShareableItemType, type ShareableItemType } from './share/closure.js';
+} from "./share/placement.js";
+export {
+  isShareableItemType,
+  type ShareableItemType,
+} from "./share/closure.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {
@@ -62,28 +65,34 @@ export {
   type LocalOrphanSweepOptions,
   type LocalOrphanSweepResult,
   type LocalOrphanSweepTarget,
-} from './blob/local-orphan-sweep.js';
-export { type BlobPlacement, type BlobPlacementMode } from './share/blobs.js';
+} from "./blob/local-orphan-sweep.js";
+export { type BlobPlacement, type BlobPlacementMode } from "./share/blobs.js";
 export {
   S3BlobStore,
   MULTIPART_THRESHOLD_BYTES,
   type S3BlobStoreOptions,
   type S3Credentials,
-} from './blob/s3.js';
-export { S3TransferStore, s3TemporaryUploadPrefix } from './blob/s3-transfer.js';
+} from "./blob/s3.js";
+export {
+  S3TransferStore,
+  s3TemporaryUploadPrefix,
+} from "./blob/s3-transfer.js";
 export {
   BlobTransferCoordinator,
   type BeginBlobIngressInput,
   type BeginBlobIngressResult,
   type BlobTransferStatus,
   type CommittedBlob,
-} from './blob/transfers.js';
+} from "./blob/transfers.js";
 export {
   type DirectBlobDownloadResult,
   type DirectBlobInitInput,
   type DirectBlobInitResult,
-} from './blob/direct-transfers.js';
-export { BlobContentKeyRegistry, type DeviceWrappedContentKey } from './blob/content-keys.js';
+} from "./blob/direct-transfers.js";
+export {
+  BlobContentKeyRegistry,
+  type DeviceWrappedContentKey,
+} from "./blob/content-keys.js";
 export {
   BlobCustody,
   sealBlob,
@@ -96,7 +105,7 @@ export {
   type CustodyState,
   type BlobSweepStatus,
   type RemoteTier,
-} from './blob/custody.js';
+} from "./blob/custody.js";
 export {
   BlobCache,
   readBlobCacheSettings,
@@ -108,9 +117,9 @@ export {
   type BlobCacheOptions,
   type BlobMetrics,
   type CacheStatfs,
-} from './blob/cache.js';
-export { ReplicaIndex, AccessIndex } from './blob/replica-index.js';
-export type { ReplicaStore } from './blob/replica-index.js';
+} from "./blob/cache.js";
+export { ReplicaIndex, AccessIndex } from "./blob/replica-index.js";
+export type { ReplicaStore } from "./blob/replica-index.js";
 export {
   stageBlobBytes,
   sweepBlobStaging,
@@ -119,7 +128,7 @@ export {
   STAGING_TTL_HOURS,
   type StageBlobOptions,
   type StagedBlob,
-} from './blob/staging.js';
+} from "./blob/staging.js";
 export {
   DERIVATIVE_REGISTRY,
   DERIVATIVE_VARIANTS,
@@ -132,10 +141,14 @@ export {
   type DerivativeVariant,
   type InlineDerivativeVariant,
   type ValidatedDerivative,
-} from './blob/derivatives.js';
-export { MAX_INLINE_DATA_URI_CHARS, decodeDataUri } from './blob/mint.js';
-export { promoteStagedBlob, type PromotedContent } from './blob/promote.js';
-export { sniffMediaType, extractBlobMeta, type BlobMeta } from './blob/pipeline.js';
+} from "./blob/derivatives.js";
+export { MAX_INLINE_DATA_URI_CHARS, decodeDataUri } from "./blob/mint.js";
+export { promoteStagedBlob, type PromotedContent } from "./blob/promote.js";
+export {
+  sniffMediaType,
+  extractBlobMeta,
+  type BlobMeta,
+} from "./blob/pipeline.js";
 export {
   resolveServableBlob,
   resolveDerivativeShas,
@@ -143,7 +156,7 @@ export {
   type BlobResolveOutcome,
   type ServableBlob,
   type DerivativeRef,
-} from './blob/read.js';
+} from "./blob/read.js";
 export {
   backfillPreviews,
   TINY_EDGE,
@@ -153,24 +166,27 @@ export {
   type PreviewCodec,
   type PreviewOutput,
   type PreviewBackfillResult,
-} from './blob/preview.js';
-export { uuidv7, nowIso, sha256Hex } from './ids.js';
-export { notifyReplicaCommit, subscribeReplicaCommits } from './replica/doorbell.js';
-export { jitterDelayMs } from './timer-jitter.js';
+} from "./blob/preview.js";
+export { uuidv7, nowIso, sha256Hex } from "./ids.js";
+export {
+  notifyReplicaCommit,
+  subscribeReplicaCommits,
+} from "./replica/doorbell.js";
+export { jitterDelayMs } from "./timer-jitter.js";
 export {
   ONTOLOGY_VERSION,
   VAULT_MIGRATIONS,
   JOURNAL_MIGRATIONS,
   migrate,
   VaultSchemaAheadError,
-} from './schema/migrate.js';
+} from "./schema/migrate.js";
 export {
   resolveEntity,
   listVaultEntities,
   VAULT_TABLES,
   JOURNAL_TABLES,
   type EntityRef,
-} from './schema/tables.js';
+} from "./schema/tables.js";
 // Issue #441 Part B: the Vault Atlas mapping (table → kind → pack).
 export {
   ONTOLOGY_PACKS,
@@ -183,7 +199,7 @@ export {
   atlasTablesByLogical,
   type AtlasPackKind,
   type AtlasTableEntry,
-} from './schema/atlas.js';
+} from "./schema/atlas.js";
 // Issue #441 Part B: the Atlas census/graph/pulse payload builders.
 export {
   atlasCensus,
@@ -201,7 +217,7 @@ export {
   type AtlasPulsePayload,
   type AtlasPulseSeries,
   type AtlasPulseDay,
-} from './schema/atlas-census.js';
+} from "./schema/atlas-census.js";
 // Issue #441 Part B (B3): the Browse read side — table picker, keyset row
 // grid, column metadata, FK reference search, and dependent preview.
 export {
@@ -224,21 +240,21 @@ export {
   type BrowseRowsParams,
   type BrowseRowsResult,
   type BrowseRowResult,
-} from './schema/atlas-browse.js';
+} from "./schema/atlas-browse.js";
 export {
   browseRefSearch,
   browseDependents,
   type BrowseRefHit,
   type BrowseDependent,
   type BrowseDependentsResult,
-} from './schema/atlas-browse-refs.js';
+} from "./schema/atlas-browse-refs.js";
 export {
   formatReplicaCursor,
   parseReplicaCursor,
   InvalidReplicaCursorError,
   type ReplicaCursor,
   type ReplicaCursorInput,
-} from './replica/cursor.js';
+} from "./replica/cursor.js";
 export {
   REPLICA_RETENTION_DAYS,
   REPLICA_RETENTION_MAX_ENTRIES,
@@ -260,8 +276,8 @@ export {
   type ReplicaLogState,
   type ReplicaPruneResult,
   type ReplicaRebootstrapReason,
-} from './replica/change-log.js';
-export { REPLICA_SCHEMA_EPOCH } from './schema/replica.js';
+} from "./replica/change-log.js";
+export { REPLICA_SCHEMA_EPOCH } from "./schema/replica.js";
 export {
   DEFAULT_REPLICA_MAX_VALUE_BYTES,
   readReplicaRow,
@@ -272,8 +288,8 @@ export {
   type ReplicaRowsPage,
   type ReplicaSnapshotReader,
   type ReplicaSnapshotResult,
-} from './replica/snapshot.js';
-export { replicaUnavailableColumnsOf } from './replica/unavailable-columns.js';
+} from "./replica/snapshot.js";
+export { replicaUnavailableColumnsOf } from "./replica/unavailable-columns.js";
 export {
   deleteReplicaIntentOutcomesForDevice,
   listReplicaIntentOutcomes,
@@ -286,7 +302,7 @@ export {
   type ReplicaIntentOutcome,
   type ReplicaIntentStatus,
   type TransitionReplicaIntentOutcomeInput,
-} from './replica/intents.js';
+} from "./replica/intents.js";
 export {
   DEFAULT_REPLICA_INVOCATION_REPAIR_BATCH_SIZE,
   ReplicaInvocationRepairError,
@@ -301,7 +317,7 @@ export {
   type ReplicaInvocationCommit,
   type ReplicaInvocationRepairFailure,
   type ReplicaInvocationRepairResult,
-} from './replica/invocation-commits.js';
+} from "./replica/invocation-commits.js";
 export {
   saveDurableParkedPayload,
   readDurableParkedPayload,
@@ -309,16 +325,20 @@ export {
   deleteDurableParkedPayload,
   deleteDurableParkedPayloadsForGrant,
   type DurableParkedPayload,
-} from './replica/parked.js';
+} from "./replica/parked.js";
 
-export { createGateway, Gateway } from './gateway/gateway.js';
-export { GatewayError, DEFAULT_PURPOSE } from './gateway/types.js';
-export { evaluateConsent, type ConsentAllow, type ConsentDecision } from './gateway/consent.js';
+export { createGateway, Gateway } from "./gateway/gateway.js";
+export { GatewayError, DEFAULT_PURPOSE } from "./gateway/types.js";
+export {
+  evaluateConsent,
+  type ConsentAllow,
+  type ConsentDecision,
+} from "./gateway/consent.js";
 export {
   compileFilters,
   compileReplicaHistoricalFilters,
   type CompiledFilter,
-} from './gateway/filters.js';
+} from "./gateway/filters.js";
 export type {
   Credential,
   Identity,
@@ -342,7 +362,7 @@ export type {
   CommandDefinition,
   RevealRequest,
   RevealResult,
-} from './gateway/types.js';
+} from "./gateway/types.js";
 export {
   SEALED_COLUMNS,
   SEALED_PLACEHOLDER,
@@ -365,7 +385,7 @@ export {
   redactSealedInput,
   scrubSealedText,
   writeSealKeyFile,
-} from './schema/sealed.js';
+} from "./schema/sealed.js";
 export {
   KeyStore,
   KeyStoreError,
@@ -374,18 +394,18 @@ export {
   KEY_STORE_SECRET_BYTES,
   type KeyProtector,
   type KeyStoreOptions,
-} from './schema/key-store.js';
-export { resealVaultKey, type ResealResult } from './gateway/reseal.js';
-export { writeReceipt } from './gateway/evidence.js';
+} from "./schema/key-store.js";
+export { resealVaultKey, type ResealResult } from "./gateway/reseal.js";
+export { writeReceipt } from "./gateway/evidence.js";
 export {
   admitImportedRow,
   resolveHandle,
   type RevocationResult,
   type SweepResult,
-} from './gateway/duties.js';
-export { SEED_DEMO_ACTIVITY, SEED_PURGE_ACTIVITY } from './schema/seed.js';
-export { type DemoPurgeResult } from './gateway/demo.js';
-export { SEARCHABLE, type SearchableEntity } from './schema/fts.js';
+} from "./gateway/duties.js";
+export { SEED_DEMO_ACTIVITY, SEED_PURGE_ACTIVITY } from "./schema/seed.js";
+export { type DemoPurgeResult } from "./gateway/demo.js";
+export { SEARCHABLE, type SearchableEntity } from "./schema/fts.js";
 export {
   VAULT_SQL_DEFAULT_ROWS,
   VAULT_SQL_MAX_ROWS,
@@ -393,15 +413,15 @@ export {
   type VaultSqlRequest,
   type VaultSqlResult,
   type VaultSqlRows,
-} from './gateway/sql.js';
-export { buildAssistantContext } from './gateway/assistant-context.js';
+} from "./gateway/sql.js";
+export { buildAssistantContext } from "./gateway/assistant-context.js";
 export {
   CARDED_ENTITIES,
   CARD_PK,
   type RefRequest,
   type RefCard,
   type ResolveResult,
-} from './gateway/cards.js';
+} from "./gateway/cards.js";
 
 export {
   bootstrapVault,
@@ -412,7 +432,7 @@ export {
   type BootstrapResult,
   type BootstrapVaultOptions,
   type ScopeSpec,
-} from './bootstrap.js';
+} from "./bootstrap.js";
 export {
   recoverVaultBootstrap,
   renameVault,
@@ -445,7 +465,7 @@ export {
   type GrantSummary,
   type AppSummary,
   type AgentSummary,
-} from './host.js';
+} from "./host.js";
 export {
   writeScopeTombstones,
   listScopeTombstones,
@@ -459,38 +479,47 @@ export {
   markScopeRequestDecided,
   type ScopeTriple,
   type ScopeRequestSummary,
-} from './install-memory.js';
-export { scopeCovers, type ScopeExtent } from './scope-extent.js';
+} from "./install-memory.js";
+export { scopeCovers, type ScopeExtent } from "./scope-extent.js";
 
-export { registerScheduleCommands } from './commands/schedule.js';
-export { registerTaskCommands } from './commands/tasks.js';
-export { registerSocialCommands } from './commands/social.js';
-export { registerFinanceCommands } from './commands/finance.js';
-export { registerHealthCommands } from './commands/health.js';
-export { registerKnowledgeCommands } from './commands/knowledge.js';
-export { registerBusinessCommands } from './commands/business.js';
-export { registerAttachmentCommands, ATTACHABLE_SUBJECTS } from './commands/attachments.js';
-export { registerTagCommands, TAGGABLE_SUBJECTS } from './commands/tags.js';
-export { registerLinkCommands, RELATIONS_SCHEME_URI } from './commands/links.js';
-export { registerPartyCommands } from './commands/parties.js';
-export { registerMediaCommands } from './commands/media.js';
-export { registerDocumentCommands, FOLDER_SCHEME_URI } from './commands/documents.js';
-export { FLAGS_SCHEME_URI, STARRED_NOTATION } from './commands/flags.js';
-export { registerHomeCommands } from './commands/home.js';
-export { registerPeopleCommands, LIST_SCHEME_URI } from './commands/people.js';
-export { registerLockerCommands, LOCKER_ITEM_TYPE } from './commands/locker.js';
-export { registerTallyCommands } from './commands/tally.js';
-export { registerSyncCommands } from './commands/sync.js';
-export { registerEnrichCommands } from './commands/enrich.js';
-export { registerOutboxCommands } from './commands/outbox.js';
-export { registerJudgmentCommands } from './commands/judgment.js';
+export { registerScheduleCommands } from "./commands/schedule.js";
+export { registerTaskCommands } from "./commands/tasks.js";
+export { registerSocialCommands } from "./commands/social.js";
+export { registerFinanceCommands } from "./commands/finance.js";
+export { registerHealthCommands } from "./commands/health.js";
+export { registerKnowledgeCommands } from "./commands/knowledge.js";
+export { registerBusinessCommands } from "./commands/business.js";
+export {
+  registerAttachmentCommands,
+  ATTACHABLE_SUBJECTS,
+} from "./commands/attachments.js";
+export { registerTagCommands, TAGGABLE_SUBJECTS } from "./commands/tags.js";
+export {
+  registerLinkCommands,
+  RELATIONS_SCHEME_URI,
+} from "./commands/links.js";
+export { registerPartyCommands } from "./commands/parties.js";
+export { registerMediaCommands } from "./commands/media.js";
+export {
+  registerDocumentCommands,
+  FOLDER_SCHEME_URI,
+} from "./commands/documents.js";
+export { FLAGS_SCHEME_URI, STARRED_NOTATION } from "./commands/flags.js";
+export { registerHomeCommands } from "./commands/home.js";
+export { registerPeopleCommands, LIST_SCHEME_URI } from "./commands/people.js";
+export { registerLockerCommands, LOCKER_ITEM_TYPE } from "./commands/locker.js";
+export { registerTallyCommands } from "./commands/tally.js";
+export { registerSyncCommands } from "./commands/sync.js";
+export { registerEnrichCommands } from "./commands/enrich.js";
+export { registerOutboxCommands } from "./commands/outbox.js";
+export { registerJudgmentCommands } from "./commands/judgment.js";
 // Issue #441 Part B (B3): the Browse write trio — journalled row CRUD.
 export {
   registerAtlasCommands,
   ATLAS_OWNER_SCHEMA,
   AtlasDeleteBlockedError,
   type AtlasDependentsRefusal,
-} from './commands/atlas.js';
+} from "./commands/atlas.js";
 
 export {
   AGENT_CONTENT_VARIANTS,
@@ -499,7 +528,7 @@ export {
   resolveAgentContent,
   type AgentContentOutcome,
   type AgentContentVariant,
-} from './enrich/content.js';
+} from "./enrich/content.js";
 export {
   DEFAULT_ENRICHMENT_LEASE_TTL_MS,
   ENRICHMENT_CAPABILITIES,
@@ -517,7 +546,7 @@ export {
   type DeviceEnrichmentSource,
   type EnrichmentCapability,
   type EnrichmentLease,
-} from './enrich/leases.js';
+} from "./enrich/leases.js";
 export {
   hexHamming,
   registerHammingFn,
@@ -526,11 +555,11 @@ export {
   cosine,
   scanEmbeddings,
   type SemanticHit,
-} from './enrich/similarity.js';
-export { ENRICH_PUBLISHERS, tagNotation } from './ingest/enrich-publishers.js';
-export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from './schema/enrich.js';
+} from "./enrich/similarity.js";
+export { ENRICH_PUBLISHERS, tagNotation } from "./ingest/enrich-publishers.js";
+export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from "./schema/enrich.js";
 
-export { parseIcs, type IcsEvent } from './ingest/ics.js';
+export { parseIcs, type IcsEvent } from "./ingest/ics.js";
 export {
   ensureConnection,
   stageCandidates,
@@ -541,17 +570,47 @@ export {
   type StageResult,
   type PublishResult,
   type Publisher,
-} from './ingest/staging.js';
-export { PUBLISHERS } from './ingest/publishers.js';
-export { stageFile, type StageFileOptions, type StageFileResult } from './ingest/stage-file.js';
-export { parseMbox, threadKey, type MboxMessage, type MboxAttachment } from './ingest/mbox.js';
-export { parseTransactionsCsv, parseCsvRows, type CsvTransaction } from './ingest/csv.js';
-export { readZipEntries, type ZipEntry } from './ingest/zip.js';
-export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from './ingest/vcard.js';
-export { importIcsEvents, importVcardParties, type ImportResult } from './ingest/import.js';
-export { importVaultExport, canonicalJson, type VaultExport } from './gateway/portability.js';
-export type { ViewDefinition, ViewJoin, ViewResult } from './gateway/views.js';
-export { checkpointVault, sha256File, type BackupResult } from './gateway/custody.js';
+} from "./ingest/staging.js";
+export { PUBLISHERS } from "./ingest/publishers.js";
+export {
+  stageFile,
+  type StageFileOptions,
+  type StageFileResult,
+} from "./ingest/stage-file.js";
+export {
+  parseMbox,
+  threadKey,
+  type MboxMessage,
+  type MboxAttachment,
+} from "./ingest/mbox.js";
+export {
+  parseTransactionsCsv,
+  parseCsvRows,
+  type CsvTransaction,
+} from "./ingest/csv.js";
+export { readZipEntries, type ZipEntry } from "./ingest/zip.js";
+export {
+  parseVcards,
+  normalizeHandle,
+  type Vcard,
+  type VcardIdentifier,
+} from "./ingest/vcard.js";
+export {
+  importIcsEvents,
+  importVcardParties,
+  type ImportResult,
+} from "./ingest/import.js";
+export {
+  importVaultExport,
+  canonicalJson,
+  type VaultExport,
+} from "./gateway/portability.js";
+export type { ViewDefinition, ViewJoin, ViewResult } from "./gateway/views.js";
+export {
+  checkpointVault,
+  sha256File,
+  type BackupResult,
+} from "./gateway/custody.js";
 export {
   WalShipper,
   type PendingBase,
@@ -559,12 +618,12 @@ export {
   type WalShipperLogger,
   type WalShipperOptions,
   type WalTickReport,
-} from './wal-shipper.js';
+} from "./wal-shipper.js";
 export {
   verifyRestoredPair,
   type RestoredPairReport,
   type SealKeyVerdict,
-} from './restore-check.js';
+} from "./restore-check.js";
 export {
   validateExtSpecs,
   canonicalSpecJson,
@@ -576,14 +635,14 @@ export {
   type ExtColumnSpec,
   type ExtIndexSpec,
   type ExtBand,
-} from './schema/ext.js';
+} from "./schema/ext.js";
 export {
   extAppIds,
   extCommandNames,
   extSearchable,
   assertExtSchemaOwnership,
   type ExtApplyOutcome,
-} from './gateway/ext.js';
+} from "./gateway/ext.js";
 
 // Issue #367 §E: vault.db sizing, archival, FTS budget, and inline threshold.
 export {
@@ -591,7 +650,7 @@ export {
   type DbSizeBreakdown,
   type TableStatsMethod,
   type TableSizeEntry,
-} from './schema/table-stats.js';
+} from "./schema/table-stats.js";
 export {
   DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS,
   archivedSegmentShas,
@@ -606,15 +665,19 @@ export {
   type JournalArchivalResult,
   type ArchivedSegmentRows,
   type ArchiveVerification,
-} from './journal-archive.js';
+} from "./journal-archive.js";
 // Conversation-ledger band GC roots (issue #438 decision 6) + the prune
 // custody latch (decision 3) — vault-side helpers the gateway composes so the
 // app-engine archival engine and every CAS GC path stay correct without the
 // vault importing app-engine.
-export { conversationArchiveShas } from './conversation-archive-roots.js';
-export { blobCustodyProven } from './blob/custody-proven.js';
-export { FTS_BODY_INDEX_BUDGET_CHARS, truncateForIndex, rebuildFtsIndex } from './schema/fts.js';
-export { rebuildDocumentFtsIndex } from './schema/blob.js';
+export { conversationArchiveShas } from "./conversation-archive-roots.js";
+export { blobCustodyProven } from "./blob/custody-proven.js";
+export {
+  FTS_BODY_INDEX_BUDGET_CHARS,
+  truncateForIndex,
+  rebuildFtsIndex,
+} from "./schema/fts.js";
+export { rebuildDocumentFtsIndex } from "./schema/blob.js";
 export {
   INLINE_BODY_BUDGET_BYTES,
   InlineBodyTooLargeError,
@@ -623,4 +686,4 @@ export {
   scanInlineBodyViolations,
   type InlineBodyViolationEntry,
   type InlineBodyViolationScan,
-} from './commands/inline-body-guard.js';
+} from "./commands/inline-body-guard.js";

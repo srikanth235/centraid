@@ -7,7 +7,13 @@
  * a first-class outcome the UI renders as the access state.
  */
 
-import { decorate, readTags, readStarred, readWatchtower, type RawItem } from './items.ts';
+import {
+  decorate,
+  readTags,
+  readStarred,
+  readWatchtower,
+  type RawItem,
+} from "./items.ts";
 
 export default async function searchHandler({
   input,
@@ -16,28 +22,28 @@ export default async function searchHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = 'dpv:ServiceProvision';
-  const term = String(input?.term ?? '')
+  const purpose = "dpv:ServiceProvision";
+  const term = String(input?.term ?? "")
     .trim()
     .toLowerCase();
   if (!term) return { items: [] };
   try {
     const res = await ctx.vault.read({
-      entity: 'locker.item',
-      where: [{ column: 'deleted_at', op: 'is-null' }],
-      orderBy: { column: 'updated_at', dir: 'desc' },
+      entity: "locker.item",
+      where: [{ column: "deleted_at", op: "is-null" }],
+      orderBy: { column: "updated_at", dir: "desc" },
       limit: 500,
       purpose,
     });
     const matched = ((res.rows ?? []) as unknown as RawItem[]).filter((it) => {
       return (
-        String(it.title || '')
+        String(it.title || "")
           .toLowerCase()
           .includes(term) ||
-        String(it.username || '')
+        String(it.username || "")
           .toLowerCase()
           .includes(term) ||
-        String(it.url || '')
+        String(it.url || "")
           .toLowerCase()
           .includes(term)
       );

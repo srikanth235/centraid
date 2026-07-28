@@ -10,20 +10,20 @@ export default async function edit({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'core.edit_document',
+      command: "core.edit_document",
       input: {
-        document_id: String(input.document_id ?? ''),
-        body_text: String(input.body_text ?? ''),
+        document_id: String(input.document_id ?? ""),
+        body_text: String(input.body_text ?? ""),
         ...(input.title == null ? {} : { title: String(input.title) }),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

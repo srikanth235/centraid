@@ -12,7 +12,7 @@
  * gateway URL/token may have flipped.
  */
 
-import { loadSettings } from './settings.js';
+import { loadSettings } from "./settings.js";
 
 interface AuthCache {
   baseUrl: string;
@@ -29,7 +29,7 @@ async function auth(): Promise<AuthCache> {
     inflightAuth = (async () => {
       const settings = await loadSettings();
       const next: AuthCache = {
-        baseUrl: settings.gatewayUrl.replace(/\/$/u, ''),
+        baseUrl: settings.gatewayUrl.replace(/\/$/u, ""),
         token: settings.gatewayToken || undefined,
         vaultId: settings.activeVaultId || undefined,
       };
@@ -46,13 +46,16 @@ export function resetAppsStoreAuthCache(): void {
   cachedAuth = undefined;
 }
 
-function headers(token: string | undefined, contentType?: string): Record<string, string> {
+function headers(
+  token: string | undefined,
+  contentType?: string
+): Record<string, string> {
   const h: Record<string, string> = {};
   if (token) h.authorization = `Bearer ${token}`;
-  if (contentType) h['content-type'] = contentType;
+  if (contentType) h["content-type"] = contentType;
   // The addressed vault (issue #289): `auth()` is always awaited before any
   // `headers()` call, so the cache carries the current vault id.
-  if (cachedAuth?.vaultId) h['x-centraid-vault'] = cachedAuth.vaultId;
+  if (cachedAuth?.vaultId) h["x-centraid-vault"] = cachedAuth.vaultId;
   return h;
 }
 
@@ -66,7 +69,7 @@ async function parse<T>(res: Response, label: string): Promise<T> {
   }
   if (!res.ok) {
     const msg =
-      parsed && typeof parsed === 'object' && 'message' in parsed
+      parsed && typeof parsed === "object" && "message" in parsed
         ? String((parsed as { message: unknown }).message)
         : `${label} HTTP ${res.status}`;
     throw new Error(msg);
@@ -78,10 +81,10 @@ async function parse<T>(res: Response, label: string): Promise<T> {
 export async function openSession(sessionId?: string): Promise<string> {
   const { baseUrl, token } = await auth();
   const res = await fetch(`${baseUrl}/centraid/_apps/_sessions`, {
-    method: 'POST',
-    headers: headers(token, 'application/json'),
+    method: "POST",
+    headers: headers(token, "application/json"),
     body: JSON.stringify(sessionId ? { sessionId } : {}),
   });
-  const out = await parse<{ sessionId: string }>(res, 'open-session');
+  const out = await parse<{ sessionId: string }>(res, "open-session");
   return out.sessionId;
 }

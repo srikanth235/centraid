@@ -1,13 +1,13 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from "node:crypto";
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { IncrementalSha256 } from './incremental-sha256.js';
+import { IncrementalSha256 } from "./incremental-sha256.js";
 
-describe('incremental-sha256', () => {
-  test('serializable WASM SHA-256 resumes at arbitrary chunk boundaries', async () => {
+describe("incremental-sha256", () => {
+  test("serializable WASM SHA-256 resumes at arbitrary chunk boundaries", async () => {
     const bytes = randomBytes(257_321);
-    const expected = createHash('sha256').update(bytes).digest('hex');
+    const expected = createHash("sha256").update(bytes).digest("hex");
     let hash = await IncrementalSha256.create();
     let offset = 0;
     const resumeWithWidth = async (index: number): Promise<void> => {
@@ -15,7 +15,9 @@ describe('incremental-sha256', () => {
       if (width === undefined || offset === bytes.length) return;
       const end = Math.min(bytes.length, offset + width);
       hash.update(bytes.subarray(offset, end));
-      hash = await IncrementalSha256.create(structuredClone(hash.exportState()));
+      hash = await IncrementalSha256.create(
+        structuredClone(hash.exportState())
+      );
       offset = end;
       return resumeWithWidth(index + 1);
     };
@@ -23,19 +25,21 @@ describe('incremental-sha256', () => {
     if (offset < bytes.length) hash.update(bytes.subarray(offset));
     await expect(hash.digestHex()).resolves.toBe(expected);
     // digest is non-destructive: a resumed caller can still append.
-    hash.update(Buffer.from('tail'));
+    hash.update(Buffer.from("tail"));
     await expect(hash.digestHex()).resolves.toBe(
-      createHash('sha256').update(bytes).update('tail').digest('hex'),
+      createHash("sha256").update(bytes).update("tail").digest("hex")
     );
   });
 
-  test('SHA-256 matches standard empty and short vectors', async () => {
+  test("SHA-256 matches standard empty and short vectors", async () => {
     const empty = await IncrementalSha256.create();
-    await expect(empty.digestHex()).resolves.toBe(createHash('sha256').digest('hex'));
+    await expect(empty.digestHex()).resolves.toBe(
+      createHash("sha256").digest("hex")
+    );
     const abc = await IncrementalSha256.create();
-    abc.update(Buffer.from('abc'));
+    abc.update(Buffer.from("abc"));
     await expect(abc.digestHex()).resolves.toBe(
-      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     );
   });
 });

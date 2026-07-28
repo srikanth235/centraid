@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from "node:crypto";
 /*
  * The base clone must be a REFLINK, not a byte copy (issue #408).
  *
@@ -18,13 +18,19 @@ import { randomBytes } from 'node:crypto';
  * large file and check that free space did not drop by its size. A regression
  * to the one-liner fails here instead of quietly doubling every user's disk.
  */
-import { readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
+import {
+  readFileSync,
+  rmSync,
+  statfsSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { cloneDbFile } from './wal-shipper.js';
+import { cloneDbFile } from "./wal-shipper.js";
 
 const MiB = 1024 * 1024;
 /** Big enough that a byte copy dwarfs ordinary free-space noise from other processes. */
@@ -32,9 +38,9 @@ const SIZE = 128 * MiB;
 
 let root: string;
 
-describe('wal-shipper-clone', () => {
+describe("wal-shipper-clone", () => {
   beforeEach(() => {
-    root = tempDirSync('wal-clone-');
+    root = tempDirSync("wal-clone-");
   });
 
   afterEach(() => {
@@ -51,15 +57,15 @@ describe('wal-shipper-clone', () => {
   // cannot, and there a byte copy is the only thing on offer. Only Darwin is a
   // platform we can assert on unconditionally — it is also the one that was
   // silently broken, and the one the desktop app runs on.
-  test.skipIf(process.platform !== 'darwin')(
-    'the base clone is a reflink: cloning a 128 MiB database consumes no new disk',
+  test.skipIf(process.platform !== "darwin")(
+    "the base clone is a reflink: cloning a 128 MiB database consumes no new disk",
     () => {
-      const src = path.join(root, 'vault.db');
+      const src = path.join(root, "vault.db");
       // Incompressible — so a byte copy cannot hide behind filesystem compression.
       writeFileSync(src, randomBytes(SIZE));
 
       const before = freeBytes(root);
-      const dst = path.join(root, 'base.db');
+      const dst = path.join(root, "base.db");
       expect(cloneDbFile(src, dst)).toBe(true);
       const consumed = before - freeBytes(root);
 
@@ -68,20 +74,20 @@ describe('wal-shipper-clone', () => {
       // ...that shares its blocks. A byte copy would consume ~128 MiB; allow a
       // generous margin for metadata and for unrelated writes racing the test.
       expect(consumed).toBeLessThan(SIZE / 4);
-    },
+    }
   );
 
-  test('the clone is byte-identical to the source, reflink or not', () => {
-    const src = path.join(root, 'vault.db');
+  test("the clone is byte-identical to the source, reflink or not", () => {
+    const src = path.join(root, "vault.db");
     const bytes = randomBytes(4 * MiB);
     writeFileSync(src, bytes);
 
-    const dst = path.join(root, 'base.db');
+    const dst = path.join(root, "base.db");
     const reflinked = cloneDbFile(src, dst);
 
     // Correctness of the copy is platform-independent; only its COST is not.
     expect(statSync(dst).size).toBe(bytes.length);
     expect(Buffer.compare(Buffer.from(bytes), readFileSync(dst))).toBe(0);
-    expect(reflinked).toBeTypeOf('boolean');
+    expect(reflinked).toBeTypeOf("boolean");
   });
 });

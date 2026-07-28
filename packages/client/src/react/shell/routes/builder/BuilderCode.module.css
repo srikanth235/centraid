@@ -80,7 +80,7 @@
 .treeRow:hover {
   background: var(--bg-sunken);
 }
-.treeRow[data-active='true'] {
+.treeRow[data-active="true"] {
   background: var(--bg-sunken);
   color: var(--ink);
   font-weight: 500;
@@ -94,7 +94,7 @@
   color: var(--ink-3);
   transition: transform 0.12s;
 }
-.treeChevron[data-open='true'] {
+.treeChevron[data-open="true"] {
   transform: rotate(90deg);
 }
 .treeChevronSpacer {
@@ -112,7 +112,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
   font-size: 12px;
 }
 .treeEmpty {
@@ -149,7 +149,7 @@
   gap: 6px;
   flex: none;
 }
-.tabActions .tabActionBtn[data-active='true'] {
+.tabActions .tabActionBtn[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
@@ -161,7 +161,7 @@
   border-bottom: 2px solid transparent;
   max-width: 200px;
 }
-.tab[data-active='true'] {
+.tab[data-active="true"] {
   border-bottom-color: var(--accent);
 }
 .tabDot {
@@ -171,14 +171,14 @@
   flex: none;
   background: var(--c-blue, #4f8fe0);
 }
-.tabDot[data-lang='css'] {
+.tabDot[data-lang="css"] {
   background: var(--c-orange, #e08c45);
 }
-.tabDot[data-lang='js'],
-.tabDot[data-lang='ts'] {
+.tabDot[data-lang="js"],
+.tabDot[data-lang="ts"] {
   background: var(--c-yellow, #d4b445);
 }
-.tabDot[data-lang='md'] {
+.tabDot[data-lang="md"] {
   background: var(--c-violet, #7c5bd9);
 }
 .tabLabel {
@@ -192,7 +192,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tab[data-active='true'] .tabLabel {
+.tab[data-active="true"] .tabLabel {
   font-weight: 600;
   color: var(--ink);
 }
@@ -213,7 +213,7 @@
   background: var(--bg-sunken);
   color: var(--ink);
 }
-.tab[data-dirty='true'] .tabClose {
+.tab[data-dirty="true"] .tabClose {
   background: var(--accent);
   width: 7px;
   height: 7px;
@@ -283,7 +283,7 @@
 .editGutterInner {
   padding: 12px 10px 12px 14px;
   text-align: right;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
   font-size: 12px;
   line-height: 1.65;
   color: var(--ink-4);
@@ -304,7 +304,7 @@
 .editTa {
   margin: 0;
   padding: 12px 16px;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
   font-size: 12px;
   line-height: 1.65;
   white-space: pre;
@@ -336,7 +336,7 @@
   flex: 1;
   overflow: auto;
   padding: 8px 0;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -344,10 +344,10 @@
   display: flex;
   white-space: pre;
 }
-.diffRow[data-type='add'] {
+.diffRow[data-type="add"] {
   background: color-mix(in srgb, var(--c-forest, #3fb950) 14%, transparent);
 }
-.diffRow[data-type='del'] {
+.diffRow[data-type="del"] {
   background: color-mix(in srgb, var(--c-rose, #f0506e) 14%, transparent);
 }
 .diffNum {
@@ -364,10 +364,10 @@
   text-align: center;
   color: var(--ink-3);
 }
-.diffRow[data-type='add'] .diffSign {
+.diffRow[data-type="add"] .diffSign {
   color: var(--c-forest, #3fb950);
 }
-.diffRow[data-type='del'] .diffSign {
+.diffRow[data-type="del"] .diffSign {
   color: var(--c-rose, #f0506e);
 }
 .diffText {
@@ -441,25 +441,25 @@
   /* Sit on the same baseline as the chevron spacer beside it. */
   margin: 0 3px;
 }
-.treeLangDot[data-lang='html'] {
+.treeLangDot[data-lang="html"] {
   background: var(--c-blue, #4f8fe0);
 }
-.treeLangDot[data-lang='css'] {
+.treeLangDot[data-lang="css"] {
   background: var(--c-orange, #e08c45);
 }
-.treeLangDot[data-lang='js'],
-.treeLangDot[data-lang='ts'] {
+.treeLangDot[data-lang="js"],
+.treeLangDot[data-lang="ts"] {
   background: var(--c-yellow, #d4b445);
 }
-.treeLangDot[data-lang='md'] {
+.treeLangDot[data-lang="md"] {
   background: var(--c-violet, #7c5bd9);
 }
-.treeRow[data-active='true'] {
+.treeRow[data-active="true"] {
   position: relative;
   background: hsla(229 91% 63% / 0.08);
 }
-.treeRow[data-active='true']::before {
-  content: '';
+.treeRow[data-active="true"]::before {
+  content: "";
   position: absolute;
   left: 2px;
   top: 5px;

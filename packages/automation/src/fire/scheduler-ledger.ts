@@ -42,13 +42,13 @@
  * ref — those always contain `/`) keys one JSON blob per vault.
  */
 
-import { cronTriggersOf, type Trigger } from '../manifest/manifest.js';
-import { cronMatches } from './cron-match.js';
+import { cronTriggersOf, type Trigger } from "../manifest/manifest.js";
+import { cronMatches } from "./cron-match.js";
 
 /** Reserved `automation_state.automation_id` — never a real ref (those contain `/`). */
-export const SCHEDULER_LEDGER_AUTOMATION_ID = '__scheduler';
+export const SCHEDULER_LEDGER_AUTOMATION_ID = "__scheduler";
 /** Reserved `automation_state.key` for the one ledger blob. */
-export const SCHEDULER_LEDGER_KEY = 'ledger';
+export const SCHEDULER_LEDGER_KEY = "ledger";
 
 /** Ring-buffer bound so a long-neglected gateway doesn't grow this unbounded. */
 const MAX_MISSED_ENTRIES = 200;
@@ -60,7 +60,7 @@ export interface MissedWindowEntry {
   readonly scheduledFor: string;
   /** ISO instant the gap was detected (the tick that noticed it). */
   readonly recordedAt: string;
-  readonly reason: 'gateway-down';
+  readonly reason: "gateway-down";
 }
 
 export interface SchedulerLedgerSnapshot {
@@ -80,15 +80,21 @@ const EMPTY_SNAPSHOT: SchedulerLedgerSnapshot = { missed: [] };
  * throws) — a ledger read is diagnostics, not a load-bearing path.
  */
 export function parseSchedulerLedgerSnapshot(
-  json: string | null | undefined,
+  json: string | null | undefined
 ): SchedulerLedgerSnapshot {
   if (!json) return EMPTY_SNAPSHOT;
   try {
     const parsed = JSON.parse(json) as Partial<SchedulerLedgerSnapshot>;
     return {
-      ...(typeof parsed.lastTickAt === 'string' ? { lastTickAt: parsed.lastTickAt } : {}),
-      ...(typeof parsed.dormant === 'boolean' ? { dormant: parsed.dormant } : {}),
-      missed: Array.isArray(parsed.missed) ? (parsed.missed as MissedWindowEntry[]) : [],
+      ...(typeof parsed.lastTickAt === "string"
+        ? { lastTickAt: parsed.lastTickAt }
+        : {}),
+      ...(typeof parsed.dormant === "boolean"
+        ? { dormant: parsed.dormant }
+        : {}),
+      missed: Array.isArray(parsed.missed)
+        ? (parsed.missed as MissedWindowEntry[])
+        : [],
     };
   } catch {
     return EMPTY_SNAPSHOT;
@@ -100,8 +106,16 @@ export function parseSchedulerLedgerSnapshot(
  * subset of `ConversationStore` so tests can satisfy it without casts.
  */
 export interface SchedulerLedgerKv {
-  stateGet: (automationId: string, key: string) => { valueJson: string } | undefined;
-  stateSet: (automationId: string, key: string, valueJson: string, updatedAt: number) => void;
+  stateGet: (
+    automationId: string,
+    key: string
+  ) => { valueJson: string } | undefined;
+  stateSet: (
+    automationId: string,
+    key: string,
+    valueJson: string,
+    updatedAt: number
+  ) => void;
 }
 
 /** `automation_state`-backed persistence for one vault's scheduler ledger. */
@@ -109,7 +123,10 @@ export class SchedulerLedgerStore {
   constructor(private readonly store: SchedulerLedgerKv) {}
 
   load(): SchedulerLedgerSnapshot {
-    const entry = this.store.stateGet(SCHEDULER_LEDGER_AUTOMATION_ID, SCHEDULER_LEDGER_KEY);
+    const entry = this.store.stateGet(
+      SCHEDULER_LEDGER_AUTOMATION_ID,
+      SCHEDULER_LEDGER_KEY
+    );
     return parseSchedulerLedgerSnapshot(entry?.valueJson);
   }
 
@@ -118,7 +135,7 @@ export class SchedulerLedgerStore {
       SCHEDULER_LEDGER_AUTOMATION_ID,
       SCHEDULER_LEDGER_KEY,
       JSON.stringify(snapshot),
-      Date.now(),
+      Date.now()
     );
   }
 
@@ -182,12 +199,17 @@ export interface ComputeMissedWindowsOptions {
  * `graceMs` (ordinary minute-to-minute cadence, or a fast restart, is not
  * an "outage").
  */
-export function computeMissedWindows(opts: ComputeMissedWindowsOptions): MissedWindowEntry[] {
+export function computeMissedWindows(
+  opts: ComputeMissedWindowsOptions
+): MissedWindowEntry[] {
   const grace = opts.graceMs ?? PERIOD_MS * 3;
   const gapMs = opts.now.getTime() - opts.lastTickAt.getTime();
   if (gapMs <= grace) return [];
 
-  const scanStartMs = Math.max(opts.lastTickAt.getTime(), opts.now.getTime() - MAX_SCAN_MS);
+  const scanStartMs = Math.max(
+    opts.lastTickAt.getTime(),
+    opts.now.getTime() - MAX_SCAN_MS
+  );
   const nowMinuteMs = floorToMinute(opts.now.getTime());
   const recordedAt = opts.now.toISOString();
   const out: MissedWindowEntry[] = [];
@@ -197,9 +219,17 @@ export function computeMissedWindows(opts: ComputeMissedWindowsOptions): MissedW
     // Earliest-only: stop at the first matching minute so a long gap costs
     // at most `min(gap, MAX_SCAN_MS) / PERIOD_MS` cronMatches calls per
     // automation, not a full scan when the automation fires often.
-    for (let t = floorToMinute(scanStartMs) + PERIOD_MS; t < nowMinuteMs; t += PERIOD_MS) {
+    for (
+      let t = floorToMinute(scanStartMs) + PERIOD_MS;
+      t < nowMinuteMs;
+      t += PERIOD_MS
+    ) {
       const candidate = new Date(t);
-      if (entry.crons.some((expr, i) => cronMatches(expr, candidate, entry.cronTimeZones?.[i]))) {
+      if (
+        entry.crons.some((expr, i) =>
+          cronMatches(expr, candidate, entry.cronTimeZones?.[i])
+        )
+      ) {
         scheduledForMs = t;
         break;
       }
@@ -209,7 +239,7 @@ export function computeMissedWindows(opts: ComputeMissedWindowsOptions): MissedW
         automationRef: entry.ref,
         scheduledFor: new Date(scheduledForMs).toISOString(),
         recordedAt,
-        reason: 'gateway-down',
+        reason: "gateway-down",
       });
     }
   }
@@ -241,7 +271,7 @@ export interface RecordSchedulerTickOptions {
  * Returns the entries just recorded (empty on the common path).
  */
 export function recordSchedulerTick(
-  opts: RecordSchedulerTickOptions,
+  opts: RecordSchedulerTickOptions
 ): readonly MissedWindowEntry[] {
   const snapshot = opts.ledger.load();
   let missed: readonly MissedWindowEntry[] = [];

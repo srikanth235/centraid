@@ -2,10 +2,10 @@
 export class CliFailError extends Error {
   constructor(
     message: string,
-    readonly code: number,
+    readonly code: number
   ) {
     super(message);
-    this.name = 'CliFailError';
+    this.name = "CliFailError";
   }
 }
 
@@ -26,11 +26,11 @@ export async function capture(fn: () => Promise<void> | void): Promise<string> {
   } finally {
     process.stdout.write = original;
   }
-  const joined = chunks.join('');
+  const joined = chunks.join("");
   return joined;
 }
 
 export function lastJson(text: string): Record<string, unknown> {
-  const lines = text.trim().split('\n').filter(Boolean);
+  const lines = text.trim().split("\n").filter(Boolean);
   return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
 }

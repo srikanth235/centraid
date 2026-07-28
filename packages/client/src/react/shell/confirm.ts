@@ -1,7 +1,7 @@
-import { cx } from '../ui/cx.js';
+import { cx } from "../ui/cx.js";
 
-import modalCss from '../styles/modal.module.css';
-import buttonCss from '../ui/Button.module.css';
+import modalCss from "../styles/modal.module.css";
+import buttonCss from "../ui/Button.module.css";
 // Confirm dialog — a promise-based modal (backdrop + card + Cancel/Confirm,
 // Esc = cancel, Enter = confirm). It portals to document.body and resolves a
 // boolean, so it's imperatively awaitable from any route regardless of who
@@ -24,58 +24,61 @@ export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
     const finish = (result: boolean): void => {
       if (settled) return;
       settled = true;
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
       backdrop.remove();
       card.remove();
       resolve(result);
     };
 
-    const backdrop = document.createElement('div');
-    backdrop.className = modalCss.backdrop ?? '';
-    backdrop.dataset.testid = 'modal-backdrop';
-    backdrop.addEventListener('click', () => finish(false));
+    const backdrop = document.createElement("div");
+    backdrop.className = modalCss.backdrop ?? "";
+    backdrop.dataset.testid = "modal-backdrop";
+    backdrop.addEventListener("click", () => finish(false));
 
-    const card = document.createElement('div');
-    card.className = modalCss.card ?? '';
-    card.setAttribute('role', 'dialog');
-    card.setAttribute('aria-label', opts.title);
+    const card = document.createElement("div");
+    card.className = modalCss.card ?? "";
+    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-label", opts.title);
 
-    const closeBtn = document.createElement('button');
+    const closeBtn = document.createElement("button");
     closeBtn.className = cx(buttonCss.icon, modalCss.close);
-    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.setAttribute("aria-label", "Close");
     closeBtn.innerHTML = X_SVG;
-    closeBtn.addEventListener('click', () => finish(false));
+    closeBtn.addEventListener("click", () => finish(false));
 
-    const heading = document.createElement('h3');
+    const heading = document.createElement("h3");
     heading.textContent = opts.title;
-    const body = document.createElement('p');
+    const body = document.createElement("p");
     body.textContent = opts.message;
 
-    const cancelBtn = document.createElement('button');
+    const cancelBtn = document.createElement("button");
     cancelBtn.className = cx(buttonCss.btn, buttonCss.ghost);
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => finish(false));
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", () => finish(false));
 
-    const confirmBtn = document.createElement('button');
-    confirmBtn.className = cx(buttonCss.btn, opts.danger ? modalCss.danger : buttonCss.primary);
-    confirmBtn.textContent = opts.confirmLabel ?? 'Confirm';
-    confirmBtn.addEventListener('click', () => finish(true));
+    const confirmBtn = document.createElement("button");
+    confirmBtn.className = cx(
+      buttonCss.btn,
+      opts.danger ? modalCss.danger : buttonCss.primary
+    );
+    confirmBtn.textContent = opts.confirmLabel ?? "Confirm";
+    confirmBtn.addEventListener("click", () => finish(true));
 
-    const actions = document.createElement('div');
-    actions.className = modalCss.actions ?? '';
+    const actions = document.createElement("div");
+    actions.className = modalCss.actions ?? "";
     actions.append(cancelBtn, confirmBtn);
     card.append(closeBtn, heading, body, actions);
 
     function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         finish(false);
-      } else if (e.key === 'Enter') {
+      } else if (e.key === "Enter") {
         e.preventDefault();
         finish(true);
       }
     }
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
 
     document.body.append(backdrop, card);
     setTimeout(() => confirmBtn.focus(), 30);

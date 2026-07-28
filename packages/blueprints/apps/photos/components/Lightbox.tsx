@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useState } from "react";
 
-import { toggleFavorite } from '../assets-actions.ts';
-import { assetBytes, isAudioAsset, isRenderableUri, isVideoAsset } from '../format.ts';
+import { toggleFavorite } from "../assets-actions.ts";
+import {
+  assetBytes,
+  isAudioAsset,
+  isRenderableUri,
+  isVideoAsset,
+} from "../format.ts";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -13,7 +18,7 @@ import {
   PlayIcon,
   ShareIcon,
   TrashIcon,
-} from '../icons.tsx';
+} from "../icons.tsx";
 // The redesigned lightbox: near-black stage with prev/next arrows and a
 // bottom filmstrip, a top bar of icon actions, and the info panel (split out
 // to LightboxInfo.tsx — see its header comment). `refresh`/`onClose` are the
@@ -23,15 +28,15 @@ import {
 // EditorView), which only the shell here can do.
 // CSS split: React-owned classes in Lightbox.module.css; the imperatively
 // toggled `zoomable`/`zoomed`/`is-placeholder` markers stay global strings.
-import { fmtBytes, toast } from '../kit.ts';
-import { gridSrc } from '../media.ts';
-import { act, narrate } from '../outcomes.ts';
-import { canWriteScope, scopeAttr } from '../scopes.ts';
-import type { Album, Asset, Place } from '../types.ts';
-import { EditorView } from './Editor.tsx';
-import { LightboxInfo } from './LightboxInfo.tsx';
+import { fmtBytes, toast } from "../kit.ts";
+import { gridSrc } from "../media.ts";
+import { act, narrate } from "../outcomes.ts";
+import { canWriteScope, scopeAttr } from "../scopes.ts";
+import type { Album, Asset, Place } from "../types.ts";
+import { EditorView } from "./Editor.tsx";
+import { LightboxInfo } from "./LightboxInfo.tsx";
 
-import styles from './Lightbox.module.css';
+import styles from "./Lightbox.module.css";
 
 interface Dims {
   width: number;
@@ -39,7 +44,9 @@ interface Dims {
 }
 
 function withProbedDims(asset: Asset, probed: Dims | null): Asset {
-  return probed && asset.width == null && asset.height == null ? { ...asset, ...probed } : asset;
+  return probed && asset.width == null && asset.height == null
+    ? { ...asset, ...probed }
+    : asset;
 }
 
 // Double-click zooms the stage image; while zoomed a pointer drag pans it —
@@ -52,18 +59,20 @@ function wireZoom(img: HTMLImageElement): void {
   let startX = 0;
   let startY = 0;
   const apply = () => {
-    img.style.transform = zoomed ? `translate(${panX}px, ${panY}px) scale(2.5)` : '';
-    img.classList.toggle('zoomed', zoomed);
+    img.style.transform = zoomed
+      ? `translate(${panX}px, ${panY}px) scale(2.5)`
+      : "";
+    img.classList.toggle("zoomed", zoomed);
   };
-  img.classList.add('zoomable');
-  img.addEventListener('dblclick', (e) => {
+  img.classList.add("zoomable");
+  img.addEventListener("dblclick", (e) => {
     e.stopPropagation();
     zoomed = !zoomed;
     panX = 0;
     panY = 0;
     apply();
   });
-  img.addEventListener('pointerdown', (e) => {
+  img.addEventListener("pointerdown", (e) => {
     if (!zoomed) return;
     dragging = true;
     startX = e.clientX - panX;
@@ -71,7 +80,7 @@ function wireZoom(img: HTMLImageElement): void {
     img.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
-  img.addEventListener('pointermove', (e) => {
+  img.addEventListener("pointermove", (e) => {
     if (!dragging) return;
     panX = e.clientX - startX;
     panY = e.clientY - startY;
@@ -80,9 +89,9 @@ function wireZoom(img: HTMLImageElement): void {
   const stop = () => {
     dragging = false;
   };
-  img.addEventListener('pointerup', stop);
-  img.addEventListener('pointercancel', stop);
-  img.addEventListener('click', (e) => e.stopPropagation());
+  img.addEventListener("pointerup", stop);
+  img.addEventListener("pointercancel", stop);
+  img.addEventListener("click", (e) => e.stopPropagation());
 }
 
 // `onDims` fires once, on load, only when the asset row itself carries no
@@ -90,7 +99,13 @@ function wireZoom(img: HTMLImageElement): void {
 // didn't probe) — the same "derive it from the live image" fallback the
 // pre-redesign lightbox had, just re-hosted here instead of behind a
 // PanelBody-owned ref.
-export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: number) => void }) {
+export function Stage({
+  asset,
+  onDims,
+}: {
+  asset: Asset;
+  onDims: (w: number, h: number) => void;
+}) {
   // Every branch below points at this asset's bytes, and the lightbox steps
   // through a MERGED list, so each one names the scope those bytes live in
   // (issue #599) — see fillTileMedia's note on why an unstamped reference in a
@@ -106,7 +121,7 @@ export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: 
         controls
         preload="metadata"
         poster={asset.poster_uri ?? undefined}
-        aria-label={asset.title ?? 'Video'}
+        aria-label={asset.title ?? "Video"}
       />
     );
   }
@@ -118,7 +133,7 @@ export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: 
           src={asset.content_uri ?? undefined}
           controls
           preload="metadata"
-          aria-label={asset.title ?? 'Audio'}
+          aria-label={asset.title ?? "Audio"}
         >
           {/* The vault has no caption sidecar for media assets yet, so there is
               nothing to point `src` at — this is the wiring point for when it
@@ -132,49 +147,63 @@ export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: 
   if (isRenderableUri(asset.content_uri)) {
     const displaySrc = asset.preview_uri ?? asset.content_uri ?? undefined;
     const needsProbe =
-      displaySrc === asset.content_uri && (asset.width == null || asset.height == null);
+      displaySrc === asset.content_uri &&
+      (asset.width == null || asset.height == null);
     return (
       <img
         data-scope={scope}
         src={displaySrc}
-        alt={asset.title ?? asset.kind ?? 'Photo'}
+        alt={asset.title ?? asset.kind ?? "Photo"}
         decoding="async"
         ref={(el) => {
           if (!el || el.dataset.zoomWired) return;
-          el.dataset.zoomWired = '1';
+          el.dataset.zoomWired = "1";
           wireZoom(el);
         }}
         onLoad={(e) => {
-          if (needsProbe) onDims(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight);
+          if (needsProbe)
+            onDims(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight);
         }}
         onError={(e) => {
-          if (e.currentTarget.dataset.originalFallback || displaySrc === asset.content_uri) return;
-          e.currentTarget.dataset.originalFallback = '1';
-          e.currentTarget.src = asset.content_uri ?? '';
+          if (
+            e.currentTarget.dataset.originalFallback ||
+            displaySrc === asset.content_uri
+          )
+            return;
+          e.currentTarget.dataset.originalFallback = "1";
+          e.currentTarget.src = asset.content_uri ?? "";
         }}
       />
     );
   }
-  return <div className={styles.placeholder}>{asset.media_type ?? asset.kind ?? 'media'}</div>;
+  return (
+    <div className={styles.placeholder}>
+      {asset.media_type ?? asset.kind ?? "media"}
+    </div>
+  );
 }
 
 function dateLine(asset: Asset): string {
   const t = asset.taken_at ? new Date(asset.taken_at) : null;
   const when =
     t && !Number.isNaN(t.getTime())
-      ? t.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })
+      ? t.toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })
       : null;
-  return [when, asset.place?.name].filter(Boolean).join(' · ') || fmtBytes(assetBytes(asset));
+  return (
+    [when, asset.place?.name].filter(Boolean).join(" · ") ||
+    fmtBytes(assetBytes(asset))
+  );
 }
 
 async function handleShare(asset: Asset): Promise<void> {
   const url =
-    typeof asset.content_uri === 'string' && asset.content_uri.startsWith('data:')
+    typeof asset.content_uri === "string" &&
+    asset.content_uri.startsWith("data:")
       ? location.href
-      : (asset.content_uri ?? '');
+      : (asset.content_uri ?? "");
   if (navigator.share) {
     try {
-      await navigator.share({ title: asset.title ?? 'Photo', url });
+      await navigator.share({ title: asset.title ?? "Photo", url });
       return;
     } catch {
       return; // the user cancelled the native share sheet — not an error
@@ -183,13 +212,13 @@ async function handleShare(asset: Asset): Promise<void> {
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(url);
-      toast('Link copied.');
+      toast("Link copied.");
       return;
     } catch {
       /* fall through */
     }
   }
-  toast('Sharing isn’t available in this browser.');
+  toast("Sharing isn’t available in this browser.");
 }
 
 export function LightboxShell({
@@ -234,11 +263,18 @@ export function LightboxShell({
   return (
     <div className={styles.lightbox}>
       <div className={styles.topbar}>
-        <button type="button" className={styles.iconBtn} aria-label="Close" onClick={onClose}>
+        <button
+          type="button"
+          className={styles.iconBtn}
+          aria-label="Close"
+          onClick={onClose}
+        >
           <CloseIcon />
         </button>
         <div className={styles.heading}>
-          <div className={styles.title}>{asset.title || asset.place?.name || 'Photo'}</div>
+          <div className={styles.title}>
+            {asset.title || asset.place?.name || "Photo"}
+          </div>
           <div className={styles.dateline}>{dateLine(displayAsset)}</div>
         </div>
         {editing ? null : (
@@ -247,9 +283,11 @@ export function LightboxShell({
               type="button"
               className={styles.iconBtn}
               disabled={!canWrite}
-              data-active={asset.favorite ? 'true' : 'false'}
-              aria-pressed={asset.favorite ? 'true' : 'false'}
-              aria-label={asset.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              data-active={asset.favorite ? "true" : "false"}
+              aria-pressed={asset.favorite ? "true" : "false"}
+              aria-label={
+                asset.favorite ? "Remove from favorites" : "Add to favorites"
+              }
               onClick={() => toggleFavorite(asset, refresh)}
             >
               <HeartIcon filled={!!asset.favorite} />
@@ -262,7 +300,9 @@ export function LightboxShell({
             >
               <PlayIcon />
             </button>
-            {isRenderableUri(asset.content_uri) && !isVideoAsset(asset) && canWrite ? (
+            {isRenderableUri(asset.content_uri) &&
+            !isVideoAsset(asset) &&
+            canWrite ? (
               <button
                 type="button"
                 className={styles.iconBtn}
@@ -273,13 +313,15 @@ export function LightboxShell({
               </button>
             ) : null}
             {isRenderableUri(asset.content_uri) ||
-            String(asset.content_uri ?? '').startsWith('data:') ? (
+            String(asset.content_uri ?? "").startsWith("data:") ? (
               <a
                 className={styles.iconBtn}
                 data-scope={scopeAttr(asset.scope_id)}
                 aria-label="Download"
                 href={asset.content_uri ?? undefined}
-                download={(asset.title ?? '').trim() || `photo-${asset.asset_id}`}
+                download={
+                  (asset.title ?? "").trim() || `photo-${asset.asset_id}`
+                }
               >
                 <DownloadIcon />
               </a>
@@ -299,16 +341,20 @@ export function LightboxShell({
               aria-label="Delete"
               onClick={async () => {
                 const outcome = await act(
-                  'delete-asset',
+                  "delete-asset",
                   { asset_id: asset.asset_id },
-                  asset.scope_id,
+                  asset.scope_id
                 );
                 if (narrate(outcome)) {
                   onClose();
-                  toast('Moved to trash — it leaves every album it was in.', {
-                    undoLabel: 'Undo',
+                  toast("Moved to trash — it leaves every album it was in.", {
+                    undoLabel: "Undo",
                     onUndo: async () => {
-                      await act('restore', { asset_id: asset.asset_id }, asset.scope_id);
+                      await act(
+                        "restore",
+                        { asset_id: asset.asset_id },
+                        asset.scope_id
+                      );
                       await refresh();
                     },
                   });
@@ -321,8 +367,8 @@ export function LightboxShell({
             <button
               type="button"
               className={styles.iconBtn}
-              data-active={infoOpen ? 'true' : 'false'}
-              aria-pressed={infoOpen ? 'true' : 'false'}
+              data-active={infoOpen ? "true" : "false"}
+              aria-pressed={infoOpen ? "true" : "false"}
               aria-label="Info"
               onClick={() => setInfoOpen((v) => !v)}
             >
@@ -402,10 +448,12 @@ export function LightboxShell({
             return (
               <button
                 // Scope-qualified for the same reason the grid's tiles are.
-                key={`${a.scope_id ?? ''}:${a.asset_id}`}
+                key={`${a.scope_id ?? ""}:${a.asset_id}`}
                 type="button"
-                className={src ? styles.frame : `${styles.frame} is-placeholder`}
-                data-active={a.asset_id === asset.asset_id ? 'true' : 'false'}
+                className={
+                  src ? styles.frame : `${styles.frame} is-placeholder`
+                }
+                data-active={a.asset_id === asset.asset_id ? "true" : "false"}
                 /* The strip mixes scopes: each frame names its own so the
                    authorizer's nearest-ancestor lookup finds the right one. */
                 data-scope={scopeAttr(a.scope_id)}
@@ -415,7 +463,9 @@ export function LightboxShell({
                   onStep(i - idx);
                 }}
               >
-                {src ? <img src={src} loading="lazy" decoding="async" alt="" /> : null}
+                {src ? (
+                  <img src={src} loading="lazy" decoding="async" alt="" />
+                ) : null}
               </button>
             );
           })}

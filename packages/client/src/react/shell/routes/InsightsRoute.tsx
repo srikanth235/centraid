@@ -1,11 +1,15 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX } from "react";
 
-import { getGatewayHealth, getInsightsSummary, listAutomations } from '../../../gateway-client.js';
-import InsightsScreen from '../../screens/InsightsScreen.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
-import { PageEmpty, PageLoading } from '../status.js';
-import { useAsyncData } from '../useAsyncData.js';
+import {
+  getGatewayHealth,
+  getInsightsSummary,
+  listAutomations,
+} from "../../../gateway-client.js";
+import InsightsScreen from "../../screens/InsightsScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import { PageEmpty, PageLoading } from "../status.js";
+import { useAsyncData } from "../useAsyncData.js";
 
 // Insights route (#514): fetches summary for a chosen window, resolves
 // automation display names from the live list, deep-links automation runs.
@@ -27,29 +31,32 @@ export default function InsightsRoute(): JSX.Element {
       resourceUsage: health?.metrics?.resourceUsage,
       ...summary,
       bySource: summary.bySource.map((row) =>
-        row.kind === 'automation'
+        row.kind === "automation"
           ? {
               ...row,
               label: nameByRef.get(row.key) ?? row.automationName ?? row.key,
             }
-          : row,
+          : row
       ),
       recent: summary.recent.map((row) =>
         row.automationRef
           ? {
               ...row,
-              label: nameByRef.get(row.automationRef) ?? row.automationName ?? row.automationRef,
+              label:
+                nameByRef.get(row.automationRef) ??
+                row.automationName ??
+                row.automationRef,
             }
-          : row,
+          : row
       ),
     };
   }, [windowDays]);
 
   return (
     <PageScroll>
-      {state.status === 'loading' ? (
+      {state.status === "loading" ? (
         <PageLoading label="Loading insights…" />
-      ) : state.status === 'error' ? (
+      ) : state.status === "error" ? (
         <PageEmpty message={`Couldn’t load insights: ${state.error}`} />
       ) : (
         <InsightsScreen
@@ -57,7 +64,9 @@ export default function InsightsRoute(): JSX.Element {
           resourceUsage={state.data.resourceUsage}
           windowDays={windowDays}
           onWindowDays={setWindowDays}
-          onOpenRun={(automationId, runId) => navigate({ kind: 'run-view', automationId, runId })}
+          onOpenRun={(automationId, runId) =>
+            navigate({ kind: "run-view", automationId, runId })
+          }
         />
       )}
     </PageScroll>

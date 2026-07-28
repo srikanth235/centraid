@@ -7,14 +7,14 @@
  * routing, and `onFailure` address it by (issue #98).
  */
 
-import { isValidAppId } from '@centraid/app-engine';
+import { isValidAppId } from "@centraid/app-engine";
 
 /**
  * Validate an automation *id* (the directory slug under `automations/`).
  * Filesystem-safe; unique within its owning app.
  */
 export function isValidId(id: string): boolean {
-  if (typeof id !== 'string' || id.length === 0) return false;
+  if (typeof id !== "string" || id.length === 0) return false;
   return /^[A-Za-z0-9_-]+$/u.test(id);
 }
 
@@ -39,7 +39,7 @@ export function formatRef(appId: string, automationId: string): string {
  * malformed handle.
  */
 export function parseRef(ref: string, withinApp?: string): Ref | undefined {
-  const slash = ref.indexOf('/');
+  const slash = ref.indexOf("/");
   if (slash === -1) {
     if (!withinApp || !isValidId(ref)) return undefined;
     return { appId: withinApp, automationId: ref };
@@ -52,7 +52,7 @@ export function parseRef(ref: string, withinApp?: string): Ref | undefined {
 
 /** True for a syntactically valid automation handle (with or without app prefix). */
 export function isValidRef(ref: string): boolean {
-  const slash = ref.indexOf('/');
+  const slash = ref.indexOf("/");
   if (slash === -1) return isValidId(ref);
   return isValidAppId(ref.slice(0, slash)) && isValidId(ref.slice(slash + 1));
 }

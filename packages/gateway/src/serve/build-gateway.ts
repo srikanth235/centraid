@@ -29,10 +29,26 @@
  * in every vault fire regardless of which vault any client looks at.
  */
 
-import crypto from 'node:crypto';
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+
+import {
+  runAutomation,
+  runPreflight,
+  runTurn,
+  CatalogWarmer,
+  deriveStatus,
+  readRunnerModels,
+  enumerateRunnerModels,
+  probeCliAvailability,
+  resolveAcpCapabilities,
+  type CatalogSurface,
+  type RunnerKind,
+  type RunnerPrefs,
+  type SurfaceStatus,
+} from "@centraid/agent-runtime";
 import {
   AnalyticsStore,
   ASSISTANT_APP_ID,
@@ -72,28 +88,14 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type VaultWorkspace,
-} from '@centraid/app-engine';
-import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
-import * as automation from '@centraid/automation';
-import { ROUTES } from '@centraid/protocol';
-import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
-import { findSequentially, forEachSequentially } from './sequential.js';
-import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
+} from "@centraid/app-engine";
+import * as automation from "@centraid/automation";
 import {
-  runAutomation,
-  runPreflight,
-  runTurn,
-  CatalogWarmer,
-  deriveStatus,
-  readRunnerModels,
-  enumerateRunnerModels,
-  probeCliAvailability,
-  resolveAcpCapabilities,
-  type CatalogSurface,
-  type RunnerKind,
-  type RunnerPrefs,
-  type SurfaceStatus,
-} from '@centraid/agent-runtime';
+  KIT_DIR,
+  bundledAppDir,
+  listBundledAppTemplates,
+} from "@centraid/blueprints";
+import { ROUTES } from "@centraid/protocol";
 import {
   KeyStore,
   readBlobStoreSettings,
@@ -101,118 +103,136 @@ import {
   jitterDelayMs,
   type FilterClause,
   type PreviewCodec,
-} from '@centraid/vault';
-import { createImagePreviewCodec } from '../preview/codec.js';
-import { WorktreeStore } from '../worktree-store/index.js';
-import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
-import { createDiskHealthProbe, formatBytes } from './disk-health.js';
-import { LocalUsageScanner } from './local-usage.js';
-import { StorageLimitsStore, evaluateStorageLimit } from './storage-limits.js';
-import { createBrokerHealthProbe } from './broker-health.js';
-import { createSchedulerHealthProbe } from './scheduler-health.js';
-import { createEnrichmentHealthProbe } from './enrichment-health.js';
-import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
-import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
-import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
+} from "@centraid/vault";
+
+import type { BackupConfig } from "../backup/backup-config.js";
+import { BackupService } from "../backup/backup-service.js";
+import { deriveBackupSourceInstanceId } from "../backup/backup-state.js";
+import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
+import { openStorageConnectionStore } from "../backup/storage-connections.js";
+import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
+import { StorageUsagePoller } from "../backup/storage-usage.js";
 import {
-  removedRunnerLadderMembers,
-  resolveGatewayRunnerPrefs,
-  resolveStrictGatewayRunnerPrefs,
-} from './runner-prefs.js';
-import { GatewayDatabase } from './gateway-db.js';
-import { ConnectionBroker } from './connection-broker.js';
-import { pollProviderEventSource } from './automation-event-sources.js';
-import { reviseAutomationInstructions } from '../lifecycle/automation-revision.js';
+  closeJournalConversationStores,
+  journalConversationStore,
+} from "../journal-stores.js";
 import {
-  ingressElement,
-  ingressRetentionGap,
-  readIngressCursor,
-} from './trigger-ingress-cursor.js';
-import type { AssistOAuthConfig } from './assist-oauth.js';
-import { OutboxExecutor } from './outbox-executor.js';
-import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
-import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
-import { EnrollmentStore } from './enrollment-store.js';
-import type { PairingTicketStore } from './pairing-store.js';
-import { makeVaultRouteHandler } from '../routes/vault-routes.js';
-import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
-import { makeMembersRouteHandler } from '../routes/members-routes.js';
-import { makeScopesRouteHandler, SCOPES_PATH } from '../routes/scopes-routes.js';
-import { makeShareRouteHandler, SHARE_PATH } from '../routes/share-routes.js';
-import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
-import { companionRequestAllowed } from './companion-access.js';
-import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
-import type { ReplicaIntentDispatchOutcome } from '../routes/replica-intent-route.js';
-import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
-import { makeDemoRouteHandler } from '../routes/demo-routes.js';
-import { makeImportRouteHandler } from '../routes/import-routes.js';
-import { makeBlobRouteHandler } from '../routes/blob-routes.js';
+  resolveAutomationAgentSelection,
+  resolveAutomationRewriteModel,
+  type AutomationAgentSelection,
+} from "../lifecycle/automation-agent-selection.js";
 import {
-  makeDataPlaneControlHandler,
-  type DataPlaneControlOptions,
-} from '../routes/data-plane-control.js';
-import type { DataPlaneHttpOptions } from './data-plane-handoff.js';
-import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
-import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
+  resolveAutomationAnchors,
+  scopesForAutomationAnchors,
+} from "../lifecycle/automation-anchor-scopes.js";
+import { reviseAutomationInstructions } from "../lifecycle/automation-revision.js";
 import {
-  makeAutomationsRouteHandler,
-  turnEventsSubscriberCount,
-} from '../routes/automations-routes.js';
-import { RunEventBus } from '../runs/run-event-bus.js';
-import { defaultLogger } from './default-logger.js';
-import { GatewayLogStore } from './gateway-log-store.js';
-import { buildDiagnosticsBundle } from './gateway-diagnostics.js';
-import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
-import { makeBackupRouteHandler } from '../routes/backup-routes.js';
-import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
+  makeDraftCodeDirResolver,
+  type ExtBandOps,
+} from "../lifecycle/ext-band.js";
+import {
+  finalizeCompiledManifest,
+  recordFailedAutomationCompile,
+  runHeadlessAutomationCompile,
+} from "../lifecycle/headless-automation-compile.js";
+import { runInteractiveAutomationTurn } from "../lifecycle/interactive-automation-turn.js";
 import {
   ensureSession,
   prepareLifecycleSession,
   publishAndReconcile,
   stageAndMaybePublish,
   type LifecycleRouteOptions,
-} from '../lifecycle/lifecycle-shared.js';
+} from "../lifecycle/lifecycle-shared.js";
+import { rewriteAutomationInstructions } from "../lifecycle/rewrite-automation-instructions.js";
+import type { GatewayPaths } from "../paths.js";
+import { createImagePreviewCodec } from "../preview/codec.js";
 import {
-  finalizeCompiledManifest,
-  recordFailedAutomationCompile,
-  runHeadlessAutomationCompile,
-} from '../lifecycle/headless-automation-compile.js';
+  makeAgentsRouteHandler,
+  type AgentAcpCapabilities,
+} from "../routes/agents-routes.js";
+import { makeAppsStoreRouteHandler } from "../routes/apps-store-routes.js";
+import { makeAssistantRouteHandler } from "../routes/assistant-routes.js";
 import {
-  resolveAutomationAnchors,
-  scopesForAutomationAnchors,
-} from '../lifecycle/automation-anchor-scopes.js';
+  makeAutomationsRouteHandler,
+  turnEventsSubscriberCount,
+} from "../routes/automations-routes.js";
+import { makeBackupRouteHandler } from "../routes/backup-routes.js";
+import { makeBlobRouteHandler } from "../routes/blob-routes.js";
+import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
 import {
-  resolveAutomationAgentSelection,
-  resolveAutomationRewriteModel,
-  type AutomationAgentSelection,
-} from '../lifecycle/automation-agent-selection.js';
-import { runInteractiveAutomationTurn } from '../lifecycle/interactive-automation-turn.js';
-import { rewriteAutomationInstructions } from '../lifecycle/rewrite-automation-instructions.js';
-import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
+  makeDataPlaneControlHandler,
+  type DataPlaneControlOptions,
+} from "../routes/data-plane-control.js";
+import { makeDemoRouteHandler } from "../routes/demo-routes.js";
+import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
+import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
+import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
+import { makeGatewayInfoRouteHandler } from "../routes/gateway-info-routes.js";
+import { makeHealthRouteHandler } from "../routes/health-routes.js";
+import { makeImportRouteHandler } from "../routes/import-routes.js";
+import { makeLifecycleRouteHandler } from "../routes/lifecycle-routes.js";
+import {
+  logsEventsSubscriberCount,
+  makeLogsRouteHandler,
+} from "../routes/logs-routes.js";
+import { makeMembersRouteHandler } from "../routes/members-routes.js";
+import { makeRemindersRouteHandler } from "../routes/reminders-routes.js";
+import type { ReplicaIntentDispatchOutcome } from "../routes/replica-intent-route.js";
+import { makeReplicaRouteHandler } from "../routes/replica-routes.js";
+import { makeResourceRouteHandler } from "../routes/resource-routes.js";
+import {
+  isDirectHostRequest,
+  isLoopbackRequest,
+  sendJson,
+} from "../routes/route-helpers.js";
+import {
+  makeScopesRouteHandler,
+  SCOPES_PATH,
+} from "../routes/scopes-routes.js";
+import { makeShareRouteHandler, SHARE_PATH } from "../routes/share-routes.js";
+import { makeStorageRouteHandler } from "../routes/storage-routes.js";
+import { makeTemplatesRouteHandler } from "../routes/templates-routes.js";
+import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import {
   assistantCwd,
   makeAssistantConversationRunner,
   makeVaultToolRunners,
-} from '../runs/assistant-conversation-runner.js';
-import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
-import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
-import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
-import { makeAgentsRouteHandler, type AgentAcpCapabilities } from '../routes/agents-routes.js';
-import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
-import { makeHealthRouteHandler } from '../routes/health-routes.js';
-import { makeResourceRouteHandler } from '../routes/resource-routes.js';
-import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
-import { HealthRegistry } from './health-registry.js';
-import { PowerContextMonitor } from './power-context.js';
-import { ResourceAccounting } from './resource-accounting.js';
-import { GatewayPerformanceMonitor } from './gateway-performance.js';
-import { measureStorageLatency } from './storage-latency.js';
+} from "../runs/assistant-conversation-runner.js";
+import { buildAssistantPrompt } from "../runs/assistant-prompt.js";
+import { RunEventBus } from "../runs/run-event-bus.js";
+import { makeUnifiedConversationRunner } from "../runs/unified-conversation-runner.js";
+import { WorktreeStore } from "../worktree-store/index.js";
+import { isExpectedPrewarmSkip } from "./app-prewarm-errors.js";
+import type { AssistOAuthConfig } from "./assist-oauth.js";
+import { pollProviderEventSource } from "./automation-event-sources.js";
+import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
+import { createBrokerHealthProbe } from "./broker-health.js";
+import { companionRequestAllowed } from "./companion-access.js";
+import { ConnectionBroker } from "./connection-broker.js";
+import type { DataPlaneHttpOptions } from "./data-plane-handoff.js";
+import { defaultLogger } from "./default-logger.js";
+import { createDiskHealthProbe, formatBytes } from "./disk-health.js";
+import { createEnrichmentHealthProbe } from "./enrichment-health.js";
+import { EnrollmentStore } from "./enrollment-store.js";
+import { recoverPendingVaultErases } from "./erase-recovery.js";
+import { GatewayDatabase } from "./gateway-db.js";
+import { buildDiagnosticsBundle } from "./gateway-diagnostics.js";
+import { GatewayLogStore } from "./gateway-log-store.js";
+import { GatewayPerformanceMonitor } from "./gateway-performance.js";
 import {
   formatHardwareProfileDetail,
   resolveGatewayHardwareProfile,
   toStructuredResourceProfile,
-} from './hardware-profile.js';
-import { probeHostLimits } from './host-limits.js';
+} from "./hardware-profile.js";
+import { HealthRegistry } from "./health-registry.js";
+import { kitlessHostIdentity } from "./host-identity.js";
+import { probeHostLimits } from "./host-limits.js";
+import { LocalUsageScanner } from "./local-usage.js";
+import { OutboxExecutor } from "./outbox-executor.js";
+import type { PairingTicketStore } from "./pairing-store.js";
+import { PowerContextMonitor } from "./power-context.js";
+import { PricingWarmer } from "./pricing-warmer.js";
+import { ResourceAccounting } from "./resource-accounting.js";
 import {
   formatEventLoopDetail,
   formatPowerPostureDeferringDetail,
@@ -221,25 +241,34 @@ import {
   resolveResourceMode,
   RESOURCE_MODE_PREF_KEY,
   type ResourceMode,
-} from './resource-mode.js';
-import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
-import { isDirectHostRequest, isLoopbackRequest, sendJson } from '../routes/route-helpers.js';
-import type { GatewayPaths } from '../paths.js';
-import { BackupService } from '../backup/backup-service.js';
-import type { BackupConfig } from '../backup/backup-config.js';
-import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
-import { openStorageConnectionStore } from '../backup/storage-connections.js';
-import { StorageUsagePoller } from '../backup/storage-usage.js';
-import { PricingWarmer } from './pricing-warmer.js';
-import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import { recoverPendingVaultErases } from './erase-recovery.js';
-import { kitlessHostIdentity } from './host-identity.js';
-import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
-import { makeStorageRouteHandler } from '../routes/storage-routes.js';
-import { WebAppSessions } from './web-app-sessions.js';
-import { WebControlSessionStore } from './web-session-store.js';
+} from "./resource-mode.js";
+import {
+  removedRunnerLadderMembers,
+  resolveGatewayRunnerPrefs,
+  resolveStrictGatewayRunnerPrefs,
+} from "./runner-prefs.js";
+import { createSchedulerHealthProbe } from "./scheduler-health.js";
+import { findSequentially, forEachSequentially } from "./sequential.js";
+import { measureStorageLatency } from "./storage-latency.js";
+import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
+import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
+import {
+  ingressElement,
+  ingressRetentionGap,
+  readIngressCursor,
+} from "./trigger-ingress-cursor.js";
+import {
+  runWithVaultContext,
+  VAULT_HEADER,
+  type DeviceAccess,
+} from "./vault-context.js";
+import { createVaultIntegrityHealthProbe } from "./vault-integrity-health.js";
+import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
+import { openVaultRegistry, type VaultRegistry } from "./vault-registry.js";
+import { WebAppSessions } from "./web-app-sessions.js";
+import { WebControlSessionStore } from "./web-session-store.js";
 
-export type { DeviceAccess } from './vault-context.js';
+export type { DeviceAccess } from "./vault-context.js";
 
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */
@@ -374,11 +403,14 @@ export type FireAutomation = (
     idempotent?: boolean;
     /** Let the cursor engine retain its pending receipt on infrastructure failure. */
     propagateError?: boolean;
-  },
+  }
 ) => Promise<void>;
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
-export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
+export type RouteHandler = (
+  req: IncomingMessage,
+  res: ServerResponse
+) => Promise<boolean>;
 
 export interface RoutePrefixRegistration {
   readonly prefixes: readonly string[];
@@ -388,9 +420,12 @@ export interface RoutePrefixRegistration {
 /** Register a handler in the immutable prefix table built at gateway boot (#456 R1). */
 export function forRoutePrefixes(
   prefixes: string | readonly string[],
-  handler: RouteHandler,
+  handler: RouteHandler
 ): RoutePrefixRegistration {
-  return { prefixes: typeof prefixes === 'string' ? [prefixes] : prefixes, handler };
+  return {
+    prefixes: typeof prefixes === "string" ? [prefixes] : prefixes,
+    handler,
+  };
 }
 
 interface RoutePrefixNode {
@@ -399,7 +434,7 @@ interface RoutePrefixNode {
 }
 
 function routeSegments(pathname: string): string[] {
-  return pathname.split('/').filter(Boolean);
+  return pathname.split("/").filter(Boolean);
 }
 
 /**
@@ -408,7 +443,7 @@ function routeSegments(pathname: string): string[] {
  * only matching handlers from most-specific prefix to least-specific prefix.
  */
 export function createRoutePrefixDispatch(
-  registrations: readonly RoutePrefixRegistration[],
+  registrations: readonly RoutePrefixRegistration[]
 ): RouteHandler {
   const root: RoutePrefixNode = { children: new Map(), registrations: [] };
   for (const registration of registrations) {
@@ -427,8 +462,8 @@ export function createRoutePrefixDispatch(
   }
 
   return async (req, res) => {
-    const raw = req.url ?? '/';
-    const query = raw.indexOf('?');
+    const raw = req.url ?? "/";
+    const query = raw.indexOf("?");
     const pathname = query === -1 ? raw : raw.slice(0, query);
     const matches: RoutePrefixRegistration[][] = [];
     let node: RoutePrefixNode | undefined = root;
@@ -440,99 +475,113 @@ export function createRoutePrefixDispatch(
     }
 
     const invoked = new Set<RoutePrefixRegistration>();
-    const matched = await findSequentially(matches.toReversed().flat(), async (registration) => {
-      if (invoked.has(registration)) return false;
-      invoked.add(registration);
-      return registration.handler(req, res);
-    });
+    const matched = await findSequentially(
+      matches.toReversed().flat(),
+      async (registration) => {
+        if (invoked.has(registration)) return false;
+        invoked.add(registration);
+        return registration.handler(req, res);
+      }
+    );
     return matched !== undefined;
   };
 }
 
-export function replicaDispatchOutcome(result: ToolResult): ReplicaIntentDispatchOutcome {
+export function replicaDispatchOutcome(
+  result: ToolResult
+): ReplicaIntentDispatchOutcome {
   if (result.isError) {
     const denied = new Set([
-      'UNKNOWN_APP',
-      'UNKNOWN_ACTION',
-      'WRONG_KIND',
-      'INVALID_INPUT',
-      'INVALID_MANIFEST',
-      'NO_ACTIVE_VERSION',
+      "UNKNOWN_APP",
+      "UNKNOWN_ACTION",
+      "WRONG_KIND",
+      "INVALID_INPUT",
+      "INVALID_MANIFEST",
+      "NO_ACTIVE_VERSION",
     ]).has(result.structuredContent.code);
     return denied
-      ? { status: 'denied', reason: result.structuredContent.message }
+      ? { status: "denied", reason: result.structuredContent.message }
       : {
           // HANDLER_ERROR includes a vault bridge failure after the canonical
           // command committed but before journal finalization/transport
           // completed. GATEWAY_BUSY and any future infrastructure error are
           // likewise safe to retry. The route keeps the admitted intent in
           // `sending`; deterministic intent-bound invocation ids dedupe it.
-          status: 'retryable',
+          status: "retryable",
           reason: result.structuredContent.message,
         };
   }
   const value = result.structuredContent;
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
     const outcome = value as {
       status?: unknown;
       invocationId?: unknown;
       reason?: unknown;
       output?: unknown;
     };
-    const reason = typeof outcome.reason === 'string' ? outcome.reason : undefined;
-    if (outcome.status === 'parked') {
+    const reason =
+      typeof outcome.reason === "string" ? outcome.reason : undefined;
+    if (outcome.status === "parked") {
       return {
-        status: 'parked',
-        ...(typeof outcome.invocationId === 'string' ? { invocationId: outcome.invocationId } : {}),
+        status: "parked",
+        ...(typeof outcome.invocationId === "string"
+          ? { invocationId: outcome.invocationId }
+          : {}),
         ...(reason ? { reason } : {}),
       };
     }
-    if (outcome.status === 'denied' || outcome.status === 'failed') {
+    if (outcome.status === "denied" || outcome.status === "failed") {
       return {
         status: outcome.status,
         reason: reason ?? `app action ${outcome.status}`,
         ...(outcome.output === undefined ? {} : { output: outcome.output }),
       };
     }
-    if (outcome.status === 'executed' || outcome.status === 'replayed') {
+    if (outcome.status === "executed" || outcome.status === "replayed") {
       return {
-        status: 'executed',
+        status: "executed",
         ...(outcome.output === undefined ? {} : { output: outcome.output }),
       };
     }
   }
-  return { status: 'executed', ...(value === undefined ? {} : { output: value }) };
+  return {
+    status: "executed",
+    ...(value === undefined ? {} : { output: value }),
+  };
 }
 
 // Prefixes the chat-history + prefs routes answer to, mirrored from
 // app-engine's http-server.ts so `composedHandler` matches the same URLs
 // `startRuntimeHttpServer` does.
-const CONVERSATIONS_PREFIX = '/_centraid-conversations';
-const USER_STORE_PREFIX = '/_centraid-user';
+const CONVERSATIONS_PREFIX = "/_centraid-conversations";
+const USER_STORE_PREFIX = "/_centraid-user";
 
 /** Shared device-role gate, before any owner/app/action route can dispatch. */
 function readRoleRequestAllowed(req: IncomingMessage): boolean {
-  const method = (req.method ?? 'GET').toUpperCase();
-  let url = new URL(req.url ?? '/', 'http://gateway.local');
-  if (url.pathname === '/centraid/_web/control') {
-    const target = url.searchParams.get('path');
-    if (target?.startsWith('/')) url = new URL(target, 'http://gateway.local');
+  const method = (req.method ?? "GET").toUpperCase();
+  let url = new URL(req.url ?? "/", "http://gateway.local");
+  if (url.pathname === "/centraid/_web/control") {
+    const target = url.searchParams.get("path");
+    if (target?.startsWith("/")) url = new URL(target, "http://gateway.local");
   }
-  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
-  if (method !== 'POST') return false;
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS")
+    return true;
+  if (method !== "POST") return false;
   // A query invocation is a read; an action invocation is a write. The
   // app-scoped RPC routes carry the kind in the path (issue #505), so a
   // read-role device may POST to `queries/<name>` but not `actions/<name>`.
   // `_describe` moved to GET and is covered by the read-method branch above.
   if (
     /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/u.test(url.pathname) ||
-    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/u.test(url.pathname)
+    /^\/centraid\/_draft\/[^/]+\/[^_/][^/]*\/queries\/[^/]+$/u.test(
+      url.pathname
+    )
   ) {
     return true;
   }
   // Checkpoints record only how far this device has durably consumed the
   // read protocol; they grant no write authority over app/vault data.
-  return url.pathname === '/centraid/_vault/replica/checkpoint';
+  return url.pathname === "/centraid/_vault/replica/checkpoint";
 }
 
 /** The per-vault host bundle — one per vault, built lazily, cached by id. */
@@ -540,7 +589,10 @@ interface VaultHost {
   vaultId: string;
   store: WorktreeStore;
   codeAppsDir: () => string;
-  draftCodeDir: (appId: string, sessionId: string) => Promise<string | undefined>;
+  draftCodeDir: (
+    appId: string,
+    sessionId: string
+  ) => Promise<string | undefined>;
   runner: ConversationRunner;
   /** Store-backed route handlers (apps-store / lifecycle / automations). */
   handlers: RouteHandler[];
@@ -645,17 +697,23 @@ export interface BuiltGateway {
   stop: () => Promise<void>;
 }
 
-export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltGateway> {
+export async function buildGateway(
+  options: BuildGatewayOptions
+): Promise<BuiltGateway> {
   const { paths } = options;
   const dataDir = paths.dataDir ?? path.dirname(paths.vaultDir);
   const gatewayDatabase =
-    options.gatewayDatabase ?? GatewayDatabase.open(dataDir, { lock: 'exclusive' });
+    options.gatewayDatabase ??
+    GatewayDatabase.open(dataDir, { lock: "exclusive" });
   const instanceId = crypto.randomUUID();
   // Every log line tees through the gateway log store (realtime Logs
   // surface) before reaching the console/host logger — see logs-routes.ts.
   // Persistence (issue #351) is opt-in via `paths.logsDir` — omitted, this
   // is exactly the prior in-memory-only store (tests, disposable embeds).
-  const logStore = new GatewayLogStore(undefined, paths.logsDir ? { dir: paths.logsDir } : {});
+  const logStore = new GatewayLogStore(
+    undefined,
+    paths.logsDir ? { dir: paths.logsDir } : {}
+  );
   const logger = logStore.wrap(options.logger ?? defaultLogger(options.logTag));
 
   // Component-level health (observability for self-hosters): subsystems
@@ -667,26 +725,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const performanceMonitor = new GatewayPerformanceMonitor();
   health.setPerformanceMetricsSource(
     () => performanceMonitor.snapshot(),
-    () => performanceMonitor.resetMeasurement(),
+    () => performanceMonitor.resetMeasurement()
   );
   let storageFsyncMs: number | undefined;
   try {
     const storageLatency = await measureStorageLatency(dataDir);
     storageFsyncMs = storageLatency.fsyncMs;
     performanceMonitor.setStorageFsyncMs(storageLatency.fsyncMs);
-    health.reportOk('storage-latency', `4 KiB fsync ${storageLatency.fsyncMs.toFixed(1)} ms`);
+    health.reportOk(
+      "storage-latency",
+      `4 KiB fsync ${storageLatency.fsyncMs.toFixed(1)} ms`
+    );
   } catch (err) {
     health.reportDegraded(
-      'storage-latency',
-      `boot fsync probe failed: ${err instanceof Error ? err.message : String(err)}`,
+      "storage-latency",
+      `boot fsync probe failed: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  health.registerProbe('event-loop', async () => {
+  health.registerProbe("event-loop", async () => {
     const sample = performanceMonitor.snapshot();
     const detail = formatEventLoopDetail(sample);
     return sample.eventLoopLagP99Ms >= 50
-      ? { status: 'degraded', detail }
-      : { status: 'ok', detail };
+      ? { status: "degraded", detail }
+      : { status: "ok", detail };
   });
   // Resource mode (#521): durable prefs + optional daemon config feed the
   // same profile resolver as CENTRAID_HARDWARE_PROFILE. Prefs open early so
@@ -701,7 +762,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           } catch {
             return [];
           }
-        }),
+        })
       ),
     write: (prefs) => gatewayDatabase.replacePrefs(prefs),
   });
@@ -736,18 +797,33 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // Publish the exact resolved values, including validated operator
   // overrides. Lazy consumers read these values instead of independently
   // reclassifying the host and drifting from this health record.
-  process.env.CENTRAID_WORKER_MAX_CONCURRENT = String(hardwareProfile.workerMaxConcurrent);
-  process.env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB = String(
-    hardwareProfile.workerMaxOldGenerationMb,
+  process.env.CENTRAID_WORKER_MAX_CONCURRENT = String(
+    hardwareProfile.workerMaxConcurrent
   );
-  process.env.CENTRAID_WORKER_POOL_SIZE = String(hardwareProfile.workerPoolSize);
-  process.env.CENTRAID_REPLICATION_CONCURRENCY = String(hardwareProfile.replicationConcurrency);
-  process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(hardwareProfile.staticBrotliQuality);
-  process.env.CENTRAID_STATIC_GZIP_QUALITY = String(hardwareProfile.staticGzipQuality);
-  health.reportOk('hardware-profile', formatHardwareProfileDetail(hardwareProfile));
+  process.env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB = String(
+    hardwareProfile.workerMaxOldGenerationMb
+  );
+  process.env.CENTRAID_WORKER_POOL_SIZE = String(
+    hardwareProfile.workerPoolSize
+  );
+  process.env.CENTRAID_REPLICATION_CONCURRENCY = String(
+    hardwareProfile.replicationConcurrency
+  );
+  process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(
+    hardwareProfile.staticBrotliQuality
+  );
+  process.env.CENTRAID_STATIC_GZIP_QUALITY = String(
+    hardwareProfile.staticGzipQuality
+  );
+  health.reportOk(
+    "hardware-profile",
+    formatHardwareProfileDetail(hardwareProfile)
+  );
   const webAppSessions = new WebAppSessions({
     ...options.webSessions,
-    controlStore: options.webSessions?.controlStore ?? WebControlSessionStore.open(gatewayDatabase),
+    controlStore:
+      options.webSessions?.controlStore ??
+      WebControlSessionStore.open(gatewayDatabase),
   });
 
   // Bundled blueprint apps (issue #434): the main client compiles their UI
@@ -756,30 +832,32 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // RESERVED — a code-store app must never shadow one. The set is fixed for
   // the process lifetime (it's the release's catalog), so resolve it once for
   // the id-reservation guard and install/listing paths below.
-  const bundledAppIds = new Set((await listBundledAppTemplates()).map((t) => t.id));
+  const bundledAppIds = new Set(
+    (await listBundledAppTemplates()).map((t) => t.id)
+  );
   const isBundledAppId = (id: string): boolean => bundledAppIds.has(id);
 
-  health.reportOk('instance', 'gateway.db exclusive process lock held');
+  health.reportOk("instance", "gateway.db exclusive process lock held");
   if (gatewayDatabase.networkFileSystem) {
     const message =
-      'gateway data directory is on a network filesystem; cross-host locking is not guaranteed and orphan blob deletion is disabled';
+      "gateway data directory is on a network filesystem; cross-host locking is not guaranteed and orphan blob deletion is disabled";
     logger.warn(message);
-    health.reportDegraded('filesystem', message);
+    health.reportDegraded("filesystem", message);
   } else {
-    health.reportOk('filesystem', 'local filesystem');
+    health.reportOk("filesystem", "local filesystem");
   }
 
   // Gateway-level storage state is in gateway.db; its credential-encryption
   // key is a KeyStore envelope under keys/.
   const gatewayKeys =
     options.keyStore ??
-    new KeyStore(path.join(dataDir, 'keys'), {
+    new KeyStore(path.join(dataDir, "keys"), {
       warn: (message) => logger.warn(message),
     });
   recoverPendingVaultErases({
     gatewayDatabase,
     vaultRoot: paths.vaultDir,
-    cacheRoot: paths.cacheDir ?? path.join(dataDir, 'cache'),
+    cacheRoot: paths.cacheDir ?? path.join(dataDir, "cache"),
     keys: gatewayKeys,
     logger,
   });
@@ -788,7 +866,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     keyStore: gatewayKeys,
   });
   let walCaptureConfigured =
-    options.backup?.enabled === true || (await storageConnections.list()).length > 0;
+    options.backup?.enabled === true ||
+    (await storageConnections.list()).length > 0;
   const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
   // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
   // refresh in front of a provider connection's optional `usage` capability
@@ -808,11 +887,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const pricingCacheFile =
     paths.modelPricingFile ??
     (paths.modelCatalogFile
-      ? path.join(path.dirname(paths.modelCatalogFile), 'model-pricing.json')
+      ? path.join(path.dirname(paths.modelCatalogFile), "model-pricing.json")
       : undefined);
   const pricingWarmer = new PricingWarmer({
     ...(pricingCacheFile ? { cacheFile: pricingCacheFile } : {}),
-    logger: health.loggerFor('pricing', logger),
+    logger: health.loggerFor("pricing", logger),
   });
   void pricingWarmer.boot();
 
@@ -831,7 +910,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // usage is MEASURED and labeled here, never throttled. Published on the health
   // metrics source below; the worker-pool counters are read live from the
   // app-engine admission gate (which must not depend on the gateway).
-  const resourceAccounting = new ResourceAccounting({ workerPoolStats: workerAdmissionStats });
+  const resourceAccounting = new ResourceAccounting({
+    workerPoolStats: workerAdmissionStats,
+  });
 
   // Host power-context posture (#528 Phase D): a third, independent "not now"
   // signal composed into the SAME safe-loop gate as the owner pause and the
@@ -842,14 +923,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const powerContext = new PowerContextMonitor({
     onDeferringChange: (state) => {
       health.reportOk(
-        'power-posture',
+        "power-posture",
         state.reason === null
           ? formatPowerPostureNormalDetail()
-          : formatPowerPostureDeferringDetail(state.reason, state.kind),
+          : formatPowerPostureDeferringDetail(state.reason, state.kind)
       );
     },
   });
-  health.reportOk('power-posture', formatPowerPostureNormalDetail());
+  health.reportOk("power-posture", formatPowerPostureNormalDetail());
 
   // Wrap a turn driver so every agent run's wall-clock (spawn→exit) is
   // MEASURED and labeled (#528 Phase C) — recorded on success and failure
@@ -862,12 +943,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       try {
         return await base(input, config);
       } finally {
-        resourceAccounting.recordAgentRun({ durationMs: Date.now() - startedAt });
+        resourceAccounting.recordAgentRun({
+          durationMs: Date.now() - startedAt,
+        });
       }
     };
   const accountedRunTurn = accountRunTurn(runTurn);
 
-  let provenanceDoorbell: (vaultId: string, entityTypes?: readonly string[]) => void = () => {};
+  let provenanceDoorbell: (
+    vaultId: string,
+    entityTypes?: readonly string[]
+  ) => void = () => {};
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
@@ -888,8 +974,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     walCaptureConfigured: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
-    cacheRootDir: paths.cacheDir ?? path.join(dataDir, 'cache'),
-    logger: health.loggerFor('vaults', logger),
+    cacheRootDir: paths.cacheDir ?? path.join(dataDir, "cache"),
+    logger: health.loggerFor("vaults", logger),
     keyStore: gatewayKeys,
     // Network mounts may not honor the local SQLite lock cross-host. Serving
     // remains available, but destructive orphan GC fails safe.
@@ -899,7 +985,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // `blob_store.connectionId` is set; vaults without one keep working off
     // the env-var default (`vault-plane.ts`'s `defaultEnvS3Credentials`).
     s3Credentials: makeStorageCredentialsResolver(storageConnections),
-    onProvenanceCommitted: (vaultId, entityTypes) => provenanceDoorbell(vaultId, entityTypes),
+    onProvenanceCommitted: (vaultId, entityTypes) =>
+      provenanceDoorbell(vaultId, entityTypes),
     // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
     // ingest inside the owner's trust boundary, so generating tiny/medium
     // derivatives here leaks nothing to the provider. One shared stateless
@@ -944,14 +1031,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
    * restore-after-erase under a brand-new Shared + Personal.
    */
   const neverInhabited = (): boolean => {
-    const row = gatewayDatabase.db.prepare('SELECT COUNT(*) AS n FROM members').get() as {
+    const row = gatewayDatabase.db
+      .prepare("SELECT COUNT(*) AS n FROM members")
+      .get() as {
       n: number;
     };
     return row.n === 0;
   };
   const autoFoundedVaults =
     vaultRegistry.isFresh() && neverInhabited()
-      ? [vaultRegistry.create('Shared'), vaultRegistry.create('Personal')]
+      ? [vaultRegistry.create("Shared"), vaultRegistry.create("Personal")]
       : [];
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
@@ -970,17 +1059,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `vault.db` handle; a plane whose file was corrupted or closed out from
   // under the process (disk failure, external `rm`) fails this and flips
   // the component red by vault id instead of staying silently "ok".
-  health.registerProbe('vaults', async () => {
+  health.registerProbe("vaults", async () => {
     vaultRegistry.rescan();
     const planes = vaultRegistry.planesList();
     const failed = vaultRegistry.failedMounts();
     const unreadable: string[] = [];
     for (const plane of planes) {
       try {
-        plane.db.vault.prepare('PRAGMA user_version').get();
+        plane.db.vault.prepare("PRAGMA user_version").get();
       } catch (err) {
         unreadable.push(
-          `${plane.boot.vaultId}: ${err instanceof Error ? err.message : String(err)}`,
+          `${plane.boot.vaultId}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
     }
@@ -991,32 +1080,40 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ...failed.map((f) => `${f.dir}: ${f.message} (since ${f.at})`),
         ...unreadable.map((u) => `${u} — vault.db unreadable`),
       ];
-      return { status: 'error', detail: notes.join('; ') };
+      return { status: "error", detail: notes.join("; ") };
     }
     if (quarantined.length > 0) {
       const detail = quarantined
-        .map((p) => `${p.boot.vaultId} (source seq ${p.quarantine?.sourceSeq}) needs review`)
-        .join('; ');
-      return { status: 'error', detail: `restored from backup — ${detail}` };
+        .map(
+          (p) =>
+            `${p.boot.vaultId} (source seq ${p.quarantine?.sourceSeq}) needs review`
+        )
+        .join("; ");
+      return { status: "error", detail: `restored from backup — ${detail}` };
     }
     // Zero mounted planes is not a legal steady state since #603 — a fresh
     // data dir auto-founds, so an empty registry means every vault dir on
     // disk was deleted out from under the process.
     return planes.length > 0
-      ? { status: 'ok', detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted` }
-      : { status: 'error', detail: 'no vault is mounted' };
+      ? {
+          status: "ok",
+          detail: `${planes.length} vault${planes.length === 1 ? "" : "s"} mounted`,
+        }
+      : { status: "error", detail: "no vault is mounted" };
   });
 
   // Disk watermark (issue #351): free space on the vault volume, plus a
   // cheap per-vault DB size so "which vault is eating the disk" doesn't
   // need a shell. Thresholds live in disk-health.ts.
   health.registerProbe(
-    'disk',
+    "disk",
     createDiskHealthProbe({
       rootDir: dataDir,
       vaults: () =>
-        vaultRegistry.planesList().map((p) => ({ vaultId: p.boot.vaultId, dir: p.dir })),
-    }),
+        vaultRegistry
+          .planesList()
+          .map((p) => ({ vaultId: p.boot.vaultId, dir: p.dir })),
+    })
   );
 
   // Local footprint by component (issue #544) — the other half of the disk
@@ -1045,10 +1142,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // storage-limits.ts for why a soft budget must never refuse a write. With
   // no limit set this is a permanent `ok`, so an owner who never opted in
   // gains no new noise in their component list.
-  health.registerProbe('storage-limit', async () => {
+  health.registerProbe("storage-limit", async () => {
     const limits = storageLimits.current();
     if (limits.totalLimitBytes === null) {
-      return { status: 'ok', detail: 'no disk budget set' };
+      return { status: "ok", detail: "no disk budget set" };
     }
     const report = await localUsage.report();
     const evaluation = evaluateStorageLimit(report.totalBytes, limits);
@@ -1056,40 +1153,48 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const detail =
       `${formatBytes(evaluation.usedBytes)} of the ${formatBytes(limits.totalLimitBytes)} ` +
       `budget (${percent}%)`;
-    if (evaluation.status === 'error') {
-      return { status: 'error', detail: `${detail} — over budget; nothing is being blocked` };
-    }
-    if (evaluation.status === 'degraded') {
+    if (evaluation.status === "error") {
       return {
-        status: 'degraded',
+        status: "error",
+        detail: `${detail} — over budget; nothing is being blocked`,
+      };
+    }
+    if (evaluation.status === "degraded") {
+      return {
+        status: "degraded",
         detail: `${detail} — past the ${limits.warnAtPercent}% warning`,
       };
     }
-    return { status: 'ok', detail };
+    return { status: "ok", detail };
   });
 
   // Connection health lives in each vault's DB (`needs-auth` flips there,
   // not in broker memory) — surface "N connections need re-auth" so a dead
   // OAuth token shows up here instead of as silent connector failures.
-  health.registerProbe('connections', async () => {
+  health.registerProbe("connections", async () => {
     let total = 0;
     let needsAuth = 0;
     for (const plane of vaultRegistry.planesList()) {
       const rows = plane.db.vault
-        .prepare(`SELECT status, COUNT(*) AS n FROM sync_connection GROUP BY status`)
+        .prepare(
+          `SELECT status, COUNT(*) AS n FROM sync_connection GROUP BY status`
+        )
         .all() as Array<{ status: string; n: number }>;
       for (const row of rows) {
         total += row.n;
-        if (row.status === 'needs-auth') needsAuth += row.n;
+        if (row.status === "needs-auth") needsAuth += row.n;
       }
     }
     if (needsAuth > 0) {
       return {
-        status: 'degraded',
-        detail: `${needsAuth} of ${total} connection${total === 1 ? '' : 's'} need re-auth`,
+        status: "degraded",
+        detail: `${needsAuth} of ${total} connection${total === 1 ? "" : "s"} need re-auth`,
       };
     }
-    return { status: 'ok', detail: `${total} connection${total === 1 ? '' : 's'} configured` };
+    return {
+      status: "ok",
+      detail: `${total} connection${total === 1 ? "" : "s"} configured`,
+    };
   });
 
   // Broker credential health (issue #351 tier 2): narrower than `connections`
@@ -1098,11 +1203,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // or sitting on an overdue token nobody has refreshed yet. See
   // `broker-health.ts` for why this is a separate signal from `connections`.
   health.registerProbe(
-    'broker',
+    "broker",
     createBrokerHealthProbe({
       vaults: () =>
-        vaultRegistry.planesList().map((p) => ({ vaultId: p.boot.vaultId, db: p.db.vault })),
-    }),
+        vaultRegistry
+          .planesList()
+          .map((p) => ({ vaultId: p.boot.vaultId, db: p.db.vault })),
+    })
   );
 
   // The one journal handle per vault (`journal-stores.ts`) — the same
@@ -1120,10 +1227,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `automations`'s reconcile push. Memoized so a health poll or a scheduler
   // tick never reconstructs it.
   const schedulerLedgers = new Map<string, automation.SchedulerLedgerStore>();
-  const schedulerLedgerFor = (vaultId: string): automation.SchedulerLedgerStore => {
+  const schedulerLedgerFor = (
+    vaultId: string
+  ): automation.SchedulerLedgerStore => {
     const existing = schedulerLedgers.get(vaultId);
     if (existing) return existing;
-    const ledger = new automation.SchedulerLedgerStore(journalStoreFor(vaultId));
+    const ledger = new automation.SchedulerLedgerStore(
+      journalStoreFor(vaultId)
+    );
     schedulerLedgers.set(vaultId, ledger);
     return ledger;
   };
@@ -1131,14 +1242,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // Per-vault scheduler liveness + missed-run visibility (issue #351 tiers
   // 2/3) — see scheduler-health.ts. Reads the SAME ledger `onTick` writes.
   health.registerProbe(
-    'scheduler',
+    "scheduler",
     createSchedulerHealthProbe({
       vaults: () =>
         vaultRegistry.planesList().map((p) => ({
           vaultId: p.boot.vaultId,
           snapshot: () => schedulerLedgerFor(p.boot.vaultId).load(),
         })),
-    }),
+    })
   );
 
   // Enricher run health (issue #351 wave 4) — see enrichment-health.ts for
@@ -1146,14 +1257,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // reads the shared per-vault journal store; it never reaches into
   // scheduler-ledger.ts's private state.
   health.registerProbe(
-    'enrichment',
+    "enrichment",
     createEnrichmentHealthProbe({
       vaults: () =>
         vaultRegistry.planesList().map((p) => ({
           vaultId: p.boot.vaultId,
           listAutomations: async () => {
-            const { rows } = await automation.list(settledHostFor(p.boot.vaultId).codeAppsDir());
-            return rows.map((r) => ({ id: r.id, enabled: r.enabled, ref: r.ref }));
+            const { rows } = await automation.list(
+              settledHostFor(p.boot.vaultId).codeAppsDir()
+            );
+            return rows.map((r) => ({
+              id: r.id,
+              enabled: r.enabled,
+              ref: r.ref,
+            }));
           },
           recentRuns: (automationRef, limit) =>
             journalStoreFor(p.boot.vaultId)
@@ -1163,7 +1280,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 ...(t.endedAt === undefined ? {} : { endedAt: t.endedAt }),
               })),
         })),
-    }),
+    })
   );
 
   // Blob custody-sweep health (issue #351 wave 4, #367 prep) — see
@@ -1171,16 +1288,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // reads (settings JSON + a GROUP BY over the custody mirror); `sweepStatus`
   // reads `BlobCustody`'s own in-memory record of its last `reconcile()`.
   health.registerProbe(
-    'blob-sweep',
+    "blob-sweep",
     createBlobSweepHealthProbe({
       vaults: () =>
         vaultRegistry.planesList().map((p) => ({
           vaultId: p.boot.vaultId,
-          s3Configured: () => readBlobStoreSettings(p.db.vault).kind === 's3',
+          s3Configured: () => readBlobStoreSettings(p.db.vault).kind === "s3",
           counts: () => custodyStateCounts(p.db.vault),
           sweepStatus: () => p.db.blobs.sweepStatus(),
         })),
-    }),
+    })
   );
 
   // On-disk integrity (issue #374 tier 5b) — see vault-integrity-health.ts.
@@ -1188,7 +1305,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // not a per-tick-cheap read); distinct from the `vaults` probe above,
   // which only proves the file still opens.
   health.registerProbe(
-    'vault-integrity',
+    "vault-integrity",
     createVaultIntegrityHealthProbe({
       vaults: () =>
         vaultRegistry.planesList().map((p) => ({
@@ -1196,7 +1313,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           vault: p.db.vault,
           journal: p.db.journal,
         })),
-    }),
+    })
   );
 
   // Storage quota watermark (issue #367 §D2) — degraded/error off a
@@ -1204,7 +1321,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // SAME cache `GET storage/usage` serves, so this never issues its own
   // network call beyond what that poller's TTL already allows.
   health.registerProbe(
-    'storage-quota',
+    "storage-quota",
     createStorageQuotaHealthProbe({
       connections: async () =>
         (await storageConnections.list()).map((c) => ({
@@ -1213,7 +1330,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           kind: c.kind,
         })),
       usageFor: (connectionId) => storageUsage.usageFor(connectionId),
-    }),
+    })
   );
 
   // Numeric signals (issue #351 tier 3): outbox backlog, summed across
@@ -1233,7 +1350,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     for (const plane of vaultRegistry.planesList()) {
       try {
         const row = plane.db.vault
-          .prepare(`SELECT COUNT(*) AS n FROM outbox_item WHERE status = 'approved'`)
+          .prepare(
+            `SELECT COUNT(*) AS n FROM outbox_item WHERE status = 'approved'`
+          )
           .get() as { n: number } | undefined;
         outboxPending += row?.n ?? 0;
       } catch {
@@ -1243,7 +1362,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return {
       outboxPending,
       sseClients:
-        logsEventsSubscriberCount() + turnEventsSubscriberCount() + changesSubscriberCount(),
+        logsEventsSubscriberCount() +
+        turnEventsSubscriberCount() +
+        changesSubscriberCount(),
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
       resourceProfile: toStructuredResourceProfile(hardwareProfile),
@@ -1262,9 +1383,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // storage connection marked for backup on every operation. This makes a
   // connection created in the desktop immediately effective without a
   // process restart or a second, hidden configuration source.
-  const backupCacheDir = paths.cacheDir ?? path.join(dataDir, 'cache');
+  const backupCacheDir = paths.cacheDir ?? path.join(dataDir, "cache");
   const sourceInstanceId = deriveBackupSourceInstanceId(
-    gatewayKeys.loadOrCreate('endpoint-key.bin'),
+    gatewayKeys.loadOrCreate("endpoint-key.bin")
   );
   const backupService = new BackupService({
     ...(options.backup?.enabled ? { config: options.backup } : {}),
@@ -1274,7 +1395,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     sourceInstanceId,
     vaults: vaultRegistry,
     health,
-    logger: health.loggerFor('backups', logger),
+    logger: health.loggerFor("backups", logger),
     recoveryKit,
     storageConnections,
     // Retention/reconciliation is a safe loop — yield to host power-context
@@ -1302,7 +1423,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const embeddedEndpointId = options.deviceAccess
     ? undefined
     : (options.hostDeviceEndpointId ??
-      kitlessHostIdentity(gatewayKeys.loadOrCreate('endpoint-key.bin')));
+      kitlessHostIdentity(gatewayKeys.loadOrCreate("endpoint-key.bin")));
   const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
     ? {
         // Deliberately `isLoopbackRequest`, not `isDirectHostRequest`: the
@@ -1310,12 +1431,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // and has no device key of its own, so tightening this would sever
         // phone-link entirely. Host-ONLY capabilities use the stricter gate
         // (`isHostCustody` below); ordinary vault access does not.
-        deviceKeyFor: (req) => (isLoopbackRequest(req) ? embeddedEndpointId : undefined),
+        deviceKeyFor: (req) =>
+          isLoopbackRequest(req) ? embeddedEndpointId : undefined,
         vaultsFor: (endpointId) => enrollmentStore.vaultsFor(endpointId),
       }
     : undefined;
   const effectiveDeviceAccess = options.deviceAccess ?? embeddedAccess;
-  const hostOwnerEndpointId = options.hostDeviceEndpointId ?? embeddedEndpointId;
+  const hostOwnerEndpointId =
+    options.hostDeviceEndpointId ?? embeddedEndpointId;
   if (autoFoundedVaults.length > 0 && hostOwnerEndpointId) {
     // One owner member, admin of BOTH auto-founded vaults, in ONE transaction
     // (issue #603): the host that just founded them is their owner, and a
@@ -1323,15 +1446,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     gatewayDatabase.transaction(() =>
       enrollmentStore.enrollWithinTransaction({
         endpointId: hostOwnerEndpointId,
-        memberLabel: 'You',
-        grants: autoFoundedVaults.map((vault) => ({ vaultId: vault.vaultId, role: 'admin' })),
-        label: options.hostDeviceEndpointId ? 'desktop host' : 'gateway host',
-        platform: 'loopback',
-      }),
+        memberLabel: "You",
+        grants: autoFoundedVaults.map((vault) => ({
+          vaultId: vault.vaultId,
+          role: "admin",
+        })),
+        label: options.hostDeviceEndpointId ? "desktop host" : "gateway host",
+        platform: "loopback",
+      })
     );
   }
 
-  const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
+  const currentWorkspace = (): VaultWorkspace =>
+    vaultRegistry.currentWorkspace();
 
   // Device prefs (`gateway.db`) + the request vault's ledger stores. The
   // analytics/insights providers resolve the request's vault per call, so
@@ -1348,11 +1475,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   let failoverDegraded = false;
   const reportFailoverError = (detail: string): void => {
     failoverDegraded = true;
-    health.reportError('agent-failover', detail);
+    health.reportError("agent-failover", detail);
     logger.warn(`Agent failover: ${detail}`);
   };
   const runnerHealth: RunnerHealthController = {
-    canAttempt: (context, kind, now) => runnerHealthStore.canAttempt(context, kind, now),
+    canAttempt: (context, kind, now) =>
+      runnerHealthStore.canAttempt(context, kind, now),
     reportFailure: (context, kind, failureClass, error, now) =>
       runnerHealthStore.reportFailure(context, kind, failureClass, error, now),
     reportOk: (context, kind, now) => {
@@ -1364,7 +1492,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       runnerHealthStore.reportPreflightOk(context, kind, now);
       if (failoverDegraded) {
         failoverDegraded = false;
-        health.reportOk('agent-failover', `${kind} completed a turn in ${context}`);
+        health.reportOk(
+          "agent-failover",
+          `${kind} completed a turn in ${context}`
+        );
       }
     },
     reportPreflightOk: (context, kind, now) =>
@@ -1379,7 +1510,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       return resolveSubsystemRunnerLadder(snapshot, subsystem, primary)
         .slice(1)
         .includes(runnerKind);
-    },
+    }
   );
   const analyticsStore = new AnalyticsStore(journalProvider);
   const insightsStore = new InsightsStore(journalProvider);
@@ -1390,9 +1521,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // SAME active-vault resolution `currentWorkspace` uses — so a vault switch
   // reads the right file. The store degrades to `archiveUnavailable` if a fetch
   // fails; the standalone http-server host wires no reader at all.
-  const conversationHistoryStore = new ConversationHistoryStore(currentWorkspace, {
-    archiveBlobReader: (sha) => vaultRegistry.current().db.blobs.open(sha),
-  });
+  const conversationHistoryStore = new ConversationHistoryStore(
+    currentWorkspace,
+    {
+      archiveBlobReader: (sha) => vaultRegistry.current().db.blobs.open(sha),
+    }
+  );
 
   // Per-turn prefs loader. Re-reads `gateway.db` every conversation turn so a
   // settings change lands without a restart.
@@ -1406,15 +1540,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // exactly as it did.
   const prefsLoader = async (
     subsystem?: ModelSubsystem,
-    requestedRunner?: RunnerKind,
+    requestedRunner?: RunnerKind
   ): Promise<RunnerPrefs | undefined> => {
-    return resolveGatewayRunnerPrefs(prefs.getAllPrefs(), subsystem, requestedRunner);
+    return resolveGatewayRunnerPrefs(
+      prefs.getAllPrefs(),
+      subsystem,
+      requestedRunner
+    );
   };
   const runnerLadder = (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind,
+    primary: RunnerKind
   ): readonly RunnerKind[] =>
-    subsystem ? resolveSubsystemRunnerLadder(prefs.getAllPrefs(), subsystem, primary) : [primary];
+    subsystem
+      ? resolveSubsystemRunnerLadder(prefs.getAllPrefs(), subsystem, primary)
+      : [primary];
   const runnerHealthContext = (): string => currentWorkspace().vaultId;
   const onConversationRunnerFailover = (event: {
     conversationId: string;
@@ -1423,8 +1563,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     to: RunnerKind;
   }): void => {
     reportFailoverError(
-      `${event.subsystem ?? 'conversation'} ${event.conversationId}: ` +
-        `${event.from} → ${event.to}`,
+      `${event.subsystem ?? "conversation"} ${event.conversationId}: ` +
+        `${event.from} → ${event.to}`
     );
   };
 
@@ -1441,27 +1581,40 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const resolveModel = async (
     subsystem: ModelSubsystem,
     explicit?: string,
-    requestedRunner?: RunnerKind,
+    requestedRunner?: RunnerKind
   ): Promise<string | undefined> => {
     const runnerPrefs = await prefsLoader(subsystem, requestedRunner);
     if (!runnerPrefs) return explicit;
-    return resolveSubsystemModel(prefs.getAllPrefs(), runnerPrefs.kind, subsystem, explicit);
+    return resolveSubsystemModel(
+      prefs.getAllPrefs(),
+      runnerPrefs.kind,
+      subsystem,
+      explicit
+    );
   };
 
   const resolveAutomationAgent = async (
-    requires: automation.ManifestRequires,
+    requires: automation.ManifestRequires
   ): Promise<AutomationAgentSelection> => {
-    const fallbackRunner = (await prefsLoader('automations'))?.kind ?? 'codex';
-    return resolveAutomationAgentSelection(requires, prefs.getAllPrefs(), fallbackRunner);
+    const fallbackRunner = (await prefsLoader("automations"))?.kind ?? "codex";
+    return resolveAutomationAgentSelection(
+      requires,
+      prefs.getAllPrefs(),
+      fallbackRunner
+    );
   };
 
   const resolveAutomationAgentForRef = async (
     automationRef: string,
-    codeAppsDir: string,
+    codeAppsDir: string
   ): Promise<AutomationAgentSelection> => {
     const parsed = automation.parseRef(automationRef);
     const row = parsed
-      ? await automation.readAppOwned(codeAppsDir, parsed.appId, parsed.automationId)
+      ? await automation.readAppOwned(
+          codeAppsDir,
+          parsed.appId,
+          parsed.automationId
+        )
       : undefined;
     return resolveAutomationAgent(row?.manifest.requires ?? {});
   };
@@ -1475,7 +1628,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const catalogPath = paths.modelCatalogFile;
   // Catalog warms are best-effort; failures record as tagged warn events
   // (visible in `_gateway/health`) without flipping any component red.
-  const catalogLogger = health.loggerFor('catalog', logger);
+  const catalogLogger = health.loggerFor("catalog", logger);
   const warmer = catalogPath
     ? new CatalogWarmer({
         catalogPath,
@@ -1484,8 +1637,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           const isActive = runnerPrefs?.kind === kind;
           return enumerateRunnerModels({
             kind,
-            ...(isActive && runnerPrefs?.binPath ? { binPath: runnerPrefs.binPath } : {}),
-            ...(isActive && runnerPrefs?.extraArgs ? { extraArgs: runnerPrefs.extraArgs } : {}),
+            ...(isActive && runnerPrefs?.binPath
+              ? { binPath: runnerPrefs.binPath }
+              : {}),
+            ...(isActive && runnerPrefs?.extraArgs
+              ? { extraArgs: runnerPrefs.extraArgs }
+              : {}),
           });
         },
       })
@@ -1499,17 +1656,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     surface: CatalogSurface,
     kind: RunnerKind,
     refresh: boolean,
-    read: (cp: string, k: RunnerKind) => Promise<T[]>,
+    read: (cp: string, k: RunnerKind) => Promise<T[]>
   ): Promise<{ list: T[]; status: SurfaceStatus }> => {
-    if (!catalogPath || !warmer) return { list: [], status: 'empty' };
+    if (!catalogPath || !warmer) return { list: [], status: "empty" };
     const list = await read(catalogPath, kind);
     if (refresh || list.length === 0) void warmer.warm(kind, surface);
-    return { list, status: deriveStatus(list.length, warmer.isWarming(kind, surface)) };
+    return {
+      list,
+      status: deriveStatus(list.length, warmer.isWarming(kind, surface)),
+    };
   };
 
   const resolveCatalogModels = catalogPath
     ? (kind: RunnerKind, refresh: boolean) =>
-        resolveCatalogSurface('models', kind, refresh, readRunnerModels)
+        resolveCatalogSurface("models", kind, refresh, readRunnerModels)
     : undefined;
   // The binary the agents route should probe for a kind. Only the kind the
   // owner actually configured carries an override (`agent.runner.binPath` is
@@ -1519,15 +1679,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // unavailable until its path is configured and selected.
   const binPathForKind = (kind: RunnerKind): string | undefined => {
     const allPrefs = prefs.getAllPrefs();
-    if (allPrefs['agent.runner.kind'] !== kind) return undefined;
-    const binPath = allPrefs['agent.runner.binPath'];
-    return typeof binPath === 'string' && binPath.length > 0 ? binPath : undefined;
+    if (allPrefs["agent.runner.kind"] !== kind) return undefined;
+    const binPath = allPrefs["agent.runner.binPath"];
+    return typeof binPath === "string" && binPath.length > 0
+      ? binPath
+      : undefined;
   };
   const extraArgsForKind = (kind: RunnerKind): string[] | undefined => {
     const allPrefs = prefs.getAllPrefs();
-    if (allPrefs['agent.runner.kind'] !== kind) return undefined;
-    const extraArgs = allPrefs['agent.runner.extraArgs'];
-    return Array.isArray(extraArgs) && extraArgs.every((entry) => typeof entry === 'string')
+    if (allPrefs["agent.runner.kind"] !== kind) return undefined;
+    const extraArgs = allPrefs["agent.runner.extraArgs"];
+    return Array.isArray(extraArgs) &&
+      extraArgs.every((entry) => typeof entry === "string")
       ? extraArgs
       : undefined;
   };
@@ -1543,16 +1706,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // picker still shows "Use default".
   const askModelPrefs = {
     get: async (): Promise<AskModelInfo> => {
-      const runnerPrefs = (await prefsLoader('ask')) ?? { kind: 'codex' as const };
+      const runnerPrefs = (await prefsLoader("ask")) ?? {
+        kind: "codex" as const,
+      };
       const allPrefs = prefs.getAllPrefs();
       const scoped = allPrefs[`model.${runnerPrefs.kind}.ask`];
-      const current = typeof scoped === 'string' && scoped.length > 0 ? scoped : null;
+      const current =
+        typeof scoped === "string" && scoped.length > 0 ? scoped : null;
       const savedDefault = allPrefs[`model.${runnerPrefs.kind}.default`];
       const { list } = resolveCatalogModels
         ? await resolveCatalogModels(runnerPrefs.kind, false)
         : { list: [] };
       const defaultModel =
-        typeof savedDefault === 'string' && savedDefault.length > 0
+        typeof savedDefault === "string" && savedDefault.length > 0
           ? savedDefault
           : list.find((m) => m.default)?.id;
       return {
@@ -1563,9 +1729,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       };
     },
     set: async (model: string | null): Promise<void> => {
-      const runnerPrefs = (await prefsLoader('ask')) ?? { kind: 'codex' as const };
+      const runnerPrefs = (await prefsLoader("ask")) ?? {
+        kind: "codex" as const,
+      };
       prefs.setPrefs({
-        [`model.${runnerPrefs.kind}.ask`]: model && model.length > 0 ? model : null,
+        [`model.${runnerPrefs.kind}.ask`]:
+          model && model.length > 0 ? model : null,
       });
     },
   };
@@ -1574,15 +1743,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // the Runtime is constructed *with* the chat runner. The runtimeRef
   // holder resolves at call time, after the assignment below.
   let runtimeRef: Runtime | undefined;
-  const getDispatcher = (): Runtime['dispatcher'] => {
+  const getDispatcher = (): Runtime["dispatcher"] => {
     const rt = runtimeRef;
-    if (!rt) throw new Error('chat runner invoked before runtime was constructed');
+    if (!rt)
+      throw new Error("chat runner invoked before runtime was constructed");
     return rt.dispatcher;
   };
   // The runner builds webhook URLs against the live server origin, known
   // only after `startRuntimeHttpServer` resolves below — a turn only ever
   // runs post-start, so this holder is populated by then.
-  let serverUrl = '';
+  let serverUrl = "";
 
   // ── Per-vault host bundles (#280, #289) ───────────────────────────────
   // Each vault owns its app world: a git code store under the vault dir,
@@ -1603,11 +1773,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // databases, so shutdown cannot land mid-`closeItem` or orphan an ACP
   // child (issue #541 review).
   const detachedAutomationTasks = new Set<Promise<void>>();
-  const trackDetachedAutomationTask = (task: Promise<void>, label: string): void => {
+  const trackDetachedAutomationTask = (
+    task: Promise<void>,
+    label: string
+  ): void => {
     const tracked = task
       .catch((error: unknown) => {
         logger.warn?.(
-          `automation task "${label}" failed: ${error instanceof Error ? error.message : String(error)}`,
+          `automation task "${label}" failed: ${error instanceof Error ? error.message : String(error)}`
         );
       })
       .finally(() => {
@@ -1627,21 +1800,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     options.assistOAuth,
     undefined,
     undefined,
-    health.loggerFor('connections', logger),
+    health.loggerFor("connections", logger)
   );
 
   // The outbox executor (issue #306): the only writer on the broker's
   // `allowWrites` lane, draining owner-approved / grant-matched items. It
   // runs OUTSIDE the fire loop — kicked after owner approvals, after each
   // fire (grant-matched items a connector just staged), and on a slow clock.
-  const outboxExecutor = new OutboxExecutor(connectionBroker, health.loggerFor('outbox', logger));
+  const outboxExecutor = new OutboxExecutor(
+    connectionBroker,
+    health.loggerFor("outbox", logger)
+  );
   const drainOutbox = (plane: VaultPlane): void => {
     void outboxExecutor
       .drain(plane)
-      .then(() => health.reportOk('outbox'))
+      .then(() => health.reportOk("outbox"))
       .catch((err) => {
         const message = `outbox drain failed: ${err instanceof Error ? err.message : String(err)}`;
-        health.reportError('outbox', message);
+        health.reportError("outbox", message);
         logger.warn(message);
       });
   };
@@ -1652,11 +1828,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const grantScopesFromDir = async (
     plane: VaultPlane,
     appId: string,
-    dir: string | undefined,
+    dir: string | undefined
   ): Promise<void> => {
     if (!dir) return;
     try {
-      const raw = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as {
+      const raw = JSON.parse(
+        await fs.readFile(path.join(dir, "app.json"), "utf8")
+      ) as {
         vault?: { purpose?: unknown; scopes?: unknown };
       };
       const block = manifestScopeBlock(raw.vault);
@@ -1664,30 +1842,36 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     } catch (err) {
       logger.warn(
         `install-time grant for app "${appId}" failed: ` +
-          (err instanceof Error ? err.message : String(err)),
+          (err instanceof Error ? err.message : String(err))
       );
     }
   };
   const grantDeclaredAppScopes = async (
     plane: VaultPlane,
     store: WorktreeStore,
-    appId: string,
+    appId: string
   ): Promise<void> => {
     // Code-store apps (scaffolds, clones, compiled automations): read the
     // live `main` app.json.
-    await grantScopesFromDir(plane, appId, await store.resolveActiveAppDir(appId));
+    await grantScopesFromDir(
+      plane,
+      appId,
+      await store.resolveActiveAppDir(appId)
+    );
   };
   // Installed bundled apps (issue #434) declare their scopes in the shipped
   // blueprint's app.json — read it there, not from the (empty) code store.
-  const grantDeclaredBundledScopes = (plane: VaultPlane, appId: string): Promise<void> =>
-    grantScopesFromDir(plane, appId, bundledAppDir(appId));
+  const grantDeclaredBundledScopes = (
+    plane: VaultPlane,
+    appId: string
+  ): Promise<void> => grantScopesFromDir(plane, appId, bundledAppDir(appId));
 
   const prewarmApp = async (appId: string, dir: string): Promise<void> => {
     try {
       const result = await prewarmAppAssets(dir, KIT_DIR);
       if (result.bundles > 0) {
         logger.info(
-          `app assets: prewarmed ${appId} (${result.bundles} bundle(s), ${result.variants} compressed variant(s))`,
+          `app assets: prewarmed ${appId} (${result.bundles} bundle(s), ${result.variants} compressed variant(s))`
         );
       }
     } catch (error) {
@@ -1695,7 +1879,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // expected skip, not a prewarm regression. Keep real failures loud.
       if (isExpectedPrewarmSkip(error)) return;
       logger.warn(
-        `app assets: prewarm failed for ${appId}: ${error instanceof Error ? error.message : String(error)}`,
+        `app assets: prewarm failed for ${appId}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };
@@ -1717,23 +1901,26 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
     const outboxStartedAt = Date.now();
     const settled = await Promise.allSettled(
-      vaultRegistry.planesList().map((plane) => outboxExecutor.drain(plane)),
+      vaultRegistry.planesList().map((plane) => outboxExecutor.drain(plane))
     );
     let active = false;
     let failed = false;
     for (const result of settled) {
-      if (result.status === 'fulfilled') {
+      if (result.status === "fulfilled") {
         active ||= result.value.approved > 0 || result.value.deferred > 0;
       } else {
         failed = true;
         logger.warn(
-          `outbox sweep failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+          `outbox sweep failed: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`
         );
       }
     }
-    resourceAccounting.recordSweepPass({ durationMs: Date.now() - outboxStartedAt });
-    if (failed) health.reportError('outbox', 'one or more adaptive outbox sweeps failed');
-    else health.reportOk('outbox');
+    resourceAccounting.recordSweepPass({
+      durationMs: Date.now() - outboxStartedAt,
+    });
+    if (failed)
+      health.reportError("outbox", "one or more adaptive outbox sweeps failed");
+    else health.reportOk("outbox");
     const nextDelay = failed
       ? Math.min(hardwareProfile.outboxIdleIntervalMs * 2, 15 * 60 * 1000)
       : active
@@ -1748,9 +1935,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // each run over the event bus. Scheduled fires enter their vault's scope
   // via `runWithVaultContext` (see schedulerFor); manual fires inherit the
   // request's scope.
-  const fireAutomation: FireAutomation = async (automationRef, opts): Promise<void> => {
+  const fireAutomation: FireAutomation = async (
+    automationRef,
+    opts
+  ): Promise<void> => {
     // Mint the runId here so every fire (cron included) has a bus channel.
-    const runId = opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+    const runId =
+      opts.runId ??
+      `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
     try {
       // Cursor bootstrap runs while `hostFor()` is still awaiting scheduler
       // reconciliation. The host is already mounted in `settledHosts` at that
@@ -1775,11 +1967,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // invocation ids then replay already-applied effects.
         if (prior) ledger.deleteTurn(opts.runId);
       }
-      const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
+      const agent = await resolveAutomationAgentForRef(
+        automationRef,
+        host.codeAppsDir()
+      );
       const automationLadder = resolveSubsystemRunnerLadder(
         prefs.getAllPrefs(),
-        'automations',
-        agent.runner,
+        "automations",
+        agent.runner
       );
       await runAutomation({
         automationRef,
@@ -1792,14 +1987,27 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         vaultFor: async (appId: string, ref: string) => {
           const parsed = automation.parseRef(ref);
           const row = parsed
-            ? await automation.readAppOwned(host.codeAppsDir(), parsed.appId, parsed.automationId)
+            ? await automation.readAppOwned(
+                host.codeAppsDir(),
+                parsed.appId,
+                parsed.automationId
+              )
             : undefined;
-          if (!row) throw new Error(`automation ${ref}: cannot resolve execution scope`);
-          return vaultRegistry.agentBridgeFor(appId, executionScopeBlock(row.manifest.vault));
+          if (!row)
+            throw new Error(
+              `automation ${ref}: cannot resolve execution scope`
+            );
+          return vaultRegistry.agentBridgeFor(
+            appId,
+            executionScopeBlock(row.manifest.vault)
+          );
         },
         resolveConnection: connectionBroker.resolveForFire,
         resolveNestedRuntime: async (nestedRef) => {
-          const nested = await resolveAutomationAgentForRef(nestedRef, host.codeAppsDir());
+          const nested = await resolveAutomationAgentForRef(
+            nestedRef,
+            host.codeAppsDir()
+          );
           return {
             runnerKind: nested.runner,
             ...(nested.model ? { model: nested.model } : {}),
@@ -1817,19 +2025,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ...(agent.model ? { model: agent.model } : {}),
         ...(agent.configPins ? { configPins: agent.configPins } : {}),
         runnerLadder: automationLadder,
-        runnerPrefsFor: (kind) => prefsLoader('automations', kind),
+        runnerPrefsFor: (kind) => prefsLoader("automations", kind),
         runnerHealth,
         runnerHealthContext: ws.vaultId,
         providerEgressConsent,
         hydrationAttachmentPath: (hash) => {
           const parsed = automation.parseRef(automationRef);
-          if (!parsed) throw new Error(`invalid automation ref "${automationRef}"`);
+          if (!parsed)
+            throw new Error(`invalid automation ref "${automationRef}"`);
           return conversationHistoryStore.blobPathFor(parsed.appId, hash);
         },
         onFailover: (event) => {
           reportFailoverError(
             `automation ${event.automationRef}: ${event.from} → ${event.to} ` +
-              `after ${event.failureClass} (${event.failedRunId})`,
+              `after ${event.failureClass} (${event.failedRunId})`
           );
         },
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
@@ -1837,12 +2046,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // Grant-matched outbox items the fire just staged drain now, not
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
-      health.reportOk('automation-runs');
+      health.reportOk("automation-runs");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
-      runEventBus.publish(runId, { type: 'turn.end', turnId: runId, ok: false, error: message });
-      health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
+      runEventBus.publish(runId, {
+        type: "turn.end",
+        turnId: runId,
+        ok: false,
+        error: message,
+      });
+      health.reportError(
+        "automation-runs",
+        `${opts.triggerKind} ${automationRef}: ${message}`
+      );
       logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
       if (opts.propagateError) throw err;
     }
@@ -1850,15 +2067,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   const settledHostFor = (vaultId: string): VaultHost => {
     const host = settledHosts.get(vaultId);
-    if (!host) throw new Error(`gateway: vault ${vaultId} workspace not mounted yet`);
+    if (!host)
+      throw new Error(`gateway: vault ${vaultId} workspace not mounted yet`);
     return host;
   };
 
   /** The current request's vault's mounted host (sync — post-mount paths only). */
-  const currentSettledHost = (): VaultHost => settledHostFor(vaultRegistry.current().boot.vaultId);
+  const currentSettledHost = (): VaultHost =>
+    settledHostFor(vaultRegistry.current().boot.vaultId);
 
   /** The current request's vault's host bundle, mounting it on first touch. */
-  const currentVaultHost = (): Promise<VaultHost> => hostFor(vaultRegistry.current());
+  const currentVaultHost = (): Promise<VaultHost> =>
+    hostFor(vaultRegistry.current());
 
   /**
    * Mount one vault's host bundle: build it, load its app registry into the
@@ -1905,7 +2125,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   /** Re-sync one vault's registry off its live `main` (see BuiltGateway.syncApps). */
   const syncApps = async (vaultId?: string): Promise<void> => {
-    const plane = vaultId ? vaultRegistry.get(vaultId) : vaultRegistry.current();
+    const plane = vaultId
+      ? vaultRegistry.get(vaultId)
+      : vaultRegistry.current();
     if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
     const id = plane.boot.vaultId;
     const host = await hostFor(plane);
@@ -1938,7 +2160,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
    * fail-soft: a refusal or failure resolves `false` rather than throwing, so
    * the listing degrades to `installed: false` instead of a 500.
    */
-  const ensureBundledAppInstalled = async (vaultId: string, appId: string): Promise<boolean> => {
+  const ensureBundledAppInstalled = async (
+    vaultId: string,
+    appId: string
+  ): Promise<boolean> => {
     if (!bundledAppIds.has(appId)) return false;
     const plane = vaultRegistry.get(vaultId);
     if (!plane) return false;
@@ -1958,7 +2183,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     } catch (err) {
       logger.warn(
         `scopes: auto-install of "${appId}" into vault ${vaultId} failed: ` +
-          (err instanceof Error ? err.message : String(err)),
+          (err instanceof Error ? err.message : String(err))
       );
       return false;
     }
@@ -1970,12 +2195,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // ext band is RETAINED there; the owner purges it separately, #286).
   const deregisterAndCleanup = async (appId: string): Promise<void> => {
     const removed = await requireRuntime().registry.deregister(appId);
-    if (removed) await cleanupDeregisteredApp(currentWorkspace().appsDir, removed, logger);
+    if (removed)
+      await cleanupDeregisteredApp(currentWorkspace().appsDir, removed, logger);
     vaultRegistry.revokeApp(appId);
   };
 
   const requireRuntime = (): Runtime => {
-    if (!runtimeRef) throw new Error('gateway: runtime not constructed yet');
+    if (!runtimeRef) throw new Error("gateway: runtime not constructed yet");
     return runtimeRef;
   };
 
@@ -1984,13 +2210,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const vaultId = workspace.vaultId;
     const store = new WorktreeStore({ root: plane.codeStoreRoot });
     await store.init();
-    const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
+    const codeAppsDir = (): string =>
+      path.join(store.getActiveMainLink(), "apps");
     // The ext band (issue #286 phase 2): publish applies an app's declared
     // extension tables to THIS vault; drafts branch a scratch band there.
     const ext: ExtBandOps = {
       applyAppExt: (appId, tables) => plane.applyAppExt(appId, tables),
       seedAppExtDraft: (appId, tables, seedOpts) =>
-        plane.gateway.seedAppExtDraft(plane.ownerCredential, appId, tables, seedOpts),
+        plane.gateway.seedAppExtDraft(
+          plane.ownerCredential,
+          appId,
+          tables,
+          seedOpts
+        ),
       dropAppExtDraft: (appId) => plane.dropAppExtDraft(appId),
     };
     // Draft preview (#141, reshaped by #286): resolve an app's code dir to
@@ -2006,7 +2238,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const runner: ConversationRunner = makeUnifiedConversationRunner({
       store,
       prefsLoader,
-      subsystem: 'builder',
+      subsystem: "builder",
       getDispatcher,
       publicBaseUrl: () => serverUrl,
       ext,
@@ -2024,26 +2256,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Headless compilation has its own outer automations ladder. Keep the
     // injected runner automations-scoped and single-rung so breaker selection
     // can never jump providers inside one compile ledger turn.
-    const automationCompileRunner: ConversationRunner = makeUnifiedConversationRunner({
-      store,
-      prefsLoader,
-      subsystem: 'automations',
-      getDispatcher,
-      publicBaseUrl: () => serverUrl,
-      ext,
-      ...makeVaultToolRunners(vaultRegistry),
-      ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
-      runTurn: accountRunTurn(options.runTurn ?? runTurn),
-      runnerHealth,
-      runnerHealthContext,
-      providerEgressConsent,
-      onFailover: onConversationRunnerFailover,
-    });
+    const automationCompileRunner: ConversationRunner =
+      makeUnifiedConversationRunner({
+        store,
+        prefsLoader,
+        subsystem: "automations",
+        getDispatcher,
+        publicBaseUrl: () => serverUrl,
+        ext,
+        ...makeVaultToolRunners(vaultRegistry),
+        ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
+        runTurn: accountRunTurn(options.runTurn ?? runTurn),
+        runnerHealth,
+        runnerHealthContext,
+        providerEgressConsent,
+        onFailover: onConversationRunnerFailover,
+      });
     // Interactive automation turns run in a scratch cwd (the route passes it
     // as `dataDir`) and through an agent-plane dispatcher. This preserves the
     // automation's enrolled `agent.agent` grant boundary while keeping native
     // file tools away from the live automation source tree.
-    const automationConversationRunnerFor = (block: InstallScopeBlock): ConversationRunner => {
+    const automationConversationRunnerFor = (
+      block: InstallScopeBlock
+    ): ConversationRunner => {
       const automationDispatcher = new Dispatcher({
         registry: () => requireRuntime().registry,
         codeDirOverride: (appId) => store.resolveActiveAppDir(appId),
@@ -2051,7 +2286,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       });
       return makeConversationRunnerCore({
         prefsLoader,
-        subsystem: 'automations',
+        subsystem: "automations",
         getDispatcher: () => automationDispatcher,
         resolveCwd: (input) => input.dataDir,
         runTurn: accountRunTurn(options.runTurn ?? runTurn),
@@ -2073,9 +2308,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }): Promise<{ ok: boolean; error?: string }> => {
       const { automationRef, runId, enableOnSuccess } = input;
       const parsed = automation.parseRef(automationRef);
-      if (!parsed) return { ok: false, error: `invalid automation ref "${automationRef}"` };
-      const row = await automation.readAppOwned(codeAppsDir(), parsed.appId, parsed.automationId);
-      if (!row) return { ok: false, error: `automation "${automationRef}" does not exist` };
+      if (!parsed)
+        return {
+          ok: false,
+          error: `invalid automation ref "${automationRef}"`,
+        };
+      const row = await automation.readAppOwned(
+        codeAppsDir(),
+        parsed.appId,
+        parsed.automationId
+      );
+      if (!row)
+        return {
+          ok: false,
+          error: `automation "${automationRef}" does not exist`,
+        };
       const agent = await resolveAutomationAgent(row.manifest.requires);
       const enabledBeforeCompile = row.enabled;
       // Resolve core_link_anchor tokens before the model runs. The token
@@ -2085,7 +2332,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         try {
           const anchors = resolveAutomationAnchors(
             { gateway: plane.gateway, credential: plane.ownerCredential },
-            row.manifest.prompt,
+            row.manifest.prompt
           );
           return { anchors, scopes: scopesForAutomationAnchors(anchors) };
         } catch (error) {
@@ -2103,124 +2350,147 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // safe for WorktreeStore session ids.
       const compileLadder = resolveSubsystemRunnerLadder(
         prefs.getAllPrefs(),
-        'automations',
-        agent.runner,
+        "automations",
+        agent.runner
       );
       let finalFailure: string | undefined;
       let failoverNotice: string | undefined;
-      const completed = await findSequentially(compileLadder.entries(), async ([index, kind]) => {
-        const selection =
-          index === 0
-            ? agent
-            : resolveAutomationAgentSelection(
-                { ...row.manifest.requires, runner: kind },
-                prefs.getAllPrefs(),
-                kind,
-                { includeManifestProviderPins: false },
+      const completed = await findSequentially(
+        compileLadder.entries(),
+        async ([index, kind]) => {
+          const selection =
+            index === 0
+              ? agent
+              : resolveAutomationAgentSelection(
+                  { ...row.manifest.requires, runner: kind },
+                  prefs.getAllPrefs(),
+                  kind,
+                  { includeManifestProviderPins: false }
+                );
+          const attemptRunId =
+            index === 0 ? runId : `${runId}:failover:${index}:${kind}`;
+          const runSuffix =
+            attemptRunId.split(":").at(-1) ?? crypto.randomUUID().slice(0, 8);
+          const sessionId = `compile-${parsed.appId}-${runSuffix}-${index}`;
+          let attemptFailure: string | undefined;
+          let attemptFailureClass: string | undefined;
+
+          // Each provider attempt owns a fresh worktree and ledger turn. A
+          // provider failure advances only after this turn has settled; compile
+          // output is never replayed into another stateful session.
+          await runHeadlessAutomationCompile({
+            runner: automationCompileRunner,
+            journalDbFile: workspace.journalDbFile,
+            runnerSessionDir: workspace.runnerSessionDir,
+            dataDir: workspace.appsDir,
+            appId: parsed.appId,
+            draftSessionId: sessionId,
+            automationRef,
+            automationName: row.name,
+            instructions: row.manifest.prompt,
+            runnerKind: selection.runner,
+            ...(selection.model ? { model: selection.model } : {}),
+            ...(selection.configPins
+              ? { configPins: selection.configPins }
+              : {}),
+            providerEgressConsent,
+            // Rung 0 is the user's automations primary unless the manifest
+            // pinned a different provider, in which case the pin only counts if
+            // that runner is a live ladder member. Later rungs ARE the ladder.
+            consentSource:
+              index === 0 && selection.selectionSource !== "manifest"
+                ? "direct"
+                : "ladder",
+            hydrationAttachmentPath: (hash) =>
+              conversationHistoryStore.blobPathFor(parsed.appId, hash),
+            ...(failoverNotice ? { failoverNotice } : {}),
+            anchors: anchorResolution.anchors,
+            ...(anchorResolution.error
+              ? { preflightError: anchorResolution.error }
+              : {}),
+            runId: attemptRunId,
+            onSuccess: async () => {
+              const appDir = await store.snapshotSessionAppDir(
+                sessionId,
+                parsed.appId
               );
-        const attemptRunId = index === 0 ? runId : `${runId}:failover:${index}:${kind}`;
-        const runSuffix = attemptRunId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
-        const sessionId = `compile-${parsed.appId}-${runSuffix}-${index}`;
-        let attemptFailure: string | undefined;
-        let attemptFailureClass: string | undefined;
+              const manifestFile = path.join(
+                appDir,
+                "automations",
+                parsed.automationId,
+                automation.MANIFEST_FILE
+              );
+              const manifest = automation.parseManifest(
+                await fs.readFile(manifestFile, "utf8")
+              );
+              const compiled = finalizeCompiledManifest(manifest, {
+                enabledBeforeCompile,
+                enableOnSuccess,
+                anchoredScopes: anchorResolution.scopes,
+              });
+              await fs.writeFile(
+                manifestFile,
+                `${JSON.stringify(compiled, null, 2)}\n`
+              );
+              await publishAndReconcile(lifecycleOpts, {
+                appId: parsed.appId,
+                sessionId,
+                appDir,
+                message: `compile ${parsed.automationId}`,
+                ephemeralSession: true,
+              });
+              health.reportOk("automation-runs", `Plan ready for ${row.name}`);
+            },
+            onFailure: async (error, failureClass) => {
+              attemptFailure = error;
+              attemptFailureClass = failureClass;
+              // Discard a failed compile's isolated branch. This also clears an
+              // interrupted rebase before the next provider starts.
+              await store.closeSession(sessionId).catch(() => undefined);
+            },
+          }).catch((error: unknown) => {
+            attemptFailure =
+              error instanceof Error ? error.message : String(error);
+          });
 
-        // Each provider attempt owns a fresh worktree and ledger turn. A
-        // provider failure advances only after this turn has settled; compile
-        // output is never replayed into another stateful session.
-        await runHeadlessAutomationCompile({
-          runner: automationCompileRunner,
-          journalDbFile: workspace.journalDbFile,
-          runnerSessionDir: workspace.runnerSessionDir,
-          dataDir: workspace.appsDir,
-          appId: parsed.appId,
-          draftSessionId: sessionId,
-          automationRef,
-          automationName: row.name,
-          instructions: row.manifest.prompt,
-          runnerKind: selection.runner,
-          ...(selection.model ? { model: selection.model } : {}),
-          ...(selection.configPins ? { configPins: selection.configPins } : {}),
-          providerEgressConsent,
-          // Rung 0 is the user's automations primary unless the manifest
-          // pinned a different provider, in which case the pin only counts if
-          // that runner is a live ladder member. Later rungs ARE the ladder.
-          consentSource:
-            index === 0 && selection.selectionSource !== 'manifest' ? 'direct' : 'ladder',
-          hydrationAttachmentPath: (hash) =>
-            conversationHistoryStore.blobPathFor(parsed.appId, hash),
-          ...(failoverNotice ? { failoverNotice } : {}),
-          anchors: anchorResolution.anchors,
-          ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
-          runId: attemptRunId,
-          onSuccess: async () => {
-            const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
-            const manifestFile = path.join(
-              appDir,
-              'automations',
-              parsed.automationId,
-              automation.MANIFEST_FILE,
-            );
-            const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
-            const compiled = finalizeCompiledManifest(manifest, {
-              enabledBeforeCompile,
-              enableOnSuccess,
-              anchoredScopes: anchorResolution.scopes,
-            });
-            await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
-            await publishAndReconcile(lifecycleOpts, {
-              appId: parsed.appId,
-              sessionId,
-              appDir,
-              message: `compile ${parsed.automationId}`,
-              ephemeralSession: true,
-            });
-            health.reportOk('automation-runs', `Plan ready for ${row.name}`);
-          },
-          onFailure: async (error, failureClass) => {
-            attemptFailure = error;
-            attemptFailureClass = failureClass;
-            // Discard a failed compile's isolated branch. This also clears an
-            // interrupted rebase before the next provider starts.
-            await store.closeSession(sessionId).catch(() => undefined);
-          },
-        }).catch((error: unknown) => {
-          attemptFailure = error instanceof Error ? error.message : String(error);
-        });
-
-        if (!attemptFailure) return true;
-        finalFailure = attemptFailure;
-        const next = compileLadder[index + 1];
-        if (!attemptFailureClass || !next) return false;
-        failoverNotice =
-          `${kind} failed at the compile boundary (${attemptFailureClass}). ` +
-          `Continuing with ${next}; provider-specific model and effort pins were cleared.`;
-        onConversationRunnerFailover({
-          conversationId: automationRef,
-          subsystem: 'automations',
-          from: kind,
-          to: next,
-        });
-        return false;
-      });
+          if (!attemptFailure) return true;
+          finalFailure = attemptFailure;
+          const next = compileLadder[index + 1];
+          if (!attemptFailureClass || !next) return false;
+          failoverNotice =
+            `${kind} failed at the compile boundary (${attemptFailureClass}). ` +
+            `Continuing with ${next}; provider-specific model and effort pins were cleared.`;
+          onConversationRunnerFailover({
+            conversationId: automationRef,
+            subsystem: "automations",
+            from: kind,
+            to: next,
+          });
+          return false;
+        }
+      );
       if (completed) return { ok: true };
 
-      const failure = finalFailure ?? 'Compile failed without a diagnostic.';
+      const failure = finalFailure ?? "Compile failed without a diagnostic.";
       health.reportError(
-        'automation-runs',
-        `Compile failed for ${row.name}: ${failure}. Retry from the automation thread.`,
+        "automation-runs",
+        `Compile failed for ${row.name}: ${failure}. Retry from the automation thread.`
       );
       logger.warn?.(`Headless compile failed for ${automationRef}: ${failure}`);
       if (row.manifest.onFailure) {
-        const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
+        const target = automation.parseRef(
+          row.manifest.onFailure,
+          parsed.appId
+        );
         if (target) {
           await fireAutomation(`${target.appId}/${target.automationId}`, {
-            triggerKind: 'on_failure',
-            triggerOrigin: 'manual',
+            triggerKind: "on_failure",
+            triggerOrigin: "manual",
             input: {
               automationRef,
               compileRunId: runId,
               error: failure,
-              phase: 'compile',
+              phase: "compile",
             },
           });
         }
@@ -2231,7 +2501,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const lifecycleOpts: LifecycleRouteOptions = {
       store,
       codeAppsDir,
-      ...(paths.templatesCacheDir ? { templatesCacheDir: paths.templatesCacheDir } : {}),
+      ...(paths.templatesCacheDir
+        ? { templatesCacheDir: paths.templatesCacheDir }
+        : {}),
       ensureRegistered: async (appId) => {
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
@@ -2265,7 +2537,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         return {
           id: templateId,
           ...(meta.name === undefined ? {} : { name: meta.name }),
-          ...(meta.description === undefined ? {} : { description: meta.description }),
+          ...(meta.description === undefined
+            ? {}
+            : { description: meta.description }),
           ...(meta.iconKey === undefined ? {} : { iconKey: meta.iconKey }),
           ...(meta.colorKey === undefined ? {} : { colorKey: meta.colorKey }),
           alreadyInstalled,
@@ -2287,20 +2561,25 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // becoming an unhandled rejection.
         trackDetachedAutomationTask(
           runAutomationCompileTask(input).then(() => undefined),
-          `compile ${input.automationRef}`,
+          `compile ${input.automationRef}`
         );
       },
       reviseAutomation: ({ row, steering, revisionTurnId, compileTurnId }) => {
         const parsed = automation.parseRef(row.ref);
         if (!parsed) return;
         let revisionRunner: RunnerKind | undefined;
-        const reportCompileTurn = (error: string, labels?: { note: string }): void => {
+        const reportCompileTurn = (
+          error: string,
+          labels?: { note: string }
+        ): void => {
           recordFailedAutomationCompile({
             journalDbFile: workspace.journalDbFile,
             automationRef: row.ref,
             appId: row.ownerApp,
             automationName: row.name,
-            runId: labels ? `${row.ref}:revert:${crypto.randomUUID().slice(0, 8)}` : compileTurnId,
+            runId: labels
+              ? `${row.ref}:revert:${crypto.randomUUID().slice(0, 8)}`
+              : compileTurnId,
             error,
             ...(labels ? { note: labels.note, summary: labels.note } : {}),
             ...(revisionRunner ? { runnerKind: revisionRunner } : {}),
@@ -2315,15 +2594,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           publishPrompt: async (prompt, message) => {
             const sessionId = `revise-${parsed.appId}-${crypto.randomUUID().slice(0, 8)}`;
             await prepareLifecycleSession(store, sessionId, true);
-            const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+            const appDir = await store.snapshotSessionAppDir(
+              sessionId,
+              parsed.appId
+            );
             const manifestPath = path.join(
               appDir,
-              'automations',
+              "automations",
               parsed.automationId,
-              automation.MANIFEST_FILE,
+              automation.MANIFEST_FILE
             );
-            const existing = automation.parseManifest(await fs.readFile(manifestPath, 'utf8'));
-            const revised = automation.validateManifest({ ...existing, prompt });
+            const existing = automation.parseManifest(
+              await fs.readFile(manifestPath, "utf8")
+            );
+            const revised = automation.validateManifest({
+              ...existing,
+              prompt,
+            });
             await stageAndMaybePublish(lifecycleOpts, {
               appId: parsed.appId,
               sessionId,
@@ -2341,18 +2628,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           rewrite: async (persistPrompt) => {
             const agent = await resolveAutomationAgent(row.manifest.requires);
             revisionRunner = agent.runner;
-            const runnerPrefs = await prefsLoader('automations', agent.runner);
-            if (!runnerPrefs) throw new Error('No automation agent is configured.');
-            const configuredRewrite = prefs.getAllPrefs()[`model.${agent.runner}.rewrite`];
+            const runnerPrefs = await prefsLoader("automations", agent.runner);
+            if (!runnerPrefs)
+              throw new Error("No automation agent is configured.");
+            const configuredRewrite =
+              prefs.getAllPrefs()[`model.${agent.runner}.rewrite`];
             const catalog = resolveCatalogModels
               ? await resolveCatalogModels(agent.runner, false)
               : { list: [] };
-            const fastModel = catalog.list.find((model) => model.tier === 'fast')?.id;
+            const fastModel = catalog.list.find(
+              (model) => model.tier === "fast"
+            )?.id;
             const rewriteModel = resolveAutomationRewriteModel(
               row.manifest.requires,
               agent,
               configuredRewrite,
-              fastModel,
+              fastModel
             );
             await rewriteAutomationInstructions({
               row,
@@ -2373,24 +2664,34 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               enableOnSuccess: false,
             }),
           onRolledBack: (detail) => {
-            reportCompileTurn(detail, { note: 'Instructions rolled back' });
+            reportCompileTurn(detail, { note: "Instructions rolled back" });
             health.reportError(
-              'automation-runs',
-              `Revision rolled back for ${row.name}: ${detail}`,
+              "automation-runs",
+              `Revision rolled back for ${row.name}: ${detail}`
             );
-            logger.warn?.(`Instruction revision rolled back for ${row.ref}: ${detail}`);
+            logger.warn?.(
+              `Instruction revision rolled back for ${row.ref}: ${detail}`
+            );
           },
           onFailed: (message) => {
             reportCompileTurn(`Instruction revision failed: ${message}`);
-            runEventBus.publish(compileTurnId, { type: 'turn.start', turnId: compileTurnId });
             runEventBus.publish(compileTurnId, {
-              type: 'turn.end',
+              type: "turn.start",
+              turnId: compileTurnId,
+            });
+            runEventBus.publish(compileTurnId, {
+              type: "turn.end",
               turnId: compileTurnId,
               ok: false,
               error: `Instruction revision failed: ${message}`,
             });
-            health.reportError('automation-runs', `Revision failed for ${row.name}: ${message}`);
-            logger.warn?.(`Instruction revision failed for ${row.ref}: ${message}`);
+            health.reportError(
+              "automation-runs",
+              `Revision failed for ${row.name}: ${message}`
+            );
+            logger.warn?.(
+              `Instruction revision failed for ${row.ref}: ${message}`
+            );
           },
         });
         trackDetachedAutomationTask(task, `revise ${row.ref}`);
@@ -2421,13 +2722,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               return {
                 id: name,
                 name: label ?? meta.name ?? name,
-                ...(meta.description === undefined ? {} : { description: meta.description }),
-                kind: 'app' as const,
+                ...(meta.description === undefined
+                  ? {}
+                  : { description: meta.description }),
+                kind: "app" as const,
                 hasIndex: meta.hasIndex,
-                ...(meta.iconKey === undefined ? {} : { iconKey: meta.iconKey }),
-                ...(meta.colorKey === undefined ? {} : { colorKey: meta.colorKey }),
+                ...(meta.iconKey === undefined
+                  ? {}
+                  : { iconKey: meta.iconKey }),
+                ...(meta.colorKey === undefined
+                  ? {}
+                  : { colorKey: meta.colorKey }),
               };
-            }),
+            })
           ),
         ext,
       }),
@@ -2445,11 +2752,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         runAutomation: ({ automationRef, turnId }) => {
           void fireAutomation(automationRef, {
             runId: turnId,
-            triggerKind: 'manual',
-            triggerOrigin: 'manual',
+            triggerKind: "manual",
+            triggerOrigin: "manual",
           });
         },
-        subscribeTurnEvents: (turnId, listener) => runEventBus.subscribe(turnId, listener),
+        subscribeTurnEvents: (turnId, listener) =>
+          runEventBus.subscribe(turnId, listener),
         runInteractiveTurn: async ({
           row,
           turnId,
@@ -2467,16 +2775,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 { runner: runnerKind },
                 prefs.getAllPrefs(),
                 runnerKind,
-                { includeManifestProviderPins: false },
+                { includeManifestProviderPins: false }
               )
             : await resolveAutomationAgent(row.manifest.requires);
           const validatedAttachmentRefs = validateTurnAttachmentRefs(
             conversationHistoryStore,
             row.ownerApp,
-            attachmentRefs ?? [],
+            attachmentRefs ?? []
           );
           const turnAttachments = validatedAttachmentRefs.map((attachment) => ({
-            path: conversationHistoryStore.blobPathFor(row.ownerApp, attachment.hash),
+            path: conversationHistoryStore.blobPathFor(
+              row.ownerApp,
+              attachment.hash
+            ),
             mime: attachment.mime,
             ...(attachment.filename ? { filename: attachment.filename } : {}),
           }));
@@ -2490,9 +2801,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             message,
             journalDbFile: workspace.journalDbFile,
             runnerSessionDir: workspace.runnerSessionDir,
-            runner: automationConversationRunnerFor(executionScopeBlock(row.manifest.vault)),
+            runner: automationConversationRunnerFor(
+              executionScopeBlock(row.manifest.vault)
+            ),
             runnerKind: selected.runner,
-            ...((model ?? selected.model) ? { model: model ?? selected.model } : {}),
+            ...((model ?? selected.model)
+              ? { model: model ?? selected.model }
+              : {}),
             ...(Object.keys(configPins).length > 0 ? { configPins } : {}),
             ...(providerConsent ? { providerConsent } : {}),
             ...(validatedAttachmentRefs.length
@@ -2501,7 +2816,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                     hash: attachment.hash,
                     mime: attachment.mime,
                     sizeBytes: attachment.sizeBytes ?? 0,
-                    ...(attachment.filename ? { filename: attachment.filename } : {}),
+                    ...(attachment.filename
+                      ? { filename: attachment.filename }
+                      : {}),
                   })),
                   turnAttachments,
                 }
@@ -2510,7 +2827,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               conversationHistoryStore.blobPathFor(row.ownerApp, hash),
             artifactRoots: [
               workspace.appsDir,
-              path.join(store.getActiveMainLink(), 'apps', row.ownerApp),
+              path.join(store.getActiveMainLink(), "apps", row.ownerApp),
             ],
             uploadInlineArtifact: (bytes) =>
               conversationHistoryStore.uploadBlob(row.ownerApp, bytes),
@@ -2542,7 +2859,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // ride the vault the automation lives in.
   const schedulers = new Map<string, automation.LocalScheduler>();
   const triggerStores = new Map<string, AutomationTriggerStore>();
-  const reconcileStates = new Map<string, { inFlight?: Promise<void>; dirty: boolean }>();
+  const reconcileStates = new Map<
+    string,
+    { inFlight?: Promise<void>; dirty: boolean }
+  >();
   let schedulersStarted = false;
 
   const triggerStoreFor = (vaultId: string): AutomationTriggerStore => {
@@ -2550,44 +2870,52 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (existing) return existing;
     const plane = vaultRegistry.get(vaultId);
     if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
-    const store = new AutomationTriggerStore(makeJournalDbProvider(plane.workspace.journalDbFile));
+    const store = new AutomationTriggerStore(
+      makeJournalDbProvider(plane.workspace.journalDbFile)
+    );
     triggerStores.set(vaultId, store);
     return store;
   };
 
   const parseEventCursor = (
-    positionJson: string | undefined,
+    positionJson: string | undefined
   ): { provider?: unknown; ingressId: number } => {
     if (!positionJson) return { ingressId: 0 };
     try {
       const parsed = JSON.parse(positionJson) as unknown;
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         return { ingressId: 0 };
       }
       const row = parsed as Record<string, unknown>;
       const ingressId = Number(row.ingressId);
       return {
         ...(row.provider === undefined ? {} : { provider: row.provider }),
-        ingressId: Number.isSafeInteger(ingressId) && ingressId >= 0 ? ingressId : 0,
+        ingressId:
+          Number.isSafeInteger(ingressId) && ingressId >= 0 ? ingressId : 0,
       };
     } catch {
       return { ingressId: 0 };
     }
   };
 
-  const gmailConnectBaseline = (vaultId: string, connectionId: string): unknown => {
+  const gmailConnectBaseline = (
+    vaultId: string,
+    connectionId: string
+  ): unknown => {
     const plane = vaultRegistry.get(vaultId);
     const row = plane?.db.vault
       .prepare(
         `SELECT value_json
            FROM sync_connection_cursor
-          WHERE connection_id = ? AND key = 'gmail_history_id'`,
+          WHERE connection_id = ? AND key = 'gmail_history_id'`
       )
       .get(connectionId) as { value_json: string } | undefined;
     if (!row) return undefined;
     try {
       const value = JSON.parse(row.value_json) as { id?: unknown };
-      return typeof value.id === 'string' ? { provider: 'gmail', historyId: value.id } : undefined;
+      return typeof value.id === "string"
+        ? { provider: "gmail", historyId: value.id }
+        : undefined;
     } catch {
       return undefined;
     }
@@ -2604,60 +2932,63 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
    */
   const eventIngressKey = (
     connectionId: string,
-    trigger: Extract<automation.Trigger, { kind: 'event' }>,
+    trigger: Extract<automation.Trigger, { kind: "event" }>
   ): string => {
     const filterHash = crypto
-      .createHash('sha256')
+      .createHash("sha256")
       .update(JSON.stringify(trigger.filter ?? {}))
-      .digest('hex')
+      .digest("hex")
       .slice(0, 16);
     return `${automation.eventSourceKey(trigger)}:${connectionId}:${filterHash}`;
   };
 
   const readTriggerCursor = async (
     vaultId: string,
-    input: automation.TriggerCursorReadInput,
+    input: automation.TriggerCursorReadInput
   ): Promise<automation.CursorReadResult> => {
     const parsed = automation.parseRef(input.automationRef);
-    if (!parsed) throw new Error(`invalid automation ref "${input.automationRef}"`);
+    if (!parsed)
+      throw new Error(`invalid automation ref "${input.automationRef}"`);
     const row = await automation.readAppOwned(
       settledHostFor(vaultId).codeAppsDir(),
       parsed.appId,
-      parsed.automationId,
+      parsed.automationId
     );
     if (!row || !row.enabled) {
       return {
         elements: [],
-        ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+        ...(input.cursor?.positionJson
+          ? { positionJson: input.cursor.positionJson }
+          : {}),
       };
     }
     const trigger = row.manifest.triggers[input.triggerIndex];
     if (!trigger || trigger.kind !== input.trigger.kind) {
       return { elements: [] };
     }
-    if (trigger.kind === 'webhook') {
-      if (!('secretHash' in trigger)) return { elements: [] };
+    if (trigger.kind === "webhook") {
+      if (!("secretHash" in trigger)) return { elements: [] };
       return readIngressCursor(
         triggerStoreFor(vaultId),
         trigger.id,
         input.cursor?.positionJson,
         input.limit,
-        input.now.getTime(),
+        input.now.getTime()
       );
     }
-    if (trigger.kind === 'event') {
+    if (trigger.kind === "event") {
       const connection = row.manifest.connections?.find(
-        (binding) => binding.kind === trigger.connectorKind,
+        (binding) => binding.kind === trigger.connectorKind
       );
       if (!connection) {
         throw new Error(
-          `event trigger ${input.automationRef}[${input.triggerIndex}] has no bound ${trigger.connectorKind} connection`,
+          `event trigger ${input.automationRef}[${input.triggerIndex}] has no bound ${trigger.connectorKind} connection`
         );
       }
       const position = parseEventCursor(input.cursor?.positionJson);
       const initialProvider =
         position.provider ??
-        (trigger.connectorKind === 'pull.gmail'
+        (trigger.connectorKind === "pull.gmail"
           ? gmailConnectBaseline(vaultId, connection.connectionId)
           : undefined);
       const polled = await pollProviderEventSource({
@@ -2666,13 +2997,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ...(initialProvider === undefined ? {} : { cursor: initialProvider }),
         now: input.now,
         limit: input.limit + 1,
-        pollJson: (binding, url, headers) => connectionBroker.pollJson(binding, url, headers),
+        pollJson: (binding, url, headers) =>
+          connectionBroker.pollJson(binding, url, headers),
       });
       const store = triggerStoreFor(vaultId);
       const sourceKey = eventIngressKey(connection.connectionId, trigger);
       for (const event of polled.events) {
         store.appendIngress({
-          source: 'poll',
+          source: "poll",
           sourceKey,
           deliveryId: event.id,
           receivedAt: event.occurredAt,
@@ -2683,9 +3015,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       const retention = ingressRetentionGap(
         store.pruneIngress(input.now.getTime()),
         sourceKey,
-        position.ingressId,
+        position.ingressId
       );
-      const records = store.listIngressAfter(sourceKey, position.ingressId, input.limit);
+      const records = store.listIngressAfter(
+        sourceKey,
+        position.ingressId,
+        input.limit
+      );
       // Same invariant `readIngressCursor` holds (trigger-ingress-cursor.ts):
       // the ingress half of this position only ever advances to the last row
       // actually handed back. Rows past the cap are still in
@@ -2710,57 +3046,76 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (!row.manifest.vault) {
       return {
         elements: [],
-        ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+        ...(input.cursor?.positionJson
+          ? { positionJson: input.cursor.positionJson }
+          : {}),
       };
     }
     const common = {
       automationRef: input.automationRef,
       purpose: row.manifest.vault.purpose,
-      vault: vaultRegistry.agentBridgeFor(parsed.appId, executionScopeBlock(row.manifest.vault)),
-      ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+      vault: vaultRegistry.agentBridgeFor(
+        parsed.appId,
+        executionScopeBlock(row.manifest.vault)
+      ),
+      ...(input.cursor?.positionJson
+        ? { positionJson: input.cursor.positionJson }
+        : {}),
       limit: input.limit,
       now: input.now,
     };
-    if (trigger.kind === 'condition') {
+    if (trigger.kind === "condition") {
       return automation.readConditionCursor({ ...common, trigger });
     }
-    if (trigger.kind === 'data') {
+    if (trigger.kind === "data") {
       return automation.readDataCursor({ ...common, trigger });
     }
     return { elements: [] };
   };
 
-  const gapNote = (input: automation.TriggerCursorFireInput): string | undefined => {
+  const gapNote = (
+    input: automation.TriggerCursorFireInput
+  ): string | undefined => {
     if (input.skipped <= 0) return undefined;
     const window =
       input.windowFrom !== undefined && input.windowTo !== undefined
         ? ` in ${new Date(input.windowFrom).toISOString()}–${new Date(input.windowTo).toISOString()}`
-        : '';
-    return `Trigger cursor skipped ${input.skipped} source element${input.skipped === 1 ? '' : 's'}${window} (${input.gapReason ?? 'catch-up cap'}).`;
+        : "";
+    return `Trigger cursor skipped ${input.skipped} source element${input.skipped === 1 ? "" : "s"}${window} (${input.gapReason ?? "catch-up cap"}).`;
   };
 
-  const fireTriggerCursor = async (input: automation.TriggerCursorFireInput): Promise<void> => {
+  const fireTriggerCursor = async (
+    input: automation.TriggerCursorFireInput
+  ): Promise<void> => {
     const trigger = input.trigger;
     let payload: unknown;
-    if (trigger.kind === 'condition') {
+    if (trigger.kind === "condition") {
       payload = {
-        trigger: { kind: 'condition', index: input.triggerIndex, entity: trigger.entity },
+        trigger: {
+          kind: "condition",
+          index: input.triggerIndex,
+          entity: trigger.entity,
+        },
         rows: [input.element.payload],
       };
-    } else if (trigger.kind === 'data') {
+    } else if (trigger.kind === "data") {
       payload = {
-        trigger: { kind: 'data', index: input.triggerIndex, entities: trigger.entities },
+        trigger: {
+          kind: "data",
+          index: input.triggerIndex,
+          entities: trigger.entities,
+        },
         changes: [input.element.payload],
       };
-    } else if (trigger.kind === 'webhook') {
+    } else if (trigger.kind === "webhook") {
       // Preserve the established webhook handler contract: ctx.input is the
       // authenticated request body, while gap metadata remains visible on
       // the native turn itself.
       payload = input.element.payload;
-    } else if (trigger.kind === 'event') {
+    } else if (trigger.kind === "event") {
       payload = {
         trigger: {
-          kind: 'event',
+          kind: "event",
           index: input.triggerIndex,
           connectorKind: trigger.connectorKind,
           event: trigger.event,
@@ -2769,15 +3124,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       };
     }
     const sourceTurnId = crypto
-      .createHash('sha256')
+      .createHash("sha256")
       .update(
-        `${input.automationRef}\u0000${input.triggerIndex}\u0000${input.sourceKind}\u0000${input.element.position}`,
+        `${input.automationRef}\u0000${input.triggerIndex}\u0000${input.sourceKind}\u0000${input.element.position}`
       )
-      .digest('hex')
+      .digest("hex")
       .slice(0, 24);
     await fireAutomation(input.automationRef, {
       runId: `${input.automationRef}:trigger:${sourceTurnId}`,
-      triggerKind: 'scheduled',
+      triggerKind: "scheduled",
       triggerOrigin: input.sourceKind,
       idempotent: true,
       propagateError: true,
@@ -2790,21 +3145,30 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const existing = schedulers.get(vaultId);
     if (existing) return existing;
     const created: automation.LocalScheduler =
-      options.scheduler && schedulers.size === 0 && vaultId === vaultRegistry.defaultVaultId()
+      options.scheduler &&
+      schedulers.size === 0 &&
+      vaultId === vaultRegistry.defaultVaultId()
         ? options.scheduler
         : new automation.InProcessScheduler({
             fire: (ref) =>
               runWithVaultContext({ vaultId }, () =>
-                fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
+                fireAutomation(ref, {
+                  triggerKind: "scheduled",
+                  triggerOrigin: "cron",
+                })
               ),
             store: triggerStoreFor(vaultId),
             readCursor: (input) =>
-              runWithVaultContext({ vaultId }, () => readTriggerCursor(vaultId, input)),
-            fireCursor: (input) => runWithVaultContext({ vaultId }, () => fireTriggerCursor(input)),
+              runWithVaultContext({ vaultId }, () =>
+                readTriggerCursor(vaultId, input)
+              ),
+            fireCursor: (input) =>
+              runWithVaultContext({ vaultId }, () => fireTriggerCursor(input)),
             onError: (err, ref) => {
               const message =
-                `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err));
-              health.reportError('automation-runs', message);
+                `scheduled ${ref} failed: ` +
+                (err instanceof Error ? err.message : String(err));
+              health.reportError("automation-runs", message);
               logger.warn(message);
             },
             // This legacy ledger now carries liveness only. Missed/source
@@ -2817,8 +3181,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             // Issue #570: gateway default cron zone (tier 2). Re-read prefs each
             // register/reconcile so Settings changes apply without a restart.
             defaultCronTimeZone: () => {
-              const raw = prefs.getAllPrefs()[automation.CRON_DEFAULT_TIMEZONE_PREF];
-              return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+              const raw =
+                prefs.getAllPrefs()[automation.CRON_DEFAULT_TIMEZONE_PREF];
+              return typeof raw === "string" && raw.trim()
+                ? raw.trim()
+                : undefined;
             },
           });
     schedulers.set(vaultId, created);
@@ -2827,7 +3194,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   provenanceDoorbell = (vaultId, entityTypes) => {
-    runWithVaultContext({ vaultId }, () => schedulers.get(vaultId)?.nudge(entityTypes));
+    runWithVaultContext({ vaultId }, () =>
+      schedulers.get(vaultId)?.nudge(entityTypes)
+    );
   };
 
   const reconcileScheduler = (vaultId: string): Promise<void> => {
@@ -2845,7 +3214,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const work = runWithVaultContext({ vaultId }, async () => {
       const reconcileUntilClean = async (): Promise<void> => {
         settled.dirty = false;
-        const { rows } = await automation.list(settledHostFor(vaultId).codeAppsDir());
+        const { rows } = await automation.list(
+          settledHostFor(vaultId).codeAppsDir()
+        );
         // Every automation app acts through an enrolled agent.agent (duaility
         // §12) — enroll identities in THIS vault as the desired set settles,
         // and grant each automation's DECLARED scopes at the same moment
@@ -2854,11 +3225,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         const nameByOwnerApp = new Map(rows.map((r) => [r.ownerApp, r.name]));
         for (const appId of new Set(rows.map((r) => r.ownerApp))) {
           try {
-            vaultRegistry.enrollAutomationAgent(appId, nameByOwnerApp.get(appId));
+            vaultRegistry.enrollAutomationAgent(
+              appId,
+              nameByOwnerApp.get(appId)
+            );
           } catch (err) {
             logger.warn(
               `vault plane: agent enrollment for "${appId}" failed: ` +
-                (err instanceof Error ? err.message : String(err)),
+                (err instanceof Error ? err.message : String(err))
             );
           }
         }
@@ -2870,7 +3244,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           } catch (err) {
             logger.warn(
               `install-time grant for automation "${row.ownerApp}" failed: ` +
-                (err instanceof Error ? err.message : String(err)),
+                (err instanceof Error ? err.message : String(err))
             );
           }
         }
@@ -2878,7 +3252,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           logger.info(
             `scheduler reconcile (vault ${vaultId}) — ` +
-              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
+              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`
           );
         }
         if (settled.dirty) return reconcileUntilClean();
@@ -2888,14 +3262,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     settled.inFlight = work
       .then(() =>
         health.reportOk(
-          'automations',
-          `scheduler${schedulers.size === 1 ? '' : 's'} running for ${schedulers.size} vault${schedulers.size === 1 ? '' : 's'}`,
-        ),
+          "automations",
+          `scheduler${schedulers.size === 1 ? "" : "s"} running for ${schedulers.size} vault${schedulers.size === 1 ? "" : "s"}`
+        )
       )
       .catch((err) => {
         const message =
-          `scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err));
-        health.reportError('automations', message);
+          `scheduler reconcile failed: ` +
+          (err instanceof Error ? err.message : String(err));
+        health.reportError("automations", message);
         logger.warn(message);
         throw err;
       })
@@ -2921,14 +3296,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   const webhookIngress = async (
     vaultId: string,
-    input: Parameters<automation.WebhookIngressFn>[0],
+    input: Parameters<automation.WebhookIngressFn>[0]
   ): Promise<automation.WebhookIngressResult> => {
     const plane = vaultRegistry.get(vaultId);
     if (!plane) return { accepted: false, error: `unknown vault "${vaultId}"` };
     try {
       const bodyJson = JSON.stringify(input.body ?? null);
       const result = triggerStoreFor(vaultId).appendIngress({
-        source: 'webhook',
+        source: "webhook",
         sourceKey: input.webhookId,
         deliveryId: input.deliveryId,
         receivedAt: input.receivedAt,
@@ -2938,10 +3313,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       triggerStoreFor(vaultId).pruneIngress(Date.now());
       const scheduler = schedulerFor(vaultId);
       scheduler.nudgeIngress?.(input.webhookId);
-      return { accepted: true, ...(result.inserted ? {} : { duplicate: true }) };
+      return {
+        accepted: true,
+        ...(result.inserted ? {} : { duplicate: true }),
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      health.reportError('automation-runs', `webhook ingress ${input.automationRef}: ${message}`);
+      health.reportError(
+        "automation-runs",
+        `webhook ingress ${input.automationRef}: ${message}`
+      );
       return { accepted: false, error: message };
     }
   };
@@ -2958,25 +3339,31 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   const webhookHandler: RouteHandler = async (req, res) => {
-    if (!req.url || !req.url.startsWith(automation.WEBHOOK_ROUTE_PREFIX)) return false;
-    const url = new URL(req.url, 'http://x');
+    if (!req.url || !req.url.startsWith(automation.WEBHOOK_ROUTE_PREFIX))
+      return false;
+    const url = new URL(req.url, "http://x");
     const slug = url.pathname
       .slice(automation.WEBHOOK_ROUTE_PREFIX.length)
-      .replace(/^\/+/u, '')
-      .replace(/\/+$/u, '');
+      .replace(/^\/+/u, "")
+      .replace(/\/+$/u, "");
     // Mirror `makeWebhookRouteHandler`'s own POST + slug-shape gate so a
     // malformed request short-circuits to the default vault's 404/405
     // without paying for a scan across every vault.
-    const isPost = (req.method ?? 'GET').toUpperCase() === 'POST';
+    const isPost = (req.method ?? "GET").toUpperCase() === "POST";
     const looksLikeSlug = /^[A-Za-z0-9_-]+$/u.test(slug);
     let targetVaultId = vaultRegistry.defaultVaultId();
     if (isPost && looksLikeSlug) {
-      const matchingPlane = await findSequentially(vaultRegistry.planesList(), async (plane) => {
-        const host = settledHosts.get(plane.boot.vaultId);
-        if (!host) return false; // not yet mounted — nothing to match there
-        const { rows } = await automation.list(host.codeAppsDir());
-        return rows.some((row) => automation.webhookTriggerOf(row.triggers)?.id === slug);
-      });
+      const matchingPlane = await findSequentially(
+        vaultRegistry.planesList(),
+        async (plane) => {
+          const host = settledHosts.get(plane.boot.vaultId);
+          if (!host) return false; // not yet mounted — nothing to match there
+          const { rows } = await automation.list(host.codeAppsDir());
+          return rows.some(
+            (row) => automation.webhookTriggerOf(row.triggers)?.id === slug
+          );
+        }
+      );
       if (matchingPlane) targetVaultId = matchingPlane.boot.vaultId;
     }
     return webhookHandlerForVault(targetVaultId)(req, res);
@@ -3014,7 +3401,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // capable, so turns persist as `kind='build'` (issue #181). EVERY
       // ask turn rides the vault register (issue #286 phase 2: the vault
       // is the only store) — the owner assistant wearing the app lens.
-      runKind: 'build',
+      runKind: "build",
       run: async (input) => {
         // Model prefs plumbing: an explicit `input.model` (the `_turn` POST
         // body) always wins; otherwise resolve off the register — `ask` is
@@ -3028,10 +3415,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // a runner that resolves `runner.<subsystem>` fresh — the model key
         // and the backend that receives it can't disagree, and a re-pin
         // takes effect on the next turn with no restart.
-        const subsystem: ModelSubsystem = input.register === 'ask' ? 'ask' : 'builder';
-        const model = await resolveModel(subsystem, input.model, input.runnerKind);
-        const resolvedInput = model === input.model ? input : { ...input, model };
-        if (input.register === 'ask') return askRunner.run(resolvedInput);
+        const subsystem: ModelSubsystem =
+          input.register === "ask" ? "ask" : "builder";
+        const model = await resolveModel(
+          subsystem,
+          input.model,
+          input.runnerKind
+        );
+        const resolvedInput =
+          model === input.model ? input : { ...input, model };
+        if (input.register === "ask") return askRunner.run(resolvedInput);
         return (await currentVaultHost()).runner.run(resolvedInput);
       },
     },
@@ -3040,21 +3433,27 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       const runnerPrefs = await prefsLoader();
       if (!runnerPrefs) {
         return {
-          kind: 'none' as const,
+          kind: "none" as const,
           ok: false,
-          reason: 'No coding agent configured.',
-          hint: 'Open Settings → Agents and pick Codex or Claude Code.',
+          reason: "No coding agent configured.",
+          hint: "Open Settings → Agents and pick Codex or Claude Code.",
         };
       }
       // The model list is a pure catalog read; enumeration is owned by the
       // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
       // the client polls `modelsStatus` until it leaves `loading`.
-      const status = await runPreflight(runnerPrefs, catalogPath ? { catalogPath } : {});
+      const status = await runPreflight(
+        runnerPrefs,
+        catalogPath ? { catalogPath } : {}
+      );
       if (catalogPath && warmer && status.ok) {
         const count = status.models?.length ?? 0;
         if ((statusOpts?.refresh ?? false) || count === 0)
-          void warmer.warm(runnerPrefs.kind, 'models');
-        status.modelsStatus = deriveStatus(count, warmer.isWarming(runnerPrefs.kind, 'models'));
+          void warmer.warm(runnerPrefs.kind, "models");
+        status.modelsStatus = deriveStatus(
+          count,
+          warmer.isWarming(runnerPrefs.kind, "models")
+        );
       }
       return status;
     },
@@ -3067,7 +3466,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // legacy snapshot-cloned app keeps resolving from the store. The app-engine
     // static-path sandbox applies identically to whichever dir is returned.
     codeDirOverride: async (appId: string) => {
-      if (bundledAppIds.has(appId) && vaultRegistry.current().installedAppIds().has(appId)) {
+      if (
+        bundledAppIds.has(appId) &&
+        vaultRegistry.current().installedAppIds().has(appId)
+      ) {
         return bundledAppDir(appId);
       }
       return (await currentVaultHost()).store.resolveActiveAppDir(appId);
@@ -3090,7 +3492,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       await ensureSession(host.store, sessionId);
       const draft = await host.draftCodeDir(appId, sessionId);
       return {
-        'vault-data': plane.dir,
+        "vault-data": plane.dir,
         ...(app ? { app } : {}),
         ...(draft ? { draft } : {}),
       };
@@ -3107,7 +3509,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // vault (prompt, vault_sql credential, scratch cwd) at call time.
   const assistantRunner = makeAssistantConversationRunner({
     prefsLoader,
-    subsystem: 'assistant',
+    subsystem: "assistant",
     getDispatcher,
     vaults: vaultRegistry,
     // Measure + label every assistant agent run (#528 Phase C); never throttled.
@@ -3143,16 +3545,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         const runnerPrefs = await prefsLoader();
         if (!runnerPrefs) return;
         const slot = prefs.getAllPrefs()[`model.${runnerPrefs.kind}.title`];
-        const configured = typeof slot === 'string' && slot.length > 0 ? slot : undefined;
+        const configured =
+          typeof slot === "string" && slot.length > 0 ? slot : undefined;
         // The `fast` tier is only meaningful on runners that understand the
         // tier vocabulary (claude-code); on codex a bare tier token would be
         // sent verbatim, so skip unless the owner configured an explicit slot.
-        if (!configured && runnerPrefs.kind !== 'claude-code') return;
+        if (!configured && runnerPrefs.kind !== "claude-code") return;
         const title = await generateConversationTitle({
           runTurn,
           runnerPrefs,
           cwd: assistantCwd(vaultRegistry),
-          model: configured ?? 'fast',
+          model: configured ?? "fast",
           userMessage: args.userMessage,
           assistantText: args.assistantText,
           timeoutMs: 20_000,
@@ -3160,9 +3563,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         if (!title) return;
         // Apply only if the thread still carries the derived truncation — a
         // manual rename between record and generation wins.
-        const meta = conversationHistoryStore.getSessionMeta(ASSISTANT_APP_ID, args.conversationId);
+        const meta = conversationHistoryStore.getSessionMeta(
+          ASSISTANT_APP_ID,
+          args.conversationId
+        );
         if (!meta || meta.title !== deriveTitle(args.userMessage)) return;
-        conversationHistoryStore.renameSession(ASSISTANT_APP_ID, args.conversationId, title);
+        conversationHistoryStore.renameSession(
+          ASSISTANT_APP_ID,
+          args.conversationId,
+          title
+        );
       } catch {
         /* fire-and-forget — a title miss never affects the turn */
       }
@@ -3174,18 +3584,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // name + description bias the prompt, never a permission boundary.
   // Resolved per turn off the live `main` manifest so a publish lands
   // without a restart.
-  const askAppMeta = async (appId: string): Promise<{ name?: string; description?: string }> => {
+  const askAppMeta = async (
+    appId: string
+  ): Promise<{ name?: string; description?: string }> => {
     try {
       const host = await currentVaultHost();
       const dir = await host.store.resolveActiveAppDir(appId);
       if (!dir) return {};
-      const raw = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as {
+      const raw = JSON.parse(
+        await fs.readFile(path.join(dir, "app.json"), "utf8")
+      ) as {
         name?: unknown;
         description?: unknown;
       };
       return {
-        ...(typeof raw.name === 'string' ? { name: raw.name } : {}),
-        ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
+        ...(typeof raw.name === "string" ? { name: raw.name } : {}),
+        ...(typeof raw.description === "string"
+          ? { description: raw.description }
+          : {}),
       };
     } catch {
       return {};
@@ -3197,7 +3613,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // the owner asking their own vault).
   const askRunner = makeAssistantConversationRunner({
     prefsLoader,
-    subsystem: 'ask',
+    subsystem: "ask",
     getDispatcher,
     vaults: vaultRegistry,
     // Measure + label every ask-register agent run (#528 Phase C); never throttled.
@@ -3229,16 +3645,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       health,
       logs: logStore,
       vaults: vaultRegistry,
-      config: { paths, backup: options.backup, deviceAccessEnabled: Boolean(options.deviceAccess) },
+      config: {
+        paths,
+        backup: options.backup,
+        deviceAccessEnabled: Boolean(options.deviceAccess),
+      },
     });
 
   // ── Route chain ───────────────────────────────────────────────────────
   const routeEntries: RoutePrefixRegistration[] = [
-    forRoutePrefixes(['/centraid/_web', '/centraid/_apps'], webAppSessions.handler),
+    forRoutePrefixes(
+      ["/centraid/_web", "/centraid/_apps"],
+      webAppSessions.handler
+    ),
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
     forRoutePrefixes(
-      '/centraid/_gateway/info',
+      "/centraid/_gateway/info",
       makeGatewayInfoRouteHandler({
         instanceId,
         ...(options.devicePairing?.endpointId
@@ -3255,13 +3678,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           assistOAuth: Boolean(options.assistOAuth),
           automationTurns: true,
         },
-      }),
+      })
     ),
     ...(options.dataPlaneControl
       ? [
           forRoutePrefixes(
-            '/centraid/_gateway/tunnel',
-            makeDataPlaneControlHandler(options.dataPlaneControl),
+            "/centraid/_gateway/tunnel",
+            makeDataPlaneControlHandler(options.dataPlaneControl)
           ),
         ]
       : []),
@@ -3271,18 +3694,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           // `cli/device-admin.ts`'s list/revoke. Every request is scoped to
           // the caller's proved EndpointId and persisted enrollments.
           forRoutePrefixes(
-            '/centraid/_gateway/devices',
+            "/centraid/_gateway/devices",
             makeDevicesRouteHandler({
               enrollments: options.devicePairing.enrollments,
               tickets: options.devicePairing.tickets,
               endpointTicket: options.devicePairing.endpointTicket,
-              ...(options.isHostCustody ? { canMintPairingTicket: options.isHostCustody } : {}),
+              ...(options.isHostCustody
+                ? { canMintPairingTicket: options.isHostCustody }
+                : {}),
               // The mint target when the caller names no vault: Shared, the
               // oldest auto-founded vault (issue #603). `list()` is
               // oldest-first, same order as `defaultVaultId()`, but total —
               // this seam must not throw when every vault has been deleted.
               defaultVaultId: () => vaultRegistry.list()[0]?.vaultId,
-              vaultIds: () => vaultRegistry.list().map((vault) => vault.vaultId),
+              vaultIds: () =>
+                vaultRegistry.list().map((vault) => vault.vaultId),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               vaultName: (id) => vaultRegistry.get(id)?.name,
               onRevoked: (rows) => {
@@ -3292,16 +3718,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                   plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
                 }
               },
-            }),
+            })
           ),
           // Household roster (issue #599): members are the principals roles
           // are authored on; the devices route above only binds hardware.
           forRoutePrefixes(
-            '/centraid/_gateway/members',
+            "/centraid/_gateway/members",
             makeMembersRouteHandler({
               enrollments: options.devicePairing.enrollments,
               vaultName: (id) => vaultRegistry.get(id)?.name,
-              ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
+              ...(options.isHostCustody
+                ? { isHostCustody: options.isHostCustody }
+                : {}),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               onRevoked: (rows) => {
                 for (const row of rows) {
@@ -3310,31 +3738,37 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                   plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
                 }
               },
-            }),
+            })
           ),
           forRoutePrefixes(
-            '/centraid/_gateway/device-work',
+            "/centraid/_gateway/device-work",
             makeDeviceWorkRouteHandler({
               vaults: vaultRegistry,
               enrollments: options.devicePairing.enrollments,
-            }),
+            })
           ),
         ]
       : []),
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
-    forRoutePrefixes('/centraid/_gateway/health', makeHealthRouteHandler(health)),
+    forRoutePrefixes(
+      "/centraid/_gateway/health",
+      makeHealthRouteHandler(health)
+    ),
     // Owner "pause background work" control (#528 Phase B): hot-applied,
     // in-memory only, never a durable Resource-mode flip. Same bearer gate
     // and owner-facing family as health.
-    forRoutePrefixes('/centraid/_gateway/resource', makeResourceRouteHandler(health, powerContext)),
+    forRoutePrefixes(
+      "/centraid/_gateway/resource",
+      makeResourceRouteHandler(health, powerContext)
+    ),
     // A single JSON document a user can save + hand to support: version,
     // health snapshot, log tail, vault sizes, and a redacted config
     // summary. Mounted right after health — same bearer gate, same
     // "owner-facing diagnostics" family.
     forRoutePrefixes(
-      '/centraid/_gateway/diagnostics',
-      makeDiagnosticsRouteHandler(buildDiagnostics),
+      "/centraid/_gateway/diagnostics",
+      makeDiagnosticsRouteHandler(buildDiagnostics)
     ),
     // Backup status + manual "run now" (issue #351): thin wiring over
     // `BackupService`. `backupService` is `undefined` when
@@ -3342,19 +3776,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // `{configured: false}` rather than 404 in that case. Same bearer
     // gate, same owner-facing-diagnostics family as health/diagnostics.
     forRoutePrefixes(
-      '/centraid/_gateway/backup',
+      "/centraid/_gateway/backup",
       makeBackupRouteHandler({
         vaults: vaultRegistry,
         enrollments: enrollmentStore,
         recoveryKitStore: recoveryKit,
         backupService,
-      }),
+      })
     ),
     // Gateway-level storage connections (issue #367 §C1): CRUD + real
     // connectivity probe + per-vault replication status. Same bearer gate,
     // same owner-facing-diagnostics family as backup/health.
     forRoutePrefixes(
-      '/centraid/_gateway/storage',
+      "/centraid/_gateway/storage",
       makeStorageRouteHandler({
         storageConnections,
         recoveryKit,
@@ -3364,24 +3798,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         storageLimits,
         onConnectionsChanged: async () => {
           walCaptureConfigured =
-            options.backup?.enabled === true || (await storageConnections.list()).length > 0;
-          for (const plane of vaultRegistry.planesList()) plane.rescheduleWalCapture();
+            options.backup?.enabled === true ||
+            (await storageConnections.list()).length > 0;
+          for (const plane of vaultRegistry.planesList())
+            plane.rescheduleWalCapture();
           await backupService.refreshWalSchedule();
         },
-      }),
+      })
     ),
     // Due task/event reminders, computed live — the desktop main process
     // polls this to fire OS notifications (issue: Tasks/Agenda comparison
     // flagged "no time-based alerts, anywhere").
-    forRoutePrefixes('/centraid/_reminders', makeRemindersRouteHandler(vaultRegistry)),
+    forRoutePrefixes(
+      "/centraid/_reminders",
+      makeRemindersRouteHandler(vaultRegistry)
+    ),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
     // the desktop's Settings → Logs screen streams from.
-    forRoutePrefixes('/centraid/_logs', makeLogsRouteHandler(logStore)),
+    forRoutePrefixes("/centraid/_logs", makeLogsRouteHandler(logStore)),
     // The assistant's `_turn`/`resolve` surface — mounted BEFORE the
     // generic `_vault` handler, which answers 404 for any sub-route it
     // doesn't know (same prefix family).
     forRoutePrefixes(
-      '/centraid/_vault/assistant',
+      "/centraid/_vault/assistant",
       makeAssistantRouteHandler({
         vaults: vaultRegistry,
         conversationStore: conversationHistoryStore,
@@ -3390,40 +3829,49 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         resolveModel,
         generateTitle: generateAssistantTitle,
         limiter: turnLimiterForCurrentVault,
-      }),
+      })
     ),
     // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
     // Mounted BEFORE the generic `_vault` handler (same prefix family).
     forRoutePrefixes(
-      '/centraid/_vault/demo',
+      "/centraid/_vault/demo",
       makeDemoRouteHandler(vaultRegistry, {
         codeAppsDir: () => currentSettledHost().codeAppsDir(),
-      }),
+      })
     ),
     // File-drop imports (issue #290 phase 2): stage → review → publish.
-    forRoutePrefixes('/centraid/_vault/imports', makeImportRouteHandler(vaultRegistry)),
+    forRoutePrefixes(
+      "/centraid/_vault/imports",
+      makeImportRouteHandler(vaultRegistry)
+    ),
     // Blob custody (issue #296): staged uploads in, consent-checked +
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`
     // handler (same prefix family).
     forRoutePrefixes(
-      '/centraid/_vault/blobs',
-      makeBlobRouteHandler(vaultRegistry, options.dataPlaneHttp),
+      "/centraid/_vault/blobs",
+      makeBlobRouteHandler(vaultRegistry, options.dataPlaneHttp)
     ),
     // Broker-carried connection credentials (issue #304): health list,
     // configure, pause/resume, and the PKCE consent ceremony. Mounted
     // BEFORE the generic `_vault` handler (same prefix family).
     forRoutePrefixes(
       [ROUTES.vaultConnections, ROUTES.vaultOAuthCallback],
-      makeConnectionsRouteHandler(vaultRegistry, connectionBroker, options.assistOAuth),
+      makeConnectionsRouteHandler(
+        vaultRegistry,
+        connectionBroker,
+        options.assistOAuth
+      )
     ),
     // Consent-derived offline replica protocol (#406). Mounted before the
     // generic owner `_vault` handler because both share that prefix. The
     // intent lane executes through the ordinary app dispatcher; the route
     // only adds durable device-scoped admission/dedupe around it.
     forRoutePrefixes(
-      ['/centraid/_vault/replica', '/centraid/_vault/changes'],
+      ["/centraid/_vault/replica", "/centraid/_vault/changes"],
       makeReplicaRouteHandler(vaultRegistry, {
-        ...(options.devicePairing ? { enrollments: options.devicePairing.enrollments } : {}),
+        ...(options.devicePairing
+          ? { enrollments: options.devicePairing.enrollments }
+          : {}),
         dispatchIntent: async (input) =>
           replicaDispatchOutcome(
             await getDispatcher().write({
@@ -3431,18 +3879,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               action: input.action,
               input: input.input,
               intentId: input.intentId,
-            }),
+            })
           ),
-      }),
+      })
     ),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, rename/presentation). Its `_vault` prefix
     // is disjoint from every other route family. Vault create/delete are
     // ADMIN acts (server CLI) — they no longer ride HTTP (#289).
     forRoutePrefixes(
-      '/centraid/_vault',
+      "/centraid/_vault",
       makeVaultRouteHandler(vaultRegistry, {
-        ...(effectiveDeviceAccess ? { deviceAccess: effectiveDeviceAccess } : {}),
+        ...(effectiveDeviceAccess
+          ? { deviceAccess: effectiveDeviceAccess }
+          : {}),
         onOutboxDecided: drainOutbox,
         // Storage-connection attach flow (issue #367 §C1/§C4/§C10): resolves
         // `blob_store.connectionId` and gates on the recovery-kit nudge.
@@ -3451,24 +3901,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         enrollments: enrollmentStore,
         gatewayDatabase,
         keys: gatewayKeys,
-        fenceVaultForErase: (vaultId) => backupService.fenceVaultForErase(vaultId),
+        fenceVaultForErase: (vaultId) =>
+          backupService.fenceVaultForErase(vaultId),
         // fix (this session): agent-grant approval can be the FIRST enrollment
         // touch for an automation's agent — resolve its real manifest name
         // the same way reconcileScheduler does, so `approveAgentGrant` never
         // has to fall back to a bare id-derived name.
         resolveAutomationName: async (appId) => {
-          const { rows } = await automation.list(currentSettledHost().codeAppsDir());
+          const { rows } = await automation.list(
+            currentSettledHost().codeAppsDir()
+          );
           return rows.find((r) => r.ownerApp === appId)?.name;
         },
-      }),
+      })
     ),
     // Template catalog (issue #141): the gateway owns it, so the renderer
     // reads `GET /centraid/_templates` directly. Templates are SEEDS —
     // gateway-level, read-only material instantiated INTO a vault (#280).
     forRoutePrefixes(
-      '/centraid/_templates',
+      "/centraid/_templates",
       makeTemplatesRouteHandler({
-        ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
+        ...(paths.templatesCacheDir
+          ? { cacheDir: paths.templatesCacheDir }
+          : {}),
         // Remote template fetch is deferred for v1 (issue #434, Phase 4): the
         // catalog serves only the shipped @centraid/blueprints. Remote install
         // is the one case where install legitimately copies (a download), so
@@ -3486,21 +3941,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             return new Set<string>();
           }
         },
-      }),
+      })
     ),
     // Coding-agent detection (codex/claude credentials on the gateway host).
     forRoutePrefixes(
-      '/centraid/_agents',
+      "/centraid/_agents",
       makeAgentsRouteHandler({
-        ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
+        ...(resolveCatalogModels
+          ? { resolveModels: resolveCatalogModels }
+          : {}),
         resolveCapabilities: async (kind, refresh) => {
           const extraArgs = extraArgsForKind(kind);
           const caps = await resolveAcpCapabilities(kind, {
             binPath: binPathForKind(kind),
             ...(extraArgs ? { extraArgs } : {}),
             cacheDir: path.join(
-              paths.cacheDir ?? path.join(dataDir, 'cache'),
-              'agent-capabilities',
+              paths.cacheDir ?? path.join(dataDir, "cache"),
+              "agent-capabilities"
             ),
             // Only force a spawn on explicit refresh; otherwise serve cache
             // (and probe once on first read when cold).
@@ -3508,7 +3965,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           });
           if (!caps) return undefined;
           if (refresh && caps.reachable && !caps.authRequired) {
-            for (const entry of runnerHealth.list().filter((row) => row.runnerKind === kind)) {
+            for (const entry of runnerHealth
+              .list()
+              .filter((row) => row.runnerKind === kind)) {
               runnerHealth.reportPreflightOk(entry.workspaceContext, kind);
             }
           }
@@ -3534,20 +3993,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           };
           return out;
         },
-        resolveHealth: (kind) => runnerHealth.list().filter((row) => row.runnerKind === kind),
+        resolveHealth: (kind) =>
+          runnerHealth.list().filter((row) => row.runnerKind === kind),
         binPathFor: binPathForKind,
-      }),
+      })
     ),
     // The request vault's store-backed handlers (apps-store / lifecycle /
     // automations), resolved per request off the ambient vault scope.
     forRoutePrefixes(
-      ['/centraid/_apps', '/centraid/_automations', '/centraid/_insights'],
+      ["/centraid/_apps", "/centraid/_automations", "/centraid/_insights"],
       async (req, res) => {
         const host = await currentVaultHost();
         return (
-          (await findSequentially(host.handlers, (handler) => handler(req, res))) !== undefined
+          (await findSequentially(host.handlers, (handler) =>
+            handler(req, res)
+          )) !== undefined
         );
-      },
+      }
     ),
   ];
 
@@ -3557,16 +4019,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // — inside that vault's ambient scope. WITHOUT the bearer check, for
   // hosts that own auth themselves. CORS is the host's job too: a fronting
   // gateway emits its own.
-  const conversationHandler = makeConversationRouteHandler(() => conversationHistoryStore);
+  const conversationHandler = makeConversationRouteHandler(
+    () => conversationHistoryStore
+  );
   const runnerSubsystems: readonly ModelSubsystem[] = [
-    'assistant',
-    'ask',
-    'builder',
-    'automations',
+    "assistant",
+    "ask",
+    "builder",
+    "automations",
   ];
   const patchedPrefs = (
     before: Record<string, unknown>,
-    patch: Record<string, unknown>,
+    patch: Record<string, unknown>
   ): Record<string, unknown> => {
     const next = { ...before };
     for (const [key, value] of Object.entries(patch)) {
@@ -3582,15 +4046,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       validatePatch: async (patch, before) => {
         const next = patchedPrefs(before, patch);
         const switches: Array<ModelSubsystem | undefined> = [];
-        if (Object.hasOwn(patch, 'agent.runner.kind')) switches.push(undefined);
+        if (Object.hasOwn(patch, "agent.runner.kind")) switches.push(undefined);
         for (const subsystem of runnerSubsystems) {
-          if (Object.hasOwn(patch, `runner.${subsystem}`)) switches.push(subsystem);
+          if (Object.hasOwn(patch, `runner.${subsystem}`))
+            switches.push(subsystem);
         }
         let failure: string | undefined;
         await findSequentially(switches, async (subsystem) => {
           const candidate = resolveStrictGatewayRunnerPrefs(next, subsystem);
           if (!candidate) {
-            failure = `Cannot switch ${subsystem ?? 'the default lane'}: no valid agent is configured.`;
+            failure = `Cannot switch ${subsystem ?? "the default lane"}: no valid agent is configured.`;
             return true;
           }
           const status = await runPreflight(candidate, {
@@ -3598,22 +4063,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             requireSessionReady: true,
           });
           if (status.ok) return false;
-          failure = `Cannot switch ${subsystem ?? 'the default lane'} to ${candidate.kind}: ${status.reason ?? 'preflight failed'}`;
+          failure = `Cannot switch ${subsystem ?? "the default lane"} to ${candidate.kind}: ${status.reason ?? "preflight failed"}`;
           return true;
         });
         return failure;
       },
       afterPatch: (_patch, before, after) => {
-        for (const { kind, subsystem } of removedRunnerLadderMembers(before, after)) {
+        for (const { kind, subsystem } of removedRunnerLadderMembers(
+          before,
+          after
+        )) {
           for (const plane of vaultRegistry.planesList()) {
-            new ProviderEgressConsentStore(() => plane.workspace.journal()).revokeLadderProvider(
-              kind,
-              subsystem,
-            );
+            new ProviderEgressConsentStore(() =>
+              plane.workspace.journal()
+            ).revokeLadderProvider(kind, subsystem);
           }
         }
       },
-    },
+    }
   );
   const prefixDispatch = createRoutePrefixDispatch([
     forRoutePrefixes(CONVERSATIONS_PREFIX, conversationHandler),
@@ -3650,15 +4117,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   });
 
   const composedHandler: RouteHandler = async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+    const url = new URL(req.url ?? "/", "http://gateway.local");
     // The Rust-owned iroh relay calls this metadata-only control surface
     // before it can inject the remote EndpointId into an upstream request.
     // Requiring that not-yet-injected identity here is circular. The route's
     // per-boot control secret (plus the outer loopback bearer in production)
     // authenticates it, so dispatch it at gateway scope in every vault state.
     if (
-      (url.pathname === '/centraid/_gateway/info' ||
-        url.pathname.startsWith('/centraid/_gateway/tunnel/')) &&
+      (url.pathname === "/centraid/_gateway/info" ||
+        url.pathname.startsWith("/centraid/_gateway/tunnel/")) &&
       (await prefixDispatch(req, res))
     ) {
       return true;
@@ -3676,7 +4143,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // keeps the skip narrow: an iroh-forwarded request arrives on loopback too
     // but carries device headers, so it falls through to the identity gate.
     if (
-      url.pathname === '/centraid/_gateway/devices/ticket' &&
+      url.pathname === "/centraid/_gateway/devices/ticket" &&
       isDirectHostRequest(req) &&
       (await prefixDispatch(req, res))
     ) {
@@ -3697,18 +4164,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const deviceKey = effectiveDeviceAccess?.deviceKeyFor(req);
     if (deviceKey === undefined) {
       return sendJson(res, 403, {
-        error: 'device_identity_required',
-        message: 'this request has no proved enrolled device identity',
+        error: "device_identity_required",
+        message: "this request has no proved enrolled device identity",
       });
     }
     req.headers[AUTHED_DEVICE_HEADER] = deviceKey;
     let vaultId: string;
     const enrolled =
-      effectiveDeviceAccess?.vaultsFor(deviceKey) ?? enrollmentStore.vaultsFor(deviceKey);
+      effectiveDeviceAccess?.vaultsFor(deviceKey) ??
+      enrollmentStore.vaultsFor(deviceKey);
     if (enrolled.length === 0) {
       return sendJson(res, 403, {
-        error: 'device_not_enrolled',
-        message: 'this device is not enrolled in any vault on this gateway',
+        error: "device_not_enrolled",
+        message: "this device is not enrolled in any vault on this gateway",
       });
     }
     // The cross-vault share plane (issue #599 decision 11) is dispatched HERE
@@ -3718,39 +4186,49 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // header is irrelevant to it, so the per-vault resolution that follows must
     // not get a chance to refuse the request over a vault it never uses. The
     // route resolves and authorizes both vaults itself, from `member_roles`.
-    if (url.pathname.startsWith(SHARE_PATH) && (await shareHandler(req, res))) return true;
+    if (url.pathname.startsWith(SHARE_PATH) && (await shareHandler(req, res)))
+      return true;
     // Same placement, same reason (issue #599 Phase 4): the scopes listing
     // answers "which vaults may I work in", which is by definition not one
     // vault, so it must run before the `x-centraid-vault` resolution below.
-    if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res))) return true;
+    if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res)))
+      return true;
     if (requested !== undefined && !enrolled.includes(requested)) {
       return sendJson(res, 403, {
-        error: 'vault_not_enrolled',
-        message: 'this device is not enrolled in the requested vault',
+        error: "vault_not_enrolled",
+        message: "this device is not enrolled in the requested vault",
       });
     }
     vaultId = requested ?? enrolled[0]!;
     if (!vaultRegistry.get(vaultId)) {
       return sendJson(res, 404, {
-        error: 'vault_not_found',
+        error: "vault_not_found",
         message: `unknown vault "${vaultId}"`,
       });
     }
     const enrollment = enrollmentStore.get(deviceKey, vaultId);
-    if (enrollment?.role === 'read' && !readRoleRequestAllowed(req)) {
+    if (enrollment?.role === "read" && !readRoleRequestAllowed(req)) {
       return sendJson(res, 403, {
-        error: 'read_role_device',
-        message: 'this device is enrolled at the read role and cannot mutate the gateway',
+        error: "read_role_device",
+        message:
+          "this device is enrolled at the read role and cannot mutate the gateway",
       });
     }
     if (enrollment?.grantProfile !== undefined) {
-      if (!companionRequestAllowed(req, enrollment.grantProfile, enrollment.enrollmentId)) {
+      if (
+        !companionRequestAllowed(
+          req,
+          enrollment.grantProfile,
+          enrollment.enrollmentId
+        )
+      ) {
         return sendJson(res, 403, {
-          error: 'companion_profile',
-          message: 'this Companion device is not granted access to that gateway surface',
+          error: "companion_profile",
+          message:
+            "this Companion device is not granted access to that gateway surface",
         });
       }
-      req.headers[COMPANION_GRANTS_HEADER] = enrollment.grantProfile.join(',');
+      req.headers[COMPANION_GRANTS_HEADER] = enrollment.grantProfile.join(",");
     }
     return runWithVaultContext(
       {
@@ -3759,12 +4237,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // L4 attribution (#599): resolve the ACTING MEMBER once, here, from
         // the device binding, so everything downstream reads "who did this"
         // off the request scope instead of re-deriving it from hardware.
-        ...(enrollment ? { memberId: enrollment.memberId, memberRole: enrollment.role } : {}),
+        ...(enrollment
+          ? { memberId: enrollment.memberId, memberRole: enrollment.role }
+          : {}),
         ...(enrollment?.grantProfile === undefined
           ? {}
           : { grantProfile: enrollment.grantProfile }),
       },
-      () => dispatchChain(req, res),
+      () => dispatchChain(req, res)
     );
   };
 
@@ -3784,16 +4264,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         hostFor(plane).catch((error) =>
           logger.warn(
             `late vault host mount failed (${plane.boot.vaultId}): ` +
-              (error instanceof Error ? error.message : String(error)),
-          ),
+              (error instanceof Error ? error.message : String(error))
+          )
         ),
         backupService
           .refreshWalSchedule()
           .catch((error) =>
             logger.warn(
               `late vault WAL schedule refresh failed: ` +
-                (error instanceof Error ? error.message : String(error)),
-            ),
+                (error instanceof Error ? error.message : String(error))
+            )
           ),
       ]).then(() => undefined);
       lateMountTasks.add(task);
@@ -3810,7 +4290,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // + enrollment, scheduler reconcile — so each vault's automations fire
     // and each client's first request finds its vault warm.
     await forEachSequentially(vaultRegistry.planesList(), (plane) =>
-      hostFor(plane).then(() => undefined),
+      hostFor(plane).then(() => undefined)
     );
 
     // Vault standing duties on the gateway clock: a sweep now, then hourly.
@@ -3831,12 +4311,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // single `<bin> --version` per kind (concurrent, and a kind with no
         // configured binary short-circuits without spawning), and only the
         // kinds that actually resolve go on to the far more expensive warm.
-        const surface: CatalogSurface = 'models';
+        const surface: CatalogSurface = "models";
         const checks = await Promise.all(
           RUNNER_KINDS.map(async (kind) => ({
             kind,
-            present: (await probeCliAvailability(kind, binPathForKind(kind))).available,
-          })),
+            present: (await probeCliAvailability(kind, binPathForKind(kind)))
+              .available,
+          }))
         );
         await Promise.all(
           checks
@@ -3847,10 +4328,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 .catch((err) =>
                   catalogLogger.warn(
                     `catalog warm (${c.kind}/${surface}) failed: ` +
-                      (err instanceof Error ? err.message : String(err)),
-                  ),
-                ),
-            ),
+                      (err instanceof Error ? err.message : String(err))
+                  )
+                )
+            )
         );
       })();
     }
@@ -3881,7 +4362,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const lockTails = Array.from(automationConversationLocks.values());
     await Promise.all(detached);
     await Promise.all(lockTails);
-    const journalFiles = vaultRegistry.planesList().map((plane) => plane.workspace.journalDbFile);
+    const journalFiles = vaultRegistry
+      .planesList()
+      .map((plane) => plane.workspace.journalDbFile);
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
     // Release THIS gateway's memoized `journal.db` handles (another gateway in
@@ -3933,49 +4416,54 @@ async function readBundledAppMeta(dir: string): Promise<{
 }> {
   let manifest: Record<string, unknown> = {};
   try {
-    manifest = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as Record<
-      string,
-      unknown
-    >;
+    manifest = JSON.parse(
+      await fs.readFile(path.join(dir, "app.json"), "utf8")
+    ) as Record<string, unknown>;
   } catch {
     manifest = {};
   }
   let hasIndex = false;
   try {
-    await fs.access(path.join(dir, 'index.html'));
+    await fs.access(path.join(dir, "index.html"));
     hasIndex = true;
   } catch {
     hasIndex = false;
   }
   return {
-    ...(typeof manifest.name === 'string' ? { name: manifest.name } : {}),
-    ...(typeof manifest.description === 'string' ? { description: manifest.description } : {}),
-    ...(typeof manifest.iconKey === 'string' ? { iconKey: manifest.iconKey } : {}),
-    ...(typeof manifest.colorKey === 'string' ? { colorKey: manifest.colorKey } : {}),
+    ...(typeof manifest.name === "string" ? { name: manifest.name } : {}),
+    ...(typeof manifest.description === "string"
+      ? { description: manifest.description }
+      : {}),
+    ...(typeof manifest.iconKey === "string"
+      ? { iconKey: manifest.iconKey }
+      : {}),
+    ...(typeof manifest.colorKey === "string"
+      ? { colorKey: manifest.colorKey }
+      : {}),
     hasIndex,
   };
 }
 
 function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
-  if (raw === null || typeof raw !== 'object') return undefined;
+  if (raw === null || typeof raw !== "object") return undefined;
   const block = raw as { purpose?: unknown; scopes?: unknown };
   if (!Array.isArray(block.scopes)) return undefined;
-  const verbs = new Set(['read', 'read+act', 'act', 'reveal']);
+  const verbs = new Set(["read", "read+act", "act", "reveal"]);
   const filterOps = new Set([
-    'eq',
-    'ne',
-    'lt',
-    'lte',
-    'gt',
-    'gte',
-    'in',
-    'is-null',
-    'not-null',
-    'within-days',
-    'within-next-days',
+    "eq",
+    "ne",
+    "lt",
+    "lte",
+    "gt",
+    "gte",
+    "in",
+    "is-null",
+    "not-null",
+    "within-days",
+    "within-next-days",
   ]);
   const scopes = block.scopes.flatMap((s: unknown) => {
-    if (s === null || typeof s !== 'object') return [];
+    if (s === null || typeof s !== "object") return [];
     const scope = s as {
       schema?: unknown;
       table?: unknown;
@@ -3983,38 +4471,46 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
       rowFilter?: unknown;
       fieldMask?: unknown;
     };
-    if (typeof scope.schema !== 'string' || scope.schema === '') return [];
-    if (typeof scope.verbs !== 'string' || !verbs.has(scope.verbs)) return [];
-    if (scope.table !== undefined && (typeof scope.table !== 'string' || scope.table === '')) {
+    if (typeof scope.schema !== "string" || scope.schema === "") return [];
+    if (typeof scope.verbs !== "string" || !verbs.has(scope.verbs)) return [];
+    if (
+      scope.table !== undefined &&
+      (typeof scope.table !== "string" || scope.table === "")
+    ) {
       return [];
     }
     if (
       (scope.rowFilter !== undefined || scope.fieldMask !== undefined) &&
-      typeof scope.table !== 'string'
+      typeof scope.table !== "string"
     ) {
       return [];
     }
     let rowFilter: FilterClause[] | undefined;
     if (scope.rowFilter !== undefined) {
-      if (!Array.isArray(scope.rowFilter) || scope.rowFilter.length === 0) return [];
+      if (!Array.isArray(scope.rowFilter) || scope.rowFilter.length === 0)
+        return [];
       rowFilter = [];
       for (const rawClause of scope.rowFilter) {
-        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+        if (
+          rawClause === null ||
+          typeof rawClause !== "object" ||
+          Array.isArray(rawClause)
+        ) {
           return [];
         }
         const clause = rawClause as Record<string, unknown>;
         if (
-          typeof clause.column !== 'string' ||
-          clause.column === '' ||
-          typeof clause.op !== 'string' ||
+          typeof clause.column !== "string" ||
+          clause.column === "" ||
+          typeof clause.op !== "string" ||
           !filterOps.has(clause.op)
         ) {
           return [];
         }
         rowFilter.push({
           column: clause.column,
-          op: clause.op as FilterClause['op'],
-          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+          op: clause.op as FilterClause["op"],
+          ...(Object.hasOwn(clause, "value") ? { value: clause.value } : {}),
         });
       }
     }
@@ -4023,7 +4519,9 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
       if (
         !Array.isArray(scope.fieldMask) ||
         scope.fieldMask.length === 0 ||
-        !scope.fieldMask.every((field) => typeof field === 'string' && field !== '')
+        !scope.fieldMask.every(
+          (field) => typeof field === "string" && field !== ""
+        )
       ) {
         return [];
       }
@@ -4032,8 +4530,10 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
     return [
       {
         schema: scope.schema,
-        ...(typeof scope.table === 'string' && scope.table !== '' ? { table: scope.table } : {}),
-        verbs: scope.verbs as 'read' | 'read+act' | 'act' | 'reveal',
+        ...(typeof scope.table === "string" && scope.table !== ""
+          ? { table: scope.table }
+          : {}),
+        verbs: scope.verbs as "read" | "read+act" | "act" | "reveal",
         ...(rowFilter ? { rowFilter } : {}),
         ...(fieldMask ? { fieldMask } : {}),
       },
@@ -4041,7 +4541,7 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
   });
   if (scopes.length === 0) return undefined;
   return {
-    ...(typeof block.purpose === 'string' && block.purpose !== ''
+    ...(typeof block.purpose === "string" && block.purpose !== ""
       ? { purpose: block.purpose }
       : {}),
     scopes,

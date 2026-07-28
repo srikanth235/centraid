@@ -214,7 +214,7 @@
   line-height: 1.55;
   color: var(--ink);
 }
-.msgAi[data-error='true'] {
+.msgAi[data-error="true"] {
   color: var(--danger);
 }
 .live {
@@ -243,7 +243,7 @@
   align-self: flex-start;
   max-width: 90%;
 }
-.notice[data-level='warn'] {
+.notice[data-level="warn"] {
   color: var(--warn, #a06a00);
 }
 /* Offline hint beside a resend button (issue #420, Wave 6). */
@@ -276,11 +276,11 @@
   user-select: none;
 }
 .tools > summary::before {
-  content: '▸ ';
+  content: "▸ ";
   color: var(--ink-4);
 }
 .tools[open] > summary::before {
-  content: '▾ ';
+  content: "▾ ";
 }
 .toolsBody {
   padding: 0 12px 10px;
@@ -316,7 +316,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tool[data-state='error'] .toolMeta {
+.tool[data-state="error"] .toolMeta {
   color: var(--danger);
 }
 
@@ -381,10 +381,10 @@
   text-align: left;
   font-size: 13px;
 }
-.acItem[data-active='true'] {
+.acItem[data-active="true"] {
   background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
-.acItem[data-disabled='true'] {
+.acItem[data-disabled="true"] {
   opacity: 0.45;
   cursor: default;
 }
@@ -409,7 +409,7 @@
     0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent),
     var(--shadow-sm);
 }
-.composerRow[data-dragover='true'] {
+.composerRow[data-dragover="true"] {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 28%, transparent);
 }
@@ -557,7 +557,7 @@
   color: var(--ink);
   background: color-mix(in oklab, var(--ink) 6%, transparent);
 }
-.modelBtn[aria-expanded='true'] {
+.modelBtn[aria-expanded="true"] {
   color: var(--ink);
   background: color-mix(in oklab, var(--ink) 8%, transparent);
 }
@@ -623,7 +623,7 @@
   background: color-mix(in oklab, var(--ink) 6%, transparent);
   outline: none;
 }
-.modelItem[data-active='true'] {
+.modelItem[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
 .modelItemHint {
@@ -665,7 +665,7 @@
   color: var(--ink-2);
   max-width: 220px;
 }
-.attachChip[data-state='error'] {
+.attachChip[data-state="error"] {
   border-color: var(--danger);
   color: var(--danger);
 }
@@ -680,7 +680,7 @@
   font-size: 10.5px;
   flex: none;
 }
-.attachChip[data-state='error'] .attachSize {
+.attachChip[data-state="error"] .attachSize {
   color: var(--danger);
 }
 .attachRemove {
@@ -785,7 +785,7 @@
   background: var(--accent);
   flex: none;
 }
-.thinking[data-streaming='true'] .thinkingDot {
+.thinking[data-streaming="true"] .thinkingDot {
   animation: asstThinkPulse 1.1s ease-in-out infinite;
 }
 @keyframes asstThinkPulse {
@@ -805,7 +805,7 @@
   margin-left: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .thinking[data-streaming='true'] .thinkingDot {
+  .thinking[data-streaming="true"] .thinkingDot {
     animation: none;
   }
 }
@@ -830,7 +830,7 @@
   object-fit: cover;
   border-radius: 10px;
 }
-.msgAttachThumb[data-loading='true'] {
+.msgAttachThumb[data-loading="true"] {
   width: 96px;
   height: 96px;
   background: color-mix(in oklab, var(--ink) 6%, transparent);

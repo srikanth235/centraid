@@ -6,7 +6,7 @@
  * `centraid/gw-pair/1`. Keeps qrcode as a gateway CLI dependency only.
  */
 
-import QRCode from 'qrcode';
+import QRCode from "qrcode";
 
 /**
  * Render a block QR suitable for SSH TTYs.
@@ -19,8 +19,8 @@ export async function renderTerminalQr(text: string): Promise<string> {
   // hints) still fit a version-40 code when scanned from a terminal.
   try {
     return await QRCode.toString(text, {
-      type: 'terminal',
-      errorCorrectionLevel: 'L',
+      type: "terminal",
+      errorCorrectionLevel: "L",
       small: true,
       margin: 1,
     });
@@ -28,12 +28,14 @@ export async function renderTerminalQr(text: string): Promise<string> {
     // Fall back without `small` if the compact renderer rejects the matrix.
     try {
       return await QRCode.toString(text, {
-        type: 'terminal',
-        errorCorrectionLevel: 'L',
+        type: "terminal",
+        errorCorrectionLevel: "L",
         margin: 1,
       });
     } catch {
-      throw first instanceof Error ? first : new Error(`QR encode failed: ${String(first)}`);
+      throw first instanceof Error
+        ? first
+        : new Error(`QR encode failed: ${String(first)}`);
     }
   }
 }

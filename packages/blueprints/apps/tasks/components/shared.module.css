@@ -101,7 +101,7 @@
     transform 0.08s var(--ease);
 }
 .circle::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: -0.55rem;
   border-radius: 999px;
@@ -112,11 +112,11 @@
 .circle:active {
   transform: scale(0.92);
 }
-.circle[data-on='true'] {
+.circle[data-on="true"] {
   background: var(--accent-deep);
   border-color: var(--accent-deep);
 }
-.circle[data-cancelled='true'] {
+.circle[data-cancelled="true"] {
   background: var(--bg-sunken);
   border-color: var(--line-strong);
   color: var(--ink-3);

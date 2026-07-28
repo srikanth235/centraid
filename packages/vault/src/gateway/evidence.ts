@@ -3,10 +3,10 @@
 // write, evidence + explanation per invocation. Unskippable because there is
 // no other door. All writers here append to journal.db and never UPDATE.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
-import type { Citation, Identity } from './types.js';
+import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
+import type { Citation, Identity } from "./types.js";
 
 export interface ReceiptInput {
   grantId: string | null;
@@ -16,7 +16,7 @@ export interface ReceiptInput {
   objectId: string | null;
   /** The purpose that APPLIED — callers record the defaulted notation (issue #306). */
   purpose: string | null | undefined;
-  decision: 'allow' | 'deny';
+  decision: "allow" | "deny";
   detail?: Record<string, unknown>;
 }
 
@@ -32,36 +32,42 @@ export interface ReceiptInput {
  * is known (a scheduler-fired automation), never guessed.
  */
 export function actingMemberDetail(
-  identity: Pick<Identity, 'onBehalfOfMember'>,
-  request: { actingMemberId?: string },
+  identity: Pick<Identity, "onBehalfOfMember">,
+  request: { actingMemberId?: string }
 ): Record<string, string> {
-  const memberId = request.actingMemberId ?? identity.onBehalfOfMember?.memberId;
+  const memberId =
+    request.actingMemberId ?? identity.onBehalfOfMember?.memberId;
   return memberId === undefined ? {} : { actingMember: memberId };
 }
 
 /** Append a consent.receipt, chaining its hash to the previous receipt. */
-export function writeReceipt(journal: DatabaseSync, input: ReceiptInput): string {
+export function writeReceipt(
+  journal: DatabaseSync,
+  input: ReceiptInput
+): string {
   const receiptId = uuidv7();
   const occurredAt = nowIso();
   const prev = journal
-    .prepare('SELECT hash FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1')
+    .prepare(
+      "SELECT hash FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1"
+    )
     .get() as { hash: string } | undefined;
   const hash = sha256Hex(
     JSON.stringify([
-      prev?.hash ?? '',
+      prev?.hash ?? "",
       receiptId,
       input.action,
       input.objectType,
       input.objectId,
       input.decision,
       occurredAt,
-    ]),
+    ])
   );
   journal
     .prepare(
       `INSERT INTO consent_receipt
          (receipt_id, grant_id, invocation_id, action, object_type, object_id, purpose_concept_id, decision, occurred_at, hash, detail_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       receiptId,
@@ -74,7 +80,7 @@ export function writeReceipt(journal: DatabaseSync, input: ReceiptInput): string
       input.decision,
       occurredAt,
       hash,
-      input.detail ? JSON.stringify(input.detail) : null,
+      input.detail ? JSON.stringify(input.detail) : null
     );
   return receiptId;
 }
@@ -91,19 +97,19 @@ export function writeProvenance(
   entityId: string,
   activity: string,
   used?: Record<string, unknown>,
-  agentKind?: 'owner' | 'app' | 'ai_agent' | 'import',
+  agentKind?: "owner" | "app" | "ai_agent" | "import"
 ): string {
   const provId = uuidv7();
   const prev = journal
     .prepare(
-      'SELECT prov_id FROM consent_provenance WHERE entity_type = ? AND entity_id = ? ORDER BY prov_id DESC LIMIT 1',
+      "SELECT prov_id FROM consent_provenance WHERE entity_type = ? AND entity_id = ? ORDER BY prov_id DESC LIMIT 1"
     )
     .get(entityType, entityId) as { prov_id: string } | undefined;
   journal
     .prepare(
       `INSERT INTO consent_provenance
          (prov_id, entity_type, entity_id, prov_activity, agent_kind, agent_id, used_json, occurred_at, prev_prov_id, signature)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`
     )
     .run(
       provId,
@@ -114,7 +120,7 @@ export function writeProvenance(
       identity.callerId,
       used ? JSON.stringify(used) : null,
       nowIso(),
-      prev?.prov_id ?? null,
+      prev?.prov_id ?? null
     );
   return provId;
 }
@@ -123,15 +129,15 @@ export function writeProvenance(
 export function writeCheck(
   journal: DatabaseSync,
   invocationId: string,
-  phase: 'pre' | 'post',
+  phase: "pre" | "post",
   predicate: string,
   passed: boolean,
-  observed?: Record<string, unknown>,
+  observed?: Record<string, unknown>
 ): void {
   journal
     .prepare(
       `INSERT INTO agent_invocation_check (check_id, invocation_id, phase, predicate, passed, observed_json, checked_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       uuidv7(),
@@ -140,7 +146,7 @@ export function writeCheck(
       predicate,
       passed ? 1 : 0,
       observed ? JSON.stringify(observed) : null,
-      nowIso(),
+      nowIso()
     );
 }
 
@@ -148,14 +154,21 @@ export function writeCheck(
 export function writeEvidence(
   journal: DatabaseSync,
   invocationId: string,
-  citations: Citation[],
+  citations: Citation[]
 ): void {
   const stmt = journal.prepare(
     `INSERT INTO agent_evidence (evidence_id, invocation_id, claim, entity_type, entity_id, prov_id, weight)
-     VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+     VALUES (?, ?, ?, ?, ?, NULL, ?)`
   );
   for (const c of citations) {
-    stmt.run(uuidv7(), invocationId, c.claim, c.entityType, c.entityId, c.weight ?? null);
+    stmt.run(
+      uuidv7(),
+      invocationId,
+      c.claim,
+      c.entityType,
+      c.entityId,
+      c.weight ?? null
+    );
   }
 }
 
@@ -163,12 +176,12 @@ export function writeEvidence(
 export function writeExplanation(
   journal: DatabaseSync,
   invocationId: string,
-  summary: string,
+  summary: string
 ): void {
   journal
     .prepare(
       `INSERT INTO agent_explanation (explanation_id, invocation_id, audience, summary, generated_at)
-       VALUES (?, ?, 'owner', ?, ?)`,
+       VALUES (?, ?, 'owner', ?, ?)`
     )
     .run(uuidv7(), invocationId, summary, nowIso());
 }

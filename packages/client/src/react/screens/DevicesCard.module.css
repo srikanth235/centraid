@@ -133,7 +133,7 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
 }
-.tombstones li span[data-quiet='true'] {
+.tombstones li span[data-quiet="true"] {
   color: color-mix(in srgb, var(--ink-3) 72%, transparent);
 }
 
@@ -211,7 +211,7 @@
   color: var(--ink-3);
   background: color-mix(in srgb, var(--ink) 8%, transparent);
 }
-.transportChip[data-transport='iroh'] {
+.transportChip[data-transport="iroh"] {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 12%, transparent);
 }
@@ -225,7 +225,7 @@
   font-size: 11px;
   color: var(--ink-3);
 }
-.meta span[data-quiet='true'] {
+.meta span[data-quiet="true"] {
   color: color-mix(in srgb, var(--ink-3) 72%, transparent);
 }
 .metaVault {

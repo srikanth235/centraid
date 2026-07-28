@@ -35,10 +35,10 @@
 //     confirmed parts can coexist with re-sealed ones. `edge-upload.js` uses a
 //     random nonce and forfeits that property; the durable queue does not.
 
-import { concatBytes, hexToBytes, u32be, u64be, utf8 } from './bytes';
-import type { UploadCrypto } from './crypto';
+import { concatBytes, hexToBytes, u32be, u64be, utf8 } from "./bytes";
+import type { UploadCrypto } from "./crypto";
 
-const MAGIC = utf8('CBSF');
+const MAGIC = utf8("CBSF");
 export const SEAL_VERSION = 2;
 export const HEADER_BYTES = 37;
 export const TRAILER_BYTES = 13;
@@ -61,15 +61,22 @@ export function partCountFor(frameCount: number): number {
  * Sealed size of the whole object, known before reading a byte.
  * header(37) + [plain + 29/frame] + [sealed directory 44 + 4/frame] + trailer(13).
  */
-export function sealedSizeFor(plaintextSize: number, frameCount: number): number {
+export function sealedSizeFor(
+  plaintextSize: number,
+  frameCount: number
+): number {
   return plaintextSize + 94 + 33 * frameCount;
 }
 
 /** Sealed length of each frame: nonce(12) + algo(1) + plaintext + tag(16). */
-export function frameSealedLengths(plaintextSize: number, frameCount: number): number[] {
+export function frameSealedLengths(
+  plaintextSize: number,
+  frameCount: number
+): number[] {
   return Array.from(
     { length: frameCount },
-    (_, index) => Math.min(FRAME_BYTES, plaintextSize - index * FRAME_BYTES) + 29,
+    (_, index) =>
+      Math.min(FRAME_BYTES, plaintextSize - index * FRAME_BYTES) + 29
   );
 }
 
@@ -85,18 +92,22 @@ function directoryAad(sha: string, frameCount: number): Uint8Array {
 async function nonceFor(
   crypto: UploadCrypto,
   key: Uint8Array,
-  aad: Uint8Array,
+  aad: Uint8Array
 ): Promise<Uint8Array> {
-  const mac = await crypto.hmacSha256(key, utf8('cbsf-nonce\0'), aad);
+  const mac = await crypto.hmacSha256(key, utf8("cbsf-nonce\0"), aad);
   return mac.subarray(0, NONCE_BYTES);
 }
 
 export function encodeHeader(sha: string): Uint8Array {
-  if (!/^[0-9a-f]{64}$/u.test(sha)) throw new Error('sealed blob: invalid header sha');
+  if (!/^[0-9a-f]{64}$/u.test(sha))
+    throw new Error("sealed blob: invalid header sha");
   return concatBytes([MAGIC, Uint8Array.of(SEAL_VERSION), hexToBytes(sha)]);
 }
 
-export function encodeTrailer(directoryLength: number, frameCount: number): Uint8Array {
+export function encodeTrailer(
+  directoryLength: number,
+  frameCount: number
+): Uint8Array {
   return concatBytes([
     MAGIC,
     Uint8Array.of(SEAL_VERSION),
@@ -112,7 +123,7 @@ export async function sealFrame(
   sha: string,
   index: number,
   frameCount: number,
-  plain: Uint8Array,
+  plain: Uint8Array
 ): Promise<Uint8Array> {
   const aad = frameAad(sha, index, frameCount);
   const nonce = await nonceFor(crypto, key, aad);
@@ -120,7 +131,7 @@ export async function sealFrame(
     key,
     nonce,
     aad,
-    concatBytes([Uint8Array.of(ALGO_STORE), plain]),
+    concatBytes([Uint8Array.of(ALGO_STORE), plain])
   );
   return concatBytes([nonce, sealed]);
 }
@@ -131,7 +142,7 @@ export async function sealDirectory(
   key: Uint8Array,
   sha: string,
   plaintextSize: number,
-  frameCount: number,
+  frameCount: number
 ): Promise<Uint8Array> {
   const plain = concatBytes([
     u32be(FRAME_BYTES),
@@ -166,7 +177,15 @@ export interface SealPartInput {
  * known before any part is sealed.
  */
 export async function sealPart(input: SealPartInput): Promise<Uint8Array> {
-  const { crypto, key, sha256, plaintextSize, frameCount, partNumber, directory } = input;
+  const {
+    crypto,
+    key,
+    sha256,
+    plaintextSize,
+    frameCount,
+    partNumber,
+    directory,
+  } = input;
   const partIndex = partNumber - 1;
   const first = partIndex * FRAMES_PER_PART;
   const last = Math.min(frameCount, first + FRAMES_PER_PART);
@@ -180,12 +199,15 @@ export async function sealPart(input: SealPartInput): Promise<Uint8Array> {
     const length = Math.min(FRAME_BYTES, plaintextSize - offset);
     const plain = await input.read(offset, length);
     if (plain.byteLength !== length) {
-      throw new Error(`frame ${index} read ${plain.byteLength} bytes, expected ${length}`);
+      throw new Error(
+        `frame ${index} read ${plain.byteLength} bytes, expected ${length}`
+      );
     }
     body.push(await sealFrame(crypto, key, sha256, index, frameCount, plain));
     return sealNextFrame(index + 1);
   };
   await sealNextFrame(first);
-  if (last === frameCount) body.push(directory, encodeTrailer(directory.byteLength, frameCount));
+  if (last === frameCount)
+    body.push(directory, encodeTrailer(directory.byteLength, frameCount));
   return concatBytes(body);
 }

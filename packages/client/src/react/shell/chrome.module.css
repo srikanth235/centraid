@@ -22,10 +22,10 @@
      own chrome into its first flex child (tlSide is the first child of
      .sidebar, tlMain is the first child of .main). */
   grid-template-rows: minmax(0, 1fr);
-  grid-template-areas: 'side main';
+  grid-template-areas: "side main";
   transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
 }
-.window[data-sidebar='closed'] {
+.window[data-sidebar="closed"] {
   --sidebar-w: 0px;
 }
 
@@ -63,7 +63,7 @@
    width (matches its minmax), col 2 spans the right-pane (1fr). The cells
    own their own horizontal padding instead of tlMain, so col 1's right
    edge meets col 2's left edge with no padding gutter. */
-.tlMain[data-layout='grid'] {
+.tlMain[data-layout="grid"] {
   display: grid;
   grid-template-columns: minmax(360px, 420px) 1fr;
   padding: 0;
@@ -109,10 +109,10 @@
    ("New app", "Search", etc.) doesn't slide up into the tlSide slot
    during the 240ms width animation. The parent sidebar is 0 wide +
    overflow:hidden once collapsed, so tlSide isn't visible regardless. */
-.window[data-sidebar='closed'] .tlSide {
+.window[data-sidebar="closed"] .tlSide {
   visibility: hidden;
 }
-.window[data-sidebar='closed'] .tlMain .spacer {
+.window[data-sidebar="closed"] .tlMain .spacer {
   display: inline-block;
 }
 .tlMain .spacer {
@@ -168,20 +168,20 @@
   color: var(--ink);
 }
 .tbBtn[disabled],
-.tbBtn[aria-disabled='true'] {
+.tbBtn[aria-disabled="true"] {
   opacity: 0.35;
   cursor: default;
   pointer-events: none;
 }
 /* Active toggle state — e.g. the builder titlebar's History button when
    the chat pane is showing version history. */
-.tbBtn[data-active='true'] {
+.tbBtn[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
 /* Popover anchor state — `data-open` is set while an anchored panel is
    mounted so the button stays visually "pressed". */
-.tbBtn[data-open='true'] {
+.tbBtn[data-open="true"] {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
@@ -255,7 +255,7 @@
   padding: 6px 8px 8px;
   overflow-y: auto;
 }
-.window[data-sidebar='closed'] .sidebar {
+.window[data-sidebar="closed"] .sidebar {
   border-right: none;
 }
 
@@ -283,12 +283,12 @@
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink);
 }
-.sbItem[aria-current='true'],
-.sbItem[data-active='true'] {
+.sbItem[aria-current="true"],
+.sbItem[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
-.sbItem[data-disabled='true'] {
+.sbItem[data-disabled="true"] {
   opacity: 0.45;
   cursor: default;
   pointer-events: none;
@@ -470,10 +470,10 @@
 }
 
 /* Accent-tinted sidebar row — the "Build new" entry point. */
-.sbItem[data-accent='true'] {
+.sbItem[data-accent="true"] {
   color: var(--accent);
 }
-.sbItem[data-accent='true']:hover {
+.sbItem[data-accent="true"]:hover {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
@@ -523,7 +523,7 @@
 .sbAppRow:hover .rowMore,
 .sbAppRow:focus-within .rowMore,
 .rowMore:focus-visible,
-.rowMore[data-open='true'] {
+.rowMore[data-open="true"] {
   opacity: 1;
 }
 .rowMore:hover {
@@ -536,7 +536,7 @@
 /* When the action is open, the row's own hover state would compete with
    the `•••` background; nudge the row back to its resting tone so focus
    reads as "this menu owns the moment". */
-.sbAppRow:has(.rowMore[data-open='true']) .sbItem {
+.sbAppRow:has(.rowMore[data-open="true"]) .sbItem {
   background: color-mix(in srgb, var(--ink) 9%, transparent);
   color: var(--ink);
 }

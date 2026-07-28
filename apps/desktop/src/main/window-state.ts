@@ -5,12 +5,12 @@
  * cannot hide the window off-screen.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
-import { app, screen, type BrowserWindow, type Rectangle } from 'electron';
+import { app, screen, type BrowserWindow, type Rectangle } from "electron";
 
-const FILE = 'window-state.json';
+const FILE = "window-state.json";
 const DEBOUNCE_MS = 400;
 
 export interface WindowState {
@@ -24,7 +24,7 @@ export interface WindowState {
 const DEFAULTS: WindowState = { width: 1400, height: 900, x: 80, y: 60 };
 
 function statePath(): string {
-  return path.join(app.getPath('userData'), FILE);
+  return path.join(app.getPath("userData"), FILE);
 }
 
 function clampToDisplay(state: WindowState): WindowState {
@@ -37,7 +37,10 @@ function clampToDisplay(state: WindowState): WindowState {
     displays.find((d) => {
       const b = d.workArea;
       return (
-        state.x >= b.x && state.x < b.x + b.width && state.y >= b.y && state.y < b.y + b.height
+        state.x >= b.x &&
+        state.x < b.x + b.width &&
+        state.y >= b.y &&
+        state.y < b.y + b.height
       );
     }) ?? screen.getPrimaryDisplay();
   const area = display.workArea;
@@ -54,13 +57,13 @@ function clampToDisplay(state: WindowState): WindowState {
 
 export function loadWindowState(): WindowState {
   try {
-    const raw = readFileSync(statePath(), 'utf8');
+    const raw = readFileSync(statePath(), "utf8");
     const parsed = JSON.parse(raw) as Partial<WindowState>;
     if (
-      typeof parsed.width !== 'number' ||
-      typeof parsed.height !== 'number' ||
-      typeof parsed.x !== 'number' ||
-      typeof parsed.y !== 'number'
+      typeof parsed.width !== "number" ||
+      typeof parsed.height !== "number" ||
+      typeof parsed.x !== "number" ||
+      typeof parsed.y !== "number"
     ) {
       return { ...DEFAULTS };
     }
@@ -89,7 +92,9 @@ export function saveWindowStateSync(state: WindowState): void {
 function capture(win: BrowserWindow): WindowState {
   const isMaximized = win.isMaximized();
   // When maximized, bounds are the work area; persist pre-maximize if available.
-  const bounds: Rectangle = isMaximized ? win.getNormalBounds() : win.getBounds();
+  const bounds: Rectangle = isMaximized
+    ? win.getNormalBounds()
+    : win.getBounds();
   return {
     x: bounds.x,
     y: bounds.y,
@@ -120,9 +125,9 @@ export function trackWindowState(win: BrowserWindow): () => void {
     saveWindowStateSync(capture(win));
   };
 
-  win.on('resize', schedule);
-  win.on('move', schedule);
-  win.on('close', flush);
+  win.on("resize", schedule);
+  win.on("move", schedule);
+  win.on("close", flush);
 
   return flush;
 }

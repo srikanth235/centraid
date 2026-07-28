@@ -8,25 +8,28 @@
  * Behind the host bearer check like every non-public route.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { nowIso } from '@centraid/vault';
+import { nowIso } from "@centraid/vault";
 
-import { computeDueReminders } from '../reminders/due-reminders.js';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import { sendError, sendJson } from './route-helpers.js';
+import { computeDueReminders } from "../reminders/due-reminders.js";
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
+import { sendError, sendJson } from "./route-helpers.js";
 
-const DUE_PATH = '/centraid/_reminders/due';
+const DUE_PATH = "/centraid/_reminders/due";
 
 export function makeRemindersRouteHandler(vaults: VaultRegistry): RouteHandler {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
     if (url.pathname !== DUE_PATH) return false;
-    if ((req.method ?? 'GET') !== 'GET') {
+    if ((req.method ?? "GET") !== "GET") {
       return sendJson(res, 405, {
-        error: 'method_not_allowed',
-        message: 'GET only',
+        error: "method_not_allowed",
+        message: "GET only",
       });
     }
     try {

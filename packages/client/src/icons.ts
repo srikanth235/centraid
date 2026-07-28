@@ -5,7 +5,9 @@
 (function () {
   const tokens = window.CentraidTokens;
   if (!tokens || !tokens.icons) {
-    console.error('CentraidTokens.icons missing — preload.js may not be loaded.');
+    console.error(
+      "CentraidTokens.icons missing — preload.js may not be loaded."
+    );
     window.Icon ||= {} as typeof window.Icon;
     window.ICON_PALETTE ||= {} as typeof window.ICON_PALETTE;
     return;
@@ -13,24 +15,28 @@
 
   interface IconPath {
     d: string;
-    fill?: 'currentColor';
+    fill?: "currentColor";
   }
 
   const wrap = (
     paths: readonly IconPath[],
-    opts: { size?: number; strokeWidth?: number } = {},
+    opts: { size?: number; strokeWidth?: number } = {}
   ): string => {
     const { size = 20, strokeWidth = 1.5 } = opts;
     const inner = paths
       .map((p) => {
-        const fillAttr = p.fill === 'currentColor' ? ' fill="currentColor" stroke="none"' : '';
+        const fillAttr =
+          p.fill === "currentColor" ? ' fill="currentColor" stroke="none"' : "";
         return `<path d="${p.d}"${fillAttr}/>`;
       })
-      .join('');
+      .join("");
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
   };
 
-  const Icon: Record<string, (opts?: { size?: number; strokeWidth?: number }) => string> = {};
+  const Icon: Record<
+    string,
+    (opts?: { size?: number; strokeWidth?: number }) => string
+  > = {};
   for (const [name, paths] of Object.entries(tokens.icons)) {
     Icon[name] = (opts) => wrap(paths, opts);
   }

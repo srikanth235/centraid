@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from "vitest";
 
-import { promoteStagedBlob } from '../blob/promote.js';
-import { stageBlobBytes } from '../blob/staging.js';
-import { openVaultDb, type VaultDb } from '../db.js';
+import { promoteStagedBlob } from "../blob/promote.js";
+import { stageBlobBytes } from "../blob/staging.js";
+import { openVaultDb, type VaultDb } from "../db.js";
 import {
   completeEnrichmentLease,
   enrichmentQueueDepth,
@@ -11,50 +11,50 @@ import {
   queueMissingDeviceEnrichmentBacklog,
   releaseEnrichmentLease,
   releaseExpiredEnrichmentLeases,
-} from './leases.js';
+} from "./leases.js";
 
 let db: VaultDb;
-const T0 = '2026-07-15T00:00:00.000Z';
+const T0 = "2026-07-15T00:00:00.000Z";
 
-describe('leases', () => {
+describe("leases", () => {
   beforeEach(() => {
     db = openVaultDb();
     queueDeviceEnrichmentRequest(db.vault, {
-      requestId: 'poster-1',
-      entityType: 'core.content_item',
-      entityId: 'video-1',
-      capability: 'poster',
-      contributionVariant: 'poster',
+      requestId: "poster-1",
+      entityType: "core.content_item",
+      entityId: "video-1",
+      capability: "poster",
+      contributionVariant: "poster",
       requestedAt: T0,
     });
     queueDeviceEnrichmentRequest(db.vault, {
-      requestId: 'transcript-1',
-      entityType: 'core.content_item',
-      entityId: 'audio-1',
-      capability: 'transcript',
-      contributionVariant: 'transcript',
-      requestedAt: '2026-07-15T00:00:01.000Z',
+      requestId: "transcript-1",
+      entityType: "core.content_item",
+      entityId: "audio-1",
+      capability: "transcript",
+      contributionVariant: "transcript",
+      requestedAt: "2026-07-15T00:00:01.000Z",
     });
   });
 
-  test('capability matching leases only compatible work and reports queue depth', () => {
+  test("capability matching leases only compatible work and reports queue depth", () => {
     expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({
       total: 2,
       available: 2,
       leased: 0,
     });
     const transcript = leaseNextEnrichmentRequest(db.vault, {
-      deviceId: 'phone',
-      capabilities: ['transcript'],
+      deviceId: "phone",
+      capabilities: ["transcript"],
       now: T0,
       ttlMs: 60_000,
-      token: 'phone-token',
+      token: "phone-token",
     });
     expect(transcript).toMatchObject({
-      requestId: 'transcript-1',
-      capability: 'transcript',
-      deviceId: 'phone',
-      token: 'phone-token',
+      requestId: "transcript-1",
+      capability: "transcript",
+      deviceId: "phone",
+      token: "phone-token",
       attempt: 1,
     });
     expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({
@@ -64,92 +64,92 @@ describe('leases', () => {
     });
     expect(
       leaseNextEnrichmentRequest(db.vault, {
-        deviceId: 'browser',
-        capabilities: ['embedding'],
+        deviceId: "browser",
+        capabilities: ["embedding"],
         now: T0,
-        token: 'unused',
-      }),
+        token: "unused",
+      })
     ).toBeNull();
   });
 
-  test('one atomic claim excludes a second device until TTL, then expired work re-enters', () => {
+  test("one atomic claim excludes a second device until TTL, then expired work re-enters", () => {
     const first = leaseNextEnrichmentRequest(db.vault, {
-      deviceId: 'laptop-a',
-      capabilities: ['poster'],
+      deviceId: "laptop-a",
+      capabilities: ["poster"],
       now: T0,
       ttlMs: 30_000,
-      token: 'token-a',
+      token: "token-a",
     });
-    expect(first?.requestId).toBe('poster-1');
+    expect(first?.requestId).toBe("poster-1");
     expect(
       leaseNextEnrichmentRequest(db.vault, {
-        deviceId: 'laptop-b',
-        capabilities: ['poster'],
-        now: '2026-07-15T00:00:29.999Z',
-        token: 'token-b-early',
-      }),
+        deviceId: "laptop-b",
+        capabilities: ["poster"],
+        now: "2026-07-15T00:00:29.999Z",
+        token: "token-b-early",
+      })
     ).toBeNull();
 
     const reclaimed = leaseNextEnrichmentRequest(db.vault, {
-      deviceId: 'laptop-b',
-      capabilities: ['poster'],
-      now: '2026-07-15T00:00:30.000Z',
+      deviceId: "laptop-b",
+      capabilities: ["poster"],
+      now: "2026-07-15T00:00:30.000Z",
       ttlMs: 30_000,
-      token: 'token-b',
+      token: "token-b",
     });
     expect(reclaimed).toMatchObject({
-      requestId: 'poster-1',
-      deviceId: 'laptop-b',
-      token: 'token-b',
+      requestId: "poster-1",
+      deviceId: "laptop-b",
+      token: "token-b",
       attempt: 2,
     });
   });
 
-  test('completion is device/token/TTL bound and duplicate completion is a no-op', () => {
+  test("completion is device/token/TTL bound and duplicate completion is a no-op", () => {
     const lease = leaseNextEnrichmentRequest(db.vault, {
-      deviceId: 'phone',
-      capabilities: ['transcript'],
+      deviceId: "phone",
+      capabilities: ["transcript"],
       now: T0,
       ttlMs: 60_000,
-      token: 'right-token',
+      token: "right-token",
     })!;
     expect(
       completeEnrichmentLease(db.vault, {
         requestId: lease.requestId,
-        deviceId: 'phone',
-        token: 'wrong-token',
-        now: '2026-07-15T00:00:20.000Z',
-      }),
+        deviceId: "phone",
+        token: "wrong-token",
+        now: "2026-07-15T00:00:20.000Z",
+      })
     ).toBe(false);
     db.vault
       .prepare(
         `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('audio-1', 'audio/mpeg', 'blob:audio', ?, 10, ?)`,
+       VALUES ('audio-1', 'audio/mpeg', 'blob:audio', ?, 10, ?)`
       )
-      .run('c'.repeat(64), T0);
+      .run("c".repeat(64), T0);
     db.vault
       .prepare(
         `INSERT INTO core_content_derivative
          (derivative_id, content_id, variant, media_type, byte_size, text_content, created_at)
-       VALUES ('transcript-row', 'audio-1', 'transcript', 'text/plain', 5, 'hello', ?)`,
+       VALUES ('transcript-row', 'audio-1', 'transcript', 'text/plain', 5, 'hello', ?)`
       )
       .run(T0);
     expect(
       completeEnrichmentLease(db.vault, {
         requestId: lease.requestId,
-        deviceId: 'phone',
-        token: 'right-token',
-        now: '2026-07-15T00:00:20.000Z',
-      }),
+        deviceId: "phone",
+        token: "right-token",
+        now: "2026-07-15T00:00:20.000Z",
+      })
     ).toBe(true);
     expect(
       completeEnrichmentLease(db.vault, {
         requestId: lease.requestId,
-        deviceId: 'phone',
-        token: 'right-token',
-        now: '2026-07-15T00:00:21.000Z',
-      }),
+        deviceId: "phone",
+        token: "right-token",
+        now: "2026-07-15T00:00:21.000Z",
+      })
     ).toBe(false);
     expect(enrichmentQueueDepth(db.vault, T0)).toStrictEqual({
       total: 1,
@@ -158,75 +158,83 @@ describe('leases', () => {
     });
   });
 
-  test('completion without the promised derivative releases the buggy client lease', () => {
+  test("completion without the promised derivative releases the buggy client lease", () => {
     const lease = leaseNextEnrichmentRequest(db.vault, {
-      deviceId: 'buggy-phone',
-      capabilities: ['poster'],
+      deviceId: "buggy-phone",
+      capabilities: ["poster"],
       now: T0,
       ttlMs: 60_000,
-      token: 'buggy-token',
+      token: "buggy-token",
     })!;
     expect(
       completeEnrichmentLease(db.vault, {
         requestId: lease.requestId,
-        deviceId: 'buggy-phone',
-        token: 'buggy-token',
-        now: '2026-07-15T00:00:10.000Z',
-      }),
+        deviceId: "buggy-phone",
+        token: "buggy-token",
+        now: "2026-07-15T00:00:10.000Z",
+      })
     ).toBe(false);
     expect(
       (
         db.vault
-          .prepare('SELECT lease_device_id FROM enrich_request WHERE request_id = ?')
+          .prepare(
+            "SELECT lease_device_id FROM enrich_request WHERE request_id = ?"
+          )
           .get(lease.requestId) as { lease_device_id: string | null }
-      ).lease_device_id,
+      ).lease_device_id
     ).toBeNull();
   });
 
-  test('voluntary release and expiry cleanup make backstop-visible NULL leases', () => {
+  test("voluntary release and expiry cleanup make backstop-visible NULL leases", () => {
     const lease = leaseNextEnrichmentRequest(db.vault, {
-      deviceId: 'desktop',
-      capabilities: ['poster'],
+      deviceId: "desktop",
+      capabilities: ["poster"],
       now: T0,
       ttlMs: 30_000,
-      token: 'desktop-token',
+      token: "desktop-token",
     })!;
     expect(
       releaseEnrichmentLease(db.vault, {
         requestId: lease.requestId,
-        deviceId: 'desktop',
-        token: 'desktop-token',
-      }),
+        deviceId: "desktop",
+        token: "desktop-token",
+      })
     ).toBe(true);
     expect(
       (
         db.vault
-          .prepare('SELECT lease_device_id FROM enrich_request WHERE request_id = ?')
+          .prepare(
+            "SELECT lease_device_id FROM enrich_request WHERE request_id = ?"
+          )
           .get(lease.requestId) as { lease_device_id: string | null }
-      ).lease_device_id,
+      ).lease_device_id
     ).toBeNull();
 
     leaseNextEnrichmentRequest(db.vault, {
-      deviceId: 'desktop',
-      capabilities: ['poster'],
+      deviceId: "desktop",
+      capabilities: ["poster"],
       now: T0,
       ttlMs: 30_000,
-      token: 'second-token',
+      token: "second-token",
     });
-    expect(releaseExpiredEnrichmentLeases(db.vault, '2026-07-15T00:00:30.000Z')).toBe(1);
-    expect(enrichmentQueueDepth(db.vault, '2026-07-15T00:00:30.000Z')).toStrictEqual({
+    expect(
+      releaseExpiredEnrichmentLeases(db.vault, "2026-07-15T00:00:30.000Z")
+    ).toBe(1);
+    expect(
+      enrichmentQueueDepth(db.vault, "2026-07-15T00:00:30.000Z")
+    ).toStrictEqual({
       total: 2,
       available: 2,
       leased: 0,
     });
   });
 
-  test('claiming video automatically queues its missing poster and transcript', () => {
+  test("claiming video automatically queues its missing poster and transcript", () => {
     const vault = openVaultDb();
     const staged = stageBlobBytes(vault, {
-      bytes: Buffer.from('video bytes'),
-      mediaType: 'video/mp4',
-      filename: 'clip.mp4',
+      bytes: Buffer.from("video bytes"),
+      mediaType: "video/mp4",
+      filename: "clip.mp4",
     });
     let id = 0;
     const promoted = promoteStagedBlob(
@@ -237,37 +245,39 @@ describe('leases', () => {
         wrote: () => undefined,
         creatorPartyId: null,
       },
-      staged.sha256,
+      staged.sha256
     );
     const rows = vault.vault
       .prepare(
         `SELECT required_capability, contribution_variant, detail
-         FROM enrich_request ORDER BY required_capability`,
+         FROM enrich_request ORDER BY required_capability`
       )
       .all() as {
       required_capability: string;
       contribution_variant: string;
       detail: string;
     }[];
-    expect(rows.map((row) => [row.required_capability, row.contribution_variant])).toStrictEqual([
-      ['poster', 'poster'],
-      ['transcript', 'transcript'],
+    expect(
+      rows.map((row) => [row.required_capability, row.contribution_variant])
+    ).toStrictEqual([
+      ["poster", "poster"],
+      ["transcript", "transcript"],
     ]);
     expect(JSON.parse(rows[0]!.detail)).toStrictEqual({
       contentId: promoted.contentId,
       sha256: staged.sha256,
-      mediaType: 'video/mp4',
+      mediaType: "video/mp4",
     });
   });
 
-  test('standing backfill discovers an old video and vanished ownership returns at TTL', () => {
+  test("standing backfill discovers an old video and vanished ownership returns at TTL", () => {
     const vault = openVaultDb();
-    const oldSha = 'b'.repeat(64);
+    const oldSha = "b".repeat(64);
     vault.vault
       .prepare(
         `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('old-video', 'video/webm', ?, ?, 42, ?)`,
+       VALUES ('old-video', 'video/webm', ?, ?, 42, ?)`
       )
       .run(`blob:sha256:${oldSha}`, oldSha, T0);
     let id = 0;
@@ -277,43 +287,67 @@ describe('leases', () => {
     });
     expect(queued).toHaveLength(2);
     const first = leaseNextEnrichmentRequest(vault.vault, {
-      deviceId: 'vanished-phone',
-      capabilities: ['poster'],
+      deviceId: "vanished-phone",
+      capabilities: ["poster"],
       now: T0,
       ttlMs: 30_000,
-      token: 'vanished-token',
+      token: "vanished-token",
     });
-    expect(first?.requestId).toBe('backfill-1');
+    expect(first?.requestId).toBe("backfill-1");
     expect(
       leaseNextEnrichmentRequest(vault.vault, {
-        deviceId: 'night-laptop',
-        capabilities: ['poster'],
-        now: '2026-07-15T00:00:30.000Z',
-        token: 'replacement-token',
-      }),
+        deviceId: "night-laptop",
+        capabilities: ["poster"],
+        now: "2026-07-15T00:00:30.000Z",
+        token: "replacement-token",
+      })
     ).toMatchObject({
-      requestId: 'backfill-1',
-      deviceId: 'night-laptop',
+      requestId: "backfill-1",
+      deviceId: "night-laptop",
       attempt: 2,
     });
   });
 
-  test('bounded backfill skips satisfied rows instead of starving later content', () => {
+  test("bounded backfill skips satisfied rows instead of starving later content", () => {
     const vault = openVaultDb();
     const insertContent = vault.vault.prepare(
       `INSERT INTO core_content_item
        (content_id, media_type, content_uri, sha256, byte_size, created_at)
-     VALUES (?, 'video/mp4', ?, ?, 42, ?)`,
+     VALUES (?, 'video/mp4', ?, ?, 42, ?)`
     );
-    insertContent.run('a-satisfied', `blob:sha256:${'a'.repeat(64)}`, 'a'.repeat(64), T0);
-    insertContent.run('b-missing', `blob:sha256:${'b'.repeat(64)}`, 'b'.repeat(64), T0);
+    insertContent.run(
+      "a-satisfied",
+      `blob:sha256:${"a".repeat(64)}`,
+      "a".repeat(64),
+      T0
+    );
+    insertContent.run(
+      "b-missing",
+      `blob:sha256:${"b".repeat(64)}`,
+      "b".repeat(64),
+      T0
+    );
     const derivative = vault.vault.prepare(
       `INSERT INTO core_content_derivative
        (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-     VALUES (?, 'a-satisfied', ?, ?, ?, 1, ?, ?)`,
+     VALUES (?, 'a-satisfied', ?, ?, ?, 1, ?, ?)`
     );
-    derivative.run('done-poster', 'poster', 'c'.repeat(64), 'image/png', null, T0);
-    derivative.run('done-transcript', 'transcript', null, 'text/plain', 'done', T0);
+    derivative.run(
+      "done-poster",
+      "poster",
+      "c".repeat(64),
+      "image/png",
+      null,
+      T0
+    );
+    derivative.run(
+      "done-transcript",
+      "transcript",
+      null,
+      "text/plain",
+      "done",
+      T0
+    );
 
     let id = 0;
     expect(
@@ -321,15 +355,17 @@ describe('leases', () => {
         newId: () => `fair-${++id}`,
         requestedAt: T0,
         limit: 1,
-      }),
-    ).toStrictEqual(['fair-1', 'fair-2']);
+      })
+    ).toStrictEqual(["fair-1", "fair-2"]);
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
     expect(
       vault.vault
-        .prepare('SELECT DISTINCT target_id FROM enrich_request ORDER BY target_id')
+        .prepare(
+          "SELECT DISTINCT target_id FROM enrich_request ORDER BY target_id"
+        )
         .all()
-        .map((row) => ({ ...row })),
-    ).toStrictEqual([{ target_id: 'b-missing' }]);
+        .map((row) => ({ ...row }))
+    ).toStrictEqual([{ target_id: "b-missing" }]);
   });
 });

@@ -6,7 +6,11 @@
 // when you re-centre; only its RADIUS moves. That is what keeps the chart from
 // degenerating into a 46-legged force-directed hairball.
 
-import type { AtlasAuthoredLink, AtlasFkEdge, AtlasGraphNode } from '../../gateway-client.js';
+import type {
+  AtlasAuthoredLink,
+  AtlasFkEdge,
+  AtlasGraphNode,
+} from "../../gateway-client.js";
 
 /** Fixed canvas — a square viewBox centred on core_party's brass plate. */
 export const ORRERY = {
@@ -47,7 +51,8 @@ export const ZOOM_MAX = 4;
 /** Identity camera — the framed, un-panned default a fresh centre lands on. */
 export const IDENTITY_VIEW: ViewTransform = { x: 0, y: 0, k: 1 };
 
-const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
+const clamp = (n: number, lo: number, hi: number): number =>
+  Math.min(hi, Math.max(lo, n));
 
 /**
  * Zoom about a fixed point `(px, py)` given in the OUTER viewBox coordinate
@@ -64,7 +69,7 @@ export function zoomView(
   py: number,
   factor: number,
   minK: number,
-  maxK: number,
+  maxK: number
 ): ViewTransform {
   const k2 = clamp(view.k * factor, minK, maxK);
   const f = k2 / view.k;
@@ -78,7 +83,11 @@ export function zoomView(
 /** Pan the camera by a delta already expressed in viewBox units (the caller
  *  converts client pixels → viewBox units via the svg's on-screen size). Pure
  *  translation; `k` is untouched. */
-export function panView(view: ViewTransform, dx: number, dy: number): ViewTransform {
+export function panView(
+  view: ViewTransform,
+  dx: number,
+  dy: number
+): ViewTransform {
   return { x: view.x + dx, y: view.y + dy, k: view.k };
 }
 
@@ -94,7 +103,7 @@ export function clientToViewBox(
   rect: { left: number; top: number; width: number; height: number },
   viewSize: number,
   clientX: number,
-  clientY: number,
+  clientY: number
 ): { x: number; y: number } | null {
   if (rect.width <= 0 || rect.height <= 0) return null;
   return {
@@ -107,14 +116,14 @@ export function clientToViewBox(
  *  colour. Packs are hue-assigned by their position in the sorted pack list so
  *  the mapping is deterministic and theme-driven (never a hardcoded hex). */
 export const PALETTE_HUES = [
-  'amber',
-  'forest',
-  'indigo',
-  'ochre',
-  'rose',
-  'slate',
-  'teal',
-  'violet',
+  "amber",
+  "forest",
+  "indigo",
+  "ochre",
+  "rose",
+  "slate",
+  "teal",
+  "violet",
 ] as const;
 
 /** The distinct pack names present, stably sorted — the canonical pack order
@@ -155,7 +164,9 @@ export interface BearingLayout {
  * in stable name order starting at 12 o'clock; kinds within a pack in stable
  * physical-name order. This is the anti-hairball invariant.
  */
-export function allocateBearings(nodes: readonly AtlasGraphNode[]): BearingLayout {
+export function allocateBearings(
+  nodes: readonly AtlasGraphNode[]
+): BearingLayout {
   const total = nodes.length || 1;
   const byPack = new Map<string, AtlasGraphNode[]>();
   for (const n of nodes) {
@@ -172,12 +183,17 @@ export function allocateBearings(nodes: readonly AtlasGraphNode[]): BearingLayou
     const list = byPack
       .get(pack)!
       .slice()
-      .sort((x, y) => (x.physical < y.physical ? -1 : x.physical > y.physical ? 1 : 0));
+      .sort((x, y) =>
+        x.physical < y.physical ? -1 : x.physical > y.physical ? 1 : 0
+      );
     const span = (360 * list.length) / total;
     const pad = Math.min(2.2, span * 0.14);
     const inner = span - pad * 2;
     list.forEach((n, i) => {
-      const b = list.length === 1 ? a + span / 2 : a + pad + (i + 0.5) * (inner / list.length);
+      const b =
+        list.length === 1
+          ? a + span / 2
+          : a + pad + (i + 0.5) * (inner / list.length);
       bearing.set(n.physical, b);
       labelTier.set(n.physical, (i % 2) as 0 | 1);
     });
@@ -204,7 +220,7 @@ export function allocateBearings(nodes: readonly AtlasGraphNode[]): BearingLayou
 export function bfsHops(
   center: string,
   edges: readonly AtlasFkEdge[],
-  allTables: readonly string[],
+  allTables: readonly string[]
 ): Map<string, number | null> {
   const adj = new Map<string, Set<string>>();
   for (const t of allTables) adj.set(t, new Set());
@@ -241,7 +257,7 @@ export function bfsHops(
 export function unreachedFrom(
   center: string,
   edges: readonly AtlasFkEdge[],
-  allTables: readonly string[],
+  allTables: readonly string[]
 ): string[] {
   const hops = bfsHops(center, edges, allTables);
   return allTables.filter((t) => hops.get(t) === null);
@@ -269,7 +285,7 @@ export function unreachedFrom(
 
 /** The three detail-dial positions, from the tightest "your data" lens to the
  *  full "every table the schema declares" lens. */
-export type AtlasDetailLevel = 'simple' | 'standard' | 'everything';
+export type AtlasDetailLevel = "simple" | "standard" | "everything";
 
 /**
  * Whether a kind PROVABLY carries data — the Simple lens's admission test. A
@@ -291,11 +307,13 @@ export type AtlasDetailLevel = 'simple' | 'standard' | 'everything';
 export function kindCarriesData(
   physical: string,
   rows: ReadonlyMap<string, number>,
-  edges: readonly AtlasFkEdge[],
+  edges: readonly AtlasFkEdge[]
 ): boolean {
   const own = rows.get(physical);
   if (own !== undefined && own > 0) return true;
-  return edges.some((e) => (e.fromTable === physical || e.toTable === physical) && e.fill > 0);
+  return edges.some(
+    (e) => (e.fromTable === physical || e.toTable === physical) && e.fill > 0
+  );
 }
 
 /** The inputs a level predicate reads about the current frame. `hops` and
@@ -326,16 +344,16 @@ export interface VisibilityContext {
 export function visibleAtLevel(
   level: AtlasDetailLevel,
   node: AtlasGraphNode,
-  ctx: VisibilityContext,
+  ctx: VisibilityContext
 ): boolean {
   if (node.physical === ctx.center) return true; // the dial never hides the centre
-  if (level === 'everything') return true;
-  if (level === 'simple') {
-    if (node.packKind === 'machinery') return false; // plumbing, hidden at Simple
+  if (level === "everything") return true;
+  if (level === "simple") {
+    if (node.packKind === "machinery") return false; // plumbing, hidden at Simple
     return kindCarriesData(node.physical, ctx.rows, ctx.edges);
   }
   // standard — ontology always; machinery only when reachable from the centre
-  if (node.packKind === 'ontology') return true;
+  if (node.packKind === "ontology") return true;
   return ctx.hops.get(node.physical) != null;
 }
 
@@ -350,10 +368,10 @@ export function visibleAtLevel(
 export function edgeVisibleAtLevel(
   level: AtlasDetailLevel,
   edge: AtlasFkEdge,
-  visible: ReadonlySet<string>,
+  visible: ReadonlySet<string>
 ): boolean {
   if (edge.selfRef) return false;
-  if (level === 'simple' && edge.ghost) return false;
+  if (level === "simple" && edge.ghost) return false;
   return visible.has(edge.fromTable) && visible.has(edge.toTable);
 }
 
@@ -367,7 +385,10 @@ export function ringRadius(hop: number | null): number {
 }
 
 /** Cartesian point for a bearing (deg) + radius, about the canvas centre. */
-export function polar(bearingDeg: number, radius: number): { x: number; y: number } {
+export function polar(
+  bearingDeg: number,
+  radius: number
+): { x: number; y: number } {
   const a = (bearingDeg * Math.PI) / 180;
   return {
     x: ORRERY.cx + Math.cos(a) * radius,
@@ -390,7 +411,11 @@ export function fillStrokeWidth(fill: number, maxFill: number): number {
 
 /** Stroke opacity for a live edge — heavier fills read more solid; nullable
  *  columns sit a touch fainter than their NOT NULL siblings. */
-export function fillStrokeOpacity(fill: number, maxFill: number, notnull: boolean): number {
+export function fillStrokeOpacity(
+  fill: number,
+  maxFill: number,
+  notnull: boolean
+): number {
   const denom = Math.log10(Math.max(maxFill, 1) + 1) || 1;
   const l = fill <= 0 ? 0 : Math.log10(fill + 1) / denom;
   const base = 0.3 + 0.45 * l;
@@ -419,7 +444,13 @@ export function edgeBow(fromDeg: number, toDeg: number): number {
  * stay radial (they carry the 38% that converge on core_party); everything else
  * bows so arcs never cross the plate.
  */
-export function edgePath(ax: number, ay: number, bx: number, by: number, bow: number): string {
+export function edgePath(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  bow: number
+): string {
   const mx = (ax + bx) / 2;
   const my = (ay + by) / 2;
   const qx = ORRERY.cx + (mx - ORRERY.cx) * bow;
@@ -435,7 +466,12 @@ export function edgePath(ax: number, ay: number, bx: number, by: number, bow: nu
  * sectors), so the large-arc flag only trips for a hypothetical single-pack
  * vault.
  */
-export function dialArcPath(a1: number, a2: number, r: number, flip: boolean): string {
+export function dialArcPath(
+  a1: number,
+  a2: number,
+  r: number,
+  flip: boolean
+): string {
   const s = polar(flip ? a2 : a1, r);
   const e = polar(flip ? a1 : a2, r);
   const large = Math.abs(a2 - a1) > 180 ? 1 : 0;
@@ -462,9 +498,12 @@ export function nodeRadius(rows: number | undefined): number {
 
 /** Map physical table → its own row count, read off any edge that starts there
  *  (every FK from a table reports that table's `childRows`). */
-export function rowsByTable(edges: readonly AtlasFkEdge[]): Map<string, number> {
+export function rowsByTable(
+  edges: readonly AtlasFkEdge[]
+): Map<string, number> {
   const m = new Map<string, number>();
-  for (const e of edges) if (!m.has(e.fromTable)) m.set(e.fromTable, e.childRows);
+  for (const e of edges)
+    if (!m.has(e.fromTable)) m.set(e.fromTable, e.childRows);
   return m;
 }
 
@@ -480,11 +519,13 @@ export interface RelationChip {
 
 /** Aggregate authored links into the distinct relation-vocabulary chips,
  *  sorted by descending count. Pure over the payload's `authoredLinks`. */
-export function aggregateRelationChips(links: readonly AtlasAuthoredLink[]): RelationChip[] {
+export function aggregateRelationChips(
+  links: readonly AtlasAuthoredLink[]
+): RelationChip[] {
   const byKey = new Map<string, RelationChip>();
   for (const link of links) {
     const key = link.relationLabel ?? link.relationConceptId;
-    const label = link.relationLabel ?? 'untyped link';
+    const label = link.relationLabel ?? "untyped link";
     const existing = byKey.get(key);
     if (existing) existing.count += link.count;
     else byKey.set(key, { key, label, count: link.count });

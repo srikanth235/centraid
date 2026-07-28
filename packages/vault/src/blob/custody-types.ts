@@ -3,9 +3,9 @@
 // them without a runtime import cycle, and so custody.ts (the facade) stays
 // under the governance line-cap.
 
-import type { RemoteBlobTransfer } from './remote-transfer.js';
-import type { ReplicaStore } from './replica-index.js';
-import type { BlobStore } from './store.js';
+import type { RemoteBlobTransfer } from "./remote-transfer.js";
+import type { ReplicaStore } from "./replica-index.js";
+import type { BlobStore } from "./store.js";
 
 /**
  * Per-content custody state: whether a piece of content's ORIGINAL bytes sit
@@ -13,11 +13,11 @@ import type { BlobStore } from './store.js';
  * `blob_custody_state` mirrors this per content_id (schema/blob.ts).
  */
 export type CustodyState =
-  | 'pending-offsite'
-  | 'local-only'
-  | 'replicated'
-  | 'remote-only'
-  | 'missing';
+  | "pending-offsite"
+  | "local-only"
+  | "replicated"
+  | "remote-only"
+  | "missing";
 
 /** How the host resolves the (settings-declared) remote tier on demand. */
 export interface RemoteTier {
@@ -56,7 +56,7 @@ export interface RemoteTier {
   storageClassFor?: (
     sha256: string,
     storeClass: ReplicaStore,
-    originalHint?: { mediaType: string; byteSize: number },
+    originalHint?: { mediaType: string; byteSize: number }
   ) => string | undefined;
   /** Seal remote objects with this key (settings `blob_store.encrypt`). */
   encryptKey?: Buffer;
@@ -79,7 +79,10 @@ export interface RemoteTier {
 }
 
 /** Resolve the encryption key without making every custody caller key-aware. */
-export function remoteEncryptionKey(remote: RemoteTier, sha256: string): Buffer | undefined {
+export function remoteEncryptionKey(
+  remote: RemoteTier,
+  sha256: string
+): Buffer | undefined {
   return remote.keyFor?.(sha256) ?? remote.encryptKey;
 }
 
@@ -91,8 +94,13 @@ export function remoteEncryptionKey(remote: RemoteTier, sha256: string): Buffer 
  * everything under cas). The edge-seal key is per-sha and store-independent, so
  * only the object prefix changes with the store class.
  */
-export function storeForClass(remote: RemoteTier, store: 'cas' | 'derived'): BlobStore {
-  return store === 'derived' && remote.derivedStore ? remote.derivedStore : remote.store;
+export function storeForClass(
+  remote: RemoteTier,
+  store: "cas" | "derived"
+): BlobStore {
+  return store === "derived" && remote.derivedStore
+    ? remote.derivedStore
+    : remote.store;
 }
 
 export interface ReconcileResult {

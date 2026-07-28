@@ -17,16 +17,25 @@
 // ---------------------------------------------------------------------------
 
 /** The store classes this revision defines (PROTOCOL.md § Terminology). */
-export type StoreClass = 'backup' | 'cas' | 'derived';
+export type StoreClass = "backup" | "cas" | "derived";
 
 /** Every store class, as a runtime array — the single source of truth so
  *  guards that must enumerate them (inventory validation, usage loops,
  *  capability checks) can't drift from `StoreClass`. Order is stable. */
-export const STORE_CLASSES = ['backup', 'cas', 'derived'] as const satisfies readonly StoreClass[];
+export const STORE_CLASSES = [
+  "backup",
+  "cas",
+  "derived",
+] as const satisfies readonly StoreClass[];
 
 /** Discovery's additive capability flags. A provider declares only the
  *  control-plane surfaces and store classes it actually offers. */
-export type ProviderCapabilityFlag = StoreClass | 'usage' | 'policy' | 'inventory' | 'audit';
+export type ProviderCapabilityFlag =
+  | StoreClass
+  | "usage"
+  | "policy"
+  | "inventory"
+  | "audit";
 
 /** Named capability bundles a provider MAY advertise (PROTOCOL.md § Profiles).
  *  Additive and advisory — capability flags, not profiles, are the
@@ -34,28 +43,30 @@ export type ProviderCapabilityFlag = StoreClass | 'usage' | 'policy' | 'inventor
  *  managed offsite home — the "Hosted" product option — which MUST carry all
  *  seven of `backup`, `cas`, `derived`, `usage`, `policy`, `inventory`,
  *  `audit`). */
-export type ProviderProfile = 'home';
+export type ProviderProfile = "home";
 
 /** Every known profile name, as a runtime array — the single source of truth
  *  for conformance's "only known profiles" and "home ⇒ all members" checks. */
-export const PROVIDER_PROFILES = ['home'] as const satisfies readonly ProviderProfile[];
+export const PROVIDER_PROFILES = [
+  "home",
+] as const satisfies readonly ProviderProfile[];
 
 /** The seven capabilities a `home`-profile provider MUST declare
  *  (PROTOCOL.md § Profiles). `policy` is REQUIRED so the client's five-metric
  *  freshness contract has a declared cadence to anchor staleness against. */
 export const HOME_PROFILE_CAPABILITIES = [
-  'backup',
-  'cas',
-  'derived',
-  'usage',
-  'policy',
-  'inventory',
-  'audit',
+  "backup",
+  "cas",
+  "derived",
+  "usage",
+  "policy",
+  "inventory",
+  "audit",
 ] as const satisfies readonly ProviderCapabilityFlag[];
 
 export type Retention =
   | {
-      kind: 'ladder';
+      kind: "ladder";
       /** Keep every snapshot this recent. */
       keepAllDays: number;
       /** Then newest-per-day. */
@@ -65,14 +76,14 @@ export type Retention =
       /** MUST be `true` (PROTOCOL.md) — the newest snapshot is never pruned. */
       neverPruneNewest: true;
     }
-  | { kind: 'none' };
+  | { kind: "none" };
 
 /** `backup`-store-scoped fields of the discovery document — present iff
  *  `capabilities` includes `"backup"` (PROTOCOL.md § Layer 2 — backup). */
 export interface BackupDiscovery {
   softDeleteWindowDays: number;
   retention: Retention;
-  restoreCostClass: 'free-egress' | 'metered-egress';
+  restoreCostClass: "free-egress" | "metered-egress";
   /** Provider can make objects immutable. */
   objectLock: boolean;
   /** Data plane honors If-None-Match. */
@@ -82,7 +93,7 @@ export interface BackupDiscovery {
 /** `GET /v1/storage/provider` response — everything a client adapts to. */
 export interface ProviderCapabilities {
   protocol: string[];
-  dataPlane: 's3';
+  dataPlane: "s3";
   /** Additive capability flags — see `ProviderCapabilityFlag`. */
   capabilities: ProviderCapabilityFlag[];
   /** OPTIONAL named capability bundles (PROTOCOL.md § Profiles). A declared
@@ -90,7 +101,7 @@ export interface ProviderCapabilities {
    *  no named profile (still conformant). */
   profiles?: ProviderProfile[];
   maxCredentialTtlSeconds: number;
-  purgeAuthTier: 'api-key' | 'interactive';
+  purgeAuthTier: "api-key" | "interactive";
   /** Present iff `capabilities` includes `"backup"`. */
   backup?: BackupDiscovery;
   /** OPTIONAL — the provider-declared list of S3 storage-class values
@@ -102,7 +113,7 @@ export interface ProviderCapabilities {
 }
 
 /** `accountStatus` on the target list — surfaced so backups don't stop silently. */
-export type AccountStatus = 'ok' | 'payment_due' | 'suspended';
+export type AccountStatus = "ok" | "payment_due" | "suspended";
 
 /** Backup store's per-target usage, embedded in the target list (Layer 2,
  *  unchanged shape from `/1`'s original single-workload design). */
@@ -119,7 +130,7 @@ export interface Usage {
 export interface TargetInfo {
   id: string;
   name: string;
-  status: 'active' | 'deleted';
+  status: "active" | "deleted";
   currentGeneration: number;
   usage: Usage;
 }
@@ -141,7 +152,7 @@ export interface S3Grant {
   secretAccessKey: string;
   sessionToken?: string;
   expiresAt: number;
-  mode: 'read' | 'read-write';
+  mode: "read" | "read-write";
 }
 
 /** Layer-1 optional `usage` capability — per-store-class report
@@ -165,7 +176,7 @@ export interface ProviderPolicyDeclaration {
   rpoSeconds: number;
   snapshotIntervalHours: number;
   verifyEveryDays: number;
-  casAck: 'receipt' | 'replicated';
+  casAck: "receipt" | "replicated";
 }
 
 /** Provider echo. `declaredAt` is provider-stamped unix epoch seconds. */
@@ -188,7 +199,7 @@ export interface ProviderInventoryObject {
   etagOrHash: string;
   storedAt: number;
   storageClass?: string;
-  state: 'live' | 'soft-deleted';
+  state: "live" | "soft-deleted";
 }
 
 export interface ProviderInventoryPage {
@@ -198,12 +209,12 @@ export interface ProviderInventoryPage {
 }
 
 export type ProviderEventKind =
-  | 'prune'
-  | 'soft-delete'
-  | 'undelete'
-  | 'purge'
-  | 'credential-issued'
-  | 'policy-changed';
+  | "prune"
+  | "soft-delete"
+  | "undelete"
+  | "purge"
+  | "credential-issued"
+  | "policy-changed";
 
 /** Append-only provider audit row. Rows are returned oldest-first. */
 export interface ProviderAuditEvent {
@@ -266,17 +277,17 @@ export interface SnapshotRegistration {
 
 /** Reserved error codes (PROTOCOL.md § Error envelope) — providers MAY add others. */
 export type BackupProviderErrorCode =
-  | 'invalid_request'
-  | 'auth_expired'
-  | 'payment_required'
-  | 'interactive_auth_required'
-  | 'quota_exceeded'
-  | 'not_found'
-  | 'undelete_window_expired'
-  | 'conflict_generation'
-  | 'policy_unmet'
-  | 'purge_pending'
-  | 'provider_error';
+  | "invalid_request"
+  | "auth_expired"
+  | "payment_required"
+  | "interactive_auth_required"
+  | "quota_exceeded"
+  | "not_found"
+  | "undelete_window_expired"
+  | "conflict_generation"
+  | "policy_unmet"
+  | "purge_pending"
+  | "provider_error";
 
 /** The HTTP status the reserved codes map to (PROTOCOL.md's table, column 2). */
 export const CODE_STATUS: Readonly<Record<BackupProviderErrorCode, number>> = {
@@ -311,7 +322,7 @@ export class BackupProviderError extends Error {
     details?: BackupProviderErrorDetails;
   }) {
     super(opts.message);
-    this.name = 'BackupProviderError';
+    this.name = "BackupProviderError";
     this.status = opts.status;
     this.code = opts.code;
     this.details = opts.details;
@@ -321,7 +332,7 @@ export class BackupProviderError extends Error {
   static of(
     code: BackupProviderErrorCode,
     message: string,
-    details?: BackupProviderErrorDetails,
+    details?: BackupProviderErrorDetails
   ): BackupProviderError {
     return new BackupProviderError({
       status: CODE_STATUS[code],
@@ -356,8 +367,8 @@ export interface BackupProvider {
   openDataPlane: (
     targetId: string,
     store: StoreClass,
-    mode: 'read' | 'read-write',
-  ) => Promise<import('./object-store.js').ObjectStore>;
+    mode: "read" | "read-write"
+  ) => Promise<import("./object-store.js").ObjectStore>;
 
   /**
    * Layer-1 grant introspection (PROTOCOL.md § Credential grant) — OPTIONAL.
@@ -370,32 +381,46 @@ export interface BackupProvider {
   requestGrant?: (
     targetId: string,
     store: StoreClass,
-    mode: 'read' | 'read-write',
-    ttlSeconds?: number,
+    mode: "read" | "read-write",
+    ttlSeconds?: number
   ) => Promise<S3Grant>;
 
-  registerSnapshot: (targetId: string, reg: SnapshotRegistration) => Promise<SnapshotRow>;
-  listSnapshots: (targetId: string, opts?: { includePruned?: boolean }) => Promise<SnapshotRow[]>;
+  registerSnapshot: (
+    targetId: string,
+    reg: SnapshotRegistration
+  ) => Promise<SnapshotRow>;
+  listSnapshots: (
+    targetId: string,
+    opts?: { includePruned?: boolean }
+  ) => Promise<SnapshotRow[]>;
   getSnapshot: (targetId: string, seq: number) => Promise<SnapshotRow>;
 
   /** Includes `currentGeneration` and the backup store's `usage`. */
   getTarget: (targetId: string) => Promise<TargetInfo>;
-  usage: (targetId: string) => Promise<{ usage: Usage; accountStatus: AccountStatus }>;
+  usage: (
+    targetId: string
+  ) => Promise<{ usage: Usage; accountStatus: AccountStatus }>;
 
   /** Layer-1 optional `usage` capability (PROTOCOL.md § Usage) — per-store-class
    *  report. OPTIONAL; present iff `capabilities` includes `"usage"`. */
   usageReport?: (targetId: string) => Promise<UsageByStore>;
 
   /** Optional `policy` capability — declaration and provider-stamped echo. */
-  putPolicy?: (targetId: string, policy: ProviderPolicyDeclaration) => Promise<ProviderPolicy>;
+  putPolicy?: (
+    targetId: string,
+    policy: ProviderPolicyDeclaration
+  ) => Promise<ProviderPolicy>;
   getPolicy?: (targetId: string) => Promise<ProviderPolicy>;
 
   /** Optional `inventory` capability — provider-attested, per-store pages. */
   listInventory?: (
     targetId: string,
-    query: ProviderInventoryQuery,
+    query: ProviderInventoryQuery
   ) => Promise<ProviderInventoryPage>;
 
   /** Optional `audit` capability — append-only lifecycle and custody events. */
-  listEvents?: (targetId: string, query?: ProviderAuditQuery) => Promise<ProviderAuditPage>;
+  listEvents?: (
+    targetId: string,
+    query?: ProviderAuditQuery
+  ) => Promise<ProviderAuditPage>;
 }

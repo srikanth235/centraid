@@ -46,14 +46,18 @@
    Emitted for both the explicit [data-theme='dark'] and the standalone
    prefers-color-scheme fallback, the same two-selector shape the token layer
    uses. */
-:global(:root[data-theme='dark']) .appRoot {
+:global(:root[data-theme="dark"]) .appRoot {
   --accd: color-mix(in oklab, var(--_accent) 76%, hsl(var(--app-hue) 40% 12%));
   --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --bg-side: hsl(var(--app-hue) 12% calc(var(--bg-l) + 3%));
 }
 @media (prefers-color-scheme: dark) {
   :global(:root:not([data-theme])) .appRoot {
-    --accd: color-mix(in oklab, var(--_accent) 76%, hsl(var(--app-hue) 40% 12%));
+    --accd: color-mix(
+      in oklab,
+      var(--_accent) 76%,
+      hsl(var(--app-hue) 40% 12%)
+    );
     --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --bg-side: hsl(var(--app-hue) 12% calc(var(--bg-l) + 3%));
   }
@@ -63,7 +67,7 @@
    data-app-font on the inline scope wrapper (pushKnobToInlineRoot); app.css's
    :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
    that wrapper. */
-:global(.centraid-inline-scope[data-app-font='mono']) {
+:global(.centraid-inline-scope[data-app-font="mono"]) {
   --font-sans: var(--mono);
   --font-title: var(--mono);
 }
@@ -147,7 +151,7 @@
    click handler either; the drawer closes via its X, a nav pick, or Escape).
    `inset: 0` resolves to the contained frame, not the viewport. */
 .appRoot:global(.is-narrow.side-open)::after {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   z-index: 55;

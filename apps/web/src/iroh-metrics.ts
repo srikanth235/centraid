@@ -14,7 +14,7 @@ export function irohStats(): IrohStats {
 
 export function markConnectStart(): number {
   try {
-    performance.mark('centraid:iroh-connect-start');
+    performance.mark("centraid:iroh-connect-start");
   } catch {
     /* User Timing may be unavailable; instrumentation is best-effort. */
   }
@@ -24,8 +24,8 @@ export function markConnectStart(): number {
 export function measureConnect(startMs: number): void {
   irohStats().connects += 1;
   try {
-    performance.mark('centraid:iroh-connect-end');
-    performance.measure('centraid:iroh-connect', {
+    performance.mark("centraid:iroh-connect-end");
+    performance.measure("centraid:iroh-connect", {
       start: startMs,
       end: nowMs(),
     });
@@ -36,7 +36,7 @@ export function measureConnect(startMs: number): void {
 
 export function measureRequest(startMs: number): void {
   try {
-    performance.measure('centraid:iroh-request', {
+    performance.measure("centraid:iroh-request", {
       start: startMs,
       end: nowMs(),
     });

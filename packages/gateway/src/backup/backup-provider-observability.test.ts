@@ -4,25 +4,27 @@ import {
   type ObjectStore,
   type ProviderCapabilities,
   type ProviderInventoryObject,
-} from '@centraid/backup';
-import { describe, expect, test } from 'vitest';
+} from "@centraid/backup";
+import { describe, expect, test } from "vitest";
 
 import {
   collectInventory,
   pushProviderPolicy,
   type ProviderPolicySyncState,
-} from './backup-provider-observability.js';
+} from "./backup-provider-observability.js";
 
-const capabilities = (extra: ProviderCapabilities['capabilities']): ProviderCapabilities => ({
-  protocol: ['centraid-storage-provider/1'],
-  dataPlane: 's3',
-  capabilities: ['backup', ...extra],
+const capabilities = (
+  extra: ProviderCapabilities["capabilities"]
+): ProviderCapabilities => ({
+  protocol: ["centraid-storage-provider/1"],
+  dataPlane: "s3",
+  capabilities: ["backup", ...extra],
   maxCredentialTtlSeconds: 3600,
-  purgeAuthTier: 'api-key',
+  purgeAuthTier: "api-key",
   backup: {
     softDeleteWindowDays: 7,
-    retention: { kind: 'none' },
-    restoreCostClass: 'free-egress',
+    retention: { kind: "none" },
+    restoreCostClass: "free-egress",
     objectLock: false,
     conditionalWrites: true,
   },
@@ -30,7 +32,7 @@ const capabilities = (extra: ProviderCapabilities['capabilities']): ProviderCapa
 
 function listStore(
   keys: string[],
-  sizeFor: (key: string) => number = (key) => key.length,
+  sizeFor: (key: string) => number = (key) => key.length
 ): ObjectStore {
   return {
     put: async () => undefined,
@@ -40,7 +42,8 @@ function listStore(
     },
     head: async () => null,
     async *list() {
-      for (const key of keys) yield { key, size: sizeFor(key), etagOrHash: key };
+      for (const key of keys)
+        yield { key, size: sizeFor(key), etagOrHash: key };
     },
     delete: async () => undefined,
   };
@@ -49,23 +52,23 @@ function listStore(
 function provider(overrides: Partial<BackupProvider>): BackupProvider {
   return {
     capabilities: async () => capabilities([]),
-    createTarget: async () => ({ targetId: 'target' }),
+    createTarget: async () => ({ targetId: "target" }),
     deleteTarget: async () => undefined,
     undeleteTarget: async () => undefined,
     purgeTarget: async () => undefined,
     openDataPlane: async () => listStore([]),
     registerSnapshot: async () => {
-      throw new Error('unused');
+      throw new Error("unused");
     },
     listSnapshots: async () => [],
     getSnapshot: async () => {
-      throw new Error('unused');
+      throw new Error("unused");
     },
     getTarget: async () => {
-      throw new Error('unused');
+      throw new Error("unused");
     },
     usage: async () => {
-      throw new Error('unused');
+      throw new Error("unused");
     },
     ...overrides,
   };
@@ -75,122 +78,128 @@ const desired = {
   rpoSeconds: 60,
   snapshotIntervalHours: 24,
   verifyEveryDays: 7,
-  casAck: 'receipt' as const,
+  casAck: "receipt" as const,
 };
 
-describe('backup-provider-observability', () => {
-  test('policy push persists a typed provider rejection instead of flattening it', async () => {
+describe("backup-provider-observability", () => {
+  test("policy push persists a typed provider rejection instead of flattening it", async () => {
     const result = await pushProviderPolicy({
       provider: provider({
-        capabilities: async () => capabilities(['policy']),
+        capabilities: async () => capabilities(["policy"]),
         putPolicy: async () => {
-          throw BackupProviderError.of('policy_unmet', 'replicated acknowledgement unavailable', {
-            field: 'casAck',
-          });
+          throw BackupProviderError.of(
+            "policy_unmet",
+            "replicated acknowledgement unavailable",
+            {
+              field: "casAck",
+            }
+          );
         },
       }),
-      targetId: 'target',
+      targetId: "target",
       desired,
-      checkedAt: '2026-07-16T00:00:00.000Z',
+      checkedAt: "2026-07-16T00:00:00.000Z",
     });
     expect(result).toMatchObject<Partial<ProviderPolicySyncState>>({
-      status: 'rejected',
-      errorCode: 'policy_unmet',
-      details: { field: 'casAck' },
+      status: "rejected",
+      errorCode: "policy_unmet",
+      details: { field: "casAck" },
     });
   });
 
-  test('policy push grades a mismatched provider echo as drift', async () => {
+  test("policy push grades a mismatched provider echo as drift", async () => {
     const result = await pushProviderPolicy({
       provider: provider({
-        capabilities: async () => capabilities(['policy']),
+        capabilities: async () => capabilities(["policy"]),
         putPolicy: async (_target, policy) => ({
           ...policy,
           rpoSeconds: policy.rpoSeconds * 2,
           declaredAt: 1,
         }),
       }),
-      targetId: 'target',
+      targetId: "target",
       desired,
-      checkedAt: '2026-07-16T00:00:00.000Z',
+      checkedAt: "2026-07-16T00:00:00.000Z",
     });
-    expect(result.status).toBe('drift');
+    expect(result.status).toBe("drift");
     expect(result.echo?.rpoSeconds).toBe(120);
   });
 
-  test('verify-bucket inventory cross-check reports both directions of provider drift', async () => {
+  test("verify-bucket inventory cross-check reports both directions of provider drift", async () => {
     const rows = (keys: string[]): ProviderInventoryObject[] =>
       keys.map((key) => ({
         key,
         sizeBytes: key.length,
         etagOrHash: key,
         storedAt: 1,
-        state: 'live',
+        state: "live",
       }));
     const result = await collectInventory({
       provider: provider({
-        capabilities: async () => capabilities(['inventory']),
+        capabilities: async () => capabilities(["inventory"]),
         listInventory: async () => ({
-          store: 'backup',
-          objects: rows(['shared', 'provider-only']),
+          store: "backup",
+          objects: rows(["shared", "provider-only"]),
           nextCursor: null,
         }),
-        openDataPlane: async () => listStore(['shared', 'bucket-only']),
+        openDataPlane: async () => listStore(["shared", "bucket-only"]),
       }),
-      targetId: 'target',
-      store: 'backup',
+      targetId: "target",
+      store: "backup",
       verifyBucket: true,
     });
-    expect(result.source).toBe('bucket');
+    expect(result.source).toBe("bucket");
     expect(result.crossCheck).toStrictEqual({
-      providerOnly: ['provider-only'],
-      bucketOnly: ['bucket-only'],
+      providerOnly: ["provider-only"],
+      bucketOnly: ["bucket-only"],
       metadataMismatch: [],
     });
   });
 
-  test('verify-bucket inventory rejects a same-key byte metadata mismatch', async () => {
+  test("verify-bucket inventory rejects a same-key byte metadata mismatch", async () => {
     const result = await collectInventory({
       provider: provider({
-        capabilities: async () => capabilities(['inventory']),
+        capabilities: async () => capabilities(["inventory"]),
         listInventory: async () => ({
-          store: 'cas',
+          store: "cas",
           objects: [
             {
-              key: 'blobs/sha256/value',
+              key: "blobs/sha256/value",
               sizeBytes: 99,
-              etagOrHash: 'stale-etag',
+              etagOrHash: "stale-etag",
               storedAt: 1,
-              state: 'live',
+              state: "live",
             },
           ],
           nextCursor: null,
         }),
-        openDataPlane: async () => listStore(['blobs/sha256/value']),
+        openDataPlane: async () => listStore(["blobs/sha256/value"]),
       }),
-      targetId: 'target',
-      store: 'cas',
+      targetId: "target",
+      store: "cas",
       verifyBucket: true,
     });
-    expect(result.crossCheck?.metadataMismatch).toStrictEqual(['blobs/sha256/value']);
+    expect(result.crossCheck?.metadataMismatch).toStrictEqual([
+      "blobs/sha256/value",
+    ]);
   });
 
-  test('an advertised but failing inventory falls back to raw LIST with an honest label', async () => {
+  test("an advertised but failing inventory falls back to raw LIST with an honest label", async () => {
     const result = await collectInventory({
       provider: provider({
-        capabilities: async () => capabilities(['inventory']),
+        capabilities: async () => capabilities(["inventory"]),
         listInventory: async () => {
-          throw new Error('attestation unavailable');
+          throw new Error("attestation unavailable");
         },
-        openDataPlane: async () => listStore(['chunks/a']),
+        openDataPlane: async () => listStore(["chunks/a"]),
       }),
-      targetId: 'target',
-      store: 'backup',
+      targetId: "target",
+      store: "backup",
       verifyBucket: false,
     });
-    expect(result.source).toBe('bucket');
+    expect(result.source).toBe("bucket");
     expect(result.providerAttested).toBe(false);
-    expect(result.attestationError).toContain('unavailable');
-    expect(result.objects.map((row) => row.key)).toStrictEqual(['chunks/a']);
+    expect(result.attestationError).toContain("unavailable");
+    expect(result.objects.map((row) => row.key)).toStrictEqual(["chunks/a"]);
   });
 });

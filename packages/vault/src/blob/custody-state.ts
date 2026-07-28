@@ -3,12 +3,12 @@
 // under the governance line-cap; custody.ts re-exports these, so every caller
 // that imports them from `./custody.js` (index.ts, gateway.ts) is untouched.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import type { VaultDb } from '../db.js';
-import { nowIso } from '../ids.js';
-import type { CustodyState } from './custody-types.js';
-import { shaOfBlobUri } from './store.js';
+import type { VaultDb } from "../db.js";
+import { nowIso } from "../ids.js";
+import type { CustodyState } from "./custody-types.js";
+import { shaOfBlobUri } from "./store.js";
 
 /**
  * Persist a custody-state snapshot into `blob_custody_state` (issue #352
@@ -22,11 +22,13 @@ import { shaOfBlobUri } from './store.js';
  * scale, and it means a purged/trashed content item's stale row can never
  * linger (rebuildable projection, never a durable fact of its own).
  */
-export async function refreshCustodyState(db: VaultDb): Promise<{ updated: number }> {
+export async function refreshCustodyState(
+  db: VaultDb
+): Promise<{ updated: number }> {
   const rows = db.vault
     .prepare(
       `SELECT content_id, content_uri FROM core_content_item
-        WHERE content_uri LIKE 'blob:%' AND deleted_at IS NULL`,
+        WHERE content_uri LIKE 'blob:%' AND deleted_at IS NULL`
     )
     .all() as { content_id: string; content_uri: string }[];
   const byContent = new Map<string, string>();
@@ -44,30 +46,30 @@ export async function refreshCustodyState(db: VaultDb): Promise<{ updated: numbe
   // as durable while a replacement upload is still outstanding.
   const pending = new Set(
     (
-      db.vault.prepare('SELECT sha256 FROM blob_outbox').all() as {
+      db.vault.prepare("SELECT sha256 FROM blob_outbox").all() as {
         sha256: string;
       }[]
-    ).map((row) => row.sha256),
+    ).map((row) => row.sha256)
   );
   const now = nowIso();
-  db.vault.exec('BEGIN');
+  db.vault.exec("BEGIN");
   try {
-    db.vault.prepare('DELETE FROM blob_custody_state').run();
+    db.vault.prepare("DELETE FROM blob_custody_state").run();
     const insert = db.vault.prepare(
       `INSERT INTO blob_custody_state (content_id, sha256, custody_state, checked_at)
-       VALUES (?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?)`
     );
     for (const [contentId, sha] of byContent) {
       insert.run(
         contentId,
         sha,
-        pending.has(sha) ? 'pending-offsite' : (status.get(sha) ?? 'missing'),
-        now,
+        pending.has(sha) ? "pending-offsite" : (status.get(sha) ?? "missing"),
+        now
       );
     }
-    db.vault.exec('COMMIT');
+    db.vault.exec("COMMIT");
   } catch (err) {
-    db.vault.exec('ROLLBACK');
+    db.vault.exec("ROLLBACK");
     throw err;
   }
   return { updated: byContent.size };
@@ -81,16 +83,20 @@ export async function refreshCustodyState(db: VaultDb): Promise<{ updated: numbe
  * poll. Zero-filled for states the mirror currently has no rows in, so
  * callers never need an `?? 0` per key.
  */
-export function custodyStateCounts(vault: DatabaseSync): Record<CustodyState, number> {
+export function custodyStateCounts(
+  vault: DatabaseSync
+): Record<CustodyState, number> {
   const counts: Record<CustodyState, number> = {
-    'pending-offsite': 0,
-    'local-only': 0,
+    "pending-offsite": 0,
+    "local-only": 0,
     replicated: 0,
-    'remote-only': 0,
+    "remote-only": 0,
     missing: 0,
   };
   const rows = vault
-    .prepare(`SELECT custody_state, COUNT(*) AS n FROM blob_custody_state GROUP BY custody_state`)
+    .prepare(
+      `SELECT custody_state, COUNT(*) AS n FROM blob_custody_state GROUP BY custody_state`
+    )
     .all() as { custody_state: CustodyState; n: number }[];
   for (const row of rows) counts[row.custody_state] = row.n;
   return counts;
@@ -105,12 +111,14 @@ export function custodyStateCounts(vault: DatabaseSync): Record<CustodyState, nu
  * `custodyStateCounts`'s return shape — the `blob-sweep` health probe (and
  * any other existing caller) only ever wanted counts.
  */
-export function custodyStateByteCounts(vault: DatabaseSync): Record<CustodyState, number> {
+export function custodyStateByteCounts(
+  vault: DatabaseSync
+): Record<CustodyState, number> {
   const bytes: Record<CustodyState, number> = {
-    'pending-offsite': 0,
-    'local-only': 0,
+    "pending-offsite": 0,
+    "local-only": 0,
     replicated: 0,
-    'remote-only': 0,
+    "remote-only": 0,
     missing: 0,
   };
   const rows = vault
@@ -118,7 +126,7 @@ export function custodyStateByteCounts(vault: DatabaseSync): Record<CustodyState
       `SELECT s.custody_state AS custody_state, COALESCE(SUM(c.byte_size), 0) AS bytes
          FROM blob_custody_state s
          JOIN core_content_item c ON c.content_id = s.content_id
-        GROUP BY s.custody_state`,
+        GROUP BY s.custody_state`
     )
     .all() as { custody_state: CustodyState; bytes: number }[];
   for (const row of rows) bytes[row.custody_state] = row.bytes;

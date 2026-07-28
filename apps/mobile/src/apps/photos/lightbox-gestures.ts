@@ -7,13 +7,13 @@
 // Reanimated babel plugin still workletises the handler bodies (it keys off the
 // `.onStart`/`.onUpdate`/`.onEnd` call chain, not the enclosing function).
 
-import { Gesture } from 'react-native-gesture-handler';
-import { runOnJS, withTiming, type SharedValue } from 'react-native-reanimated';
+import { Gesture } from "react-native-gesture-handler";
+import { runOnJS, withTiming, type SharedValue } from "react-native-reanimated";
 
 /** Pinch-to-zoom plus double-tap-to-toggle, clamped to 1×–5×. */
 export function buildZoomGesture(
   scale: SharedValue<number>,
-  startScale: SharedValue<number>,
+  startScale: SharedValue<number>
 ): ReturnType<typeof Gesture.Simultaneous> {
   const pinch = Gesture.Pinch()
     .onStart(() => {
@@ -32,7 +32,9 @@ export function buildZoomGesture(
 }
 
 /** Swipe-down-to-dismiss, ignoring horizontal paging drags. */
-export function buildDismissGesture(onDismiss: () => void): ReturnType<typeof Gesture.Pan> {
+export function buildDismissGesture(
+  onDismiss: () => void
+): ReturnType<typeof Gesture.Pan> {
   return Gesture.Pan()
     .activeOffsetY([-24, 24])
     .failOffsetX([-24, 24])

@@ -1,12 +1,12 @@
-import { listVaults } from '../../../gateway-client.js';
-import { connectGateway } from './gatewayModals.js';
+import { listVaults } from "../../../gateway-client.js";
 import {
   type ConnectFlowResult,
   type ConnectFlowState,
   type ConnectTestInput,
   type ConnectivityReport,
   type LocalVaultsResult,
-} from './connectFlow-core.js';
+} from "./connectFlow-core.js";
+import { connectGateway } from "./gatewayModals.js";
 
 /*
  * Impure IO for ConnectFlow (issue #382) — mirrors the
@@ -21,10 +21,12 @@ import {
 
 /** The vault a fresh gateway auto-founds for its owner (issue #603). Its peer
  *  is "Shared", which is the default for everyone the owner invites. */
-const PERSONAL_VAULT_NAME = 'Personal';
+const PERSONAL_VAULT_NAME = "Personal";
 
 export interface ConnectFlowBridge {
-  testGatewayConnection: (input: ConnectTestInput) => Promise<ConnectivityReport>;
+  testGatewayConnection: (
+    input: ConnectTestInput
+  ) => Promise<ConnectivityReport>;
 }
 
 function bridge(): ConnectFlowBridge {
@@ -35,27 +37,29 @@ function bridge(): ConnectFlowBridge {
  *  bridge that's missing (older build, unwired test double) or a rejecting
  *  call both fold to a single failed 'reach' stage, same posture as
  *  `redeemGatewayPairing`'s `{ok:false}` contract. */
-export async function runConnectivityTest(input: ConnectTestInput): Promise<ConnectivityReport> {
+export async function runConnectivityTest(
+  input: ConnectTestInput
+): Promise<ConnectivityReport> {
   try {
     const b = bridge();
-    if (typeof b.testGatewayConnection !== 'function') {
+    if (typeof b.testGatewayConnection !== "function") {
       return {
-        error: 'unavailable',
+        error: "unavailable",
         ok: false,
-        stages: [{ id: 'reach', label: 'Reach gateway', status: 'fail' }],
+        stages: [{ id: "reach", label: "Reach gateway", status: "fail" }],
       };
     }
     return await b.testGatewayConnection(input);
   } catch (err) {
     return {
-      error: 'unreachable',
+      error: "unreachable",
       ok: false,
       stages: [
         {
           detail: err instanceof Error ? err.message : String(err),
-          id: 'reach',
-          label: 'Reach gateway',
-          status: 'fail',
+          id: "reach",
+          label: "Reach gateway",
+          status: "fail",
         },
       ],
     };
@@ -75,7 +79,10 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
   try {
     const vaults = await listVaults();
     if (!vaults) {
-      return { ok: false, message: 'This gateway does not serve a vault list.' };
+      return {
+        ok: false,
+        message: "This gateway does not serve a vault list.",
+      };
     }
     return {
       ok: true,
@@ -108,26 +115,36 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   const loaded = await loadLocalVaults();
   if (!loaded.ok) throw new Error(loaded.message);
   const personal =
-    loaded.vaults.find((v) => v.name === PERSONAL_VAULT_NAME) ?? loaded.vaults[0] ?? null;
+    loaded.vaults.find((v) => v.name === PERSONAL_VAULT_NAME) ??
+    loaded.vaults[0] ??
+    null;
   if (!personal) {
-    throw new Error('The gateway on this Mac has no spaces yet — restart Centraid and try again.');
+    throw new Error(
+      "The gateway on this Mac has no spaces yet — restart Centraid and try again."
+    );
   }
   await window.CentraidApi.setActiveVault({ vaultId: personal.vaultId });
-  return { displayLabel: 'This Mac', gatewayId: 'local', vaultId: personal.vaultId };
+  return {
+    displayLabel: "This Mac",
+    gatewayId: "local",
+    vaultId: personal.vaultId,
+  };
 }
 
 /**
  * Commit the flow (design doc step D). Throws with a user-facing message on
  * failure — the component catches it and dispatches `commitFailed`.
  */
-export async function commitConnectFlow(state: ConnectFlowState): Promise<ConnectFlowResult> {
-  if (state.method === 'local') {
+export async function commitConnectFlow(
+  state: ConnectFlowState
+): Promise<ConnectFlowResult> {
+  if (state.method === "local") {
     return commitLocal(state);
   }
-  if (state.method === 'gateway') {
+  if (state.method === "gateway") {
     return commitGateway(state);
   }
-  throw new Error('No connection method selected.');
+  throw new Error("No connection method selected.");
 }
 
 async function ensureLocalGatewayActive(): Promise<void> {
@@ -137,35 +154,49 @@ async function ensureLocalGatewayActive(): Promise<void> {
   // keychain prompt before the user chooses), and `setActiveGateway` is what
   // lifts that deferral. Skipping it when the id already matches would leave
   // the gateway unstarted and every follow-up read hanging on an empty URL.
-  await window.CentraidApi.setActiveGateway({ id: 'local' });
+  await window.CentraidApi.setActiveGateway({ id: "local" });
 }
 
-async function commitLocal(state: ConnectFlowState): Promise<ConnectFlowResult> {
-  if (!state.vaultChoice) throw new Error('Pick or create a space first.');
+async function commitLocal(
+  state: ConnectFlowState
+): Promise<ConnectFlowResult> {
+  if (!state.vaultChoice) throw new Error("Pick or create a space first.");
   await ensureLocalGatewayActive();
-  if (state.vaultChoice.kind === 'create') {
+  if (state.vaultChoice.kind === "create") {
     const create = window.CentraidApi.createVault;
-    if (typeof create !== 'function') {
-      throw new Error('This host cannot create spaces — use the desktop app or the gateway CLI.');
+    if (typeof create !== "function") {
+      throw new Error(
+        "This host cannot create spaces — use the desktop app or the gateway CLI."
+      );
     }
     const name = state.newVaultName.trim();
     const created = await create({ name: name || undefined });
     await window.CentraidApi.setActiveVault({ vaultId: created.vaultId });
-    return { displayLabel: 'This Mac', gatewayId: 'local', vaultId: created.vaultId };
+    return {
+      displayLabel: "This Mac",
+      gatewayId: "local",
+      vaultId: created.vaultId,
+    };
   }
   const { vaultId } = state.vaultChoice;
   await window.CentraidApi.setActiveVault({ vaultId });
-  return { displayLabel: 'This Mac', gatewayId: 'local', vaultId };
+  return { displayLabel: "This Mac", gatewayId: "local", vaultId };
 }
 
-async function commitGateway(state: ConnectFlowState): Promise<ConnectFlowResult> {
+async function commitGateway(
+  state: ConnectFlowState
+): Promise<ConnectFlowResult> {
   const label = state.label.trim() || undefined;
   const result = await connectGateway({
-    kind: 'ticket',
+    kind: "ticket",
     label,
     rememberDevice: state.rememberDevice,
     ticket: state.ticket.trim(),
   });
   if (!result.ok) throw new Error(result.message);
-  return { displayLabel: result.label, gatewayId: result.gatewayId, vaultId: result.vaultId ?? '' };
+  return {
+    displayLabel: result.label,
+    gatewayId: result.gatewayId,
+    vaultId: result.vaultId ?? "",
+  };
 }

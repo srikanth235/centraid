@@ -4,17 +4,17 @@
 // modal (unmounting this component) and opens the new person's drawer, same
 // as the old version. On failure/park, the draft and open state stay put so
 // nothing typed is lost.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-import type { PersonList } from '../types.ts';
+import type { PersonList } from "../types.ts";
 
-import styles from './AddPersonModal.module.css';
+import styles from "./AddPersonModal.module.css";
 
 const CADENCE_OPTS: Array<{ d: number; l: string }> = [
-  { d: 7, l: 'Weekly' },
-  { d: 14, l: 'Biweekly' },
-  { d: 30, l: 'Monthly' },
-  { d: 90, l: 'Quarterly' },
+  { d: 7, l: "Weekly" },
+  { d: 14, l: "Biweekly" },
+  { d: 30, l: "Monthly" },
+  { d: 90, l: "Quarterly" },
 ];
 
 interface AddFields {
@@ -34,8 +34,8 @@ export function AddPersonModal({
   onClose: () => void;
 }) {
   const nameRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('');
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
   const [listId, setListId] = useState<string | null>(null);
   const [cadence, setCadence] = useState(30);
   const [busy, setBusy] = useState(false);
@@ -45,7 +45,7 @@ export function AddPersonModal({
   }, []);
 
   const listOpts: Array<{ list_id: string | null; name: string }> = [
-    { list_id: null, name: 'No list' },
+    { list_id: null, name: "No list" },
     ...lists,
   ];
 
@@ -64,7 +64,12 @@ export function AddPersonModal({
 
   return (
     <div className="kit-modal-back">
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
       <div className="kit-modal">
         <h2>Add someone</h2>
         <p className="hint">Who do you want to keep up with?</p>
@@ -78,7 +83,7 @@ export function AddPersonModal({
         />
         <input
           className={styles.input}
-          style={{ marginTop: '8px' }}
+          style={{ marginTop: "8px" }}
           placeholder="Role or where they are (optional)"
           aria-label="Role"
           value={role}
@@ -88,7 +93,7 @@ export function AddPersonModal({
         <div className={styles.pick}>
           {listOpts.map((c) => (
             <button
-              key={c.list_id ?? 'none'}
+              key={c.list_id ?? "none"}
               type="button"
               className="kit-chip quiet"
               aria-pressed={listId === c.list_id}

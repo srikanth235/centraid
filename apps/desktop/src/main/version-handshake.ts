@@ -11,4 +11,4 @@ export {
   judgeGatewayInfo,
   protocolsCompatible,
   type HandshakeResult,
-} from '@centraid/client/version-handshake';
+} from "@centraid/client/version-handshake";

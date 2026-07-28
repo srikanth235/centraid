@@ -1,13 +1,13 @@
-import { type JSX, useEffect, useState } from 'react';
+import { type JSX, useEffect, useState } from "react";
 
-import { relativeWhen, shortVersionTitle } from '../../../../format.js';
-import { activateVersion, listVersions } from '../../../../gateway-client.js';
-import { cx } from '../../../ui/cx.js';
+import { relativeWhen, shortVersionTitle } from "../../../../format.js";
+import { activateVersion, listVersions } from "../../../../gateway-client.js";
+import { cx } from "../../../ui/cx.js";
 
-import atomsCss from '../../../styles/atoms.module.css';
-import controlsCss from '../../../styles/controls.module.css';
-import buttonCss from '../../../ui/Button.module.css';
-import styles from './BuilderHistory.module.css';
+import atomsCss from "../../../styles/atoms.module.css";
+import controlsCss from "../../../styles/controls.module.css";
+import buttonCss from "../../../ui/Button.module.css";
+import styles from "./BuilderHistory.module.css";
 
 // Version-history list inside the builder chat pane's History view (React port
 // of builder.ts renderHistoryInto). Newest first; each row can Restore a prior
@@ -34,12 +34,13 @@ export default function BuilderHistory({
   // instead of needing the effect to clear the previous result first.
   const [settled, setSettled] = useState<{
     key: string;
-    result: Versions | 'error';
+    result: Versions | "error";
   } | null>(null);
   const key = `${appId}\u0000${nonce}`;
-  const current = settled !== null && settled.key === key ? settled.result : null;
-  const data = current === 'error' ? null : current;
-  const error = current === 'error';
+  const current =
+    settled !== null && settled.key === key ? settled.result : null;
+  const data = current === "error" ? null : current;
+  const error = current === "error";
 
   useEffect(() => {
     if (!appId) return;
@@ -49,7 +50,7 @@ export default function BuilderHistory({
         if (alive) setSettled({ key, result: r });
       })
       .catch(() => {
-        if (alive) setSettled({ key, result: 'error' });
+        if (alive) setSettled({ key, result: "error" });
       });
     return () => {
       alive = false;
@@ -58,13 +59,23 @@ export default function BuilderHistory({
 
   if (!appId) return <div className={atomsCss.empty}>No app yet.</div>;
   if (error)
-    return <div className={atomsCss.empty}>No versions yet. Publish to create the first one.</div>;
+    return (
+      <div className={atomsCss.empty}>
+        No versions yet. Publish to create the first one.
+      </div>
+    );
   if (!data) return <div className={atomsCss.empty}>Loading…</div>;
   if (data.versions.length === 0) {
-    return <div className={atomsCss.empty}>No versions yet. Publish to create the first one.</div>;
+    return (
+      <div className={atomsCss.empty}>
+        No versions yet. Publish to create the first one.
+      </div>
+    );
   }
 
-  const sorted = [...data.versions].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+  const sorted = [...data.versions].sort((a, b) =>
+    b.uploadedAt.localeCompare(a.uploadedAt)
+  );
 
   const restore = (versionId: string, title: string): void => {
     void (async () => {
@@ -84,14 +95,20 @@ export default function BuilderHistory({
       {sorted.map((v) => {
         const isCurrent = v.versionId === data.activeVersion;
         return (
-          <div key={v.versionId} className={styles.item} data-active={String(isCurrent)}>
+          <div
+            key={v.versionId}
+            className={styles.item}
+            data-active={String(isCurrent)}
+          >
             <div className={styles.thumb}>
               <div className={styles.shimmer} />
             </div>
             <div className={styles.meta}>
               <div className={styles.title}>
                 <b>{shortVersionTitle(v)}</b>
-                {isCurrent ? <span className={styles.tag}>● current</span> : null}
+                {isCurrent ? (
+                  <span className={styles.tag}>● current</span>
+                ) : null}
               </div>
               <div className={styles.when}>{relativeWhen(v.uploadedAt)}</div>
               <p className={styles.prompt}>

@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac } from "node:crypto";
 
 /**
  * The gateway host's own device identity, derived from the KeyStore-custodied
@@ -10,7 +10,7 @@ import { createHmac } from 'node:crypto';
  * that receives an explicit `hostDeviceEndpointId` uses that instead.
  */
 export function kitlessHostIdentity(endpointSecret: Uint8Array): string {
-  return `host:${createHmac('sha256', Buffer.from(endpointSecret))
-    .update('centraid-kitless-host-v1')
-    .digest('hex')}`;
+  return `host:${createHmac("sha256", Buffer.from(endpointSecret))
+    .update("centraid-kitless-host-v1")
+    .digest("hex")}`;
 }

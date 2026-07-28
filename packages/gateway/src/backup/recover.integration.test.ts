@@ -1,7 +1,7 @@
-import crypto, { randomBytes } from 'node:crypto';
-import { existsSync, promises as fs } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import crypto, { randomBytes } from "node:crypto";
+import { existsSync, promises as fs } from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import {
   BackupProviderError,
@@ -9,25 +9,25 @@ import {
   SNAPSHOT_FORMAT_V2,
   wrapRecoveryKit,
   type WrappedRecoveryKitDocument,
-} from '@centraid/backup';
-import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { FsBlobStore, KeyStore, ReplicaIndex } from '@centraid/vault';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+} from "@centraid/backup";
+import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { FsBlobStore, KeyStore, ReplicaIndex } from "@centraid/vault";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { daemonLayoutFor } from '../cli/paths.js';
-import { HealthRegistry } from '../serve/health-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import { run } from '../worktree-store/git.js';
-import { WorktreeStore } from '../worktree-store/worktree-store.js';
-import { BackupService } from './backup-service.js';
-import { recover } from './recover.js';
+import { daemonLayoutFor } from "../cli/paths.js";
+import { HealthRegistry } from "../serve/health-registry.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import { run } from "../worktree-store/git.js";
+import { WorktreeStore } from "../worktree-store/worktree-store.js";
+import { BackupService } from "./backup-service.js";
+import { recover } from "./recover.js";
 
 vi.setConfig({ testTimeout: 30_000 });
 
-const KIT_PASSWORD = 'correct horse battery staple';
+const KIT_PASSWORD = "correct horse battery staple";
 
 const silentLogger = {
   info: () => undefined,
@@ -36,24 +36,27 @@ const silentLogger = {
 };
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('backup/recover', () => {
+describe("backup/recover", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
   function invoke(
     plane: VaultPlane,
     command: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Record<string, unknown> {
     const out = plane.gateway.invoke(plane.ownerCredential, { command, input });
-    if (out.status !== 'executed') throw new Error(`${command} failed: ${JSON.stringify(out)}`);
+    if (out.status !== "executed")
+      throw new Error(`${command} failed: ${JSON.stringify(out)}`);
     return (out as { output: Record<string, unknown> }).output;
   }
 
   function stage(plane: VaultPlane, bytes: Buffer, name: string): string {
     return plane.gateway.stageBlob(plane.ownerCredential, {
       bytes,
-      mediaType: 'application/octet-stream',
+      mediaType: "application/octet-stream",
       filename: name,
     }).sha256;
   }
@@ -62,36 +65,36 @@ describe('backup/recover', () => {
     itemId: string;
     grantId: string;
   } {
-    invoke(plane, 'sync.configure_credential', {
-      kind: 'pull.gmail',
-      label: 'personal',
-      cred_kind: 'api_key',
-      api_key: 'sk-recover-test',
-      allowed_hosts: ['gmail.googleapis.com'],
+    invoke(plane, "sync.configure_credential", {
+      kind: "pull.gmail",
+      label: "personal",
+      cred_kind: "api_key",
+      api_key: "sk-recover-test",
+      allowed_hosts: ["gmail.googleapis.com"],
     });
-    const itemId = invoke(plane, 'outbox.stage', {
-      kind: 'pull.gmail',
-      label: 'personal',
-      verb: 'gmail.send',
-      target: 'ravi@example.com',
-      artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you.' },
+    const itemId = invoke(plane, "outbox.stage", {
+      kind: "pull.gmail",
+      label: "personal",
+      verb: "gmail.send",
+      target: "ravi@example.com",
+      artifact: { to: "ravi@example.com", subject: "Hi", body: "See you." },
       request: {
-        method: 'POST',
-        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
-        headers: { authorization: 'Bearer {{connection:api_key}}' },
+        method: "POST",
+        url: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        headers: { authorization: "Bearer {{connection:api_key}}" },
         body: '{"raw":"x"}',
       },
-    })['item_id'] as string;
+    })["item_id"] as string;
     const grantId = crypto.randomUUID();
     plane.db.vault
       .prepare(
         `INSERT INTO outbox_grant (grant_id, actor_id, verb, target, created_at, revoked_at)
-       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`,
+       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`
       )
       .run(grantId, new Date().toISOString());
     plane.db.vault
       .prepare(
-        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`,
+        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`
       )
       .run(new Date().toISOString(), grantId, itemId);
     return { itemId, grantId };
@@ -112,35 +115,35 @@ describe('backup/recover', () => {
   }
 
   async function publishSeedApp(plane: VaultPlane): Promise<string> {
-    const appId = 'todo';
+    const appId = "todo";
     const store = new WorktreeStore({ root: plane.codeStoreRoot });
     await store.init();
-    const session = await store.openSession('seed-session');
-    const appDir = path.join(session.worktreePath, 'apps', appId);
-    await fs.mkdir(path.join(appDir, 'actions'), { recursive: true });
+    const session = await store.openSession("seed-session");
+    const appDir = path.join(session.worktreePath, "apps", appId);
+    await fs.mkdir(path.join(appDir, "actions"), { recursive: true });
     await fs.writeFile(
-      path.join(appDir, 'app.json'),
-      JSON.stringify({ id: appId, name: 'Todo' }, null, 2),
+      path.join(appDir, "app.json"),
+      JSON.stringify({ id: appId, name: "Todo" }, null, 2)
     );
-    await fs.writeFile(path.join(appDir, 'index.html'), '<h1>Todo</h1>\n');
+    await fs.writeFile(path.join(appDir, "index.html"), "<h1>Todo</h1>\n");
     await store.publish({
-      sessionId: 'seed-session',
+      sessionId: "seed-session",
       appId,
-      message: 'seed v1',
+      message: "seed v1",
     });
-    await store.closeSession('seed-session');
+    await store.closeSession("seed-session");
     return appId;
   }
 
   async function seedMachineA(
-    server: Awaited<ReturnType<typeof startFakeProviderServer>>,
+    server: Awaited<ReturnType<typeof startFakeProviderServer>>
   ): Promise<MachineA> {
-    const vaultRoot = await tempDir('recover-a-vault');
-    const backupDir = await tempDir('recover-a-backup');
+    const vaultRoot = await tempDir("recover-a-vault");
+    const backupDir = await tempDir("recover-a-backup");
     const registry = openVaultRegistry({
       rootDir: vaultRoot,
       logger: silentLogger,
-      ownerName: 'Mara',
+      ownerName: "Mara",
     });
     cleanups.push(() => registry.stop());
     registry.create("Mara's vault");
@@ -150,13 +153,13 @@ describe('backup/recover', () => {
       config: {
         enabled: true,
         provider: {
-          kind: 'remote',
+          kind: "remote",
           endpoint: server.url,
           apiKey: server.apiKey,
         },
       },
       cacheDir: backupDir,
-      keyStore: new KeyStore(path.join(vaultRoot, 'keys')),
+      keyStore: new KeyStore(path.join(vaultRoot, "keys")),
       vaults: registry,
       health: new HealthRegistry(),
       logger: silentLogger,
@@ -166,12 +169,12 @@ describe('backup/recover', () => {
     const originals: string[] = [];
     const thumbs: string[] = [];
     for (let i = 0; i < 3; i++) {
-      const taskId = invoke(plane, 'schedule.add_task', {
+      const taskId = invoke(plane, "schedule.add_task", {
         title: `Photo ${i}`,
-      })['task_id'] as string;
+      })["task_id"] as string;
       const originalSha = stage(plane, randomBytes(400 + i), `photo-${i}.bin`);
-      const attach = invoke(plane, 'core.attach', {
-        subject_type: 'schedule.task',
+      const attach = invoke(plane, "core.attach", {
+        subject_type: "schedule.task",
         subject_id: taskId,
         staged_sha: originalSha,
       });
@@ -182,14 +185,14 @@ describe('backup/recover', () => {
         .prepare(
           `INSERT INTO core_content_derivative
            (derivative_id, content_id, variant, sha256, media_type, byte_size, created_at)
-         VALUES (?, ?, 'thumb', ?, 'image/webp', ?, ?)`,
+         VALUES (?, ?, 'thumb', ?, 'image/webp', ?, ?)`
         )
         .run(
           crypto.randomUUID(),
-          attach['content_id'] as string,
+          attach["content_id"] as string,
           thumbSha,
           thumbBytes.length,
-          new Date().toISOString(),
+          new Date().toISOString()
         );
       thumbs.push(thumbSha);
     }
@@ -199,24 +202,34 @@ describe('backup/recover', () => {
     const appId = await publishSeedApp(plane);
 
     const replica = new ReplicaIndex(plane.db.vault);
-    replica.mark(originals[0]!, 400, 'cas');
-    replica.mark(originals[1]!, 401, 'cas');
+    replica.mark(originals[0]!, 400, "cas");
+    replica.mark(originals[1]!, 401, "cas");
 
     await service.runBackup(vaultId);
     const status = await service.status();
     const targetId = status[vaultId]!.targetId;
     const oldGeneration = status[vaultId]!.generation;
-    const kitDocument = wrapRecoveryKit(await service.recoveryKitDocument(), KIT_PASSWORD);
+    const kitDocument = wrapRecoveryKit(
+      await service.recoveryKitDocument(),
+      KIT_PASSWORD
+    );
 
     const casProvider = openRemoteBackupProvider({
       baseUrl: server.url,
       apiKey: server.apiKey,
     });
-    const casStore = await casProvider.openDataPlane(targetId, 'cas', 'read-write');
+    const casStore = await casProvider.openDataPlane(
+      targetId,
+      "cas",
+      "read-write"
+    );
     await Promise.all(
       [originals[0]!, originals[1]!].map((sha) =>
-        casStore.put(`blobs/sha256/${sha}`, new Uint8Array(Buffer.from(`remote-${sha}`))),
-      ),
+        casStore.put(
+          `blobs/sha256/${sha}`,
+          new Uint8Array(Buffer.from(`remote-${sha}`))
+        )
+      )
     );
 
     return {
@@ -234,13 +247,13 @@ describe('backup/recover', () => {
     };
   }
 
-  test('a blank machine recovers a whole vault from nothing but the kit and the api-key', async () => {
+  test("a blank machine recovers a whole vault from nothing but the kit and the api-key", async () => {
     const server = await startFakeProviderServer();
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
     expect(a.oldGeneration).toBe(1);
 
-    const dataDir = await tempDir('recover-blank');
+    const dataDir = await tempDir("recover-blank");
     const layout = daemonLayoutFor(dataDir);
     const report = await recover({
       kitDocument: a.kitDocument,
@@ -253,14 +266,18 @@ describe('backup/recover', () => {
 
     const vaultDir = path.join(layout.vaultDir, a.vaultId);
     expect(report.vaultDir).toBe(vaultDir);
-    expect(existsSync(path.join(vaultDir, 'vault.db'))).toBe(true);
-    expect(existsSync(path.join(vaultDir, 'journal.db'))).toBe(true);
-    const restoredDb = new DatabaseSync(path.join(vaultDir, 'vault.db'), {
+    expect(existsSync(path.join(vaultDir, "vault.db"))).toBe(true);
+    expect(existsSync(path.join(vaultDir, "journal.db"))).toBe(true);
+    const restoredDb = new DatabaseSync(path.join(vaultDir, "vault.db"), {
       readOnly: true,
     });
     try {
       expect(
-        (restoredDb.prepare('SELECT COUNT(*) AS n FROM schedule_task').get() as { n: number }).n,
+        (
+          restoredDb
+            .prepare("SELECT COUNT(*) AS n FROM schedule_task")
+            .get() as { n: number }
+        ).n
       ).toBe(3);
     } finally {
       restoredDb.close();
@@ -268,27 +285,32 @@ describe('backup/recover', () => {
 
     expect(report.inventoryConsulted).toBe(true);
     expect(report.skippedBlobs).toBe(2);
-    const restoredBlobs = new FsBlobStore(path.join(vaultDir, 'blobs'));
+    const restoredBlobs = new FsBlobStore(path.join(vaultDir, "blobs"));
     expect(restoredBlobs.hasSync(a.originals[0]!)).toBe(false); // remote holds it ⇒ deferred
     expect(restoredBlobs.hasSync(a.originals[1]!)).toBe(false);
     expect(restoredBlobs.hasSync(a.originals[2]!)).toBe(true); // snapshot-only ⇒ materialized
-    for (const thumb of a.thumbs) expect(restoredBlobs.hasSync(thumb)).toBe(true);
+    for (const thumb of a.thumbs)
+      expect(restoredBlobs.hasSync(thumb)).toBe(true);
 
-    expect(existsSync(path.join(layout.keysDir, `${a.vaultId}.sealkey`))).toBe(true);
+    expect(existsSync(path.join(layout.keysDir, `${a.vaultId}.sealkey`))).toBe(
+      true
+    );
 
-    const bareDir = path.join(vaultDir, 'code', 'apps.git');
-    expect(existsSync(path.join(bareDir, 'HEAD'))).toBe(true);
-    expect(existsSync(path.join(vaultDir, 'apps.bundle'))).toBe(false);
-    const tags = await run(['tag', '--list'], { cwd: bareDir });
-    expect(tags.split('\n')).toContain(`${a.appId}/v1`);
+    const bareDir = path.join(vaultDir, "code", "apps.git");
+    expect(existsSync(path.join(bareDir, "HEAD"))).toBe(true);
+    expect(existsSync(path.join(vaultDir, "apps.bundle"))).toBe(false);
+    const tags = await run(["tag", "--list"], { cwd: bareDir });
+    expect(tags.split("\n")).toContain(`${a.appId}/v1`);
     const recoveredStore = new WorktreeStore({
-      root: path.join(vaultDir, 'code'),
+      root: path.join(vaultDir, "code"),
     });
     await recoveredStore.init();
     await expect(recoveredStore.listApps()).resolves.toStrictEqual([a.appId]);
 
-    expect(existsSync(path.join(vaultDir, 'RESTORE_QUARANTINE.json'))).toBe(true);
-    expect(report.quarantine).toContain('outbox');
+    expect(existsSync(path.join(vaultDir, "RESTORE_QUARANTINE.json"))).toBe(
+      true
+    );
+    expect(report.quarantine).toContain("outbox");
     const mounted = openVaultRegistry({
       rootDir: layout.vaultDir,
       logger: silentLogger,
@@ -298,13 +320,15 @@ describe('backup/recover', () => {
     const mountedPlane = mounted.get(a.vaultId)!;
     expect(mountedPlane.quarantine).not.toBeNull();
     expect(mountedPlane.quarantine!.outboxParked).toBeGreaterThanOrEqual(1);
-    expect(mountedPlane.quarantine!.outboxGrantsRevoked).toBeGreaterThanOrEqual(1);
+    expect(mountedPlane.quarantine!.outboxGrantsRevoked).toBeGreaterThanOrEqual(
+      1
+    );
     const item = mountedPlane.db.vault
-      .prepare('SELECT status FROM outbox_item WHERE item_id = ?')
+      .prepare("SELECT status FROM outbox_item WHERE item_id = ?")
       .get(a.itemId) as { status: string };
-    expect(item.status).toBe('pending'); // approved → parked back to pending
+    expect(item.status).toBe("pending"); // approved → parked back to pending
     const grant = mountedPlane.db.vault
-      .prepare('SELECT revoked_at FROM outbox_grant WHERE grant_id = ?')
+      .prepare("SELECT revoked_at FROM outbox_grant WHERE grant_id = ?")
       .get(a.grantId) as { revoked_at: string | null };
     expect(grant.revoked_at).not.toBeNull();
 
@@ -312,7 +336,7 @@ describe('backup/recover', () => {
       readOnly: true,
     });
     const targetState = gatewayDb
-      .prepare('SELECT config_json FROM backup_targets WHERE vault_id = ?')
+      .prepare("SELECT config_json FROM backup_targets WHERE vault_id = ?")
       .get(a.vaultId) as { config_json: string };
     gatewayDb.close();
     const recoveredTarget = JSON.parse(targetState.config_json) as {
@@ -322,16 +346,16 @@ describe('backup/recover', () => {
     expect(recoveredTarget.generation).toBe(a.oldGeneration + 1);
     expect(recoveredTarget.lastSeq).toBe(report.seq);
     expect(report.generation).toBe(a.oldGeneration + 1);
-    expect(new KeyStore(layout.keysDir).export('keyring.key')).not.toBeNull();
+    expect(new KeyStore(layout.keysDir).export("keyring.key")).not.toBeNull();
 
     const providerClient = openRemoteBackupProvider({
       baseUrl: a.serverUrl,
       apiKey: a.apiKey,
     });
     await providerClient.registerSnapshot(a.targetId, {
-      idempotencyKey: 'recovered-first',
+      idempotencyKey: "recovered-first",
       manifestKey: `u/${a.targetId}/backup/manifests/recovered.json`,
-      manifestHash: 'a'.repeat(64),
+      manifestHash: "a".repeat(64),
       totalBytes: 0,
       objectCount: 0,
       generation: report.generation,
@@ -341,9 +365,9 @@ describe('backup/recover', () => {
     let fenced = false;
     try {
       await providerClient.registerSnapshot(a.targetId, {
-        idempotencyKey: 'old-machine-next',
+        idempotencyKey: "old-machine-next",
         manifestKey: `u/${a.targetId}/backup/manifests/old.json`,
-        manifestHash: 'b'.repeat(64),
+        manifestHash: "b".repeat(64),
         totalBytes: 0,
         objectCount: 0,
         generation: a.oldGeneration,
@@ -351,7 +375,9 @@ describe('backup/recover', () => {
         appMeta: {},
       });
     } catch (err) {
-      fenced = err instanceof BackupProviderError && err.code === 'conflict_generation';
+      fenced =
+        err instanceof BackupProviderError &&
+        err.code === "conflict_generation";
     }
     expect(fenced).toBe(true);
 
@@ -371,11 +397,12 @@ describe('backup/recover', () => {
       truncated: false,
       warmed: false,
     });
-    if (report.previews.warmed) throw new Error('headless recovery must not pre-warm previews');
+    if (report.previews.warmed)
+      throw new Error("headless recovery must not pre-warm previews");
     expect(report.previews.reason.length).toBeGreaterThan(0);
   }, 45_000);
 
-  test('recovery refuses a snapshot written by newer software BEFORE any byte is fetched', async () => {
+  test("recovery refuses a snapshot written by newer software BEFORE any byte is fetched", async () => {
     const server = await startFakeProviderServer();
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
@@ -385,17 +412,17 @@ describe('backup/recover', () => {
       apiKey: a.apiKey,
     });
     await providerClient.registerSnapshot(a.targetId, {
-      idempotencyKey: 'from-the-future',
+      idempotencyKey: "from-the-future",
       manifestKey: `u/${a.targetId}/backup/manifests/future.json`,
-      manifestHash: 'c'.repeat(64),
+      manifestHash: "c".repeat(64),
       totalBytes: 0,
       objectCount: 0,
       generation: a.oldGeneration,
       format: SNAPSHOT_FORMAT_V2,
-      appMeta: { vaultUserVersion: '9999', ontologyVersion: '1.0' },
+      appMeta: { vaultUserVersion: "9999", ontologyVersion: "1.0" },
     });
 
-    const dataDir = await tempDir('recover-incompat');
+    const dataDir = await tempDir("recover-incompat");
     const layout = daemonLayoutFor(dataDir);
     await expect(
       recover({
@@ -405,16 +432,20 @@ describe('backup/recover', () => {
         vaultRoot: layout.vaultDir,
         dataDir: layout.dataDir,
         log: silentLogger,
-      }),
+      })
     ).rejects.toThrow(/vaultUserVersion 9999 is newer/u);
 
     expect(existsSync(path.join(layout.vaultDir, a.vaultId))).toBe(false);
-    const rootEntries = existsSync(layout.vaultDir) ? await fs.readdir(layout.vaultDir) : [];
-    expect(rootEntries.filter((e) => e.startsWith('.recover-staging-'))).toHaveLength(0);
-    expect(new KeyStore(layout.keysDir).export('keyring.key')).toBeNull();
+    const rootEntries = existsSync(layout.vaultDir)
+      ? await fs.readdir(layout.vaultDir)
+      : [];
+    expect(
+      rootEntries.filter((e) => e.startsWith(".recover-staging-"))
+    ).toHaveLength(0);
+    expect(new KeyStore(layout.keysDir).export("keyring.key")).toBeNull();
   }, 45_000);
 
-  test('adopt-time reconcile re-pins a replicated blob the provider dropped, and unmarks it', async () => {
+  test("adopt-time reconcile re-pins a replicated blob the provider dropped, and unmarks it", async () => {
     const server = await startFakeProviderServer();
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
@@ -423,10 +454,14 @@ describe('backup/recover', () => {
       baseUrl: a.serverUrl,
       apiKey: a.apiKey,
     });
-    const casStore = await casProvider.openDataPlane(a.targetId, 'cas', 'read-write');
+    const casStore = await casProvider.openDataPlane(
+      a.targetId,
+      "cas",
+      "read-write"
+    );
     await casStore.delete(`blobs/sha256/${a.originals[0]}`);
 
-    const dataDir = await tempDir('recover-reconcile');
+    const dataDir = await tempDir("recover-reconcile");
     const layout = daemonLayoutFor(dataDir);
     const report = await recover({
       kitDocument: a.kitDocument,
@@ -443,12 +478,12 @@ describe('backup/recover', () => {
     expect(report.reconcile.lost).toStrictEqual([]);
 
     const vaultDir = path.join(layout.vaultDir, a.vaultId);
-    const restoredBlobs = new FsBlobStore(path.join(vaultDir, 'blobs'));
+    const restoredBlobs = new FsBlobStore(path.join(vaultDir, "blobs"));
     expect(restoredBlobs.hasSync(a.originals[0]!)).toBe(true);
     expect(restoredBlobs.hasSync(a.originals[1]!)).toBe(false);
     expect(report.skippedBlobs).toBe(1); // only originals[1] deferred now
 
-    const restoredDb = new DatabaseSync(path.join(vaultDir, 'vault.db'), {
+    const restoredDb = new DatabaseSync(path.join(vaultDir, "vault.db"), {
       readOnly: true,
     });
     try {

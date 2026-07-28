@@ -4,16 +4,16 @@
 export default async function starPerson({ body, ctx }: HandlerArgs) {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.star_person',
+      command: "people.star_person",
       input: (body ?? {}) as Record<string, unknown>,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

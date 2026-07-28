@@ -1,9 +1,17 @@
-import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import ConnectFlow from '../shell/routes/ConnectFlow.js';
-import { connectFreshLocalGateway } from '../shell/routes/connectFlowIO.js';
-import type { ConnectFlowResult } from '../shell/routes/connectFlow-core.js';
-import a11y from '../styles/a11y.module.css';
-import styles from './OnboardingScreen.module.css';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+} from "react";
+
+import type { ConnectFlowResult } from "../shell/routes/connectFlow-core.js";
+import ConnectFlow from "../shell/routes/ConnectFlow.js";
+import { connectFreshLocalGateway } from "../shell/routes/connectFlowIO.js";
+
+import a11y from "../styles/a11y.module.css";
+import styles from "./OnboardingScreen.module.css";
 
 /**
  * Which gateway this first run is landing on (issue #603). `fresh` is the
@@ -11,7 +19,7 @@ import styles from './OnboardingScreen.module.css';
  * nothing to connect, so the connect step is skipped entirely. `ticket`
  * joins an existing gateway and is the ONLY path a browser can take.
  */
-export type OnboardingPath = 'fresh' | 'ticket';
+export type OnboardingPath = "fresh" | "ticket";
 
 export interface OnboardingCompleteInput {
   displayName: string;
@@ -37,25 +45,27 @@ export interface OnboardingScreenProps {
 // Mirror of gateway-store.ts#AVATAR_PALETTE (values round-trip through
 // updateProfileMetadata, which validates #RRGGBB).
 const AVATAR_PALETTE = [
-  '#5B8DEF',
-  '#7C5CFF',
-  '#E36AD2',
-  '#E5734A',
-  '#E0B53D',
-  '#4FB077',
-  '#3FB5C7',
-  '#B07A4A',
+  "#5B8DEF",
+  "#7C5CFF",
+  "#E36AD2",
+  "#E5734A",
+  "#E0B53D",
+  "#4FB077",
+  "#3FB5C7",
+  "#B07A4A",
 ] as const;
 
 function initials(name: string): string {
   const trimmed = name.trim();
-  if (trimmed.length === 0) return '·';
+  if (trimmed.length === 0) return "·";
   const parts = trimmed.split(/\s+/u).filter((w) => w.length > 0);
   if (parts.length === 1) {
-    const w = parts[0] ?? '';
-    return (w.charAt(0) + (w.charAt(1) || '')).toUpperCase();
+    const w = parts[0] ?? "";
+    return (w.charAt(0) + (w.charAt(1) || "")).toUpperCase();
   }
-  return ((parts[0]?.charAt(0) ?? '') + (parts[1]?.charAt(0) ?? '')).toUpperCase();
+  return (
+    (parts[0]?.charAt(0) ?? "") + (parts[1]?.charAt(0) ?? "")
+  ).toUpperCase();
 }
 
 /**
@@ -68,14 +78,20 @@ export default function OnboardingScreen({
   onComplete,
   onBack,
 }: OnboardingScreenProps): JSX.Element {
-  const [step, setStep] = useState<'identity' | 'connect' | 'service'>('identity');
-  const [displayName, setDisplayName] = useState('');
+  const [step, setStep] = useState<"identity" | "connect" | "service">(
+    "identity"
+  );
+  const [displayName, setDisplayName] = useState("");
   const [avatarColor, setAvatarColor] = useState<string>(
-    () => AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ?? AVATAR_PALETTE[0],
+    () =>
+      AVATAR_PALETTE[Math.floor(Math.random() * AVATAR_PALETTE.length)] ??
+      AVATAR_PALETTE[0]
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingResult, setPendingResult] = useState<ConnectFlowResult | null>(null);
+  const [pendingResult, setPendingResult] = useState<ConnectFlowResult | null>(
+    null
+  );
   const [keychainNote, setKeychainNote] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -93,7 +109,7 @@ export default function OnboardingScreen({
       .catch((err: unknown) => {
         // A broken probe must not block onboarding, but losing the note means
         // the OS dialog arrives unannounced — leave a trace for debugging.
-        console.error('keychainPromptExpected probe failed', err);
+        console.error("keychainPromptExpected probe failed", err);
       });
     return () => {
       cancelled = true;
@@ -101,7 +117,7 @@ export default function OnboardingScreen({
   }, []);
 
   useEffect(() => {
-    if (step !== 'identity') return;
+    if (step !== "identity") return;
     const id = requestAnimationFrame(() => nameRef.current?.focus());
     return () => cancelAnimationFrame(id);
   }, [step]);
@@ -116,8 +132,8 @@ export default function OnboardingScreen({
   const continueFromIdentity = (): void => {
     if (!displayName.trim() || submitting) return;
     setError(null);
-    if (path === 'ticket') {
-      setStep('connect');
+    if (path === "ticket") {
+      setStep("connect");
       return;
     }
     setSubmitting(true);
@@ -147,7 +163,9 @@ export default function OnboardingScreen({
         });
       } catch (err) {
         setSubmitting(false);
-        setError(`Couldn't save your profile: ${err instanceof Error ? err.message : String(err)}`);
+        setError(
+          `Couldn't save your profile: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     })();
   };
@@ -158,11 +176,13 @@ export default function OnboardingScreen({
    * machine's own detached child.
    */
   const afterConnect = (result: ConnectFlowResult): void => {
-    const isLocal = result.gatewayId === 'local' || result.gatewayId.startsWith('local');
-    const canInstall = typeof window.CentraidApi?.installGatewayService === 'function';
+    const isLocal =
+      result.gatewayId === "local" || result.gatewayId.startsWith("local");
+    const canInstall =
+      typeof window.CentraidApi?.installGatewayService === "function";
     if (isLocal && canInstall) {
       setPendingResult(result);
-      setStep('service');
+      setStep("service");
       return;
     }
     finish(result);
@@ -185,7 +205,7 @@ export default function OnboardingScreen({
           const res = await install();
           if (!res.ok) {
             setSubmitting(false);
-            setError(res.error || 'Service install failed');
+            setError(res.error || "Service install failed");
             return;
           }
         }
@@ -203,7 +223,7 @@ export default function OnboardingScreen({
       className={styles.view}
       data-testid="onboarding-view"
       data-mounted="true"
-      style={{ '--onb-accent': avatarColor } as CSSProperties}
+      style={{ "--onb-accent": avatarColor } as CSSProperties}
     >
       <div className={styles.stageBg} aria-hidden="true" />
       <div className={styles.stageGlow} aria-hidden="true" />
@@ -212,23 +232,24 @@ export default function OnboardingScreen({
           <span className={styles.eyebrowDot} aria-hidden="true" />
           CENTRAID
         </div>
-        {step === 'identity' ? (
+        {step === "identity" ? (
           <>
             <h1 className={styles.title}>
               Make yourself <em>at home</em>.
             </h1>
             <p className={styles.sub}>
-              A name and a color. We use them for your profile — you can change either at any time.
+              A name and a color. We use them for your profile — you can change
+              either at any time.
             </p>
           </>
-        ) : step === 'connect' ? (
+        ) : step === "connect" ? (
           <>
             <h1 className={styles.title}>
               Connect your <em>gateway</em>.
             </h1>
             <p className={styles.sub}>
-              Paste or scan the pair ticket from the gateway you already run. It decides which space
-              you land in.
+              Paste or scan the pair ticket from the gateway you already run. It
+              decides which space you land in.
             </p>
           </>
         ) : (
@@ -237,21 +258,26 @@ export default function OnboardingScreen({
               Keep your vault <em>reachable</em>?
             </h1>
             <p className={styles.sub}>
-              Optionally install a small background service so your gateway stays up when Centraid
-              is closed — phones and other devices can still reach your vault. Default is off; we
-              never install this without asking.
+              Optionally install a small background service so your gateway
+              stays up when Centraid is closed — phones and other devices can
+              still reach your vault. Default is off; we never install this
+              without asking.
             </p>
           </>
         )}
-        {step === 'identity' ? (
+        {step === "identity" ? (
           <div className={styles.avatarWrap}>
             <span className={styles.avatarRing} aria-hidden="true" />
-            <span className={styles.avatar} style={{ background: avatarColor }} aria-hidden="true">
+            <span
+              className={styles.avatar}
+              style={{ background: avatarColor }}
+              aria-hidden="true"
+            >
               <span className={styles.initials}>{initials(displayName)}</span>
             </span>
           </div>
         ) : null}
-        {step === 'identity' ? (
+        {step === "identity" ? (
           <form
             className={styles.form}
             onSubmit={(e) => {
@@ -276,7 +302,7 @@ export default function OnboardingScreen({
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   e.preventDefault();
                   continueFromIdentity();
                 }
@@ -285,13 +311,17 @@ export default function OnboardingScreen({
             <span className={styles.fieldLabel} id="cd-onb-color-label">
               Pick a color
             </span>
-            <div className={styles.swatches} role="radiogroup" aria-labelledby="cd-onb-color-label">
+            <div
+              className={styles.swatches}
+              role="radiogroup"
+              aria-labelledby="cd-onb-color-label"
+            >
               {AVATAR_PALETTE.map((c) => (
                 <label
                   key={c}
                   className={styles.swatch}
                   data-color={c}
-                  data-selected={c === avatarColor ? 'true' : 'false'}
+                  data-selected={c === avatarColor ? "true" : "false"}
                   style={{ background: c }}
                 >
                   <input
@@ -309,7 +339,7 @@ export default function OnboardingScreen({
               type="button"
               className={styles.cta}
               disabled={!ready}
-              data-state={submitting ? 'submitting' : ready ? 'ready' : 'idle'}
+              data-state={submitting ? "submitting" : ready ? "ready" : "idle"}
               onClick={continueFromIdentity}
             >
               <span>Continue</span>
@@ -328,10 +358,10 @@ export default function OnboardingScreen({
                 </svg>
               </span>
             </button>
-            {keychainNote && path === 'fresh' ? (
+            {keychainNote && path === "fresh" ? (
               <p className={styles.keychainNote}>
-                Continuing stores this device&rsquo;s keys in your system keychain — your OS may ask
-                once to allow it.
+                Continuing stores this device&rsquo;s keys in your system
+                keychain — your OS may ask once to allow it.
               </p>
             ) : null}
             {error ? (
@@ -350,19 +380,19 @@ export default function OnboardingScreen({
               </button>
             ) : null}
           </form>
-        ) : step === 'connect' ? (
+        ) : step === "connect" ? (
           <div className={styles.connectPanel} data-theme="dark">
             <ConnectFlow
               context="onboarding"
-              methods={['gateway']}
+              methods={["gateway"]}
               initialMethod="gateway"
-              onCancel={() => setStep('identity')}
+              onCancel={() => setStep("identity")}
               onDone={afterConnect}
             />
             {keychainNote ? (
               <p className={styles.keychainNote}>
-                Connecting stores this device&rsquo;s keys in your system keychain — your OS may ask
-                once to allow it.
+                Connecting stores this device&rsquo;s keys in your system
+                keychain — your OS may ask once to allow it.
               </p>
             ) : null}
             {error ? (
@@ -380,7 +410,7 @@ export default function OnboardingScreen({
               data-testid="onboarding-service-accept"
               onClick={acceptService}
             >
-              <span>{submitting ? 'Installing…' : 'Keep vault reachable'}</span>
+              <span>{submitting ? "Installing…" : "Keep vault reachable"}</span>
             </button>
             <button
               type="button"

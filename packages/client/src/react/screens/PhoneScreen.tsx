@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useState, type JSX } from "react";
 
 import type {
   PhoneBridgeProps,
   PhoneDeviceDTO,
   PhonePairingDTO,
   PhoneStatusDTO,
-} from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
 
-import appSettingsCss from '../styles/appSettings.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
-import linkBtnCss from '../styles/linkBtn.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './PhoneScreen.module.css';
+import appSettingsCss from "../styles/appSettings.module.css";
+import drawerGroupCss from "../styles/drawerGroup.module.css";
+import linkBtnCss from "../styles/linkBtn.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./PhoneScreen.module.css";
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
@@ -27,7 +27,9 @@ function DeviceRow({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   const added = new Date(device.addedAt);
-  const addedLabel = Number.isNaN(added.getTime()) ? '' : ` · added ${added.toLocaleDateString()}`;
+  const addedLabel = Number.isNaN(added.getTime())
+    ? ""
+    : ` · added ${added.toLocaleDateString()}`;
   return (
     <div className={styles.deviceRow}>
       <div className={styles.deviceInfo}>
@@ -66,15 +68,17 @@ export default function PhoneScreen({
   revoke,
   showToast,
 }: PhoneBridgeProps): JSX.Element {
-  const [status, setStatus] = useState<PhoneStatusDTO | 'loading' | 'error'>('loading');
+  const [status, setStatus] = useState<PhoneStatusDTO | "loading" | "error">(
+    "loading"
+  );
   const [pairing, setPairing] = useState<Pairing>(null);
 
   const reload = useCallback(
     (): Promise<void> =>
       loadStatus()
-        .then((s) => setStatus(s ?? 'error'))
-        .catch(() => setStatus('error')),
-    [loadStatus],
+        .then((s) => setStatus(s ?? "error"))
+        .catch(() => setStatus("error")),
+    [loadStatus]
   );
 
   useEffect(() => {
@@ -88,7 +92,7 @@ export default function PhoneScreen({
       void reload();
     }).then((res) => {
       if (!res) {
-        showToast?.('Could not start pairing.');
+        showToast?.("Could not start pairing.");
         return;
       }
       setPairing(res);
@@ -103,24 +107,24 @@ export default function PhoneScreen({
 
   const onRevoke = (deviceId: string): void => {
     void revoke(deviceId).then((ok) => {
-      showToast?.(ok ? 'Revoked device.' : 'Could not revoke device.');
+      showToast?.(ok ? "Revoked device." : "Could not revoke device.");
       void reload();
     });
   };
 
-  if (status === 'loading') {
+  if (status === "loading") {
     return <Note>Loading…</Note>;
   }
-  if (status === 'error') {
+  if (status === "error") {
     return <Note>Could not read the phone link status.</Note>;
   }
 
   const expiresLabel = pairing
     ? new Date(pairing.info.expiresAt).toLocaleTimeString([], {
-        hour: 'numeric',
-        minute: '2-digit',
+        hour: "numeric",
+        minute: "2-digit",
       })
-    : '';
+    : "";
 
   return (
     <>
@@ -141,15 +145,20 @@ export default function PhoneScreen({
             <div className={appSettingsCss.appSettingsNote}>
               {`Open the Centraid app on your phone → Settings → Pair with desktop, and scan this code. It works once and expires at ${expiresLabel}.`}
             </div>
-            <button type="button" className={linkBtnCss.linkBtn} onClick={onCancelPairing}>
+            <button
+              type="button"
+              className={linkBtnCss.linkBtn}
+              onClick={onCancelPairing}
+            >
               Cancel pairing
             </button>
           </>
         ) : (
           <>
             <div className={appSettingsCss.appSettingsNote}>
-              Your phone connects directly to this desktop over an end-to-end encrypted tunnel —
-              from any network, with the gateway never exposed. Publish an app here, open it there.
+              Your phone connects directly to this desktop over an end-to-end
+              encrypted tunnel — from any network, with the gateway never
+              exposed. Publish an app here, open it there.
             </div>
             <button
               type="button"
@@ -166,11 +175,16 @@ export default function PhoneScreen({
         <div className={drawerGroupCss.groupLabel}>Paired phones</div>
         {status.devices.length > 0 ? (
           status.devices.map((device) => (
-            <DeviceRow key={device.deviceId} device={device} onRevoke={onRevoke} />
+            <DeviceRow
+              key={device.deviceId}
+              device={device}
+              onRevoke={onRevoke}
+            />
           ))
         ) : (
           <Note>
-            No phones paired yet. Scan the QR code from the Centraid mobile app to connect one.
+            No phones paired yet. Scan the QR code from the Centraid mobile app
+            to connect one.
           </Note>
         )}
       </div>

@@ -1,11 +1,11 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX } from "react";
 
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
 
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './GatewayScreen.module.css';
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./GatewayScreen.module.css";
 
 /**
  * "Restart gateway" (issue #351 wave 2) — serialized stop→start on the
@@ -26,7 +26,7 @@ export default function RestartGatewayButton({
     setError(null);
     try {
       const result = await onRestart();
-      if (!result.ok) setError(result.error ?? 'Restart was refused.');
+      if (!result.ok) setError(result.error ?? "Restart was refused.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -43,9 +43,9 @@ export default function RestartGatewayButton({
         onClick={() => void restart()}
       >
         <span className={styles.restartIcon} data-spin={pending || undefined}>
-          <Icon name={pending ? 'Loader' : 'Power'} size={13} />
+          <Icon name={pending ? "Loader" : "Power"} size={13} />
         </span>
-        <span>{pending ? 'Restarting…' : 'Restart gateway'}</span>
+        <span>{pending ? "Restarting…" : "Restart gateway"}</span>
       </button>
       {error ? <div className={styles.restartError}>{error}</div> : null}
     </div>

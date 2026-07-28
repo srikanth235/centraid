@@ -147,20 +147,20 @@
   overflow: hidden;
   color: #24292f;
 }
-.brandMark[data-tone='github'] {
+.brandMark[data-tone="github"] {
   color: #24292f;
 }
-:global([data-theme='dark']) .brandMark,
+:global([data-theme="dark"]) .brandMark,
 :global(.theme-dark) .brandMark,
-:global([data-color-scheme='dark']) .brandMark {
+:global([data-color-scheme="dark"]) .brandMark {
   background: color-mix(in srgb, #fff 10%, var(--bg-elev, #1a1a1a));
   border-color: color-mix(in srgb, #fff 14%, transparent);
   box-shadow: none;
   color: #f0f6fc;
 }
-:global([data-theme='dark']) .brandMark[data-tone='github'],
-:global(.theme-dark) .brandMark[data-tone='github'],
-:global([data-color-scheme='dark']) .brandMark[data-tone='github'] {
+:global([data-theme="dark"]) .brandMark[data-tone="github"],
+:global(.theme-dark) .brandMark[data-tone="github"],
+:global([data-color-scheme="dark"]) .brandMark[data-tone="github"] {
   color: #f0f6fc;
 }
 /* Fallback: prefer-color-scheme when theme attrs aren't set on ancestors. */
@@ -170,7 +170,7 @@
     border-color: color-mix(in srgb, #fff 14%, transparent);
     color: #f0f6fc;
   }
-  .brandMark[data-tone='github'] {
+  .brandMark[data-tone="github"] {
     color: #f0f6fc;
   }
 }
@@ -293,11 +293,11 @@
   letter-spacing: 0.02em;
   color: var(--ink);
 }
-.authKindBanner[data-kind='oauth2'] {
+.authKindBanner[data-kind="oauth2"] {
   border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
   background: color-mix(in oklab, var(--accent) 8%, var(--bg-elev));
 }
-.authKindBanner[data-kind='oauth2'] strong {
+.authKindBanner[data-kind="oauth2"] strong {
   color: var(--accent);
 }
 
@@ -320,18 +320,19 @@
   border-radius: 50%;
   flex: none;
   background: var(--conn-health, var(--ink-3));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--conn-health, var(--ink-3)) 16%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in oklab, var(--conn-health, var(--ink-3)) 16%, transparent);
 }
-.dot[data-health='ok'] {
+.dot[data-health="ok"] {
   --conn-health: var(--success);
 }
-.dot[data-health='needs-auth'] {
+.dot[data-health="needs-auth"] {
   --conn-health: var(--icon-amber);
 }
-.dot[data-health='paused'] {
+.dot[data-health="paused"] {
   --conn-health: var(--ink-3);
 }
-.dot[data-health='failing'] {
+.dot[data-health="failing"] {
   --conn-health: var(--danger);
 }
 
@@ -370,16 +371,16 @@
   text-transform: uppercase;
   color: var(--conn-health, var(--ink-3));
 }
-.healthLabel[data-health='ok'] {
+.healthLabel[data-health="ok"] {
   --conn-health: var(--success);
 }
-.healthLabel[data-health='needs-auth'] {
+.healthLabel[data-health="needs-auth"] {
   --conn-health: var(--icon-amber);
 }
-.healthLabel[data-health='paused'] {
+.healthLabel[data-health="paused"] {
   --conn-health: var(--ink-3);
 }
-.healthLabel[data-health='failing'] {
+.healthLabel[data-health="failing"] {
   --conn-health: var(--danger);
 }
 
@@ -564,7 +565,7 @@
   line-height: 1.45;
   color: var(--ink-4);
 }
-.wizardHint[data-tone='warn'] {
+.wizardHint[data-tone="warn"] {
   color: var(--c-amber);
 }
 .textInput {
@@ -618,7 +619,7 @@
   color: var(--ink-4);
   font-size: 10.5px;
 }
-.scopeOption[data-disabled='true'] {
+.scopeOption[data-disabled="true"] {
   color: var(--ink-4);
   cursor: not-allowed;
   background: color-mix(in srgb, var(--ink) 2%, transparent);

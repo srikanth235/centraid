@@ -1,5 +1,5 @@
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 /*
  * Coverage for the provider-usage poller (issue #367 §D1) against a REAL
  * in-process HTTP fake implementing just `GET /v1/storage/vaults/:id/usage`
@@ -8,18 +8,23 @@ import type { AddressInfo } from 'node:net';
  * calls. No mocked `fetch`.
  */
 
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { openStorageConnectionStore, type StorageConnectionStore } from './storage-connections.js';
-import { StorageUsagePoller } from './storage-usage.js';
+import {
+  openStorageConnectionStore,
+  type StorageConnectionStore,
+} from "./storage-connections.js";
+import { StorageUsagePoller } from "./storage-usage.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('storage-usage', () => {
+describe("storage-usage", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
 
   /** Minimal fake provider — one route, PROTOCOL.md's exact envelope + shape. */
@@ -36,43 +41,49 @@ describe('storage-usage', () => {
     const server = http.createServer((req, res) => {
       const auth = req.headers.authorization;
       if (auth !== `Bearer ${opts.apiKey}`) {
-        res.writeHead(401, { 'content-type': 'application/json' });
+        res.writeHead(401, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
             error: {
-              type: 'invalid_request_error',
-              code: 'auth_expired',
-              message: 'bad key',
+              type: "invalid_request_error",
+              code: "auth_expired",
+              message: "bad key",
             },
-          }),
+          })
         );
         return;
       }
-      if (req.method === 'GET' && req.url === `/v1/storage/vaults/${opts.targetId}/usage`) {
+      if (
+        req.method === "GET" &&
+        req.url === `/v1/storage/vaults/${opts.targetId}/usage`
+      ) {
         requests += 1;
-        res.writeHead(200, { 'content-type': 'application/json' });
+        res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ data: opts.usage }));
         return;
       }
-      res.writeHead(404, { 'content-type': 'application/json' });
+      res.writeHead(404, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
           error: {
-            type: 'invalid_request_error',
-            code: 'not_found',
-            message: 'no route',
+            type: "invalid_request_error",
+            code: "not_found",
+            message: "no route",
           },
-        }),
+        })
       );
     });
     return new Promise((resolve) => {
-      server.listen(0, '127.0.0.1', () => {
+      server.listen(0, "127.0.0.1", () => {
         const { port } = server.address() as AddressInfo;
-        cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+        cleanups.push(
+          () => new Promise<void>((resolve) => server.close(() => resolve()))
+        );
         resolve({
           url: `http://127.0.0.1:${port}`,
           requestCount: () => requests,
-          close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+          close: () =>
+            new Promise<void>((resolve) => server.close(() => resolve())),
         });
       });
     });
@@ -82,11 +93,11 @@ describe('storage-usage', () => {
     store: StorageConnectionStore,
     baseUrl: string,
     apiKey: string,
-    targetId: string,
+    targetId: string
   ): Promise<string> {
     const connection = await store.create({
-      kind: 'provider',
-      name: 'Clawgnition',
+      kind: "provider",
+      name: "Clawgnition",
       baseUrl,
       apiKey,
     });
@@ -94,12 +105,12 @@ describe('storage-usage', () => {
     return connection.id;
   }
 
-  test('first read fetches inline and caches the report', async () => {
+  test("first read fetches inline and caches the report", async () => {
     const dir = await tempDir();
     const store = await openStorageConnectionStore(dir);
     const fake = await startFakeUsageServer({
-      apiKey: 'sk-test',
-      targetId: 'target-1',
+      apiKey: "sk-test",
+      targetId: "target-1",
       usage: {
         backup: {
           bytesStored: 1000,
@@ -115,7 +126,12 @@ describe('storage-usage', () => {
         },
       },
     });
-    const connectionId = await makeProviderConnection(store, fake.url, 'sk-test', 'target-1');
+    const connectionId = await makeProviderConnection(
+      store,
+      fake.url,
+      "sk-test",
+      "target-1"
+    );
 
     const poller = new StorageUsagePoller({ storageConnections: store });
     const result = await poller.usageFor(connectionId);
@@ -132,12 +148,12 @@ describe('storage-usage', () => {
     expect(fake.requestCount()).toBe(1);
   });
 
-  test('stale-while-refresh: a read past pollIntervalMs returns the cached value immediately and refreshes in the background', async () => {
+  test("stale-while-refresh: a read past pollIntervalMs returns the cached value immediately and refreshes in the background", async () => {
     const dir = await tempDir();
     const store = await openStorageConnectionStore(dir);
     const fake = await startFakeUsageServer({
-      apiKey: 'sk-test',
-      targetId: 'target-1',
+      apiKey: "sk-test",
+      targetId: "target-1",
       usage: {
         backup: {
           bytesStored: 500,
@@ -147,7 +163,12 @@ describe('storage-usage', () => {
         },
       },
     });
-    const connectionId = await makeProviderConnection(store, fake.url, 'sk-test', 'target-1');
+    const connectionId = await makeProviderConnection(
+      store,
+      fake.url,
+      "sk-test",
+      "target-1"
+    );
 
     let now = 0;
     const poller = new StorageUsagePoller({
@@ -170,14 +191,14 @@ describe('storage-usage', () => {
     expect(fake.requestCount()).toBe(2);
   });
 
-  test('a provider connection with no target yet reports null with no network call', async () => {
+  test("a provider connection with no target yet reports null with no network call", async () => {
     const dir = await tempDir();
     const store = await openStorageConnectionStore(dir);
     const connection = await store.create({
-      kind: 'provider',
-      name: 'Not attached yet',
-      baseUrl: 'http://127.0.0.1:1', // would refuse if ever called
-      apiKey: 'sk-test',
+      kind: "provider",
+      name: "Not attached yet",
+      baseUrl: "http://127.0.0.1:1", // would refuse if ever called
+      apiKey: "sk-test",
     });
     const poller = new StorageUsagePoller({ storageConnections: store });
     const result = await poller.usageFor(connection.id);
@@ -185,12 +206,12 @@ describe('storage-usage', () => {
     expect(result.error).toBeUndefined();
   });
 
-  test('a failed refresh keeps serving the last-known-good report with an error note', async () => {
+  test("a failed refresh keeps serving the last-known-good report with an error note", async () => {
     const dir = await tempDir();
     const store = await openStorageConnectionStore(dir);
     const fake = await startFakeUsageServer({
-      apiKey: 'sk-test',
-      targetId: 'target-1',
+      apiKey: "sk-test",
+      targetId: "target-1",
       usage: {
         backup: {
           bytesStored: 777,
@@ -200,7 +221,12 @@ describe('storage-usage', () => {
         },
       },
     });
-    const connectionId = await makeProviderConnection(store, fake.url, 'sk-test', 'target-1');
+    const connectionId = await makeProviderConnection(
+      store,
+      fake.url,
+      "sk-test",
+      "target-1"
+    );
 
     let now = 0;
     const poller = new StorageUsagePoller({
@@ -219,12 +245,12 @@ describe('storage-usage', () => {
     expect(afterFailedRefresh.providerReported?.backup?.bytesStored).toBe(777); // last-known-good preserved
   });
 
-  test('a wrong api key surfaces as an error without throwing out of usageFor', async () => {
+  test("a wrong api key surfaces as an error without throwing out of usageFor", async () => {
     const dir = await tempDir();
     const store = await openStorageConnectionStore(dir);
     const fake = await startFakeUsageServer({
-      apiKey: 'sk-correct',
-      targetId: 'target-1',
+      apiKey: "sk-correct",
+      targetId: "target-1",
       usage: {
         backup: {
           bytesStored: 1,
@@ -234,7 +260,12 @@ describe('storage-usage', () => {
         },
       },
     });
-    const connectionId = await makeProviderConnection(store, fake.url, 'sk-wrong', 'target-1');
+    const connectionId = await makeProviderConnection(
+      store,
+      fake.url,
+      "sk-wrong",
+      "target-1"
+    );
     const poller = new StorageUsagePoller({ storageConnections: store });
     const result = await poller.usageFor(connectionId);
     expect(result.providerReported).toBeNull();

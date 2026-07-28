@@ -17,19 +17,24 @@
  * concern (a different process) and are unaffected by this.
  */
 
-import { appendFileSync, renameSync, statSync } from 'node:fs';
-import path from 'node:path';
+import { appendFileSync, renameSync, statSync } from "node:fs";
+import path from "node:path";
 
-import { app } from 'electron';
+import { app } from "electron";
 
-import { formatCrashLine, shouldRotate, toCrashRecord, type CrashKind } from './crash-log-core.js';
+import {
+  formatCrashLine,
+  shouldRotate,
+  toCrashRecord,
+  type CrashKind,
+} from "./crash-log-core.js";
 
-const CRASH_LOG_FILE = 'crash.log';
+const CRASH_LOG_FILE = "crash.log";
 /** Single-generation rotation (crash.log -> crash.log.1) past this size. */
 const MAX_BYTES = 2 * 1024 * 1024;
 
 function crashLogPath(): string {
-  return path.join(app.getPath('userData'), CRASH_LOG_FILE);
+  return path.join(app.getPath("userData"), CRASH_LOG_FILE);
 }
 
 function rotateIfNeeded(file: string): void {
@@ -37,8 +42,10 @@ function rotateIfNeeded(file: string): void {
     const { size } = statSync(file);
     if (shouldRotate(size, MAX_BYTES)) renameSync(file, `${file}.1`);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      process.stdout.write(`[crash-log] rotation check failed: ${String(err)}\n`);
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      process.stdout.write(
+        `[crash-log] rotation check failed: ${String(err)}\n`
+      );
     }
   }
 }
@@ -53,7 +60,9 @@ export function recordCrash(kind: CrashKind, err: unknown): void {
     rotateIfNeeded(file);
     appendFileSync(file, line, { mode: 0o600 });
   } catch (writeErr) {
-    process.stdout.write(`[crash-log] failed to persist crash log: ${String(writeErr)}\n`);
+    process.stdout.write(
+      `[crash-log] failed to persist crash log: ${String(writeErr)}\n`
+    );
   }
 }
 
@@ -67,28 +76,28 @@ let installed = false;
 export function installCrashHandlers(): void {
   if (installed) return;
   installed = true;
-  process.on('uncaughtException', (err) => {
+  process.on("uncaughtException", (err) => {
     // See the module doc comment: log + persist + continue, deliberately.
-    recordCrash('uncaughtException', err);
+    recordCrash("uncaughtException", err);
   });
-  process.on('unhandledRejection', (reason) => {
-    recordCrash('unhandledRejection', reason);
+  process.on("unhandledRejection", (reason) => {
+    recordCrash("unhandledRejection", reason);
   });
   // Renderer / GPU / utility process exits (issue #468 K12).
-  app.on('render-process-gone', (_event, webContents, details) => {
+  app.on("render-process-gone", (_event, webContents, details) => {
     recordCrash(
-      'render-process-gone',
+      "render-process-gone",
       new Error(
-        `render process gone reason=${details.reason} exitCode=${details.exitCode} url=${webContents.getURL?.() ?? ''}`,
-      ),
+        `render process gone reason=${details.reason} exitCode=${details.exitCode} url=${webContents.getURL?.() ?? ""}`
+      )
     );
   });
-  app.on('child-process-gone', (_event, details) => {
+  app.on("child-process-gone", (_event, details) => {
     recordCrash(
-      'child-process-gone',
+      "child-process-gone",
       new Error(
-        `child process gone type=${details.type} reason=${details.reason} exitCode=${details.exitCode} name=${details.name ?? ''}`,
-      ),
+        `child process gone type=${details.type} reason=${details.reason} exitCode=${details.exitCode} name=${details.name ?? ""}`
+      )
     );
   });
 }

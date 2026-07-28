@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
 import {
   decodeHeader,
@@ -11,7 +11,7 @@ import {
   sealDirectory,
   sealStoredFrame,
   unsealFrame,
-} from './blob/seal-frames.ts';
+} from "./blob/seal-frames.ts";
 
 interface GoldenFixture {
   cbsf: {
@@ -21,23 +21,26 @@ interface GoldenFixture {
     sealedBase64: string;
   };
   cbsfCompressed: Record<
-    'zstd' | 'deflate',
+    "zstd" | "deflate",
     { algorithm: number; plainBase64: string; sealedBase64: string }
   >;
 }
 
 const fixture = JSON.parse(
   readFileSync(
-    new URL('../../tunnel/data-plane/fixtures/format-golden.json', import.meta.url),
-    'utf8',
-  ),
+    new URL(
+      "../../tunnel/data-plane/fixtures/format-golden.json",
+      import.meta.url
+    ),
+    "utf8"
+  )
 ) as GoldenFixture;
 
-describe('rust-golden', () => {
-  test('CBSF v2 golden is byte-identical across Node and Rust', () => {
-    const key = Buffer.from(fixture.cbsf.keyHex, 'hex');
-    const expectedPlain = Buffer.from(fixture.cbsf.plainBase64, 'base64');
-    const sealed = Buffer.from(fixture.cbsf.sealedBase64, 'base64');
+describe("rust-golden", () => {
+  test("CBSF v2 golden is byte-identical across Node and Rust", () => {
+    const key = Buffer.from(fixture.cbsf.keyHex, "hex");
+    const expectedPlain = Buffer.from(fixture.cbsf.plainBase64, "base64");
+    const sealed = Buffer.from(fixture.cbsf.sealedBase64, "base64");
     const sha = decodeHeader(sealed).sha256;
     const trailer = decodeTrailer(sealed.subarray(sealed.length - 13));
     const directoryStart = sealed.length - 13 - trailer.directoryLength;
@@ -45,15 +48,17 @@ describe('rust-golden', () => {
       key,
       sha,
       trailer.frameCount,
-      sealed.subarray(directoryStart, sealed.length - 13),
+      sealed.subarray(directoryStart, sealed.length - 13)
     );
     const frames = directory.offsets.map((offset, index) =>
-      sealed.subarray(offset, offset + directory.sealedLens[index]!),
+      sealed.subarray(offset, offset + directory.sealedLens[index]!)
     );
     expect(
       Buffer.concat(
-        frames.map((frame, index) => unsealFrame(key, sha, index, trailer.frameCount, frame)),
-      ),
+        frames.map((frame, index) =>
+          unsealFrame(key, sha, index, trailer.frameCount, frame)
+        )
+      )
     ).toStrictEqual(expectedPlain);
 
     const resealedFrames = Array.from(
@@ -66,9 +71,9 @@ describe('rust-golden', () => {
           trailer.frameCount,
           expectedPlain.subarray(
             index * fixture.cbsf.frameSize,
-            Math.min(expectedPlain.length, (index + 1) * fixture.cbsf.frameSize),
-          ),
-        ),
+            Math.min(expectedPlain.length, (index + 1) * fixture.cbsf.frameSize)
+          )
+        )
     );
     const resealedDirectory = sealDirectory(
       key,
@@ -76,7 +81,7 @@ describe('rust-golden', () => {
       trailer.frameCount,
       fixture.cbsf.frameSize,
       expectedPlain.length,
-      resealedFrames.map((frame) => frame.length),
+      resealedFrames.map((frame) => frame.length)
     );
     expect(
       Buffer.concat([
@@ -84,14 +89,14 @@ describe('rust-golden', () => {
         ...resealedFrames,
         resealedDirectory,
         encodeTrailer(resealedDirectory.length, trailer.frameCount),
-      ]),
+      ])
     ).toStrictEqual(sealed);
   });
 
-  test('CBSF compressed algorithm goldens open in both Node and Rust', () => {
-    const key = Buffer.from(fixture.cbsf.keyHex, 'hex');
+  test("CBSF compressed algorithm goldens open in both Node and Rust", () => {
+    const key = Buffer.from(fixture.cbsf.keyHex, "hex");
     for (const [name, vector] of Object.entries(fixture.cbsfCompressed)) {
-      const sealed = Buffer.from(vector.sealedBase64, 'base64');
+      const sealed = Buffer.from(vector.sealedBase64, "base64");
       const sha = decodeHeader(sealed).sha256;
       const trailer = decodeTrailer(sealed.subarray(sealed.length - 13));
       const directoryStart = sealed.length - 13 - trailer.directoryLength;
@@ -99,14 +104,14 @@ describe('rust-golden', () => {
         key,
         sha,
         trailer.frameCount,
-        sealed.subarray(directoryStart, sealed.length - 13),
+        sealed.subarray(directoryStart, sealed.length - 13)
       );
       const frame = sealed.subarray(
         directory.offsets[0],
-        directory.offsets[0]! + directory.sealedLens[0]!,
+        directory.offsets[0]! + directory.sealedLens[0]!
       );
       expect(unsealFrame(key, sha, 0, 1, frame), name).toStrictEqual(
-        Buffer.from(vector.plainBase64, 'base64'),
+        Buffer.from(vector.plainBase64, "base64")
       );
     }
   });

@@ -1,6 +1,6 @@
-import path from 'node:path';
+import path from "node:path";
 
-import { defineConfig } from '@playwright/test';
+import { defineConfig } from "@playwright/test";
 
 const here = import.meta.dirname;
 
@@ -13,18 +13,18 @@ export default defineConfig({
   // `path: artifacts/` and generate.mjs readPlaywright agree (#535 F2).
   reporter: process.env.CI
     ? [
-        ['list'],
+        ["list"],
         [
-          'json',
+          "json",
           {
             outputFile: path.resolve(
               here,
-              '../../../../artifacts/test-results/web-playwright.json',
+              "../../../../artifacts/test-results/web-playwright.json"
             ),
           },
         ],
       ]
-    : 'list',
+    : "list",
   timeout: 60_000,
   // Suite-level backstop, CI only. Without it nothing stops the run before the
   // job's `timeout-minutes`, and a job-level cancel is unconditional: it kills
@@ -36,14 +36,14 @@ export default defineConfig({
   globalTimeout: process.env.CI ? 10 * 60_000 : undefined,
   expect: { timeout: 10_000 },
   use: {
-    baseURL: 'http://127.0.0.1:4173',
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    baseURL: "http://127.0.0.1:4173",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
   webServer: {
-    command: 'node --experimental-strip-types tests/e2e/server.ts',
-    cwd: path.resolve(here, '../..'),
-    url: 'http://127.0.0.1:4173/web-config.json',
+    command: "node --experimental-strip-types tests/e2e/server.ts",
+    cwd: path.resolve(here, "../.."),
+    url: "http://127.0.0.1:4173/web-config.json",
     reuseExistingServer: false,
     timeout: 60_000,
   },

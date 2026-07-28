@@ -1,27 +1,27 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { GatewayRuntimeSnapshot } from '../shell/routes/gatewayData.js';
-import GatewayScreen, { type GatewayScreenProps } from './GatewayScreen.js';
-import type { GatewayHealthDTO } from './SettingsDiagnosticsScreen.js';
+import type { GatewayRuntimeSnapshot } from "../shell/routes/gatewayData.js";
+import GatewayScreen, { type GatewayScreenProps } from "./GatewayScreen.js";
+import type { GatewayHealthDTO } from "./SettingsDiagnosticsScreen.js";
 
 const T0 = Date.UTC(2026, 6, 11, 12, 0, 0);
 const NOW = T0 + 3_600_000; // one hour into the session
 
 const base: GatewayRuntimeSnapshot = {
-  gatewayId: 'local',
-  gatewayLabel: 'Local',
-  gatewayKind: 'local',
+  gatewayId: "local",
+  gatewayLabel: "Local",
+  gatewayKind: "local",
   trackingSince: T0,
-  status: 'up',
+  status: "up",
   statusSince: T0,
   lastCheckAt: NOW - 2000,
   latencyMs: 3,
   gatewayStartedAt: T0 - 60_000,
   gatewayUptimeMs: NOW - 2000 - (T0 - 60_000),
-  version: '0.1.0',
+  version: "0.1.0",
   schemaEpoch: 1,
   checksTotal: 720,
   checksFailed: 6,
@@ -30,13 +30,15 @@ const base: GatewayRuntimeSnapshot = {
     { at: NOW - 10_000, ok: false },
     { at: NOW - 5000, ok: true, latencyMs: 4 },
   ],
-  outages: [{ startedAt: NOW - 10_000, endedAt: NOW - 5000, alertedAt: NOW - 8000 }],
+  outages: [
+    { startedAt: NOW - 10_000, endedAt: NOW - 5000, alertedAt: NOW - 8000 },
+  ],
   alert: { enabled: true, thresholdSeconds: 120 },
   pollIntervalMs: 5000,
   alertHistory: [
     {
       at: NOW - 5000,
-      kind: 'recovered',
+      kind: "recovered",
       durationMs: 5000,
       previousSession: false,
     },
@@ -45,7 +47,7 @@ const base: GatewayRuntimeSnapshot = {
 
 function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
   return {
-    status: 'ok',
+    status: "ok",
     startedAt: new Date(T0).toISOString(),
     uptimeMs: 3_600_000,
     components: [],
@@ -55,11 +57,13 @@ function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
 }
 
 const noop = (): void => {};
-const noLoadHealth = (): Promise<GatewayHealthDTO> => Promise.resolve(makeHealth());
+const noLoadHealth = (): Promise<GatewayHealthDTO> =>
+  Promise.resolve(makeHealth());
 const noStreamLogs = (): Promise<void> => new Promise<void>(() => {}); // never resolves — no lines, "live" shell only
 // Never-resolving stubs for the ops props (restart / export) — tests that
 // don't exercise them just need the Overview render to be stable.
-const noRestartGateway = (): Promise<{ ok: boolean; error?: string }> => new Promise(() => {});
+const noRestartGateway = (): Promise<{ ok: boolean; error?: string }> =>
+  new Promise(() => {});
 const noExportDiagnostics = (): Promise<
   { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
 > => new Promise(() => {});
@@ -76,7 +80,10 @@ const stubProps = {
   onExportDiagnostics: noExportDiagnostics,
 } as const;
 
-const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | null = null): string =>
+const render = (
+  snapshot: GatewayRuntimeSnapshot,
+  health: GatewayHealthDTO | null = null
+): string =>
   renderToStaticMarkup(
     <GatewayScreen
       snapshot={snapshot}
@@ -88,79 +95,82 @@ const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | nul
       streamLogs={noStreamLogs}
       onRestartGateway={noRestartGateway}
       onExportDiagnostics={noExportDiagnostics}
-    />,
+    />
   );
 
-describe('GatewayScreen — Overview tab (default)', () => {
-  it('renders the operational hero with the gauge cluster', () => {
+describe("GatewayScreen — Overview tab (default)", () => {
+  it("renders the operational hero with the gauge cluster", () => {
     const html = render(base);
-    expect(html).toContain('<h1>Gateway</h1>');
-    expect(html).toContain('Operational');
-    expect(html).toContain('local gateway “Local”');
-    expect(html).toContain('3 ms');
-    expect(html).toContain('99.2%'); // (720-6)/720
-    expect(html).toContain('720 checks this session');
+    expect(html).toContain("<h1>Gateway</h1>");
+    expect(html).toContain("Operational");
+    expect(html).toContain("local gateway “Local”");
+    expect(html).toContain("3 ms");
+    expect(html).toContain("99.2%"); // (720-6)/720
+    expect(html).toContain("720 checks this session");
     expect(html).toContain('data-status="up"');
     // Server uptime figure ticks forward from the last heartbeat.
-    expect(html).toContain('1h 01m 00s');
+    expect(html).toContain("1h 01m 00s");
   });
 
-  it('renders the tab strip with Overview active', () => {
+  it("renders the tab strip with Overview active", () => {
     const html = render(base);
     expect(html).toContain('role="tablist"');
-    expect(html).toContain('Components');
-    expect(html).toContain('Logs');
-    expect(html).toContain('Alerts');
+    expect(html).toContain("Components");
+    expect(html).toContain("Logs");
+    expect(html).toContain("Alerts");
   });
 
-  it('renders one heartbeat tick per sample, flagging failures', () => {
+  it("renders one heartbeat tick per sample, flagging failures", () => {
     const html = render(base);
     expect(html.split('data-ok="true"').length - 1).toBe(2);
     expect(html.split('data-ok="false"').length - 1).toBe(1);
   });
 
-  it('renders the unreachable state with the failure detail and blanked gauges', () => {
+  it("renders the unreachable state with the failure detail and blanked gauges", () => {
     const html = render({
       ...base,
-      status: 'down',
+      status: "down",
       statusSince: NOW - 30_000,
-      lastError: 'fetch failed',
+      lastError: "fetch failed",
       outages: [...base.outages, { startedAt: NOW - 30_000 }],
     });
-    expect(html).toContain('Unreachable');
+    expect(html).toContain("Unreachable");
     expect(html).toContain('data-status="down"');
-    expect(html).toContain('fetch failed');
-    expect(html).toContain('— ongoing');
-    expect(html).not.toContain('1h 01m 00s'); // uptime blanks while down
+    expect(html).toContain("fetch failed");
+    expect(html).toContain("— ongoing");
+    expect(html).not.toContain("1h 01m 00s"); // uptime blanks while down
   });
 
-  it('shows the outage log with the notified badge, or the empty state', () => {
-    expect(render(base)).toContain('notified');
+  it("shows the outage log with the notified badge, or the empty state", () => {
+    expect(render(base)).toContain("notified");
     const html = render({ ...base, checksFailed: 0, outages: [] });
-    expect(html).toContain('No downtime recorded this session');
+    expect(html).toContain("No downtime recorded this session");
   });
 
   it('reconciles a healthy heartbeat with a failing component into "Degraded"', () => {
-    const html = render(base, makeHealth({ status: 'error' }));
-    expect(html).toContain('Degraded');
+    const html = render(base, makeHealth({ status: "error" }));
+    expect(html).toContain("Degraded");
     expect(html).toContain('data-status="degraded"');
     // Heartbeat itself is still up — the uptime figure keeps ticking.
-    expect(html).toContain('1h 01m 00s');
+    expect(html).toContain("1h 01m 00s");
   });
 
-  it('lets the heartbeat win when the process is unreachable, even with healthy components', () => {
-    const html = render({ ...base, status: 'down' }, makeHealth({ status: 'ok' }));
-    expect(html).toContain('Unreachable');
+  it("lets the heartbeat win when the process is unreachable, even with healthy components", () => {
+    const html = render(
+      { ...base, status: "down" },
+      makeHealth({ status: "ok" })
+    );
+    expect(html).toContain("Unreachable");
     expect(html).toContain('data-status="down"');
   });
 });
 
-describe('GatewayScreen interactions', () => {
+describe("GatewayScreen interactions", () => {
   let host: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
   });
@@ -171,12 +181,12 @@ describe('GatewayScreen interactions', () => {
 
   const clickTab = async (label: string): Promise<void> => {
     const btn = [...host.querySelectorAll('[role="tab"]')].find((b) =>
-      b.textContent?.startsWith(label),
+      b.textContent?.startsWith(label)
     ) as HTMLButtonElement;
     await act(async () => btn.click());
   };
 
-  it('shows the Components tab badge count from unhealthy components', async () => {
+  it("shows the Components tab badge count from unhealthy components", async () => {
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -185,28 +195,28 @@ describe('GatewayScreen interactions', () => {
           onAlertSecondsChange={noop}
           onAlertsEnabledChange={noop}
           health={makeHealth({
-            status: 'error',
+            status: "error",
             components: [
-              { component: 'vaults', status: 'ok', errorCount: 0 },
-              { component: 'connections', status: 'error', errorCount: 4 },
+              { component: "vaults", status: "ok", errorCount: 0 },
+              { component: "connections", status: "error", errorCount: 4 },
             ],
           })}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
-        />,
+        />
       );
     });
     const componentsTab = [...host.querySelectorAll('[role="tab"]')].find((b) =>
-      b.textContent?.startsWith('Components'),
+      b.textContent?.startsWith("Components")
     );
-    expect(componentsTab?.textContent).toContain('1');
+    expect(componentsTab?.textContent).toContain("1");
   });
 
-  it('moves the down-alert preset/switch controls under the Alerts tab', async () => {
-    const onSeconds = vi.fn<GatewayScreenProps['onAlertSecondsChange']>();
-    const onEnabled = vi.fn<GatewayScreenProps['onAlertsEnabledChange']>();
+  it("moves the down-alert preset/switch controls under the Alerts tab", async () => {
+    const onSeconds = vi.fn<GatewayScreenProps["onAlertSecondsChange"]>();
+    const onEnabled = vi.fn<GatewayScreenProps["onAlertsEnabledChange"]>();
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -215,14 +225,18 @@ describe('GatewayScreen interactions', () => {
           {...stubProps}
           onAlertSecondsChange={onSeconds}
           onAlertsEnabledChange={onEnabled}
-        />,
+        />
       );
     });
     // Not visible on Overview.
-    expect([...host.querySelectorAll('button')].some((b) => b.textContent === '5m')).toBe(false);
+    expect(
+      [...host.querySelectorAll("button")].some((b) => b.textContent === "5m")
+    ).toBe(false);
 
-    await clickTab('Alerts');
-    const fiveMin = [...host.querySelectorAll('button')].find((b) => b.textContent === '5m');
+    await clickTab("Alerts");
+    const fiveMin = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent === "5m"
+    );
     await act(async () => fiveMin?.click());
     expect(onSeconds).toHaveBeenCalledWith(300);
 
@@ -231,88 +245,106 @@ describe('GatewayScreen interactions', () => {
     expect(onEnabled).toHaveBeenCalledWith(false);
 
     // Panel rendering itself is covered by AlertHistoryPanel.test.tsx.
-    expect(host.querySelector('[data-testid="alert-history-panel"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-testid="alert-history-panel"]')
+    ).not.toBeNull();
   });
 
-  it('switching to the Components tab mounts the diagnostics screen', async () => {
-    const loadHealth = vi.fn<GatewayScreenProps['loadHealth']>().mockResolvedValue(
-      makeHealth({
-        components: [{ component: 'vaults', status: 'ok', errorCount: 0 }],
-      }),
-    );
+  it("switching to the Components tab mounts the diagnostics screen", async () => {
+    const loadHealth = vi
+      .fn<GatewayScreenProps["loadHealth"]>()
+      .mockResolvedValue(
+        makeHealth({
+          components: [{ component: "vaults", status: "ok", errorCount: 0 }],
+        })
+      );
     await act(async () => {
       root.render(
-        <GatewayScreen snapshot={base} now={NOW} {...stubProps} loadHealth={loadHealth} />,
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          {...stubProps}
+          loadHealth={loadHealth}
+        />
       );
     });
-    await clickTab('Components');
+    await clickTab("Components");
     await act(async () => {
       await Promise.resolve();
     });
     expect(loadHealth).toHaveBeenCalledWith();
-    expect(host.textContent).toContain('Vaults');
+    expect(host.textContent).toContain("Vaults");
   });
 
-  it('switching to the Logs tab mounts the log stream', async () => {
+  it("switching to the Logs tab mounts the log stream", async () => {
     await act(async () => {
       root.render(<GatewayScreen snapshot={base} now={NOW} {...stubProps} />);
     });
-    await clickTab('Logs');
+    await clickTab("Logs");
     expect(host.querySelector('input[type="search"]')).not.toBeNull();
-    expect(host.textContent).toContain('No log lines yet');
+    expect(host.textContent).toContain("No log lines yet");
   });
 
-  it('jumps from a failing component straight into a focused Logs search', async () => {
-    const loadHealth = vi.fn<GatewayScreenProps['loadHealth']>().mockResolvedValue(
-      makeHealth({
-        status: 'error',
-        components: [
-          {
-            component: 'connections',
-            status: 'error',
-            lastError: 'ETIMEDOUT',
-            errorCount: 4,
-          },
-        ],
-      }),
-    );
+  it("jumps from a failing component straight into a focused Logs search", async () => {
+    const loadHealth = vi
+      .fn<GatewayScreenProps["loadHealth"]>()
+      .mockResolvedValue(
+        makeHealth({
+          status: "error",
+          components: [
+            {
+              component: "connections",
+              status: "error",
+              lastError: "ETIMEDOUT",
+              errorCount: 4,
+            },
+          ],
+        })
+      );
     await act(async () => {
       root.render(
-        <GatewayScreen snapshot={base} now={NOW} {...stubProps} loadHealth={loadHealth} />,
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          {...stubProps}
+          loadHealth={loadHealth}
+        />
       );
     });
-    await clickTab('Components');
+    await clickTab("Components");
     await act(async () => {
       await Promise.resolve();
     });
-    const jumpBtn = [...host.querySelectorAll('button')].find(
-      (b) => b.textContent === 'View in logs',
+    const jumpBtn = [...host.querySelectorAll("button")].find(
+      (b) => b.textContent === "View in logs"
     ) as HTMLButtonElement;
     expect(jumpBtn).toBeDefined();
     await act(async () => jumpBtn.click());
 
     // Landed on the Logs tab, search box seeded with the component id.
     const search = host.querySelector<HTMLInputElement>('input[type="search"]');
-    expect(search?.value).toBe('connections');
+    expect(search?.value).toBe("connections");
   });
 
   // Backup/Storage now live on their own page — see BackupsScreen.test.tsx.
   // This asserts the split held: the Gateway page must not re-grow them.
-  it('no longer mounts the Backup or Storage cards', async () => {
+  it("no longer mounts the Backup or Storage cards", async () => {
     await act(async () => {
       root.render(<GatewayScreen snapshot={base} now={NOW} {...stubProps} />);
     });
     await act(async () => {
       await Promise.resolve();
     });
-    expect(host.textContent).not.toContain('Backups');
-    expect(host.textContent).not.toContain('Save this recovery kit somewhere offline');
-    expect(host.textContent).not.toContain('Storage');
+    expect(host.textContent).not.toContain("Backups");
+    expect(host.textContent).not.toContain(
+      "Save this recovery kit somewhere offline"
+    );
+    expect(host.textContent).not.toContain("Storage");
   });
 
-  it('restarts the gateway and clears back to idle on success', async () => {
+  it("restarts the gateway and clears back to idle on success", async () => {
     const onRestartGateway = vi
-      .fn<GatewayScreenProps['onRestartGateway']>()
+      .fn<GatewayScreenProps["onRestartGateway"]>()
       .mockResolvedValue({ ok: true });
     await act(async () => {
       root.render(
@@ -326,27 +358,29 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
-        />,
+        />
       );
     });
-    const restartBtn = [...host.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Restart gateway'),
+    const restartBtn = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Restart gateway")
     ) as HTMLButtonElement;
     expect(restartBtn).toBeDefined();
     await act(async () => {
-      restartBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      restartBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(onRestartGateway).toHaveBeenCalledOnce();
-    expect(host.textContent).toContain('Restart gateway'); // back to idle label
+    expect(host.textContent).toContain("Restart gateway"); // back to idle label
   });
 
-  it('surfaces a refused restart (remote gateway) inline without throwing', async () => {
-    const onRestartGateway = vi.fn<GatewayScreenProps['onRestartGateway']>().mockResolvedValue({
-      ok: false,
-      error: 'restart is only available for a local gateway',
-    });
+  it("surfaces a refused restart (remote gateway) inline without throwing", async () => {
+    const onRestartGateway = vi
+      .fn<GatewayScreenProps["onRestartGateway"]>()
+      .mockResolvedValue({
+        ok: false,
+        error: "restart is only available for a local gateway",
+      });
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -359,24 +393,26 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
-        />,
+        />
       );
     });
-    const restartBtn = [...host.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Restart gateway'),
+    const restartBtn = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Restart gateway")
     ) as HTMLButtonElement;
     await act(async () => {
-      restartBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      restartBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(host.textContent).toContain('restart is only available for a local gateway');
+    expect(host.textContent).toContain(
+      "restart is only available for a local gateway"
+    );
   });
 
-  it('exports diagnostics from the Logs tab toolbar and shows the saved path', async () => {
+  it("exports diagnostics from the Logs tab toolbar and shows the saved path", async () => {
     const onExportDiagnostics = vi
-      .fn<NonNullable<GatewayScreenProps['onExportDiagnostics']>>()
-      .mockResolvedValue({ ok: true, path: '/tmp/diag.json' });
+      .fn<NonNullable<GatewayScreenProps["onExportDiagnostics"]>>()
+      .mockResolvedValue({ ok: true, path: "/tmp/diag.json" });
     await act(async () => {
       root.render(
         <GatewayScreen
@@ -389,26 +425,26 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
-        />,
+        />
       );
     });
-    await clickTab('Logs');
-    const exportBtn = [...host.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Export diagnostics'),
+    await clickTab("Logs");
+    const exportBtn = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Export diagnostics")
     ) as HTMLButtonElement;
     expect(exportBtn).toBeDefined();
     await act(async () => {
-      exportBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      exportBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(onExportDiagnostics).toHaveBeenCalledOnce();
-    expect(host.textContent).toContain('/tmp/diag.json');
+    expect(host.textContent).toContain("/tmp/diag.json");
   });
 
-  it('shows nothing extra when the export dialog is canceled, and surfaces a real failure inline', async () => {
+  it("shows nothing extra when the export dialog is canceled, and surfaces a real failure inline", async () => {
     const onExportDiagnostics = vi
-      .fn<NonNullable<GatewayScreenProps['onExportDiagnostics']>>()
+      .fn<NonNullable<GatewayScreenProps["onExportDiagnostics"]>>()
       .mockResolvedValue({ ok: false, canceled: true });
     await act(async () => {
       root.render(
@@ -422,19 +458,19 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
-        />,
+        />
       );
     });
-    await clickTab('Logs');
-    const exportBtn = [...host.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Export diagnostics'),
+    await clickTab("Logs");
+    const exportBtn = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Export diagnostics")
     ) as HTMLButtonElement;
     await act(async () => {
-      exportBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      exportBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(host.textContent).not.toContain('Saved to');
-    expect(exportBtn.textContent).toContain('Export diagnostics'); // back to idle label
+    expect(host.textContent).not.toContain("Saved to");
+    expect(exportBtn.textContent).toContain("Export diagnostics"); // back to idle label
   });
 });

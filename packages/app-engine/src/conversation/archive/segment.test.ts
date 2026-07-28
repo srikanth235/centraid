@@ -5,12 +5,12 @@
  * conversation_digest accretion.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-import { archiveRange, readArchivedConversationSegment } from './segment.js';
-import type { EligibleRange } from './selector.js';
+import { archiveRange, readArchivedConversationSegment } from "./segment.js";
+import type { EligibleRange } from "./selector.js";
 import {
   MemoryBlobSink,
   daysAgo,
@@ -18,23 +18,23 @@ import {
   openTempJournal,
   seedConversation,
   seedTurn,
-} from './test-fixtures.js';
+} from "./test-fixtures.js";
 
-describe('archiveRange + readArchivedConversationSegment', () => {
-  it('gzips turns/items into the CAS, indexes conversation_archive, and folds digest', () => {
+describe("archiveRange + readArchivedConversationSegment", () => {
+  it("gzips turns/items into the CAS, indexes conversation_archive, and folds digest", () => {
     const { journal } = openTempJournal();
     const blobSink = new MemoryBlobSink();
     seedConversation(journal, {
-      id: 'app/digest',
-      kind: 'automation',
-      automationId: 'app/digest',
-      appId: 'app',
-      title: 'Morning digest',
+      id: "app/digest",
+      kind: "automation",
+      automationId: "app/digest",
+      appId: "app",
+      title: "Morning digest",
       updatedAt: now,
     });
     seedTurn(journal, {
-      turnId: 't0',
-      conversationId: 'app/digest',
+      turnId: "t0",
+      conversationId: "app/digest",
       seq: 0,
       startedAt: daysAgo(120),
       inputTokens: 100,
@@ -43,13 +43,13 @@ describe('archiveRange + readArchivedConversationSegment', () => {
       costUsd: 0.02,
       stepCount: 2,
       toolCount: 1,
-      model: 'gpt-test',
-      effort: 'high',
+      model: "gpt-test",
+      effort: "high",
       ok: true,
     });
     seedTurn(journal, {
-      turnId: 't1',
-      conversationId: 'app/digest',
+      turnId: "t1",
+      conversationId: "app/digest",
       seq: 1,
       startedAt: daysAgo(119),
       inputTokens: 10,
@@ -57,20 +57,22 @@ describe('archiveRange + readArchivedConversationSegment', () => {
       costUsd: 0.01,
       stepCount: 1,
       toolCount: 0,
-      model: 'gpt-test',
-      effort: 'high',
+      model: "gpt-test",
+      effort: "high",
       ok: false,
     });
 
     const turns = journal
-      .prepare(`SELECT * FROM turns WHERE conversation_id = ? AND id IN ('t0','t1') ORDER BY seq`)
-      .all('app/digest') as EligibleRange['turns'];
+      .prepare(
+        `SELECT * FROM turns WHERE conversation_id = ? AND id IN ('t0','t1') ORDER BY seq`
+      )
+      .all("app/digest") as EligibleRange["turns"];
     const conv = journal
       .prepare(`SELECT * FROM conversations WHERE id = ?`)
-      .get('app/digest') as Record<string, unknown>;
+      .get("app/digest") as Record<string, unknown>;
     const range: EligibleRange = {
-      conversationId: 'app/digest',
-      kind: 'automation',
+      conversationId: "app/digest",
+      kind: "automation",
       seqFrom: 0,
       seqTo: 1,
       turns,
@@ -83,9 +85,11 @@ describe('archiveRange + readArchivedConversationSegment', () => {
     expect(blobSink.has(result.segmentSha256)).toBe(true);
 
     const bytes = blobSink.get(result.segmentSha256)!;
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe(result.segmentSha256);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(
+      result.segmentSha256
+    );
     const segment = readArchivedConversationSegment(bytes);
-    expect(segment.conversationId).toBe('app/digest');
+    expect(segment.conversationId).toBe("app/digest");
     expect(segment.seqFrom).toBe(0);
     expect(segment.seqTo).toBe(1);
     expect(segment.turns).toHaveLength(2);
@@ -93,9 +97,9 @@ describe('archiveRange + readArchivedConversationSegment', () => {
 
     const archive = journal
       .prepare(
-        `SELECT turn_count, item_count, segment_sha256, pruned_at FROM conversation_archive WHERE conversation_id = ?`,
+        `SELECT turn_count, item_count, segment_sha256, pruned_at FROM conversation_archive WHERE conversation_id = ?`
       )
-      .get('app/digest') as {
+      .get("app/digest") as {
       turn_count: number;
       item_count: number;
       segment_sha256: string;
@@ -112,9 +116,9 @@ describe('archiveRange + readArchivedConversationSegment', () => {
         `SELECT run_count, ok_count, err_count, total_input_tokens, total_output_tokens,
                 total_hydration_tokens, total_cost_usd, step_count, tool_count, app_id, automation_ref, models_json,
                 efforts_json
-           FROM conversation_digest WHERE conversation_id = ?`,
+           FROM conversation_digest WHERE conversation_id = ?`
       )
-      .get('app/digest') as {
+      .get("app/digest") as {
       run_count: number;
       ok_count: number;
       err_count: number;
@@ -138,13 +142,15 @@ describe('archiveRange + readArchivedConversationSegment', () => {
     expect(digest.total_cost_usd).toBeCloseTo(0.03, 8);
     expect(digest.step_count).toBe(3);
     expect(digest.tool_count).toBe(1);
-    expect(digest.app_id).toBe('app');
-    expect(digest.automation_ref).toBe('app/digest');
+    expect(digest.app_id).toBe("app");
+    expect(digest.automation_ref).toBe("app/digest");
     const models = JSON.parse(digest.models_json) as {
       model: string;
       runs: number;
     }[];
-    expect(models.some((m) => m.model === 'gpt-test' && m.runs === 2)).toBe(true);
+    expect(models.some((m) => m.model === "gpt-test" && m.runs === 2)).toBe(
+      true
+    );
     const efforts = JSON.parse(digest.efforts_json) as {
       effort: string;
       runs: number;
@@ -152,38 +158,37 @@ describe('archiveRange + readArchivedConversationSegment', () => {
       cost: number;
     }[];
     expect(efforts).toHaveLength(1);
-    expect(efforts[0]).toMatchObject({ effort: 'high', runs: 2, tokens: 165 });
+    expect(efforts[0]).toMatchObject({ effort: "high", runs: 2, tokens: 165 });
     expect(efforts[0]!.cost).toBeCloseTo(0.03, 8);
 
     journal.close();
   });
 
-  it('throws when the blob sink claims ingest but has() is false', () => {
+  it("throws when the blob sink claims ingest but has() is false", () => {
     const { journal } = openTempJournal();
     seedConversation(journal, {
-      id: 'chat1',
-      kind: 'chat',
-      appId: 'app',
+      id: "chat1",
+      kind: "chat",
+      appId: "app",
       updatedAt: now,
     });
     seedTurn(journal, {
-      turnId: 't0',
-      conversationId: 'chat1',
+      turnId: "t0",
+      conversationId: "chat1",
       seq: 0,
       startedAt: daysAgo(100),
-      model: 'm',
+      model: "m",
     });
     const turns = journal
       .prepare(`SELECT * FROM turns WHERE conversation_id = ?`)
-      .all('chat1') as EligibleRange['turns'];
-    const conv = journal.prepare(`SELECT * FROM conversations WHERE id = ?`).get('chat1') as Record<
-      string,
-      unknown
-    >;
+      .all("chat1") as EligibleRange["turns"];
+    const conv = journal
+      .prepare(`SELECT * FROM conversations WHERE id = ?`)
+      .get("chat1") as Record<string, unknown>;
 
     const brokenSink = {
       ingestSync: (bytes: Buffer) => ({
-        sha256: createHash('sha256').update(bytes).digest('hex'),
+        sha256: createHash("sha256").update(bytes).digest("hex"),
         byteSize: bytes.length,
       }),
       has: () => false,
@@ -194,9 +199,9 @@ describe('archiveRange + readArchivedConversationSegment', () => {
         journal,
         brokenSink,
         conv,
-        { conversationId: 'chat1', kind: 'chat', seqFrom: 0, seqTo: 0, turns },
-        now,
-      ),
+        { conversationId: "chat1", kind: "chat", seqFrom: 0, seqTo: 0, turns },
+        now
+      )
     ).toThrow(/did not land in the blob CAS/u);
     journal.close();
   });

@@ -88,11 +88,11 @@
   color: var(--accent-deep-fg);
   background: var(--accent-soft);
 }
-.badge[data-tone='muted'] {
+.badge[data-tone="muted"] {
   color: var(--ink-3);
   background: var(--bg-sunken);
 }
-.badge[data-tone='warn'] {
+.badge[data-tone="warn"] {
   color: var(--warn);
   background: color-mix(in oklab, var(--warn) 14%, transparent);
 }
@@ -159,7 +159,7 @@
   background: var(--bg-elev);
   color: var(--ink-3);
 }
-.guestOpt[data-active='true'] {
+.guestOpt[data-active="true"] {
   border-color: var(--selb);
   background: var(--accent-soft);
   color: var(--accent-deep-fg);
@@ -173,11 +173,11 @@
   color: var(--ink-3);
   background: var(--bg-sunken);
 }
-.guestStat[data-stat='accepted'] {
+.guestStat[data-stat="accepted"] {
   color: var(--accent-deep-fg);
   background: var(--accent-soft);
 }
-.guestStat[data-stat='declined'] {
+.guestStat[data-stat="declined"] {
   color: var(--danger);
   background: color-mix(in oklab, var(--danger) 12%, transparent);
 }

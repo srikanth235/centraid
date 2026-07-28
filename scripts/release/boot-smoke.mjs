@@ -12,11 +12,11 @@
  * (future extension). Failure here means the artifact cannot boot.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 
-const root = path.resolve(import.meta.dirname, '../..');
-const desktop = path.join(root, 'apps/desktop');
+const root = path.resolve(import.meta.dirname, "../..");
+const desktop = path.join(root, "apps/desktop");
 let failed = 0;
 
 function ok(cond, msg) {
@@ -27,76 +27,106 @@ function ok(cond, msg) {
   }
 }
 
-const mainJs = path.join(desktop, 'dist/main.js');
-const preload = path.join(desktop, 'dist/preload.cjs');
-const renderer = path.join(desktop, 'dist/renderer/react-boot.js');
-const builderYml = path.join(desktop, 'electron-builder.yml');
-const preloadSrc = path.join(desktop, 'src/preload.ts');
+const mainJs = path.join(desktop, "dist/main.js");
+const preload = path.join(desktop, "dist/preload.cjs");
+const renderer = path.join(desktop, "dist/renderer/react-boot.js");
+const builderYml = path.join(desktop, "electron-builder.yml");
+const preloadSrc = path.join(desktop, "src/preload.ts");
 
-ok(existsSync(mainJs), 'dist/main.js exists (packaged main entry)');
-ok(existsSync(preload), 'dist/preload.cjs exists (preload bridge)');
-ok(existsSync(renderer), 'dist/renderer/react-boot.js exists (renderer mounted bundle)');
-ok(existsSync(builderYml), 'electron-builder.yml present');
+ok(existsSync(mainJs), "dist/main.js exists (packaged main entry)");
+ok(existsSync(preload), "dist/preload.cjs exists (preload bridge)");
+ok(
+  existsSync(renderer),
+  "dist/renderer/react-boot.js exists (renderer mounted bundle)"
+);
+ok(existsSync(builderYml), "electron-builder.yml present");
 
 if (existsSync(builderYml)) {
-  const yml = readFileSync(builderYml, 'utf8');
-  ok(yml.includes('appId: dev.centraid.desktop'), 'appId is dev.centraid.desktop (J5)');
-  ok(yml.includes('target: dmg') || yml.includes('dmg'), 'macOS DMG target (I10)');
-  ok(yml.includes('zip') || yml.includes('target: zip'), 'macOS ZIP target for updater (I10)');
-  ok(yml.includes('perMachine: false') || yml.includes('nsis'), 'Windows NSIS per-user (I10)');
-  ok(yml.includes('AppImage') || yml.includes('linux:'), 'Linux AppImage target (#501)');
+  const yml = readFileSync(builderYml, "utf8");
+  ok(
+    yml.includes("appId: dev.centraid.desktop"),
+    "appId is dev.centraid.desktop (J5)"
+  );
+  ok(
+    yml.includes("target: dmg") || yml.includes("dmg"),
+    "macOS DMG target (I10)"
+  );
+  ok(
+    yml.includes("zip") || yml.includes("target: zip"),
+    "macOS ZIP target for updater (I10)"
+  );
+  ok(
+    yml.includes("perMachine: false") || yml.includes("nsis"),
+    "Windows NSIS per-user (I10)"
+  );
+  ok(
+    yml.includes("AppImage") || yml.includes("linux:"),
+    "Linux AppImage target (#501)"
+  );
 }
 
-const desktopPkg = path.join(desktop, 'package.json');
+const desktopPkg = path.join(desktop, "package.json");
 if (existsSync(desktopPkg)) {
-  const pkg = JSON.parse(readFileSync(desktopPkg, 'utf8'));
+  const pkg = JSON.parse(readFileSync(desktopPkg, "utf8"));
   ok(
-    Boolean(pkg.devDependencies?.['electron-builder']),
-    'electron-builder pinned in desktop package.json',
+    Boolean(pkg.devDependencies?.["electron-builder"]),
+    "electron-builder pinned in desktop package.json"
   );
   // Runtime dep (packaged app loads it) — not a build-only devDependency.
   ok(
-    Boolean(pkg.dependencies?.['electron-updater'] || pkg.devDependencies?.['electron-updater']),
-    'electron-updater pinned in desktop package.json',
+    Boolean(
+      pkg.dependencies?.["electron-updater"] ||
+      pkg.devDependencies?.["electron-updater"]
+    ),
+    "electron-updater pinned in desktop package.json"
   );
-  ok(Boolean(pkg.scripts?.dist), 'desktop dist script present');
+  ok(Boolean(pkg.scripts?.dist), "desktop dist script present");
 }
 
 ok(
-  existsSync(path.join(root, 'scripts/release/sync-versions.mjs')),
-  'sync-versions.mjs present (#501)',
+  existsSync(path.join(root, "scripts/release/sync-versions.mjs")),
+  "sync-versions.mjs present (#501)"
 );
 ok(
-  existsSync(path.join(root, 'scripts/release/restamp-rollout.mjs')),
-  'restamp-rollout.mjs present (I8)',
+  existsSync(path.join(root, "scripts/release/restamp-rollout.mjs")),
+  "restamp-rollout.mjs present (I8)"
 );
-ok(existsSync(path.join(root, 'apps/mobile/eas.json')), 'mobile eas.json present');
 ok(
-  existsSync(path.join(root, 'apps/web/wrangler.json')),
-  'web wrangler.json present (app.centraid.dev)',
+  existsSync(path.join(root, "apps/mobile/eas.json")),
+  "mobile eas.json present"
 );
-ok(existsSync(path.join(root, 'packages/gateway/Dockerfile')), 'gateway Dockerfile present');
+ok(
+  existsSync(path.join(root, "apps/web/wrangler.json")),
+  "web wrangler.json present (app.centraid.dev)"
+);
+ok(
+  existsSync(path.join(root, "packages/gateway/Dockerfile")),
+  "gateway Dockerfile present"
+);
 
 if (existsSync(preloadSrc)) {
-  const src = readFileSync(preloadSrc, 'utf8');
+  const src = readFileSync(preloadSrc, "utf8");
   // Structural: every preload must expose CentraidApi; silent missing bridge
   // is the failure mode L2 calls out.
-  ok(/exposeInMainWorld\(['"]CentraidApi['"]/u.test(src), 'preload exposes CentraidApi');
-  for (const key of ['getSettings', 'saveSettings', 'onGatewayChanged']) {
+  ok(
+    /exposeInMainWorld\(['"]CentraidApi['"]/u.test(src),
+    "preload exposes CentraidApi"
+  );
+  for (const key of ["getSettings", "saveSettings", "onGatewayChanged"]) {
     ok(src.includes(key), `preload defines bridge key ${key}`);
   }
 }
 
 if (existsSync(preload)) {
-  const cjs = readFileSync(preload, 'utf8');
-  ok(cjs.includes('CentraidApi'), 'built preload still contains CentraidApi');
+  const cjs = readFileSync(preload, "utf8");
+  ok(cjs.includes("CentraidApi"), "built preload still contains CentraidApi");
 }
 
 // Detached gateway pure core must ship (H2–H7)
-const detached = path.join(desktop, 'src/main/detached-gateway-core.ts');
-ok(existsSync(detached), 'detached-gateway-core.ts present (H2–H7 pure core)');
+const detached = path.join(desktop, "src/main/detached-gateway-core.ts");
+ok(existsSync(detached), "detached-gateway-core.ts present (H2–H7 pure core)");
 
-const rollout = path.join(desktop, 'src/main/update-rollout-core.ts');
-ok(existsSync(rollout), 'update-rollout-core.ts present (I5/I6 pure core)');
+const rollout = path.join(desktop, "src/main/update-rollout-core.ts");
+ok(existsSync(rollout), "update-rollout-core.ts present (I5/I6 pure core)");
 
 process.exit(failed > 0 ? 1 : 0);

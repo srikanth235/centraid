@@ -3,12 +3,12 @@
 // own contract; Photos' legacy relative video-frame specifier is redirected to
 // the client's TypeScript module by inline-vite-aliases.ts.
 
-declare module '*?url' {
+declare module "*?url" {
   const url: string;
   export default url;
 }
 
-declare module '*video-frame.js' {
+declare module "*video-frame.js" {
   export const VIDEO_POSTER_EDGE: number;
   export const VIDEO_THUMB_EDGE: number;
 
@@ -20,5 +20,7 @@ declare module '*video-frame.js' {
     thumb: Blob | null;
   }
 
-  export function captureVideoFrames(source: Blob): Promise<CapturedVideoFrames | null>;
+  export function captureVideoFrames(
+    source: Blob
+  ): Promise<CapturedVideoFrames | null>;
 }

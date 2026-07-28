@@ -4,26 +4,37 @@
 // as `attendee_party_ids`, which the propose command turns into
 // needs-action schedule_attendee rows. Opening from a day/slot click
 // prefills the time via `prefill`.
-import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import { useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 
-import { colorForCalendar, initials, nextHalfHour, toIsoUtc, toLocalInput } from '../format.ts';
-import { I } from '../icons.ts';
-import { outcomeMessage } from '../kit.ts';
-import type { Calendar, CreatePayload, PartyOption, Prefill } from '../types.ts';
-import { CalDot, Icon } from './Shared.tsx';
+import {
+  colorForCalendar,
+  initials,
+  nextHalfHour,
+  toIsoUtc,
+  toLocalInput,
+} from "../format.ts";
+import { I } from "../icons.ts";
+import { outcomeMessage } from "../kit.ts";
+import type {
+  Calendar,
+  CreatePayload,
+  PartyOption,
+  Prefill,
+} from "../types.ts";
+import { CalDot, Icon } from "./Shared.tsx";
 
-import styles from './CreateModal.module.css';
-import shared from './shared.module.css';
+import styles from "./CreateModal.module.css";
+import shared from "./shared.module.css";
 
 // Repeat picker → RFC 5545 subset the vault's recurrence engine understands
 // (see @centraid/vault recurrence/rrule.ts). "None" sends no rrule at all.
 const REPEAT_OPTIONS: { value: string; label: string }[] = [
-  { value: 'none', label: 'Does not repeat' },
-  { value: 'FREQ=DAILY', label: 'Daily' },
-  { value: 'FREQ=WEEKLY', label: 'Weekly' },
-  { value: 'FREQ=MONTHLY', label: 'Monthly' },
-  { value: 'FREQ=YEARLY', label: 'Yearly' },
+  { value: "none", label: "Does not repeat" },
+  { value: "FREQ=DAILY", label: "Daily" },
+  { value: "FREQ=WEEKLY", label: "Weekly" },
+  { value: "FREQ=MONTHLY", label: "Monthly" },
+  { value: "FREQ=YEARLY", label: "Yearly" },
 ];
 
 export function CreateModal({
@@ -39,19 +50,19 @@ export function CreateModal({
 }) {
   const start0 = prefill?.start ?? nextHalfHour();
   const end0 = prefill?.end ?? new Date(start0.getTime() + 3600000);
-  const [summary, setSummary] = useState('');
+  const [summary, setSummary] = useState("");
   const [startVal, setStartVal] = useState(toLocalInput(start0));
   const [endVal, setEndVal] = useState(toLocalInput(end0));
-  const [calendarId, setCalendarId] = useState(calendars[0]?.calendar_id ?? '');
-  const [description, setDescription] = useState('');
-  const [repeat, setRepeat] = useState('none');
-  const [conferencingUri, setConferencingUri] = useState('');
+  const [calendarId, setCalendarId] = useState(calendars[0]?.calendar_id ?? "");
+  const [description, setDescription] = useState("");
+  const [repeat, setRepeat] = useState("none");
+  const [conferencingUri, setConferencingUri] = useState("");
   // The invite directory (parties query), and the party ids currently invited.
   const [people, setPeople] = useState<PartyOption[]>([]);
   const [invited, setInvited] = useState(() => new Set<string>());
   const [busy, setBusy] = useState(false);
   const [queued, setQueued] = useState(false);
-  const [formNotice, setFormNotice] = useState('');
+  const [formNotice, setFormNotice] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,7 +74,7 @@ export function CreateModal({
   useEffect(() => {
     let live = true;
     window.centraid
-      .read<{ parties?: PartyOption[] }>({ query: 'parties' })
+      .read<{ parties?: PartyOption[] }>({ query: "parties" })
       .then((res) => {
         if (live) setPeople((res?.parties ?? []).filter((p) => !p.is_you));
       })
@@ -102,21 +113,21 @@ export function CreateModal({
   const submit = async () => {
     const title = summary.trim();
     if (!title) {
-      setFormNotice('Give the event a title.');
+      setFormNotice("Give the event a title.");
       return;
     }
     const dtstart = toIsoUtc(startVal);
     const dtend = toIsoUtc(endVal);
     if (!dtstart || !dtend) {
-      setFormNotice('Pick a start and an end.');
+      setFormNotice("Pick a start and an end.");
       return;
     }
     if (dtend < dtstart) {
-      setFormNotice('Pick a start and a later end.');
+      setFormNotice("Pick a start and a later end.");
       return;
     }
     if (!calendarId) {
-      setFormNotice('Pick a calendar.');
+      setFormNotice("Pick a calendar.");
       return;
     }
     setBusy(true);
@@ -134,25 +145,34 @@ export function CreateModal({
       ...(startTz ? { start_tz: startTz } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(invited.size ? { attendee_party_ids: [...invited] } : {}),
-      ...(repeat === 'none' ? {} : { rrule: repeat }),
-      ...(conferencingUri.trim() ? { conferencing_uri: conferencingUri.trim() } : {}),
+      ...(repeat === "none" ? {} : { rrule: repeat }),
+      ...(conferencingUri.trim()
+        ? { conferencing_uri: conferencingUri.trim() }
+        : {}),
     });
     setBusy(false);
-    if (outcome?.status === 'executed' || outcome?.status === 'parked') {
+    if (outcome?.status === "executed" || outcome?.status === "parked") {
       onClose();
       return;
     }
-    if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
+    if (outcome?.status === "queued" || outcome?.status === "in-flight") {
       setQueued(true);
-      setFormNotice('Saved on this device. It will sync automatically; no need to submit again.');
+      setFormNotice(
+        "Saved on this device. It will sync automatically; no need to submit again."
+      );
       return;
     }
-    setFormNotice(outcomeMessage(outcome) ?? 'Something went wrong.');
+    setFormNotice(outcomeMessage(outcome) ?? "Something went wrong.");
   };
 
   return (
     <div className="kit-modal-back">
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
       <dialog
         open
         className={`kit-modal ${styles.createModal}`}
@@ -163,7 +183,12 @@ export function CreateModal({
           <span id="createEventTitle" className={styles.createHeading}>
             New event
           </span>
-          <button type="button" className="kit-icon-btn" aria-label="Close" onClick={onClose}>
+          <button
+            type="button"
+            className="kit-icon-btn"
+            aria-label="Close"
+            onClick={onClose}
+          >
             <Icon svg={I.close} />
           </button>
         </div>
@@ -180,7 +205,11 @@ export function CreateModal({
           <div className={styles.createTimes}>
             <label className="ag-field-row">
               <span>Start</span>
-              <input type="datetime-local" value={startVal} onChange={handleStartChange} />
+              <input
+                type="datetime-local"
+                value={startVal}
+                onChange={handleStartChange}
+              />
             </label>
             <label className="ag-field-row">
               <span>End</span>
@@ -220,15 +249,15 @@ export function CreateModal({
                       onClick={() => setCalendarId(c.calendar_id)}
                     >
                       <CalDot color={color} />
-                      {c.name ?? 'Calendar'}
+                      {c.name ?? "Calendar"}
                     </button>
                   );
                 })}
               </div>
             ) : (
               <p className="muted small">
-                The vault has no calendars yet — import an .ics file through the vault's ingest to
-                create one.
+                The vault has no calendars yet — import an .ics file through the
+                vault's ingest to create one.
               </p>
             )}
           </div>
@@ -244,7 +273,9 @@ export function CreateModal({
                     aria-pressed={invited.has(p.party_id)}
                     onClick={() => toggleGuest(p.party_id)}
                   >
-                    <span className={styles.guestChipAvatar}>{initials(p.name)}</span>
+                    <span className={styles.guestChipAvatar}>
+                      {initials(p.name)}
+                    </span>
                     {p.name}
                   </button>
                 ))}
@@ -269,7 +300,9 @@ export function CreateModal({
             onChange={(e) => setDescription(e.target.value)}
           />
           {formNotice ? (
-            <output className={`${shared.formNotice} muted small`}>{formNotice}</output>
+            <output className={`${shared.formNotice} muted small`}>
+              {formNotice}
+            </output>
           ) : null}
         </div>
         <div className="kit-modal-foot">

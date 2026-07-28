@@ -1,6 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState } from "react";
 
-import { Store } from './store.js';
+import { Store } from "./store.js";
 
 // Starred apps/automations, ported from the vanilla app.ts star helpers. Backed
 // by the local Store ('home.starred' — an id→true map); reactive so toggling a
@@ -12,17 +12,20 @@ export interface StarController {
 
 export function useStarred(): StarController {
   const [starred, setStarred] = useState<Record<string, boolean>>(() =>
-    Store.get<Record<string, boolean>>('home.starred', {}),
+    Store.get<Record<string, boolean>>("home.starred", {})
   );
 
-  const isStarred = useCallback((id: string) => starred[id] === true, [starred]);
+  const isStarred = useCallback(
+    (id: string) => starred[id] === true,
+    [starred]
+  );
 
   const toggleStar = useCallback((id: string) => {
     setStarred((prev) => {
       const next = { ...prev };
       if (next[id]) delete next[id];
       else next[id] = true;
-      Store.set('home.starred', next);
+      Store.set("home.starred", next);
       return next;
     });
   }, []);

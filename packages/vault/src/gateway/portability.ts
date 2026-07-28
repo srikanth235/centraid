@@ -3,17 +3,17 @@
 // intact. §11 gates every new domain on this: "If export→reimport isn't
 // lossless, ownership is theater."
 
-import type { VaultDb } from '../db.js';
-import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
-import { ONTOLOGY_VERSION } from '../schema/migrate.js';
-import { listVaultEntities, resolveEntity } from '../schema/tables.js';
-import { writeReceipt } from './evidence.js';
-import { recreateExtTables } from './ext.js';
-import { clearColumnCache, tableColumns } from './filters.js';
-import type { Identity } from './types.js';
+import type { VaultDb } from "../db.js";
+import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
+import { ONTOLOGY_VERSION } from "../schema/migrate.js";
+import { listVaultEntities, resolveEntity } from "../schema/tables.js";
+import { writeReceipt } from "./evidence.js";
+import { recreateExtTables } from "./ext.js";
+import { clearColumnCache, tableColumns } from "./filters.js";
+import type { Identity } from "./types.js";
 
 export interface VaultExport {
-  format: 'jsonld';
+  format: "jsonld";
   ontologyVersion: string;
   exportedAt: string;
   /** Logical entity → rows, PK-ordered. The hash covers exactly this. */
@@ -34,22 +34,24 @@ export interface VaultExport {
 
 /** Deterministic JSON: object keys sorted at every level. */
 export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value !== null && typeof value === 'object') {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>)
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`);
-    return `{${entries.join(',')}}`;
+    return `{${entries.join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
 function primaryKeyColumn(db: VaultDb, physical: string): string {
-  const rows = db.vault.prepare(`PRAGMA table_info(${JSON.stringify(physical)})`).all() as {
+  const rows = db.vault
+    .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
+    .all() as {
     name: string;
     pk: number;
   }[];
-  return rows.find((r) => r.pk === 1)?.name ?? rows[0]?.name ?? 'rowid';
+  return rows.find((r) => r.pk === 1)?.name ?? rows[0]?.name ?? "rowid";
 }
 
 /**
@@ -60,7 +62,7 @@ function primaryKeyColumn(db: VaultDb, physical: string): string {
  */
 export function exportVault(
   db: VaultDb,
-  owner: Identity,
+  owner: Identity
 ): { artifact: VaultExport; exportId: string; receiptId: string } {
   const requestedAt = nowIso();
   const tables: Record<string, Record<string, unknown>[]> = {};
@@ -90,7 +92,7 @@ export function exportVault(
   // that was actually produced, not the one that was attempted.
   const verifyHash = sha256Hex(canonicalJson(tables));
   const artifact: VaultExport = {
-    format: 'jsonld',
+    format: "jsonld",
     ontologyVersion: ONTOLOGY_VERSION,
     exportedAt: requestedAt,
     tables,
@@ -102,24 +104,24 @@ export function exportVault(
     .prepare(
       `INSERT INTO consent_export_job
          (export_id, requested_by_party_id, scope_json, format, requested_at, completed_at, artifact_content_id, verify_hash)
-       VALUES (?, ?, ?, 'jsonld', ?, ?, NULL, ?)`,
+       VALUES (?, ?, ?, 'jsonld', ?, ?, NULL, ?)`
     )
     .run(
       exportId,
       owner.partyId,
-      JSON.stringify({ schemas: 'all' }),
+      JSON.stringify({ schemas: "all" }),
       requestedAt,
       nowIso(),
-      verifyHash,
+      verifyHash
     );
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
     invocationId: null,
-    action: 'act consent.export_vault',
-    objectType: 'consent.export_job',
+    action: "act consent.export_vault",
+    objectType: "consent.export_job",
     objectId: exportId,
     purpose: null,
-    decision: 'allow',
+    decision: "allow",
     detail: {
       verifyHash,
       rowCount: Object.values(tables).reduce((n, rows) => n + rows.length, 0),
@@ -136,18 +138,23 @@ export function exportVault(
  * wholesale after load (imports arrive in registry order, but polymorphic
  * and self-referencing rows make per-row ordering impossible in general).
  */
-export function importVaultExport(db: VaultDb, artifact: VaultExport): { imported: number } {
+export function importVaultExport(
+  db: VaultDb,
+  artifact: VaultExport
+): { imported: number } {
   const actual = sha256Hex(canonicalJson(artifact.tables));
   if (actual !== artifact.verifyHash) {
     throw new Error(
-      `export artifact hash mismatch: expected ${artifact.verifyHash}, got ${actual}`,
+      `export artifact hash mismatch: expected ${artifact.verifyHash}, got ${actual}`
     );
   }
-  const existing = db.vault.prepare('SELECT count(*) AS n FROM core_party').get() as { n: number };
-  if (existing.n > 0) throw new Error('import target is not a fresh vault');
+  const existing = db.vault
+    .prepare("SELECT count(*) AS n FROM core_party")
+    .get() as { n: number };
+  if (existing.n > 0) throw new Error("import target is not a fresh vault");
   let imported = 0;
-  db.vault.exec('PRAGMA foreign_keys = OFF');
-  db.vault.exec('BEGIN');
+  db.vault.exec("PRAGMA foreign_keys = OFF");
+  db.vault.exec("BEGIN");
   try {
     const load = (logical: string): number => {
       const rows = artifact.tables[logical];
@@ -159,9 +166,11 @@ export function importVaultExport(db: VaultDb, artifact: VaultExport): { importe
       let n = 0;
       for (const row of rows) {
         const names = Object.keys(row).filter((c) => cols.has(c));
-        const sql = `INSERT INTO "${ref.physical}" (${names.map((c) => `"${c}"`).join(', ')})
-                     VALUES (${names.map(() => '?').join(', ')})`;
-        db.vault.prepare(sql).run(...names.map((c) => row[c] as string | number | null));
+        const sql = `INSERT INTO "${ref.physical}" (${names.map((c) => `"${c}"`).join(", ")})
+                     VALUES (${names.map(() => "?").join(", ")})`;
+        db.vault
+          .prepare(sql)
+          .run(...names.map((c) => row[c] as string | number | null));
         n += 1;
       }
       return n;
@@ -171,20 +180,20 @@ export function importVaultExport(db: VaultDb, artifact: VaultExport): { importe
     for (const logical of listVaultEntities()) imported += load(logical);
     recreateExtTables(db);
     for (const logical of listVaultEntities(db.vault)) {
-      if (logical.startsWith('ext.')) imported += load(logical);
+      if (logical.startsWith("ext.")) imported += load(logical);
     }
-    const violations = db.vault.prepare('PRAGMA foreign_key_check').all();
+    const violations = db.vault.prepare("PRAGMA foreign_key_check").all();
     if (violations.length > 0) {
       throw new Error(
-        `import broke referential integrity: ${JSON.stringify(violations.slice(0, 3))}`,
+        `import broke referential integrity: ${JSON.stringify(violations.slice(0, 3))}`
       );
     }
-    db.vault.exec('COMMIT');
+    db.vault.exec("COMMIT");
   } catch (err) {
-    db.vault.exec('ROLLBACK');
+    db.vault.exec("ROLLBACK");
     throw err;
   } finally {
-    db.vault.exec('PRAGMA foreign_keys = ON');
+    db.vault.exec("PRAGMA foreign_keys = ON");
   }
   return { imported };
 }

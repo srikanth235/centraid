@@ -1,10 +1,10 @@
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { photoTimelineEngine, type TimelineSnapshot } from './timeline-engine';
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { photoTimelineEngine, type TimelineSnapshot } from "./timeline-engine";
 
-export type { PhotoAsset, PhotoSection } from './timeline-model';
+export type { PhotoAsset, PhotoSection } from "./timeline-model";
 
 /**
  * Read the one shared timeline (see `timeline-engine.ts`). Every Photos screen
@@ -26,7 +26,10 @@ export function usePhotoTimeline(): TimelineSnapshot {
   useFocusEffect(
     useCallback(() => {
       photoTimelineEngine.refreshUploads();
-    }, []),
+    }, [])
   );
-  return useSyncExternalStore(photoTimelineEngine.subscribe, photoTimelineEngine.getSnapshot);
+  return useSyncExternalStore(
+    photoTimelineEngine.subscribe,
+    photoTimelineEngine.getSnapshot
+  );
 }

@@ -4,7 +4,7 @@
 // app.tsx mutates in place; the outcome shape is typed locally (the ambient
 // `VaultOutcome` in types/centraid.d.ts, out of scope here, carries no
 // `intentId`, which the replica overlay path does).
-import type { AppState } from './types.ts';
+import type { AppState } from "./types.ts";
 
 /** The subset of a write outcome pending.ts keys and settles on. */
 interface PendingOutcome {
@@ -13,11 +13,14 @@ interface PendingOutcome {
   invocationId?: string;
 }
 
-const PENDING = new Set(['queued', 'in-flight', 'parked']);
-const TERMINAL = new Set(['executed', 'denied', 'failed']);
+const PENDING = new Set(["queued", "in-flight", "parked"]);
+const TERMINAL = new Set(["executed", "denied", "failed"]);
 
-function records(state: AppState): Map<string, { eventId: string; kind: string }> {
-  if (!(state.pendingByIntent instanceof Map)) state.pendingByIntent = new Map();
+function records(
+  state: AppState
+): Map<string, { eventId: string; kind: string }> {
+  if (!(state.pendingByIntent instanceof Map))
+    state.pendingByIntent = new Map();
   return state.pendingByIntent;
 }
 
@@ -26,7 +29,7 @@ function refreshPresentation(state: AppState): void {
   state.pendingCancelIds.clear();
   for (const pending of records(state).values()) {
     state.pendingIds.add(pending.eventId);
-    if (pending.kind === 'cancel') state.pendingCancelIds.add(pending.eventId);
+    if (pending.kind === "cancel") state.pendingCancelIds.add(pending.eventId);
   }
 }
 
@@ -35,9 +38,10 @@ export function trackPendingOutcome(
   state: AppState,
   eventId: string | null | undefined,
   kind: string,
-  outcome: PendingOutcome | undefined,
+  outcome: PendingOutcome | undefined
 ): boolean {
-  if (!eventId || !outcome?.status || !PENDING.has(outcome.status)) return false;
+  if (!eventId || !outcome?.status || !PENDING.has(outcome.status))
+    return false;
   const key = outcome.intentId ?? outcome.invocationId ?? `${kind}:${eventId}`;
   records(state).set(key, { eventId, kind });
   refreshPresentation(state);
@@ -45,12 +49,15 @@ export function trackPendingOutcome(
 }
 
 /** Settle only the exact intent named by a terminal overlay invalidation. */
-export function settlePendingChange(state: AppState, detail: CentraidChangeDetail): boolean {
+export function settlePendingChange(
+  state: AppState,
+  detail: CentraidChangeDetail
+): boolean {
   if (
-    detail?.source !== 'overlay' ||
-    typeof detail?.intentState !== 'string' ||
+    detail?.source !== "overlay" ||
+    typeof detail?.intentState !== "string" ||
     !TERMINAL.has(detail.intentState) ||
-    typeof detail?.intentId !== 'string'
+    typeof detail?.intentId !== "string"
   ) {
     return false;
   }
@@ -67,7 +74,7 @@ export function settlePendingChange(state: AppState, detail: CentraidChangeDetai
 export function reconcilePendingChange(
   state: AppState,
   detail: CentraidChangeDetail,
-  managed: boolean,
+  managed: boolean
 ): boolean {
   if (managed) return settlePendingChange(state, detail);
   const changed = records(state).size > 0;

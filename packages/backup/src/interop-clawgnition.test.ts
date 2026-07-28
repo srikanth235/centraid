@@ -1,5 +1,5 @@
-import { type ChildProcess, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { type ChildProcess, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#363) single cross-repo interop suite against a real Clawgnition gateway (wrangler dev); the scenario is one coherent conformance run, not independently splittable cases
 /*
  * Cross-repo interop: `RemoteBackupProvider` (this package's real client)
@@ -36,23 +36,31 @@ import { createHash } from 'node:crypto';
  * registration test data) build prefixed keys; PROTOCOL.md's example was
  * corrected to match.
  */
-import { existsSync, readFileSync, promises as fs } from 'node:fs';
-import net from 'node:net';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { setTimeout as sleep } from 'node:timers/promises';
+import { existsSync, readFileSync, promises as fs } from "node:fs";
+import net from "node:net";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { setTimeout as sleep } from "node:timers/promises";
 
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import { providerConformanceCases, type ConformanceHarness } from './conformance.js';
-import { createKeyring, type Keyring } from './crypto.js';
-import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
-import { BackupProviderError } from './provider.js';
-import { RemoteBackupProvider } from './remote-provider.js';
-import { S3TestServer } from './testing/s3-test-server.js';
-import { callProviderRoute } from './wire-client.js';
+import {
+  providerConformanceCases,
+  type ConformanceHarness,
+} from "./conformance.js";
+import { createKeyring, type Keyring } from "./crypto.js";
+import {
+  createSnapshot,
+  restoreSnapshot,
+  verifySnapshot,
+  type SourceEntry,
+} from "./engine.js";
+import { BackupProviderError } from "./provider.js";
+import { RemoteBackupProvider } from "./remote-provider.js";
+import { S3TestServer } from "./testing/s3-test-server.js";
+import { callProviderRoute } from "./wire-client.js";
 
 // A `/1` coordinated base pair (vault.db + journal.db) must be a REAL
 // WAL-quiet SQLite base carrying sha256 + walGeneration + baseTickMs — the
@@ -61,9 +69,9 @@ import { callProviderRoute } from './wire-client.js';
 // mirror engine.test.ts's fixtures.
 function makeSqliteDbFile(filePath: string, vals: string[]): void {
   const conn = new DatabaseSync(filePath);
-  conn.exec('PRAGMA journal_mode=WAL');
-  conn.exec('CREATE TABLE rows (id INTEGER PRIMARY KEY, val TEXT NOT NULL)');
-  const stmt = conn.prepare('INSERT INTO rows (val) VALUES (?)');
+  conn.exec("PRAGMA journal_mode=WAL");
+  conn.exec("CREATE TABLE rows (id INTEGER PRIMARY KEY, val TEXT NOT NULL)");
+  const stmt = conn.prepare("INSERT INTO rows (val) VALUES (?)");
   for (const v of vals) stmt.run(v);
   conn.close(); // closing the last connection checkpoints + deletes the WAL
 }
@@ -72,7 +80,7 @@ function readSqliteRows(filePath: string): string[] {
   const conn = new DatabaseSync(filePath);
   try {
     return (
-      conn.prepare('SELECT val FROM rows ORDER BY id').all() as {
+      conn.prepare("SELECT val FROM rows ORDER BY id").all() as {
         val: string;
       }[]
     ).map((r) => r.val);
@@ -82,9 +90,9 @@ function readSqliteRows(filePath: string): string[] {
 }
 
 async function fileSha256(filePath: string): Promise<string> {
-  return createHash('sha256')
+  return createHash("sha256")
     .update(await fs.readFile(filePath))
-    .digest('hex');
+    .digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -93,12 +101,13 @@ async function fileSha256(filePath: string): Promise<string> {
 // cleanly with zero side effects when the env/checkout isn't set up.
 // ---------------------------------------------------------------------------
 
-const CLAWGNITION_REPO = process.env.CLAWGNITION_REPO ?? '/Users/srikanth/gitspace/clawgnition';
-const GATEWAY_DIR = path.join(CLAWGNITION_REPO, 'apps/gateway');
-const DEV_VARS_FILE = path.join(GATEWAY_DIR, '.dev.vars');
+const CLAWGNITION_REPO =
+  process.env.CLAWGNITION_REPO ?? "/Users/srikanth/gitspace/clawgnition";
+const GATEWAY_DIR = path.join(CLAWGNITION_REPO, "apps/gateway");
+const DEV_VARS_FILE = path.join(GATEWAY_DIR, ".dev.vars");
 
 function computeSkipReason(): string | null {
-  if (process.env.CLAWGNITION_INTEROP !== '1') {
+  if (process.env.CLAWGNITION_INTEROP !== "1") {
     return 'CLAWGNITION_INTEROP is not "1" — run `bun run test:interop` to opt in';
   }
   if (!existsSync(CLAWGNITION_REPO)) {
@@ -107,7 +116,7 @@ function computeSkipReason(): string | null {
   if (!existsSync(DEV_VARS_FILE)) {
     return `Clawgnition gateway .dev.vars not found at "${DEV_VARS_FILE}" — see its docs/LOCAL_DEV_BACKUP.md`;
   }
-  const vars = readFileSync(DEV_VARS_FILE, 'utf8');
+  const vars = readFileSync(DEV_VARS_FILE, "utf8");
   if (!/^DEV_BACKUP_S3_ENDPOINT=.+$/mu.test(vars)) {
     return `DEV_BACKUP_S3_ENDPOINT is not set in "${DEV_VARS_FILE}" — the dev credentials fallback won't engage`;
   }
@@ -117,7 +126,7 @@ function computeSkipReason(): string | null {
 const SKIP_REASON = computeSkipReason();
 const SUITE_TITLE = SKIP_REASON
   ? `interop: Centraid backup client vs real Clawgnition gateway (SKIPPED — ${SKIP_REASON})`
-  : 'interop: Centraid backup client vs real Clawgnition gateway';
+  : "interop: Centraid backup client vs real Clawgnition gateway";
 
 // ---------------------------------------------------------------------------
 // Fixed dev-loop constants (match Clawgnition's docs/LOCAL_DEV_BACKUP.md and
@@ -129,23 +138,23 @@ const SUITE_TITLE = SKIP_REASON
 const GATEWAY_PORT = 9587;
 const S3_PORT = 9099;
 const GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`;
-const BUCKET = 'clawgnition-vault-backups-dev';
+const BUCKET = "clawgnition-vault-backups-dev";
 // Clawgnition auth is routed-key based (`sk-claw_v1_<cell>_<keyId>_<secret>`):
 // flat seeded keys no longer authenticate. The suite signs in as the
 // predev-seeded operator and mints a routed key over the real HTTP surface
 // (`POST /v1/keys`) in beforeAll — the same path the dashboard takes.
-const OPERATOR_EMAIL = 'operator@clawgnition.local';
-const OPERATOR_PASSWORD = 'Operator123!';
+const OPERATOR_EMAIL = "operator@clawgnition.local";
+const OPERATOR_PASSWORD = "Operator123!";
 const CURRENT = {
-  gatewayVersion: '0.1.0',
-  vaultUserVersion: '1',
-  ontologyVersion: '1.2',
+  gatewayVersion: "0.1.0",
+  vaultUserVersion: "1",
+  ontologyVersion: "1.2",
 };
 const APP_META = {
-  gatewayVersion: '0.1.0',
-  vaultUserVersion: '1',
-  ontologyVersion: '1.2',
-  sourceInstanceId: 'interop-test',
+  gatewayVersion: "0.1.0",
+  vaultUserVersion: "1",
+  ontologyVersion: "1.2",
+  sourceInstanceId: "interop-test",
 };
 
 // ---------------------------------------------------------------------------
@@ -155,20 +164,20 @@ const APP_META = {
 async function assertPortFree(port: number, label: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const srv = net.createServer();
-    srv.once('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'EADDRINUSE') {
+    srv.once("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
         reject(
           new Error(
             `port ${port} (${label}) is already in use — stop whatever's bound to it (a stale ` +
-              `wrangler dev? another S3TestServer?) and re-run`,
-          ),
+              `wrangler dev? another S3TestServer?) and re-run`
+          )
         );
       } else {
         reject(err);
       }
     });
-    srv.once('listening', () => srv.close(() => resolve()));
-    srv.listen(port, '127.0.0.1');
+    srv.once("listening", () => srv.close(() => resolve()));
+    srv.listen(port, "127.0.0.1");
   });
 }
 
@@ -181,26 +190,26 @@ function runCommand(
   command: string,
   args: string[],
   cwd: string,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: 'pipe' });
-    let output = '';
+    const child = spawn(command, args, { cwd, stdio: "pipe" });
+    let output = "";
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      child.kill("SIGKILL");
       reject(
         new Error(
-          `${command} ${args.join(' ')} timed out after ${timeoutMs}ms\n${output.slice(-4000)}`,
-        ),
+          `${command} ${args.join(" ")} timed out after ${timeoutMs}ms\n${output.slice(-4000)}`
+        )
       );
     }, timeoutMs);
-    child.stdout?.on('data', (d: Buffer) => (output += d.toString()));
-    child.stderr?.on('data', (d: Buffer) => (output += d.toString()));
-    child.on('error', (err) => {
+    child.stdout?.on("data", (d: Buffer) => (output += d.toString()));
+    child.stderr?.on("data", (d: Buffer) => (output += d.toString()));
+    child.on("error", (err) => {
       clearTimeout(timer);
       reject(err);
     });
-    child.on('exit', (code) => {
+    child.on("exit", (code) => {
       clearTimeout(timer);
       resolve({ code, output });
     });
@@ -209,7 +218,12 @@ function runCommand(
 
 /** `bun run predev` — applies D1 migrations + seeds the fixed dev API key. Idempotent. (clawgnition is bun-managed; pnpm refuses to run there.) */
 async function runPredev(): Promise<void> {
-  const { code, output } = await runCommand('bun', ['run', 'predev'], CLAWGNITION_REPO, 120_000);
+  const { code, output } = await runCommand(
+    "bun",
+    ["run", "predev"],
+    CLAWGNITION_REPO,
+    120_000
+  );
   if (code !== 0) {
     throw new Error(`bun run predev exited ${code}:\n${output.slice(-4000)}`);
   }
@@ -218,32 +232,44 @@ async function runPredev(): Promise<void> {
 /** Spawns `wrangler dev` detached (its own process group) so `killProcessTree` can take out esbuild/workerd children with it, not just the `npx` shim. */
 function spawnWranglerDev(): { child: ChildProcess; recentLog: () => string } {
   const child = spawn(
-    'npx',
-    ['wrangler', 'dev', '--port', String(GATEWAY_PORT), '--persist-to', '.wrangler/state'],
-    { cwd: GATEWAY_DIR, detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
+    "npx",
+    [
+      "wrangler",
+      "dev",
+      "--port",
+      String(GATEWAY_PORT),
+      "--persist-to",
+      ".wrangler/state",
+    ],
+    { cwd: GATEWAY_DIR, detached: true, stdio: ["ignore", "pipe", "pipe"] }
   );
   const lines: string[] = [];
   const capture = (d: Buffer) => {
     lines.push(d.toString());
     if (lines.length > 500) lines.shift();
   };
-  child.stdout?.on('data', capture);
-  child.stderr?.on('data', capture);
-  return { child, recentLog: () => lines.join('') };
+  child.stdout?.on("data", capture);
+  child.stderr?.on("data", capture);
+  return { child, recentLog: () => lines.join("") };
 }
 
 async function killProcessTree(child: ChildProcess): Promise<void> {
   if (child.pid === undefined || child.exitCode !== null) return;
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  const exited = new Promise<void>((resolve) =>
+    child.once("exit", () => resolve())
+  );
   try {
-    process.kill(-child.pid, 'SIGTERM');
+    process.kill(-child.pid, "SIGTERM");
   } catch {
     return; // group already gone
   }
-  const timedOut = await Promise.race([exited.then(() => false), sleep(5000).then(() => true)]);
+  const timedOut = await Promise.race([
+    exited.then(() => false),
+    sleep(5000).then(() => true),
+  ]);
   if (timedOut) {
     try {
-      process.kill(-child.pid, 'SIGKILL');
+      process.kill(-child.pid, "SIGKILL");
     } catch {
       /* already gone */
     }
@@ -255,15 +281,15 @@ async function killProcessTree(child: ChildProcess): Promise<void> {
 async function waitForGatewayUp(
   url: string,
   timeoutMs: number,
-  recentLog: () => string,
+  recentLog: () => string
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  let lastErr = 'no attempt made';
+  let lastErr = "no attempt made";
   const poll = async (): Promise<void> => {
     if (Date.now() >= deadline) {
       throw new Error(
         `clawgnition gateway did not come up at ${url} within ${timeoutMs}ms (last: ${lastErr})\n` +
-          `--- recent wrangler output ---\n${recentLog().slice(-4000)}`,
+          `--- recent wrangler output ---\n${recentLog().slice(-4000)}`
       );
     }
     try {
@@ -287,42 +313,48 @@ async function waitForGatewayUp(
  */
 async function mintRoutedApiKey(): Promise<string> {
   const signIn = await fetch(`${GATEWAY_URL}/api/auth/sign-in/email`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({
       email: OPERATOR_EMAIL,
       password: OPERATOR_PASSWORD,
     }),
   });
   if (!signIn.ok) {
-    throw new Error(`operator sign-in failed (${signIn.status}): ${await signIn.text()}`);
+    throw new Error(
+      `operator sign-in failed (${signIn.status}): ${await signIn.text()}`
+    );
   }
-  const setCookie = signIn.headers.get('set-cookie') ?? '';
+  const setCookie = signIn.headers.get("set-cookie") ?? "";
   const session = /better-auth\.session_token=[^;]+/u.exec(setCookie)?.[0];
   if (!session) {
-    throw new Error(`operator sign-in returned no session cookie (set-cookie: ${setCookie})`);
+    throw new Error(
+      `operator sign-in returned no session cookie (set-cookie: ${setCookie})`
+    );
   }
   // Right after a cold `wrangler dev` boot the USER_DO key-verifier snapshot
   // isn't warm yet, so the first mint can 503 with `key_delivery_pending`
   // ("Retry shortly."). Retry with backoff, exactly as the contract asks.
-  let lastText = '';
+  let lastText = "";
   const mintAfterVerifierWarmup = async (attempt: number): Promise<string> => {
     if (attempt >= 10) {
       throw new Error(`POST /v1/keys never became available: ${lastText}`);
     }
     const minted = await fetch(`${GATEWAY_URL}/v1/keys`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: session },
-      body: JSON.stringify({ name: 'centraid-interop' }),
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ name: "centraid-interop" }),
     });
     if (minted.ok) {
       const body = (await minted.json()) as { data?: { key?: string } };
       if (!body.data?.key)
-        throw new Error(`POST /v1/keys returned no key: ${JSON.stringify(body)}`);
+        throw new Error(
+          `POST /v1/keys returned no key: ${JSON.stringify(body)}`
+        );
       return body.data.key;
     }
     lastText = await minted.text();
-    if (minted.status === 503 && lastText.includes('key_delivery_pending')) {
+    if (minted.status === 503 && lastText.includes("key_delivery_pending")) {
       await sleep(500 * (attempt + 1));
       return mintAfterVerifierWarmup(attempt + 1);
     }
@@ -343,8 +375,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
   const createdTargetIds: string[] = [];
 
   beforeAll(async () => {
-    await assertPortFree(S3_PORT, 'S3 test server');
-    await assertPortFree(GATEWAY_PORT, 'clawgnition wrangler dev');
+    await assertPortFree(S3_PORT, "S3 test server");
+    await assertPortFree(GATEWAY_PORT, "clawgnition wrangler dev");
 
     s3 = await S3TestServer.start({ port: S3_PORT });
 
@@ -356,7 +388,11 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         await runPredev();
         const spawned = spawnWranglerDev();
         gatewayProc = spawned.child;
-        await waitForGatewayUp(`${GATEWAY_URL}/v1/storage/provider`, 90_000, spawned.recentLog);
+        await waitForGatewayUp(
+          `${GATEWAY_URL}/v1/storage/provider`,
+          90_000,
+          spawned.recentLog
+        );
       } catch (err) {
         if (gatewayProc) {
           await killProcessTree(gatewayProc);
@@ -365,9 +401,9 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         if (attempt >= 2) throw err;
         console.warn(
           `[interop] gateway boot attempt ${attempt} failed (${err instanceof Error ? err.message : String(err)}); ` +
-            `wiping .wrangler/state (known migration-0012 trap) and retrying once`,
+            `wiping .wrangler/state (known migration-0012 trap) and retrying once`
         );
-        await fs.rm(path.join(GATEWAY_DIR, '.wrangler', 'state'), {
+        await fs.rm(path.join(GATEWAY_DIR, ".wrangler", "state"), {
           recursive: true,
           force: true,
         });
@@ -388,7 +424,9 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // a correctness requirement for the next run.
     await forEachSequentially(createdTargetIds, async (id) => {
       await provider.deleteTarget(id).catch((err: unknown) => {
-        console.warn(`[interop] cleanup: deleteTarget(${id}) failed: ${String(err)}`);
+        console.warn(
+          `[interop] cleanup: deleteTarget(${id}) failed: ${String(err)}`
+        );
       });
     });
     if (gatewayProc) await killProcessTree(gatewayProc);
@@ -404,7 +442,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
   // -------------------------------------------------------------------------
   // a. Full conformance
   // -------------------------------------------------------------------------
-  describe('a. full conformance', () => {
+  describe("a. full conformance", () => {
     async function makeHarness(): Promise<ConformanceHarness> {
       return { provider, cleanup: async () => undefined };
     }
@@ -414,14 +452,16 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // Generous per-case timeout: the dev gateway's per-cell auth rate limit
     // (60 req / 60 s, no Retry-After) can force the client to wait out a full
     // window mid-case; the wire client's bounded backoff needs room to do so.
-    test.each(providerConformanceCases(makeHarness).map((c) => [c.name, c] as const))(
-      '%s',
+    test.each(
+      providerConformanceCases(makeHarness).map((c) => [c.name, c] as const)
+    )(
+      "%s",
       async (_name, c) => {
         await c.run();
         // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
         expect(c.name.length).toBeGreaterThan(0);
       },
-      90_000,
+      90_000
     );
   });
 
@@ -429,8 +469,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
   // b + c. Real snapshot -> restore over the wire, then verify catches real
   // loss. Sequential/stateful on purpose — c corrupts the snapshot b built.
   // -------------------------------------------------------------------------
-  describe('b+c. real snapshot lifecycle over the wire', () => {
-    const VAULT_ID = 'interop-vault-1';
+  describe("b+c. real snapshot lifecycle over the wire", () => {
+    const VAULT_ID = "interop-vault-1";
     let targetId: string;
     let keyring: Keyring;
     let sourceDir: string;
@@ -451,20 +491,23 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       return buf;
     }
 
-    test('b. createSnapshot registers against the real Worker+DO+D1, chunks/manifest land in the real S3 server; restoreSnapshot is byte-identical; verifySnapshot is clean', async () => {
-      targetId = await freshTarget('interop-snapshot-lifecycle');
+    test("b. createSnapshot registers against the real Worker+DO+D1, chunks/manifest land in the real S3 server; restoreSnapshot is byte-identical; verifySnapshot is clean", async () => {
+      targetId = await freshTarget("interop-snapshot-lifecycle");
 
-      const keyringDir = await tempDir('interop-keyring-');
-      keyring = await createKeyring(path.join(keyringDir, 'keyring.json'));
+      const keyringDir = await tempDir("interop-keyring-");
+      keyring = await createKeyring(path.join(keyringDir, "keyring.json"));
 
-      sourceDir = await tempDir('interop-source-');
-      await fs.mkdir(path.join(sourceDir, 'blobs'), { recursive: true });
+      sourceDir = await tempDir("interop-source-");
+      await fs.mkdir(path.join(sourceDir, "blobs"), { recursive: true });
       // Real WAL-quiet SQLite bases (the `/1` coordinated pair); the engine
       // verifies their sha256 and runs an integrity-checked WAL replay on
       // restore, so these cannot be random bytes.
-      makeSqliteDbFile(path.join(sourceDir, 'vault.db'), ['v1', 'v2', 'v3']);
-      makeSqliteDbFile(path.join(sourceDir, 'journal.db'), ['j1']);
-      await fs.writeFile(path.join(sourceDir, 'blobs', 'photo.bin'), pseudoRandomBuffer(40_000, 3));
+      makeSqliteDbFile(path.join(sourceDir, "vault.db"), ["v1", "v2", "v3"]);
+      makeSqliteDbFile(path.join(sourceDir, "journal.db"), ["j1"]);
+      await fs.writeFile(
+        path.join(sourceDir, "blobs", "photo.bin"),
+        pseudoRandomBuffer(40_000, 3)
+      );
       // Large blob: 33 MiB of incompressible bytes so a SINGLE entry spans
       // MULTIPLE 16 MiB parts (#405 §1 acceptance — the old interop topped out
       // at 1.5 MiB, one part). Incompressible on purpose: it stores RAW under
@@ -474,38 +517,38 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // no longer content-defined-chunks, so size, not entropy, sets the part
       // count.)
       await fs.writeFile(
-        path.join(sourceDir, 'blobs', 'big.bin'),
-        pseudoRandomBuffer(33 * 1024 * 1024, 4),
+        path.join(sourceDir, "blobs", "big.bin"),
+        pseudoRandomBuffer(33 * 1024 * 1024, 4)
       );
       const BASE_TICK = 1_752_480_000_000;
       entries = [
         {
-          path: 'vault.db',
-          kind: 'db',
-          absolutePath: path.join(sourceDir, 'vault.db'),
-          sha256: await fileSha256(path.join(sourceDir, 'vault.db')),
-          walGeneration: '11'.repeat(16),
+          path: "vault.db",
+          kind: "db",
+          absolutePath: path.join(sourceDir, "vault.db"),
+          sha256: await fileSha256(path.join(sourceDir, "vault.db")),
+          walGeneration: "11".repeat(16),
           baseTickMs: BASE_TICK,
         },
         {
-          path: 'journal.db',
-          kind: 'db',
-          absolutePath: path.join(sourceDir, 'journal.db'),
-          sha256: await fileSha256(path.join(sourceDir, 'journal.db')),
+          path: "journal.db",
+          kind: "db",
+          absolutePath: path.join(sourceDir, "journal.db"),
+          sha256: await fileSha256(path.join(sourceDir, "journal.db")),
           // Same tick as the vault base — the shipper breaks both generations
           // together and restore refuses a pair that cannot show it.
-          walGeneration: '22'.repeat(16),
+          walGeneration: "22".repeat(16),
           baseTickMs: BASE_TICK,
         },
         {
-          path: 'blobs/photo.bin',
-          kind: 'blob',
-          absolutePath: path.join(sourceDir, 'blobs', 'photo.bin'),
+          path: "blobs/photo.bin",
+          kind: "blob",
+          absolutePath: path.join(sourceDir, "blobs", "photo.bin"),
         },
         {
-          path: 'blobs/big.bin',
-          kind: 'blob',
-          absolutePath: path.join(sourceDir, 'blobs', 'big.bin'),
+          path: "blobs/big.bin",
+          kind: "blob",
+          absolutePath: path.join(sourceDir, "blobs", "big.bin"),
         },
       ];
 
@@ -534,14 +577,16 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // grant's own "vaults/{id}/" prefix) — hence `includes`, not
       // `startsWith`, below.
       const putKeys = s3.listDirect(BUCKET, `u/${targetId}/backup/`);
-      expect(putKeys.some((k) => k.includes('/manifests/'))).toBe(true);
+      expect(putKeys.some((k) => k.includes("/manifests/"))).toBe(true);
       // The 33 MiB blob alone splits into ceil(33/16)=3 fixed parts, so the
       // snapshot lands several distinct chunk objects — a single entry now
       // genuinely spans multiple parts (not four one-part files masquerading
       // as "multi-chunked").
-      expect(putKeys.filter((k) => k.includes('/chunks/')).length).toBeGreaterThanOrEqual(5);
+      expect(
+        putKeys.filter((k) => k.includes("/chunks/")).length
+      ).toBeGreaterThanOrEqual(5);
 
-      const destDir = await tempDir('interop-restore-');
+      const destDir = await tempDir("interop-restore-");
       const result = await restoreSnapshot({
         provider,
         targetId,
@@ -551,20 +596,30 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         current: CURRENT,
       });
       expect(result.seq).toBe(1);
-      expect(result.entries.sort()).toStrictEqual(entries.map((e) => e.path).sort());
+      expect(result.entries.sort()).toStrictEqual(
+        entries.map((e) => e.path).sort()
+      );
       // The db bases restore + replay to logically-identical SQLite content
       // (WAL replay reopens/checkpoints the file, so the bytes need not match);
       // the opaque blobs restore byte-identical.
-      expect(readSqliteRows(path.join(destDir, 'vault.db'))).toStrictEqual(['v1', 'v2', 'v3']);
-      expect(readSqliteRows(path.join(destDir, 'journal.db'))).toStrictEqual(['j1']);
+      expect(readSqliteRows(path.join(destDir, "vault.db"))).toStrictEqual([
+        "v1",
+        "v2",
+        "v3",
+      ]);
+      expect(readSqliteRows(path.join(destDir, "journal.db"))).toStrictEqual([
+        "j1",
+      ]);
       await Promise.all(
         entries
-          .filter((e) => e.kind === 'blob')
+          .filter((e) => e.kind === "blob")
           .map(async (entry) => {
             const original = await fs.readFile(entry.absolutePath);
-            const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
+            const restored = await fs.readFile(
+              path.join(destDir, ...entry.path.split("/"))
+            );
             expect(restored.equals(original)).toBe(true);
-          }),
+          })
       );
       await fs.rm(destDir, { recursive: true, force: true });
 
@@ -578,8 +633,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       expect(verified.corrupt).toStrictEqual([]);
     }, 90_000);
 
-    test('c. deleting a chunk object directly against the real S3 server makes verifySnapshot report it missing', async () => {
-      expect(targetId, 'depends on test b having run first').toBeDefined();
+    test("c. deleting a chunk object directly against the real S3 server makes verifySnapshot report it missing", async () => {
+      expect(targetId, "depends on test b having run first").toBeDefined();
       // `listDirect`'s keys are already bucket-relative (see the comment
       // in test "b") — directly usable with `deleteObjectDirect`.
       const chunkKeys = s3.listDirect(BUCKET, `u/${targetId}/backup/chunks/`);
@@ -601,22 +656,23 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
   // -------------------------------------------------------------------------
   // d. Fencing against the real Durable Object
   // -------------------------------------------------------------------------
-  test('d. generation fencing + idempotency replay-before-fencing, against the real DO', async () => {
-    const targetId = await freshTarget('interop-fencing');
+  test("d. generation fencing + idempotency replay-before-fencing, against the real DO", async () => {
+    const targetId = await freshTarget("interop-fencing");
     const base = {
-      manifestHash: 'd'.repeat(64),
+      manifestHash: "d".repeat(64),
       totalBytes: 1,
       objectCount: 1,
-      format: 'centraid-snapshot/2',
+      format: "centraid-snapshot/2",
       appMeta: {},
     };
-    const manifestKeyFor = (name: string) => `u/${targetId}/backup/manifests/${name}`;
+    const manifestKeyFor = (name: string) =>
+      `u/${targetId}/backup/manifests/${name}`;
 
     // Takeover: register gen 2 first (currentGeneration starts at 0).
     const gen2 = await provider.registerSnapshot(targetId, {
       ...base,
-      idempotencyKey: 'interop-gen2',
-      manifestKey: manifestKeyFor('gen2.json'),
+      idempotencyKey: "interop-gen2",
+      manifestKey: manifestKeyFor("gen2.json"),
       generation: 2,
     });
     expect(gen2.generation).toBe(2);
@@ -625,20 +681,20 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     const err = await provider
       .registerSnapshot(targetId, {
         ...base,
-        idempotencyKey: 'interop-gen1-stale',
-        manifestKey: manifestKeyFor('gen1.json'),
+        idempotencyKey: "interop-gen1-stale",
+        manifestKey: manifestKeyFor("gen1.json"),
         generation: 1,
       })
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(BackupProviderError);
-    expect((err as BackupProviderError).code).toBe('conflict_generation');
+    expect((err as BackupProviderError).code).toBe("conflict_generation");
     expect((err as BackupProviderError).details?.currentGeneration).toBe(2);
 
     // gen 3 (a legitimate next write) is accepted.
     const gen3 = await provider.registerSnapshot(targetId, {
       ...base,
-      idempotencyKey: 'interop-gen3',
-      manifestKey: manifestKeyFor('gen3.json'),
+      idempotencyKey: "interop-gen3",
+      manifestKey: manifestKeyFor("gen3.json"),
       generation: 3,
     });
     expect(gen3.generation).toBe(3);
@@ -650,8 +706,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // unit tests).
     const replay = await provider.registerSnapshot(targetId, {
       ...base,
-      idempotencyKey: 'interop-gen2',
-      manifestKey: manifestKeyFor('gen2-REPLAY-DIFFERENT.json'),
+      idempotencyKey: "interop-gen2",
+      manifestKey: manifestKeyFor("gen2-REPLAY-DIFFERENT.json"),
       generation: 2,
     });
     expect(replay.generation).toBe(2);
@@ -662,7 +718,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
   // e. Read-mode grant
   // -------------------------------------------------------------------------
   test("e. a 'read' credential grant carries mode:'read'; our S3ObjectStore refuses put locally", async () => {
-    const targetId = await freshTarget('interop-read-grant');
+    const targetId = await freshTarget("interop-read-grant");
 
     // The grant mode assertion needs the raw wire response — RemoteBackupProvider
     // doesn't surface the grant object itself, only an already-wrapped ObjectStore.
@@ -671,11 +727,11 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // auth rate limit applies here too.
     const grant = await callProviderRoute<{ mode: string; bucket: string }>(
       { baseUrl: GATEWAY_URL, apiKey },
-      'POST',
+      "POST",
       `/v1/storage/vaults/${targetId}/credentials`,
-      { ttlSeconds: 3600, mode: 'read', store: 'backup' },
+      { ttlSeconds: 3600, mode: "read", store: "backup" }
     );
-    expect(grant.mode).toBe('read');
+    expect(grant.mode).toBe("read");
     expect(grant.bucket).toBe(BUCKET);
 
     // Enforcement that a 'read' grant can't write is CLIENT-side by design
@@ -684,37 +740,39 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // with these particular static dev credentials, which carry no IAM
     // policy). `S3ObjectStore.put` refuses locally based on `grant.mode`
     // before ever making the request — that's what this asserts.
-    const readStore = await provider.openDataPlane(targetId, 'backup', 'read');
-    await expect(readStore.put('chunks/nope', new Uint8Array([1]))).rejects.toThrow(/read.*mode/iu);
+    const readStore = await provider.openDataPlane(targetId, "backup", "read");
+    await expect(
+      readStore.put("chunks/nope", new Uint8Array([1]))
+    ).rejects.toThrow(/read.*mode/iu);
   }, 90_000);
 
   // -------------------------------------------------------------------------
   // f. accountStatus / usage / currentGeneration shape against real rows
   // -------------------------------------------------------------------------
-  test('f. getTarget/usage report real accountStatus/usage/currentGeneration from D1', async () => {
-    const targetId = await freshTarget('interop-shape-check');
+  test("f. getTarget/usage report real accountStatus/usage/currentGeneration from D1", async () => {
+    const targetId = await freshTarget("interop-shape-check");
     await provider.registerSnapshot(targetId, {
-      idempotencyKey: 'interop-shape-1',
+      idempotencyKey: "interop-shape-1",
       manifestKey: `u/${targetId}/backup/manifests/shape-1.json`,
-      manifestHash: 'e'.repeat(64),
+      manifestHash: "e".repeat(64),
       totalBytes: 4096,
       objectCount: 2,
       generation: 1,
-      format: 'centraid-snapshot/2',
+      format: "centraid-snapshot/2",
       appMeta: {},
     });
 
     const info = await provider.getTarget(targetId);
     expect(info.id).toBe(targetId);
-    expect(info.status).toBe('active');
+    expect(info.status).toBe("active");
     expect(info.currentGeneration).toBe(1);
-    expect(info.usage.storedBytes).toBeTypeOf('number');
-    expect(info.usage.objectCount).toBeTypeOf('number');
+    expect(info.usage.storedBytes).toBeTypeOf("number");
+    expect(info.usage.objectCount).toBeTypeOf("number");
 
     const { usage, accountStatus } = await provider.usage(targetId);
-    expect(['ok', 'payment_due', 'suspended']).toContain(accountStatus);
-    expect(usage.storedBytes).toBeTypeOf('number');
-    expect(usage.objectCount).toBeTypeOf('number');
+    expect(["ok", "payment_due", "suspended"]).toContain(accountStatus);
+    expect(usage.storedBytes).toBeTypeOf("number");
+    expect(usage.objectCount).toBeTypeOf("number");
     // Either unreported, or exactly the pro tier's 100 GiB (packages/db
     // migration 0012) — any other number means the quota wiring drifted.
     expect([undefined, 107_374_182_400]).toContain(usage.quotaBytes);

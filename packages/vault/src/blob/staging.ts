@@ -7,10 +7,10 @@
 // staged sha into a `core_content_item` in-transaction and mints the
 // receipt; unclaimed rows sweep after a TTL.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import type { VaultDb } from '../db.js';
-import { nowIso, uuidv7 } from '../ids.js';
+import type { VaultDb } from "../db.js";
+import { nowIso, uuidv7 } from "../ids.js";
 import {
   BINARY_DERIVATIVE_SQL,
   DERIVATIVE_REGISTRY,
@@ -19,31 +19,33 @@ import {
   validateDerivativeContribution,
   type DerivativeVariant,
   type ValidatedDerivative,
-} from './derivatives.js';
-import { extractBlobMeta, sniffMediaType } from './pipeline.js';
-import { upsertContentEmbedding } from './semantic-contributions.js';
-import { sha256OfBytes } from './store.js';
+} from "./derivatives.js";
+import { extractBlobMeta, sniffMediaType } from "./pipeline.js";
+import { upsertContentEmbedding } from "./semantic-contributions.js";
+import { sha256OfBytes } from "./store.js";
 
 /** Staged bytes linger this long before the sweep reclaims them. */
 export const STAGING_TTL_HOURS = 24;
 
 /** The `media.location` vault setting: `keep` (default) or `strip`. */
-export function mediaLocationPolicyForVault(vault: DatabaseSync): 'keep' | 'strip' {
+export function mediaLocationPolicyForVault(
+  vault: DatabaseSync
+): "keep" | "strip" {
   try {
-    const row = vault.prepare('SELECT settings_json FROM core_vault LIMIT 1').get() as
-      | { settings_json: string | null }
-      | undefined;
-    if (!row?.settings_json) return 'keep';
+    const row = vault
+      .prepare("SELECT settings_json FROM core_vault LIMIT 1")
+      .get() as { settings_json: string | null } | undefined;
+    if (!row?.settings_json) return "keep";
     const parsed = JSON.parse(row.settings_json) as {
       media?: { location?: string };
     };
-    return parsed.media?.location === 'strip' ? 'strip' : 'keep';
+    return parsed.media?.location === "strip" ? "strip" : "keep";
   } catch {
-    return 'keep';
+    return "keep";
   }
 }
 
-export function mediaLocationPolicy(db: VaultDb): 'keep' | 'strip' {
+export function mediaLocationPolicy(db: VaultDb): "keep" | "strip" {
   return mediaLocationPolicyForVault(db.vault);
 }
 
@@ -80,15 +82,18 @@ export interface StagedBlob {
  * Synchronous by design — the local tier is the spool, remote replication is
  * a sweep — so the import spine can call it mid-parse.
  */
-export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBlob {
+export function stageBlobBytes(
+  db: VaultDb,
+  options: StageBlobOptions
+): StagedBlob {
   if ((options.variant === undefined) !== (options.variantOf === undefined)) {
-    throw new Error('variant and variant_of must be supplied together');
+    throw new Error("variant and variant_of must be supplied together");
   }
   if (options.variant !== undefined && !isDerivativeVariant(options.variant)) {
-    throw new Error('unknown derivative variant');
+    throw new Error("unknown derivative variant");
   }
   if (options.variantOf && !/^[0-9a-f]{64}$/u.test(options.variantOf)) {
-    throw new Error('variant_of must be a lowercase sha256');
+    throw new Error("variant_of must be a lowercase sha256");
   }
   if (options.variantOf) {
     const parent = db.vault
@@ -97,15 +102,16 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
           WHERE sha256 = ? AND variant IS NULL
          UNION ALL
         SELECT 1 AS present FROM core_content_item WHERE sha256 = ?
-         LIMIT 1`,
+         LIMIT 1`
       )
       .get(options.variantOf, options.variantOf) as { present: 1 } | undefined;
-    if (!parent) throw new Error('variant_of does not identify staged or claimed content');
+    if (!parent)
+      throw new Error("variant_of does not identify staged or claimed content");
   }
   let contribution: ValidatedDerivative | undefined;
   if (options.variant) {
     const spec = DERIVATIVE_REGISTRY[options.variant];
-    if (spec.storage === 'inline' || options.validateDerivative === true) {
+    if (spec.storage === "inline" || options.validateDerivative === true) {
       contribution = validateDerivativeContribution({
         variant: options.variant,
         bytes: options.bytes,
@@ -113,35 +119,37 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
       });
     }
   }
-  const binary = options.variant === undefined || isBinaryDerivative(options.variant);
+  const binary =
+    options.variant === undefined || isBinaryDerivative(options.variant);
   const ingested = binary
     ? db.blobs.ingestSync(options.bytes)
     : { sha256: sha256OfBytes(options.bytes), byteSize: options.bytes.length };
   const { sha256, byteSize } = ingested;
   const mediaType =
-    contribution?.mediaType ?? sniffMediaType(options.bytes, options.mediaType, options.filename);
+    contribution?.mediaType ??
+    sniffMediaType(options.bytes, options.mediaType, options.filename);
   // GPS policy gates HERE (issue #296 §4): `media.location = 'strip'` means
   // extraction never writes coordinates anywhere downstream.
   const meta = binary
     ? extractBlobMeta(options.bytes, mediaType, {
-        keepLocation: mediaLocationPolicy(db) !== 'strip',
+        keepLocation: mediaLocationPolicy(db) !== "strip",
       })
     : {};
   const existing = options.variant
     ? undefined
-    : (db.vault.prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?').get(sha256) as
-        | { content_id: string }
-        | undefined);
+    : (db.vault
+        .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
+        .get(sha256) as { content_id: string } | undefined);
   // Keep the typed slot and its claimed-content association as one database
   // mutation. A device may complete its lease immediately after this call;
   // it must never observe a deleted staging slot without the derivative row.
-  db.vault.exec('SAVEPOINT stage_blob_bytes');
+  db.vault.exec("SAVEPOINT stage_blob_bytes");
   try {
     db.vault
       .prepare(
         `INSERT INTO blob_staging (staging_id, sha256, media_type, byte_size, original_name, meta_json, staged_by, held_by_batch, variant, variant_of, inline_content, staged_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (${options.variant ? 'variant_of, variant) WHERE variant IS NOT NULL' : 'sha256) WHERE variant IS NULL'} DO UPDATE SET
+       ON CONFLICT (${options.variant ? "variant_of, variant) WHERE variant IS NOT NULL" : "sha256) WHERE variant IS NULL"} DO UPDATE SET
          sha256 = excluded.sha256,
          media_type = excluded.media_type,
          byte_size = excluded.byte_size,
@@ -150,7 +158,7 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
          staged_by = excluded.staged_by,
          held_by_batch = COALESCE(excluded.held_by_batch, blob_staging.held_by_batch),
          inline_content = excluded.inline_content,
-         staged_at = excluded.staged_at`,
+         staged_at = excluded.staged_at`
       )
       .run(
         uuidv7(),
@@ -164,17 +172,17 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
         options.variant ?? null,
         options.variantOf ?? null,
         contribution?.textContent ?? null,
-        nowIso(),
+        nowIso()
       );
     // A derivative arriving AFTER its parent was already claimed (a slow
     // thumb upload racing the claim) registers immediately — otherwise it
     // would sit unclaimed until the TTL reaped it.
     if (options.variant && options.variantOf) {
       const parent = db.vault
-        .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+        .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
         .get(options.variantOf) as { content_id: string } | undefined;
       if (parent) {
-        const inline = contribution?.storage === 'inline';
+        const inline = contribution?.storage === "inline";
         db.vault
           .prepare(
             `INSERT INTO core_content_derivative
@@ -186,7 +194,7 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
              created_at = excluded.created_at
            WHERE core_content_derivative.sha256 IS NOT excluded.sha256
               OR core_content_derivative.text_content IS NOT excluded.text_content
-              OR core_content_derivative.media_type <> excluded.media_type`,
+              OR core_content_derivative.media_type <> excluded.media_type`
           )
           .run(
             uuidv7(),
@@ -196,22 +204,24 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
             mediaType,
             contribution?.byteSize ?? byteSize,
             contribution?.textContent ?? null,
-            nowIso(),
+            nowIso()
           );
-        if (options.variant === 'phash' && contribution?.textContent) {
+        if (options.variant === "phash" && contribution?.textContent) {
           const assets = db.vault
-            .prepare('SELECT asset_id FROM media_media_asset WHERE content_id = ?')
+            .prepare(
+              "SELECT asset_id FROM media_media_asset WHERE content_id = ?"
+            )
             .all(parent.content_id) as { asset_id: string }[];
           const upsertPhash = db.vault.prepare(
             `INSERT INTO media_asset_phash (asset_id, phash, computed_at) VALUES (?, ?, ?)
            ON CONFLICT (asset_id) DO UPDATE SET phash = excluded.phash,
-             computed_at = excluded.computed_at WHERE media_asset_phash.phash <> excluded.phash`,
+             computed_at = excluded.computed_at WHERE media_asset_phash.phash <> excluded.phash`
           );
           for (const asset of assets) {
             upsertPhash.run(asset.asset_id, contribution.textContent, nowIso());
           }
         }
-        if (options.variant === 'embedding' && contribution?.textContent) {
+        if (options.variant === "embedding" && contribution?.textContent) {
           upsertContentEmbedding(db.vault, {
             contentId: parent.content_id,
             canonicalPayload: contribution.textContent,
@@ -220,14 +230,16 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
           });
         }
         db.vault
-          .prepare('DELETE FROM blob_staging WHERE variant_of = ? AND variant = ?')
+          .prepare(
+            "DELETE FROM blob_staging WHERE variant_of = ? AND variant = ?"
+          )
           .run(options.variantOf, options.variant);
       }
     }
-    db.vault.exec('RELEASE stage_blob_bytes');
+    db.vault.exec("RELEASE stage_blob_bytes");
   } catch (error) {
-    db.vault.exec('ROLLBACK TO stage_blob_bytes');
-    db.vault.exec('RELEASE stage_blob_bytes');
+    db.vault.exec("ROLLBACK TO stage_blob_bytes");
+    db.vault.exec("RELEASE stage_blob_bytes");
     throw error;
   }
 
@@ -259,10 +271,13 @@ export interface StagedRow {
 }
 
 /** The staging row a command is about to claim, or null. */
-export function stagedInfoTx(vault: DatabaseSync, sha256: string): StagedRow | null {
+export function stagedInfoTx(
+  vault: DatabaseSync,
+  sha256: string
+): StagedRow | null {
   const row = vault
     .prepare(
-      'SELECT sha256, media_type, byte_size, original_name, meta_json FROM blob_staging WHERE sha256 = ? AND variant IS NULL',
+      "SELECT sha256, media_type, byte_size, original_name, meta_json FROM blob_staging WHERE sha256 = ? AND variant IS NULL"
     )
     .get(sha256) as StagedRow | undefined;
   return row ?? null;
@@ -280,15 +295,15 @@ export interface StagingSweepResult {
  */
 export function sweepBlobStaging(
   db: VaultDb,
-  options: { ttlHours?: number; now?: string } = {},
+  options: { ttlHours?: number; now?: string } = {}
 ): StagingSweepResult {
   const now = options.now ?? nowIso();
   const cutoff = new Date(
-    Date.parse(now) - (options.ttlHours ?? STAGING_TTL_HOURS) * 3_600_000,
+    Date.parse(now) - (options.ttlHours ?? STAGING_TTL_HOURS) * 3_600_000
   ).toISOString();
   const rows = db.vault
     .prepare(
-      'SELECT staging_id, sha256, variant FROM blob_staging WHERE staged_at <= ? AND held_by_batch IS NULL',
+      "SELECT staging_id, sha256, variant FROM blob_staging WHERE staged_at <= ? AND held_by_batch IS NULL"
     )
     .all(cutoff) as {
     staging_id: string;
@@ -297,7 +312,9 @@ export function sweepBlobStaging(
   }[];
   const expired: string[] = [];
   for (const row of rows) {
-    db.vault.prepare('DELETE FROM blob_staging WHERE staging_id = ?').run(row.staging_id);
+    db.vault
+      .prepare("DELETE FROM blob_staging WHERE staging_id = ?")
+      .run(row.staging_id);
     const casBacked = row.variant === null || isBinaryDerivative(row.variant);
     const rented = casBacked
       ? (db.vault
@@ -306,7 +323,7 @@ export function sweepBlobStaging(
                (SELECT count(*) FROM core_content_item WHERE sha256 = ?) +
                (SELECT count(*) FROM core_content_derivative WHERE sha256 = ?) +
                (SELECT count(*) FROM blob_staging
-                 WHERE sha256 = ? AND (variant IS NULL OR variant IN (${BINARY_DERIVATIVE_SQL}))) AS n`,
+                 WHERE sha256 = ? AND (variant IS NULL OR variant IN (${BINARY_DERIVATIVE_SQL}))) AS n`
           )
           .get(row.sha256, row.sha256, row.sha256) as { n: number })
       : { n: 1 };
@@ -319,6 +336,8 @@ export function sweepBlobStaging(
 /** Release an import batch's hold (publish or discard) — TTL resumes. */
 export function releaseBatchHold(vault: DatabaseSync, batchId: string): void {
   vault
-    .prepare('UPDATE blob_staging SET held_by_batch = NULL WHERE held_by_batch = ?')
+    .prepare(
+      "UPDATE blob_staging SET held_by_batch = NULL WHERE held_by_batch = ?"
+    )
     .run(batchId);
 }

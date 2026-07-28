@@ -1,6 +1,6 @@
-import http from 'node:http';
+import http from "node:http";
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
 import {
   GATEWAY_HEADERS_TIMEOUT_MS,
@@ -8,10 +8,10 @@ import {
   GATEWAY_MAX_CONNECTIONS,
   GATEWAY_REQUEST_TIMEOUT_MS,
   tuneGatewayHttpServer,
-} from './server-tuning.js';
+} from "./server-tuning.js";
 
-describe('server-tuning', () => {
-  it('keeps clients warm while bounding slow requests and connection memory (#456 R3)', () => {
+describe("server-tuning", () => {
+  it("keeps clients warm while bounding slow requests and connection memory (#456 R3)", () => {
     const server = http.createServer();
     tuneGatewayHttpServer(server);
     expect(server.keepAliveTimeout).toBe(GATEWAY_KEEP_ALIVE_TIMEOUT_MS);

@@ -23,7 +23,11 @@
 export const DEFAULT_GATEWAY_PORT = 17832;
 
 /** Outcome of the adopt-don't-kill decision (H3). */
-export type ControlDecision = 'own' | 'foreign' | 'stale-reclaim' | 'probe-failed-refuse';
+export type ControlDecision =
+  | "own"
+  | "foreign"
+  | "stale-reclaim"
+  | "probe-failed-refuse";
 
 /**
  * Decide from the kernel-backed gateway.db lock and a credentialed daemon
@@ -34,16 +38,16 @@ export function decideControl(input: {
   credentialedProbeOk: boolean;
   publicProbeOk: boolean;
 }): ControlDecision {
-  if (!input.lockHeld) return 'stale-reclaim';
-  if (input.credentialedProbeOk) return 'own';
-  if (input.publicProbeOk) return 'foreign';
-  return 'probe-failed-refuse';
+  if (!input.lockHeld) return "stale-reclaim";
+  if (input.credentialedProbeOk) return "own";
+  if (input.publicProbeOk) return "foreign";
+  return "probe-failed-refuse";
 }
 
 /** Resolve the listen port: a positive configured port wins, else the stable default (H4). */
 export function resolveListenPort(configured?: number): number {
   if (
-    typeof configured === 'number' &&
+    typeof configured === "number" &&
     Number.isInteger(configured) &&
     configured > 0 &&
     configured <= 65535
@@ -60,13 +64,13 @@ export function resolveListenPort(configured?: number): number {
  */
 export interface DetachedSpawnConfig {
   detached: true;
-  stdio: 'ignore';
+  stdio: "ignore";
   /** Caller must `child.unref()` after spawn when this is true. */
   unref: true;
 }
 
 export function buildDetachedSpawnOptions(): DetachedSpawnConfig {
-  return { detached: true, stdio: 'ignore', unref: true };
+  return { detached: true, stdio: "ignore", unref: true };
 }
 
 /**
@@ -83,7 +87,7 @@ export function shouldOfferServiceInstall(settings: {
   offerGatewayService?: boolean;
   onboardingCompletedAt?: string;
 }): boolean {
-  if (typeof settings.offerGatewayService === 'boolean') return false;
+  if (typeof settings.offerGatewayService === "boolean") return false;
   return !settings.onboardingCompletedAt;
 }
 

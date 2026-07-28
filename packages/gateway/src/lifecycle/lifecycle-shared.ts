@@ -4,18 +4,22 @@
 // (create/set-enabled/delete) can each stay under the repo file-size
 // limit while sharing the stage-vs-publish fork and error mapping.
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
 
-import { ManifestError } from '@centraid/automation';
-import type * as automation from '@centraid/automation';
-import { AppScaffoldError } from '@centraid/blueprints';
-import { ExtSpecError } from '@centraid/vault';
+import { ManifestError } from "@centraid/automation";
+import type * as automation from "@centraid/automation";
+import { AppScaffoldError } from "@centraid/blueprints";
+import { ExtSpecError } from "@centraid/vault";
 
-import { validateManifestAt } from '../routes/apps-store-routes.js';
-import { sendJson, writeFileMap, type FileMapEntry } from '../routes/route-helpers.js';
-import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
-import { applyExtOnPublish, type ExtBandOps } from './ext-band.js';
+import { validateManifestAt } from "../routes/apps-store-routes.js";
+import {
+  sendJson,
+  writeFileMap,
+  type FileMapEntry,
+} from "../routes/route-helpers.js";
+import { WorktreeStore, WorktreeStoreError } from "../worktree-store/index.js";
+import { applyExtOnPublish, type ExtBandOps } from "./ext-band.js";
 
 export interface LifecycleRouteOptions {
   /** Git store backing app code. Sessions/publishes ride through it. */
@@ -75,7 +79,9 @@ export interface LifecycleRouteOptions {
    * `undefined` when `templateId` isn't a bundled app. Omitted on hosts with
    * no vault plane.
    */
-  installBundledApp?: (templateId: string) => Promise<InstalledBundledApp | undefined>;
+  installBundledApp?: (
+    templateId: string
+  ) => Promise<InstalledBundledApp | undefined>;
   /**
    * Set/clear an installed bundled app's per-vault rename (issue #434), since
    * its code is read-only. Returns true when handled (the id is an installed
@@ -98,20 +104,26 @@ export interface InstalledBundledApp {
 
 /** Build an app's absolute webhook URL from the inbound request's host. */
 export function webhookUrl(req: IncomingMessage, webhookId: string): string {
-  const host = req.headers.host ?? '127.0.0.1';
-  const forwarded = req.headers['x-forwarded-proto'];
+  const host = req.headers.host ?? "127.0.0.1";
+  const forwarded = req.headers["x-forwarded-proto"];
   const proto =
-    (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(',')[0]?.trim() || 'http';
+    (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+      ?.split(",")[0]
+      ?.trim() || "http";
   return `${proto}://${host}/_centraid-hook/${webhookId}`;
 }
 
 /** Open a session, tolerating one that already exists (reuse its worktree). */
-export async function ensureSession(store: WorktreeStore, sessionId: string): Promise<string> {
+export async function ensureSession(
+  store: WorktreeStore,
+  sessionId: string
+): Promise<string> {
   try {
     const handle = await store.openSession(sessionId);
     return handle.id;
   } catch (err) {
-    if (err instanceof WorktreeStoreError && err.code === 'session_exists') return sessionId;
+    if (err instanceof WorktreeStoreError && err.code === "session_exists")
+      return sessionId;
     throw err;
   }
 }
@@ -135,7 +147,7 @@ export async function ensureSession(store: WorktreeStore, sessionId: string): Pr
 export async function prepareLifecycleSession(
   store: WorktreeStore,
   sessionId: string,
-  ephemeral: boolean,
+  ephemeral: boolean
 ): Promise<void> {
   if (!ephemeral) {
     await ensureSession(store, sessionId);
@@ -151,12 +163,14 @@ export function defaultSessionId(appId: string): string {
 }
 
 /** Coerce a wire value into an {@link automation.HistoryKeep}, or undefined. */
-export function parseHistoryKeep(raw: unknown): automation.HistoryKeep | undefined {
-  if (raw === 'all' || raw === 'errors') return raw;
-  if (raw && typeof raw === 'object') {
+export function parseHistoryKeep(
+  raw: unknown
+): automation.HistoryKeep | undefined {
+  if (raw === "all" || raw === "errors") return raw;
+  if (raw && typeof raw === "object") {
     const obj = raw as Record<string, unknown>;
-    if (typeof obj.count === 'number') return { count: obj.count };
-    if (typeof obj.days === 'number') return { days: obj.days };
+    if (typeof obj.count === "number") return { count: obj.count };
+    if (typeof obj.days === "number") return { days: obj.days };
   }
   return undefined;
 }
@@ -182,10 +196,11 @@ export async function publishAndReconcile(
     message: string;
     /** Close the session after publishing — see {@link stageAndMaybePublish}. */
     ephemeralSession?: boolean;
-  },
+  }
 ): Promise<void> {
   const validationError = await validateManifestAt(input.appDir);
-  if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
+  if (validationError)
+    throw new AppScaffoldError("invalid_manifest", validationError);
   // Apply the staged app's declared ext tables to the vault as part of the
   // publish (issue #286 phase 2). The `beforeMerge` hook runs inside the
   // store's mutex, post-rebase + pre-ff-merge, against the final worktree
@@ -205,7 +220,10 @@ export async function publishAndReconcile(
       : {}),
   });
   await opts.ensureRegistered(input.appId);
-  await opts.preparePublishedApp?.(input.appId, path.join(opts.codeAppsDir(), input.appId));
+  await opts.preparePublishedApp?.(
+    input.appId,
+    path.join(opts.codeAppsDir(), input.appId)
+  );
   opts.reconcile();
   if (input.ephemeralSession) await opts.store.closeSession(input.sessionId);
 }
@@ -220,7 +238,7 @@ export async function publishAndReconcile(
  */
 export async function deleteAppAndReconcile(
   opts: LifecycleRouteOptions,
-  appId: string,
+  appId: string
 ): Promise<void> {
   await opts.store.deleteApp(appId);
   await opts.deregister(appId);
@@ -248,9 +266,12 @@ export async function stageAndMaybePublish(
      * draft must keep its session so it stays previewable.
      */
     ephemeralSession?: boolean;
-  },
+  }
 ): Promise<void> {
-  const appDir = await opts.store.snapshotSessionAppDir(input.sessionId, input.appId);
+  const appDir = await opts.store.snapshotSessionAppDir(
+    input.sessionId,
+    input.appId
+  );
   await writeFileMap(appDir, input.files);
   if (!input.publish) {
     await opts.ensureRegistered(input.appId);
@@ -261,14 +282,21 @@ export async function stageAndMaybePublish(
     sessionId: input.sessionId,
     appDir,
     message: input.message,
-    ...(input.ephemeralSession ? { ephemeralSession: input.ephemeralSession } : {}),
+    ...(input.ephemeralSession
+      ? { ephemeralSession: input.ephemeralSession }
+      : {}),
   });
 }
 
 /** Map a lifecycle error to a status + JSON body. */
 export function sendLifecycleError(res: ServerResponse, err: unknown): true {
   if (err instanceof AppScaffoldError) {
-    const status = err.code === 'already_exists' ? 409 : err.code === 'not_found' ? 404 : 400;
+    const status =
+      err.code === "already_exists"
+        ? 409
+        : err.code === "not_found"
+          ? 404
+          : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   if (err instanceof ManifestError) {
@@ -276,7 +304,7 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
     // trigger the caller hand-authored) is a bad request, not a server fault —
     // surface the validator's own field-scoped message instead of a 500.
     return sendJson(res, 400, {
-      error: 'bad_request',
+      error: "bad_request",
       message: `Invalid automation manifest (${err.code}): ${err.message}`,
     });
   }
@@ -284,21 +312,21 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
     // A declared ext table the vault refuses (bad shape, unsupported
     // change) aborts the publish (issue #286 phase 2) — a bad request.
     return sendJson(res, 400, {
-      error: 'invalid_ext_spec',
+      error: "invalid_ext_spec",
       message: err.message,
     });
   }
   if (err instanceof WorktreeStoreError) {
     const status =
-      err.code === 'session_missing' || err.code === 'tag_missing'
+      err.code === "session_missing" || err.code === "tag_missing"
         ? 404
-        : err.code === 'session_exists'
+        : err.code === "session_exists"
           ? 409
           : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   return sendJson(res, 500, {
-    error: 'internal_error',
+    error: "internal_error",
     message: err instanceof Error ? err.message : String(err),
   });
 }

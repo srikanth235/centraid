@@ -1,18 +1,39 @@
-import { Feather } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from "@expo/vector-icons";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Platform,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import Button from '../kit/components/Button';
-import Icon from '../kit/components/Icon';
-import { family, radii, spacing, t, useTheme, type ThemeColors } from '../kit/theme';
+import Button from "../kit/components/Button";
+import Icon from "../kit/components/Icon";
+import {
+  family,
+  radii,
+  spacing,
+  t,
+  useTheme,
+  type ThemeColors,
+} from "../kit/theme";
 import {
   hydrateGatewayToken,
   hydrateGatewayUrl,
   setGatewayToken,
   setGatewayUrl,
-} from '../lib/gateway';
+} from "../lib/gateway";
 import {
   getDesktopName,
   getTunnelStatus,
@@ -23,12 +44,12 @@ import {
   subscribeTunnelStatus,
   unpair,
   type TunnelStatus,
-} from '../lib/phone-link';
-import type { SettingsScreenProps } from '../navigation';
-import AppearanceSection from './settings/AppearanceSection';
-import SettingsSection from './settings/SettingsSection';
-import SpaceSection from './settings/SpaceSection';
-import YouSection from './settings/YouSection';
+} from "../lib/phone-link";
+import type { SettingsScreenProps } from "../navigation";
+import AppearanceSection from "./settings/AppearanceSection";
+import SettingsSection from "./settings/SettingsSection";
+import SpaceSection from "./settings/SpaceSection";
+import YouSection from "./settings/YouSection";
 
 // Settings is a full-screen cover over Home (springboard model): a native back
 // arrow returns to Home (no pull-down on a full-screen modal), and the title sits
@@ -43,53 +64,57 @@ import YouSection from './settings/YouSection';
 // dev fallback for simulators pointing at a token-less local gateway.
 
 function defaultDeviceName(): string {
-  return Platform.OS === 'ios' ? 'iPhone' : 'Android phone';
+  return Platform.OS === "ios" ? "iPhone" : "Android phone";
 }
 
 function tunnelStatusLabel(status: TunnelStatus | undefined): string {
-  if (!status) return 'Checking…';
+  if (!status) return "Checking…";
   switch (status.state) {
-    case 'running':
-      return status.port ? `Connected (port ${status.port})` : 'Connected';
-    case 'starting':
-      return 'Connecting…';
-    case 'error':
-      return `Error: ${status.error ?? 'unknown'}`;
-    case 'stopped':
-      return 'Not connected';
+    case "running":
+      return status.port ? `Connected (port ${status.port})` : "Connected";
+    case "starting":
+      return "Connecting…";
+    case "error":
+      return `Error: ${status.error ?? "unknown"}`;
+    case "stopped":
+      return "Not connected";
   }
 }
 
 export default function SettingsScreen({
   navigation,
-}: SettingsScreenProps<'Settings'>): React.JSX.Element {
+}: SettingsScreenProps<"Settings">): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [paired, setPaired] = useState(false);
-  const [desktopName, setDesktopName] = useState('');
-  const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus | undefined>(undefined);
+  const [desktopName, setDesktopName] = useState("");
+  const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus | undefined>(
+    undefined
+  );
   const [scanning, setScanning] = useState(false);
   const [pairing, setPairing] = useState(false);
   const [pairError, setPairError] = useState<string | undefined>(undefined);
-  const [pasteTicket, setPasteTicket] = useState('');
+  const [pasteTicket, setPasteTicket] = useState("");
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [urlValue, setUrlValue] = useState('');
-  const [tokenValue, setTokenValue] = useState('');
+  const [urlValue, setUrlValue] = useState("");
+  const [tokenValue, setTokenValue] = useState("");
   const [hydrated, setHydrated] = useState(false);
 
   const tunnelAvailable = isTunnelAvailable();
 
   useEffect(() => {
-    void Promise.all([hydratePhoneLink(), hydrateGatewayUrl(), hydrateGatewayToken()]).then(
-      ([, url, token]) => {
-        setPaired(isPaired());
-        setDesktopName(getDesktopName());
-        setUrlValue(url);
-        setTokenValue(token);
-        setHydrated(true);
-      },
-    );
+    void Promise.all([
+      hydratePhoneLink(),
+      hydrateGatewayUrl(),
+      hydrateGatewayToken(),
+    ]).then(([, url, token]) => {
+      setPaired(isPaired());
+      setDesktopName(getDesktopName());
+      setUrlValue(url);
+      setTokenValue(token);
+      setHydrated(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -106,7 +131,7 @@ export default function SettingsScreen({
       .then(({ desktopName: name }) => {
         setPaired(true);
         setDesktopName(name);
-        setPasteTicket('');
+        setPasteTicket("");
       })
       .catch((err: unknown) => {
         setPairError(err instanceof Error ? err.message : String(err));
@@ -119,7 +144,7 @@ export default function SettingsScreen({
       setScanning(false);
       runPair(payload);
     },
-    [runPair],
+    [runPair]
   );
 
   const onPastePair = useCallback((): void => {
@@ -129,7 +154,7 @@ export default function SettingsScreen({
   const onUnpair = useCallback((): void => {
     void unpair().then(() => {
       setPaired(false);
-      setDesktopName('');
+      setDesktopName("");
       setTunnelStatus(undefined);
     });
   }, []);
@@ -143,11 +168,13 @@ export default function SettingsScreen({
   };
 
   if (scanning) {
-    return <PairScanner onScanned={onScanned} onCancel={() => setScanning(false)} />;
+    return (
+      <PairScanner onScanned={onScanned} onCancel={() => setScanning(false)} />
+    );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -160,7 +187,10 @@ export default function SettingsScreen({
         <Text style={styles.title}>Settings</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+      >
         <YouSection />
         <AppearanceSection />
         <SpaceSection />
@@ -168,37 +198,49 @@ export default function SettingsScreen({
         <SettingsSection label="Desktop link">
           {paired ? (
             <View style={styles.linkCard}>
-              <Text style={styles.linkName}>{desktopName || 'Your gateway'}</Text>
-              <Text style={styles.linkStatus}>{tunnelStatusLabel(tunnelStatus)}</Text>
+              <Text style={styles.linkName}>
+                {desktopName || "Your gateway"}
+              </Text>
+              <Text style={styles.linkStatus}>
+                {tunnelStatusLabel(tunnelStatus)}
+              </Text>
               <Text style={styles.help}>
-                Switch between your connected spaces from the space menu on Home. Pair another
-                desktop or gateway to add its vault here too.
+                Switch between your connected spaces from the space menu on
+                Home. Pair another desktop or gateway to add its vault here too.
               </Text>
               <View style={styles.linkAction}>
                 {tunnelAvailable ? (
                   <Button
-                    label={pairing ? 'Pairing…' : 'Pair another'}
+                    label={pairing ? "Pairing…" : "Pair another"}
                     icon="Camera"
                     variant="soft"
                     onPress={() => setScanning(true)}
                     disabled={pairing}
                   />
                 ) : null}
-                <Button label="Unpair" icon="X" variant="soft" onPress={onUnpair} />
+                <Button
+                  label="Unpair"
+                  icon="X"
+                  variant="soft"
+                  onPress={onUnpair}
+                />
               </View>
-              {pairError ? <Text style={styles.pairError}>{pairError}</Text> : null}
+              {pairError ? (
+                <Text style={styles.pairError}>{pairError}</Text>
+              ) : null}
             </View>
           ) : (
             <View>
               <Text style={styles.help}>
-                Scan a desktop "Connect phone" QR, or a terminal QR from{' '}
-                <Text style={styles.helpMono}>centraid-gateway pair --qr</Text> on a VPS. You can
-                also paste the one-line ticket. Apps then load over an encrypted tunnel.
+                Scan a desktop "Connect phone" QR, or a terminal QR from{" "}
+                <Text style={styles.helpMono}>centraid-gateway pair --qr</Text>{" "}
+                on a VPS. You can also paste the one-line ticket. Apps then load
+                over an encrypted tunnel.
               </Text>
               {tunnelAvailable ? (
                 <>
                   <Button
-                    label={pairing ? 'Pairing…' : 'Scan QR code'}
+                    label={pairing ? "Pairing…" : "Scan QR code"}
                     icon="Camera"
                     onPress={() => setScanning(true)}
                     disabled={pairing}
@@ -219,7 +261,7 @@ export default function SettingsScreen({
                   />
                   <View style={styles.actions}>
                     <Button
-                      label={pairing ? 'Pairing…' : 'Pair with ticket'}
+                      label={pairing ? "Pairing…" : "Pair with ticket"}
                       icon="Key"
                       onPress={onPastePair}
                       disabled={pairing || pasteTicket.trim().length === 0}
@@ -228,24 +270,37 @@ export default function SettingsScreen({
                 </>
               ) : (
                 <Text style={styles.unavailable}>
-                  Pairing needs a development build — the tunnel module isn't available in Expo Go.
-                  Use the Advanced section below to point at a dev gateway instead.
+                  Pairing needs a development build — the tunnel module isn't
+                  available in Expo Go. Use the Advanced section below to point
+                  at a dev gateway instead.
                 </Text>
               )}
-              {pairError ? <Text style={styles.pairError}>{pairError}</Text> : null}
+              {pairError ? (
+                <Text style={styles.pairError}>{pairError}</Text>
+              ) : null}
             </View>
           )}
         </SettingsSection>
 
         <SettingsSection label="Approvals">
           <Pressable
-            onPress={() => navigation.navigate('Approvals')}
+            onPress={() => navigation.navigate("Approvals")}
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Approvals"
           >
-            <Icon name="CheckCircle" size={18} color={colors.ink2} strokeWidth={1.75} />
+            <Icon
+              name="CheckCircle"
+              size={18}
+              color={colors.ink2}
+              strokeWidth={1.75}
+            />
             <Text style={styles.rowLabel}>Pending approvals</Text>
-            <Icon name="ChevronRight" size={16} color={colors.ink3} strokeWidth={1.75} />
+            <Icon
+              name="ChevronRight"
+              size={16}
+              color={colors.ink3}
+              strokeWidth={1.75}
+            />
           </Pressable>
         </SettingsSection>
 
@@ -255,10 +310,15 @@ export default function SettingsScreen({
             style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
             accessibilityLabel="Gateway connection"
           >
-            <Icon name="Code" size={18} color={colors.ink2} strokeWidth={1.75} />
+            <Icon
+              name="Code"
+              size={18}
+              color={colors.ink2}
+              strokeWidth={1.75}
+            />
             <Text style={styles.rowLabel}>Gateway connection</Text>
             <Icon
-              name={advancedOpen ? 'ChevronDown' : 'ChevronRight'}
+              name={advancedOpen ? "ChevronDown" : "ChevronRight"}
               size={16}
               color={colors.ink3}
               strokeWidth={1.75}
@@ -270,8 +330,8 @@ export default function SettingsScreen({
               <Text style={styles.fieldLabel}>Gateway URL</Text>
               <Text style={styles.help}>
                 Dev fallback for simulators: a directly reachable gateway, e.g.
-                http://127.0.0.1:18789. An authed gateway needs the tunnel — the WebView attaches no
-                token.
+                http://127.0.0.1:18789. An authed gateway needs the tunnel — the
+                WebView attaches no token.
               </Text>
               <TextInput
                 value={urlValue}
@@ -284,9 +344,12 @@ export default function SettingsScreen({
                 keyboardType="url"
                 editable={hydrated}
               />
-              <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>Gateway token</Text>
+              <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>
+                Gateway token
+              </Text>
               <Text style={styles.help}>
-                Bearer token used only for the app list and approvals fetches in this mode.
+                Bearer token used only for the app list and approvals fetches in
+                this mode.
               </Text>
               <TextInput
                 value={tokenValue}
@@ -331,7 +394,7 @@ function PairScanner({
   }, [permission, requestPermission]);
 
   return (
-    <SafeAreaView style={styles.scanSafe} edges={['top']}>
+    <SafeAreaView style={styles.scanSafe} edges={["top"]}>
       <View style={styles.bar}>
         <Pressable
           onPress={onCancel}
@@ -339,7 +402,12 @@ function PairScanner({
           accessibilityLabel="Cancel scan"
           style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.6 }]}
         >
-          <Icon name="ArrowLeft" size={20} color={colors.ink} strokeWidth={1.75} />
+          <Icon
+            name="ArrowLeft"
+            size={20}
+            color={colors.ink}
+            strokeWidth={1.75}
+          />
         </Pressable>
         <Text style={styles.scanTitle}>Scan pairing code</Text>
         <View style={styles.barSpacer} />
@@ -349,7 +417,7 @@ function PairScanner({
           <CameraView
             style={styles.camera}
             facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
             onBarcodeScanned={({ data }) => {
               if (scannedRef.current) return;
               scannedRef.current = true;
@@ -357,14 +425,16 @@ function PairScanner({
             }}
           />
           <Text style={styles.scanHint}>
-            Point the camera at a desktop "Connect phone" QR or a gateway `pair --qr` terminal QR.
+            Point the camera at a desktop "Connect phone" QR or a gateway `pair
+            --qr` terminal QR.
           </Text>
         </View>
       ) : (
         <View style={styles.scanDenied}>
           <Text style={styles.emptyTitle}>Camera access needed.</Text>
           <Text style={styles.help}>
-            Allow camera access to scan the pairing QR code. You can enable it in system settings.
+            Allow camera access to scan the pairing QR code. You can enable it
+            in system settings.
           </Text>
           <Button label="Back" variant="soft" onPress={onCancel} />
         </View>
@@ -378,15 +448,15 @@ const makeStyles = (colors: ThemeColors) =>
     actions: { marginTop: spacing[5] },
     advanced: { marginTop: spacing[4] },
     backBtn: {
-      alignItems: 'center',
+      alignItems: "center",
       height: 36,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 36,
     },
     bar: {
-      alignItems: 'center',
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
       paddingHorizontal: 14,
       paddingVertical: spacing[2],
     },
@@ -396,19 +466,19 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[5],
       paddingTop: spacing[4],
     },
-    camera: { borderRadius: radii.md, flex: 1, overflow: 'hidden' },
-    emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+    camera: { borderRadius: radii.md, flex: 1, overflow: "hidden" },
+    emptyTitle: { ...t("title"), color: colors.ink, marginBottom: spacing[2] },
     fieldLabel: {
-      ...t('small'),
+      ...t("small"),
       color: colors.ink2,
-      fontWeight: '500',
+      fontWeight: "500",
       marginBottom: 6,
     },
     fieldLabelSpaced: { marginTop: spacing[4] },
-    help: { ...t('small'), color: colors.ink3, marginBottom: spacing[3] },
-    helpMono: { fontFamily: 'JetBrainsMono_400Regular', color: colors.ink2 },
+    help: { ...t("small"), color: colors.ink3, marginBottom: spacing[3] },
+    helpMono: { fontFamily: "JetBrainsMono_400Regular", color: colors.ink2 },
     input: {
-      ...t('body'),
+      ...t("body"),
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       borderRadius: radii.md,
@@ -425,36 +495,36 @@ const makeStyles = (colors: ThemeColors) =>
       borderWidth: 1,
       padding: spacing[4],
     },
-    linkName: { ...t('bodyStrong'), color: colors.ink },
-    linkStatus: { ...t('small'), color: colors.ink3, marginTop: 2 },
-    pairError: { ...t('small'), color: colors.danger, marginTop: spacing[3] },
+    linkName: { ...t("bodyStrong"), color: colors.ink },
+    linkStatus: { ...t("small"), color: colors.ink3, marginTop: 2 },
+    pairError: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     row: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       borderRadius: radii.md,
       borderWidth: 1,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: spacing[3],
       paddingHorizontal: 12,
       paddingVertical: 12,
     },
-    rowLabel: { ...t('body'), color: colors.ink, flex: 1 },
+    rowLabel: { ...t("body"), color: colors.ink, flex: 1 },
     safe: { backgroundColor: colors.bg, flex: 1 },
     scanDenied: { padding: spacing[5] },
     scanHint: {
-      ...t('small'),
+      ...t("small"),
       color: colors.ink3,
       marginTop: spacing[3],
-      textAlign: 'center',
+      textAlign: "center",
     },
     scanSafe: { backgroundColor: colors.bg, flex: 1 },
-    scanTitle: { ...t('title'), color: colors.ink },
+    scanTitle: { ...t("title"), color: colors.ink },
     scanWrap: { flex: 1, padding: spacing[5] },
     spacer: { height: spacing[5] },
     header: {
-      alignItems: 'center',
-      flexDirection: 'row',
+      alignItems: "center",
+      flexDirection: "row",
       gap: spacing[3],
       paddingHorizontal: spacing[5],
       paddingTop: spacing[2],
@@ -465,5 +535,5 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 26,
       letterSpacing: -0.3,
     },
-    unavailable: { ...t('small'), color: colors.ink3 },
+    unavailable: { ...t("small"), color: colors.ink3 },
   });

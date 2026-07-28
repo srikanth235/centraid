@@ -5,14 +5,14 @@
 // collection entries — the sweep's doctrine, issue #272/#274). Provenance
 // records the purge; receipts stay: history is never rewritten.
 
-import type { VaultDb } from '../db.js';
-import { nowIso } from '../ids.js';
-import { cleanupPolyRefs } from '../schema/poly-refs.js';
-import { SEED_PURGE_ACTIVITY } from '../schema/seed.js';
-import { resolveEntity } from '../schema/tables.js';
-import { writeProvenance, writeReceipt } from './evidence.js';
-import { pkColumn } from './execution.js';
-import type { Identity } from './types.js';
+import type { VaultDb } from "../db.js";
+import { nowIso } from "../ids.js";
+import { cleanupPolyRefs } from "../schema/poly-refs.js";
+import { SEED_PURGE_ACTIVITY } from "../schema/seed.js";
+import { resolveEntity } from "../schema/tables.js";
+import { writeProvenance, writeReceipt } from "./evidence.js";
+import { pkColumn } from "./execution.js";
+import type { Identity } from "./types.js";
 
 export interface DemoPurgeResult {
   /** Physical rows deleted. */
@@ -34,7 +34,9 @@ interface SeedRow {
 /** Rows seeded per app — the "demo data present" surface. */
 export function demoStatus(db: VaultDb): { appId: string; rows: number }[] {
   const rows = db.vault
-    .prepare(`SELECT app_id, count(*) AS n FROM consent_seed_row GROUP BY app_id ORDER BY app_id`)
+    .prepare(
+      `SELECT app_id, count(*) AS n FROM consent_seed_row GROUP BY app_id ORDER BY app_id`
+    )
     .all() as { app_id: string; n: number }[];
   return rows.map((r) => ({ appId: r.app_id, rows: r.n }));
 }
@@ -47,16 +49,22 @@ export function demoStatus(db: VaultDb): { appId: string; rows: number }[] {
  * is reported blocked rather than force-deleted: the owner may have built
  * real data on top of a demo row, and honest refusal beats a broken FK web.
  */
-export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): DemoPurgeResult {
+export function purgeDemoRows(
+  db: VaultDb,
+  owner: Identity,
+  appId?: string
+): DemoPurgeResult {
   const now = nowIso();
   const rows = db.vault
     .prepare(
       `SELECT seed_id, app_id, target_type, target_id FROM consent_seed_row
-        ${appId ? 'WHERE app_id = ?' : ''} ORDER BY seed_id DESC`,
+        ${appId ? "WHERE app_id = ?" : ""} ORDER BY seed_id DESC`
     )
     .all(...(appId ? [appId] : [])) as unknown as SeedRow[];
 
-  const dropSeed = db.vault.prepare('DELETE FROM consent_seed_row WHERE seed_id = ?');
+  const dropSeed = db.vault.prepare(
+    "DELETE FROM consent_seed_row WHERE seed_id = ?"
+  );
 
   let purged = 0;
   let missing = 0;
@@ -68,7 +76,7 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
     const blocked: SeedRow[] = [];
     for (const row of remaining) {
       const ref = resolveEntity(row.target_type, db.vault);
-      if (!ref || ref.file !== 'vault') {
+      if (!ref || ref.file !== "vault") {
         // An unresolvable registry row (e.g. a purged ext band) has nothing
         // left to delete — retire the registry entry.
         dropSeed.run(row.seed_id);
@@ -99,16 +107,22 @@ export function purgeDemoRows(db: VaultDb, owner: Identity, appId?: string): Dem
   }
 
   for (const row of purgedIds) {
-    writeProvenance(db.journal, owner, row.target_type, row.target_id, SEED_PURGE_ACTIVITY);
+    writeProvenance(
+      db.journal,
+      owner,
+      row.target_type,
+      row.target_id,
+      SEED_PURGE_ACTIVITY
+    );
   }
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
     invocationId: null,
-    action: 'act consent.demo_purge',
-    objectType: 'consent.seed_row',
+    action: "act consent.demo_purge",
+    objectType: "consent.seed_row",
     objectId: appId ?? null,
     purpose: null,
-    decision: 'allow',
+    decision: "allow",
     detail: {
       purged,
       missing,

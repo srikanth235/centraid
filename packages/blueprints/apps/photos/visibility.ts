@@ -5,10 +5,10 @@
 // and passes them in as getters — same split toolbar/picker use for
 // their own regions — so this stays pure, DOM-free, and easy to reason about
 // on its own.
-import { assetKey } from './asset-key.ts';
-import { TRASH } from './constants.ts';
-import { dayKey, fmtDay, fmtMonth } from './format.ts';
-import type { Asset } from './types.ts';
+import { assetKey } from "./asset-key.ts";
+import { TRASH } from "./constants.ts";
+import { dayKey, fmtDay, fmtMonth } from "./format.ts";
+import type { Asset } from "./types.ts";
 
 export interface Visibility {
   visibleAssets: () => Asset[];
@@ -50,7 +50,7 @@ export function createVisibility({
       ...(asset.album_titles ?? []),
     ]
       .filter(Boolean)
-      .join(' ')
+      .join(" ")
       .toLowerCase();
     return query
       .toLowerCase()
@@ -77,7 +77,8 @@ export function createVisibility({
     // otherwise collapse two different photos into one row here (issue #599).
     const scopedKeys = selectedAlbum ? new Set(scoped.map(assetKey)) : null;
     const merged = new Map<string, Asset>();
-    for (const a of scoped.filter(matchesSearchLocal)) merged.set(assetKey(a), a);
+    for (const a of scoped.filter(matchesSearchLocal))
+      merged.set(assetKey(a), a);
     for (const a of getSearchResults() ?? []) {
       if (scopedKeys && !scopedKeys.has(assetKey(a))) continue;
       merged.set(assetKey(a), a);
@@ -92,7 +93,9 @@ export function createVisibility({
   function findAsset(key: string): Asset | undefined {
     const match = (a: Asset): boolean => assetKey(a) === key;
     return (
-      getAssets().find(match) ?? getTrash().find(match) ?? (getSearchResults() ?? []).find(match)
+      getAssets().find(match) ??
+      getTrash().find(match) ??
+      (getSearchResults() ?? []).find(match)
     );
   }
 

@@ -5,7 +5,10 @@ export interface FetchJsonResult {
   status: number;
   body: any;
 }
-export type FetchJson = (url: string, opts?: object) => Promise<FetchJsonResult>;
+export type FetchJson = (
+  url: string,
+  opts?: object
+) => Promise<FetchJsonResult>;
 
 export interface ParkedEntry {
   invocationId?: string;
@@ -31,13 +34,13 @@ export function describeParked(entry: ParkedEntry): {
 };
 export function fetchParkedEntry(
   invocationId: string,
-  deps: { fetchJson: FetchJson },
+  deps: { fetchJson: FetchJson }
 ): Promise<ParkedEntry | null>;
 export function confirmParked(
   invocationId: string,
   approve: boolean,
-  deps: { fetchJson: FetchJson },
+  deps: { fetchJson: FetchJson }
 ): Promise<InvokeOutcome>;
 export function normalizeApproveOutcome(
-  outcome: InvokeOutcome | null,
+  outcome: InvokeOutcome | null
 ): { ok: true; receipt: string } | { ok: false; note: string };

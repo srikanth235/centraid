@@ -12,24 +12,27 @@
  * (issue #573 follow-up) rather than each maintaining a subtly different one.
  */
 
-import { act } from 'react';
+import { act } from "react";
 
 /** Type into a controlled input/textarea the way a user would. */
-export function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+export function setValue(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  value: string
+): void {
   const proto =
-    el.tagName === 'TEXTAREA'
+    el.tagName === "TEXTAREA"
       ? globalThis.HTMLTextAreaElement.prototype
       : globalThis.HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
   act(() => {
     setter?.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
 /** The button whose visible label is exactly `label`. */
 export function button(el: HTMLElement, label: string): HTMLButtonElement {
-  return [...el.querySelectorAll('button')].find(
-    (b) => b.textContent === label,
+  return [...el.querySelectorAll("button")].find(
+    (b) => b.textContent === label
   ) as HTMLButtonElement;
 }

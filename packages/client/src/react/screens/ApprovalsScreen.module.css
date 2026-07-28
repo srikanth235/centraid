@@ -112,7 +112,7 @@ button.rowMain {
 button.rowMain:hover {
   background: color-mix(in oklab, var(--ink) 4%, transparent);
 }
-.row[data-expanded='true'] .rowMain {
+.row[data-expanded="true"] .rowMain {
   background: color-mix(in oklab, var(--accent) 6%, transparent);
 }
 .rowIcon {
@@ -350,7 +350,7 @@ button.rowMain:hover {
   color: var(--ink-3);
   cursor: pointer;
 }
-.filterChip[data-active='true'] {
+.filterChip[data-active="true"] {
   background: color-mix(in oklab, var(--accent) 12%, transparent);
   border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
   color: var(--ink);

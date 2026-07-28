@@ -24,9 +24,9 @@
  * owning app).
  */
 
-import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 import type {
   AgentFailureClass,
@@ -36,16 +36,16 @@ import type {
   RunnerKind,
   RunnerPrefs,
   TurnStreamEvent,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
 import {
   compileHydrationPlan,
   ConversationStore,
   hydrationMessagesFromLedger,
   makeJournalDbProvider,
-} from '@centraid/app-engine';
-import * as automation from '@centraid/automation';
+} from "@centraid/app-engine";
+import * as automation from "@centraid/automation";
 
-import { getRunnerBackend } from '../registry.js';
+import { getRunnerBackend } from "../registry.js";
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the agent's cwd. */
@@ -80,7 +80,7 @@ export interface LiveDispatchOptions {
   consentSource?: ProviderConsentSource;
   /** Resolve historical upload hashes into the owning automation's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
-  onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  onLog: (level: "info" | "warn" | "error", msg: string) => void;
 }
 
 export interface LiveDispatch {
@@ -89,14 +89,14 @@ export interface LiveDispatch {
     store: ConversationStore,
     conversationId: string,
     turnId: string,
-    ok: boolean,
+    ok: boolean
   ) => void;
   /** Tear down the scratch dir (only ever created if an attachment was
    *  staged). Safe to call once. */
   close: () => Promise<void>;
 }
 
-const AGENT_FAILURE_PREFIX = 'centraid-agent-failure:';
+const AGENT_FAILURE_PREFIX = "centraid-agent-failure:";
 
 export interface AutomationAgentFailure {
   runner: RunnerKind;
@@ -106,7 +106,7 @@ export interface AutomationAgentFailure {
 
 /** Preserve typed runner failure metadata through the handler worker boundary. */
 export function parseAutomationAgentFailure(
-  error: string | undefined,
+  error: string | undefined
 ): AutomationAgentFailure | undefined {
   if (!error) return undefined;
   const at = error.indexOf(AGENT_FAILURE_PREFIX);
@@ -120,15 +120,15 @@ export function parseAutomationAgentFailure(
       .slice(at + AGENT_FAILURE_PREFIX.length)
       .split(/\r?\n/u, 1)[0]
       ?.trim();
-    const parsed = JSON.parse(payload ?? '') as {
+    const parsed = JSON.parse(payload ?? "") as {
       runner?: unknown;
       failureClass?: unknown;
       message?: unknown;
     };
     if (
-      typeof parsed.runner !== 'string' ||
-      typeof parsed.failureClass !== 'string' ||
-      typeof parsed.message !== 'string'
+      typeof parsed.runner !== "string" ||
+      typeof parsed.failureClass !== "string" ||
+      typeof parsed.message !== "string"
     ) {
       return undefined;
     }
@@ -149,25 +149,31 @@ function agentFailureError(failure: AutomationAgentFailure): Error {
  * nothing eagerly. The scratch dir is created lazily, only when a `ctx.agent`
  * call carries vault derivatives to stage.
  */
-export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<LiveDispatch> {
-  const scratchDir = path.join(opts.workdir, '.automation-scratch', opts.runId);
+export async function startLiveDispatch(
+  opts: LiveDispatchOptions
+): Promise<LiveDispatch> {
+  const scratchDir = path.join(opts.workdir, ".automation-scratch", opts.runId);
   let scratchReady = false;
-  const runsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  const runsStore = new ConversationStore(
+    makeJournalDbProvider(opts.journalDbFile)
+  );
   const lockToken = randomUUID();
   if (!runsStore.acquireTurnLock(opts.automationRef, lockToken)) {
     runsStore.close();
-    throw new Error(`automation conversation "${opts.automationRef}" already has a running turn`);
+    throw new Error(
+      `automation conversation "${opts.automationRef}" already has a running turn`
+    );
   }
   const lockLeaseHeartbeat = setInterval(
     () => runsStore.refreshTurnLock(opts.automationRef, lockToken),
-    60_000,
+    60_000
   );
   lockLeaseHeartbeat.unref?.();
   let latestAdapter:
     | {
         kind: string;
         sessionId?: string;
-        usageSnapshot?: import('@centraid/app-engine').AdapterUsageSnapshot;
+        usageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
         hydrated?: boolean;
       }
     | undefined;
@@ -175,7 +181,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     | {
         kind: string;
         sessionId?: string;
-        usageSnapshot?: import('@centraid/app-engine').AdapterUsageSnapshot;
+        usageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
         hydrated?: boolean;
       }
     | undefined;
@@ -190,21 +196,26 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // and receipted them; here they become scratch files the agent's native
   // multimodal Read path picks up — one mechanism for every runner, no
   // per-backend wire format. The scratch dir materializes only on first use.
-  const stageAttachments = async (call: automation.AgentCall): Promise<string> => {
+  const stageAttachments = async (
+    call: automation.AgentCall
+  ): Promise<string> => {
     if (!call.attachments?.length) return call.prompt;
     await ensureScratch();
     const lines = await Promise.all(
       call.attachments.map(async (att) => {
-        const file = path.join(scratchDir, `attach-${randomUUID().slice(0, 8)}-${att.name}`);
+        const file = path.join(
+          scratchDir,
+          `attach-${randomUUID().slice(0, 8)}-${att.name}`
+        );
         if (att.base64 === undefined) {
-          await fs.writeFile(file, att.text ?? '', 'utf8');
+          await fs.writeFile(file, att.text ?? "", "utf8");
         } else {
-          await fs.writeFile(file, Buffer.from(att.base64, 'base64'));
+          await fs.writeFile(file, Buffer.from(att.base64, "base64"));
         }
         return `- ${file} (${att.mediaType})`;
-      }),
+      })
     );
-    return `${call.prompt}\n\nAttached files — read each from disk before answering (images are visual input):\n${lines.join('\n')}`;
+    return `${call.prompt}\n\nAttached files — read each from disk before answering (images are visual input):\n${lines.join("\n")}`;
   };
 
   // ctx.agent routes to the user's REAL provider through the SAME runner
@@ -219,7 +230,10 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // kind), so the backend resolves its default binary off PATH. The custom
   // `acp` kind has no default binary and therefore surfaces a clear `error`
   // event, raised below.
-  const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
+  const agentDispatcher: automation.AgentDispatcher = async (
+    call,
+    ctx
+  ): Promise<unknown> => {
     const runner = opts.runner;
     // Unattended egress is never prompted (#567 D5) — it is authorized at
     // authoring time. So derive the grant honestly rather than minting one:
@@ -227,7 +241,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     // ladder source the user's live settings do not contain. A controller
     // without the derived-consent seam denies rather than assumes.
     const consent = opts.providerEgressConsent;
-    if (consent && !consent.has(opts.automationRef, runner, 'automations')) {
+    if (consent && !consent.has(opts.automationRef, runner, "automations")) {
       const derived =
         opts.consentSource === undefined
           ? false
@@ -235,12 +249,12 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
               opts.automationRef,
               runner,
               opts.consentSource,
-              'automations',
+              "automations"
             ) ?? false);
       if (!derived) {
         throw agentFailureError({
           runner,
-          failureClass: 'unknown',
+          failureClass: "unknown",
           message:
             `Unattended egress to ${runner} is not consented for ${opts.automationRef}. ` +
             `Add ${runner} to the automations agent or its failover ladder in Settings, ` +
@@ -254,14 +268,15 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     if (breaker && !breaker.allowed) {
       throw agentFailureError({
         runner,
-        failureClass: breaker.failureClass ?? 'unknown',
-        message: `Runner breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ''}.`,
+        failureClass: breaker.failureClass ?? "unknown",
+        message: `Runner breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ""}.`,
       });
     }
     const loaded = (await opts.runnerPrefsFor?.(runner)) ?? { kind: runner };
-    const prefs: RunnerPrefs = loaded.kind === runner ? loaded : { kind: runner };
-    let finalText = '';
-    let failure: Extract<TurnStreamEvent, { type: 'error' }> | undefined;
+    const prefs: RunnerPrefs =
+      loaded.kind === runner ? loaded : { kind: runner };
+    let finalText = "";
+    let failure: Extract<TurnStreamEvent, { type: "error" }> | undefined;
     const binding =
       latestAdapter?.sessionId === undefined
         ? runsStore.getHarnessBinding(opts.automationRef, runner)
@@ -275,7 +290,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
             completedTurns,
             (turnId) => runsStore.listItems(turnId),
             (itemId) => runsStore.listAttachmentsForItem(itemId),
-            binding?.hydratedThroughSeq ?? -1,
+            binding?.hydratedThroughSeq ?? -1
           )
         : [];
     const recoveryMessages =
@@ -283,7 +298,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
         ? hydrationMessagesFromLedger(
             completedTurns,
             (turnId) => runsStore.listItems(turnId),
-            (itemId) => runsStore.listAttachmentsForItem(itemId),
+            (itemId) => runsStore.listAttachmentsForItem(itemId)
           )
         : [];
     const hydrationPlan =
@@ -302,9 +317,9 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       | {
           sessionId?: string;
           adapterKind: string;
-          usageSnapshot?: import('@centraid/app-engine').AdapterUsageSnapshot;
+          usageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
           hydrated?: boolean;
-          hydrationKind?: 'handoff' | 'recovery';
+          hydrationKind?: "handoff" | "recovery";
         }
       | undefined;
     try {
@@ -313,7 +328,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
           conversationId: opts.automationRef,
           cwd: opts.workdir,
           message: effectivePrompt,
-          extraSystemPrompt: '',
+          extraSystemPrompt: "",
           ...(opts.model ? { model: opts.model } : {}),
           ...((opts.configPins ?? prefs.configPins)
             ? { configPins: opts.configPins ?? prefs.configPins }
@@ -329,52 +344,60 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
             : {}),
           ...(opts.hydrationAttachmentPath && hydrationPlan?.attachments.length
             ? {
-                hydrationAttachments: hydrationPlan.attachments.map((attachment) => ({
-                  path: opts.hydrationAttachmentPath!(attachment.hash),
-                  mime: attachment.mime,
-                  ...(attachment.filename ? { filename: attachment.filename } : {}),
-                })),
+                hydrationAttachments: hydrationPlan.attachments.map(
+                  (attachment) => ({
+                    path: opts.hydrationAttachmentPath!(attachment.hash),
+                    mime: attachment.mime,
+                    ...(attachment.filename
+                      ? { filename: attachment.filename }
+                      : {}),
+                  })
+                ),
               }
             : {}),
           ...(recoveryHydrationPlan
             ? { recoveryHydrationContext: recoveryHydrationPlan.prompt }
             : {}),
-          ...(opts.hydrationAttachmentPath && recoveryHydrationPlan?.attachments.length
+          ...(opts.hydrationAttachmentPath &&
+          recoveryHydrationPlan?.attachments.length
             ? {
-                recoveryHydrationAttachments: recoveryHydrationPlan.attachments.map(
-                  (attachment) => ({
+                recoveryHydrationAttachments:
+                  recoveryHydrationPlan.attachments.map((attachment) => ({
                     path: opts.hydrationAttachmentPath!(attachment.hash),
                     mime: attachment.mime,
-                    ...(attachment.filename ? { filename: attachment.filename } : {}),
-                  }),
-                ),
+                    ...(attachment.filename
+                      ? { filename: attachment.filename }
+                      : {}),
+                  })),
               }
             : {}),
           onEvent: (event) => {
-            if (event.type === 'final') finalText = event.text;
-            if (event.type === 'error') failure = event;
+            if (event.type === "final") finalText = event.text;
+            if (event.type === "error") failure = event;
             call.onEvent?.(event);
           },
         },
-        { prefs },
+        { prefs }
       );
     } catch (error) {
       failure = {
-        type: 'error',
+        type: "error",
         message: error instanceof Error ? error.message : String(error),
-        failureClass: 'unknown',
+        failureClass: "unknown",
       };
     }
     if (result) {
       observedAdapter = {
         kind: result.adapterKind,
         ...(result.sessionId ? { sessionId: result.sessionId } : {}),
-        ...(result.usageSnapshot ? { usageSnapshot: result.usageSnapshot } : {}),
+        ...(result.usageSnapshot
+          ? { usageSnapshot: result.usageSnapshot }
+          : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
       };
       if (result.hydrated) {
         hydrationTokens +=
-          result.hydrationKind === 'recovery'
+          result.hydrationKind === "recovery"
             ? (recoveryHydrationPlan?.estimatedTokens ?? 0)
             : (hydrationPlan?.estimatedTokens ?? 0);
       }
@@ -388,14 +411,14 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     }
     const typedFailure: AutomationAgentFailure = {
       runner,
-      failureClass: failure.failureClass ?? 'unknown',
+      failureClass: failure.failureClass ?? "unknown",
       message: failure.message,
     };
     opts.runnerHealth?.reportFailure(
       scope,
       runner,
       typedFailure.failureClass,
-      typedFailure.message,
+      typedFailure.message
     );
     throw agentFailureError(typedFailure);
   };
@@ -407,8 +430,8 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       if (hydrationTokens > 0) {
         store.setTurnHydrationTokens(turnId, hydrationTokens);
       }
-      if (ok) store.noteTurn(conversationId, '', latestAdapter);
-      else store.noteFailedTurn(conversationId, '', observedAdapter);
+      if (ok) store.noteTurn(conversationId, "", latestAdapter);
+      else store.noteFailedTurn(conversationId, "", observedAdapter);
     },
     async close(): Promise<void> {
       if (closed) return;
@@ -424,7 +447,9 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       // Only ever created if an attachment was staged — the rm is a no-op
       // otherwise, so a tool-free / attachment-free fire touches no disk here.
       if (scratchReady) {
-        await fs.rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
+        await fs
+          .rm(scratchDir, { recursive: true, force: true })
+          .catch(() => undefined);
       }
     },
   };

@@ -32,11 +32,11 @@
         --grain-opacity: 0.5;
         --sel: rgba(62, 200, 180, 0.35);
 
-        --display: 'Fraunces', georgia, serif;
-        --body: 'Newsreader', georgia, serif;
-        --mono: 'IBM Plex Mono', ui-monospace, monospace;
+        --display: "Fraunces", georgia, serif;
+        --body: "Newsreader", georgia, serif;
+        --mono: "IBM Plex Mono", ui-monospace, monospace;
       }
-      [data-theme='night'] {
+      [data-theme="night"] {
         --paper: #111612;
         --paper-2: #0c110d;
         --card: #171d17;
@@ -81,7 +81,7 @@
       }
       /* paper grain */
       body::after {
-        content: '';
+        content: "";
         position: fixed;
         inset: 0;
         z-index: 60;
@@ -98,7 +98,11 @@
         text-decoration: underline;
         text-decoration-thickness: 2px;
         text-underline-offset: 4px;
-        text-decoration-color: color-mix(in oklab, var(--accent) 45%, transparent);
+        text-decoration-color: color-mix(
+          in oklab,
+          var(--accent) 45%,
+          transparent
+        );
         transition: text-decoration-color 0.18s ease;
       }
       .u:hover {
@@ -225,7 +229,7 @@
         gap: 14px;
       }
       .kicker::after {
-        content: '';
+        content: "";
         flex: 0 0 64px;
         height: 1px;
         background: var(--accent);
@@ -333,7 +337,8 @@
         font-size: clamp(160px, 26vw, 380px);
         line-height: 1;
         color: transparent;
-        -webkit-text-stroke: 1.5px color-mix(in oklab, var(--accent) 32%, transparent);
+        -webkit-text-stroke: 1.5px
+          color-mix(in oklab, var(--accent) 32%, transparent);
         pointer-events: none;
         user-select: none;
       }
@@ -424,7 +429,8 @@
       .chapter .prose .aside a {
         color: var(--accent);
         text-decoration: none;
-        border-bottom: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
+        border-bottom: 1px solid
+          color-mix(in oklab, var(--accent) 45%, transparent);
       }
       .chapter .prose .aside a:hover {
         border-bottom-color: var(--accent);
@@ -907,14 +913,19 @@
     <header>
       <div class="head-row">
         <a class="brand" href="/">
-          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
+          <span class="mark" aria-hidden="true"
+            ><img src="assets/centraid-mark.svg" alt=""
+          /></span>
           Centraid
         </a>
         <nav>
           <a href="#data" class="hide-sm">data</a>
           <a href="#apps" class="hide-sm">apps</a>
           <a href="#devices" class="hide-sm">devices</a>
-          <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+          <a
+            href="https://github.com/srikanth235/centraid"
+            target="_blank"
+            rel="noopener"
             >github</a
           >
           <a href="docs/" class="docs-link">docs&nbsp;→</a>
@@ -937,14 +948,18 @@
     <section class="hero wrap">
       <div class="ghost" aria-hidden="true">1</div>
       <p class="kicker r" style="--d: 0.05s">Centraid · personal software</p>
-      <h1 class="r" style="--d: 0.14s">Software for a <em>market of one.</em></h1>
+      <h1 class="r" style="--d: 0.14s">
+        Software for a <em>market of one.</em>
+      </h1>
       <p class="lede r" style="--d: 0.26s">
-        Most software is built for everyone, which is why none of it quite fits you — and why your
-        life ends up scattered across a hundred vendors' databases. Centraid inverts the ownership:
-        <b>your data</b> lives in one vault on your own machine, on one shared model with no silos;
-        <b>your apps</b> are thin projections over it, written and rewritten by an agent to fit you;
-        <b>your devices</b> connect peer-to-peer to one gateway you run. No accounts, no cloud, no
-        landlord.
+        Most software is built for everyone, which is why none of it quite fits
+        you — and why your life ends up scattered across a hundred vendors'
+        databases. Centraid inverts the ownership:
+        <b>your data</b> lives in one vault on your own machine, on one shared
+        model with no silos; <b>your apps</b> are thin projections over it,
+        written and rewritten by an agent to fit you;
+        <b>your devices</b> connect peer-to-peer to one gateway you run. No
+        accounts, no cloud, no landlord.
       </p>
       <div class="cta-row r" style="--d: 0.38s">
         <a href="#install" class="btn btn-primary">get it running</a>
@@ -952,31 +967,38 @@
       </div>
       <p class="hero-notes r" style="--d: 0.48s">
         <span>no accounts</span><span class="dot">·</span><span>no cloud</span
-        ><span class="dot">·</span><span>no build step</span><span class="dot">·</span>
+        ><span class="dot">·</span><span>no build step</span
+        ><span class="dot">·</span>
         <span class="beta-pill">β beta</span>
       </p>
     </section>
 
     <div class="wrap">
       <hr class="rule" />
-      <div class="rule-label"><span>How it works</span><span>in five chapters</span></div>
+      <div class="rule-label">
+        <span>How it works</span><span>in five chapters</span>
+      </div>
     </div>
 
     <!-- 01 · YOUR DATA -->
     <section class="chapter wrap" id="data">
       <div class="prose">
         <p class="ch-no r"><span class="n">01</span> your data</p>
-        <h2 class="r" style="--d: 0.08s">One vault holds <em>the whole record.</em></h2>
+        <h2 class="r" style="--d: 0.08s">
+          One vault holds <em>the whole record.</em>
+        </h2>
         <p class="r" style="--d: 0.16s">
           Your people, money, health, documents, messages and plans live in
-          <b>one vault on your disk</b>, on one shared ontology: "a person", "money moved",
-          "something was measured" are declared exactly once, and every app extends or references
-          them — never re-declares them. Star a document in one app and every other app knows,
-          because there is <b>no silo to copy across</b>.
+          <b>one vault on your disk</b>, on one shared ontology: "a person",
+          "money moved", "something was measured" are declared exactly once, and
+          every app extends or references them — never re-declares them. Star a
+          document in one app and every other app knows, because there is
+          <b>no silo to copy across</b>.
         </p>
         <p class="r" style="--d: 0.22s">
-          Apps <b>borrow</b> the record through scoped grants you sign, every access leaves a
-          receipt, and secrets are sealed even at rest. Export is honest: copy a directory.
+          Apps <b>borrow</b> the record through scoped grants you sign, every
+          access leaves a receipt, and secrets are sealed even at rest. Export
+          is honest: copy a directory.
         </p>
         <p class="aside r" style="--d: 0.28s">
           One consent-checked door, an append-only journal beside it.
@@ -986,13 +1008,17 @@
       </div>
       <div class="artifact-col">
         <div class="artifact tilt-r r" style="--d: 0.12s">
-          <div class="artifact-head"><span>~/vaults/local</span><span class="tag">yours</span></div>
+          <div class="artifact-head">
+            <span>~/vaults/local</span><span class="tag">yours</span>
+          </div>
           <div class="artifact-body">
             <div class="ft">
               <div class="ft-row"><span class="ft-l d">local/</span></div>
               <div class="ft-row">
                 <span class="ft-l">├── <span class="hl">vault.db</span></span>
-                <span class="c">the canonical record — every domain, one model</span>
+                <span class="c"
+                  >the canonical record — every domain, one model</span
+                >
               </div>
               <div class="ft-row">
                 <span class="ft-l">├── journal.db</span>
@@ -1011,7 +1037,9 @@
               </div>
               <div class="ft-row">
                 <span class="ft-l">└── local.sealkey</span>
-                <span class="c">seals your secrets — lives outside backups</span>
+                <span class="c"
+                  >seals your secrets — lives outside backups</span
+                >
               </div>
             </div>
           </div>
@@ -1023,40 +1051,50 @@
     <section class="chapter flip wrap" id="apps">
       <div class="prose">
         <p class="ch-no r"><span class="n">02</span> your apps</p>
-        <h2 class="r" style="--d: 0.08s">Apps are windows, <em>not warehouses.</em></h2>
+        <h2 class="r" style="--d: 0.08s">
+          Apps are windows, <em>not warehouses.</em>
+        </h2>
         <p class="r" style="--d: 0.16s">
           Eight blueprints ship in the box —
-          <b>Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks</b> — and none of them owns a
-          byte of your data. An app is a folder of plain HTML and JavaScript that renders vault rows
-          and mutates them through typed commands. Delete one and nothing of yours is lost.
+          <b>Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks</b> — and
+          none of them owns a byte of your data. An app is a folder of plain
+          HTML and JavaScript that renders vault rows and mutates them through
+          typed commands. Delete one and nothing of yours is lost.
         </p>
         <p class="r" style="--d: 0.22s">
-          Don't like how one works? Tell the <b>builder</b>. It edits the app in conversation
-          against a live preview, on a draft — publish flips it onto every device you own.
+          Don't like how one works? Tell the <b>builder</b>. It edits the app in
+          conversation against a live preview, on a draft — publish flips it
+          onto every device you own.
           <b>Software that fits, because it's refitted.</b>
         </p>
         <p class="aside r" style="--d: 0.28s">
-          No private databases, no build step — a folder you can read in an evening.
+          No private databases, no build step — a folder you can read in an
+          evening.
           <a href="docs/apps/">The apps pillar →</a>
         </p>
       </div>
       <div class="artifact-col">
         <div class="artifact tilt-l r" style="--d: 0.12s">
-          <div class="artifact-head"><span>builder · docs</span><span class="tag">draft</span></div>
+          <div class="artifact-head">
+            <span>builder · docs</span><span class="tag">draft</span>
+          </div>
           <div class="artifact-body">
             <div class="t-line">
               <span class="t-who you">you</span>
               <span class="t-msg"
-                >Separate receipts from documents, and show a monthly total next to each
-                folder.</span
+                >Separate receipts from documents, and show a monthly total next
+                to each folder.</span
               >
             </div>
             <div class="t-line">
               <span class="t-who agent">builder</span>
               <span class="t-msg"
-                ><span class="tool-chip">⚙ vault_sql → folders, roles, txn joins</span>
-                Receipts already carry a canonical role — no new table needed. Drafted a filtered
-                view + a query joining receipts to transactions.
+                ><span class="tool-chip"
+                  >⚙ vault_sql → folders, roles, txn joins</span
+                >
+                Receipts already carry a canonical role — no new table needed.
+                Drafted a filtered view + a query joining receipts to
+                transactions.
                 <span class="dim nl">Preview is live. Publish?</span></span
               >
             </div>
@@ -1066,7 +1104,9 @@
             </div>
             <div class="t-line">
               <span class="t-who agent">builder</span>
-              <span class="t-msg">Done — <b>docs</b> is updated on all your devices.</span>
+              <span class="t-msg"
+                >Done — <b>docs</b> is updated on all your devices.</span
+              >
             </div>
           </div>
         </div>
@@ -1077,40 +1117,52 @@
     <section class="chapter wrap" id="assistant">
       <div class="prose">
         <p class="ch-no r"><span class="n">03</span> the assistant</p>
-        <h2 class="r" style="--d: 0.08s">Data that's alive, <em>not just stored.</em></h2>
+        <h2 class="r" style="--d: 0.08s">
+          Data that's alive, <em>not just stored.</em>
+        </h2>
         <p class="r" style="--d: 0.16s">
           The point of one model is that something can finally
-          <b>think across it</b>. The assistant reads your whole vault with plain SQL — receipted,
-          row-capped — and answers questions no siloed app could: joins across your people, money,
-          calendar and documents, because they were never separated.
+          <b>think across it</b>. The assistant reads your whole vault with
+          plain SQL — receipted, row-capped — and answers questions no siloed
+          app could: joins across your people, money, calendar and documents,
+          because they were never separated.
         </p>
         <p class="r" style="--d: 0.22s">
-          It writes only through the <b>same typed commands</b> your apps use — consequential acts
-          pause for your confirmation, and when you correct it, the correction becomes a durable
-          rule it consults next time.
+          It writes only through the <b>same typed commands</b> your apps use —
+          consequential acts pause for your confirmation, and when you correct
+          it, the correction becomes a durable rule it consults next time.
         </p>
         <p class="aside r" style="--d: 0.28s">
-          Three tools, no side doors: read with SQL, act with commands, open a document.
+          Three tools, no side doors: read with SQL, act with commands, open a
+          document.
           <a href="docs/data/#assistant">The assistant →</a>
         </p>
       </div>
       <div class="artifact-col">
         <div class="artifact tilt-r r" style="--d: 0.12s">
-          <div class="artifact-head"><span>assistant</span><span class="tag">your vault</span></div>
+          <div class="artifact-head">
+            <span>assistant</span><span class="tag">your vault</span>
+          </div>
           <div class="artifact-body">
             <div class="t-line">
               <span class="t-who you">you</span>
               <span class="t-msg"
-                >what did the car cost me this year — and where are the receipts?</span
+                >what did the car cost me this year — and where are the
+                receipts?</span
               >
             </div>
             <div class="t-line">
               <span class="t-who agent">assistant</span>
               <span class="t-msg"
-                ><span class="tool-chip">⚙ vault_sql → transactions ⋈ tags ⋈ attachments</span>
-                ₹86,400 across 14 transactions — insurance, two services, fuel. Eleven have receipts
-                attached in Docs; the December service doesn't.
-                <span class="dim nl">Want a task to chase that invoice?</span></span
+                ><span class="tool-chip"
+                  >⚙ vault_sql → transactions ⋈ tags ⋈ attachments</span
+                >
+                ₹86,400 across 14 transactions — insurance, two services, fuel.
+                Eleven have receipts attached in Docs; the December service
+                doesn't.
+                <span class="dim nl"
+                  >Want a task to chase that invoice?</span
+                ></span
               >
             </div>
           </div>
@@ -1122,21 +1174,27 @@
     <section class="chapter flip wrap" id="automations">
       <div class="prose">
         <p class="ch-no r"><span class="n">04</span> the long game</p>
-        <h2 class="r" style="--d: 0.08s">Automations ferry your life <em>back home.</em></h2>
+        <h2 class="r" style="--d: 0.08s">
+          Automations ferry your life <em>back home.</em>
+        </h2>
         <p class="r" style="--d: 0.16s">
-          Agents on schedules and data triggers pull your world into the vault — Gmail, calendars,
-          contacts, GitHub. <b>Centraid Assist</b> makes Google consent one click while keeping
-          tokens sealed only on your gateway; Advanced lets operators use their own OAuth client.
-          Every imported row is staged for review and stamped with where it came from. Drop an
-          <b>.mbox, .ics, .vcf or CSV</b> on the import door and it enters the same way.
+          Agents on schedules and data triggers pull your world into the vault —
+          Gmail, calendars, contacts, GitHub. <b>Centraid Assist</b> makes
+          Google consent one click while keeping tokens sealed only on your
+          gateway; Advanced lets operators use their own OAuth client. Every
+          imported row is staged for review and stamped with where it came from.
+          Drop an <b>.mbox, .ics, .vcf or CSV</b> on the import door and it
+          enters the same way.
         </p>
         <p class="r" style="--d: 0.22s">
-          Writes to the outside world go through an <b>outbox you approve</b> — you read the actual
-          email before it sends. And every run keeps a durable transcript: when you wonder why it
-          did what it did, you <b>read the conversation back</b>.
+          Writes to the outside world go through an <b>outbox you approve</b> —
+          you read the actual email before it sends. And every run keeps a
+          durable transcript: when you wonder why it did what it did, you
+          <b>read the conversation back</b>.
         </p>
         <p class="aside r" style="--d: 0.28s">
-          Cron, webhook, condition, or a change in your data — templates to start from.
+          Cron, webhook, condition, or a change in your data — templates to
+          start from.
           <a href="docs/data/#automations">Automations →</a> ·
           <a href="docs/data/#connections">connections →</a>
         </p>
@@ -1154,20 +1212,27 @@
             <div class="t-line">
               <span class="t-who agent">briefing</span>
               <span class="t-msg"
-                ><span class="tool-chip">⚙ vault_sql → agenda ⋈ tasks ⋈ people</span>
-                <span class="tool-chip">⚙ read → sync.staged batches</span></span
+                ><span class="tool-chip"
+                  >⚙ vault_sql → agenda ⋈ tasks ⋈ people</span
+                >
+                <span class="tool-chip"
+                  >⚙ read → sync.staged batches</span
+                ></span
               >
             </div>
             <div class="t-line">
               <span class="t-who agent">briefing</span>
               <span class="t-msg"
-                >Two meetings, both after lunch. Rent is due Friday. 14 new emails staged from Gmail
-                overnight — one looks like the missing car-service invoice.</span
+                >Two meetings, both after lunch. Rent is due Friday. 14 new
+                emails staged from Gmail overnight — one looks like the missing
+                car-service invoice.</span
               >
             </div>
             <div class="t-line">
               <span class="t-stamp">06:31</span>
-              <span class="t-msg dim">transcript saved · readable any time</span>
+              <span class="t-msg dim"
+                >transcript saved · readable any time</span
+              >
             </div>
           </div>
         </div>
@@ -1178,21 +1243,26 @@
     <section class="chapter wrap" id="devices">
       <div class="prose">
         <p class="ch-no r"><span class="n">05</span> your devices</p>
-        <h2 class="r" style="--d: 0.08s">One gateway. <em>Everything else is a client.</em></h2>
+        <h2 class="r" style="--d: 0.08s">
+          One gateway. <em>Everything else is a client.</em>
+        </h2>
         <p class="r" style="--d: 0.16s">
           There is no sync service because there is nothing to sync:
-          <b>one gateway</b> holds the vault, and your laptop and phone are clients in a star around
-          it, connected by <b>direct, end-to-end-encrypted peer-to-peer</b> links (iroh) — no relay
-          to rent, no account to lose.
+          <b>one gateway</b> holds the vault, and your laptop and phone are
+          clients in a star around it, connected by
+          <b>direct, end-to-end-encrypted peer-to-peer</b> links (iroh) — no
+          relay to rent, no account to lose.
         </p>
         <p class="r" style="--d: 0.22s">
-          Pairing a phone is one QR code — a ticket that burns on use. Devices authenticate by key,
-          are enrolled per-vault, and
-          <b>revocation cuts live connections</b>, not just future ones. Your agent runtime is
-          pluggable too: Claude Code or Codex behind the same leash.
+          Pairing a phone is one QR code — a ticket that burns on use. Devices
+          authenticate by key, are enrolled per-vault, and
+          <b>revocation cuts live connections</b>, not just future ones. Your
+          agent runtime is pluggable too: Claude Code or Codex behind the same
+          leash.
         </p>
         <p class="aside r" style="--d: 0.28s">
-          Desktop shell, always-on daemon, phone in your pocket — one wire protocol.
+          Desktop shell, always-on daemon, phone in your pocket — one wire
+          protocol.
           <a href="docs/devices/">The devices pillar →</a>
         </p>
       </div>
@@ -1202,17 +1272,21 @@
             <span>gateway · devices</span><span class="tag">star of 3</span>
           </div>
           <div class="artifact-body">
-            <div class="t-msg" style="margin-bottom: 4px">enrolled on vault <b>local</b>:</div>
+            <div class="t-msg" style="margin-bottom: 4px">
+              enrolled on vault <b>local</b>:
+            </div>
             <div class="consent-rows">
               <div class="consent-row">
                 <span class="scope">this machine · desktop shell</span
                 ><span class="verb">owner</span>
               </div>
               <div class="consent-row">
-                <span class="scope">phone · ep_k7va…3q</span><span class="verb">iroh p2p</span>
+                <span class="scope">phone · ep_k7va…3q</span
+                ><span class="verb">iroh p2p</span>
               </div>
               <div class="consent-row">
-                <span class="scope">home server · always-on</span><span class="verb">daemon</span>
+                <span class="scope">home server · always-on</span
+                ><span class="verb">daemon</span>
               </div>
             </div>
             <div class="t-msg dim" style="font-size: 12px">
@@ -1222,7 +1296,9 @@
               <span class="consent-btn">show QR</span>
               <span class="consent-btn ghost">revoke…</span>
             </div>
-            <div class="consent-fine">revocation lands on live connections, not the next one.</div>
+            <div class="consent-fine">
+              revocation lands on live connections, not the next one.
+            </div>
           </div>
         </div>
       </div>
@@ -1230,7 +1306,9 @@
 
     <div class="wrap">
       <hr class="rule" />
-      <div class="rule-label"><span>Where it runs</span><span>one gateway · three homes</span></div>
+      <div class="rule-label">
+        <span>Where it runs</span><span>one gateway · three homes</span>
+      </div>
     </div>
 
     <!-- WHERE IT RUNS -->
@@ -1238,8 +1316,9 @@
       <div class="strip-head">
         <h2 class="r">It runs where <em>your life runs.</em></h2>
         <p class="strip-note r" style="--d: 0.1s">
-          local-first: the vault is files on your machine, the gateway is the only door to it, and
-          nothing leaves your devices unless you point it somewhere.
+          local-first: the vault is files on your machine, the gateway is the
+          only door to it, and nothing leaves your devices unless you point it
+          somewhere.
         </p>
       </div>
       <div class="homes r" style="--d: 0.15s">
@@ -1247,24 +1326,25 @@
           <p class="h-no">home 1</p>
           <h3>Desktop shell</h3>
           <p>
-            The gateway embedded in an app on your Mac, Linux, or Windows machine. Open it like
-            anything else.
+            The gateway embedded in an app on your Mac, Linux, or Windows
+            machine. Open it like anything else.
           </p>
         </div>
         <div class="home">
           <p class="h-no">home 2</p>
           <h3>Always-on daemon</h3>
           <p>
-            <code>centraid-gateway serve</code> on a spare machine or home server — your apps and
-            automations keep working with the laptop closed.
+            <code>centraid-gateway serve</code> on a spare machine or home
+            server — your apps and automations keep working with the laptop
+            closed.
           </p>
         </div>
         <div class="home">
           <p class="h-no">home 3</p>
           <h3>Phone in your pocket</h3>
           <p>
-            The mobile companion is a thin client onto any gateway you run. Same apps, same data, no
-            sync service.
+            The mobile companion is a thin client onto any gateway you run. Same
+            apps, same data, no sync service.
           </p>
         </div>
       </div>
@@ -1273,37 +1353,59 @@
     <!-- INSTALL -->
     <section class="install wrap" id="install">
       <p class="ch-no r"><span class="n">→</span> get started</p>
-      <h2 class="r" style="--d: 0.08s">One clone to <em>your own vault.</em></h2>
+      <h2 class="r" style="--d: 0.08s">
+        One clone to <em>your own vault.</em>
+      </h2>
       <div class="install-grid">
         <div class="term r" style="--d: 0.14s">
           <div class="term-bar" role="tablist">
-            <button class="tab on" data-cmd="desktop" role="tab">desktop</button>
+            <button class="tab on" data-cmd="desktop" role="tab">
+              desktop
+            </button>
             <button class="tab" data-cmd="server" role="tab">always-on</button>
           </div>
           <div class="term-body">
             <div class="cmd on" id="cmd-desktop">
-              <div class="cm"># macOS · Linux · Windows — needs Bun ≥ 1.3 and Node ≥ 24</div>
+              <div class="cm">
+                # macOS · Linux · Windows — needs Bun ≥ 1.3 and Node ≥ 24
+              </div>
               <div class="ln">
                 <span class="p">$</span>
                 <code>git clone https://github.com/srikanth235/centraid</code>
               </div>
-              <div class="ln"><span class="p">$</span> <code>cd centraid && bun install</code></div>
-              <div class="ln"><span class="p">$</span> <code>bun run dev:desktop</code></div>
+              <div class="ln">
+                <span class="p">$</span> <code>cd centraid && bun install</code>
+              </div>
+              <div class="ln">
+                <span class="p">$</span> <code>bun run dev:desktop</code>
+              </div>
             </div>
             <div class="cmd" id="cmd-server">
-              <div class="cm"># a spare machine or home server — devices pair to this</div>
-              <div class="ln"><span class="p">$</span> <code>bun run build</code></div>
+              <div class="cm">
+                # a spare machine or home server — devices pair to this
+              </div>
+              <div class="ln">
+                <span class="p">$</span> <code>bun run build</code>
+              </div>
               <div class="ln">
                 <span class="p">$</span>
                 <code>centraid-gateway serve --data-dir ~/centraid-data</code>
               </div>
               <div class="ln">
                 <span class="p">$</span>
-                <code>centraid-gateway pair --data-dir ~/centraid-data --vault Local</code>
+                <code
+                  >centraid-gateway pair --data-dir ~/centraid-data --vault
+                  Local</code
+                >
               </div>
             </div>
             <button class="copy" id="copy" aria-label="Copy command">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              >
                 <rect x="9" y="9" width="11" height="11" rx="2" />
                 <path d="M5 15V5a2 2 0 0 1 2-2h10" />
               </svg>
@@ -1312,14 +1414,16 @@
         </div>
         <div class="install-notes r" style="--d: 0.2s">
           <p>
-            First launch asks your name, mints your vault, and lands on the app grid — clone a
-            blueprint from <code>Discover</code> and it's yours to reshape.
+            First launch asks your name, mints your vault, and lands on the app
+            grid — clone a blueprint from <code>Discover</code> and it's yours
+            to reshape.
           </p>
           <p>
             Ten minutes in you can pair your phone from
-            <code>Settings → Phone</code>, drop an .mbox or .ics on the import door, and ask the
-            assistant your first cross-silo question.
-            <a class="u" href="docs/start/">The start guide</a> walks the whole first day.
+            <code>Settings → Phone</code>, drop an .mbox or .ics on the import
+            door, and ask the assistant your first cross-silo question.
+            <a class="u" href="docs/start/">The start guide</a> walks the whole
+            first day.
           </p>
         </div>
       </div>
@@ -1340,7 +1444,10 @@
             <a href="docs/ontology/">ontology</a>
             <a href="docs/privacy/">privacy</a>
             <a href="docs/terms/">terms</a>
-            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+            <a
+              href="https://github.com/srikanth235/centraid"
+              target="_blank"
+              rel="noopener"
               >github</a
             >
           </span>
@@ -1351,11 +1458,11 @@
     <script>
       // theme: persisted, defaults to system preference (paper for light)
       const root = document.documentElement;
-      const saved = localStorage.getItem('centraid-theme');
+      const saved = localStorage.getItem("centraid-theme");
       if (saved) {
         root.dataset.theme = saved;
-      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        root.dataset.theme = 'night';
+      } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        root.dataset.theme = "night";
       }
       const icons = {
         paper:
@@ -1363,14 +1470,15 @@
         night:
           '<svg id="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
       };
-      const toggle = document.getElementById('toggle');
+      const toggle = document.getElementById("toggle");
       const syncIcon = () => {
-        toggle.innerHTML = icons[root.dataset.theme === 'night' ? 'night' : 'paper'];
+        toggle.innerHTML =
+          icons[root.dataset.theme === "night" ? "night" : "paper"];
       };
       syncIcon();
-      toggle.addEventListener('click', () => {
-        root.dataset.theme = root.dataset.theme === 'night' ? 'paper' : 'night';
-        localStorage.setItem('centraid-theme', root.dataset.theme);
+      toggle.addEventListener("click", () => {
+        root.dataset.theme = root.dataset.theme === "night" ? "paper" : "night";
+        localStorage.setItem("centraid-theme", root.dataset.theme);
         syncIcon();
       });
 
@@ -1379,44 +1487,49 @@
         (entries) => {
           for (const e of entries) {
             if (e.isIntersecting) {
-              e.target.classList.add('in');
+              e.target.classList.add("in");
               io.unobserve(e.target);
             }
           }
         },
-        { threshold: 0.12, rootMargin: '0px 0px -40px 0px' },
+        { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
       );
-      document.querySelectorAll('.r').forEach((el) => io.observe(el));
+      document.querySelectorAll(".r").forEach((el) => io.observe(el));
 
       // install tabs
       const commands = {
         desktop:
-          'git clone https://github.com/srikanth235/centraid && cd centraid && bun install && bun run dev:desktop',
-        server: 'bun run build && centraid-gateway serve --data-dir ~/centraid-data',
+          "git clone https://github.com/srikanth235/centraid && cd centraid && bun install && bun run dev:desktop",
+        server:
+          "bun run build && centraid-gateway serve --data-dir ~/centraid-data",
       };
-      let active = 'desktop';
-      document.querySelectorAll('.tab').forEach((t) =>
-        t.addEventListener('click', () => {
-          document.querySelectorAll('.tab').forEach((x) => x.classList.remove('on'));
-          document.querySelectorAll('.cmd').forEach((x) => x.classList.remove('on'));
-          t.classList.add('on');
+      let active = "desktop";
+      document.querySelectorAll(".tab").forEach((t) =>
+        t.addEventListener("click", () => {
+          document
+            .querySelectorAll(".tab")
+            .forEach((x) => x.classList.remove("on"));
+          document
+            .querySelectorAll(".cmd")
+            .forEach((x) => x.classList.remove("on"));
+          t.classList.add("on");
           active = t.dataset.cmd;
-          document.getElementById('cmd-' + active).classList.add('on');
-        }),
+          document.getElementById("cmd-" + active).classList.add("on");
+        })
       );
 
       // copy
-      const copy = document.getElementById('copy');
+      const copy = document.getElementById("copy");
       const copyIcon = copy.innerHTML;
-      copy.addEventListener('click', async () => {
+      copy.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(commands[active]);
         } catch (e) {}
-        copy.classList.add('done');
+        copy.classList.add("done");
         copy.innerHTML =
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7"/></svg>';
         setTimeout(() => {
-          copy.classList.remove('done');
+          copy.classList.remove("done");
           copy.innerHTML = copyIcon;
         }, 1600);
       });

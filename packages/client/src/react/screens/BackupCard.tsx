@@ -1,27 +1,34 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
 
-import type { GatewayHomeDiscoveryDTO } from '../../gateway-client.js';
-import type { UsageInput } from '../../storage-metrics.js';
-import { formatDuration } from '../shell/routes/gatewayData.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import BackupHealthMetrics, { ClockLine } from './BackupHealthMetrics.js';
+import type { GatewayHomeDiscoveryDTO } from "../../gateway-client.js";
+import type { UsageInput } from "../../storage-metrics.js";
+import { formatDuration } from "../shell/routes/gatewayData.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import BackupHealthMetrics, { ClockLine } from "./BackupHealthMetrics.js";
 import BackupInventoryPanel, {
   type BackupReconciliationDTO,
   type ProviderPolicyStatusDTO,
-} from './BackupInventoryPanel.js';
-import { computeStorageMetrics } from './backupMetrics.js';
+} from "./BackupInventoryPanel.js";
+import { computeStorageMetrics } from "./backupMetrics.js";
 import BackupPolicyPanel, {
   type BackupDestinationDTO,
   type BackupPolicyDTO,
   type BackupPolicyPatchDTO,
-} from './BackupPolicyPanel.js';
-import RecoveryKitGate from './RecoveryKitGate.js';
+} from "./BackupPolicyPanel.js";
+import RecoveryKitGate from "./RecoveryKitGate.js";
 
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './BackupCard.module.css';
-import gwStyles from './GatewayScreen.module.css';
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./BackupCard.module.css";
+import gwStyles from "./GatewayScreen.module.css";
 
 // Gateway → Backups: the owner surface over the offsite backup engine. This
 // card now renders EXACTLY the five metrics of the §6 contract (issue #436)
@@ -78,10 +85,10 @@ export interface BackupCardProps {
   onVerifyNow?: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
   onUpdatePolicy?: (
     vaultId: string,
-    patch: BackupPolicyPatchDTO,
+    patch: BackupPolicyPatchDTO
   ) => Promise<{ policy: BackupPolicyDTO }>;
   onVerifyBucket?: (
-    vaultId: string,
+    vaultId: string
   ) => Promise<{ vaultId: string; reconciliation: BackupReconciliationDTO }>;
   onExportRecoveryKit?: (input: {
     password: string;
@@ -104,9 +111,9 @@ const POLL_MS = 10_000;
 const FOLLOWUP_MS = 1500;
 
 function ageLabel(iso: string | undefined, now: number): string {
-  if (!iso) return 'never';
+  if (!iso) return "never";
   const at = Date.parse(iso);
-  if (Number.isNaN(at)) return 'never';
+  if (Number.isNaN(at)) return "never";
   return `${formatDuration(Math.max(0, now - at))} ago`;
 }
 
@@ -131,13 +138,13 @@ function VaultRow({
   vault: BackupVaultStatusDTO;
   now: number;
   provider?: string;
-  onUpdatePolicy?: BackupCardProps['onUpdatePolicy'];
-  onVerifyBucket?: BackupCardProps['onVerifyBucket'];
+  onUpdatePolicy?: BackupCardProps["onUpdatePolicy"];
+  onVerifyBucket?: BackupCardProps["onVerifyBucket"];
 }): JSX.Element {
   const neverBackedUp = !vault.lastBackupAt;
-  const destination = vault.destination ?? { kind: 'gateway-local' as const };
+  const destination = vault.destination ?? { kind: "gateway-local" as const };
   const hasRemoteInventory =
-    destination.kind !== 'gateway-local' ||
+    destination.kind !== "gateway-local" ||
     provider !== undefined ||
     vault.providerPolicy !== undefined ||
     vault.reconciliation !== undefined;
@@ -145,15 +152,19 @@ function VaultRow({
     <div className={styles.vaultRow} data-testid="backup-vault-row">
       <div className={styles.vaultHead}>
         <span className={styles.vaultName}>{vault.name ?? vault.vaultId}</span>
-        {vault.running ? <span className={styles.runningBadge}>backing up…</span> : null}
+        {vault.running ? (
+          <span className={styles.runningBadge}>backing up…</span>
+        ) : null}
       </div>
       <div className={styles.vaultMeta}>
-        <span data-emphasis={neverBackedUp ? 'warn' : undefined}>
+        <span data-emphasis={neverBackedUp ? "warn" : undefined}>
           backed up {ageLabel(vault.lastBackupAt, now)}
         </span>
         <span>verified {ageLabel(vault.lastVerifyAt, now)}</span>
       </div>
-      {vault.lastError ? <div className={styles.vaultError}>{vault.lastError}</div> : null}
+      {vault.lastError ? (
+        <div className={styles.vaultError}>{vault.lastError}</div>
+      ) : null}
       <BackupPolicyPanel
         vaultId={vault.vaultId}
         now={now}
@@ -202,7 +213,9 @@ export default function BackupCard({
   // particular is a bare `setTimeout` outside the effect below, so it
   // needs its own cleanup rather than relying on an effect's teardown.
   const mountedRef = useRef(true);
-  const followupTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const followupTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
 
   const refresh = useCallback((): void => {
     loadStatus()
@@ -233,7 +246,8 @@ export default function BackupCard({
     return () => {
       mountedRef.current = false;
       clearInterval(timer);
-      if (followupTimerRef.current !== undefined) clearTimeout(followupTimerRef.current);
+      if (followupTimerRef.current !== undefined)
+        clearTimeout(followupTimerRef.current);
     };
   }, [refresh]);
 
@@ -254,13 +268,15 @@ export default function BackupCard({
       refresh();
       followupTimerRef.current = setTimeout(refresh, FOLLOWUP_MS);
     } catch (err) {
-      if (mountedRef.current) setRunError(err instanceof Error ? err.message : String(err));
+      if (mountedRef.current)
+        setRunError(err instanceof Error ? err.message : String(err));
     } finally {
       if (mountedRef.current) setTriggering(false);
     }
   };
 
-  const anyRunning = triggering || (status?.vaults.some((v) => v.running) ?? false);
+  const anyRunning =
+    triggering || (status?.vaults.some((v) => v.running) ?? false);
 
   const verifyNow = async (): Promise<void> => {
     if (!onVerifyNow) return;
@@ -271,7 +287,8 @@ export default function BackupCard({
       refresh();
       followupTimerRef.current = setTimeout(refresh, FOLLOWUP_MS);
     } catch (err) {
-      if (mountedRef.current) setRunError(err instanceof Error ? err.message : String(err));
+      if (mountedRef.current)
+        setRunError(err instanceof Error ? err.message : String(err));
     } finally {
       if (mountedRef.current) setVerifying(false);
     }
@@ -279,11 +296,12 @@ export default function BackupCard({
 
   const metrics = useMemo(
     () => (status ? computeStorageMetrics(status, usage, now) : null),
-    [status, usage, now],
+    [status, usage, now]
   );
 
   const hasBackups =
-    (status?.configured ?? false) || (status?.vaults.some((v) => v.lastBackupAt) ?? false);
+    (status?.configured ?? false) ||
+    (status?.vaults.some((v) => v.lastBackupAt) ?? false);
   const clocks = metrics?.freshness.clocks;
 
   return (
@@ -312,7 +330,9 @@ export default function BackupCard({
 
       <div className={styles.body}>
         {loadError ? (
-          <div className={styles.loadError}>Couldn’t reach the gateway: {loadError}</div>
+          <div className={styles.loadError}>
+            Couldn’t reach the gateway: {loadError}
+          </div>
         ) : !status || !metrics ? (
           <div className={gwStyles.panelEmpty}>Checking backup status…</div>
         ) : hasBackups ? (
@@ -326,37 +346,56 @@ export default function BackupCard({
               onExport={onExportRecoveryKit}
             />
 
-            <details className={styles.diagnostics} data-testid="backup-diagnostics">
+            <details
+              className={styles.diagnostics}
+              data-testid="backup-diagnostics"
+            >
               <summary>Diagnostics</summary>
               <div className={styles.diagnosticsBody}>
                 <div className={styles.actions}>
                   {onVerifyNow ? (
                     <button
                       type="button"
-                      className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+                      className={cx(
+                        buttonCss.btn,
+                        buttonCss.sm,
+                        controlsCss.soft
+                      )}
                       disabled={anyRunning || verifying}
                       onClick={() => void verifyNow()}
                     >
                       <Icon name="CheckCircle" size={13} />
-                      <span>{verifying ? 'Verifying…' : 'Verify now'}</span>
+                      <span>{verifying ? "Verifying…" : "Verify now"}</span>
                     </button>
                   ) : null}
                   <button
                     type="button"
-                    className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+                    className={cx(
+                      buttonCss.btn,
+                      buttonCss.sm,
+                      controlsCss.soft
+                    )}
                     disabled={anyRunning || verifying}
                     onClick={() => void runNow()}
                   >
-                    <span className={styles.runIcon} data-spin={anyRunning || undefined}>
-                      <Icon name={anyRunning ? 'Loader' : 'Save'} size={13} />
+                    <span
+                      className={styles.runIcon}
+                      data-spin={anyRunning || undefined}
+                    >
+                      <Icon name={anyRunning ? "Loader" : "Save"} size={13} />
                     </span>
-                    <span>{anyRunning ? 'Backing up…' : 'Back up now'}</span>
+                    <span>{anyRunning ? "Backing up…" : "Back up now"}</span>
                   </button>
                 </div>
-                {runError ? <div className={styles.runError}>{runError}</div> : null}
+                {runError ? (
+                  <div className={styles.runError}>{runError}</div>
+                ) : null}
 
                 {clocks ? (
-                  <div className={styles.clockGrid} data-testid="freshness-clocks">
+                  <div
+                    className={styles.clockGrid}
+                    data-testid="freshness-clocks"
+                  >
                     <ClockLine
                       label="Newest snapshot"
                       at={clocks.lastRegisteredSnapshotAt}
@@ -400,9 +439,9 @@ export default function BackupCard({
         ) : (
           <>
             <p className={styles.notConfigured}>
-              Your data isn’t backed up offsite yet. In Settings → Storage, connect your storage
-              provider and set this vault to Hosted. Until then, databases, code, and attachments
-              live only on this machine.
+              Your data isn’t backed up offsite yet. In Settings → Storage,
+              connect your storage provider and set this vault to Hosted. Until
+              then, databases, code, and attachments live only on this machine.
             </p>
             <RecoveryKitGate
               configured={status.configured}

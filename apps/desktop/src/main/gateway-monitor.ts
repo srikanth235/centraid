@@ -28,7 +28,7 @@
  * see gateway-monitor-core.ts's file header for why.
  */
 
-import { BrowserWindow, Notification } from 'electron';
+import { BrowserWindow, Notification } from "electron";
 
 import {
   applyComponentAlerts,
@@ -45,18 +45,24 @@ import {
   type GatewayProbe,
   type GatewayRuntimeState,
   type GatewayVersionSkewAction,
-} from './gateway-monitor-core.js';
-import { deriveOutageEvents, type OutageLogEvent } from './gateway-outage-log-core.js';
-import { loadOutageLog, persistOutageEvents } from './gateway-outage-log.js';
-import { probeGateway } from './gateway-monitor-probe.js';
-import { CRASH_LOOP_THRESHOLD, CRASH_LOOP_WINDOW_MS } from './gateway-supervisor-core.js';
-import { getLocalGatewaySupervisorState } from './local-gateway.js';
-import { pushPowerContext } from './power-context-push.js';
-import { loadSettings } from './settings.js';
+} from "./gateway-monitor-core.js";
+import { probeGateway } from "./gateway-monitor-probe.js";
+import {
+  deriveOutageEvents,
+  type OutageLogEvent,
+} from "./gateway-outage-log-core.js";
+import { loadOutageLog, persistOutageEvents } from "./gateway-outage-log.js";
+import {
+  CRASH_LOOP_THRESHOLD,
+  CRASH_LOOP_WINDOW_MS,
+} from "./gateway-supervisor-core.js";
+import { getLocalGatewaySupervisorState } from "./local-gateway.js";
+import { pushPowerContext } from "./power-context-push.js";
+import { loadSettings } from "./settings.js";
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
 /** Broadcast channel — keep in sync with `Channel` in ipc.ts + preload.ts. */
-const RUNTIME_EVENT_CHANNEL = 'centraid:gateway-runtime:event';
+const RUNTIME_EVENT_CHANNEL = "centraid:gateway-runtime:event";
 
 /**
  * One durable alert-history entry as the renderer sees it (issue #351 wave
@@ -64,7 +70,10 @@ const RUNTIME_EVENT_CHANNEL = 'centraid:gateway-runtime:event';
  * boot, vs. one recorded during the current run, so the Alerts tab can
  * label history from before the last restart.
  */
-export interface OutageLogSnapshotEntry extends Omit<OutageLogEvent, 'gatewayId' | 'gatewayLabel'> {
+export interface OutageLogSnapshotEntry extends Omit<
+  OutageLogEvent,
+  "gatewayId" | "gatewayLabel"
+> {
   previousSession: boolean;
 }
 
@@ -77,7 +86,7 @@ export interface OutageLogSnapshotEntry extends Omit<OutageLogEvent, 'gatewayId'
  */
 export interface GatewayRuntimeSnapshot extends Omit<
   GatewayRuntimeState,
-  'componentAlerts' | 'versionSkewAlertedAt'
+  "componentAlerts" | "versionSkewAlertedAt"
 > {
   alert: GatewayAlertConfig;
   pollIntervalMs: number;
@@ -108,28 +117,31 @@ let historyBootAt: number | undefined;
 function notify(action: GatewayAlertAction, label: string): void {
   if (!Notification.isSupported()) return;
   const n =
-    action.kind === 'down'
+    action.kind === "down"
       ? new Notification({
-          title: 'Gateway unreachable',
+          title: "Gateway unreachable",
           body: `“${label}” has been down for ${formatDurationMs(action.downForMs)}. Centraid can’t reach it.`,
-          urgency: 'critical',
+          urgency: "critical",
         })
       : new Notification({
-          title: 'Gateway back online',
+          title: "Gateway back online",
           body: `“${label}” recovered after ${formatDurationMs(action.outageMs)}.`,
         });
   n.show();
 }
 
 /** Component-level down alert (issue #351) — de-duped by `applyComponentAlerts`. */
-function notifyComponent(action: GatewayComponentAlertAction, gatewayLabel: string): void {
+function notifyComponent(
+  action: GatewayComponentAlertAction,
+  gatewayLabel: string
+): void {
   if (!Notification.isSupported()) return;
   const n = new Notification({
-    title: 'Gateway component unhealthy',
+    title: "Gateway component unhealthy",
     body:
       `“${action.component}” on “${gatewayLabel}” has been erroring for ` +
-      `${formatDurationMs(action.downForMs)}${action.message ? `: ${action.message}` : '.'}`,
-    urgency: 'critical',
+      `${formatDurationMs(action.downForMs)}${action.message ? `: ${action.message}` : "."}`,
+    urgency: "critical",
   });
   n.show();
 }
@@ -140,31 +152,37 @@ function notifyComponent(action: GatewayComponentAlertAction, gatewayLabel: stri
  * expectations, de-duped by `applyVersionSkewAlert`. v0 policy is
  * "surface loudly", not refuse — see gateway-monitor-core.ts's file header.
  */
-function notifyVersionSkew(action: GatewayVersionSkewAction, gatewayLabel: string): void {
+function notifyVersionSkew(
+  action: GatewayVersionSkewAction,
+  gatewayLabel: string
+): void {
   if (!Notification.isSupported()) return;
   const n = new Notification({
-    title: 'Gateway version mismatch',
+    title: "Gateway version mismatch",
     body:
       `“${gatewayLabel}” is running v${action.gatewayVersion} (schema epoch ` +
       `${action.gatewaySchemaEpoch}), which doesn’t match what this app expects. ` +
-      'Update both to the same version to avoid undebuggable weirdness.',
-    urgency: 'critical',
+      "Update both to the same version to avoid undebuggable weirdness.",
+    urgency: "critical",
   });
   n.show();
 }
 
 /** Fired once when the embedded local gateway's supervised restart gives up (issue #351). */
-function notifyCrashLoop(gatewayLabel: string, lastError: string | undefined): void {
+function notifyCrashLoop(
+  gatewayLabel: string,
+  lastError: string | undefined
+): void {
   if (!Notification.isSupported()) return;
   const windowMinutes = Math.round(CRASH_LOOP_WINDOW_MS / 60_000);
   const n = new Notification({
-    title: 'Gateway failed repeatedly',
+    title: "Gateway failed repeatedly",
     body:
       `“${gatewayLabel}” failed to start ${CRASH_LOOP_THRESHOLD}+ times in the last ` +
       `${windowMinutes} minutes — Centraid stopped retrying automatically.` +
-      (lastError ? ` Last error: ${lastError}.` : '') +
-      ' Use Settings → Gateway to restart it manually.',
-    urgency: 'critical',
+      (lastError ? ` Last error: ${lastError}.` : "") +
+      " Use Settings → Gateway to restart it manually.",
+    urgency: "critical",
   });
   n.show();
 }
@@ -196,7 +214,7 @@ async function tick(): Promise<void> {
     settingsError = err instanceof Error ? err.message : String(err);
     if (!state) {
       process.stdout.write(
-        `[gateway-monitor] settings unavailable, no prior state to track: ${settingsError}\n`,
+        `[gateway-monitor] settings unavailable, no prior state to track: ${settingsError}\n`
       );
       return;
     }
@@ -210,7 +228,7 @@ async function tick(): Promise<void> {
           label: settings.activeGatewayLabel,
           kind: settings.activeGatewayKind,
         },
-        Date.now(),
+        Date.now()
       );
     }
     // Label/kind can change without a gateway switch (rename) — carry them.
@@ -233,9 +251,10 @@ async function tick(): Promise<void> {
   // (see above): in the common case that IS the local gateway failing to
   // boot, so we still attribute it to the supervisor when the tracked
   // gateway is local.
-  const activeGatewayKind = settings?.activeGatewayKind ?? trackedState.gatewayKind;
+  const activeGatewayKind =
+    settings?.activeGatewayKind ?? trackedState.gatewayKind;
   const localSupervisor =
-    activeGatewayKind === 'local'
+    activeGatewayKind === "local"
       ? getLocalGatewaySupervisorState(trackedState.gatewayId)
       : undefined;
   const probe: GatewayProbe = settings
@@ -243,15 +262,16 @@ async function tick(): Promise<void> {
       ? {
           at: Date.now(),
           ok: false,
-          detail: localSupervisor.lastError ?? 'local gateway failed repeatedly',
+          detail:
+            localSupervisor.lastError ?? "local gateway failed repeatedly",
         }
       : settings.gatewayUrl
         ? await probeGateway(settings.gatewayUrl, settings.gatewayToken)
-        : { at: Date.now(), ok: false, detail: 'gateway URL not resolved yet' }
+        : { at: Date.now(), ok: false, detail: "gateway URL not resolved yet" }
     : {
         at: Date.now(),
         ok: false,
-        detail: settingsError ?? 'settings unavailable',
+        detail: settingsError ?? "settings unavailable",
       };
   // Piggyback the power-context push (#528 Phase D) on the heartbeat so the
   // gateway's live host power posture never approaches its 120s staleness
@@ -273,7 +293,8 @@ async function tick(): Promise<void> {
   // picks "Start fresh on this Mac" the local gateway is deliberately not
   // started (no keychain prompt ahead of the chooser), so "unreachable" is
   // expected, not an outage. A FAILED settings read still alerts.
-  const inFirstRunSetup = settings !== undefined && settings.onboardingCompletedAt === undefined;
+  const inFirstRunSetup =
+    settings !== undefined && settings.onboardingCompletedAt === undefined;
   const alert: GatewayAlertConfig = {
     enabled: (settings?.gatewayAlertsEnabled ?? true) && !inFirstRunSetup,
     thresholdSeconds: settings?.gatewayAlertSeconds ?? DEFAULT_ALERT_SECONDS,
@@ -289,16 +310,22 @@ async function tick(): Promise<void> {
     enabled: alert.enabled,
     thresholdSeconds: DEFAULT_COMPONENT_ALERT_SECONDS,
   };
-  const componentEvaluated = applyComponentAlerts(state, Date.now(), componentAlert);
+  const componentEvaluated = applyComponentAlerts(
+    state,
+    Date.now(),
+    componentAlert
+  );
   state = componentEvaluated.state;
-  for (const action of componentEvaluated.actions) notifyComponent(action, state.gatewayLabel);
+  for (const action of componentEvaluated.actions)
+    notifyComponent(action, state.gatewayLabel);
 
   // Version-skew alert (wave 2 of #351) — same enable switch, no threshold
   // (see applyVersionSkewAlert's doc comment for why). `versionSkew` is only
   // ever set for a remote gateway, so this is a no-op for local.
   const skewEvaluated = applyVersionSkewAlert(state, alert, Date.now());
   state = skewEvaluated.state;
-  if (skewEvaluated.action) notifyVersionSkew(skewEvaluated.action, state.gatewayLabel);
+  if (skewEvaluated.action)
+    notifyVersionSkew(skewEvaluated.action, state.gatewayLabel);
 
   // Crash-loop alert — fires once per loop-broken episode; clears when the
   // supervisor recovers (a manual restart, or the app relaunching) so a
@@ -327,7 +354,9 @@ async function tick(): Promise<void> {
     prevHealthStatus,
     state,
     componentActions: componentEvaluated.actions,
-    ...(skewEvaluated.action ? { versionSkewAction: skewEvaluated.action } : {}),
+    ...(skewEvaluated.action
+      ? { versionSkewAction: skewEvaluated.action }
+      : {}),
     now: Date.now(),
   });
   outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
@@ -394,7 +423,7 @@ export function stopGatewayMonitor(): void {
  */
 export async function getGatewayRuntimeSnapshot(): Promise<GatewayRuntimeSnapshot> {
   if (!lastSnapshot) await runTick();
-  if (!lastSnapshot) throw new Error('gateway monitor produced no snapshot');
+  if (!lastSnapshot) throw new Error("gateway monitor produced no snapshot");
   return lastSnapshot;
 }
 

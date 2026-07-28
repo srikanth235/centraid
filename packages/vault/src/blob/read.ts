@@ -9,19 +9,19 @@
 // its grace window and still serves. What never serves: a sha nothing
 // claims, and variants of an unservable parent.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 import {
   BINARY_DERIVATIVE_SQL,
   isBinaryDerivative,
   isDerivativeVariant,
   type BinaryDerivativeVariant,
-} from './derivatives.js';
-import { shaOfBlobUri } from './store.js';
+} from "./derivatives.js";
+import { shaOfBlobUri } from "./store.js";
 
 // Mirrors commands/links.ts RELATIONS_SCHEME_URI (imported by literal to
 // keep blob/ free of command-layer imports; the scheme URI is contract).
-const RELATIONS_SCHEME_URI = 'urn:duaility:relations';
+const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
 /**
  * Byte-renting edges, the serve-side twin of media.ts CONTENT_REFERENCES —
@@ -34,16 +34,16 @@ const RELATIONS_SCHEME_URI = 'urn:duaility:relations';
  * removed) and never fully removed either (trash renders until purge).
  */
 const SERVE_REFERENCES: string[] = [
-  'SELECT 1 FROM core_attachment WHERE content_id = i.content_id',
-  'SELECT 1 FROM core_party WHERE avatar_content_id = i.content_id',
-  'SELECT 1 FROM knowledge_note WHERE body_content_id = i.content_id',
-  'SELECT 1 FROM social_message WHERE body_content_id = i.content_id',
-  'SELECT 1 FROM business_invoice WHERE pdf_content_id = i.content_id',
-  'SELECT 1 FROM home_warranty WHERE terms_content_id = i.content_id',
-  'SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = i.content_id',
-  'SELECT 1 FROM media_media_asset WHERE content_id = i.content_id',
-  'SELECT 1 FROM core_collection WHERE cover_content_id = i.content_id',
-  'SELECT 1 FROM core_document WHERE current_content_id = i.content_id',
+  "SELECT 1 FROM core_attachment WHERE content_id = i.content_id",
+  "SELECT 1 FROM core_party WHERE avatar_content_id = i.content_id",
+  "SELECT 1 FROM knowledge_note WHERE body_content_id = i.content_id",
+  "SELECT 1 FROM social_message WHERE body_content_id = i.content_id",
+  "SELECT 1 FROM business_invoice WHERE pdf_content_id = i.content_id",
+  "SELECT 1 FROM home_warranty WHERE terms_content_id = i.content_id",
+  "SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = i.content_id",
+  "SELECT 1 FROM media_media_asset WHERE content_id = i.content_id",
+  "SELECT 1 FROM core_collection WHERE cover_content_id = i.content_id",
+  "SELECT 1 FROM core_document WHERE current_content_id = i.content_id",
   `WITH RECURSIVE chain(content_id) AS (
      SELECT current_content_id FROM core_document
      UNION
@@ -63,15 +63,15 @@ export interface ServableBlob {
   byteSize: number;
   title: string | null;
   /** Which variant resolved — `original` when no variant was asked. */
-  variant: 'original' | BinaryDerivativeVariant;
+  variant: "original" | BinaryDerivativeVariant;
 }
 
 export type BlobResolveOutcome =
-  | { status: 'ok'; blob: ServableBlob }
-  | { status: 'not-found' }
-  | { status: 'not-blob' } // inline text/* content has no byte endpoint
-  | { status: 'unreferenced' } // exists but nothing in the model claims it
-  | { status: 'no-variant' }; // parent serves, asked variant doesn't exist
+  | { status: "ok"; blob: ServableBlob }
+  | { status: "not-found" }
+  | { status: "not-blob" } // inline text/* content has no byte endpoint
+  | { status: "unreferenced" } // exists but nothing in the model claims it
+  | { status: "no-variant" }; // parent serves, asked variant doesn't exist
 
 /**
  * Resolve one content id (and optional variant) to servable bytes metadata.
@@ -81,7 +81,7 @@ export type BlobResolveOutcome =
 export function resolveServableBlob(
   vault: DatabaseSync,
   contentId: string,
-  variant?: string,
+  variant?: string
 ): BlobResolveOutcome {
   const row = vault
     .prepare(
@@ -91,8 +91,8 @@ export function resolveServableBlob(
               COALESCE(
                 (SELECT d.title FROM core_document d WHERE d.current_content_id = i.content_id LIMIT 1),
                 i.title) AS title,
-              (${SERVE_REFERENCES.map((q) => `EXISTS(${q})`).join(' + ')}) AS refs
-         FROM core_content_item i WHERE i.content_id = ?`,
+              (${SERVE_REFERENCES.map((q) => `EXISTS(${q})`).join(" + ")}) AS refs
+         FROM core_content_item i WHERE i.content_id = ?`
     )
     .get(contentId) as
     | {
@@ -104,21 +104,21 @@ export function resolveServableBlob(
         refs: number;
       }
     | undefined;
-  if (!row) return { status: 'not-found' };
-  if (row.refs === 0) return { status: 'unreferenced' };
+  if (!row) return { status: "not-found" };
+  if (row.refs === 0) return { status: "unreferenced" };
 
   if (isDerivativeVariant(variant) && isBinaryDerivative(variant)) {
     const v = vault
       .prepare(
         `SELECT sha256, media_type, byte_size FROM core_content_derivative
-          WHERE content_id = ? AND variant = ? AND sha256 IS NOT NULL`,
+          WHERE content_id = ? AND variant = ? AND sha256 IS NOT NULL`
       )
       .get(contentId, variant) as
       | { sha256: string; media_type: string; byte_size: number }
       | undefined;
-    if (!v) return { status: 'no-variant' };
+    if (!v) return { status: "no-variant" };
     return {
-      status: 'ok',
+      status: "ok",
       blob: {
         contentId,
         sha256: v.sha256,
@@ -131,16 +131,16 @@ export function resolveServableBlob(
   }
 
   const sha = shaOfBlobUri(row.content_uri);
-  if (!sha) return { status: 'not-blob' };
+  if (!sha) return { status: "not-blob" };
   return {
-    status: 'ok',
+    status: "ok",
     blob: {
       contentId,
       sha256: sha,
       mediaType: row.media_type,
       byteSize: row.byte_size,
       title: row.title,
-      variant: 'original',
+      variant: "original",
     },
   };
 }
@@ -176,19 +176,19 @@ const DERIVATIVE_IN_CHUNK = 500;
 export function resolveDerivativeShas(
   vault: DatabaseSync,
   contentIds: readonly string[],
-  variant: BinaryDerivativeVariant,
+  variant: BinaryDerivativeVariant
 ): Map<string, DerivativeRef> {
   const out = new Map<string, DerivativeRef>();
   for (let i = 0; i < contentIds.length; i += DERIVATIVE_IN_CHUNK) {
     const chunk = contentIds.slice(i, i + DERIVATIVE_IN_CHUNK);
     if (chunk.length === 0) continue;
-    const placeholders = chunk.map(() => '?').join(',');
+    const placeholders = chunk.map(() => "?").join(",");
     const rows = vault
       .prepare(
         `SELECT content_id, sha256, media_type, byte_size
            FROM core_content_derivative
           WHERE variant = ? AND sha256 IS NOT NULL
-            AND content_id IN (${placeholders})`,
+            AND content_id IN (${placeholders})`
       )
       .all(variant, ...chunk) as {
       content_id: string;
@@ -215,20 +215,24 @@ export function resolveDerivativeShas(
 export function liveBlobShas(vault: DatabaseSync): Set<string> {
   const live = new Set<string>();
   const uris = vault
-    .prepare(`SELECT content_uri FROM core_content_item WHERE content_uri LIKE 'blob:%'`)
+    .prepare(
+      `SELECT content_uri FROM core_content_item WHERE content_uri LIKE 'blob:%'`
+    )
     .all() as { content_uri: string }[];
   for (const r of uris) {
     const sha = shaOfBlobUri(r.content_uri);
     if (sha) live.add(sha);
   }
   const variants = vault
-    .prepare('SELECT sha256 FROM core_content_derivative WHERE sha256 IS NOT NULL')
+    .prepare(
+      "SELECT sha256 FROM core_content_derivative WHERE sha256 IS NOT NULL"
+    )
     .all() as { sha256: string }[];
   for (const r of variants) live.add(r.sha256);
   const staged = vault
     .prepare(
       `SELECT sha256 FROM blob_staging
-        WHERE variant IS NULL OR variant IN (${BINARY_DERIVATIVE_SQL})`,
+        WHERE variant IS NULL OR variant IN (${BINARY_DERIVATIVE_SQL})`
     )
     .all() as { sha256: string }[];
   for (const r of staged) live.add(r.sha256);

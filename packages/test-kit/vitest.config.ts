@@ -1,8 +1,8 @@
-import { nodeProject } from './src/vitest.js';
+import { nodeProject } from "./src/vitest.js";
 
 export default nodeProject({
   test: {
-    name: '@centraid/test-kit',
-    include: ['src/**/*.test.ts'],
+    name: "@centraid/test-kit",
+    include: ["src/**/*.test.ts"],
   },
 });

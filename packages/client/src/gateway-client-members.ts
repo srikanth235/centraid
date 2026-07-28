@@ -25,8 +25,8 @@ import {
   enc,
   readJson,
   GatewayClientError,
-} from './gateway-client-core.js';
-import type { GatewayVaultGrant } from './gateway-client-devices.js';
+} from "./gateway-client-core.js";
+import type { GatewayVaultGrant } from "./gateway-client-devices.js";
 
 /** One person in the household (mirrors the gateway route's member DTO). */
 export interface GatewayMember {
@@ -44,14 +44,18 @@ export interface GatewayMember {
 export async function listGatewayMembers(): Promise<GatewayMember[]> {
   const { baseUrl, token } = await auth();
   try {
-    const res = await doFetch(baseUrl, '/centraid/_gateway/members', {
-      method: 'GET',
+    const res = await doFetch(baseUrl, "/centraid/_gateway/members", {
+      method: "GET",
       headers: authHeaders(token),
     });
-    const out = await readJson<{ members: GatewayMember[] }>(res, 'list members');
+    const out = await readJson<{ members: GatewayMember[] }>(
+      res,
+      "list members"
+    );
     return out.members ?? [];
   } catch (err) {
-    if (err instanceof GatewayClientError && err.code === 'not_found') return [];
+    if (err instanceof GatewayClientError && err.code === "not_found")
+      return [];
     throw err;
   }
 }
@@ -61,25 +65,35 @@ export async function listGatewayMembers(): Promise<GatewayMember[]> {
  * refuses (`not_admin`) unless the caller is an owner somewhere. The new
  * member starts with NO roles; a pairing ticket is what grants them.
  */
-export async function createGatewayMember(label: string): Promise<GatewayMember> {
+export async function createGatewayMember(
+  label: string
+): Promise<GatewayMember> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/members', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+  const res = await doFetch(baseUrl, "/centraid/_gateway/members", {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ label }),
   });
-  return (await readJson<{ member: GatewayMember }>(res, 'add member')).member;
+  return (await readJson<{ member: GatewayMember }>(res, "add member")).member;
 }
 
 /** Rename a person. The id is untouched, so grants and attribution survive. */
-export async function renameGatewayMember(memberId: string, label: string): Promise<GatewayMember> {
+export async function renameGatewayMember(
+  memberId: string,
+  label: string
+): Promise<GatewayMember> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_gateway/members/${enc(memberId)}`, {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ label }),
-  });
-  return (await readJson<{ member: GatewayMember }>(res, 'rename member')).member;
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/members/${enc(memberId)}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ label }),
+    }
+  );
+  return (await readJson<{ member: GatewayMember }>(res, "rename member"))
+    .member;
 }
 
 /**
@@ -89,15 +103,24 @@ export async function renameGatewayMember(memberId: string, label: string): Prom
  */
 export async function removeGatewayMember(
   memberId: string,
-  options?: { confirmLastAdmin?: string },
+  options?: { confirmLastAdmin?: string }
 ): Promise<{ removed: boolean; memberId: string; devices: number }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_gateway/members/${enc(memberId)}`, {
-    method: 'DELETE',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(
-      options?.confirmLastAdmin ? { confirmLastAdmin: options.confirmLastAdmin } : {},
-    ),
-  });
-  return readJson<{ removed: boolean; memberId: string; devices: number }>(res, 'remove member');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/members/${enc(memberId)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(
+        options?.confirmLastAdmin
+          ? { confirmLastAdmin: options.confirmLastAdmin }
+          : {}
+      ),
+    }
+  );
+  return readJson<{ removed: boolean; memberId: string; devices: number }>(
+    res,
+    "remove member"
+  );
 }

@@ -18,8 +18,8 @@
 //
 // The merge itself — ordering, cross-scope dedupe, the shared safe horizon —
 // lives in merge.ts and is deliberately not re-derived here.
-import { mergeScopePages, type MergeAsset, type MergeResult } from './merge.ts';
-import type { Album, Asset, LibraryData, Place } from './types.ts';
+import { mergeScopePages, type MergeAsset, type MergeResult } from "./merge.ts";
+import type { Album, Asset, LibraryData, Place } from "./types.ts";
 
 /** What one scope answered, or why it couldn't. Errors are data, never throws. */
 export type ScopeReadResult =
@@ -46,7 +46,7 @@ export interface LibraryStoreDeps {
   /** Fan the `library` query across the named scopes. Must never reject. */
   readScopes: (
     scopeIds: readonly string[],
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ) => Promise<ScopeReadResult[]>;
   /** The mounted scope ids, primary first — read live (audiences hydrate late). */
   scopeIds: () => string[];
@@ -107,7 +107,10 @@ function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
   const seen = new Set(prev.assets.map((asset) => asset.asset_id));
   return {
     ...next,
-    assets: [...prev.assets, ...next.assets.filter((asset) => !seen.has(asset.asset_id))],
+    assets: [
+      ...prev.assets,
+      ...next.assets.filter((asset) => !seen.has(asset.asset_id)),
+    ],
     albums: next.albums.length > 0 ? next.albums : prev.albums,
     places: next.places.length > 0 ? next.places : prev.places,
     trash: next.trash.length > 0 ? next.trash : prev.trash,
@@ -157,7 +160,8 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   };
   const current = (scopeId: string): number => generation.get(scopeId) ?? 0;
 
-  const scopeOf = (scopeId: string): ScopeLibrary => byScope.get(scopeId) ?? emptyLibrary();
+  const scopeOf = (scopeId: string): ScopeLibrary =>
+    byScope.get(scopeId) ?? emptyLibrary();
 
   /** How deep this scope currently is, rounded up to whole pages. */
   const depthOf = (scopeId: string): number => {
@@ -171,12 +175,14 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   };
 
   /** Fold one scope's answer in. A failed read leaves the last good page alone. */
-  const apply = (result: ScopeReadResult, mode: 'replace' | 'append'): void => {
+  const apply = (result: ScopeReadResult, mode: "replace" | "append"): void => {
     if (result.ok) {
       const prev = byScope.get(result.scope);
       byScope.set(
         result.scope,
-        mode === 'append' && prev ? appendPage(prev, result.data) : libraryFrom(result.data),
+        mode === "append" && prev
+          ? appendPage(prev, result.data)
+          : libraryFrom(result.data)
       );
       return;
     }
@@ -191,7 +197,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   async function readInto(
     scopeIds: readonly string[],
     input: Record<string, unknown>,
-    mode: 'replace' | 'append',
+    mode: "replace" | "append"
   ): Promise<void> {
     if (disposed || scopeIds.length === 0) return;
     const marks = new Map(scopeIds.map((id) => [id, bump(id)]));
@@ -231,13 +237,16 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     const scopeIds = deps.scopeIds();
     // One round trip, so one limit: the deepest scope's, which keeps a scope
     // that has already paged deep from snapping back to page 1 on a refresh.
-    const limit = scopeIds.reduce((deep, id) => Math.max(deep, depthOf(id)), pageSize);
-    await readInto(scopeIds, { limit }, 'replace');
+    const limit = scopeIds.reduce(
+      (deep, id) => Math.max(deep, depthOf(id)),
+      pageSize
+    );
+    await readInto(scopeIds, { limit }, "replace");
   }
 
   async function refreshScope(scopeId: string): Promise<void> {
     if (!deps.scopeIds().includes(scopeId)) return;
-    await readInto([scopeId], { limit: depthOf(scopeId) }, 'replace');
+    await readInto([scopeId], { limit: depthOf(scopeId) }, "replace");
   }
 
   async function showMore(): Promise<void> {
@@ -255,9 +264,9 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
           // Without a cursor the query returns the same newest page again;
           // replacing (not appending) keeps that from being a no-op that also
           // strands the accumulated depth.
-          before ? 'append' : 'replace',
+          before ? "append" : "replace"
         );
-      }),
+      })
     );
   }
 
@@ -266,8 +275,8 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     const scope = detail?.scope;
     // A scope that just hydrated has no page at all: fetch exactly it, and
     // never mistake the arrival for a data burst that the table gate can drop.
-    if (detail?.source === 'scope-added') {
-      const scopeId = scope ?? '';
+    if (detail?.source === "scope-added") {
+      const scopeId = scope ?? "";
       deps.schedule(`scope:${scopeId}`, () => void refreshScope(scopeId));
       return;
     }
@@ -276,11 +285,11 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     if (Array.isArray(tables) && tables.length > 0) {
       if (!tables.some((table) => deps.readTables.has(table))) return;
     }
-    if (typeof scope === 'string' && deps.scopeIds().includes(scope)) {
+    if (typeof scope === "string" && deps.scopeIds().includes(scope)) {
       deps.schedule(`scope:${scope}`, () => void refreshScope(scope));
       return;
     }
-    deps.schedule('all', () => void refreshAll());
+    deps.schedule("all", () => void refreshAll());
   }
 
   return {

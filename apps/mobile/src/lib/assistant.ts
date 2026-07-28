@@ -1,14 +1,14 @@
-import * as DocumentPicker from 'expo-document-picker';
-import { fetch as expoFetch } from 'expo/fetch';
+import * as DocumentPicker from "expo-document-picker";
+import { fetch as expoFetch } from "expo/fetch";
 
-import { apiHeaders, fetchJson, requireGatewayBase } from './gateway';
+import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
 
-const APP_ID = '_assistant';
+const APP_ID = "_assistant";
 const sessionsPath = `/_centraid-conversations/apps/${APP_ID}/sessions`;
 
 export interface AssistantHistoryBubble {
   key: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   text: string;
   error?: boolean;
 }
@@ -69,37 +69,42 @@ export interface AssistantConfig {
 }
 
 export type AssistantTurnEvent =
-  | { type: 'assistant.start' }
-  | { type: 'assistant.delta'; delta: string }
-  | { type: 'final'; text: string }
-  | { type: 'context'; used?: number; size?: number }
-  | { type: 'usage'; model?: string; effort?: string }
-  | { type: 'error'; message: string }
-  | { type: 'consent.required'; provider: string; message: string };
+  | { type: "assistant.start" }
+  | { type: "assistant.delta"; delta: string }
+  | { type: "final"; text: string }
+  | { type: "context"; used?: number; size?: number }
+  | { type: "usage"; model?: string; effort?: string }
+  | { type: "error"; message: string }
+  | { type: "consent.required"; provider: string; message: string };
 
 function prefString(prefs: Record<string, unknown>, key: string): string {
   const value = prefs[key];
-  return typeof value === 'string' ? value : '';
+  return typeof value === "string" ? value : "";
 }
 
 export async function loadAssistantConfig(
-  options: { refresh?: boolean } = {},
+  options: { refresh?: boolean } = {}
 ): Promise<AssistantConfig> {
   const base = await requireGatewayBase();
   const [status, prefResult] = await Promise.all([
     fetchJson<{ agents?: AgentStatus[] }>(
-      `${base}/centraid/_agents/status${options.refresh ? '?refresh=1' : ''}`,
+      `${base}/centraid/_agents/status${options.refresh ? "?refresh=1" : ""}`,
       {
         headers: apiHeaders(),
-      },
+      }
     ),
-    fetchJson<{ prefs?: Record<string, unknown> }>(`${base}/_centraid-user/prefs`, {
-      headers: apiHeaders(),
-    }),
+    fetchJson<{ prefs?: Record<string, unknown> }>(
+      `${base}/_centraid-user/prefs`,
+      {
+        headers: apiHeaders(),
+      }
+    ),
   ]);
   const prefs = prefResult.prefs ?? {};
   const runnerKind =
-    prefString(prefs, 'runner.assistant') || prefString(prefs, 'agent.runner.kind') || 'codex';
+    prefString(prefs, "runner.assistant") ||
+    prefString(prefs, "agent.runner.kind") ||
+    "codex";
   const runners = (status.agents ?? []).map((agent) => {
     const models = agent.capabilities?.modelConfigurable
       ? (agent.models ?? []).map((model) => ({
@@ -108,7 +113,7 @@ export async function loadAssistantConfig(
         }))
       : [];
     const effortOption = agent.capabilities?.configOptions?.find(
-      (option) => option.category === 'thought_level',
+      (option) => option.category === "thought_level"
     );
     const efforts = (effortOption?.values ?? []).map((effort) => ({
       id: effort.value,
@@ -123,13 +128,13 @@ export async function loadAssistantConfig(
         prefString(prefs, `model.${agent.kind}.assistant`) ||
         prefString(prefs, `model.${agent.kind}.default`) ||
         models[0]?.id ||
-        '',
+        "",
       efforts,
       selectedEffort:
         prefString(prefs, `config.${agent.kind}.assistant.thought_level`) ||
         prefString(prefs, `config.${agent.kind}.default.thought_level`) ||
         effortOption?.currentValue ||
-        '',
+        "",
       supportsAttachments:
         agent.capabilities?.promptImage === true ||
         agent.capabilities?.promptAudio === true ||
@@ -139,7 +144,9 @@ export async function loadAssistantConfig(
         agent.available &&
         agent.capabilities?.reachable === true &&
         agent.capabilities.authRequired !== true,
-      ...(agent.hint || agent.capabilities?.reason || agent.capabilities?.authRequired
+      ...(agent.hint ||
+      agent.capabilities?.reason ||
+      agent.capabilities?.authRequired
         ? {
             hint:
               agent.hint ??
@@ -156,9 +163,9 @@ export async function loadAssistantConfig(
       label: runnerKind,
       available: false,
       models: [],
-      selectedModel: '',
+      selectedModel: "",
       efforts: [],
-      selectedEffort: '',
+      selectedEffort: "",
       supportsAttachments: false,
       supportsContext: false,
       sessionReady: false,
@@ -176,7 +183,9 @@ export async function loadAssistantConfig(
   };
 }
 
-export async function pickAndUploadAssistantAttachment(): Promise<AssistantAttachment | undefined> {
+export async function pickAndUploadAssistantAttachment(): Promise<
+  AssistantAttachment | undefined
+> {
   const picked = await DocumentPicker.getDocumentAsync({
     copyToCacheDirectory: true,
     multiple: false,
@@ -185,17 +194,23 @@ export async function pickAndUploadAssistantAttachment(): Promise<AssistantAttac
   const asset = picked.assets[0];
   if (!asset) return undefined;
   if (asset.size !== undefined && asset.size > 25 * 1024 * 1024) {
-    throw new Error('Attachments must be 25 MB or smaller.');
+    throw new Error("Attachments must be 25 MB or smaller.");
   }
-  const mime = asset.mimeType ?? 'application/octet-stream';
-  const bytes = new Uint8Array(await (await expoFetch(asset.uri)).arrayBuffer());
+  const mime = asset.mimeType ?? "application/octet-stream";
+  const bytes = new Uint8Array(
+    await (await expoFetch(asset.uri)).arrayBuffer()
+  );
   const base = await requireGatewayBase();
-  const response = await expoFetch(`${base}${sessionsPath.replace('/sessions', '/blobs')}`, {
-    method: 'POST',
-    headers: apiHeaders({ 'content-type': mime }),
-    body: bytes,
-  });
-  if (!response.ok) throw new Error(`Attachment upload returned HTTP ${response.status}`);
+  const response = await expoFetch(
+    `${base}${sessionsPath.replace("/sessions", "/blobs")}`,
+    {
+      method: "POST",
+      headers: apiHeaders({ "content-type": mime }),
+      body: bytes,
+    }
+  );
+  if (!response.ok)
+    throw new Error(`Attachment upload returned HTTP ${response.status}`);
   const stored = (await response.json()) as { hash: string; sizeBytes: number };
   return {
     hash: stored.hash,
@@ -207,17 +222,17 @@ export async function pickAndUploadAssistantAttachment(): Promise<AssistantAttac
 
 export async function saveAssistantSelection(
   runnerKind: string,
-  kind: 'model' | 'effort',
-  value: string,
+  kind: "model" | "effort",
+  value: string
 ): Promise<void> {
   const base = await requireGatewayBase();
   const key =
-    kind === 'model'
+    kind === "model"
       ? `model.${runnerKind}.assistant`
       : `config.${runnerKind}.assistant.thought_level`;
   await fetchJson(`${base}/_centraid-user/prefs`, {
-    method: 'PUT',
-    headers: apiHeaders({ 'content-type': 'application/json' }),
+    method: "PUT",
+    headers: apiHeaders({ "content-type": "application/json" }),
     body: JSON.stringify({ patch: { [key]: value || null } }),
   });
 }
@@ -234,9 +249,9 @@ export async function openAssistantConversation(): Promise<{
   let conversationId = listed.sessions?.[0]?.id;
   if (!conversationId) {
     const created = await fetchJson<{ id: string }>(`${base}${sessionsPath}`, {
-      method: 'POST',
-      headers: apiHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({ title: '' }),
+      method: "POST",
+      headers: apiHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ title: "" }),
     });
     conversationId = created.id;
   }
@@ -249,18 +264,20 @@ export async function openAssistantConversation(): Promise<{
   }>(`${base}${sessionsPath}/${encodeURIComponent(conversationId)}`, {
     headers: apiHeaders(),
   });
-  const bubbles = (transcript.messages ?? []).flatMap((message): AssistantHistoryBubble[] => {
-    const payload = message.payload;
-    if (payload?.kind !== 'user' && payload?.kind !== 'ai') return [];
-    return [
-      {
-        key: `history-${message.idx}`,
-        role: payload.kind === 'user' ? 'user' : 'assistant',
-        text: payload.text ?? '',
-        ...(payload.error ? { error: true } : {}),
-      },
-    ];
-  });
+  const bubbles = (transcript.messages ?? []).flatMap(
+    (message): AssistantHistoryBubble[] => {
+      const payload = message.payload;
+      if (payload?.kind !== "user" && payload?.kind !== "ai") return [];
+      return [
+        {
+          key: `history-${message.idx}`,
+          role: payload.kind === "user" ? "user" : "assistant",
+          text: payload.text ?? "",
+          ...(payload.error ? { error: true } : {}),
+        },
+      ];
+    }
+  );
   return {
     conversationId,
     bubbles,
@@ -281,17 +298,17 @@ export async function streamAssistantTurn(
     idempotencyKey: string;
   },
   onEvent: (event: AssistantTurnEvent) => void,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<{
   consent?: { provider: string; message: string };
   error?: string;
 }> {
   const base = await requireGatewayBase();
   const response = await expoFetch(`${base}/centraid/_vault/assistant/_turn`, {
-    method: 'POST',
+    method: "POST",
     headers: apiHeaders({
-      accept: 'text/event-stream',
-      'content-type': 'application/json',
+      accept: "text/event-stream",
+      "content-type": "application/json",
     }),
     body: JSON.stringify({
       conversationId: input.conversationId,
@@ -301,44 +318,47 @@ export async function streamAssistantTurn(
       ...(input.effort ? { thinking: input.effort } : {}),
       ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
+      ...(input.providerConsent?.length
+        ? { providerConsent: input.providerConsent }
+        : {}),
     }),
     signal,
   });
-  if (!response.ok || !response.body) throw new Error(`Assistant returned HTTP ${response.status}`);
+  if (!response.ok || !response.body)
+    throw new Error(`Assistant returned HTTP ${response.status}`);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
   let consent: { provider: string; message: string } | undefined;
   let error: string | undefined;
   const readNext = async (): Promise<void> => {
     const { done, value } = await reader.read();
     if (done) return;
-    buffer += decoder.decode(value, { stream: true }).replaceAll('\r\n', '\n');
-    let boundary = buffer.indexOf('\n\n');
+    buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+    let boundary = buffer.indexOf("\n\n");
     while (boundary >= 0) {
       const frame = buffer.slice(0, boundary);
       buffer = buffer.slice(boundary + 2);
       const data = frame
-        .split('\n')
-        .filter((line) => line.startsWith('data:'))
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
         .map((line) => line.slice(5).trimStart())
-        .join('\n');
+        .join("\n");
       if (data) {
         try {
           const event = JSON.parse(data) as AssistantTurnEvent;
-          if (event.type === 'consent.required') {
+          if (event.type === "consent.required") {
             consent = { provider: event.provider, message: event.message };
-          } else if (event.type === 'error') {
+          } else if (event.type === "error") {
             error = event.message;
-          } else if (typeof event.type === 'string') {
+          } else if (typeof event.type === "string") {
             onEvent(event);
           }
         } catch {
           // Skip one malformed optional frame and keep the turn alive.
         }
       }
-      boundary = buffer.indexOf('\n\n');
+      boundary = buffer.indexOf("\n\n");
     }
     return readNext();
   };

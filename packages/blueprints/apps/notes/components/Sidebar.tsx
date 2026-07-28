@@ -5,15 +5,15 @@
 // footer (library summary + the trust line). Three React roots — #sidebarNav,
 // #sidebarFoot — the brand row and "New note" button around them are static
 // HTML in index.html (stable, no per-render data), wired once in chrome.ts.
-import { useRef, useState } from 'react';
+import { useRef, useState } from "react";
 
-import { notebookColorVar } from '../format.ts';
-import { I } from '../icons.ts';
-import type { Nav, Notebook, SidebarCounts, SidebarTag } from '../types.ts';
-import { Icon } from './Shared.tsx';
+import { notebookColorVar } from "../format.ts";
+import { I } from "../icons.ts";
+import type { Nav, Notebook, SidebarCounts, SidebarTag } from "../types.ts";
+import { Icon } from "./Shared.tsx";
 
-import shared from './shared.module.css';
-import styles from './Sidebar.module.css';
+import shared from "./shared.module.css";
+import styles from "./Sidebar.module.css";
 
 function NewNotebookForm({
   onSubmit,
@@ -22,7 +22,7 @@ function NewNotebookForm({
   onSubmit: (name: string) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
   return (
     <form
@@ -44,7 +44,7 @@ function NewNotebookForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') {
+          if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
           }
@@ -54,7 +54,11 @@ function NewNotebookForm({
         <button type="button" className="kit-btn" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="kit-btn primary" disabled={!name.trim()}>
+        <button
+          type="submit"
+          className="kit-btn primary"
+          disabled={!name.trim()}
+        >
           Create
         </button>
       </div>
@@ -95,8 +99,8 @@ export function SidebarNav({
         <button
           type="button"
           className={styles.navItem}
-          aria-current={nav.kind === 'all'}
-          onClick={() => onSelect({ kind: 'all' })}
+          aria-current={nav.kind === "all"}
+          onClick={() => onSelect({ kind: "all" })}
         >
           <Icon svg={I.allNotes} />
           <span className={styles.navLabel}>All notes</span>
@@ -105,8 +109,8 @@ export function SidebarNav({
         <button
           type="button"
           className={styles.navItem}
-          aria-current={nav.kind === 'pinned'}
-          onClick={() => onSelect({ kind: 'pinned' })}
+          aria-current={nav.kind === "pinned"}
+          onClick={() => onSelect({ kind: "pinned" })}
         >
           <Icon svg={I.pinnedOutline} />
           <span className={styles.navLabel}>Pinned</span>
@@ -135,22 +139,31 @@ export function SidebarNav({
                 ? `${styles.navItem} kit-pending`
                 : styles.navItem
             }
-            aria-current={nav.kind === 'notebook' && nav.notebookId === nb.notebook_id}
-            onClick={() => onSelect({ kind: 'notebook', notebookId: nb.notebook_id })}
+            aria-current={
+              nav.kind === "notebook" && nav.notebookId === nb.notebook_id
+            }
+            onClick={() =>
+              onSelect({ kind: "notebook", notebookId: nb.notebook_id })
+            }
           >
             <span
               className={shared.nbDot}
               style={{ background: notebookColorVar(nb.notebook_id) }}
             />
-            <span className={styles.nbName}>{nb.name ?? 'Notebook'}</span>
-            <span className={styles.navCount}>{notebookCounts.get(nb.notebook_id) ?? 0}</span>
+            <span className={styles.nbName}>{nb.name ?? "Notebook"}</span>
+            <span className={styles.navCount}>
+              {notebookCounts.get(nb.notebook_id) ?? 0}
+            </span>
             {pendingNotebookIds.has(nb.notebook_id) ? (
               <span className="kit-pending-chip">pending</span>
             ) : null}
           </button>
         ))}
         {creatingNotebook ? (
-          <NewNotebookForm onSubmit={onSubmitCreate} onCancel={onCancelCreate} />
+          <NewNotebookForm
+            onSubmit={onSubmitCreate}
+            onCancel={onCancelCreate}
+          />
         ) : null}
       </div>
 
@@ -165,11 +178,17 @@ export function SidebarNav({
                 key={t.concept_id}
                 type="button"
                 className={styles.navItem}
-                aria-current={nav.kind === 'tag' && nav.conceptId === t.concept_id}
-                onClick={() => onSelect({ kind: 'tag', conceptId: t.concept_id })}
+                aria-current={
+                  nav.kind === "tag" && nav.conceptId === t.concept_id
+                }
+                onClick={() =>
+                  onSelect({ kind: "tag", conceptId: t.concept_id })
+                }
               >
                 <span className={styles.nbName}>#{t.label}</span>
-                <span className={styles.navCount}>{tagCounts.get(t.concept_id) ?? 0}</span>
+                <span className={styles.navCount}>
+                  {tagCounts.get(t.concept_id) ?? 0}
+                </span>
               </button>
             ))}
           </div>
@@ -185,11 +204,11 @@ export function SidebarFoot({ counts }: { counts: SidebarCounts }) {
       <div className={styles.summary}>
         <div className={shared.eyebrowLabel}>This library</div>
         <div className={styles.summaryLine}>
-          {counts.all} {counts.all === 1 ? 'note' : 'notes'} · {counts.notebooks}{' '}
-          {counts.notebooks === 1 ? 'notebook' : 'notebooks'}
+          {counts.all} {counts.all === 1 ? "note" : "notes"} ·{" "}
+          {counts.notebooks} {counts.notebooks === 1 ? "notebook" : "notebooks"}
         </div>
         <div className={styles.summarySub}>
-          {counts.checks} open checklist item{counts.checks === 1 ? '' : 's'}
+          {counts.checks} open checklist item{counts.checks === 1 ? "" : "s"}
         </div>
       </div>
       <div className={styles.consentLine}>

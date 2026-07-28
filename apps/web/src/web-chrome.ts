@@ -1,19 +1,19 @@
-import { loadSettingsPatch, subscribe, SETTINGS_EVENT } from './web-state.js';
+import { loadSettingsPatch, subscribe, SETTINGS_EVENT } from "./web-state.js";
 
 interface InstallPromptEvent extends Event {
   prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-const DISMISS_KEY = 'centraid.web.v1.install-dismissed-at';
+const DISMISS_KEY = "centraid.web.v1.install-dismissed-at";
 /** Re-offer the install banner this many days after "Not now". */
 const REOFFER_DAYS = 14;
 
-function notice(kind: 'install' | 'offline', text: string): HTMLDivElement {
-  const element = document.createElement('div');
+function notice(kind: "install" | "offline", text: string): HTMLDivElement {
+  const element = document.createElement("div");
   element.className = `web-notice web-notice-${kind}`;
-  element.setAttribute('role', kind === 'offline' ? 'status' : 'region');
-  const label = document.createElement('span');
+  element.setAttribute("role", kind === "offline" ? "status" : "region");
+  const label = document.createElement("span");
   label.textContent = text;
   element.append(label);
   document.body.append(element);
@@ -45,16 +45,19 @@ let bannerEl: HTMLDivElement | null = null;
 
 function showInstallBanner(event: InstallPromptEvent): void {
   if (bannerEl || dismissedRecently()) return;
-  const banner = notice('install', 'Install Centraid for a focused, app-like workspace.');
+  const banner = notice(
+    "install",
+    "Install Centraid for a focused, app-like workspace."
+  );
   bannerEl = banner;
-  const install = document.createElement('button');
-  install.type = 'button';
-  install.textContent = 'Install';
-  const dismiss = document.createElement('button');
-  dismiss.type = 'button';
-  dismiss.textContent = 'Not now';
-  dismiss.className = 'web-notice-quiet';
-  install.addEventListener('click', () => {
+  const install = document.createElement("button");
+  install.type = "button";
+  install.textContent = "Install";
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.textContent = "Not now";
+  dismiss.className = "web-notice-quiet";
+  install.addEventListener("click", () => {
     void event
       .prompt()
       .then(() => event.userChoice)
@@ -63,7 +66,7 @@ function showInstallBanner(event: InstallPromptEvent): void {
         bannerEl = null;
       });
   });
-  dismiss.addEventListener('click', () => {
+  dismiss.addEventListener("click", () => {
     markDismissed();
     banner.remove();
     bannerEl = null;
@@ -75,19 +78,22 @@ function showInstallBanner(event: InstallPromptEvent): void {
  *  copy over the welcome screen (issue #603 W6). The banner starts once the
  *  user has actually finished onboarding. */
 function onboardingComplete(): boolean {
-  return typeof loadSettingsPatch()['onboardingCompletedAt'] === 'string';
+  return typeof loadSettingsPatch()["onboardingCompletedAt"] === "string";
 }
 
 export function installWebChrome(): void {
   const offline = notice(
-    'offline',
-    'You’re offline. Centraid will reconnect to your gateway when the network returns.',
+    "offline",
+    "You’re offline. Centraid will reconnect to your gateway when the network returns."
   );
   const syncOnline = (): void => {
-    offline.toggleAttribute('data-visible', !navigator.onLine && onboardingComplete());
+    offline.toggleAttribute(
+      "data-visible",
+      !navigator.onLine && onboardingComplete()
+    );
   };
-  window.addEventListener('online', syncOnline);
-  window.addEventListener('offline', syncOnline);
+  window.addEventListener("online", syncOnline);
+  window.addEventListener("offline", syncOnline);
   // The onboarding stamp is written through `saveSettingsPatch`, which
   // publishes this — so the banner appears the moment first run finishes on
   // an offline tab, with no polling.
@@ -96,7 +102,7 @@ export function installWebChrome(): void {
 
   // Keep listening across the session (not `{ once: true }`) so a later
   // re-offer after days, or a menu action, can still use the event.
-  window.addEventListener('beforeinstallprompt', (raw) => {
+  window.addEventListener("beforeinstallprompt", (raw) => {
     raw.preventDefault();
     const event = raw as InstallPromptEvent;
     if (!dismissedRecently()) showInstallBanner(event);

@@ -1,45 +1,51 @@
-import { palette, tileFinish } from '@centraid/design-tokens';
-import type { ColorHex, IconName } from '@centraid/design-tokens';
-import { useState, type JSX } from 'react';
+import { palette, tileFinish } from "@centraid/design-tokens";
+import type { ColorHex, IconName } from "@centraid/design-tokens";
+import { useState, type JSX } from "react";
 
-import { INTEGRATION_HUES } from '../format.js';
+import { INTEGRATION_HUES } from "../format.js";
 import type {
   DiscoverBridgeProps,
   DiscoverMenuAnchor,
   DiscoverTemplate,
-} from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { Icon, KindBadge } from '../ui/index.js';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon, KindBadge } from "../ui/index.js";
 
-import au from '../styles/automation.module.css';
-import libCss from '../styles/library.module.css';
-import mainScrollCss from '../styles/mainScroll.module.css';
-import emptyCss from '../styles/pageEmpty.module.css';
-import styles from './DiscoverScreen.module.css';
+import au from "../styles/automation.module.css";
+import libCss from "../styles/library.module.css";
+import mainScrollCss from "../styles/mainScroll.module.css";
+import emptyCss from "../styles/pageEmpty.module.css";
+import styles from "./DiscoverScreen.module.css";
 
-type Kind = 'all' | 'app' | 'automation';
-type Layout = 'tiles' | 'rows';
+type Kind = "all" | "app" | "automation";
+type Layout = "tiles" | "rows";
 
-const isAutomation = (t: DiscoverTemplate): boolean => t.kind === 'automation';
+const isAutomation = (t: DiscoverTemplate): boolean => t.kind === "automation";
 
 // Trigger-kind → icon/label, matching the labels automationsData.ts'
 // deriveAutomationHero (kindEyebrow/run trig) uses for the same four kinds —
 // data and condition triggers reuse the Clock glyph there too (only webhook
 // gets its own icon), so the badge stays honest without inventing a new mark.
 const TRIGGER_KIND_META: Record<
-  'cron' | 'webhook' | 'data' | 'condition',
+  "cron" | "webhook" | "data" | "condition",
   { icon: IconName; label: string }
 > = {
-  cron: { icon: 'Clock', label: 'Cron' },
-  webhook: { icon: 'Webhook', label: 'Webhook' },
-  data: { icon: 'Clock', label: 'Data' },
-  condition: { icon: 'Clock', label: 'Condition' },
+  cron: { icon: "Clock", label: "Cron" },
+  webhook: { icon: "Webhook", label: "Webhook" },
+  data: { icon: "Clock", label: "Data" },
+  condition: { icon: "Clock", label: "Condition" },
 };
 
 // Rect-based glyphs the path-only Icon set can't express — copied verbatim from
 // app-glyphs.ts (GRID_RECTS / ROWS_RECTS) so the React screen and the vanilla
 // Home page render the identical marks.
-function GridGlyph({ size = 15, sw = 1.75 }: { size?: number; sw?: number }): JSX.Element {
+function GridGlyph({
+  size = 15,
+  sw = 1.75,
+}: {
+  size?: number;
+  sw?: number;
+}): JSX.Element {
   return (
     <svg
       width={size}
@@ -79,18 +85,23 @@ function RowsGlyph({ size = 15 }: { size?: number }): JSX.Element {
 
 function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
   return (
-    <div className={cx(au.auOvDots, styles.footDots)} aria-hidden={names.length === 0}>
+    <div
+      className={cx(au.auOvDots, styles.footDots)}
+      aria-hidden={names.length === 0}
+    >
       {names.slice(0, 4).map((name) => (
         <i
           key={name}
           className={au.auOvDot}
           title={name}
           style={{
-            background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})`,
+            background: `var(--c-${INTEGRATION_HUES[name] ?? "slate"})`,
           }}
         />
       ))}
-      {names.length > 4 ? <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span> : null}
+      {names.length > 4 ? (
+        <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span>
+      ) : null}
     </div>
   );
 }
@@ -103,23 +114,25 @@ function TemplateCard({
   onTemplateContext,
 }: {
   t: DiscoverTemplate;
-  tileVariant: DiscoverBridgeProps['tileVariant'];
+  tileVariant: DiscoverBridgeProps["tileVariant"];
   onOpenTemplate: (t: DiscoverTemplate) => void;
   onOpenAutomationTemplate: (t: DiscoverTemplate) => void;
   onTemplateContext: (t: DiscoverTemplate, anchor: DiscoverMenuAnchor) => void;
 }): JSX.Element {
   const auto = isAutomation(t);
-  const color = (palette as Record<string, ColorHex>)[t.colorKey] ?? ('#7C5BD9' as ColorHex);
+  const color =
+    (palette as Record<string, ColorHex>)[t.colorKey] ??
+    ("#7C5BD9" as ColorHex);
   const finish = tileFinish(color, tileVariant);
   return (
     <button
       type="button"
       className={styles.card}
-      data-kind={auto ? 'automation' : 'app'}
+      data-kind={auto ? "automation" : "app"}
       onClick={() => (auto ? onOpenAutomationTemplate(t) : onOpenTemplate(t))}
       onContextMenu={(e) => {
         e.preventDefault();
-        onTemplateContext(t, { kind: 'point', x: e.clientX, y: e.clientY });
+        onTemplateContext(t, { kind: "point", x: e.clientX, y: e.clientY });
       }}
     >
       <div className={styles.cardTop}>
@@ -139,19 +152,26 @@ function TemplateCard({
         </div>
       </div>
       <div className={styles.cardFoot}>
-        <KindBadge kind={auto ? 'automation' : 'app'}>
-          <span aria-hidden="true" style={{ display: 'inline-flex' }}>
-            {auto ? <Icon name="Bolt" size={12} /> : <GridGlyph size={12} sw={1.85} />}
+        <KindBadge kind={auto ? "automation" : "app"}>
+          <span aria-hidden="true" style={{ display: "inline-flex" }}>
+            {auto ? (
+              <Icon name="Bolt" size={12} />
+            ) : (
+              <GridGlyph size={12} sw={1.85} />
+            )}
           </span>
-          <span>{auto ? 'Automation' : 'App'}</span>
+          <span>{auto ? "Automation" : "App"}</span>
         </KindBadge>
         {auto ? (
           <>
             <span className={styles.trig}>
-              <span aria-hidden="true" style={{ display: 'inline-flex' }}>
-                <Icon name={TRIGGER_KIND_META[t.triggerKind ?? 'cron'].icon} size={12} />
+              <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                <Icon
+                  name={TRIGGER_KIND_META[t.triggerKind ?? "cron"].icon}
+                  size={12}
+                />
               </span>
-              <span>{TRIGGER_KIND_META[t.triggerKind ?? 'cron'].label}</span>
+              <span>{TRIGGER_KIND_META[t.triggerKind ?? "cron"].label}</span>
             </span>
             <IntegrationDots names={[...(t.integrations ?? [])]} />
           </>
@@ -180,17 +200,18 @@ export default function DiscoverScreen({
   onOpenAutomationTemplate,
   onTemplateContext,
 }: DiscoverBridgeProps): JSX.Element {
-  const [kind, setKind] = useState<Kind>('all');
-  const [layout, setLayout] = useState<Layout>('tiles');
+  const [kind, setKind] = useState<Kind>("all");
+  const [layout, setLayout] = useState<Layout>("tiles");
 
   const all = [...appTemplates, ...automationTemplates];
-  const shown = kind === 'all' ? all : kind === 'app' ? appTemplates : automationTemplates;
+  const shown =
+    kind === "all" ? all : kind === "app" ? appTemplates : automationTemplates;
 
   // Group by category, apps-first, first-seen order (mirrors the vanilla paint).
   const order: string[] = [];
   const groups = new Map<string, DiscoverTemplate[]>();
   for (const t of shown) {
-    const cat = t.category ?? (isAutomation(t) ? 'Automations' : 'Apps');
+    const cat = t.category ?? (isAutomation(t) ? "Automations" : "Apps");
     let bucket = groups.get(cat);
     if (!bucket) {
       bucket = [];
@@ -201,18 +222,18 @@ export default function DiscoverScreen({
   }
 
   const segDefs = [
-    { k: 'all' as const, label: 'All', count: all.length, icon: null },
+    { k: "all" as const, label: "All", count: all.length, icon: null },
     {
-      k: 'app' as const,
-      label: 'Apps',
+      k: "app" as const,
+      label: "Apps",
       count: appTemplates.length,
-      icon: 'Home' as IconName,
+      icon: "Home" as IconName,
     },
     {
-      k: 'automation' as const,
-      label: 'Automations',
+      k: "automation" as const,
+      label: "Automations",
       count: automationTemplates.length,
-      icon: 'Bolt' as IconName,
+      icon: "Bolt" as IconName,
     },
   ];
 
@@ -224,8 +245,9 @@ export default function DiscoverScreen({
             <div className={styles.eyebrow}>Discover</div>
             <h1>Apps</h1>
             <p>
-              Install an app to use it right away, or add an automation that runs in the background
-              for you. Installing grants only the access the app asks for.
+              Install an app to use it right away, or add an automation that
+              runs in the background for you. Installing grants only the access
+              the app asks for.
             </p>
           </div>
         </div>
@@ -263,9 +285,9 @@ export default function DiscoverScreen({
               className={libCss.libLayoutBtn}
               title="Tiles"
               aria-label="Tiles"
-              aria-pressed={layout === 'tiles'}
+              aria-pressed={layout === "tiles"}
               data-layout="tiles"
-              onClick={() => setLayout('tiles')}
+              onClick={() => setLayout("tiles")}
             >
               <GridGlyph />
             </button>
@@ -274,9 +296,9 @@ export default function DiscoverScreen({
               className={libCss.libLayoutBtn}
               title="Rows"
               aria-label="Rows"
-              aria-pressed={layout === 'rows'}
+              aria-pressed={layout === "rows"}
               data-layout="rows"
-              onClick={() => setLayout('rows')}
+              onClick={() => setLayout("rows")}
             >
               <RowsGlyph />
             </button>
@@ -288,7 +310,9 @@ export default function DiscoverScreen({
               <div className={emptyCss.pageEmptyIcon} aria-hidden="true">
                 <Icon name="Sparkle" size={22} />
               </div>
-              <div className={emptyCss.pageEmptyText}>Nothing to install yet.</div>
+              <div className={emptyCss.pageEmptyText}>
+                Nothing to install yet.
+              </div>
             </div>
           ) : (
             order.map((cat) => {
@@ -300,13 +324,13 @@ export default function DiscoverScreen({
                   <div className={styles.catHead}>
                     <span className={styles.catLabel}>{cat}</span>
                     <span className={styles.catCount}>
-                      {String(bucket.length).padStart(2, '0')}
+                      {String(bucket.length).padStart(2, "0")}
                     </span>
                   </div>
                   <div className={styles.grid} data-layout={layout}>
                     {bucket.map((t) => (
                       <TemplateCard
-                        key={`${t.kind ?? 'app'}:${t.id}`}
+                        key={`${t.kind ?? "app"}:${t.id}`}
                         t={t}
                         tileVariant={tileVariant}
                         onOpenTemplate={onOpenTemplate}

@@ -12,10 +12,10 @@
 // foreign_key_list`) rather than a remembered list of referrers, so a table
 // added later is covered without anyone having to update a sweep clause here.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { isBlobUri } from '../blob/store.js';
-import type { ShareableItemType } from './closure.js';
+import { isBlobUri } from "../blob/store.js";
+import type { ShareableItemType } from "./closure.js";
 
 interface ForeignKeyRow {
   table: string;
@@ -28,10 +28,14 @@ interface ForeignKeyRow {
  * the ones that clean themselves up (`ON DELETE CASCADE`). Derived from the
  * live schema so it cannot rot.
  */
-function contentItemReferrers(db: DatabaseSync): { table: string; column: string }[] {
+function contentItemReferrers(
+  db: DatabaseSync
+): { table: string; column: string }[] {
   const tables = (
     db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+      )
       .all() as { name: string }[]
   ).map((row) => row.name);
   const referrers: { table: string; column: string }[] = [];
@@ -40,8 +44,8 @@ function contentItemReferrers(db: DatabaseSync): { table: string; column: string
       .prepare(`PRAGMA foreign_key_list(${JSON.stringify(table)})`)
       .all() as unknown as ForeignKeyRow[];
     for (const fk of fks) {
-      if (fk.table !== 'core_content_item') continue;
-      if (fk.on_delete === 'CASCADE') continue;
+      if (fk.table !== "core_content_item") continue;
+      if (fk.on_delete === "CASCADE") continue;
       referrers.push({ table, column: fk.from });
     }
   }
@@ -51,7 +55,9 @@ function contentItemReferrers(db: DatabaseSync): { table: string; column: string
 function isReferenced(db: DatabaseSync, contentId: string): boolean {
   for (const ref of contentItemReferrers(db)) {
     const hit = db
-      .prepare(`SELECT 1 AS present FROM "${ref.table}" WHERE "${ref.column}" = ? LIMIT 1`)
+      .prepare(
+        `SELECT 1 AS present FROM "${ref.table}" WHERE "${ref.column}" = ? LIMIT 1`
+      )
       .get(contentId);
     if (hit) return true;
   }
@@ -81,39 +87,47 @@ const ABSENT: RemovalResult = {
 export function deleteProjectedClosure(
   audience: DatabaseSync,
   itemType: ShareableItemType,
-  itemId: string,
+  itemId: string
 ): RemovalResult {
   let contentId: string;
-  if (itemType === 'core.content_item') {
+  if (itemType === "core.content_item") {
     contentId = itemId;
   } else {
     const asset = audience
-      .prepare('SELECT content_id FROM media_media_asset WHERE asset_id = ?')
+      .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
       .get(itemId) as { content_id: string } | undefined;
     if (!asset) return ABSENT;
     contentId = asset.content_id;
   }
   const item = audience
-    .prepare('SELECT content_uri, sha256 FROM core_content_item WHERE content_id = ?')
+    .prepare(
+      "SELECT content_uri, sha256 FROM core_content_item WHERE content_id = ?"
+    )
     .get(contentId) as { content_uri: string; sha256: string } | undefined;
   if (!item) return ABSENT;
 
   const shas = new Set<string>();
   if (isBlobUri(item.content_uri)) shas.add(item.sha256);
   const derivatives = audience
-    .prepare('SELECT sha256 FROM core_content_derivative WHERE content_id = ?')
+    .prepare("SELECT sha256 FROM core_content_derivative WHERE content_id = ?")
     .all(contentId) as { sha256: string | null }[];
   for (const derivative of derivatives) {
     if (derivative.sha256 !== null) shas.add(derivative.sha256);
   }
 
-  if (itemType === 'media.media_asset') {
-    audience.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(itemId);
+  if (itemType === "media.media_asset") {
+    audience
+      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .run(itemId);
   }
-  audience.prepare('DELETE FROM core_content_derivative WHERE content_id = ?').run(contentId);
+  audience
+    .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
+    .run(contentId);
   const contentItemRemoved = !isReferenced(audience, contentId);
   if (contentItemRemoved) {
-    audience.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(contentId);
+    audience
+      .prepare("DELETE FROM core_content_item WHERE content_id = ?")
+      .run(contentId);
   }
   return { removed: true, contentItemRemoved, shas: [...shas] };
 }

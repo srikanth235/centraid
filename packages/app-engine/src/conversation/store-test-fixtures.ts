@@ -3,16 +3,19 @@
 // rather than a shared in-memory handle. Test-only module — imported by
 // store.test.ts / store-items.test.ts, never shipped.
 
-import path from 'node:path';
+import path from "node:path";
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
-import { ConversationStore } from './store.js';
+import {
+  makeJournalDbProvider,
+  type DatabaseProvider,
+} from "../stores/gateway-db.js";
+import { ConversationStore } from "./store.js";
 
 export function newProvider(): DatabaseProvider {
-  const dir = tempDirSync('centraid-conv-store-');
-  return makeJournalDbProvider(path.join(dir, 'journal.db'));
+  const dir = tempDirSync("centraid-conv-store-");
+  return makeJournalDbProvider(path.join(dir, "journal.db"));
 }
 
 export function newStore(): ConversationStore {

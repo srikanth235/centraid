@@ -1,15 +1,19 @@
-import { File } from 'expo-file-system';
-import { useShareIntentContext } from 'expo-share-intent';
-import { useEffect, useMemo } from 'react';
-import { Alert } from 'react-native';
+import { File } from "expo-file-system";
+import { useShareIntentContext } from "expo-share-intent";
+import { useEffect, useMemo } from "react";
+import { Alert } from "react-native";
 
-import { backupDeviceMedia, backupDocument } from '../../lib/upload/media-producer';
-import { useReplica } from '../replica/ReplicaProvider';
-import { ShareIntentGate, processShareIntent } from './share-ingest';
+import {
+  backupDeviceMedia,
+  backupDocument,
+} from "../../lib/upload/media-producer";
+import { useReplica } from "../replica/ReplicaProvider";
+import { ShareIntentGate, processShareIntent } from "./share-ingest";
 
 /** iOS share extension + Android share target converge on the one durable queue. */
 export function ShareIntentIngest(): null {
-  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const { hasShareIntent, shareIntent, resetShareIntent } =
+    useShareIntentContext();
   const { session, gatewayBase } = useReplica();
   // One gate across renders: a re-render while an ingest is still in flight must
   // not spawn a second pass over the same files (#431 F9). The memoized gate
@@ -28,9 +32,16 @@ export function ShareIntentIngest(): null {
         },
         session,
         gatewayBase,
-        shareIntent,
-      ),
+        shareIntent
+      )
     );
-  }, [gate, gatewayBase, hasShareIntent, resetShareIntent, session, shareIntent]);
+  }, [
+    gate,
+    gatewayBase,
+    hasShareIntent,
+    resetShareIntent,
+    session,
+    shareIntent,
+  ]);
   return null;
 }

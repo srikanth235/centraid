@@ -1,4 +1,4 @@
-import { first, resolveSplits, toCents, todayKey } from './format.ts';
+import { first, resolveSplits, toCents, todayKey } from "./format.ts";
 // governance: allow-repo-hygiene file-size-limit (#408) pre-existing cohesive Tally business-logic module; the TS conversion only adds type annotations to the existing boundary and does not expand its behavior
 // Non-visual business logic: vault IO (write/act/read), navigation, the
 // people directory, and every modal's open/patch/save/close flow (expense,
@@ -13,7 +13,7 @@ import { first, resolveSplits, toCents, todayKey } from './format.ts';
 // functions of that object, so a controlled input's `value` prop simply
 // tracks it (no React `useState` needed for these, no Lit `live()` needed
 // either: a full re-render already keeps the DOM in sync on every keystroke).
-import { debounce, outcomeMessage, toast } from './kit.ts';
+import { debounce, outcomeMessage, toast } from "./kit.ts";
 import type {
   AddFriendModel,
   ExpenseModel,
@@ -27,7 +27,7 @@ import type {
   SplitEntry,
   VaultDenied,
   ViewData,
-} from './types.ts';
+} from "./types.ts";
 
 /** The ground fields an optimistic row and the write share. */
 interface ExpenseBase {
@@ -52,25 +52,25 @@ export function createLogic({
   // ---------- Notice / consent narration ----------
 
   function notice(text: string) {
-    const b = $('noticeBanner');
-    b.textContent = text || '';
+    const b = $("noticeBanner");
+    b.textContent = text || "";
     b.hidden = !text;
   }
 
   // Returns true when the write executed; otherwise narrates parked / failed /
   // denied honestly and returns false.
   function narrate(outcome: VaultOutcome | undefined) {
-    if (outcome?.status === 'executed') {
-      notice('');
+    if (outcome?.status === "executed") {
+      notice("");
       return true;
     }
-    notice(outcomeMessage(outcome) ?? 'The write did not go through.');
+    notice(outcomeMessage(outcome) ?? "The write did not go through.");
     return false;
   }
 
   async function act(
     action: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
@@ -80,14 +80,17 @@ export function createLogic({
     }
   }
 
-  async function read<T = ViewData>(query: string, input?: Record<string, unknown>): Promise<T> {
+  async function read<T = ViewData>(
+    query: string,
+    input?: Record<string, unknown>
+  ): Promise<T> {
     return window.centraid.read<T>({ query, input: input ?? {} });
   }
 
   function applyDenied(denied: VaultDenied) {
-    $('consentBanner').hidden = false;
-    $('consentDetail').textContent = denied.message ?? '';
-    $('root').classList.add('denied');
+    $("consentBanner").hidden = false;
+    $("consentDetail").textContent = denied.message ?? "";
+    $("root").classList.add("denied");
   }
 
   // ---------- People lookups (from the loaded snapshots) ----------
@@ -108,9 +111,9 @@ export function createLogic({
     if (dash.me && !map.has(dash.me))
       map.set(dash.me, {
         party_id: dash.me,
-        name: 'You',
-        color: '#0FA678',
-        initials: 'You',
+        name: "You",
+        color: "#0FA678",
+        initials: "You",
       });
     return map;
   }
@@ -118,17 +121,17 @@ export function createLogic({
     return (
       directory().get(pid) || {
         party_id: pid,
-        name: 'Someone',
-        color: '#5C677D',
-        initials: '?',
+        name: "Someone",
+        color: "#5C677D",
+        initials: "?",
       }
     );
   }
   function displayName(pid: string): string {
-    return pid === dash.me ? 'You' : personOf(pid).name;
+    return pid === dash.me ? "You" : personOf(pid).name;
   }
   function shortName(pid: string): string {
-    return pid === dash.me ? 'you' : first(personOf(pid).name);
+    return pid === dash.me ? "you" : first(personOf(pid).name);
   }
 
   // ---------- View navigation ----------
@@ -136,7 +139,7 @@ export function createLogic({
   function setNav(patch: NavPatch) {
     Object.assign(state, patch);
     state.detail = null;
-    if (state.narrow) $('root').classList.remove('side-open');
+    if (state.narrow) $("root").classList.remove("side-open");
     loadView();
   }
 
@@ -144,7 +147,7 @@ export function createLogic({
 
   let searchSeq = 0;
   const applySearch = debounce(async () => {
-    const q = ($('searchInput') as HTMLInputElement).value.trim();
+    const q = ($("searchInput") as HTMLInputElement).value.trim();
     if (q === state.search) return;
     state.search = q;
     const seq = ++searchSeq;
@@ -156,7 +159,7 @@ export function createLogic({
     render(); // paint the "Results for…" chrome + skeleton
     let res: ViewData | null = null;
     try {
-      res = await read('search', { term: q });
+      res = await read("search", { term: q });
     } catch {
       res = { results: [] };
     }
@@ -167,11 +170,11 @@ export function createLogic({
   }, 150);
 
   function clearSearch() {
-    const input = $('searchInput') as HTMLInputElement;
+    const input = $("searchInput") as HTMLInputElement;
     if (!input.value && !state.search) return;
-    input.value = '';
+    input.value = "";
     searchSeq += 1;
-    state.search = '';
+    state.search = "";
     loadView();
   }
 
@@ -191,7 +194,7 @@ export function createLogic({
   // Load a group's members into state.modalMembers, then re-render the modal.
   async function loadModalMembers(groupId: string) {
     try {
-      const res = await read('group', { group_id: groupId });
+      const res = await read("group", { group_id: groupId });
       if (res?.me) dash.me = res.me;
       state.modalMembers = res?.members ?? [];
     } catch {
@@ -203,19 +206,20 @@ export function createLogic({
   async function openAddExpense() {
     closeAllModals();
     // Default to the active group, else the first group.
-    const gid = state.view === 'group' ? state.groupId : dash.groups[0]?.group_id;
+    const gid =
+      state.view === "group" ? state.groupId : dash.groups[0]?.group_id;
     if (!gid) {
-      notice('Create a group first — expenses live inside a group.');
+      notice("Create a group first — expenses live inside a group.");
       return;
     }
     state.expense = {
-      mode: 'new',
+      mode: "new",
       groupId: gid,
-      desc: '',
-      amount: '',
-      paidBy: dash.me ?? '',
-      method: 'equal',
-      category: 'general',
+      desc: "",
+      amount: "",
+      paidBy: dash.me ?? "",
+      method: "equal",
+      category: "general",
       spent_on: todayKey(),
       include: new Set<string>(),
       exact: {},
@@ -231,16 +235,17 @@ export function createLogic({
     closeAllModals();
     const include = new Set((row.splits ?? []).map((s) => s.party_id));
     const exact: Record<string, string> = {};
-    for (const s of row.splits ?? []) exact[s.party_id] = (s.share_minor / 100).toFixed(2);
+    for (const s of row.splits ?? [])
+      exact[s.party_id] = (s.share_minor / 100).toFixed(2);
     state.expense = {
-      mode: 'edit',
+      mode: "edit",
       expense_id: row.expense_id,
       groupId: row.group_id,
       desc: row.description,
       amount: (row.amount_minor / 100).toFixed(2),
       paidBy: row.paid_by,
-      method: 'exact', // edit lands on exact so the existing shares show
-      category: row.category || 'general',
+      method: "exact", // edit lands on exact so the existing shares show
+      category: row.category || "general",
       spent_on: row.spent_on || todayKey(),
       include,
       exact,
@@ -266,28 +271,34 @@ export function createLogic({
     exp.groupId = groupId;
     await loadModalMembers(groupId);
     exp.include = new Set(state.modalMembers.map((m) => m.party_id));
-    if (!state.modalMembers.some((m) => m.party_id === exp.paidBy)) exp.paidBy = dash.me ?? '';
+    if (!state.modalMembers.some((m) => m.party_id === exp.paidBy))
+      exp.paidBy = dash.me ?? "";
     renderModals();
   }
 
   // Build the decorated row shape the group/friend ledger queries return, so
   // an optimistic add renders through the exact same components (ExpenseRow)
   // as a fetched row — plus `pending`/`parked` flags for the kit chip.
-  function optimisticExpenseRow(exp: ExpenseModel, base: ExpenseBase): LedgerRow {
-    const myShare = base.splits.find((s) => s.party_id === dash.me)?.share_minor ?? 0;
-    let your_role: Role = 'none';
+  function optimisticExpenseRow(
+    exp: ExpenseModel,
+    base: ExpenseBase
+  ): LedgerRow {
+    const myShare =
+      base.splits.find((s) => s.party_id === dash.me)?.share_minor ?? 0;
+    let your_role: Role = "none";
     let your_amount_minor = 0;
     if (base.paid_by === dash.me) {
-      your_role = 'lent';
+      your_role = "lent";
       your_amount_minor = base.amount_minor - myShare;
     } else if (myShare > 0) {
-      your_role = 'borrowed';
+      your_role = "borrowed";
       your_amount_minor = myShare;
     }
     return {
       expense_id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       group_id: exp.groupId,
-      group_name: dash.groups.find((g) => g.group_id === exp.groupId)?.name ?? '',
+      group_name:
+        dash.groups.find((g) => g.group_id === exp.groupId)?.name ?? "",
       description: base.description,
       amount_minor: base.amount_minor,
       paid_by: base.paid_by,
@@ -315,15 +326,15 @@ export function createLogic({
       spent_on: exp.spent_on,
       splits,
     };
-    if (exp.mode === 'edit') {
+    if (exp.mode === "edit") {
       // Edit is the cold path — patching a fetched row in place is not worth
       // the divergence risk, so it keeps the plain write→narrate→refresh flow.
-      const outcome = await act('edit-expense', {
+      const outcome = await act("edit-expense", {
         expense_id: exp.expense_id,
         ...base,
       });
       if (!narrate(outcome)) return;
-      toast('Expense updated · receipted.');
+      toast("Expense updated · receipted.");
       closeExpense();
       await refreshAll();
       return;
@@ -341,16 +352,16 @@ export function createLogic({
     state.pendingExpenses.push(row);
     closeExpense();
     render();
-    const outcome = await act('add-expense', {
+    const outcome = await act("add-expense", {
       group_id: exp.groupId,
       ...base,
     });
-    if (outcome?.status === 'executed') {
-      notice('');
-      toast('Expense added · receipted.');
+    if (outcome?.status === "executed") {
+      notice("");
+      toast("Expense added · receipted.");
       return;
     }
-    if (outcome?.status === 'parked') {
+    if (outcome?.status === "parked") {
       row.parked = true;
       narrate(outcome); // the existing parked banner copy
       render();
@@ -363,9 +374,9 @@ export function createLogic({
   }
 
   async function deleteExpense(expenseId: string) {
-    const outcome = await act('delete-expense', { expense_id: expenseId });
+    const outcome = await act("delete-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
-    toast('Expense deleted · receipted.');
+    toast("Expense deleted · receipted.");
     closeAllModals();
     // closeAllModals() only nulls the state — every other caller follows it
     // with its own renderModals(), and render()/refreshAll() never touch
@@ -376,9 +387,9 @@ export function createLogic({
   }
 
   async function restoreExpense(expenseId: string) {
-    const outcome = await act('restore-expense', { expense_id: expenseId });
+    const outcome = await act("restore-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
-    toast('Expense restored · receipted.');
+    toast("Expense restored · receipted.");
     await refreshAll();
   }
 
@@ -386,24 +397,24 @@ export function createLogic({
 
   async function openSettle() {
     closeAllModals();
-    if (state.view === 'group' && state.groupId) {
+    if (state.view === "group" && state.groupId) {
       await loadModalMembers(state.groupId);
       const other = state.modalMembers.find((m) => m.party_id !== dash.me);
       state.settle = {
         people: state.modalMembers,
-        from: other?.party_id ?? dash.me ?? '',
-        to: dash.me ?? '',
-        amount: '',
+        from: other?.party_id ?? dash.me ?? "",
+        to: dash.me ?? "",
+        amount: "",
         groupId: state.groupId,
       };
-    } else if (state.view === 'friend' && state.viewData?.friend) {
+    } else if (state.view === "friend" && state.viewData?.friend) {
       const f = state.viewData.friend;
       state.modalMembers = [
         {
-          party_id: dash.me ?? '',
-          name: 'You',
-          color: '#0FA678',
-          initials: 'You',
+          party_id: dash.me ?? "",
+          name: "You",
+          color: "#0FA678",
+          initials: "You",
           is_me: true,
         },
         f,
@@ -411,8 +422,8 @@ export function createLogic({
       state.settle = {
         people: state.modalMembers,
         from: f.party_id,
-        to: dash.me ?? '',
-        amount: '',
+        to: dash.me ?? "",
+        amount: "",
         groupId: null,
       };
     } else {
@@ -440,9 +451,9 @@ export function createLogic({
       paid_on: todayKey(),
     };
     if (st.groupId) input.group_id = st.groupId;
-    const outcome = await act('settle-up', input);
+    const outcome = await act("settle-up", input);
     if (!narrate(outcome)) return;
-    toast('Payment recorded · receipted.');
+    toast("Payment recorded · receipted.");
     closeSettle();
     await refreshAll();
   }
@@ -452,11 +463,11 @@ export function createLogic({
   function openNewGroup() {
     closeAllModals();
     if (dash.friends.length === 0) {
-      notice('Add a friend first — a group needs at least one other member.');
+      notice("Add a friend first — a group needs at least one other member.");
       openAddFriend();
       return;
     }
-    state.newGroup = { name: '', icon: '🏠', members: new Set<string>() };
+    state.newGroup = { name: "", icon: "🏠", members: new Set<string>() };
     renderModals();
   }
   function closeNewGroup() {
@@ -471,18 +482,18 @@ export function createLogic({
   async function saveNewGroup() {
     const ng = state.newGroup!;
     if (!ng.name.trim() || ng.members.size < 1) return;
-    const outcome = await act('create-group', {
+    const outcome = await act("create-group", {
       name: ng.name.trim(),
       icon: ng.icon,
-      color: '#0FA678',
+      color: "#0FA678",
       member_ids: [...ng.members],
     });
     if (!narrate(outcome)) return;
     const gid = outcome?.output?.group_id as string | undefined;
-    toast('Group created · receipted.');
+    toast("Group created · receipted.");
     closeNewGroup();
     await refreshAll();
-    if (gid) setNav({ view: 'group', groupId: gid, search: '' });
+    if (gid) setNav({ view: "group", groupId: gid, search: "" });
   }
 
   // ---------- Add friend (REQUIRED — a fresh vault starts empty) ----------
@@ -491,7 +502,7 @@ export function createLogic({
     closeAllModals();
     // No colour field: a friend's hue is derived from the party (issue #441 A3),
     // not chosen and stored per Tally row.
-    state.addFriend = { name: '' };
+    state.addFriend = { name: "" };
     renderModals();
   }
   function closeAddFriend() {
@@ -506,9 +517,9 @@ export function createLogic({
   async function saveAddFriend() {
     const af = state.addFriend!;
     if (!af.name.trim()) return;
-    const outcome = await act('add-friend', { name: af.name.trim() });
+    const outcome = await act("add-friend", { name: af.name.trim() });
     if (!narrate(outcome)) return;
-    toast('Friend added · receipted.');
+    toast("Friend added · receipted.");
     closeAddFriend();
     await refreshAll();
   }
@@ -523,7 +534,13 @@ export function createLogic({
     state.addFriend = null;
   }
   function anyModalOpen() {
-    return !!(state.detail || state.expense || state.settle || state.newGroup || state.addFriend);
+    return !!(
+      state.detail ||
+      state.expense ||
+      state.settle ||
+      state.newGroup ||
+      state.addFriend
+    );
   }
 
   return {

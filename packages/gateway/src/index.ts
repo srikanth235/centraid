@@ -24,8 +24,12 @@ export {
   type BuiltGateway,
   type RouteHandler,
   type FireAutomation,
-} from './serve/build-gateway.js';
-export { serve, type ServeOptions, type GatewayServeHandle } from './serve/serve.js';
+} from "./serve/build-gateway.js";
+export {
+  serve,
+  type ServeOptions,
+  type GatewayServeHandle,
+} from "./serve/serve.js";
 export {
   ASSIST_PRODUCTION_CALLBACK_URL,
   ASSIST_PRODUCTION_WORKER_ORIGIN,
@@ -34,7 +38,7 @@ export {
   validateAssistOAuthConfig,
   type AssistOAuthConfig,
   type AssistOAuthEnvironment,
-} from './serve/assist-oauth.js';
+} from "./serve/assist-oauth.js";
 // Component-level health (self-hosting observability): hosts push their
 // own components (tunnel, disk) through `BuiltGateway.health`; clients
 // read the aggregate at `GET /centraid/_gateway/health`.
@@ -46,7 +50,7 @@ export {
   type HealthSnapshot,
   type HealthProbe,
   type HealthMetrics,
-} from './serve/health-registry.js';
+} from "./serve/health-registry.js";
 export {
   RESOURCE_MODE_PREF_KEY,
   RESOURCE_MODES,
@@ -58,86 +62,95 @@ export {
   resolveResourceMode,
   resourceModeLabel,
   type ResourceMode,
-} from './serve/resource-mode.js';
+} from "./serve/resource-mode.js";
 export {
   formatHardwareProfileDetail,
   hardwareClassForResourceMode,
   resolveGatewayHardwareProfile,
   type GatewayHardwareProfile,
   type HardwareClass,
-} from './serve/hardware-profile.js';
+} from "./serve/hardware-profile.js";
 export {
   evaluateDiskFreeStatus,
   DISK_DEGRADED_BELOW_BYTES,
   DISK_DEGRADED_BELOW_PERCENT,
   DISK_ERROR_BELOW_BYTES,
   DISK_ERROR_BELOW_PERCENT,
-} from './serve/disk-health.js';
+} from "./serve/disk-health.js";
 export {
   GatewayPerformanceMonitor,
   type GatewayPerformanceSnapshot,
   type GatewayPerformanceMonitorOptions,
-} from './serve/gateway-performance.js';
-export { measureStorageLatency, type StorageLatencySample } from './serve/storage-latency.js';
+} from "./serve/gateway-performance.js";
+export {
+  measureStorageLatency,
+  type StorageLatencySample,
+} from "./serve/storage-latency.js";
 export {
   GatewayLogStore,
   type GatewayLogEntry,
   type GatewayLogLevel,
-} from './serve/gateway-log-store.js';
-export type { GatewayPaths } from './paths.js';
+} from "./serve/gateway-log-store.js";
+export type { GatewayPaths } from "./paths.js";
 export {
   readAgentsStatus,
   type AgentsStatus,
   type AgentStatusEntry,
-} from './routes/agents-routes.js';
+} from "./routes/agents-routes.js";
 export {
   openVaultPlane,
   VaultPlane,
   type VaultPlaneOptions,
   type GrantRequest,
-} from './serve/vault-plane.js';
+} from "./serve/vault-plane.js";
 export {
   openVaultRegistry,
   VaultRegistry,
   VaultRegistryError,
   type VaultRegistryOptions,
   type VaultInfo,
-} from './serve/vault-registry.js';
-export { makeVaultRouteHandler } from './routes/vault-routes.js';
+} from "./serve/vault-registry.js";
+export { makeVaultRouteHandler } from "./routes/vault-routes.js";
 export {
   makeReplicaRouteHandler,
   REPLICA_INTENTS_PATH,
   type ReplicaRouteOptions,
-} from './routes/replica-routes.js';
+} from "./routes/replica-routes.js";
 // The vault-register tool runners, giving chat turns `vault_sql` /
 // `vault_invoke` / `vault_content` capability through the same
 // consent/receipt pipeline the codex/claude runners use (issue #319).
-export { makeVaultToolRunners, assistantCwd } from './runs/assistant-conversation-runner.js';
+export {
+  makeVaultToolRunners,
+  assistantCwd,
+} from "./runs/assistant-conversation-runner.js";
 export {
   runWithVaultContext,
   vaultContext,
   VAULT_HEADER,
   type VaultRequestContext,
   type DeviceAccess,
-} from './serve/vault-context.js';
+} from "./serve/vault-context.js";
 // The preview ladder's raster codec (issue #405 §2): pure-JS jpeg-js/pngjs
 // downscaler the host injects into vault planes so the blob sweep's backstop
 // can generate missing tiny/medium derivatives for imported / weak-client /
 // server-ingested images.
-export { createImagePreviewCodec } from './preview/codec.js';
-export { createWasmImagePreviewCodec } from './preview/wasm-codec.js';
+export { createImagePreviewCodec } from "./preview/codec.js";
+export { createWasmImagePreviewCodec } from "./preview/wasm-codec.js";
 export {
   GATEWAY_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
-} from './version.js';
-export { platformDefaultDataDir, type DefaultDataDirOptions } from './cli/data-dir.js';
+} from "./version.js";
+export {
+  platformDefaultDataDir,
+  type DefaultDataDirOptions,
+} from "./cli/data-dir.js";
 // How the desktop reaches a daemon it did not spawn — an OS-service install
 // derives its loopback bearer from custody rather than an env pin (#568 F).
-export { landlordBearerForDataDir } from './cli/landlord-auth.js';
+export { landlordBearerForDataDir } from "./cli/landlord-auth.js";
 // Host-only capability gate (issue #568 items A/B). Embedders wire this into
 // `serve({isHostCustody})` so the host-only lanes — pairing-ticket mint,
 // member administration, share, scopes — refuse anything a forwarder
 // delivered to loopback.
-export { isDirectHostRequest } from './routes/route-helpers.js';
+export { isDirectHostRequest } from "./routes/route-helpers.js";

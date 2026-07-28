@@ -11,27 +11,26 @@
 //   MAESTRO_GATEWAY_TOKEN  (bearer for the install/delete calls)
 //   MAESTRO_TEMPLATES      (optional comma-separated template-id subset)
 
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
-import { runFlow } from '../lib/harness.mjs';
+import { runFlow } from "../lib/harness.mjs";
 
 const __dirname = import.meta.dirname;
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 
-const GATEWAY_URL = (process.env.MAESTRO_GATEWAY_URL ?? 'http://127.0.0.1:18789').replace(
-  /\/+$/u,
-  '',
-);
-const GATEWAY_TOKEN = process.env.MAESTRO_GATEWAY_TOKEN ?? '';
-const ONLY = (process.env.MAESTRO_TEMPLATES ?? '')
-  .split(',')
+const GATEWAY_URL = (
+  process.env.MAESTRO_GATEWAY_URL ?? "http://127.0.0.1:18789"
+).replace(/\/+$/u, "");
+const GATEWAY_TOKEN = process.env.MAESTRO_GATEWAY_TOKEN ?? "";
+const ONLY = (process.env.MAESTRO_TEMPLATES ?? "")
+  .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
 async function gw(pathname, init = {}) {
   const headers = {
-    'content-type': 'application/json',
+    "content-type": "application/json",
     ...(GATEWAY_TOKEN ? { authorization: `Bearer ${GATEWAY_TOKEN}` } : {}),
     ...init.headers,
   };
@@ -39,7 +38,7 @@ async function gw(pathname, init = {}) {
   const text = await res.text();
   if (!res.ok) {
     throw new Error(
-      `${init.method ?? 'GET'} ${pathname} -> HTTP ${res.status}: ${text.slice(0, 200)}`,
+      `${init.method ?? "GET"} ${pathname} -> HTTP ${res.status}: ${text.slice(0, 200)}`
     );
   }
   return text ? JSON.parse(text) : undefined;
@@ -56,14 +55,17 @@ async function gw(pathname, init = {}) {
 // Keep in sync with NATIVE_APPS. The sync is manual because that list lives in
 // TSX the flow cannot import; the cost of drift is a WebView app silently going
 // ungated, so treat this list as load-bearing.
-const NATIVE_ON_MOBILE = new Set(['photos', 'docs', 'agenda']);
+const NATIVE_ON_MOBILE = new Set(["photos", "docs", "agenda"]);
 
 // UI templates only — automations have no index.html to open on the phone.
 async function uiTemplates() {
-  const raw = await readFile(path.join(REPO_ROOT, 'packages', 'blueprints', 'index.json'), 'utf8');
+  const raw = await readFile(
+    path.join(REPO_ROOT, "packages", "blueprints", "index.json"),
+    "utf8"
+  );
   const index = JSON.parse(raw);
   return index.templates
-    .filter((t) => (t.kind ?? 'app') === 'app')
+    .filter((t) => (t.kind ?? "app") === "app")
     .filter((t) => !NATIVE_ON_MOBILE.has(t.id))
     .filter((t) => ONLY.length === 0 || ONLY.includes(t.id));
 }
@@ -76,8 +78,15 @@ async function uiTemplates() {
 async function templateMarker(templateId) {
   try {
     const html = await readFile(
-      path.join(REPO_ROOT, 'packages', 'blueprints', 'apps', templateId, 'index.html'),
-      'utf8',
+      path.join(
+        REPO_ROOT,
+        "packages",
+        "blueprints",
+        "apps",
+        templateId,
+        "index.html"
+      ),
+      "utf8"
     );
     const h1 = /<h1[^>]*>(?<heading>[^<]+)<\/h1>/u.exec(html);
     if (h1?.groups?.heading) return h1.groups.heading.trim();
@@ -89,12 +98,13 @@ async function templateMarker(templateId) {
   return undefined;
 }
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
-await runFlow('template-gate', async (ctx) => {
+await runFlow("template-gate", async (ctx) => {
   await ctx.configureGateway(GATEWAY_URL, GATEWAY_TOKEN);
   const templates = await uiTemplates();
-  if (templates.length === 0) throw new Error('no UI templates found in blueprints index.json');
+  if (templates.length === 0)
+    throw new Error("no UI templates found in blueprints index.json");
 
   const installed = [];
   const failures = [];
@@ -111,9 +121,9 @@ await runFlow('template-gate', async (ctx) => {
     const installNext = async (index) => {
       const tmpl = templates[index];
       if (tmpl === undefined) return;
-      const res = await gw('/centraid/_apps/_install', {
+      const res = await gw("/centraid/_apps/_install", {
         body: JSON.stringify({ templateId: tmpl.id }),
-        method: 'POST',
+        method: "POST",
       });
       installed.push({
         appId: res.app.id,
@@ -126,7 +136,9 @@ await runFlow('template-gate', async (ctx) => {
       });
       ctx.note(
         `installed ${tmpl.id} -> ${res.app.id} ("${res.app.name}")` +
-          (res.alreadyInstalled === true ? ' [already present — will not delete]' : ''),
+          (res.alreadyInstalled === true
+            ? " [already present — will not delete]"
+            : "")
       );
       return installNext(index + 1);
     };
@@ -181,12 +193,12 @@ await runFlow('template-gate', async (ctx) => {
 - assertNotVisible: "Not connected"
 - takeScreenshot: ${c.appId}
 `,
-          c.templateId,
+          c.templateId
         );
         ctx.note(`${c.templateId}: rendered (marker "${marker ?? c.appName}")`);
       } catch (err) {
-        failures.push(`${c.templateId}: ${err.message.split('\n')[0]}`);
-        ctx.note(`${c.templateId}: FAILED — ${err.message.split('\n')[0]}`);
+        failures.push(`${c.templateId}: ${err.message.split("\n")[0]}`);
+        ctx.note(`${c.templateId}: FAILED — ${err.message.split("\n")[0]}`);
       }
       return exerciseNext(index + 1);
     };
@@ -200,18 +212,20 @@ await runFlow('template-gate', async (ctx) => {
         .map(async (c) => {
           try {
             await gw(`/centraid/_apps/${encodeURIComponent(c.appId)}`, {
-              method: 'DELETE',
+              method: "DELETE",
             });
           } catch (err) {
-            ctx.note(`cleanup: could not delete ${c.appId} — ${err.message.split('\n')[0]}`);
+            ctx.note(
+              `cleanup: could not delete ${c.appId} — ${err.message.split("\n")[0]}`
+            );
           }
-        }),
+        })
     );
   }
 
   if (failures.length > 0) {
     throw new Error(
-      `template gate failed for ${failures.length}/${installed.length}:\n${failures.join('\n')}`,
+      `template gate failed for ${failures.length}/${installed.length}:\n${failures.join("\n")}`
     );
   }
   return {

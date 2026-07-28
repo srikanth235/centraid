@@ -2,11 +2,17 @@
 // testable in the node vitest env. `useTheme.ts` wraps this with
 // `useColorScheme()`; everything dark-mode actually needs is here.
 
-import type { Theme as NavigationTheme } from '@react-navigation/native';
+import type { Theme as NavigationTheme } from "@react-navigation/native";
 
-import { lightPalette, darkPalette, radii, spacing, fonts } from './tokens.generated';
+import {
+  lightPalette,
+  darkPalette,
+  radii,
+  spacing,
+  fonts,
+} from "./tokens.generated";
 
-export type Scheme = 'light' | 'dark';
+export type Scheme = "light" | "dark";
 
 // The generated palettes plus a derived `ink4` — the source has no `--ink-4`,
 // but the app uses a fourth, fainter ink (e.g. the home pager dots), so we
@@ -37,45 +43,45 @@ export interface ThemeValue {
 // teal as `BRAND_TEAL` in lib/profile.ts (the profile default), so out of the
 // box identity and actions read as one colour; personalising the profile colour
 // then only re-tints the avatar + greeting, not the app's controls.
-const BRAND_TEAL = '#128A78';
+const BRAND_TEAL = "#128A78";
 
 const SOLAR_LIGHT: ThemeColors = {
   ...lightPalette,
-  bg: '#f1ece1', // design screenBg — the solar cream canvas
-  bgElev: '#fbf8f1', // warm off-white, lifts cards above the canvas
-  bgSunken: '#e7dfcf', // deeper warm sand for search pills / inputs
-  surface: '#fbf8f1',
-  surface2: '#e7dfcf',
-  ink: '#231f18', // warm near-black
-  ink2: '#645c4e',
-  inkSoft: '#645c4e',
-  muted: '#645c4e',
-  ink3: '#938a78',
-  inkFaint: '#938a78',
-  line: 'rgba(60, 48, 22, 0.1)',
-  lineStrong: 'rgba(60, 48, 22, 0.18)',
-  ink4: 'rgba(35, 31, 24, 0.28)',
+  bg: "#f1ece1", // design screenBg — the solar cream canvas
+  bgElev: "#fbf8f1", // warm off-white, lifts cards above the canvas
+  bgSunken: "#e7dfcf", // deeper warm sand for search pills / inputs
+  surface: "#fbf8f1",
+  surface2: "#e7dfcf",
+  ink: "#231f18", // warm near-black
+  ink2: "#645c4e",
+  inkSoft: "#645c4e",
+  muted: "#645c4e",
+  ink3: "#938a78",
+  inkFaint: "#938a78",
+  line: "rgba(60, 48, 22, 0.1)",
+  lineStrong: "rgba(60, 48, 22, 0.18)",
+  ink4: "rgba(35, 31, 24, 0.28)",
   accent: BRAND_TEAL, // teal on cream carries white glyphs cleanly
 };
 
 const LIGHT_COLORS: ThemeColors = SOLAR_LIGHT;
 const DARK_COLORS: ThemeColors = {
   ...darkPalette,
-  ink4: 'rgba(237, 239, 242, 0.28)',
+  ink4: "rgba(237, 239, 242, 0.28)",
   accent: BRAND_TEAL, // same teal reads on the near-black ground (matches the greeting highlight)
 };
 
 // Frozen singletons per scheme so `colors` keeps a stable identity across
 // renders — lets screens `useMemo(makeStyles, [colors])` without thrash.
 const LIGHT: ThemeValue = {
-  scheme: 'light',
+  scheme: "light",
   colors: LIGHT_COLORS,
   radii,
   spacing,
   fonts,
 };
 const DARK: ThemeValue = {
-  scheme: 'dark',
+  scheme: "dark",
   colors: DARK_COLORS,
   radii,
   spacing,
@@ -83,7 +89,7 @@ const DARK: ThemeValue = {
 };
 
 export function resolveTheme(scheme: Scheme | null | undefined): ThemeValue {
-  return scheme === 'dark' ? DARK : LIGHT;
+  return scheme === "dark" ? DARK : LIGHT;
 }
 
 // React Navigation theme — feeds NavigationContainer so headers, card
@@ -92,7 +98,7 @@ export function resolveTheme(scheme: Scheme | null | undefined): ThemeValue {
 function navTheme(t: ThemeValue): NavigationTheme {
   const { colors } = t;
   return {
-    dark: t.scheme === 'dark',
+    dark: t.scheme === "dark",
     colors: {
       background: colors.bg,
       border: colors.line,
@@ -102,10 +108,10 @@ function navTheme(t: ThemeValue): NavigationTheme {
       text: colors.ink,
     },
     fonts: {
-      regular: { fontFamily: fonts.sans.regular, fontWeight: '400' },
-      medium: { fontFamily: fonts.sans.medium, fontWeight: '500' },
-      bold: { fontFamily: fonts.sans.semibold, fontWeight: '600' },
-      heavy: { fontFamily: fonts.sans.semibold, fontWeight: '600' },
+      regular: { fontFamily: fonts.sans.regular, fontWeight: "400" },
+      medium: { fontFamily: fonts.sans.medium, fontWeight: "500" },
+      bold: { fontFamily: fonts.sans.semibold, fontWeight: "600" },
+      heavy: { fontFamily: fonts.sans.semibold, fontWeight: "600" },
     },
   };
 }
@@ -115,6 +121,8 @@ export const navThemes: Record<Scheme, NavigationTheme> = {
   dark: navTheme(DARK),
 };
 
-export function navThemeFor(scheme: Scheme | null | undefined): NavigationTheme {
-  return scheme === 'dark' ? navThemes.dark : navThemes.light;
+export function navThemeFor(
+  scheme: Scheme | null | undefined
+): NavigationTheme {
+  return scheme === "dark" ? navThemes.dark : navThemes.light;
 }

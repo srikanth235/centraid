@@ -1,23 +1,34 @@
-import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import React, { useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import React, { useMemo, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import HomeKey from '../../kit/components/HomeKey';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { useTheme } from '../../kit/theme';
-import type { AgendaScreenProps } from '../../navigation';
-import { styles } from './AgendaHome.styles';
-import type { AgendaEventModel } from './recurrence';
-import { useAgenda } from './useAgenda';
+import HomeKey from "../../kit/components/HomeKey";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { useTheme } from "../../kit/theme";
+import type { AgendaScreenProps } from "../../navigation";
+import { styles } from "./AgendaHome.styles";
+import type { AgendaEventModel } from "./recurrence";
+import { useAgenda } from "./useAgenda";
 
-type ViewMode = 'month' | 'week' | 'agenda';
+type ViewMode = "month" | "week" | "agenda";
 type AgendaRow =
-  | { kind: 'day'; key: string; date: Date }
-  | { kind: 'event'; key: string; event: AgendaEventModel };
-const startOfMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
-const endOfMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  | { kind: "day"; key: string; date: Date }
+  | { kind: "event"; key: string; event: AgendaEventModel };
+const startOfMonth = (date: Date): Date =>
+  new Date(date.getFullYear(), date.getMonth(), 1);
+const endOfMonth = (date: Date): Date =>
+  new Date(date.getFullYear(), date.getMonth() + 1, 1);
 const startOfWeek = (date: Date): Date => {
   const next = new Date(date);
   next.setDate(next.getDate() - next.getDay());
@@ -32,28 +43,33 @@ const addDays = (date: Date, days: number): Date => {
 
 export default function AgendaHome({
   navigation,
-}: AgendaScreenProps<'AgendaHome'>): React.JSX.Element {
+}: AgendaScreenProps<"AgendaHome">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
   const [cursor, setCursor] = useState(new Date());
-  const [mode, setMode] = useState<ViewMode>('agenda');
+  const [mode, setMode] = useState<ViewMode>("agenda");
   const [createOpen, setCreateOpen] = useState(false);
-  const [summary, setSummary] = useState('');
+  const [summary, setSummary] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [hiddenCalendars, setHiddenCalendars] = useState(new Set<string>());
-  const [startPreset, setStartPreset] = useState<'next-hour' | 'tomorrow'>('next-hour');
+  const [startPreset, setStartPreset] = useState<"next-hour" | "tomorrow">(
+    "next-hour"
+  );
   const range = useMemo(
     () =>
-      mode === 'month'
+      mode === "month"
         ? ([startOfMonth(cursor), endOfMonth(cursor)] as const)
-        : mode === 'week'
+        : mode === "week"
           ? ([startOfWeek(cursor), addDays(startOfWeek(cursor), 7)] as const)
-          : ([new Date(new Date().setHours(0, 0, 0, 0)), addDays(new Date(), 120)] as const),
-    [cursor, mode],
+          : ([
+              new Date(new Date().setHours(0, 0, 0, 0)),
+              addDays(new Date(), 120),
+            ] as const),
+    [cursor, mode]
   );
   const agenda = useAgenda(range[0], range[1]);
-  const calendarId = String(agenda.calendars[0]?.calendar_id ?? '');
+  const calendarId = String(agenda.calendars[0]?.calendar_id ?? "");
   const visibleEvents = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return agenda.events.filter(
@@ -61,31 +77,34 @@ export default function AgendaHome({
         (!event.calendarId || !hiddenCalendars.has(event.calendarId)) &&
         (!needle ||
           event.summary.toLowerCase().includes(needle) ||
-          event.description?.toLowerCase().includes(needle)),
+          event.description?.toLowerCase().includes(needle))
     );
   }, [agenda.events, hiddenCalendars, query]);
   const agendaRows = useMemo<AgendaRow[]>(() => {
     const rows: AgendaRow[] = [];
-    let previous = '';
+    let previous = "";
     for (const event of visibleEvents) {
       const date = new Date(event.start);
       const day = date.toDateString();
       if (day !== previous) {
         previous = day;
-        rows.push({ kind: 'day', key: `day:${day}`, date });
+        rows.push({ kind: "day", key: `day:${day}`, date });
       }
-      rows.push({ kind: 'event', key: event.instanceKey, event });
+      rows.push({ kind: "event", key: event.instanceKey, event });
     }
     return rows;
   }, [visibleEvents]);
 
   const create = async (): Promise<void> => {
     if (!session || !summary.trim() || !calendarId) {
-      Alert.alert('Calendar unavailable', 'Sync a calendar before creating an event.');
+      Alert.alert(
+        "Calendar unavailable",
+        "Sync a calendar before creating an event."
+      );
       return;
     }
     const start = new Date();
-    if (startPreset === 'tomorrow') {
+    if (startPreset === "tomorrow") {
       start.setDate(start.getDate() + 1);
       start.setHours(9, 0, 0, 0);
     } else {
@@ -94,8 +113,8 @@ export default function AgendaHome({
     }
     const end = new Date(start.getTime() + 60 * 60 * 1000);
     const rowId = `optimistic-${Date.now()}`;
-    const result = await session.write('agenda', {
-      action: 'propose',
+    const result = await session.write("agenda", {
+      action: "propose",
       input: {
         summary: summary.trim(),
         dtstart: start.toISOString(),
@@ -106,8 +125,8 @@ export default function AgendaHome({
       },
       optimistic: [
         {
-          op: 'upsert',
-          entity: 'core.event',
+          op: "upsert",
+          entity: "core.event",
           rowId,
           values: {
             event_id: rowId,
@@ -115,19 +134,19 @@ export default function AgendaHome({
             dtstart: start.toISOString(),
             dtend: end.toISOString(),
             start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            status: 'tentative',
+            status: "tentative",
           },
         },
       ],
     });
-    setSummary('');
+    setSummary("");
     setCreateOpen(false);
-    if (result.status === 'parked' || result.status === 'queued')
-      navigation.navigate('Settings', { screen: 'Approvals' });
+    if (result.status === "parked" || result.status === "queued")
+      navigation.navigate("Settings", { screen: "Approvals" });
   };
   const move = (direction: number): void => {
     const next = new Date(cursor);
-    if (mode === 'month') next.setMonth(next.getMonth() + direction);
+    if (mode === "month") next.setMonth(next.getMonth() + direction);
     else next.setDate(next.getDate() + direction * 7);
     setCursor(next);
   };
@@ -145,12 +164,17 @@ export default function AgendaHome({
     });
   };
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={["top"]}
+    >
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerCopy}>
           <Text style={[styles.title, { color: colors.ink }]}>Agenda</Text>
-          <Text style={[styles.subtitle, { color: colors.ink2 }]}>Your time, in one view</Text>
+          <Text style={[styles.subtitle, { color: colors.ink2 }]}>
+            Your time, in one view
+          </Text>
         </View>
         <View style={styles.headerActions}>
           <Pressable
@@ -159,7 +183,10 @@ export default function AgendaHome({
           >
             <Feather name="search" size={21} color={colors.ink} />
           </Pressable>
-          <Pressable accessibilityLabel="Create event" onPress={() => setCreateOpen(true)}>
+          <Pressable
+            accessibilityLabel="Create event"
+            onPress={() => setCreateOpen(true)}
+          >
             <Feather name="plus" size={24} color={colors.accent} />
           </Pressable>
         </View>
@@ -177,7 +204,7 @@ export default function AgendaHome({
           />
           <Pressable
             onPress={() => {
-              setQuery('');
+              setQuery("");
               setSearchOpen(false);
             }}
           >
@@ -186,20 +213,33 @@ export default function AgendaHome({
         </View>
       ) : null}
       <View style={[styles.segment, { backgroundColor: colors.bgSunken }]}>
-        {(['month', 'week', 'agenda'] as ViewMode[]).map((item) => (
+        {(["month", "week", "agenda"] as ViewMode[]).map((item) => (
           <Pressable
             key={item}
             onPress={() => setMode(item)}
-            style={[styles.segmentItem, item === mode && { backgroundColor: colors.bgElev }]}
+            style={[
+              styles.segmentItem,
+              item === mode && { backgroundColor: colors.bgElev },
+            ]}
           >
-            <Text style={[styles.segmentText, { color: item === mode ? colors.ink : colors.ink2 }]}>
-              {item === 'agenda' ? 'Schedule' : item[0]!.toUpperCase() + item.slice(1)}
+            <Text
+              style={[
+                styles.segmentText,
+                { color: item === mode ? colors.ink : colors.ink2 },
+              ]}
+            >
+              {item === "agenda"
+                ? "Schedule"
+                : item[0]!.toUpperCase() + item.slice(1)}
             </Text>
           </Pressable>
         ))}
       </View>
       <View style={styles.nav}>
-        <Pressable style={[styles.today, { borderColor: colors.lineStrong }]} onPress={goToday}>
+        <Pressable
+          style={[styles.today, { borderColor: colors.lineStrong }]}
+          onPress={goToday}
+        >
           <Text style={[styles.todayText, { color: colors.ink }]}>Today</Text>
         </Pressable>
         <View style={styles.navArrows}>
@@ -211,14 +251,14 @@ export default function AgendaHome({
           </Pressable>
         </View>
         <Text style={[styles.rangeTitle, { color: colors.ink }]}>
-          {mode === 'month'
+          {mode === "month"
             ? new Intl.DateTimeFormat(undefined, {
-                month: 'long',
-                year: 'numeric',
+                month: "long",
+                year: "numeric",
               }).format(cursor)
-            : mode === 'week'
-              ? `${range[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${addDays(range[1], -1).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
-              : 'Upcoming'}
+            : mode === "week"
+              ? `${range[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${addDays(range[1], -1).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+              : "Upcoming"}
         </Text>
       </View>
       {agenda.calendars.length ? (
@@ -229,10 +269,11 @@ export default function AgendaHome({
           contentContainerStyle={styles.calendars}
         >
           {agenda.calendars.map((calendar, index) => {
-            const id = String(calendar.calendar_id ?? '');
+            const id = String(calendar.calendar_id ?? "");
             const shown = !hiddenCalendars.has(id);
             const swatch = String(
-              calendar.color ?? ['#4e68dd', '#b45173', '#258d86', '#ba7418'][index % 4],
+              calendar.color ??
+                ["#4e68dd", "#b45173", "#258d86", "#ba7418"][index % 4]
             );
             return (
               <Pressable
@@ -246,19 +287,28 @@ export default function AgendaHome({
                   },
                 ]}
               >
-                <View style={[styles.calendarDot, { backgroundColor: swatch }]} />
+                <View
+                  style={[styles.calendarDot, { backgroundColor: swatch }]}
+                />
                 <Text style={[styles.calendarText, { color: colors.ink2 }]}>
-                  {String(calendar.name ?? 'Calendar')}
+                  {String(calendar.name ?? "Calendar")}
                 </Text>
-                {shown ? <Feather name="check" size={12} color={colors.accent} /> : null}
+                {shown ? (
+                  <Feather name="check" size={12} color={colors.accent} />
+                ) : null}
               </Pressable>
             );
           })}
         </ScrollView>
       ) : null}
-      {mode === 'month' ? (
-        <MonthGrid cursor={cursor} events={visibleEvents} onDay={setCursor} colors={colors} />
-      ) : mode === 'week' ? (
+      {mode === "month" ? (
+        <MonthGrid
+          cursor={cursor}
+          events={visibleEvents}
+          onDay={setCursor}
+          colors={colors}
+        />
+      ) : mode === "week" ? (
         <WeekStrip start={range[0]} events={visibleEvents} colors={colors} />
       ) : null}
       <FlatList
@@ -267,17 +317,19 @@ export default function AgendaHome({
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <Text style={[styles.empty, { color: colors.ink2 }]}>
-            {agenda.loading ? 'Opening your calendar…' : 'Nothing scheduled in this range.'}
+            {agenda.loading
+              ? "Opening your calendar…"
+              : "Nothing scheduled in this range."}
           </Text>
         }
         renderItem={({ item }) =>
-          item.kind === 'day' ? (
+          item.kind === "day" ? (
             <View style={styles.dayHeader}>
               <Text style={[styles.dayHeaderTitle, { color: colors.ink }]}>
                 {new Intl.DateTimeFormat(undefined, {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
                 }).format(item.date)}
               </Text>
             </View>
@@ -286,7 +338,7 @@ export default function AgendaHome({
               event={item.event}
               colors={colors}
               onPress={() =>
-                navigation.navigate('AgendaEvent', {
+                navigation.navigate("AgendaEvent", {
                   eventId: item.event.id,
                   instanceKey: item.event.instanceKey,
                 })
@@ -301,9 +353,14 @@ export default function AgendaHome({
         visible={createOpen}
         onRequestClose={() => setCreateOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setCreateOpen(false)} />
+        <Pressable
+          style={styles.backdrop}
+          onPress={() => setCreateOpen(false)}
+        />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>New event</Text>
+          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
+            New event
+          </Text>
           <Text style={[styles.dialogMeta, { color: colors.ink2 }]}>
             1 hour · 15 minute local reminder
           </Text>
@@ -313,13 +370,16 @@ export default function AgendaHome({
             onChangeText={setSummary}
             placeholder="Event title"
             placeholderTextColor={colors.ink3}
-            style={[styles.input, { borderColor: colors.lineStrong, color: colors.ink }]}
+            style={[
+              styles.input,
+              { borderColor: colors.lineStrong, color: colors.ink },
+            ]}
           />
           <View style={styles.startPresets}>
             {(
               [
-                ['next-hour', 'Next hour'],
-                ['tomorrow', 'Tomorrow · 9 AM'],
+                ["next-hour", "Next hour"],
+                ["tomorrow", "Tomorrow · 9 AM"],
               ] as const
             ).map(([key, label]) => (
               <Pressable
@@ -328,7 +388,8 @@ export default function AgendaHome({
                 style={[
                   styles.startPreset,
                   {
-                    backgroundColor: startPreset === key ? colors.ink : colors.bgSunken,
+                    backgroundColor:
+                      startPreset === key ? colors.ink : colors.bgSunken,
                   },
                 ]}
               >
@@ -361,32 +422,37 @@ function EventRow({
   onPress,
 }: {
   event: AgendaEventModel;
-  colors: ReturnType<typeof useTheme>['colors'];
+  colors: ReturnType<typeof useTheme>["colors"];
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <Pressable onPress={onPress} style={[styles.event, { borderBottomColor: colors.line }]}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.event, { borderBottomColor: colors.line }]}
+    >
       <View style={styles.time}>
         <Text style={[styles.timeText, { color: colors.ink }]}>
           {new Intl.DateTimeFormat(undefined, {
-            hour: 'numeric',
-            minute: '2-digit',
+            hour: "numeric",
+            minute: "2-digit",
           }).format(new Date(event.start))}
         </Text>
         <Text style={[styles.dayText, { color: colors.ink2 }]}>
-          –{' '}
+          –{" "}
           {new Intl.DateTimeFormat(undefined, {
-            hour: 'numeric',
-            minute: '2-digit',
+            hour: "numeric",
+            minute: "2-digit",
           }).format(new Date(event.end))}
         </Text>
       </View>
       <View style={[styles.eventLine, { backgroundColor: colors.accent }]} />
       <View style={styles.eventCopy}>
-        <Text style={[styles.eventTitle, { color: colors.ink }]}>{event.summary}</Text>
+        <Text style={[styles.eventTitle, { color: colors.ink }]}>
+          {event.summary}
+        </Text>
         <Text style={[styles.eventMeta, { color: colors.ink2 }]}>
-          {event.timezone ?? 'Local time'}
-          {event.isRecurrenceInstance ? ' · repeating' : ''}
+          {event.timezone ?? "Local time"}
+          {event.isRecurrenceInstance ? " · repeating" : ""}
         </Text>
       </View>
       <Feather name="chevron-right" size={18} color={colors.ink3} />
@@ -403,32 +469,46 @@ function MonthGrid({
   cursor: Date;
   events: AgendaEventModel[];
   onDay: (day: Date) => void;
-  colors: ReturnType<typeof useTheme>['colors'];
+  colors: ReturnType<typeof useTheme>["colors"];
 }): React.JSX.Element {
   const start = startOfMonth(cursor);
   const first = addDays(start, -start.getDay());
   return (
     <View style={styles.month}>
-      {Array.from({ length: 42 }, (_, index) => addDays(first, index)).map((day) => {
-        const count = events.filter(
-          (event) => new Date(event.start).toDateString() === day.toDateString(),
-        ).length;
-        return (
-          <Pressable key={day.toISOString()} onPress={() => onDay(day)} style={styles.day}>
-            <Text
-              style={[
-                styles.dayNumber,
-                {
-                  color: day.getMonth() === cursor.getMonth() ? colors.ink : colors.ink3,
-                },
-              ]}
+      {Array.from({ length: 42 }, (_, index) => addDays(first, index)).map(
+        (day) => {
+          const count = events.filter(
+            (event) =>
+              new Date(event.start).toDateString() === day.toDateString()
+          ).length;
+          return (
+            <Pressable
+              key={day.toISOString()}
+              onPress={() => onDay(day)}
+              style={styles.day}
             >
-              {day.getDate()}
-            </Text>
-            {count ? <View style={[styles.dot, { backgroundColor: colors.accent }]} /> : null}
-          </Pressable>
-        );
-      })}
+              <Text
+                style={[
+                  styles.dayNumber,
+                  {
+                    color:
+                      day.getMonth() === cursor.getMonth()
+                        ? colors.ink
+                        : colors.ink3,
+                  },
+                ]}
+              >
+                {day.getDate()}
+              </Text>
+              {count ? (
+                <View
+                  style={[styles.dot, { backgroundColor: colors.accent }]}
+                />
+              ) : null}
+            </Pressable>
+          );
+        }
+      )}
     </View>
   );
 }
@@ -439,7 +519,7 @@ function WeekStrip({
 }: {
   start: Date;
   events: AgendaEventModel[];
-  colors: ReturnType<typeof useTheme>['colors'];
+  colors: ReturnType<typeof useTheme>["colors"];
 }): React.JSX.Element {
   return (
     <ScrollView
@@ -447,23 +527,31 @@ function WeekStrip({
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.week}
     >
-      {Array.from({ length: 7 }, (_, index) => addDays(start, index)).map((day) => (
-        <View
-          key={day.toISOString()}
-          style={[styles.weekDay, { backgroundColor: colors.bgSunken }]}
-        >
-          <Text style={[styles.weekName, { color: colors.ink2 }]}>
-            {new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(day)}
-          </Text>
-          <Text style={[styles.weekNumber, { color: colors.ink }]}>{day.getDate()}</Text>
-          <Text style={[styles.weekCount, { color: colors.accent }]}>
-            {
-              events.filter((event) => new Date(event.start).toDateString() === day.toDateString())
-                .length
-            }
-          </Text>
-        </View>
-      ))}
+      {Array.from({ length: 7 }, (_, index) => addDays(start, index)).map(
+        (day) => (
+          <View
+            key={day.toISOString()}
+            style={[styles.weekDay, { backgroundColor: colors.bgSunken }]}
+          >
+            <Text style={[styles.weekName, { color: colors.ink2 }]}>
+              {new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
+                day
+              )}
+            </Text>
+            <Text style={[styles.weekNumber, { color: colors.ink }]}>
+              {day.getDate()}
+            </Text>
+            <Text style={[styles.weekCount, { color: colors.accent }]}>
+              {
+                events.filter(
+                  (event) =>
+                    new Date(event.start).toDateString() === day.toDateString()
+                ).length
+              }
+            </Text>
+          </View>
+        )
+      )}
     </ScrollView>
   );
 }

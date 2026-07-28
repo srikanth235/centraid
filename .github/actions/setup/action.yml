@@ -26,21 +26,21 @@ inputs:
   working-directory:
     description: Directory containing the package.json that carries `packageManager`.
     required: false
-    default: '.'
+    default: "."
   install:
     description: Run `bun install --frozen-lockfile` after Bun is on PATH.
     required: false
-    default: 'true'
+    default: "true"
   turbo-cache:
     description: >-
       Enable Turbo's native remote cache, backed by the GitHub Actions cache API via a local adapter (#538). Per-task and content-addressed, so unchanged tasks are re-read rather than re-saved as a fresh ~600 MiB blob.
     required: false
-    default: 'false'
+    default: "false"
   cargo-cache:
     description: >-
       Which Cargo cache preset to restore — `none`, `data-plane`, `iroh-wasm`, or `verify` (both crates). The presets stay separate on purpose: one shared key would let jobs with different target/ contents overwrite each other's entry, which surfaces only as unexplained cold builds.
     required: false
-    default: 'none'
+    default: "none"
 
 outputs:
   bun-version:

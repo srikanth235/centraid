@@ -1,4 +1,4 @@
-import type { OnlineOnlyGuard } from './errors.js';
+import type { OnlineOnlyGuard } from "./errors.js";
 import type {
   ApplyChangesResult,
   OptimisticMutation,
@@ -14,7 +14,7 @@ import type {
   ReplicaShape,
   ReplicaSnapshot,
   ReplicaStatus,
-} from './types.js';
+} from "./types.js";
 
 /**
  * The async storage surface a {@link import('./coordinator.js').ReplicaCoordinator}
@@ -55,15 +55,15 @@ export interface ReplicaStore {
   read: (
     request: ReplicaReadRequest,
     mutations?: OptimisticMutation[],
-    guard?: OnlineOnlyGuard,
+    guard?: OnlineOnlyGuard
   ) => Promise<ReplicaReadResult>;
   readWire: (
     request: ReplicaReadRequest,
-    mutations?: OptimisticMutation[],
+    mutations?: OptimisticMutation[]
   ) => Promise<ReplicaReadWireResult>;
   searchWire: (
     request: ReplicaSearchRequest,
-    mutations?: OptimisticMutation[],
+    mutations?: OptimisticMutation[]
   ) => Promise<ReplicaSearchWireResult>;
   wipe: () => Promise<undefined>;
   close: () => Promise<void>;

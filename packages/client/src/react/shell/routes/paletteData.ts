@@ -1,7 +1,10 @@
-import type { AppearancePrefs, ShellRoute } from '../../../app-shell-context.js';
-import type { PaletteGroupDTO, PaletteRowDTO } from '../../screen-contracts.js';
-import { iconSvg } from '../iconSvg.js';
-import type { PaletteConversationSearch } from './paletteConversationSearch.js';
+import type {
+  AppearancePrefs,
+  ShellRoute,
+} from "../../../app-shell-context.js";
+import type { PaletteGroupDTO, PaletteRowDTO } from "../../screen-contracts.js";
+import { iconSvg } from "../iconSvg.js";
+import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
 
 // The ⌘K command palette's data driver — the React successor to the vanilla
 // app-palette.ts `buildGroups`. Given the current query it returns grouped
@@ -10,15 +13,15 @@ import type { PaletteConversationSearch } from './paletteConversationSearch.js';
 // so it is unit-testable without a live shell.
 
 const NAV_ACTIONS: { label: string; icon: string; route: ShellRoute }[] = [
-  { label: 'Home', icon: 'Home', route: { kind: 'home' } },
-  { label: 'Assistant', icon: 'Sparkle', route: { kind: 'assistant' } },
-  { label: 'Insights', icon: 'Gauge', route: { kind: 'insights' } },
-  { label: 'Discover', icon: 'Compass', route: { kind: 'discover' } },
-  { label: 'Automations', icon: 'Bolt', route: { kind: 'automations' } },
-  { label: 'Connectors', icon: 'Plug', route: { kind: 'connectors' } },
-  { label: 'Gateway', icon: 'Cellular', route: { kind: 'gateway' } },
-  { label: 'Storage', icon: 'Save', route: { kind: 'storage' } },
-  { label: 'Settings', icon: 'Settings', route: { kind: 'settings' } },
+  { label: "Home", icon: "Home", route: { kind: "home" } },
+  { label: "Assistant", icon: "Sparkle", route: { kind: "assistant" } },
+  { label: "Insights", icon: "Gauge", route: { kind: "insights" } },
+  { label: "Discover", icon: "Compass", route: { kind: "discover" } },
+  { label: "Automations", icon: "Bolt", route: { kind: "automations" } },
+  { label: "Connectors", icon: "Plug", route: { kind: "connectors" } },
+  { label: "Gateway", icon: "Cellular", route: { kind: "gateway" } },
+  { label: "Storage", icon: "Save", route: { kind: "storage" } },
+  { label: "Settings", icon: "Settings", route: { kind: "settings" } },
 ];
 
 export interface PaletteDeps {
@@ -27,7 +30,7 @@ export interface PaletteDeps {
   /** Dev flag (issue #434, Phase 3) — the "Build a new app…" create row is a
    *  builder entry point, so it only appears when the builder is enabled. */
   builderEnabled: boolean;
-  tileVariant: AppearancePrefs['tileVariant'];
+  tileVariant: AppearancePrefs["tileVariant"];
   navigate: (route: ShellRoute) => void;
   enterBuilder: (initialPrompt?: string) => void;
   onClose: () => void;
@@ -43,28 +46,36 @@ export interface PaletteDeps {
 /** Flatten an FTS `snippet()` string to plain palette-sub text (drop `⟦`/`⟧`). */
 function snippetToText(snippet: string): string {
   return snippet
-    .replace(/[⟦⟧]/gu, '')
-    .replace(/\s+/gu, ' ')
+    .replace(/[⟦⟧]/gu, "")
+    .replace(/\s+/gu, " ")
     .trim();
 }
 
 /** Recompute the palette's grouped rows for `query` (case-insensitive substring). */
-export function buildPaletteGroups(query: string, deps: PaletteDeps): PaletteGroupDTO[] {
+export function buildPaletteGroups(
+  query: string,
+  deps: PaletteDeps
+): PaletteGroupDTO[] {
   const q = query.trim().toLowerCase();
   const groups: PaletteGroupDTO[] = [];
 
   const allApps: AppMetaResolvedType[] = [...deps.userApps, ...deps.drafts];
-  const appMatches = allApps.filter((a) => !q || a.name.toLowerCase().includes(q));
+  const appMatches = allApps.filter(
+    (a) => !q || a.name.toLowerCase().includes(q)
+  );
   if (appMatches.length > 0) {
     groups.push({
-      group: 'Apps',
+      group: "Apps",
       items: appMatches.slice(0, 8).map((a): PaletteRowDTO => {
-        const finish = window.CentraidTokens.tileFinish(a.color, deps.tileVariant);
+        const finish = window.CentraidTokens.tileFinish(
+          a.color,
+          deps.tileVariant
+        );
         return {
-          variant: 'app',
+          variant: "app",
           label: a.name,
           ...(a.desc ? { sub: a.desc } : {}),
-          iconHtml: iconSvg(a.iconKey || 'Sparkle'),
+          iconHtml: iconSvg(a.iconKey || "Sparkle"),
           tile: {
             background: finish.background,
             glyphColor: finish.glyphColor,
@@ -72,7 +83,7 @@ export function buildPaletteGroups(query: string, deps: PaletteDeps): PaletteGro
           },
           run: () => {
             deps.onClose();
-            deps.navigate({ kind: 'app', id: a.id });
+            deps.navigate({ kind: "app", id: a.id });
           },
         };
       }),
@@ -87,37 +98,39 @@ export function buildPaletteGroups(query: string, deps: PaletteDeps): PaletteGro
     const hits = deps.conversationSearch.results(query);
     if (hits.length > 0) {
       groups.push({
-        group: 'Conversations',
+        group: "Conversations",
         items: hits.slice(0, 6).map(
           (h): PaletteRowDTO => ({
-            variant: 'chat',
-            label: h.title || 'New conversation',
+            variant: "chat",
+            label: h.title || "New conversation",
             ...(h.snippet ? { sub: snippetToText(h.snippet) } : {}),
-            iconHtml: iconSvg('Sparkle'),
+            iconHtml: iconSvg("Sparkle"),
             run: () => {
               deps.onClose();
-              deps.navigate({ kind: 'assistant', conversationId: h.id });
+              deps.navigate({ kind: "assistant", conversationId: h.id });
             },
-          }),
+          })
         ),
       });
     }
   }
 
-  const navMatches = NAV_ACTIONS.filter((n) => !q || n.label.toLowerCase().includes(q));
+  const navMatches = NAV_ACTIONS.filter(
+    (n) => !q || n.label.toLowerCase().includes(q)
+  );
   if (navMatches.length > 0) {
     groups.push({
-      group: 'Go to',
+      group: "Go to",
       items: navMatches.map(
         (n): PaletteRowDTO => ({
-          variant: 'action',
+          variant: "action",
           label: n.label,
           iconHtml: iconSvg(n.icon),
           run: () => {
             deps.onClose();
             deps.navigate(n.route);
           },
-        }),
+        })
       ),
     });
   }
@@ -127,13 +140,13 @@ export function buildPaletteGroups(query: string, deps: PaletteDeps): PaletteGro
   if (deps.builderEnabled) {
     const trimmed = query.trim();
     groups.push({
-      group: 'Create',
+      group: "Create",
       items: [
         {
-          variant: 'action',
+          variant: "action",
           accent: true,
-          label: trimmed ? `Build “${trimmed}”` : 'Build a new app…',
-          iconHtml: iconSvg('Plus'),
+          label: trimmed ? `Build “${trimmed}”` : "Build a new app…",
+          iconHtml: iconSvg("Plus"),
           run: () => {
             deps.onClose();
             deps.enterBuilder(trimmed || undefined);

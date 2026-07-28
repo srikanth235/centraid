@@ -1,4 +1,4 @@
-import type { ReplicaDependency, ReplicaInvalidation } from './types.js';
+import type { ReplicaDependency, ReplicaInvalidation } from "./types.js";
 
 export interface LiveQueryExecution<T> {
   value: T;
@@ -10,8 +10,12 @@ export interface LiveQueryObserver<T> {
   error?: (error: unknown) => void;
 }
 
-export type LiveQuerySubscriber<T> = LiveQueryObserver<T> | ((value: T) => void);
-export type LiveQueryRunner<T> = (signal: AbortSignal) => Promise<LiveQueryExecution<T>>;
+export type LiveQuerySubscriber<T> =
+  | LiveQueryObserver<T>
+  | ((value: T) => void);
+export type LiveQueryRunner<T> = (
+  signal: AbortSignal
+) => Promise<LiveQueryExecution<T>>;
 
 /** Awaitable first result plus an ongoing local subscription. */
 export class LiveQuery<T> implements PromiseLike<T> {
@@ -45,13 +49,17 @@ export class LiveQuery<T> implements PromiseLike<T> {
   // eslint-disable-next-line unicorn/no-thenable -- (#406) read() intentionally remains await-compatible while adding subscribe(); governance: allow-no-unjustified-suppressions compatibility contract
   then<TResult1 = T, TResult2 = never>(
     onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
   ): PromiseLike<TResult1 | TResult2> {
     return this.#first.then(onfulfilled, onrejected);
   }
 
-  subscribe(subscriber: LiveQuerySubscriber<T>, emitCurrent = true): () => void {
-    const observer = typeof subscriber === 'function' ? { next: subscriber } : subscriber;
+  subscribe(
+    subscriber: LiveQuerySubscriber<T>,
+    emitCurrent = true
+  ): () => void {
+    const observer =
+      typeof subscriber === "function" ? { next: subscriber } : subscriber;
     this.#observers.add(observer);
     if (emitCurrent && this.#hasCurrent) observer.next(this.#current as T);
     return () => this.#observers.delete(observer);
@@ -88,7 +96,7 @@ export class LiveQuery<T> implements PromiseLike<T> {
   }
 
   private matches(invalidation: ReplicaInvalidation): boolean {
-    if (invalidation.source === 'purge') return true;
+    if (invalidation.source === "purge") return true;
     if (this.#dependencies.size === 0) return true;
     return this.#dependencies.has(keyOf(invalidation));
   }

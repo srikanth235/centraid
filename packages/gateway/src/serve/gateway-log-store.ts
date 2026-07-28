@@ -41,13 +41,17 @@
  * next health tick.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
-import type { RuntimeLogger } from '@centraid/app-engine';
-import { isDiskFullError, sharedDiskFullTracker, type DiskFullTracker } from '@centraid/vault';
+import type { RuntimeLogger } from "@centraid/app-engine";
+import {
+  isDiskFullError,
+  sharedDiskFullTracker,
+  type DiskFullTracker,
+} from "@centraid/vault";
 
-export type GatewayLogLevel = 'info' | 'warn' | 'error';
+export type GatewayLogLevel = "info" | "warn" | "error";
 
 export interface GatewayLogEntry {
   /** Monotonic per-process sequence — resume/dedupe cursor. */
@@ -58,7 +62,10 @@ export interface GatewayLogEntry {
   message: string;
 }
 
-export type GatewayLogListener = (entry: GatewayLogEntry, serialized: string) => void;
+export type GatewayLogListener = (
+  entry: GatewayLogEntry,
+  serialized: string
+) => void;
 
 export interface GatewayLogStoreOptions {
   /**
@@ -89,7 +96,7 @@ const DEFAULT_CAPACITY = 2000;
 const ROTATE_BYTES = 4 * 1024 * 1024;
 /** Generations kept beyond the current file: `gateway.1.jsonl` … `gateway.<N>.jsonl`. */
 const MAX_ROTATED_FILES = 3;
-const CURRENT_FILE_NAME = 'gateway.jsonl';
+const CURRENT_FILE_NAME = "gateway.jsonl";
 
 function rotatedFileName(n: number): string {
   return `gateway.${n}.jsonl`;
@@ -107,7 +114,10 @@ export class GatewayLogStore {
   /** Epoch ms until which disk writes are suspended after an ENOSPC hit; null = writing normally. */
   private diskFullUntil: number | null = null;
 
-  constructor(capacity: number = DEFAULT_CAPACITY, options: GatewayLogStoreOptions = {}) {
+  constructor(
+    capacity: number = DEFAULT_CAPACITY,
+    options: GatewayLogStoreOptions = {}
+  ) {
     this.capacity = Math.max(1, capacity);
     this.dir = options.dir;
     this.diskFullTracker = options.diskFullTracker ?? sharedDiskFullTracker;
@@ -191,15 +201,15 @@ export class GatewayLogStore {
   wrap(inner: RuntimeLogger): RuntimeLogger {
     return {
       info: (m) => {
-        this.append('info', m);
+        this.append("info", m);
         inner.info(m);
       },
       warn: (m) => {
-        this.append('warn', m);
+        this.append("warn", m);
         inner.warn(m);
       },
       error: (m) => {
-        this.append('error', m);
+        this.append("error", m);
         inner.error(m);
       },
     };
@@ -223,7 +233,7 @@ export class GatewayLogStore {
       this.droppedWrites += 1;
       if (isDiskFullError(err)) {
         this.diskFullUntil = Date.now() + DISK_FULL_RETRY_MS;
-        this.diskFullTracker.report(err, 'gateway log persistence');
+        this.diskFullTracker.report(err, "gateway log persistence");
       }
     }
   }
@@ -272,15 +282,15 @@ export class GatewayLogStore {
     if (!this.dir || !this.currentFile) return;
     const files = [
       ...Array.from({ length: MAX_ROTATED_FILES }, (_, i) =>
-        path.join(this.dir as string, rotatedFileName(MAX_ROTATED_FILES - i)),
+        path.join(this.dir as string, rotatedFileName(MAX_ROTATED_FILES - i))
       ),
       this.currentFile,
     ];
     const lines: string[] = [];
     for (const file of files) {
       try {
-        const raw = fs.readFileSync(file, 'utf8');
-        for (const line of raw.split('\n')) {
+        const raw = fs.readFileSync(file, "utf8");
+        for (const line of raw.split("\n")) {
           if (line.length > 0) lines.push(line);
         }
       } catch {
@@ -306,10 +316,12 @@ function parseLogLine(line: string): GatewayLogEntry | undefined {
   try {
     const parsed = JSON.parse(line) as Partial<GatewayLogEntry>;
     if (
-      typeof parsed.seq === 'number' &&
-      typeof parsed.ts === 'number' &&
-      typeof parsed.message === 'string' &&
-      (parsed.level === 'info' || parsed.level === 'warn' || parsed.level === 'error')
+      typeof parsed.seq === "number" &&
+      typeof parsed.ts === "number" &&
+      typeof parsed.message === "string" &&
+      (parsed.level === "info" ||
+        parsed.level === "warn" ||
+        parsed.level === "error")
     ) {
       return {
         seq: parsed.seq,

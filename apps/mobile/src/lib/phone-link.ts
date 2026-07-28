@@ -20,7 +20,8 @@
 // and `forgetSpace()`/`unpair()` drop one. The device secret key is device-wide
 // — one EndpointId enrolls with every desktop — so it is never per-Space.
 
-import { Platform } from 'react-native';
+import { Platform } from "react-native";
+
 import {
   addTunnelStatusListener,
   generateSecretKey,
@@ -30,9 +31,11 @@ import {
   pairWithGateway,
   startTunnel,
   stopTunnel,
-} from '../../modules/centraid-tunnel';
-import type { TunnelStatus } from '../../modules/centraid-tunnel';
-import { getSecure, hydrateSecure, setSecure } from './secure-storage';
+} from "../../modules/centraid-tunnel";
+import type { TunnelStatus } from "../../modules/centraid-tunnel";
+import { Store } from "../storage";
+import { parsePairingInput } from "./phone-link-parse";
+import { getSecure, hydrateSecure, setSecure } from "./secure-storage";
 import {
   LINK_DESKTOP_NAME_KEY,
   LINK_DEVICE_ID_KEY,
@@ -44,9 +47,7 @@ import {
   removeSpace,
   setActiveSpace,
   type Space,
-} from './spaces';
-import { Store } from '../storage';
-import { parsePairingInput } from './phone-link-parse';
+} from "./spaces";
 
 // The active-slot keys now live in their new owner, lib/spaces (the Spaces
 // registry projects the active (gateway, vault) tuple into them); imported above
@@ -54,11 +55,15 @@ import { parsePairingInput } from './phone-link-parse';
 
 export class PhoneLinkError extends Error {
   constructor(
-    public readonly kind: 'invalid_qr' | 'module_unavailable' | 'pair_failed' | 'tunnel_failed',
-    message: string,
+    public readonly kind:
+      | "invalid_qr"
+      | "module_unavailable"
+      | "pair_failed"
+      | "tunnel_failed",
+    message: string
   ) {
     super(message);
-    this.name = 'PhoneLinkError';
+    this.name = "PhoneLinkError";
   }
 }
 
@@ -68,19 +73,21 @@ export async function hydratePhoneLink(): Promise<void> {
   // and projects the active Space into the LINK_* slot keys read below.
   await hydrateSpaces();
   await Promise.all([
-    hydrateSecure(LINK_ENDPOINT_HINT_KEY, ''),
-    Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ''),
-    Store.hydrate<string>(LINK_DEVICE_ID_KEY, ''),
-    hydrateSecure(LINK_SECRET_KEY, ''),
+    hydrateSecure(LINK_ENDPOINT_HINT_KEY, ""),
+    Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ""),
+    Store.hydrate<string>(LINK_DEVICE_ID_KEY, ""),
+    hydrateSecure(LINK_SECRET_KEY, ""),
   ]);
 }
 
 export function isPaired(): boolean {
-  return Boolean(getSecure(LINK_ENDPOINT_HINT_KEY, '') && getSecure(LINK_SECRET_KEY, ''));
+  return Boolean(
+    getSecure(LINK_ENDPOINT_HINT_KEY, "") && getSecure(LINK_SECRET_KEY, "")
+  );
 }
 
 export function getDesktopName(): string {
-  return Store.get<string>(LINK_DESKTOP_NAME_KEY, '');
+  return Store.get<string>(LINK_DESKTOP_NAME_KEY, "");
 }
 
 /**
@@ -89,35 +96,35 @@ export function getDesktopName(): string {
  */
 export async function pair(
   qrPayloadString: string,
-  deviceName: string,
+  deviceName: string
 ): Promise<{ desktopName: string; deviceId: string }> {
   const parsed = parsePairingInput(qrPayloadString);
   if (!parsed) {
     throw new PhoneLinkError(
-      'invalid_qr',
-      'That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from `centraid-gateway pair`.',
+      "invalid_qr",
+      "That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from `centraid-gateway pair`."
     );
   }
-  if (parsed.kind === 'centraid-gw-pair' && parsed.exp <= Date.now()) {
+  if (parsed.kind === "centraid-gw-pair" && parsed.exp <= Date.now()) {
     throw new PhoneLinkError(
-      'invalid_qr',
-      'This pairing ticket has expired — mint a new one on the gateway.',
+      "invalid_qr",
+      "This pairing ticket has expired — mint a new one on the gateway."
     );
   }
   if (!isTunnelAvailableImpl()) {
     throw new PhoneLinkError(
-      'module_unavailable',
-      'Pairing needs the native tunnel module — use a development build, not Expo Go.',
+      "module_unavailable",
+      "Pairing needs the native tunnel module — use a development build, not Expo Go."
     );
   }
   await hydratePhoneLink();
-  let secretKeyB64 = getSecure(LINK_SECRET_KEY, '');
+  let secretKeyB64 = getSecure(LINK_SECRET_KEY, "");
   if (!secretKeyB64) {
     secretKeyB64 = await generateSecretKey();
     await setSecure(LINK_SECRET_KEY, secretKeyB64);
   }
 
-  if (parsed.kind === 'centraid-pair') {
+  if (parsed.kind === "centraid-pair") {
     const result = await pairWithDesktop({
       code: parsed.code,
       deviceName,
@@ -127,11 +134,11 @@ export async function pair(
     });
     if (!result.ok || !result.deviceId || !result.gatewayId) {
       throw new PhoneLinkError(
-        'pair_failed',
-        result.error ?? 'Desktop did not return its durable gateway EndpointId.',
+        "pair_failed",
+        result.error ?? "Desktop did not return its durable gateway EndpointId."
       );
     }
-    const desktopName = result.desktopName ?? '';
+    const desktopName = result.desktopName ?? "";
     const deviceId = result.deviceId;
     // A new pairing may target a DIFFERENT gateway than the running tunnel. Stop
     // it so the re-init (driven by the active-Space change) dials the gateway we
@@ -146,7 +153,7 @@ export async function pair(
       gatewayId: result.gatewayId,
       desktopName,
       deviceId,
-      vaultId: '',
+      vaultId: "",
       endpointHint: parsed.ticket,
     });
     return { desktopName, deviceId };
@@ -162,7 +169,10 @@ export async function pair(
     secretKeyB64,
   });
   if (!result.ok) {
-    throw new PhoneLinkError('pair_failed', result.error ?? 'Pairing was refused by the gateway.');
+    throw new PhoneLinkError(
+      "pair_failed",
+      result.error ?? "Pairing was refused by the gateway."
+    );
   }
   // The tunnel dials the gateway EndpointTicket (`gw`) embedded in the pairing
   // token. A new pairing may target a DIFFERENT gateway than the running tunnel,
@@ -173,17 +183,22 @@ export async function pair(
   });
   const gatewayId = result.gatewayId;
   if (!gatewayId) {
-    throw new PhoneLinkError('pair_failed', 'Gateway did not return its EndpointId.');
+    throw new PhoneLinkError(
+      "pair_failed",
+      "Gateway did not return its EndpointId."
+    );
   }
-  const desktopName = result.vaultName || result.gatewayName || parsed.vaultName || 'Gateway';
-  const deviceId = result.enrollmentId || result.gatewayId || result.deviceId || 'gateway';
+  const desktopName =
+    result.vaultName || result.gatewayName || parsed.vaultName || "Gateway";
+  const deviceId =
+    result.enrollmentId || result.gatewayId || result.deviceId || "gateway";
   // EndpointId is durable identity. `gw` is only a refreshable dial hint; a
   // relay change updates it in-place because addSpace keys on EndpointId.
   await addSpace({
     gatewayId,
     desktopName,
     deviceId,
-    vaultId: result.vaultId ?? '',
+    vaultId: result.vaultId ?? "",
     vaultName: parsed.vaultName,
     endpointHint: parsed.gw,
   });
@@ -254,25 +269,27 @@ let startInFlight: Promise<{ baseUrl: string } | undefined> | undefined;
  * `undefined` when unpaired or when the native module is unavailable
  * (Expo Go); throws PhoneLinkError when a start attempt fails.
  */
-export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undefined> {
+export async function ensureTunnelStarted(): Promise<
+  { baseUrl: string } | undefined
+> {
   if (startInFlight) return startInFlight;
   startInFlight = (async () => {
     await hydratePhoneLink();
     if (!isPaired() || !isTunnelAvailableImpl()) return undefined;
     const status = await getTunnelStatusImpl();
-    if (status.state === 'running' && status.port) {
+    if (status.state === "running" && status.port) {
       return { baseUrl: `http://127.0.0.1:${status.port}` };
     }
     try {
       const { port } = await startTunnel({
-        secretKeyB64: getSecure(LINK_SECRET_KEY, ''),
-        ticket: getSecure(LINK_ENDPOINT_HINT_KEY, ''),
+        secretKeyB64: getSecure(LINK_SECRET_KEY, ""),
+        ticket: getSecure(LINK_ENDPOINT_HINT_KEY, ""),
       });
       return { baseUrl: `http://127.0.0.1:${port}` };
     } catch (err) {
       throw new PhoneLinkError(
-        'tunnel_failed',
-        `Could not reach your gateway: ${err instanceof Error ? err.message : String(err)}`,
+        "tunnel_failed",
+        `Could not reach your gateway: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   })();
@@ -284,7 +301,9 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
 }
 
 /** Status subscription passthrough — no-op remover when the module is unavailable. */
-export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): { remove: () => void } {
+export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): {
+  remove: () => void;
+} {
   if (!isTunnelAvailableImpl()) {
     return {
       remove: () => {
@@ -295,5 +314,8 @@ export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): { rem
   return addTunnelStatusListener(cb);
 }
 
-export { getTunnelStatus, isTunnelAvailable } from '../../modules/centraid-tunnel';
-export type { TunnelStatus } from '../../modules/centraid-tunnel';
+export {
+  getTunnelStatus,
+  isTunnelAvailable,
+} from "../../modules/centraid-tunnel";
+export type { TunnelStatus } from "../../modules/centraid-tunnel";

@@ -7,21 +7,21 @@
  * catalog can disagree with it.
  */
 
-import { chmodSync, mkdirSync, statfsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import path from 'node:path';
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, statfsSync } from "node:fs";
+import path from "node:path";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
-export const GATEWAY_DB_FILE = 'gateway.db';
+export const GATEWAY_DB_FILE = "gateway.db";
 
-export type GatewayDbLockMode = 'exclusive' | 'read-only' | 'shared';
+export type GatewayDbLockMode = "exclusive" | "read-only" | "shared";
 
 export class GatewayLockError extends Error {
   constructor(readonly file: string) {
     super(
-      `another Centraid gateway holds ${file}; stop the running daemon before retrying this mutating command`,
+      `another Centraid gateway holds ${file}; stop the running daemon before retrying this mutating command`
     );
-    this.name = 'GatewayLockError';
+    this.name = "GatewayLockError";
   }
 }
 
@@ -43,7 +43,7 @@ export class GatewayDatabase {
     file: string,
     db: DatabaseSync,
     lockMode: GatewayDbLockMode,
-    networkFileSystem: boolean,
+    networkFileSystem: boolean
   ) {
     this.file = file;
     this.db = db;
@@ -51,16 +51,19 @@ export class GatewayDatabase {
     this.networkFileSystem = networkFileSystem;
   }
 
-  static open(dataDir: string, options: OpenGatewayDatabaseOptions = {}): GatewayDatabase {
+  static open(
+    dataDir: string,
+    options: OpenGatewayDatabaseOptions = {}
+  ): GatewayDatabase {
     const root = path.resolve(dataDir);
     const file = path.join(root, GATEWAY_DB_FILE);
-    const lockMode = options.lock ?? 'shared';
-    if (lockMode !== 'read-only') mkdirSync(root, { recursive: true });
+    const lockMode = options.lock ?? "shared";
+    if (lockMode !== "read-only") mkdirSync(root, { recursive: true });
 
     let db: DatabaseSync;
     try {
       db = new DatabaseSync(file, {
-        readOnly: lockMode === 'read-only',
+        readOnly: lockMode === "read-only",
         timeout: 0,
       });
     } catch (error) {
@@ -69,25 +72,26 @@ export class GatewayDatabase {
     }
 
     try {
-      db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 0;');
-      if (lockMode !== 'read-only') {
-        db.exec('PRAGMA journal_mode = DELETE;');
+      db.exec("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 0;");
+      if (lockMode !== "read-only") {
+        db.exec("PRAGMA journal_mode = DELETE;");
         installGatewaySchema(db);
         chmodSync(file, 0o600);
       }
-      if (lockMode === 'exclusive') acquireExclusiveLifetimeLock(db, file);
+      if (lockMode === "exclusive") acquireExclusiveLifetimeLock(db, file);
       // A `read-only` open against an EXCLUSIVE-locked database SUCCEEDS —
       // the constructor and the pragmas above never touch a page, so the
       // lock is not observed until the first real read. Probe here so the
       // caller's `GatewayLockError` handling gets its chance, instead of a
       // raw `ERR_SQLITE_ERROR: database is locked` escaping from whatever
       // SELECT happens to run first (issue #568 item H).
-      if (lockMode === 'read-only') db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get();
+      if (lockMode === "read-only")
+        db.prepare("SELECT 1 FROM sqlite_schema LIMIT 1").get();
       return new GatewayDatabase(
         file,
         db,
         lockMode,
-        options.networkFileSystem ?? detectNetworkFileSystem(root),
+        options.networkFileSystem ?? detectNetworkFileSystem(root)
       );
     } catch (error) {
       db.close();
@@ -97,14 +101,14 @@ export class GatewayDatabase {
   }
 
   transaction<T>(work: () => T): T {
-    this.db.exec('BEGIN IMMEDIATE');
+    this.db.exec("BEGIN IMMEDIATE");
     try {
       const result = work();
-      this.db.exec('COMMIT');
+      this.db.exec("COMMIT");
       return result;
     } catch (error) {
       try {
-        this.db.exec('ROLLBACK');
+        this.db.exec("ROLLBACK");
       } catch {
         // Preserve the original error when SQLite already rolled back.
       }
@@ -113,7 +117,9 @@ export class GatewayDatabase {
   }
 
   prefRows(): Array<{ key: string; value_json: string }> {
-    return this.db.prepare('SELECT key, value_json FROM prefs ORDER BY key').all() as Array<{
+    return this.db
+      .prepare("SELECT key, value_json FROM prefs ORDER BY key")
+      .all() as Array<{
       key: string;
       value_json: string;
     }>;
@@ -123,19 +129,20 @@ export class GatewayDatabase {
     this.db
       .prepare(
         `INSERT INTO prefs (key, value_json) VALUES (?, ?)
-         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`,
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json`
       )
       .run(key, JSON.stringify(value));
   }
 
   deletePref(key: string): void {
-    this.db.prepare('DELETE FROM prefs WHERE key = ?').run(key);
+    this.db.prepare("DELETE FROM prefs WHERE key = ?").run(key);
   }
 
   replacePrefs(prefs: Record<string, unknown>): void {
     this.transaction(() => {
-      this.db.exec('DELETE FROM prefs');
-      for (const [key, value] of Object.entries(prefs)) this.setPref(key, value);
+      this.db.exec("DELETE FROM prefs");
+      for (const [key, value] of Object.entries(prefs))
+        this.setPref(key, value);
     });
   }
 
@@ -152,10 +159,10 @@ export class GatewayDatabase {
 
 function acquireExclusiveLifetimeLock(db: DatabaseSync, file: string): void {
   try {
-    const row = db.prepare('PRAGMA locking_mode = EXCLUSIVE').get() as
+    const row = db.prepare("PRAGMA locking_mode = EXCLUSIVE").get() as
       | { locking_mode?: string }
       | undefined;
-    if (row?.locking_mode?.toLowerCase() !== 'exclusive') {
+    if (row?.locking_mode?.toLowerCase() !== "exclusive") {
       throw new Error(`SQLite refused exclusive locking_mode for ${file}`);
     }
     // A completed write transaction makes EXCLUSIVE mode retain the OS lock
@@ -164,7 +171,7 @@ function acquireExclusiveLifetimeLock(db: DatabaseSync, file: string): void {
       `BEGIN EXCLUSIVE;
        INSERT INTO gateway_meta (key, value) VALUES ('schema', '1')
        ON CONFLICT(key) DO UPDATE SET value = excluded.value;
-       COMMIT;`,
+       COMMIT;`
     );
   } catch (error) {
     if (isBusy(error)) throw new GatewayLockError(file);
@@ -299,11 +306,17 @@ function installGatewaySchema(db: DatabaseSync): void {
 function isBusy(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const code = (error as Error & { code?: string }).code;
-  return code === 'ERR_SQLITE_ERROR' && /busy|locked/iu.test(error.message);
+  return code === "ERR_SQLITE_ERROR" && /busy|locked/iu.test(error.message);
 }
 
 /** Remote filesystem names as BSD `statfs.f_fstypename` reports them. */
-const DARWIN_NETWORK_FS_TYPES = new Set(['nfs', 'smbfs', 'afpfs', 'webdav', 'ftpfs']);
+const DARWIN_NETWORK_FS_TYPES = new Set([
+  "nfs",
+  "smbfs",
+  "afpfs",
+  "webdav",
+  "ftpfs",
+]);
 
 /**
  * macOS has no filesystem magic to read: `statfsSync().type` is a BSD
@@ -317,19 +330,26 @@ const DARWIN_NETWORK_FS_TYPES = new Set(['nfs', 'smbfs', 'afpfs', 'webdav', 'ftp
  * `statfsSync` fallback, so darwin detection was a guaranteed `false`
  * (issue #568 item I).
  */
-export function parseDarwinFileSystemType(mountOutput: string, root: string): string | undefined {
+export function parseDarwinFileSystemType(
+  mountOutput: string,
+  root: string
+): string | undefined {
   // `mount` lines read: `<source> on <mount point> (<fstype>, <opts…>)`.
   let best: { mountPoint: string; type: string } | undefined;
-  for (const line of mountOutput.split('\n')) {
-    const match = /^.* on (?<mountPoint>.+) \((?<type>[^,)]+)[,)]/u.exec(line.trim());
+  for (const line of mountOutput.split("\n")) {
+    const match = /^.* on (?<mountPoint>.+) \((?<type>[^,)]+)[,)]/u.exec(
+      line.trim()
+    );
     const mountPoint = match?.groups?.mountPoint;
     const type = match?.groups?.type;
     if (!mountPoint || !type) continue;
     const contains =
-      root === mountPoint || root.startsWith(mountPoint === '/' ? '/' : `${mountPoint}${path.sep}`);
+      root === mountPoint ||
+      root.startsWith(mountPoint === "/" ? "/" : `${mountPoint}${path.sep}`);
     if (!contains) continue;
     // Longest matching mount point wins — `/Volumes/share` beats `/`.
-    if (!best || mountPoint.length > best.mountPoint.length) best = { mountPoint, type };
+    if (!best || mountPoint.length > best.mountPoint.length)
+      best = { mountPoint, type };
   }
   return best?.type.trim().toLowerCase();
 }
@@ -337,7 +357,7 @@ export function parseDarwinFileSystemType(mountOutput: string, root: string): st
 /** True/false when the mount table answered; `undefined` when it could not. */
 export function darwinNetworkFileSystem(
   root: string,
-  readMountTable: () => string | undefined = defaultMountTable,
+  readMountTable: () => string | undefined = defaultMountTable
 ): boolean | undefined {
   const output = readMountTable();
   if (output === undefined) return undefined;
@@ -346,13 +366,18 @@ export function darwinNetworkFileSystem(
 }
 
 function defaultMountTable(): string | undefined {
-  const result = spawnSync('/sbin/mount', [], { encoding: 'utf8', timeout: 2_000 });
-  return result.status === 0 && typeof result.stdout === 'string' ? result.stdout : undefined;
+  const result = spawnSync("/sbin/mount", [], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  return result.status === 0 && typeof result.stdout === "string"
+    ? result.stdout
+    : undefined;
 }
 
 function detectNetworkFileSystem(root: string): boolean {
   try {
-    if (process.platform === 'darwin') {
+    if (process.platform === "darwin") {
       const remote = darwinNetworkFileSystem(root);
       // Fall through to `statfsSync` when the mount table is unreadable
       // rather than early-returning `false` — an undetected remote mount is

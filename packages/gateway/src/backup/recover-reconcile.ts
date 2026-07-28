@@ -31,11 +31,11 @@
  * index untouched rather than second-guessing it.
  */
 
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import type { EngineLogger } from '@centraid/backup';
-import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
+import type { EngineLogger } from "@centraid/backup";
+import { FsBlobStore, ReplicaIndex } from "@centraid/vault";
 
 /** A logger that can also shout at error level (the LOST case is CRITICAL). */
 export interface ReconcileLogger extends EngineLogger {
@@ -72,8 +72,8 @@ export interface ReconcileAdoptedInventoryOptions {
 function snapshotBlobShas(entries: readonly string[]): Set<string> {
   const shas = new Set<string>();
   for (const p of entries) {
-    if (!p.startsWith('blobs/')) continue;
-    const last = p.split('/').pop();
+    if (!p.startsWith("blobs/")) continue;
+    const last = p.split("/").pop();
     if (last && /^[0-9a-f]{64}$/u.test(last)) shas.add(last);
   }
   return shas;
@@ -81,61 +81,66 @@ function snapshotBlobShas(entries: readonly string[]): Set<string> {
 
 function preview(shas: readonly string[]): string {
   return shas.length <= 6
-    ? shas.join(', ')
-    : `${shas.slice(0, 6).join(', ')}, +${shas.length - 6} more`;
+    ? shas.join(", ")
+    : `${shas.slice(0, 6).join(", ")}, +${shas.length - 6} more`;
 }
 
 export async function reconcileAdoptedInventory(
-  opts: ReconcileAdoptedInventoryOptions,
+  opts: ReconcileAdoptedInventoryOptions
 ): Promise<ReconcileReport> {
   const { vaultDir, remoteShas, snapshotEntries, materialize, log } = opts;
   if (remoteShas === undefined) {
     log?.info?.(
-      'recover: provider attests no inventory — skipping adopt-time reconcile; the restored ' +
-        'blob_replica index is trusted as-is',
+      "recover: provider attests no inventory — skipping adopt-time reconcile; the restored " +
+        "blob_replica index is trusted as-is"
     );
     return {
       checked: 0,
       missing: 0,
       repinned: [],
       lost: [],
-      skipped: 'no-inventory-capability',
+      skipped: "no-inventory-capability",
     };
   }
 
   const carried = snapshotBlobShas(snapshotEntries);
-  const blobs = new FsBlobStore(path.join(vaultDir, 'blobs'));
-  const db = new DatabaseSync(path.join(vaultDir, 'vault.db'));
+  const blobs = new FsBlobStore(path.join(vaultDir, "blobs"));
+  const db = new DatabaseSync(path.join(vaultDir, "vault.db"));
   try {
     const index = new ReplicaIndex(db);
-    const believed = [...index.all('cas')];
+    const believed = [...index.all("cas")];
     const missing = believed.filter((sha) => !remoteShas.has(sha));
 
     // Re-pin the snapshot-carried missing blobs the restore did not already
     // land locally — reusing the engine's chunk-stream/verify path.
-    const toFetch = missing.filter((sha) => carried.has(sha) && !blobs.hasSync(sha));
-    const fetched = new Set(toFetch.length > 0 ? await materialize(toFetch) : []);
+    const toFetch = missing.filter(
+      (sha) => carried.has(sha) && !blobs.hasSync(sha)
+    );
+    const fetched = new Set(
+      toFetch.length > 0 ? await materialize(toFetch) : []
+    );
 
     const repinned: string[] = [];
     const lost: string[] = [];
     for (const sha of missing) {
       // Truth wins: the remote does not hold it, so the vault must not believe it does.
       index.unmark(sha);
-      if (carried.has(sha) && (blobs.hasSync(sha) || fetched.has(sha))) repinned.push(sha);
+      if (carried.has(sha) && (blobs.hasSync(sha) || fetched.has(sha)))
+        repinned.push(sha);
       else lost.push(sha);
     }
 
     if (repinned.length > 0) {
       log?.warn?.(
         `recover: ${repinned.length} blob(s) the provider no longer holds were re-pinned from the ` +
-          `snapshot and blob_replica corrected (${preview(repinned)}); they will re-upload on the next backup`,
+          `snapshot and blob_replica corrected (${preview(repinned)}); they will re-upload on the next backup`
       );
     }
     if (lost.length > 0) {
       (log?.error ?? log?.warn)?.(
         `recover: CRITICAL — ${lost.length} blob(s) the restored vault believed durable are NOT held by ` +
           `the provider and the snapshot does not carry them; they are LOST (${preview(lost)}). blob_replica ` +
-          'was corrected so nothing evicts a phantom local copy, but the bytes are unrecoverable',
+          "was corrected so nothing evicts a phantom local copy, but the bytes are unrecoverable"
       );
     }
 

@@ -1,12 +1,12 @@
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import { Readable } from 'node:stream';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import { Readable } from "node:stream";
 
-import type { BlobCache } from './cache.js';
-import { fetchFrameDirectory, fetchRemoteRange } from './custody-read.js';
-import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
-import type { LocalBlobStore } from './local.js';
-import { resolveRange, type BlobRange, type BlobStore } from './store.js';
+import type { BlobCache } from "./cache.js";
+import { fetchFrameDirectory, fetchRemoteRange } from "./custody-read.js";
+import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import { resolveRange, type BlobRange, type BlobStore } from "./store.js";
 
 const REMOTE_STREAM_CHUNK_BYTES = 4 * 1024 * 1024;
 
@@ -23,7 +23,7 @@ export function createRemoteBlobStream(
   size: number,
   range?: BlobRange,
   cache?: BlobCache,
-  local?: LocalBlobStore,
+  local?: LocalBlobStore
 ): Readable | null {
   const resolved = resolveRange(size, range);
   if (!resolved) return null;
@@ -36,13 +36,20 @@ export function createRemoteBlobStream(
     let tempPath: string | undefined;
     let tempFile: fs.FileHandle | undefined;
     try {
-      if (fullRead && !local?.hasSync(sha) && local?.promotionTempPathSync && local.adoptTempSync) {
+      if (
+        fullRead &&
+        !local?.hasSync(sha) &&
+        local?.promotionTempPathSync &&
+        local.adoptTempSync
+      ) {
         tempPath = local.promotionTempPathSync(sha);
-        tempFile = await fs.open(tempPath, 'wx', 0o600);
+        tempFile = await fs.open(tempPath, "wx", 0o600);
       }
-      const directory = key ? await fetchFrameDirectory(store, key, sha) : undefined;
+      const directory = key
+        ? await fetchFrameDirectory(store, key, sha)
+        : undefined;
       if (key && !directory) throw new Error(`remote blob ${sha} disappeared`);
-      const digest = fullRead ? createHash('sha256') : undefined;
+      const digest = fullRead ? createHash("sha256") : undefined;
       const writeAll = async (bytes: Buffer, offset = 0): Promise<void> => {
         if (!tempFile || offset >= bytes.length) return;
         const { bytesWritten } = await tempFile.write(bytes, offset);
@@ -65,7 +72,7 @@ export function createRemoteBlobStream(
         yield* readNext(start + REMOTE_STREAM_CHUNK_BYTES);
       };
       yield* readNext(firstByte);
-      if (digest && digest.digest('hex') !== sha) {
+      if (digest && digest.digest("hex") !== sha) {
         throw new Error(`remote blob ${sha} failed content verification`);
       }
       if (tempFile && tempPath && local?.adoptTempSync) {

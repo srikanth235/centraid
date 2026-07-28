@@ -5,15 +5,15 @@
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
 
-import type { InlineAppModule } from '../inline-types.ts';
-import { Root, CHANGE_TABLES } from './app-root.tsx';
-import activityQuery from './queries/activity.ts';
-import driveQuery from './queries/drive.ts';
-import historyQuery from './queries/history.ts';
-import searchQuery from './queries/search.ts';
+import type { InlineAppModule } from "../inline-types.ts";
+import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import activityQuery from "./queries/activity.ts";
+import driveQuery from "./queries/drive.ts";
+import historyQuery from "./queries/history.ts";
+import searchQuery from "./queries/search.ts";
 
 const docsInlineApp: InlineAppModule = {
-  appId: 'docs',
+  appId: "docs",
   changeTables: CHANGE_TABLES,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds a
@@ -23,13 +23,17 @@ const docsInlineApp: InlineAppModule = {
     search: { default: searchQuery },
     activity: { default: activityQuery },
     history: { default: historyQuery },
-  } as unknown as InlineAppModule['queries'],
+  } as unknown as InlineAppModule["queries"],
   kitAsk: {
-    scope: 'docs',
-    placeholder: 'Ask your docs…',
+    scope: "docs",
+    placeholder: "Ask your docs…",
     intro:
-      'Ask me to find a file, upload one, or file it away. Writes show for your approval before they touch the vault.',
-    suggest: ['Find my lease', 'File the June receipts', 'What did I upload this week?'],
+      "Ask me to find a file, upload one, or file it away. Writes show for your approval before they touch the vault.",
+    suggest: [
+      "Find my lease",
+      "File the June receipts",
+      "What did I upload this week?",
+    ],
   },
   Root,
 };

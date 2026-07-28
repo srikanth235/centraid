@@ -7,24 +7,24 @@
  * module is the single place that decides what to emit.
  */
 
-import type { TurnStreamEvent } from '@centraid/app-engine';
+import type { TurnStreamEvent } from "@centraid/app-engine";
 
 /** Wire stopReason values we map explicitly (plus open-ended future values). */
 type AcpStopReason =
-  | 'end_turn'
-  | 'max_tokens'
-  | 'max_turn_requests'
-  | 'refusal'
-  | 'cancelled'
+  | "end_turn"
+  | "max_tokens"
+  | "max_turn_requests"
+  | "refusal"
+  | "cancelled"
   | string;
 
 export interface StopReasonOutcome {
   /** Emit `final` with accumulated assistant text? */
   emitFinal: boolean;
   /** Optional notice before final/error. */
-  notice?: Extract<TurnStreamEvent, { type: 'notice' }>;
+  notice?: Extract<TurnStreamEvent, { type: "notice" }>;
   /** Optional terminal error (e.g. refusal) — supersedes final when set. */
-  error?: Extract<TurnStreamEvent, { type: 'error' }>;
+  error?: Extract<TurnStreamEvent, { type: "error" }>;
 }
 
 /**
@@ -32,45 +32,46 @@ export interface StopReasonOutcome {
  * when the local abort signal fired (that path emits `aborted` instead).
  */
 export function outcomeForStopReason(stopReason: unknown): StopReasonOutcome {
-  const reason: AcpStopReason = typeof stopReason === 'string' ? stopReason : 'end_turn';
+  const reason: AcpStopReason =
+    typeof stopReason === "string" ? stopReason : "end_turn";
 
-  if (reason === 'end_turn') {
+  if (reason === "end_turn") {
     return { emitFinal: true };
   }
 
-  if (reason === 'cancelled') {
+  if (reason === "cancelled") {
     return {
       emitFinal: true,
       notice: {
-        type: 'notice',
-        level: 'info',
-        code: 'stop_cancelled',
-        message: 'The agent stopped this turn (cancelled).',
+        type: "notice",
+        level: "info",
+        code: "stop_cancelled",
+        message: "The agent stopped this turn (cancelled).",
       },
     };
   }
 
-  if (reason === 'max_tokens' || reason === 'max_turn_requests') {
+  if (reason === "max_tokens" || reason === "max_turn_requests") {
     return {
       emitFinal: true,
       notice: {
-        type: 'notice',
-        level: 'warn',
-        code: 'stop_truncated',
+        type: "notice",
+        level: "warn",
+        code: "stop_truncated",
         message:
-          reason === 'max_tokens'
-            ? 'The agent hit its output token limit before finishing — the reply may be incomplete.'
-            : 'The agent hit its max turn/request limit before finishing — the reply may be incomplete.',
+          reason === "max_tokens"
+            ? "The agent hit its output token limit before finishing — the reply may be incomplete."
+            : "The agent hit its max turn/request limit before finishing — the reply may be incomplete.",
       },
     };
   }
 
-  if (reason === 'refusal') {
+  if (reason === "refusal") {
     return {
       emitFinal: false,
       error: {
-        type: 'error',
-        message: 'The agent refused to complete this turn.',
+        type: "error",
+        message: "The agent refused to complete this turn.",
       },
     };
   }
@@ -79,9 +80,9 @@ export function outcomeForStopReason(stopReason: unknown): StopReasonOutcome {
   return {
     emitFinal: true,
     notice: {
-      type: 'notice',
-      level: 'info',
-      code: 'stop_other',
+      type: "notice",
+      level: "info",
+      code: "stop_other",
       message: `The agent ended the turn with stopReason “${reason}”.`,
     },
   };

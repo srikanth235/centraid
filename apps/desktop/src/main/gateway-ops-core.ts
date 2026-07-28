@@ -17,10 +17,12 @@
  */
 
 /** `GET /centraid/_gateway/diagnostics`, fetched and pretty-printed. */
-export type DiagnosticsFetchResult = { ok: true; text: string } | { ok: false; error: string };
+export type DiagnosticsFetchResult =
+  | { ok: true; text: string }
+  | { ok: false; error: string };
 
-const DIAGNOSTICS_PATH = '/centraid/_gateway/diagnostics';
-const RECOVERY_KIT_PATH = '/centraid/_gateway/backup/kit';
+const DIAGNOSTICS_PATH = "/centraid/_gateway/diagnostics";
+const RECOVERY_KIT_PATH = "/centraid/_gateway/backup/kit";
 
 /**
  * Fetch the active gateway's diagnostics bundle. `fetchImpl` is injectable
@@ -32,9 +34,15 @@ const RECOVERY_KIT_PATH = '/centraid/_gateway/backup/kit';
 export async function fetchDiagnosticsText(
   baseUrl: string,
   token: string | undefined,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<DiagnosticsFetchResult> {
-  return fetchJsonText(baseUrl, token, DIAGNOSTICS_PATH, 'diagnostics', fetchImpl);
+  return fetchJsonText(
+    baseUrl,
+    token,
+    DIAGNOSTICS_PATH,
+    "diagnostics",
+    fetchImpl
+  );
 }
 
 async function fetchJsonText(
@@ -43,7 +51,7 @@ async function fetchJsonText(
   requestPath: string,
   label: string,
   fetchImpl: typeof fetch,
-  init: RequestInit = {},
+  init: RequestInit = {}
 ): Promise<DiagnosticsFetchResult> {
   let res: Response;
   try {
@@ -73,8 +81,8 @@ async function fetchJsonText(
 /** `centraid-diagnostics-YYYY-MM-DD.json`, in the local calendar day. */
 export function diagnosticsFileName(now: Date = new Date()): string {
   const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
   return `centraid-diagnostics-${y}-${m}-${d}.json`;
 }
 
@@ -83,7 +91,9 @@ export interface ExportDiagnosticsDeps {
   loadSettings: () => Promise<{ gatewayUrl: string; gatewayToken?: string }>;
   fetchImpl?: typeof fetch;
   /** Native save dialog — `filePath` undefined/absent implies canceled. */
-  showSaveDialog: (defaultPath: string) => Promise<{ canceled: boolean; filePath?: string }>;
+  showSaveDialog: (
+    defaultPath: string
+  ) => Promise<{ canceled: boolean; filePath?: string }>;
   writeFile: (path: string, data: string) => Promise<void>;
   now?: () => Date;
 }
@@ -98,19 +108,19 @@ export type ExportDiagnosticsResult =
  * contract in `renderer/centraid-api.d.ts` exactly.
  */
 export async function exportGatewayDiagnostics(
-  deps: ExportDiagnosticsDeps,
+  deps: ExportDiagnosticsDeps
 ): Promise<ExportDiagnosticsResult> {
   const settings = await deps.loadSettings();
   if (!settings.gatewayUrl) {
     return {
       ok: false,
-      error: 'No active gateway to export diagnostics from.',
+      error: "No active gateway to export diagnostics from.",
     };
   }
   const fetched = await fetchDiagnosticsText(
     settings.gatewayUrl,
     settings.gatewayToken,
-    deps.fetchImpl ?? fetch,
+    deps.fetchImpl ?? fetch
   );
   if (!fetched.ok) return { ok: false, error: fetched.error };
 
@@ -132,25 +142,29 @@ export async function exportGatewayDiagnostics(
 /** Fetch and save the active gateway's recovery kit through a native dialog. */
 export async function exportGatewayRecoveryKit(
   deps: ExportDiagnosticsDeps,
-  input: { password: string },
+  input: { password: string }
 ): Promise<ExportDiagnosticsResult> {
   const settings = await deps.loadSettings();
-  if (!settings.gatewayUrl) return { ok: false, error: 'No active gateway to export from.' };
-  if (!input.password) return { ok: false, error: 'A recovery-kit password is required.' };
+  if (!settings.gatewayUrl)
+    return { ok: false, error: "No active gateway to export from." };
+  if (!input.password)
+    return { ok: false, error: "A recovery-kit password is required." };
   const fetched = await fetchJsonText(
     settings.gatewayUrl,
     settings.gatewayToken,
     RECOVERY_KIT_PATH,
-    'recovery kit',
+    "recovery kit",
     deps.fetchImpl ?? fetch,
     {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ password: input.password }),
-    },
+    }
   );
   if (!fetched.ok) return { ok: false, error: fetched.error };
-  const { canceled, filePath } = await deps.showSaveDialog('centraid-recovery-kit.json');
+  const { canceled, filePath } = await deps.showSaveDialog(
+    "centraid-recovery-kit.json"
+  );
   if (canceled || !filePath) return { ok: false, canceled: true };
   try {
     await deps.writeFile(filePath, fetched.text);

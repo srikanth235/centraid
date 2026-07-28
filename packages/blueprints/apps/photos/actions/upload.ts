@@ -11,29 +11,33 @@ export default async function upload({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'media.add_asset',
+      command: "media.add_asset",
       input: {
         ...(input.staged_sha == null
-          ? { data_uri: String(input.data_uri ?? '') }
+          ? { data_uri: String(input.data_uri ?? "") }
           : { staged_sha: String(input.staged_sha) }),
         ...(input.kind == null ? {} : { kind: String(input.kind) }),
-        ...(input.captured_at == null ? {} : { captured_at: String(input.captured_at) }),
+        ...(input.captured_at == null
+          ? {}
+          : { captured_at: String(input.captured_at) }),
         ...(input.title == null ? {} : { title: String(input.title) }),
         ...(input.width == null ? {} : { width: Number(input.width) }),
         ...(input.height == null ? {} : { height: Number(input.height) }),
-        ...(input.duration_s == null ? {} : { duration_s: Number(input.duration_s) }),
+        ...(input.duration_s == null
+          ? {}
+          : { duration_s: Number(input.duration_s) }),
         // Perceptual hash (issue #299 Tier 0) — computed client-side from
         // the same canvas that grew the thumb; near-dups become plain SQL.
         ...(input.phash == null ? {} : { phash: String(input.phash) }),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

@@ -5,7 +5,7 @@
 
 /** Badge text for pending approval count (empty when none, capped at 99). */
 export function approvalBadgeText(count: number | undefined | null): string {
-  if (!count || count <= 0) return '';
+  if (!count || count <= 0) return "";
   return String(Math.min(count, 99));
 }
 
@@ -19,8 +19,8 @@ export function approvalBadgeForState(input: {
   count?: number;
   unreachable?: boolean;
 }): string {
-  if (!input.paired || input.locked) return '';
-  if (input.unreachable) return '!';
+  if (!input.paired || input.locked) return "";
+  if (input.unreachable) return "!";
   return approvalBadgeText(input.count);
 }
 
@@ -28,8 +28,8 @@ export function approvalBadgeForState(input: {
 export function isLockerFillMessage(message: unknown): boolean {
   return (
     !!message &&
-    typeof message === 'object' &&
-    (message as { type?: string }).type === 'locker:fill'
+    typeof message === "object" &&
+    (message as { type?: string }).type === "locker:fill"
   );
 }
 
@@ -39,8 +39,10 @@ export function shouldCaptureContextMenu(input: {
   tabUrl?: string;
   expectedId?: string;
 }): boolean {
-  const expected = input.expectedId ?? 'centraid-quick-task';
+  const expected = input.expectedId ?? "centraid-quick-task";
   return (
-    input.menuItemId === expected && typeof input.tabUrl === 'string' && input.tabUrl.length > 0
+    input.menuItemId === expected &&
+    typeof input.tabUrl === "string" &&
+    input.tabUrl.length > 0
   );
 }

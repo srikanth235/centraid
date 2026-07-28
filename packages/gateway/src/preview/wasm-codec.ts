@@ -1,8 +1,8 @@
-import { createRequire } from 'node:module';
+import { createRequire } from "node:module";
 
-import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
+import type { PreviewCodec, PreviewOutput } from "@centraid/vault";
 
-import { rgbaToThumbHash } from './thumbhash.js';
+import { rgbaToThumbHash } from "./thumbhash.js";
 
 const MAX_INPUT_PIXELS = 40_000_000;
 const MAX_INPUT_EDGE = 12_000;
@@ -36,7 +36,7 @@ interface VipsRuntime {
 // Avoid pulling wasm-vips' 260 KiB generated operation declaration into every
 // gateway typecheck; this narrow seam is the only API surface the codec uses.
 const require = createRequire(import.meta.url);
-const Vips = require('wasm-vips') as () => Promise<VipsRuntime>;
+const Vips = require("wasm-vips") as () => Promise<VipsRuntime>;
 
 let runtime: Promise<VipsRuntime> | undefined;
 
@@ -59,13 +59,13 @@ function bounded<T>(operation: () => Promise<T>): Promise<T> {
   const current = operationTail.then(operation, operation);
   operationTail = current.then(
     () => undefined,
-    () => undefined,
+    () => undefined
   );
   return current;
 }
 
 function supported(mediaType: string): boolean {
-  return mediaType === 'image/jpeg' || mediaType === 'image/png';
+  return mediaType === "image/jpeg" || mediaType === "image/png";
 }
 
 function allowed(image: VipsImage): boolean {
@@ -93,7 +93,7 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
     async downscale(
       source: Buffer,
       mediaType: string,
-      maxEdge: number,
+      maxEdge: number
     ): Promise<PreviewOutput | null> {
       if (!supported(mediaType)) return null;
       const images: VipsImage[] = [];
@@ -104,7 +104,10 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
         const upright = decoded.autorot();
         images.push(upright);
         if (!allowed(upright)) return null;
-        const scale = Math.min(1, maxEdge / Math.max(upright.width, upright.height));
+        const scale = Math.min(
+          1,
+          maxEdge / Math.max(upright.width, upright.height)
+        );
         const resized = scale < 1 ? upright.resize(scale) : upright.copy();
         images.push(resized);
         const opaque = resized.hasAlpha()
@@ -112,8 +115,8 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
           : resized;
         images.push(opaque);
         return {
-          bytes: Buffer.from(opaque.writeToBuffer('.jpg[Q=80,strip]')),
-          mediaType: 'image/jpeg',
+          bytes: Buffer.from(opaque.writeToBuffer(".jpg[Q=80,strip]")),
+          mediaType: "image/jpeg",
           width: opaque.width,
           height: opaque.height,
         };
@@ -124,7 +127,10 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
       }
     },
 
-    async perceptualHash(source: Buffer, mediaType: string): Promise<string | null> {
+    async perceptualHash(
+      source: Buffer,
+      mediaType: string
+    ): Promise<string | null> {
       if (!supported(mediaType)) return null;
       const images: VipsImage[] = [];
       try {
@@ -136,17 +142,19 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
         if (!allowed(upright)) return null;
         const sampled = upright
           .resize(9 / upright.width, { vscale: 8 / upright.height })
-          .colourspace('b-w')
-          .cast('uchar');
+          .colourspace("b-w")
+          .cast("uchar");
         images.push(sampled);
         const pixels = sampled.writeToMemory();
         let hash = 0n;
         for (let y = 0; y < 8; y += 1) {
           for (let x = 0; x < 8; x += 1) {
-            hash = (hash << 1n) | (pixels[y * 9 + x]! > pixels[y * 9 + x + 1]! ? 1n : 0n);
+            hash =
+              (hash << 1n) |
+              (pixels[y * 9 + x]! > pixels[y * 9 + x + 1]! ? 1n : 0n);
           }
         }
-        return hash.toString(16).padStart(16, '0');
+        return hash.toString(16).padStart(16, "0");
       } catch {
         return null;
       } finally {
@@ -164,15 +172,22 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
         const upright = decoded.autorot();
         images.push(upright);
         if (!allowed(upright)) return null;
-        const scale = Math.min(1, THUMBHASH_EDGE / Math.max(upright.width, upright.height));
+        const scale = Math.min(
+          1,
+          THUMBHASH_EDGE / Math.max(upright.width, upright.height)
+        );
         const resized = scale < 1 ? upright.resize(scale) : upright.copy();
         images.push(resized);
-        const srgb = resized.colourspace('srgb').cast('uchar');
+        const srgb = resized.colourspace("srgb").cast("uchar");
         images.push(srgb);
         const rgba = srgb.hasAlpha() ? srgb : srgb.addalpha();
         images.push(rgba);
-        const bytes = rgbaToThumbHash(rgba.width, rgba.height, rgba.writeToMemory());
-        return Buffer.from(bytes).toString('base64').replace(/=+$/u, '');
+        const bytes = rgbaToThumbHash(
+          rgba.width,
+          rgba.height,
+          rgba.writeToMemory()
+        );
+        return Buffer.from(bytes).toString("base64").replace(/=+$/u, "");
       } catch {
         return null;
       } finally {
@@ -185,6 +200,7 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
       bounded(async () => await codec.downscale(source, mediaType, maxEdge)),
     perceptualHash: (source, mediaType) =>
       bounded(async () => await codec.perceptualHash(source, mediaType)),
-    thumbhash: (source, mediaType) => bounded(async () => await codec.thumbhash(source, mediaType)),
+    thumbhash: (source, mediaType) =>
+      bounded(async () => await codec.thumbhash(source, mediaType)),
   };
 }

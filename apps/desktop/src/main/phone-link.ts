@@ -11,8 +11,8 @@
 // desktop, not with remote gateways). The gateway keeps binding 127.0.0.1
 // and its HTTP surface is untouched.
 
-import os from 'node:os';
-import path from 'node:path';
+import os from "node:os";
+import path from "node:path";
 
 import {
   DeviceStore,
@@ -20,14 +20,14 @@ import {
   startPreferredDesktopTunnel,
   type DesktopTunnelHandle,
   type PairedDevice,
-} from '@centraid/tunnel';
-import { app, BrowserWindow } from 'electron';
-import QRCode from 'qrcode';
+} from "@centraid/tunnel";
+import { app, BrowserWindow } from "electron";
+import QRCode from "qrcode";
 
-import { deviceIrohKeyPersistence } from './gateway-secrets.js';
-import { loadSettings } from './settings.js';
+import { deviceIrohKeyPersistence } from "./gateway-secrets.js";
+import { loadSettings } from "./settings.js";
 
-export const PHONE_PAIRED_CHANNEL = 'centraid:phone:paired';
+export const PHONE_PAIRED_CHANNEL = "centraid:phone:paired";
 
 export interface PhoneLinkStatus {
   running: boolean;
@@ -51,11 +51,11 @@ let startError: string | undefined;
 let store: DeviceStore | undefined;
 
 function phoneLinkDir(): string {
-  return path.join(app.getPath('userData'), 'phone-link');
+  return path.join(app.getPath("userData"), "phone-link");
 }
 
 function deviceStore(): DeviceStore {
-  store ??= DeviceStore.open(path.join(phoneLinkDir(), 'devices.json'));
+  store ??= DeviceStore.open(path.join(phoneLinkDir(), "devices.json"));
   return store;
 }
 
@@ -70,19 +70,19 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
   starting = (async () => {
     const started = await startPreferredDesktopTunnel({
       secretKey: loadEndpointSecret({
-        persistence: deviceIrohKeyPersistence('phone-link'),
-        onCorrupt: 'remint',
-        label: 'desktop phone-link device key',
+        persistence: deviceIrohKeyPersistence("phone-link"),
+        onCorrupt: "remint",
+        label: "desktop phone-link device key",
         warn: (message) => console.warn(`phone link: ${message}`),
       }),
       deviceStore: deviceStore(),
-      desktopName: os.hostname().replace(/\.local$/u, ''),
+      desktopName: os.hostname().replace(/\.local$/u, ""),
       upstream: async () => {
         const settings = await loadSettings();
-        if (settings.activeGatewayKind !== 'local') return undefined;
+        if (settings.activeGatewayKind !== "local") return undefined;
         if (!(settings.gatewayUrl && settings.gatewayToken)) return undefined;
         return {
-          baseUrl: settings.gatewayUrl.replace(/\/+$/u, ''),
+          baseUrl: settings.gatewayUrl.replace(/\/+$/u, ""),
           token: settings.gatewayToken,
         };
       },
@@ -123,7 +123,7 @@ export async function beginPhonePairing(): Promise<PhonePairingInfo> {
   const tunnel = await ensurePhoneLink();
   const pairing = tunnel.beginPairing();
   const qrDataUrl = await QRCode.toDataURL(pairing.qrPayload, {
-    errorCorrectionLevel: 'M',
+    errorCorrectionLevel: "M",
     margin: 1,
     width: 512,
   });

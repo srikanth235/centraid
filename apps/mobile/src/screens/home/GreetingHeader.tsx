@@ -7,11 +7,11 @@
 // opens the Space menu. It carries the profile colour + initial so identity and
 // the "switch space" affordance read as one thing.
 
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { family, useTheme, type ThemeColors } from '../../kit/theme';
-import { firstNameOf, greetingFor, initialsOf } from '../../lib/profile';
+import { family, useTheme, type ThemeColors } from "../../kit/theme";
+import { firstNameOf, greetingFor, initialsOf } from "../../lib/profile";
 
 export interface GreetingHeaderProps {
   name: string;
@@ -30,7 +30,7 @@ export default function GreetingHeader({
   // Salutation follows the device clock at mount (see lib/profile.greetingFor).
   const hello = greetingFor();
   const tint = /^#[0-9a-fA-F]{6}$/u.test(color) ? color : colors.accent;
-  const display = firstNameOf(name) || 'there';
+  const display = firstNameOf(name) || "there";
 
   return (
     <View style={styles.row}>
@@ -62,14 +62,14 @@ const AVATAR = 42;
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     avatar: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: AVATAR / 2,
       height: AVATAR,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: AVATAR,
     },
     avatarInitial: {
-      color: '#fff',
+      color: "#fff",
       fontFamily: family.displayBold,
       fontSize: 17,
     },
@@ -88,8 +88,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
     pressed: { opacity: 0.7 },
     row: {
-      alignItems: 'center',
-      flexDirection: 'row',
+      alignItems: "center",
+      flexDirection: "row",
       paddingBottom: 14,
       paddingHorizontal: 20,
       paddingTop: 4,

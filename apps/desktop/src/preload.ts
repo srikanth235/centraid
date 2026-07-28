@@ -5,15 +5,15 @@
 // This file is bundled to CJS by `bun build` (Electron `sandbox: true` requires
 // CJS preload). Renderer typings live in `renderer/centraid-api.d.ts`.
 
-import * as tokens from '@centraid/design-tokens';
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import * as tokens from "@centraid/design-tokens";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
-import { Channel, hostCapabilities } from './main/ipc-core.js';
-import { createDeepLinkBuffer } from './main/oauth-deep-link.js';
+import { Channel, hostCapabilities } from "./main/ipc-core.js";
+import { createDeepLinkBuffer } from "./main/oauth-deep-link.js";
 
 const deepLinkBuffer = createDeepLinkBuffer();
 ipcRenderer.on(Channel.DEEP_LINK, (_event: IpcRendererEvent, url: unknown) => {
-  if (typeof url === 'string') deepLinkBuffer.enqueue(url);
+  if (typeof url === "string") deepLinkBuffer.enqueue(url);
 });
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -22,7 +22,7 @@ ipcRenderer.on(Channel.DEEP_LINK, (_event: IpcRendererEvent, url: unknown) => {
 // CSS variable writes, no duplicated theme blocks in styles.css.
 const tokensCss = tokens.toCss();
 
-contextBridge.exposeInMainWorld('CentraidTokens', {
+contextBridge.exposeInMainWorld("CentraidTokens", {
   apps: [...tokens.apps],
   cssText: tokensCss,
   fonts: tokens.fonts,
@@ -38,11 +38,12 @@ contextBridge.exposeInMainWorld('CentraidTokens', {
   // `tileFinish` is pure — exposing the function lets the renderer compute
   // a tile's background/glyph/shadow without duplicating the variant rules
   // in CSS. Functions cross the contextBridge fine when wrapped this way.
-  tileFinish: (color: string, variant: tokens.TileVariant) => tokens.tileFinish(color, variant),
+  tileFinish: (color: string, variant: tokens.TileVariant) =>
+    tokens.tileFinish(color, variant),
   type: tokens.type,
 });
 
-contextBridge.exposeInMainWorld('CentraidApi', {
+contextBridge.exposeInMainWorld("CentraidApi", {
   onDeepLink: (cb: (url: string) => void) => deepLinkBuffer.subscribe(cb),
   // File ASR is backed by an explicitly configured loopback model service in
   // the main process; capability stays false until that adapter answers.
@@ -53,8 +54,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
       .catch(() => false);
     return hostCapabilities(transcript);
   },
-  transcribeMedia: (input: { bytes: ArrayBuffer; mediaType: string; filename?: string }) =>
-    ipcRenderer.invoke(Channel.DEVICE_TRANSCRIBE, input),
+  transcribeMedia: (input: {
+    bytes: ArrayBuffer;
+    mediaType: string;
+    filename?: string;
+  }) => ipcRenderer.invoke(Channel.DEVICE_TRANSCRIBE, input),
 
   // Settings
   getSettings: () => ipcRenderer.invoke(Channel.SETTINGS_GET),
@@ -65,7 +69,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // renderer's direct HTTP client (renderer/gateway-client.ts) under the
   // thin-client pivot. The preview iframe points at the gateway draft URL
   // (Phase 4), so only the local-only reveal-in-Finder stays on IPC.
-  openAppFolder: (input: { id: string }) => ipcRenderer.invoke(Channel.APPS_OPEN, input),
+  openAppFolder: (input: { id: string }) =>
+    ipcRenderer.invoke(Channel.APPS_OPEN, input),
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder + the app-view data chat both stream the
@@ -80,12 +85,20 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Auto-publish queue (issue #108) — workspaces upload to the gateway
   // on every save. Renderer can poll a snapshot of the status, or
   // subscribe to per-event broadcasts to toast failures inline.
-  getPublishStatus: (input: { id: string }) => ipcRenderer.invoke(Channel.PUBLISH_STATUS, input),
+  getPublishStatus: (input: { id: string }) =>
+    ipcRenderer.invoke(Channel.PUBLISH_STATUS, input),
   onPublishEvent: (
-    cb: (msg: { id: string; ok: boolean; error?: string; publishedAt?: number }) => void,
+    cb: (msg: {
+      id: string;
+      ok: boolean;
+      error?: string;
+      publishedAt?: number;
+    }) => void
   ) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
-      cb(msg as { id: string; ok: boolean; error?: string; publishedAt?: number });
+      cb(
+        msg as { id: string; ok: boolean; error?: string; publishedAt?: number }
+      );
     ipcRenderer.on(Channel.PUBLISH_EVENT, handler);
     return () => ipcRenderer.off(Channel.PUBLISH_EVENT, handler);
   },
@@ -95,11 +108,15 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the manual "add by URL + token" bridge — gateways are added through the
   // pairing ceremony (`redeemGatewayPairing`), which adds the profile itself.
   listGateways: () => ipcRenderer.invoke(Channel.GATEWAYS_LIST),
-  removeGateway: (input: { id: string }) => ipcRenderer.invoke(Channel.GATEWAYS_REMOVE, input),
+  removeGateway: (input: { id: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_REMOVE, input),
   renameGateway: (input: { id: string; label: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_RENAME, input),
-  updateProfileMetadata: (input: { id: string; displayName?: string; avatarColor?: string }) =>
-    ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_METADATA, input),
+  updateProfileMetadata: (input: {
+    id: string;
+    displayName?: string;
+    avatarColor?: string;
+  }) => ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_METADATA, input),
   setActiveGateway: (input: { id: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_SET_ACTIVE, input),
   // Active gateway's HTTP base URL + bearer token for the renderer's
@@ -108,8 +125,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   getGatewayAuth: () => ipcRenderer.invoke(Channel.GATEWAY_AUTH_GET),
   // Pairing-ticket redemption (issue #376): decode + dial/POST, add-or-reuse
   // the gateway profile, flip active gateway + active vault together.
-  redeemGatewayPairing: (input: { ticket: string; label?: string; rememberDevice?: boolean }) =>
-    ipcRenderer.invoke(Channel.GATEWAY_PAIR_REDEEM, input),
+  redeemGatewayPairing: (input: {
+    ticket: string;
+    label?: string;
+    rememberDevice?: boolean;
+  }) => ipcRenderer.invoke(Channel.GATEWAY_PAIR_REDEEM, input),
   // Preview a gateway's vault list WITHOUT switching to it (issue #376) —
   // the flat (gateway, vault) switcher.
   listGatewayVaults: (input: { gatewayId: string }) =>
@@ -118,7 +138,9 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // for ticket/gateway inputs. Never rejects. (Issue #603 deleted the ssh
   // variant along with the whole SSH-connect feature.)
   testGatewayConnection: (
-    input: { kind: 'ticket'; ticket: string } | { kind: 'gateway'; gatewayId: string },
+    input:
+      | { kind: "ticket"; ticket: string }
+      | { kind: "gateway"; gatewayId: string }
   ) => ipcRenderer.invoke(Channel.GATEWAY_TEST_CONNECTION, input),
   // Gateway runtime watch: latest heartbeat snapshot for first paint, plus
   // the per-poll push stream the Gateway page (and sidebar pill) subscribe to.
@@ -132,33 +154,34 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // only (remote gateways restart server-side); diagnostics export fetches
   // the active gateway's bundle and saves it via a native dialog.
   restartGateway: () => ipcRenderer.invoke(Channel.GATEWAY_RESTART),
-  exportGatewayDiagnostics: () => ipcRenderer.invoke(Channel.GATEWAY_DIAGNOSTICS_EXPORT),
+  exportGatewayDiagnostics: () =>
+    ipcRenderer.invoke(Channel.GATEWAY_DIAGNOSTICS_EXPORT),
   exportGatewayRecoveryKit: (input: { password: string }) =>
     ipcRenderer.invoke(Channel.GATEWAY_RECOVERY_KIT_EXPORT, input),
   onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;
-      activeGatewayKind: 'local' | 'remote';
+      activeGatewayKind: "local" | "remote";
       activeGatewayLabel: string;
       activeProfileDisplayName: string;
       activeProfileAvatarColor: string;
       gatewayId?: string;
       removedGatewayId?: string;
       purgeReplicaGatewayId?: string;
-    }) => void,
+    }) => void
   ) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
       cb(
         msg as {
           activeGatewayId: string;
-          activeGatewayKind: 'local' | 'remote';
+          activeGatewayKind: "local" | "remote";
           activeGatewayLabel: string;
           activeProfileDisplayName: string;
           activeProfileAvatarColor: string;
           gatewayId?: string;
           removedGatewayId?: string;
           purgeReplicaGatewayId?: string;
-        },
+        }
       );
     ipcRenderer.on(Channel.GATEWAY_CHANGED, handler);
     return () => ipcRenderer.off(Channel.GATEWAY_CHANGED, handler);
@@ -169,7 +192,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   setActiveVault: (input: { vaultId?: string }) =>
     ipcRenderer.invoke(Channel.VAULTS_SET_ACTIVE, input),
   // Owner-scoped vault create/erase on the local gateway.
-  createVault: (input: { name?: string }) => ipcRenderer.invoke(Channel.VAULTS_CREATE, input),
+  createVault: (input: { name?: string }) =>
+    ipcRenderer.invoke(Channel.VAULTS_CREATE, input),
   deleteVault: (input: { vaultId: string; name: string }) =>
     ipcRenderer.invoke(Channel.VAULTS_DELETE, input),
   // Notify-only: call after a metadata-only `updateVault()` HTTP call
@@ -177,9 +201,14 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // head) re-read immediately instead of waiting on an unrelated event.
   // Deliberately separate from VAULT_CHANGED — no addressing changed here,
   // so this must not trigger `reScope`'s navigate-Home in App.tsx.
-  notifyVaultMetadataChanged: () => ipcRenderer.invoke(Channel.VAULT_METADATA_CHANGED),
+  notifyVaultMetadataChanged: () =>
+    ipcRenderer.invoke(Channel.VAULT_METADATA_CHANGED),
   onVaultChanged: (
-    cb: (msg: { activeGatewayId: string; gatewayId?: string; activeVaultId?: string }) => void,
+    cb: (msg: {
+      activeGatewayId: string;
+      gatewayId?: string;
+      activeVaultId?: string;
+    }) => void
   ) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
       cb(
@@ -187,7 +216,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
           activeGatewayId: string;
           gatewayId?: string;
           activeVaultId?: string;
-        },
+        }
       );
     ipcRenderer.on(Channel.VAULT_CHANGED, handler);
     return () => ipcRenderer.off(Channel.VAULT_CHANGED, handler);
@@ -230,7 +259,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   revokePhoneDevice: (input: { deviceId: string }) =>
     ipcRenderer.invoke(Channel.PHONE_REVOKE, input),
   onPhonePaired: (cb: (msg: { device: unknown }) => void) => {
-    const handler = (_e: IpcRendererEvent, msg: unknown): void => cb(msg as { device: unknown });
+    const handler = (_e: IpcRendererEvent, msg: unknown): void =>
+      cb(msg as { device: unknown });
     ipcRenderer.on(Channel.PHONE_PAIRED, handler);
     return () => ipcRenderer.off(Channel.PHONE_PAIRED, handler);
   },
@@ -241,10 +271,13 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   getUpdateStatus: () => ipcRenderer.invoke(Channel.UPDATE_STATUS),
   checkForUpdates: () => ipcRenderer.invoke(Channel.UPDATE_CHECK),
   relaunchToUpdate: () => ipcRenderer.invoke(Channel.UPDATE_RELAUNCH),
-  installGatewayService: (): Promise<{ ok: true } | { ok: false; error: string }> =>
-    ipcRenderer.invoke(Channel.GATEWAY_SERVICE_INSTALL),
+  installGatewayService: (): Promise<
+    { ok: true } | { ok: false; error: string }
+  > => ipcRenderer.invoke(Channel.GATEWAY_SERVICE_INSTALL),
 
-  onUpdateAvailable: (cb: (msg: { available: boolean; version: string }) => void) => {
+  onUpdateAvailable: (
+    cb: (msg: { available: boolean; version: string }) => void
+  ) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
       cb(msg as { available: boolean; version: string });
     ipcRenderer.on(Channel.UPDATE_AVAILABLE, handler);

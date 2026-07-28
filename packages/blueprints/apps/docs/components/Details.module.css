@@ -121,7 +121,9 @@
   cursor: default;
 }
 .custodyChip:hover {
-  border-color: var(--line); /* not interactive — suppress kit-chip's hover cue */
+  border-color: var(
+    --line
+  ); /* not interactive — suppress kit-chip's hover cue */
 }
 .custodyChip.custodyOk {
   color: var(--accent-deep-fg);

@@ -13,44 +13,57 @@ import {
   conversationArchiveShas,
   liveBlobShas,
   type VaultDb,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
-import { collectCasInventory, type CasInventoryResult } from './backup-cas-inventory.js';
-import { reconcileDerivedInto } from './backup-derived-inventory.js';
-import { unavailableStore, type StoreReconciliationState } from './backup-reconciliation-state.js';
-import { reconcileCasInventory, type BackupReconciliationState } from './backup-reconciliation.js';
-import type { StorageConnectionStore } from './storage-connections.js';
+import {
+  collectCasInventory,
+  type CasInventoryResult,
+} from "./backup-cas-inventory.js";
+import { reconcileDerivedInto } from "./backup-derived-inventory.js";
+import {
+  unavailableStore,
+  type StoreReconciliationState,
+} from "./backup-reconciliation-state.js";
+import {
+  reconcileCasInventory,
+  type BackupReconciliationState,
+} from "./backup-reconciliation.js";
+import type { StorageConnectionStore } from "./storage-connections.js";
 
 const SAMPLE_LIMIT = 25;
 
-function statusForCas(cas: StoreReconciliationState): BackupReconciliationState['status'] {
+function statusForCas(
+  cas: StoreReconciliationState
+): BackupReconciliationState["status"] {
   if (
     (cas.configured && !!cas.error) ||
     cas.missing.count > 0 ||
     (cas.attestationDrift?.providerOnly.count ?? 0) > 0 ||
     (cas.attestationDrift?.metadataMismatch.count ?? 0) > 0
   ) {
-    return 'error';
+    return "error";
   }
   if (
     cas.orphans.count > 0 ||
     !!cas.attestationError ||
     (cas.attestationDrift?.bucketOnly.count ?? 0) > 0
   ) {
-    return 'degraded';
+    return "degraded";
   }
-  return 'ok';
+  return "ok";
 }
 
 function addAuthenticatedFailures(
   cas: StoreReconciliationState,
-  failures: readonly string[],
+  failures: readonly string[]
 ): void {
   if (failures.length === 0) return;
   const failureSet = new Set(failures);
   cas.missing = {
     count: cas.missing.count + failureSet.size,
-    sample: [...new Set([...cas.missing.sample, ...failureSet])].sort().slice(0, SAMPLE_LIMIT),
+    sample: [...new Set([...cas.missing.sample, ...failureSet])]
+      .sort()
+      .slice(0, SAMPLE_LIMIT),
   };
 }
 
@@ -66,13 +79,13 @@ export interface CasOnlyReconciliationOptions {
 /** Persistable failure shape that remains honest about the absent backup store. */
 export function failedCasOnlyReconciliation(
   checkedAt: string,
-  mode: BackupReconciliationState['mode'],
-  error: string,
+  mode: BackupReconciliationState["mode"],
+  error: string
 ): BackupReconciliationState {
   return {
     checkedAt,
     mode,
-    status: 'error',
+    status: "error",
     backup: unavailableStore(false),
     cas: unavailableStore(true, error),
     walGaps: { count: 0, sample: [] },
@@ -84,18 +97,20 @@ export function failedCasOnlyReconciliation(
       markerCount: 0,
     },
     snapshots: { live: 0, pruned: 0, recent: [] },
-    audit: { source: 'unavailable', eventCount: 0, recent: [] },
+    audit: { source: "unavailable", eventCount: 0, recent: [] },
   };
 }
 
 /** Reconcile remote CAS custody without requiring or creating a backup target. */
 export async function runCasOnlyReconciliation(
-  opts: CasOnlyReconciliationOptions,
+  opts: CasOnlyReconciliationOptions
 ): Promise<BackupReconciliationState> {
   const collect = opts.collect ?? collectCasInventory;
   const result: CasInventoryResult = await collect({
     db: opts.db,
-    ...(opts.storageConnections ? { storageConnections: opts.storageConnections } : {}),
+    ...(opts.storageConnections
+      ? { storageConnections: opts.storageConnections }
+      : {}),
     verifyBucket: opts.verifyBucket,
   });
   let cas = unavailableStore(result.configured, result.error);
@@ -115,13 +130,15 @@ export async function runCasOnlyReconciliation(
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
     // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2).
-    const rows = index.rows().filter((row) => row.store === 'cas');
+    const rows = index.rows().filter((row) => row.store === "cas");
     cas = reconcileCasInventory({
       collection: result.collection,
       live,
       indexed: new Set(rows.map((row) => row.sha256)),
       recentlyIndexed: new Set(
-        rows.filter((row) => row.replicatedAt >= opts.checkedAt).map((row) => row.sha256),
+        rows
+          .filter((row) => row.replicatedAt >= opts.checkedAt)
+          .map((row) => row.sha256)
       ),
       unmark: (sha) => index.unmark(sha),
     });
@@ -131,7 +148,9 @@ export async function runCasOnlyReconciliation(
     await reconcileDerivedInto({
       cas,
       db: opts.db,
-      ...(opts.storageConnections ? { storageConnections: opts.storageConnections } : {}),
+      ...(opts.storageConnections
+        ? { storageConnections: opts.storageConnections }
+        : {}),
       verifyBucket: opts.verifyBucket,
       live,
       checkedAt: opts.checkedAt,
@@ -141,7 +160,7 @@ export async function runCasOnlyReconciliation(
 
   return {
     checkedAt: opts.checkedAt,
-    mode: opts.verifyBucket ? 'bucket' : 'scheduled',
+    mode: opts.verifyBucket ? "bucket" : "scheduled",
     status: statusForCas(cas),
     backup: unavailableStore(false),
     cas,
@@ -154,6 +173,6 @@ export async function runCasOnlyReconciliation(
       markerCount: 0,
     },
     snapshots: { live: 0, pruned: 0, recent: [] },
-    audit: { source: 'unavailable', eventCount: 0, recent: [] },
+    audit: { source: "unavailable", eventCount: 0, recent: [] },
   };
 }

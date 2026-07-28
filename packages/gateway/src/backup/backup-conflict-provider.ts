@@ -6,7 +6,7 @@
  * sides of the conflict.
  */
 
-import { BackupProviderError, type BackupProvider } from '@centraid/backup';
+import { BackupProviderError, type BackupProvider } from "@centraid/backup";
 
 export function conflictAfterFirstCall(real: BackupProvider): BackupProvider {
   let calls = 0;
@@ -21,9 +21,13 @@ export function conflictAfterFirstCall(real: BackupProvider): BackupProvider {
       calls += 1;
       if (calls === 1) return real.registerSnapshot(...a);
       return Promise.reject(
-        BackupProviderError.of('conflict_generation', 'another machine has taken over this vault', {
-          currentGeneration: 5,
-        }),
+        BackupProviderError.of(
+          "conflict_generation",
+          "another machine has taken over this vault",
+          {
+            currentGeneration: 5,
+          }
+        )
       );
     },
     listSnapshots: (...a) => real.listSnapshots(...a),

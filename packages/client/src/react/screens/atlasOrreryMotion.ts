@@ -1,21 +1,27 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
-import { ORRERY } from './atlasOrreryGeometry.js';
+import { ORRERY } from "./atlasOrreryGeometry.js";
 
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /** `null` in any host without `matchMedia` (jsdom, SSR) — there is no
  *  preference to read, so motion is never suppressed. */
 const reducedMotionQuery = (): MediaQueryList | null =>
-  typeof window === 'undefined' || typeof window.matchMedia !== 'function'
+  typeof window === "undefined" || typeof window.matchMedia !== "function"
     ? null
     : window.matchMedia(REDUCED_MOTION_QUERY);
 
 const subscribeReducedMotion = (onChange: () => void): (() => void) => {
   const mq = reducedMotionQuery();
   if (!mq) return () => {};
-  mq.addEventListener?.('change', onChange);
-  return () => mq.removeEventListener?.('change', onChange);
+  mq.addEventListener?.("change", onChange);
+  return () => mq.removeEventListener?.("change", onChange);
 };
 
 const readReducedMotion = (): boolean => reducedMotionQuery()?.matches ?? false;
@@ -27,11 +33,12 @@ const RECENTER_MS = 640;
 /** jsdom (and SSR) have neither `matchMedia` nor `requestAnimationFrame` — there
  *  an ease would only schedule frames that never composite, so we snap. */
 const canAnimateRecenter = (): boolean =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  typeof requestAnimationFrame === 'function';
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  typeof requestAnimationFrame === "function";
 
-const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+const easeInOutCubic = (t: number): number =>
+  t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 
 /**
  * Drive one re-centre ease, reporting 0→1 progress per frame and calling
@@ -39,7 +46,10 @@ const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - (-2
  * because the rAF loop names itself and a self-referential function declared
  * inside a hook is not a value the compiler can reason about.
  */
-function driveRecenter(onProgress: (p: number) => void, onSettled: () => void): () => void {
+function driveRecenter(
+  onProgress: (p: number) => void,
+  onSettled: () => void
+): () => void {
   const t0 = performance.now();
   let raf = requestAnimationFrame(function step(now: number) {
     const t = Math.min(1, (now - t0) / RECENTER_MS);
@@ -60,7 +70,11 @@ export function usePrefersReducedMotion(): boolean {
   // Subscribed, not synced-through-an-effect: the very first paint already
   // knows the preference, so a reduced-motion user never sees one animated
   // frame before the effect catches up.
-  return useSyncExternalStore(subscribeReducedMotion, readReducedMotion, serverReducedMotion);
+  return useSyncExternalStore(
+    subscribeReducedMotion,
+    readReducedMotion,
+    serverReducedMotion
+  );
 }
 
 /**
@@ -74,7 +88,7 @@ export function usePrefersReducedMotion(): boolean {
 export function useRecenterAnimation(
   center: string,
   targetRadius: Map<string, number>,
-  reduced: boolean,
+  reduced: boolean
 ): (physical: string) => number {
   const startRadiusRef = useRef<Map<string, number>>(new Map());
   const [progress, setProgress] = useState(1);
@@ -111,6 +125,6 @@ export function useRecenterAnimation(
       const start = startRadiusRef.current.get(physical) ?? target;
       return start + (target - start) * progress;
     },
-    [targetRadius, progress],
+    [targetRadius, progress]
   );
 }

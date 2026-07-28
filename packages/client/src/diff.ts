@@ -4,7 +4,7 @@
 // `readAppFiles` caps app files at 256 KB.
 
 export type DiffRow = {
-  type: 'same' | 'add' | 'del';
+  type: "same" | "add" | "del";
   text: string;
   aNum?: number;
   bNum?: number;
@@ -16,16 +16,19 @@ export type DiffRow = {
  * the left number, `add` carries the right.
  */
 export function lineDiff(aStr: string, bStr: string): DiffRow[] {
-  const a = aStr.split('\n');
-  const b = bStr.split('\n');
+  const a = aStr.split("\n");
+  const b = bStr.split("\n");
   const m = a.length;
   const n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () =>
-    Array.from<number>({ length: n + 1 }).fill(0),
+    Array.from<number>({ length: n + 1 }).fill(0)
   );
   for (let i = m - 1; i >= 0; i--) {
     for (let j = n - 1; j >= 0; j--) {
-      dp[i]![j] = a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+      dp[i]![j] =
+        a[i] === b[j]
+          ? dp[i + 1]![j + 1]! + 1
+          : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
     }
   }
   const rows: DiffRow[] = [];
@@ -35,18 +38,18 @@ export function lineDiff(aStr: string, bStr: string): DiffRow[] {
   let bn = 1;
   while (i < m && j < n) {
     if (a[i] === b[j]) {
-      rows.push({ type: 'same', text: a[i]!, aNum: an++, bNum: bn++ });
+      rows.push({ type: "same", text: a[i]!, aNum: an++, bNum: bn++ });
       i++;
       j++;
     } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
-      rows.push({ type: 'del', text: a[i]!, aNum: an++ });
+      rows.push({ type: "del", text: a[i]!, aNum: an++ });
       i++;
     } else {
-      rows.push({ type: 'add', text: b[j]!, bNum: bn++ });
+      rows.push({ type: "add", text: b[j]!, bNum: bn++ });
       j++;
     }
   }
-  while (i < m) rows.push({ type: 'del', text: a[i++]!, aNum: an++ });
-  while (j < n) rows.push({ type: 'add', text: b[j++]!, bNum: bn++ });
+  while (i < m) rows.push({ type: "del", text: a[i++]!, aNum: an++ });
+  while (j < n) rows.push({ type: "add", text: b[j++]!, bNum: bn++ });
   return rows;
 }

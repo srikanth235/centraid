@@ -30,57 +30,61 @@ import {
   type FC,
   type ReactElement,
   type ReactNode,
-} from 'react';
+} from "react";
 
-import type { InlineScope, InlineAppProps } from '../inline-types.ts';
-import { assetKey } from './asset-key.ts';
-import { Chrome, type ChromeSlots } from './Chrome.tsx';
-import { AlbumGridView } from './components/AlbumGrid.tsx';
-import { EnrichmentPanel } from './components/Enrichment.tsx';
-import { MemoriesStrip } from './components/Memories.tsx';
-import { SelectionBarView } from './components/SelectionBar.tsx';
-import { TimelineBody } from './components/Timeline.tsx';
-import { ToolbarView } from './components/Toolbar.tsx';
-import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.ts';
-import { $ } from './dom.ts';
-import { createDuplicates } from './duplicates.tsx';
-import { debounce, observeWidth, readFailed } from './kit.ts';
-import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from './layout.ts';
-import { createRefetchScheduler, readLibraryScopes, stopLiveReads } from './library-reads.ts';
-import { createLibraryStore } from './library-store.ts';
-import { createLightbox } from './lightbox.tsx';
-import { notice, setWriteTargetResolver } from './outcomes.ts';
-import { createPicker } from './picker.tsx';
-import { mountedScopes, ownScopeId, photoWriteTarget } from './scopes.ts';
-import { createSearch } from './search.ts';
-import { createSidebar } from './sidebar.tsx';
-import { createSlideshow } from './slideshow.tsx';
-import type { Album, Asset, MemoryCard, Place } from './types.ts';
-import { applyUploadTarget, runUpload, wireUpload } from './upload.ts';
-import { createVisibility } from './visibility.ts';
+import type { InlineScope, InlineAppProps } from "../inline-types.ts";
+import { assetKey } from "./asset-key.ts";
+import { Chrome, type ChromeSlots } from "./Chrome.tsx";
+import { AlbumGridView } from "./components/AlbumGrid.tsx";
+import { EnrichmentPanel } from "./components/Enrichment.tsx";
+import { MemoriesStrip } from "./components/Memories.tsx";
+import { SelectionBarView } from "./components/SelectionBar.tsx";
+import { TimelineBody } from "./components/Timeline.tsx";
+import { ToolbarView } from "./components/Toolbar.tsx";
+import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
+import { $ } from "./dom.ts";
+import { createDuplicates } from "./duplicates.tsx";
+import { debounce, observeWidth, readFailed } from "./kit.ts";
+import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from "./layout.ts";
+import {
+  createRefetchScheduler,
+  readLibraryScopes,
+  stopLiveReads,
+} from "./library-reads.ts";
+import { createLibraryStore } from "./library-store.ts";
+import { createLightbox } from "./lightbox.tsx";
+import { notice, setWriteTargetResolver } from "./outcomes.ts";
+import { createPicker } from "./picker.tsx";
+import { mountedScopes, ownScopeId, photoWriteTarget } from "./scopes.ts";
+import { createSearch } from "./search.ts";
+import { createSidebar } from "./sidebar.tsx";
+import { createSlideshow } from "./slideshow.tsx";
+import type { Album, Asset, MemoryCard, Place } from "./types.ts";
+import { applyUploadTarget, runUpload, wireUpload } from "./upload.ts";
+import { createVisibility } from "./visibility.ts";
 
-import styles from './Chrome.module.css';
+import styles from "./Chrome.module.css";
 
 // The vault tables the library projection reads — the change-subscription filter
 // AND the onChange refetch gate (issue #404): a change touching none of these
 // can't alter what this app shows.
 export const PHOTOS_READ_TABLES_LIST = [
-  'media.media_asset',
-  'core.content_item',
-  'core.collection',
-  'core.collection_entry',
-  'core.place',
-  'core.concept_scheme',
-  'core.concept',
-  'core.tag',
-  'blob.custody_state',
+  "media.media_asset",
+  "core.content_item",
+  "core.collection",
+  "core.collection_entry",
+  "core.place",
+  "core.concept_scheme",
+  "core.concept",
+  "core.tag",
+  "blob.custody_state",
 ];
 const PHOTOS_READ_TABLES = new Set<string>(PHOTOS_READ_TABLES_LIST);
 const FOCUS_STALE_MS = 30_000;
 
 // The genuine <kit-skeleton> custom element as ordinary JSX (pilot pattern —
 // the runtime value stays the string, so the emitted DOM is identical).
-const KitSkeleton = 'kit-skeleton' as unknown as FC<{ rows?: number }>;
+const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 
 type SlotKey = keyof ChromeSlots;
 
@@ -108,7 +112,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       rootElRef.current = el;
       rootRef(el);
     },
-    [rootRef],
+    [rootRef]
   );
 
   // Seed the narrow layout BEFORE the first paint (the served app relies on a
@@ -120,7 +124,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   useLayoutEffect(() => {
     const el = rootElRef.current;
     if (el) {
-      const forced = el.dataset.appWidth === 'narrow';
+      const forced = el.dataset.appWidth === "narrow";
       setNarrow(forced || el.clientWidth < 860);
     }
     const raf = requestAnimationFrame(() => setReady(true));
@@ -141,13 +145,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const mk = (key: SlotKey) => ({
       render: (node: ReactNode) => setSlot(key, node),
     });
-    const toolbarRoot = mk('toolbar');
-    const mainRoot = mk('main');
-    const selectionBarRoot = mk('selectionBar');
-    const sidebarRoot = mk('sidebar');
-    const lightboxRoot = mk('lightbox');
-    const pickerRoot = mk('picker');
-    const slideshowRoot = mk('slideshow');
+    const toolbarRoot = mk("toolbar");
+    const mainRoot = mk("main");
+    const selectionBarRoot = mk("selectionBar");
+    const sidebarRoot = mk("sidebar");
+    const lightboxRoot = mk("lightbox");
+    const pickerRoot = mk("picker");
+    const slideshowRoot = mk("slideshow");
 
     // ---- module state (was app.tsx top-level `let`) ----
     let assets: Asset[] = [];
@@ -157,7 +161,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     let selectedAlbum: string | null = null;
     let uploading = false;
     let readErrorShown = false;
-    let searchQuery = '';
+    let searchQuery = "";
     let searchResults: Asset[] | null = null;
     let selectMode = false;
     let batchBusy = false;
@@ -168,7 +172,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     let selectAnchor: string | null = null;
     const selectedIds = new Set<string>();
     let zoomIndex = DEFAULT_ZOOM;
-    let paneWidth = gridWidthFallback(typeof window === 'undefined' ? 1280 : window.innerWidth);
+    let paneWidth = gridWidthFallback(
+      typeof window === "undefined" ? 1280 : window.innerWidth
+    );
     let libraryTruncated = false;
     let lastFreshLoadAt = 0;
     let recordNextLoad = false;
@@ -191,7 +197,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // Where a CREATING write lands. `own` ignores the chip (albums, tags and
     // places are own-scope surfaces); `new` follows it, which is what makes
     // "Add media" while looking at Family put the photo in Family.
-    setWriteTargetResolver((kind) => photoWriteTarget(kind, selectedScopeId, scopesNow()));
+    setWriteTargetResolver((kind) =>
+      photoWriteTarget(kind, selectedScopeId, scopesNow())
+    );
 
     // ---- data ----
     // One page per mounted scope plus the merged timeline over them. Every
@@ -202,7 +210,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // host whose `read` carries a subscription, a fresh projection lands
       // without any refetch at all.
       readScopes: (scopeIds, input) =>
-        readLibraryScopes(scopeIds, input, (scopeId, data) => store.applyScopeData(scopeId, data)),
+        readLibraryScopes(scopeIds, input, (scopeId, data) =>
+          store.applyScopeData(scopeId, data)
+        ),
       scopeIds: () => scopesNow().map((scope) => scope.id),
       ownScopeId: ownId,
       readTables: PHOTOS_READ_TABLES,
@@ -221,20 +231,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // about the member's own library, which is the thing the banners name. An
       // audience that failed simply contributes no photos this round.
       const denied = own.denied;
-      $('consentBanner').hidden = !denied;
-      $('live').hidden = Boolean(denied);
-      $('sidebarMount').hidden = Boolean(denied);
+      $("consentBanner").hidden = !denied;
+      $("live").hidden = Boolean(denied);
+      $("sidebarMount").hidden = Boolean(denied);
       if (denied) {
-        $('consentDetail').textContent = denied.message ?? '';
+        $("consentDetail").textContent = denied.message ?? "";
         return;
       }
       if (own.error) {
-        readFailed($('noticeBanner'));
+        readFailed($("noticeBanner"));
         readErrorShown = true;
         return;
       }
       if (readErrorShown) {
-        notice('');
+        notice("");
         readErrorShown = false;
       }
       const view = store.merged();
@@ -242,7 +252,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // see the same cast's note in library-store.ts.
       const merged = view.assets as unknown as Asset[];
       const own_ = ownId();
-      ownAssets = merged.filter((asset) => (asset.scope_id ?? '') === own_);
+      ownAssets = merged.filter((asset) => (asset.scope_id ?? "") === own_);
       assets = selectedScopeId
         ? merged.filter((asset) => asset.scope_id === selectedScopeId)
         : merged;
@@ -257,7 +267,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         selectedAlbum !== TRASH &&
         selectedAlbum !== DUPLICATES &&
         selectedAlbum !== ALBUMS &&
-        !(typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) &&
+        !(
+          typeof selectedAlbum === "string" && selectedAlbum.startsWith("tag:")
+        ) &&
         !albums.some((a) => a.album_id === selectedAlbum)
       ) {
         selectedAlbum = null;
@@ -287,7 +299,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // see the header note on colliding ids.
       if (selectedAlbum === FAVORITES) return assets.filter((a) => a.favorite);
       if (selectedAlbum === TRASH) return trash;
-      if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
+      if (
+        typeof selectedAlbum === "string" &&
+        selectedAlbum.startsWith("tag:")
+      ) {
         const label = selectedAlbum.slice(4);
         return assets.filter((a) => a.tags?.some((t) => t.label === label));
       }
@@ -305,37 +320,39 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
     // ---- memories ----
     function buildMemories(): MemoryCard[] {
-      if (rootElRef.current?.dataset.showMemories === 'hide') return [];
+      if (rootElRef.current?.dataset.showMemories === "hide") return [];
       const cards: MemoryCard[] = [];
       const favs = assets.filter((a) => a.favorite);
       if (favs.length > 0) {
         const first = favs[0]!;
         cards.push({
-          key: 'built-in:favorites',
-          title: 'Favorites',
-          sub: `${favs.length} photo${favs.length === 1 ? '' : 's'}`,
+          key: "built-in:favorites",
+          title: "Favorites",
+          sub: `${favs.length} photo${favs.length === 1 ? "" : "s"}`,
           coverUri: first.thumb_uri ?? first.content_uri ?? null,
           // The cover is one real asset's bytes; the card carries the scope
           // they must be fetched in (issue #599).
           coverScopeId: first.scope_id,
-          newestAt: first.taken_at ?? '',
+          newestAt: first.taken_at ?? "",
           onOpen: () => navigateTo(FAVORITES),
         });
       }
       const albumCards = albums
         .map((album): MemoryCard | null => {
-          const members = ownAssets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+          const members = ownAssets.filter((a) =>
+            (a.album_ids ?? []).includes(album.album_id)
+          );
           if (members.length === 0) return null;
           const newest = members.reduce((a, b) =>
-            String(a.taken_at ?? '') > String(b.taken_at ?? '') ? a : b,
+            String(a.taken_at ?? "") > String(b.taken_at ?? "") ? a : b
           );
           return {
             key: album.album_id,
-            title: album.title ?? 'Album',
-            sub: `${members.length} photo${members.length === 1 ? '' : 's'}`,
+            title: album.title ?? "Album",
+            sub: `${members.length} photo${members.length === 1 ? "" : "s"}`,
             coverUri: newest.thumb_uri ?? newest.content_uri ?? null,
             coverScopeId: newest.scope_id,
-            newestAt: newest.taken_at ?? '',
+            newestAt: newest.taken_at ?? "",
             onOpen: () => navigateTo(album.album_id),
           };
         })
@@ -356,7 +373,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     }
 
     function navigateTo(id: string | null): void {
-      if (selectedAlbum === DUPLICATES && id !== DUPLICATES) duplicates.invalidate();
+      if (selectedAlbum === DUPLICATES && id !== DUPLICATES)
+        duplicates.invalidate();
       selectedAlbum = id;
       if (selectMode) {
         exitSelectMode();
@@ -373,32 +391,36 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       const q = searchQuery.trim();
       if (selectedAlbum === ALBUMS) {
         return {
-          title: 'Albums',
-          sub: `${albums.length} album${albums.length === 1 ? '' : 's'} · covers pulled from your library`,
+          title: "Albums",
+          sub: `${albums.length} album${albums.length === 1 ? "" : "s"} · covers pulled from your library`,
         };
       }
       if (selectedAlbum === DUPLICATES) {
         return {
-          title: 'Duplicates',
-          sub: 'Near-duplicate clusters in your library',
+          title: "Duplicates",
+          sub: "Near-duplicate clusters in your library",
         };
       }
       const countSub = q
-        ? `${n} match${n === 1 ? '' : 'es'} “${q}”`
-        : `${n} photo${n === 1 ? '' : 's'}`;
+        ? `${n} match${n === 1 ? "" : "es"} “${q}”`
+        : `${n} photo${n === 1 ? "" : "s"}`;
       if (selectedAlbum === TRASH) {
         return {
-          title: 'Trash',
+          title: "Trash",
           sub: q ? countSub : `${n} in trash · auto-purge after 30 days`,
         };
       }
-      if (selectedAlbum === FAVORITES) return { title: 'Favorites', sub: countSub };
-      if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
+      if (selectedAlbum === FAVORITES)
+        return { title: "Favorites", sub: countSub };
+      if (
+        typeof selectedAlbum === "string" &&
+        selectedAlbum.startsWith("tag:")
+      ) {
         return { title: `#${selectedAlbum.slice(4)}`, sub: countSub };
       }
       const album = albums.find((a) => a.album_id === selectedAlbum);
-      if (album) return { title: album.title ?? 'Album', sub: countSub };
-      return { title: 'Photos', sub: countSub };
+      if (album) return { title: album.title ?? "Album", sub: countSub };
+      return { title: "Photos", sub: countSub };
     }
 
     function renderToolbarBar(): void {
@@ -419,21 +441,25 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           showAddPhotos={inAlbum}
           onAddPhotos={openPicker}
           showSelect={
-            selectedAlbum !== TRASH && selectedAlbum !== DUPLICATES && selectedAlbum !== ALBUMS
+            selectedAlbum !== TRASH &&
+            selectedAlbum !== DUPLICATES &&
+            selectedAlbum !== ALBUMS
           }
           selectMode={selectMode}
-          onToggleSelect={() => (selectMode ? exitSelectMode() : enterSelectMode())}
+          onToggleSelect={() =>
+            selectMode ? exitSelectMode() : enterSelectMode()
+          }
           scopes={scopesNow()}
           ownScopeId={ownId()}
           selectedScopeId={selectedScopeId}
           onSelectScope={selectScope}
-        />,
+        />
       );
     }
 
     // ---- main content ----
     function renderMain(): void {
-      const empty = $('empty');
+      const empty = $("empty");
       if (selectedAlbum === DUPLICATES) {
         empty.hidden = true;
         duplicates.ensureLoaded();
@@ -443,7 +469,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       if (selectedAlbum === ALBUMS) {
         empty.hidden = true;
         const enriched = albums.map((album) => {
-          const members = ownAssets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+          const members = ownAssets.filter((a) =>
+            (a.album_ids ?? []).includes(album.album_id)
+          );
           return {
             ...album,
             count: members.length,
@@ -455,7 +483,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             albums={enriched}
             onOpen={navigateTo}
             onNewAlbum={() => sidebar.openNewAlbum()}
-          />,
+          />
         );
         return;
       }
@@ -463,27 +491,30 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       const shown = visibleAssets();
       empty.hidden = shown.length > 0;
       if (shown.length === 0) {
-        const searching = searchQuery !== '';
-        $('emptyText').textContent = searching
+        const searching = searchQuery !== "";
+        $("emptyText").textContent = searching
           ? `No matches for “${searchQuery}”.`
           : selectedAlbum === FAVORITES
-            ? 'No favorites yet — tap the heart on any photo.'
+            ? "No favorites yet — tap the heart on any photo."
             : selectedAlbum === TRASH
-              ? 'Trash is empty.'
-              : typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')
+              ? "Trash is empty."
+              : typeof selectedAlbum === "string" &&
+                  selectedAlbum.startsWith("tag:")
                 ? `No photos tagged “${selectedAlbum.slice(4)}”.`
                 : selectedAlbum
-                  ? 'Nothing in this album yet.'
-                  : 'No photos yet — your library starts with the first upload.';
-        $('emptyUpload').hidden =
+                  ? "Nothing in this album yet."
+                  : "No photos yet — your library starts with the first upload.";
+        $("emptyUpload").hidden =
           searching ||
           selectedAlbum === FAVORITES ||
           selectedAlbum === TRASH ||
-          (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:'));
+          (typeof selectedAlbum === "string" &&
+            selectedAlbum.startsWith("tag:"));
       }
 
       const inAlbum = albums.some((a) => a.album_id === selectedAlbum);
-      const showMemories = selectedAlbum === null && searchQuery.trim() === '' && !selectMode;
+      const showMemories =
+        selectedAlbum === null && searchQuery.trim() === "" && !selectMode;
       mainRoot.render(
         <>
           {showMemories ? <MemoriesStrip memories={buildMemories()} /> : null}
@@ -513,7 +544,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               await store.showMore();
             }}
           />
-        </>,
+        </>
       );
     }
 
@@ -521,7 +552,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     function enterSelectMode(): void {
       selectMode = true;
       selectAnchor = null;
-      document.body.classList.add('has-selection');
+      document.body.classList.add("has-selection");
       renderToolbarBar();
       renderMain();
       renderSelectionBar();
@@ -530,7 +561,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       selectMode = false;
       selectedIds.clear();
       selectAnchor = null;
-      document.body.classList.remove('has-selection');
+      document.body.classList.remove("has-selection");
       closeAlbumMenu();
       renderToolbarBar();
       renderMain();
@@ -566,10 +597,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     function closeAlbumMenu(): void {
       if (!albumMenuOpen) return;
       albumMenuOpen = false;
-      document.removeEventListener('click', onAlbumMenuAway, true);
+      document.removeEventListener("click", onAlbumMenuAway, true);
     }
     function onAlbumMenuAway(e: globalThis.MouseEvent): void {
-      const wrap = $('selectionBar').querySelector('.bar-menu-wrap');
+      const wrap = $("selectionBar").querySelector(".bar-menu-wrap");
       if (wrap && !wrap.contains(e.target as Node)) {
         closeAlbumMenu();
         renderSelectionBar();
@@ -583,7 +614,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       }
       albumMenuOpen = true;
       renderSelectionBar();
-      document.addEventListener('click', onAlbumMenuAway, true);
+      document.addEventListener("click", onAlbumMenuAway, true);
     }
     function closeAlbumMenuAndRerender(): void {
       closeAlbumMenu();
@@ -591,10 +622,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     }
     function setBarBusy(on: boolean): void {
       batchBusy = on;
-      for (const btn of $('selectionBar').querySelectorAll('button')) btn.disabled = on;
+      for (const btn of $("selectionBar").querySelectorAll("button"))
+        btn.disabled = on;
     }
     function renderSelectionBar(): void {
-      const bar = $('selectionBar');
+      const bar = $("selectionBar");
       bar.hidden = !selectMode;
       if (!selectMode) {
         selectionBarRoot.render(null);
@@ -611,14 +643,15 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           onToggleMenu={toggleAlbumMenu}
           onCloseMenu={closeAlbumMenuAndRerender}
           onExit={exitSelectMode}
-        />,
+        />
       );
     }
 
     // ---- zoom ----
     function renderZoomButtons(): void {
-      $<HTMLButtonElement>('zoomOutBtn').disabled = zoomIndex === 0;
-      $<HTMLButtonElement>('zoomInBtn').disabled = zoomIndex === ZOOM_LEVELS.length - 1;
+      $<HTMLButtonElement>("zoomOutBtn").disabled = zoomIndex === 0;
+      $<HTMLButtonElement>("zoomInBtn").disabled =
+        zoomIndex === ZOOM_LEVELS.length - 1;
     }
 
     // ---- search ----
@@ -634,11 +667,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       renderMain();
     }, 180);
     function clearSearch(): void {
-      $<HTMLInputElement>('searchInput').value = '';
-      $('searchClear').hidden = true;
+      $<HTMLInputElement>("searchInput").value = "";
+      $("searchClear").hidden = true;
       invalidateSearch();
-      if (searchQuery !== '' || searchResults !== null) {
-        searchQuery = '';
+      if (searchQuery !== "" || searchResults !== null) {
+        searchQuery = "";
         searchResults = null;
         renderToolbarBar();
         renderMain();
@@ -657,13 +690,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     }
 
     // ---- region factories (constructed once, exactly like app.tsx Boot) ----
-    setSlot('enrichment', <EnrichmentPanel />);
+    setSlot("enrichment", <EnrichmentPanel />);
 
     const duplicates = createDuplicates({
       gridRoot: mainRoot,
       refresh,
       ownScope: () => {
-        const target = photoWriteTarget('own', selectedScopeId, scopesNow());
+        const target = photoWriteTarget("own", selectedScopeId, scopesNow());
         return target.disabled ? null : target.scopeId;
       },
     });
@@ -693,7 +726,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       getTrash: () => trash,
       getSelectedAlbum: () => selectedAlbum,
       setSelectedAlbum: (id) => {
-        if (selectedAlbum === DUPLICATES && id !== DUPLICATES) duplicates.invalidate();
+        if (selectedAlbum === DUPLICATES && id !== DUPLICATES)
+          duplicates.invalidate();
         selectedAlbum = id;
       },
       refresh,
@@ -714,20 +748,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
     // ---- raw DOM + global wiring (was app.tsx's imperative listeners) ----
     const onSearchInput = (): void => {
-      searchQuery = $<HTMLInputElement>('searchInput').value.trim();
-      $('searchClear').hidden = searchQuery === '';
+      searchQuery = $<HTMLInputElement>("searchInput").value.trim();
+      $("searchClear").hidden = searchQuery === "";
       debouncedLocalRender();
       runSearch();
     };
     const onSearchKeyDown = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       e.stopPropagation();
-      if ($<HTMLInputElement>('searchInput').value) clearSearch();
-      else $('searchInput').blur();
+      if ($<HTMLInputElement>("searchInput").value) clearSearch();
+      else $("searchInput").blur();
     };
     const onSearchClear = (): void => {
       clearSearch();
-      $('searchInput').focus();
+      $("searchInput").focus();
     };
     const onZoomOut = (): void => {
       zoomIndex = Math.max(0, zoomIndex - 1);
@@ -742,27 +776,29 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const onHamburger = (): void => sidebar.openSidebar();
     const onSlideshowBtn = (): void => lightbox.startSlideshow(null);
     const onKeydown = (e: globalThis.KeyboardEvent): void => {
-      if (e.key === 'Escape' && !$('picker').hidden) {
+      if (e.key === "Escape" && !$("picker").hidden) {
         closePicker();
         return;
       }
-      if ($('lightbox').hidden) {
-        if (e.key === 'Escape' && selectMode && !batchBusy) exitSelectMode();
-        else if (e.key === 'Escape' && sidebar.isSidebarOpen()) sidebar.closeSidebar();
+      if ($("lightbox").hidden) {
+        if (e.key === "Escape" && selectMode && !batchBusy) exitSelectMode();
+        else if (e.key === "Escape" && sidebar.isSidebarOpen())
+          sidebar.closeSidebar();
         return;
       }
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') {
-        if (e.key === 'Escape') target!.blur();
+      if (tag === "INPUT" || tag === "TEXTAREA") {
+        if (e.key === "Escape") target!.blur();
         return;
       }
-      if (e.key === 'Escape') lightbox.closeLightbox();
-      else if (e.key === 'ArrowLeft') lightbox.step(-1);
-      else if (e.key === 'ArrowRight') lightbox.step(1);
+      if (e.key === "Escape") lightbox.closeLightbox();
+      else if (e.key === "ArrowLeft") lightbox.step(-1);
+      else if (e.key === "ArrowRight") lightbox.step(1);
     };
     const onFocus = (): void => {
-      if (lastFreshLoadAt && Date.now() - lastFreshLoadAt < FOCUS_STALE_MS) return;
+      if (lastFreshLoadAt && Date.now() - lastFreshLoadAt < FOCUS_STALE_MS)
+        return;
       void refresh();
     };
 
@@ -771,43 +807,47 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // would return null and `removeEventListener` would throw (#505 — the
     // Photos→app→Photos remount crash). `removeEventListener` on a now-detached
     // node is a harmless no-op.
-    const searchInput = $<HTMLInputElement>('searchInput');
-    const searchClearBtn = $('searchClear');
-    const zoomOutBtn = $('zoomOutBtn');
-    const zoomInBtn = $('zoomInBtn');
-    const hamburgerBtn = $('hamburgerBtn');
-    const slideshowBtn = $('slideshowBtn');
-    searchInput.addEventListener('input', onSearchInput);
-    searchInput.addEventListener('keydown', onSearchKeyDown);
-    searchClearBtn.addEventListener('click', onSearchClear);
-    zoomOutBtn.addEventListener('click', onZoomOut);
-    zoomInBtn.addEventListener('click', onZoomIn);
-    hamburgerBtn.addEventListener('click', onHamburger);
-    slideshowBtn.addEventListener('click', onSlideshowBtn);
-    window.addEventListener('keydown', onKeydown);
-    window.addEventListener('focus', onFocus);
+    const searchInput = $<HTMLInputElement>("searchInput");
+    const searchClearBtn = $("searchClear");
+    const zoomOutBtn = $("zoomOutBtn");
+    const zoomInBtn = $("zoomInBtn");
+    const hamburgerBtn = $("hamburgerBtn");
+    const slideshowBtn = $("slideshowBtn");
+    searchInput.addEventListener("input", onSearchInput);
+    searchInput.addEventListener("keydown", onSearchKeyDown);
+    searchClearBtn.addEventListener("click", onSearchClear);
+    zoomOutBtn.addEventListener("click", onZoomOut);
+    zoomInBtn.addEventListener("click", onZoomIn);
+    hamburgerBtn.addEventListener("click", onHamburger);
+    slideshowBtn.addEventListener("click", onSlideshowBtn);
+    window.addEventListener("keydown", onKeydown);
+    window.addEventListener("focus", onFocus);
     // The store decides the SMALLEST refetch a burst justifies: the tagged
     // scope alone, a newly hydrated scope alone, or — only when the host cannot
     // say which scope burst — all of them. It also owns the table gate and the
     // per-scope debounce, so nothing about that reasoning lives here (#599).
-    const stopChange = window.centraid.onChange?.((detail) => store.handleChange(detail));
+    const stopChange = window.centraid.onChange?.((detail) =>
+      store.handleChange(detail)
+    );
 
     // The grid's real width drives the justified timeline (read off #grid, not
     // #scrollPane whose clientWidth includes its own padding).
     function measurePane(): void {
-      const el = $('grid');
-      const w = el?.clientWidth || (typeof window === 'undefined' ? 0 : window.innerWidth);
+      const el = $("grid");
+      const w =
+        el?.clientWidth ||
+        (typeof window === "undefined" ? 0 : window.innerWidth);
       if (w > 0 && Math.abs(w - paneWidth) > 1) {
         paneWidth = w;
         renderMain();
       }
     }
     let paneObserver: ResizeObserver | undefined;
-    if (typeof ResizeObserver !== 'undefined' && $('grid')) {
+    if (typeof ResizeObserver !== "undefined" && $("grid")) {
       paneObserver = new ResizeObserver(measurePane);
-      paneObserver.observe($('grid'));
-    } else if (typeof window !== 'undefined') {
-      window.addEventListener('resize', measurePane);
+      paneObserver.observe($("grid"));
+    } else if (typeof window !== "undefined") {
+      window.addEventListener("resize", measurePane);
     }
 
     // Component-width narrow observer (#505 trap 1): the served path leans on
@@ -833,18 +873,18 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       disposed = true;
       store.dispose();
       stopLiveReads();
-      searchInput.removeEventListener('input', onSearchInput);
-      searchInput.removeEventListener('keydown', onSearchKeyDown);
-      searchClearBtn.removeEventListener('click', onSearchClear);
-      zoomOutBtn.removeEventListener('click', onZoomOut);
-      zoomInBtn.removeEventListener('click', onZoomIn);
-      hamburgerBtn.removeEventListener('click', onHamburger);
-      slideshowBtn.removeEventListener('click', onSlideshowBtn);
-      window.removeEventListener('keydown', onKeydown);
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('resize', measurePane);
-      document.removeEventListener('click', onAlbumMenuAway, true);
-      document.body.classList.remove('has-selection');
+      searchInput.removeEventListener("input", onSearchInput);
+      searchInput.removeEventListener("keydown", onSearchKeyDown);
+      searchClearBtn.removeEventListener("click", onSearchClear);
+      zoomOutBtn.removeEventListener("click", onZoomOut);
+      zoomInBtn.removeEventListener("click", onZoomIn);
+      hamburgerBtn.removeEventListener("click", onHamburger);
+      slideshowBtn.removeEventListener("click", onSlideshowBtn);
+      window.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("resize", measurePane);
+      document.removeEventListener("click", onAlbumMenuAway, true);
+      document.body.classList.remove("has-selection");
       stopChange?.();
       stopWidth();
       paneObserver?.disconnect();
@@ -862,8 +902,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       ref={setRoot}
       className={styles.appRoot}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
         minWidth: 0,
         minHeight: 0,

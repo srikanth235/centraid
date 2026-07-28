@@ -17,36 +17,39 @@ import {
   type WalDbName,
   type WalGroupCloser,
   type WalSegmentAddress,
-} from '@centraid/backup';
+} from "@centraid/backup";
 import {
   ReplicaIndex,
   archivedSegmentShas,
   conversationArchiveShas,
   liveBlobShas,
   type VaultDb,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
-import { baseStore, reconcileCasInventory } from './backup-cas-diff.js';
-import { collectCasInventory } from './backup-cas-inventory.js';
-import { reconcileDerivedInto } from './backup-derived-inventory.js';
+import { baseStore, reconcileCasInventory } from "./backup-cas-diff.js";
+import { collectCasInventory } from "./backup-cas-inventory.js";
+import { reconcileDerivedInto } from "./backup-derived-inventory.js";
 import {
   collectAudit,
   collectInventory,
   type CollectedAudit,
   type CollectedInventory,
-} from './backup-provider-observability.js';
+} from "./backup-provider-observability.js";
 import type {
   BackupReconciliationState,
   DriftSummary,
   StoreReconciliationState,
-} from './backup-reconciliation-state.js';
-import { driftSummary as drift, unavailableStore } from './backup-reconciliation-state.js';
-import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
-import type { StorageConnectionStore } from './storage-connections.js';
+} from "./backup-reconciliation-state.js";
+import {
+  driftSummary as drift,
+  unavailableStore,
+} from "./backup-reconciliation-state.js";
+import { snapshotReferencedBlobShas } from "./snapshot-blob-roots.js";
+import type { StorageConnectionStore } from "./storage-connections.js";
 
-export { reconcileCasInventory } from './backup-cas-diff.js';
-export type { BackupReconciliationState } from './backup-reconciliation-state.js';
-export { failedReconciliation } from './backup-reconciliation-state.js';
+export { reconcileCasInventory } from "./backup-cas-diff.js";
+export type { BackupReconciliationState } from "./backup-reconciliation-state.js";
+export { failedReconciliation } from "./backup-reconciliation-state.js";
 
 const SAMPLE_LIMIT = 25;
 
@@ -54,25 +57,34 @@ function walStreamGaps(
   db: WalDbName,
   generation: string,
   segments: readonly WalSegmentAddress[],
-  closers: readonly WalGroupCloser[],
+  closers: readonly WalGroupCloser[]
 ): string[] {
   const gaps: string[] = [];
-  const relevantSegments = segments.filter((row) => row.db === db && row.generation === generation);
-  const relevantClosers = closers.filter((row) => row.db === db && row.generation === generation);
+  const relevantSegments = segments.filter(
+    (row) => row.db === db && row.generation === generation
+  );
+  const relevantClosers = closers.filter(
+    (row) => row.db === db && row.generation === generation
+  );
   const groups = new Set<number>([
     ...relevantSegments.map((row) => row.group),
     ...relevantClosers.map((row) => row.group),
   ]);
   const orderedGroups = [...groups].sort((a, b) => a - b);
-  if ((orderedGroups[0] ?? 0) > 0) gaps.push(`${db}/${generation}: starts-after-group-0`);
+  if ((orderedGroups[0] ?? 0) > 0)
+    gaps.push(`${db}/${generation}: starts-after-group-0`);
   for (const [index, group] of orderedGroups.entries()) {
     const previous = orderedGroups[index - 1];
     if (previous !== undefined && group !== previous + 1) {
-      gaps.push(`${db}/${generation}: missing-group-between-${previous}-${group}`);
+      gaps.push(
+        `${db}/${generation}: missing-group-between-${previous}-${group}`
+      );
     }
     const rows = relevantSegments
       .filter((row) => row.group === group)
-      .sort((a, b) => a.startOffset - b.startOffset || b.endOffset - a.endOffset);
+      .sort(
+        (a, b) => a.startOffset - b.startOffset || b.endOffset - a.endOffset
+      );
     const closer = relevantClosers.find((row) => row.group === group);
     if (rows.length === 0) {
       gaps.push(`${db}/${generation}/group-${group}: empty`);
@@ -81,22 +93,34 @@ function walStreamGaps(
     let offset = 0;
     for (const row of rows) {
       if (row.startOffset > offset) {
-        gaps.push(`${db}/${generation}/group-${group}: ${offset}-${row.startOffset}`);
+        gaps.push(
+          `${db}/${generation}/group-${group}: ${offset}-${row.startOffset}`
+        );
         break;
       }
       if (row.endOffset > offset) offset = row.endOffset;
     }
     if (closer && closer.endOffset !== offset) {
-      gaps.push(`${db}/${generation}/group-${group}: closer-${closer.endOffset}-at-${offset}`);
+      gaps.push(
+        `${db}/${generation}/group-${group}: closer-${closer.endOffset}-at-${offset}`
+      );
     }
-    if (index < orderedGroups.length - 1 && (!closer || closer.endOffset !== offset)) {
-      gaps.push(`${db}/${generation}/group-${group}: next-group-without-complete-closer`);
+    if (
+      index < orderedGroups.length - 1 &&
+      (!closer || closer.endOffset !== offset)
+    ) {
+      gaps.push(
+        `${db}/${generation}/group-${group}: next-group-without-complete-closer`
+      );
     }
   }
   return gaps;
 }
 
-export function walInventoryGaps(keys: Iterable<string>, generations: Set<string>): string[] {
+export function walInventoryGaps(
+  keys: Iterable<string>,
+  generations: Set<string>
+): string[] {
   const segments: WalSegmentAddress[] = [];
   const closers: WalGroupCloser[] = [];
   for (const key of keys) {
@@ -108,8 +132,8 @@ export function walInventoryGaps(keys: Iterable<string>, generations: Set<string
   const gaps: string[] = [];
   for (const generation of generations) {
     gaps.push(
-      ...walStreamGaps('vault', generation, segments, closers),
-      ...walStreamGaps('journal', generation, segments, closers),
+      ...walStreamGaps("vault", generation, segments, closers),
+      ...walStreamGaps("journal", generation, segments, closers)
     );
   }
   return gaps;
@@ -117,15 +141,17 @@ export function walInventoryGaps(keys: Iterable<string>, generations: Set<string
 
 export function walCoverageFromInventory(
   keys: Iterable<string>,
-  generations: Set<string>,
-): BackupReconciliationState['walCoverage'] {
+  generations: Set<string>
+): BackupReconciliationState["walCoverage"] {
   let earliestTickMs: number | null = null;
   let latestTickMs: number | null = null;
   let segmentCount = 0;
   let markerCount = 0;
   const observe = (tickMs: number): void => {
-    earliestTickMs = earliestTickMs === null ? tickMs : Math.min(earliestTickMs, tickMs);
-    latestTickMs = latestTickMs === null ? tickMs : Math.max(latestTickMs, tickMs);
+    earliestTickMs =
+      earliestTickMs === null ? tickMs : Math.min(earliestTickMs, tickMs);
+    latestTickMs =
+      latestTickMs === null ? tickMs : Math.max(latestTickMs, tickMs);
   };
   for (const key of keys) {
     const segment = parseWalSegmentKey(key);
@@ -157,8 +183,8 @@ export function walCoverageFromInventory(
 }
 
 export function snapshotInventorySummary(
-  rows: readonly SnapshotRow[],
-): BackupReconciliationState['snapshots'] {
+  rows: readonly SnapshotRow[]
+): BackupReconciliationState["snapshots"] {
   return {
     live: rows.filter((row) => row.prunedAt === null).length,
     pruned: rows.filter((row) => row.prunedAt !== null).length,
@@ -187,17 +213,23 @@ async function analyzeBackupInventory(opts: {
 }): Promise<{
   store: StoreReconciliationState;
   walGaps: DriftSummary;
-  walCoverage: BackupReconciliationState['walCoverage'];
+  walCoverage: BackupReconciliationState["walCoverage"];
 }> {
   const liveRows = opts.rows.filter((row) => row.prunedAt === null);
   const liveKeys = new Set(
-    opts.collection.objects.filter((row) => row.state === 'live').map((row) => row.key),
+    opts.collection.objects
+      .filter((row) => row.state === "live")
+      .map((row) => row.key)
   );
   const expected = new Set(liveRows.map((row) => row.manifestKey));
   const generations = new Set<string>();
   const expectedMarkerKeys = new Set<string>();
   const unreadable: string[] = [];
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read"
+  );
   let nextManifest = 0;
   const readManifest = async (): Promise<void> => {
     const row = liveRows[nextManifest++];
@@ -208,39 +240,59 @@ async function analyzeBackupInventory(opts: {
           await store.get(row.manifestKey),
           opts.keyring,
           opts.vaultId,
-          row.manifestHash,
+          row.manifestHash
         );
-        for (const chunk of manifest.public.chunkIndex) expected.add(`chunks/${chunk.id}`);
-        const vault = manifest.entries.find((entry) => entry.path === 'vault.db');
-        const journal = manifest.entries.find((entry) => entry.path === 'journal.db');
+        for (const chunk of manifest.public.chunkIndex)
+          expected.add(`chunks/${chunk.id}`);
+        const vault = manifest.entries.find(
+          (entry) => entry.path === "vault.db"
+        );
+        const journal = manifest.entries.find(
+          (entry) => entry.path === "journal.db"
+        );
         if (vault?.walGeneration) generations.add(vault.walGeneration);
         if (journal?.walGeneration) generations.add(journal.walGeneration);
         const tip = vault?.walTipTickMs ?? journal?.walTipTickMs;
-        if (vault?.walGeneration && journal?.walGeneration && tip !== undefined) {
+        if (
+          vault?.walGeneration &&
+          journal?.walGeneration &&
+          tip !== undefined
+        ) {
           expectedMarkerKeys.add(
             walPairMarkerKey({
               vaultGeneration: vault.walGeneration,
               journalGeneration: journal.walGeneration,
               tickMs: tip,
-            }),
+            })
           );
         }
       } catch (err) {
-        unreadable.push(`${row.manifestKey}: ${err instanceof Error ? err.message : String(err)}`);
+        unreadable.push(
+          `${row.manifestKey}: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
     return readManifest();
   };
-  await Promise.all(Array.from({ length: Math.min(8, liveRows.length) }, readManifest));
+  await Promise.all(
+    Array.from({ length: Math.min(8, liveRows.length) }, readManifest)
+  );
   for (const [pair, tickMs] of Object.entries(opts.walMarkerTips ?? {})) {
-    const [vaultGeneration, journalGeneration] = [pair.slice(0, 32), pair.slice(33)];
+    const [vaultGeneration, journalGeneration] = [
+      pair.slice(0, 32),
+      pair.slice(33),
+    ];
     if (!vaultGeneration || !journalGeneration) continue;
-    expectedMarkerKeys.add(walPairMarkerKey({ vaultGeneration, journalGeneration, tickMs }));
+    expectedMarkerKeys.add(
+      walPairMarkerKey({ vaultGeneration, journalGeneration, tickMs })
+    );
     generations.add(vaultGeneration);
     generations.add(journalGeneration);
   }
   const missing = [...expected].filter((key) => !liveKeys.has(key));
-  const markerMissing = [...expectedMarkerKeys].filter((key) => !liveKeys.has(key));
+  const markerMissing = [...expectedMarkerKeys].filter(
+    (key) => !liveKeys.has(key)
+  );
   const orphans: string[] = [];
   for (const key of liveKeys) {
     if (expected.has(key)) continue;
@@ -275,8 +327,8 @@ function statusFor(
   backup: StoreReconciliationState,
   cas: StoreReconciliationState,
   walGaps: DriftSummary,
-  audit: CollectedAudit,
-): BackupReconciliationState['status'] {
+  audit: CollectedAudit
+): BackupReconciliationState["status"] {
   const critical =
     !!backup.error ||
     (cas.configured && !!cas.error) ||
@@ -287,7 +339,7 @@ function statusFor(
     (cas.attestationDrift?.providerOnly.count ?? 0) > 0 ||
     (backup.attestationDrift?.metadataMismatch.count ?? 0) > 0 ||
     (cas.attestationDrift?.metadataMismatch.count ?? 0) > 0;
-  if (critical) return 'error';
+  if (critical) return "error";
   const warning =
     backup.orphans.count > 0 ||
     cas.orphans.count > 0 ||
@@ -296,7 +348,7 @@ function statusFor(
     !!audit.error ||
     (backup.attestationDrift?.bucketOnly.count ?? 0) > 0 ||
     (cas.attestationDrift?.bucketOnly.count ?? 0) > 0;
-  return warning ? 'degraded' : 'ok';
+  return warning ? "degraded" : "ok";
 }
 
 export async function runBackupReconciliation(opts: {
@@ -319,23 +371,27 @@ export async function runBackupReconciliation(opts: {
     targetId: opts.targetId,
     vaultId: opts.vaultId,
     keyring: opts.keyring,
-    ...(opts.manifestBlobCache ? { manifestBlobCache: opts.manifestBlobCache } : {}),
+    ...(opts.manifestBlobCache
+      ? { manifestBlobCache: opts.manifestBlobCache }
+      : {}),
   });
   const [backupResult, casResult, audit] = await Promise.all([
     collectInventory({
       provider: opts.provider,
       targetId: opts.targetId,
-      store: 'backup',
+      store: "backup",
       verifyBucket,
     }).then(
       (collection) => ({ collection }),
       (err: unknown) => ({
         error: err instanceof Error ? err.message : String(err),
-      }),
+      })
     ),
     collectCasInventory({
       db: opts.db,
-      ...(opts.storageConnections ? { storageConnections: opts.storageConnections } : {}),
+      ...(opts.storageConnections
+        ? { storageConnections: opts.storageConnections }
+        : {}),
       verifyBucket,
     }),
     collectAudit(opts.provider, opts.targetId),
@@ -349,13 +405,15 @@ export async function runBackupReconciliation(opts: {
     const index = new ReplicaIndex(opts.db.vault);
     // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2) so the cas
     // listing never disproves derived evidence.
-    const rows = index.rows().filter((row) => row.store === 'cas');
+    const rows = index.rows().filter((row) => row.store === "cas");
     cas = reconcileCasInventory({
       collection: casResult.collection,
       live,
       indexed: new Set(rows.map((row) => row.sha256)),
       recentlyIndexed: new Set(
-        rows.filter((row) => row.replicatedAt >= opts.checkedAt).map((row) => row.sha256),
+        rows
+          .filter((row) => row.replicatedAt >= opts.checkedAt)
+          .map((row) => row.sha256)
       ),
       unmark: (sha) => index.unmark(sha),
       snapshotReferenced,
@@ -372,7 +430,9 @@ export async function runBackupReconciliation(opts: {
     await reconcileDerivedInto({
       cas,
       db: opts.db,
-      ...(opts.storageConnections ? { storageConnections: opts.storageConnections } : {}),
+      ...(opts.storageConnections
+        ? { storageConnections: opts.storageConnections }
+        : {}),
       verifyBucket,
       live,
       checkedAt: opts.checkedAt,
@@ -382,16 +442,16 @@ export async function runBackupReconciliation(opts: {
   const rows = await opts.provider.listSnapshots(opts.targetId, {
     includePruned: true,
   });
-  let backup = unavailableStore(true, 'backup inventory unavailable');
+  let backup = unavailableStore(true, "backup inventory unavailable");
   let walGaps = drift([]);
-  let walCoverage: BackupReconciliationState['walCoverage'] = {
+  let walCoverage: BackupReconciliationState["walCoverage"] = {
     earliestTickMs: null,
     latestTickMs: null,
     spanDays: null,
     segmentCount: 0,
     markerCount: 0,
   };
-  if ('collection' in backupResult && backupResult.collection) {
+  if ("collection" in backupResult && backupResult.collection) {
     const analyzed = await analyzeBackupInventory({
       provider: opts.provider,
       targetId: opts.targetId,
@@ -404,12 +464,12 @@ export async function runBackupReconciliation(opts: {
     backup = analyzed.store;
     walGaps = analyzed.walGaps;
     walCoverage = analyzed.walCoverage;
-  } else if ('error' in backupResult) {
+  } else if ("error" in backupResult) {
     backup = unavailableStore(true, backupResult.error);
   }
   const state: BackupReconciliationState = {
     checkedAt: opts.checkedAt,
-    mode: verifyBucket ? 'bucket' : 'scheduled',
+    mode: verifyBucket ? "bucket" : "scheduled",
     status: statusFor(backup, cas, walGaps, audit),
     backup,
     cas,

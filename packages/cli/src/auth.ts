@@ -14,7 +14,11 @@ export interface AuthOptions {
  * per-device token minted by pairing.
  */
 export function resolveToken(opts: AuthOptions): string | undefined {
-  if (opts.token && opts.token.trim() !== '') return opts.token.trim();
+  if (opts.token && opts.token.trim() !== "") return opts.token.trim();
   const env = opts.env ?? process.env;
-  return env.CENTRAID_TOKEN?.trim() || env.CENTRAID_GATEWAY_TOKEN?.trim() || undefined;
+  return (
+    env.CENTRAID_TOKEN?.trim() ||
+    env.CENTRAID_GATEWAY_TOKEN?.trim() ||
+    undefined
+  );
 }

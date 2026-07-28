@@ -12,7 +12,7 @@
  * yields, so titling never steals a slot from an interactive turn.
  */
 
-import type { ServerResponse } from 'node:http';
+import type { ServerResponse } from "node:http";
 
 /** Concurrent running turns a single vault accepts. Personal gateway, a handful
  * of devices — not a public API. */
@@ -59,15 +59,15 @@ export class TurnLimiter {
  * transport reads to schedule its bounded auto-retry.
  */
 export function writeTurnBusy(res: ServerResponse): void {
-  res.setHeader('Retry-After', String(TURN_RETRY_AFTER_SECONDS));
+  res.setHeader("Retry-After", String(TURN_RETRY_AFTER_SECONDS));
   const body = JSON.stringify({
-    error: 'turn_busy',
+    error: "turn_busy",
     message: `This vault is running too many turns at once — retrying shortly.`,
     retryAfterSeconds: TURN_RETRY_AFTER_SECONDS,
   });
   res.writeHead(429, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(body).toString(),
+    "content-type": "application/json",
+    "content-length": Buffer.byteLength(body).toString(),
   });
   res.end(body);
 }

@@ -12,17 +12,22 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from 'react';
+} from "react";
 
-import type { InlineAppProps } from '../inline-types.ts';
-import { Chrome } from './Chrome.tsx';
-import { LockerDetail } from './components/Detail.tsx';
-import { EditModal } from './components/EditModal.tsx';
-import { Generator } from './components/Generator.tsx';
-import { LockerList } from './components/List.tsx';
-import { LockScreen } from './components/LockScreen.tsx';
-import { LockerSidebar } from './components/Sidebar.tsx';
-import { observeWidth, onDataChange, onFocusRefresh, readFailed } from './kit.ts';
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome } from "./Chrome.tsx";
+import { LockerDetail } from "./components/Detail.tsx";
+import { EditModal } from "./components/EditModal.tsx";
+import { Generator } from "./components/Generator.tsx";
+import { LockerList } from "./components/List.tsx";
+import { LockScreen } from "./components/LockScreen.tsx";
+import { LockerSidebar } from "./components/Sidebar.tsx";
+import {
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+} from "./kit.ts";
 import {
   copy,
   createLogic,
@@ -31,46 +36,56 @@ import {
   listTitle,
   sidebarCounts,
   sidebarTags,
-} from './logic.ts';
-import type { AppData, AppState, LockerDetail as DetailItem, LockerRow } from './types.ts';
+} from "./logic.ts";
+import type {
+  AppData,
+  AppState,
+  LockerDetail as DetailItem,
+  LockerRow,
+} from "./types.ts";
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
 // when a change names one of these (or names none, i.e. "this app acted").
-export const CHANGE_TABLES = ['locker.item', 'core.tag', 'core.concept', 'core.concept_scheme'];
+export const CHANGE_TABLES = [
+  "locker.item",
+  "core.tag",
+  "core.concept",
+  "core.concept_scheme",
+];
 
 // The detail pane already holds the full (secret-bearing) item — reuse it so
 // edit never re-fetches. Map only the action-key fields into the form. Verbatim
 // from app.tsx.
 const EDIT_FIELD_KEYS = [
-  'username',
-  'password',
-  'url',
-  'otp_seed',
-  'notes',
-  'cardholder',
-  'card_number',
-  'expiry',
-  'cvv',
-  'brand',
-  'content',
-  'fullname',
-  'email',
-  'phone',
-  'address',
-  'network',
+  "username",
+  "password",
+  "url",
+  "otp_seed",
+  "notes",
+  "cardholder",
+  "card_number",
+  "expiry",
+  "cvv",
+  "brand",
+  "content",
+  "fullname",
+  "email",
+  "phone",
+  "address",
+  "network",
 ] as const;
 type EditKey = (typeof EDIT_FIELD_KEYS)[number];
 
 function makeState(): AppState {
   return {
-    nav: { kind: 'all' },
+    nav: { kind: "all" },
     selectedId: null,
     detail: null,
     detailLoading: false,
     reveal: {},
-    search: '',
+    search: "",
     searchResults: null,
-    dark: document.documentElement.dataset.theme === 'dark',
+    dark: document.documentElement.dataset.theme === "dark",
     narrow: false,
     sideOpen: false,
     showList: true,
@@ -79,7 +94,7 @@ function makeState(): AppState {
     genLen: 20,
     genNum: true,
     genSym: true,
-    genValue: '',
+    genValue: "",
     genApply: null,
     edit: null,
     trashRows: [],
@@ -121,24 +136,24 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     let next: ItemsPayload;
     try {
       next = await window.centraid.read<ItemsPayload>({
-        query: 'items',
+        query: "items",
         input: { limit: 300 },
       });
     } catch {
-      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
       return;
     }
     if (state.readFailedShown) {
       state.readFailedShown = false;
-      logic.notice('');
+      logic.notice("");
     }
     if (next?.vaultDenied) {
       logic.applyDenied(next.vaultDenied);
       return;
     }
     state.denied = false;
-    const consent = document.querySelector('#consentBanner');
+    const consent = document.querySelector("#consentBanner");
     if (consent) (consent as HTMLElement).hidden = true;
 
     data.items = next?.items ?? [];
@@ -156,8 +171,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       };
     }
     await window.centraid
-      .read<{ items?: AppData['items']; vaultDenied?: unknown }>({
-        query: 'trash',
+      .read<{ items?: AppData["items"]; vaultDenied?: unknown }>({
+        query: "trash",
       })
       .then((r) => {
         if (r && !r.vaultDenied) state.trashRows = r.items ?? [];
@@ -191,20 +206,20 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       rootElRef.current = el;
       rootRef(el);
     },
-    [rootRef],
+    [rootRef]
   );
 
   // ---- Edit / new / lock plumbing (verbatim from app.tsx, render → bump) ----
   const openNew = useCallback(() => {
     const state = stateRef.current;
     state.edit = {
-      mode: 'new',
-      type: 'login',
-      title: '',
+      mode: "new",
+      type: "login",
+      title: "",
       fields: {},
-      tags: '',
-      alias: '',
-      urlMatchPolicy: 'registrable-domain',
+      tags: "",
+      alias: "",
+      urlMatchPolicy: "registrable-domain",
     };
     state.sideOpen = false;
     bump();
@@ -217,14 +232,17 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       if (v != null) fields[k] = v;
     }
     stateRef.current.edit = {
-      mode: 'edit',
+      mode: "edit",
       id: sel.item_id,
       type: sel.type,
       title: sel.title,
       fields,
-      tags: (sel.tags || []).join(', '),
-      alias: sel.alias || '',
-      urlMatchPolicy: sel.url_match_policy === 'exact-host' ? 'exact-host' : 'registrable-domain',
+      tags: (sel.tags || []).join(", "),
+      alias: sel.alias || "",
+      urlMatchPolicy:
+        sel.url_match_policy === "exact-host"
+          ? "exact-host"
+          : "registrable-domain",
     };
     bump();
   }, []);
@@ -239,12 +257,12 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       const outcome = await logicRef.current!.saveItem(payload);
       // Only close on an executed write — parked/failed/denied leave the modal
       // open (the notice banner explains why), same as app.tsx's submitEdit.
-      if (outcome?.status === 'executed') {
+      if (outcome?.status === "executed") {
         stateRef.current.edit = null;
         bump();
       }
     },
-    [logic],
+    [logic]
   );
 
   // Seed the narrow layout BEFORE the first paint. The served app sets
@@ -279,7 +297,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     const stopDoorbell = onDataChange(CHANGE_TABLES, refresh);
     const stopFocus = onFocusRefresh(refresh);
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       const state = stateRef.current;
       if (state.edit) {
         closeEdit();
@@ -294,7 +312,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         bump();
       }
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
     const el = rootElRef.current;
     // Component-width driven responsive via a ResizeObserver (matches app.tsx).
     const stopWidth = el
@@ -307,7 +325,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       : () => {};
     void refresh();
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener("keydown", onKey);
       stopDoorbell();
       stopFocus();
       stopWidth();
@@ -328,8 +346,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     <div
       ref={setRoot}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
         minWidth: 0,
         minHeight: 0,
@@ -385,11 +403,11 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         detail={
           <LockerDetail
             mode={
-              state.nav.kind === 'watch'
-                ? 'watch'
+              state.nav.kind === "watch"
+                ? "watch"
                 : state.selectedId && (state.detail || state.detailLoading)
-                  ? 'item'
-                  : 'empty'
+                  ? "item"
+                  : "empty"
             }
             watch={state.watch}
             detail={state.detail}
@@ -442,7 +460,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
                 onUse={() => {
                   // If a password field is waiting for it, drop the value there; always copy.
                   state.genApply?.(state.genValue);
-                  copy(state.genValue, 'Password', true);
+                  copy(state.genValue, "Password", true);
                   logic.closeGen();
                 }}
               />

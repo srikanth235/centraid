@@ -1,7 +1,11 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { atlasTables, type AtlasPackKind, type AtlasTableEntry } from './atlas.js';
-import { resolveEntity } from './tables.js';
+import {
+  atlasTables,
+  type AtlasPackKind,
+  type AtlasTableEntry,
+} from "./atlas.js";
+import { resolveEntity } from "./tables.js";
 
 export function countRows(db: DatabaseSync, physical: string): number {
   try {
@@ -19,7 +23,7 @@ export function countRows(db: DatabaseSync, physical: string): number {
 // ---------------------------------------------------------------------------
 
 /** The kind at the centre of the orrery — the data says so (46/122 → core_party). */
-export const ATLAS_GRAPH_CENTER = 'core_party';
+export const ATLAS_GRAPH_CENTER = "core_party";
 
 export interface AtlasFkEdge {
   /** Child (referencing) table. */
@@ -109,7 +113,9 @@ interface TableInfoRow {
 }
 
 function notNullColumns(vault: DatabaseSync, physical: string): Set<string> {
-  const cols = vault.prepare(`PRAGMA table_info("${physical}")`).all() as unknown as TableInfoRow[];
+  const cols = vault
+    .prepare(`PRAGMA table_info("${physical}")`)
+    .all() as unknown as TableInfoRow[];
   return new Set(cols.filter((c) => c.notnull === 1).map((c) => c.name));
 }
 
@@ -123,8 +129,10 @@ function notNullColumns(vault: DatabaseSync, physical: string): Set<string> {
 export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
   // Vault-file tables only — the FK graph is one file (journal FKs are
   // cross-file and gateway-enforced, invisible to PRAGMA anyway).
-  const vaultEntries = atlasTables().filter((e) => e.file === 'vault');
-  const byPhysical = new Map<string, AtlasTableEntry>(vaultEntries.map((e) => [e.physical, e]));
+  const vaultEntries = atlasTables().filter((e) => e.file === "vault");
+  const byPhysical = new Map<string, AtlasTableEntry>(
+    vaultEntries.map((e) => [e.physical, e])
+  );
 
   const fkEdges: AtlasFkEdge[] = [];
   const selfRefTables = new Set<string>();
@@ -159,7 +167,7 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
         : (
             vault
               .prepare(
-                `SELECT COUNT(*) AS n FROM "${entry.physical}" WHERE "${fk.from}" IS NOT NULL`,
+                `SELECT COUNT(*) AS n FROM "${entry.physical}" WHERE "${fk.from}" IS NOT NULL`
               )
               .get() as { n: number }
           ).n;
@@ -221,7 +229,9 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
     hopDistance: hop.has(entry.physical) ? hop.get(entry.physical)! : null,
     selfRef: selfRefTables.has(entry.physical),
   }));
-  const island = nodes.filter((n) => n.hopDistance === null).map((n) => n.physical);
+  const island = nodes
+    .filter((n) => n.hopDistance === null)
+    .map((n) => n.physical);
 
   // Authored links (core_link) — SEPARATE from FK edges. Live links only
   // (valid_to IS NULL); a temporal end-date retires a relation. Concept
@@ -238,12 +248,14 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
            LEFT JOIN core_concept c ON c.concept_id = l.relation_concept_id
           WHERE l.valid_to IS NULL
           GROUP BY l.relation_concept_id, l.from_type, l.to_type
-          ORDER BY count DESC`,
+          ORDER BY count DESC`
       )
       .all() as unknown as AtlasAuthoredLink[]
   ).map((r) => ({ ...r, relationLabel: r.relationLabel ?? null }));
 
-  const centerEdgeCount = fkEdges.filter((e) => e.toTable === ATLAS_GRAPH_CENTER).length;
+  const centerEdgeCount = fkEdges.filter(
+    (e) => e.toTable === ATLAS_GRAPH_CENTER
+  ).length;
   return {
     generatedAt: new Date().toISOString(),
     center: ATLAS_GRAPH_CENTER,
@@ -307,7 +319,7 @@ interface PulseRow {
  */
 export function atlasPulse(
   journal: DatabaseSync,
-  options: { windowDays?: number; now?: Date } = {},
+  options: { windowDays?: number; now?: Date } = {}
 ): AtlasPulsePayload {
   const windowDays = options.windowDays ?? ATLAS_PULSE_WINDOW_DAYS;
   const now = options.now ?? new Date();
@@ -322,7 +334,7 @@ export function atlasPulse(
          FROM consent_provenance
         WHERE occurred_at >= ?
         GROUP BY entity_type, day
-        ORDER BY entity_type, day`,
+        ORDER BY entity_type, day`
     )
     .all(cutoff.toISOString()) as unknown as PulseRow[];
 

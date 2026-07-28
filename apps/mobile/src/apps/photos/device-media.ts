@@ -12,11 +12,11 @@
 // "this photo did not back up" into "this photo is still in iCloud", which is
 // the sentence the user can act on.
 
-import * as MediaLibrary from 'expo-media-library';
-import { Platform } from 'react-native';
+import * as MediaLibrary from "expo-media-library";
+import { Platform } from "react-native";
 
 /** One phrasing, shared by every flow that meets an undownloaded original. */
-export const IN_CLOUD_MESSAGE = 'in iCloud — not downloaded on this device';
+export const IN_CLOUD_MESSAGE = "in iCloud — not downloaded on this device";
 
 /**
  * Raised instead of quietly skipping an asset whose bytes never came down.
@@ -29,7 +29,7 @@ export class InCloudOriginalError extends Error {
 
   constructor(localId: string, reason: unknown) {
     super(`This original is ${IN_CLOUD_MESSAGE}.`);
-    this.name = 'InCloudOriginalError';
+    this.name = "InCloudOriginalError";
     this.localId = localId;
     this.reason = reason;
   }
@@ -48,7 +48,9 @@ export interface DeviceOriginal {
  *
  * @throws {InCloudOriginalError} when the original is still only in iCloud.
  */
-export async function openDeviceOriginal(localId: string): Promise<DeviceOriginal> {
+export async function openDeviceOriginal(
+  localId: string
+): Promise<DeviceOriginal> {
   const asset = new MediaLibrary.Asset(localId);
   const inCloud = await isInCloud(asset);
   try {
@@ -60,10 +62,12 @@ export async function openDeviceOriginal(localId: string): Promise<DeviceOrigina
 }
 
 /** The extracted companion MOV of a Live Photo, or `null` when there is none. */
-export async function liveVideoUri(asset: MediaLibrary.Asset): Promise<string | null> {
+export async function liveVideoUri(
+  asset: MediaLibrary.Asset
+): Promise<string | null> {
   // Live Photos are an iOS concept and the getter throws an UnavailabilityError
   // anywhere else, so Android answers with "no companion".
-  return Platform.OS === 'ios' ? await asset.getLivePhotoVideoUri() : null;
+  return Platform.OS === "ios" ? await asset.getLivePhotoVideoUri() : null;
 }
 
 /**
@@ -73,9 +77,14 @@ export async function liveVideoUri(asset: MediaLibrary.Asset): Promise<string | 
  * time stands in before the epoch does.
  */
 export function capturedAtIso(
-  metadata: Pick<MediaLibrary.AssetMetadata, 'creationTime' | 'modificationTime'>,
+  metadata: Pick<
+    MediaLibrary.AssetMetadata,
+    "creationTime" | "modificationTime"
+  >
 ): string {
-  return new Date(metadata.creationTime ?? metadata.modificationTime ?? 0).toISOString();
+  return new Date(
+    metadata.creationTime ?? metadata.modificationTime ?? 0
+  ).toISOString();
 }
 
 /**
@@ -88,5 +97,5 @@ export function durationSeconds(durationMs: number | null): number | undefined {
 
 /** iCloud Photo Library is iOS-only; `getIsInCloud()` throws anywhere else. */
 async function isInCloud(asset: MediaLibrary.Asset): Promise<boolean> {
-  return Platform.OS === 'ios' ? await asset.getIsInCloud() : false;
+  return Platform.OS === "ios" ? await asset.getIsInCloud() : false;
 }

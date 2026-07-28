@@ -11,16 +11,16 @@
  * concrete model-id literal ever appears in a scanned `.ts` file.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
-import { matchEntry } from './match.js';
-import type { PricingCatalog, PricingEntry } from './types.js';
+import { matchEntry } from "./match.js";
+import type { PricingCatalog, PricingEntry } from "./types.js";
 
 function loadSnapshot(): PricingCatalog {
   try {
     const here = import.meta.dirname;
-    const raw = readFileSync(path.join(here, 'litellm-snapshot.json'), 'utf8');
+    const raw = readFileSync(path.join(here, "litellm-snapshot.json"), "utf8");
     const parsed = JSON.parse(raw) as { models?: PricingCatalog };
     return parsed.models ?? {};
   } catch {
@@ -41,7 +41,9 @@ export function setPricingCatalog(entries: PricingCatalog): void {
 }
 
 /** Resolve a model id against the active table, or `undefined` when unknown. */
-export function lookupEntry(model: string | undefined): PricingEntry | undefined {
+export function lookupEntry(
+  model: string | undefined
+): PricingEntry | undefined {
   if (!model) return undefined;
   return matchEntry(catalog, model);
 }

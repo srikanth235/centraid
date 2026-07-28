@@ -1,4 +1,4 @@
-import { createHash, type Hash } from 'node:crypto';
+import { createHash, type Hash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#418) the ingress/direct/stream/outbox coordinator is one lifecycle boundary; splitting only its close fence would separate shutdown ordering from the runner it owns
 import {
   closeSync,
@@ -9,48 +9,55 @@ import {
   rmSync,
   truncateSync,
   writeSync,
-} from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
+} from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 
-import type { BackupPolicy } from '../backup-policy.js';
+import type { BackupPolicy } from "../backup-policy.js";
 import {
   asVaultDiskFullError,
   VaultBlobBackpressureError,
   VaultBlobHashMismatchError,
   VaultBlobSessionError,
-} from '../errors.js';
-import { uuidv7 } from '../ids.js';
-import type { BlobCache } from './cache.js';
-import { BlobContentKeyRegistry } from './content-keys.js';
-import type { CustodyState, RemoteTier } from './custody-types.js';
+} from "../errors.js";
+import { uuidv7 } from "../ids.js";
+import type { BlobCache } from "./cache.js";
+import { BlobContentKeyRegistry } from "./content-keys.js";
+import type { CustodyState, RemoteTier } from "./custody-types.js";
 import {
   DirectBlobTransfers,
   type DirectBlobDownloadResult,
   type DirectBlobInitInput,
   type DirectBlobInitResult,
-} from './direct-transfers.js';
-import { enqueueExistingLocalBlobs } from './existing-local.js';
-import { adoptAndStageFallbackIngress, stageCompletedIngress } from './fallback-finalize.js';
-import { assertSpoolAdmission, requireRemote } from './ingress-admission.js';
-import type { LocalBlobStore } from './local.js';
-import { streamThroughOnce } from './one-shot-stream.js';
-import { BlobOutboxRunner } from './outbox-runner.js';
-import { preflightBlob, type BlobPreflightHint, type BlobPreflightResult } from './preflight.js';
-import type { IngressPreviewInput } from './preview.js';
-import { auditRemoteBlob } from './remote-audit.js';
-import type { MultipartPart } from './remote-transfer.js';
-import { recordKnownStagedBlob } from './staging-record.js';
-import type { StagedBlob } from './staging.js';
-import { assertSha } from './store.js';
+} from "./direct-transfers.js";
+import { enqueueExistingLocalBlobs } from "./existing-local.js";
+import {
+  adoptAndStageFallbackIngress,
+  stageCompletedIngress,
+} from "./fallback-finalize.js";
+import { assertSpoolAdmission, requireRemote } from "./ingress-admission.js";
+import type { LocalBlobStore } from "./local.js";
+import { streamThroughOnce } from "./one-shot-stream.js";
+import { BlobOutboxRunner } from "./outbox-runner.js";
+import {
+  preflightBlob,
+  type BlobPreflightHint,
+  type BlobPreflightResult,
+} from "./preflight.js";
+import type { IngressPreviewInput } from "./preview.js";
+import { auditRemoteBlob } from "./remote-audit.js";
+import type { MultipartPart } from "./remote-transfer.js";
+import { recordKnownStagedBlob } from "./staging-record.js";
+import type { StagedBlob } from "./staging.js";
+import { assertSha } from "./store.js";
 import {
   RemoteStreamIngress,
   STREAM_INGRESS_CHUNK_BYTES,
   type StreamIngressStart,
-} from './stream-ingress.js';
-import { BlobTransferState, type IngressSessionRow } from './transfer-state.js';
-import { streamThroughUnknownHash } from './unknown-hash-stream.js';
+} from "./stream-ingress.js";
+import { BlobTransferState, type IngressSessionRow } from "./transfer-state.js";
+import { streamThroughUnknownHash } from "./unknown-hash-stream.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 export const INGRESS_FSYNC_BATCH_BYTES = 4 * 1024 * 1024;
@@ -73,7 +80,7 @@ export interface BeginBlobIngressInput {
 
 export type BeginBlobIngressResult =
   | {
-      mode: 'spool';
+      mode: "spool";
       sessionId: string;
       offset: number;
       expiresAt: string;
@@ -81,15 +88,15 @@ export type BeginBlobIngressResult =
     }
   | StreamIngressStart
   | {
-      mode: 'one-shot-stream-through';
+      mode: "one-shot-stream-through";
       expectedSha256: string;
       expectedSize: number;
     }
-  | { mode: 'one-shot-hash-pending'; expectedSize: number }
-  | { mode: 'existing'; staged: StagedBlob; custody: CustodyState };
+  | { mode: "one-shot-hash-pending"; expectedSize: number }
+  | { mode: "existing"; staged: StagedBlob; custody: CustodyState };
 
 export interface CommittedBlob extends StagedBlob {
-  casAck: 'receipt' | 'replicated';
+  casAck: "receipt" | "replicated";
   custody: CustodyState;
 }
 
@@ -151,7 +158,9 @@ export class BlobTransferCoordinator {
       ...(options.shouldDeferBackgroundWork
         ? { shouldDeferBackgroundWork: options.shouldDeferBackgroundWork }
         : {}),
-      ...(options.drainIntervalMs ? { intervalMs: options.drainIntervalMs } : {}),
+      ...(options.drainIntervalMs
+        ? { intervalMs: options.drainIntervalMs }
+        : {}),
     });
     this.stream = new RemoteStreamIngress({
       vault: options.vault,
@@ -161,8 +170,12 @@ export class BlobTransferCoordinator {
       policy: options.policy,
       contentKeys: options.contentKeys,
       dir: options.dir,
-      ...(options.streamChunkBytes ? { chunkBytes: options.streamChunkBytes } : {}),
-      ...(options.contributePreview ? { contributePreview: options.contributePreview } : {}),
+      ...(options.streamChunkBytes
+        ? { chunkBytes: options.streamChunkBytes }
+        : {}),
+      ...(options.contributePreview
+        ? { contributePreview: options.contributePreview }
+        : {}),
       emit: () => this.emit(),
     });
   }
@@ -176,7 +189,11 @@ export class BlobTransferCoordinator {
 
   /** Seed durable obligations before an fs-only vault enables remote-primary. */
   enqueueExistingLocal(): number {
-    const count = enqueueExistingLocalBlobs(this.options.vault, this.options.local, this.state);
+    const count = enqueueExistingLocalBlobs(
+      this.options.vault,
+      this.options.local,
+      this.state
+    );
     if (count > 0) this.emit();
     return count;
   }
@@ -201,7 +218,10 @@ export class BlobTransferCoordinator {
     for (const listener of this.listeners) listener(snapshot);
   }
 
-  async preflight(sha256: string, hint: BlobPreflightHint = {}): Promise<BlobPreflightResult> {
+  async preflight(
+    sha256: string,
+    hint: BlobPreflightHint = {}
+  ): Promise<BlobPreflightResult> {
     return preflightBlob(
       {
         vault: this.options.vault,
@@ -219,12 +239,15 @@ export class BlobTransferCoordinator {
         },
       },
       sha256,
-      hint,
+      hint
     );
   }
 
   /** Authenticated, range-bounded CAS audit: header, directory, first frame. */
-  async auditRemoteReplica(sha256: string, knownSealedSize?: number): Promise<void> {
+  async auditRemoteReplica(
+    sha256: string,
+    knownSealedSize?: number
+  ): Promise<void> {
     await auditRemoteBlob({
       vault: this.options.vault,
       local: this.options.local,
@@ -234,7 +257,10 @@ export class BlobTransferCoordinator {
     });
   }
 
-  private availableForSpool(incoming: number, expectedShaSupplied: boolean): void {
+  private availableForSpool(
+    incoming: number,
+    expectedShaSupplied: boolean
+  ): void {
     assertSpoolAdmission(
       {
         cache: this.options.cache,
@@ -243,23 +269,28 @@ export class BlobTransferCoordinator {
         remoteConfigured: this.options.remoteConfigured,
       },
       incoming,
-      expectedShaSupplied,
+      expectedShaSupplied
     );
   }
 
-  async beginIngress(input: BeginBlobIngressInput): Promise<BeginBlobIngressResult> {
+  async beginIngress(
+    input: BeginBlobIngressInput
+  ): Promise<BeginBlobIngressResult> {
     if (input.expectedSha256) assertSha(input.expectedSha256);
     if (
       input.expectedSize !== undefined &&
       (!Number.isSafeInteger(input.expectedSize) || input.expectedSize < 0)
     ) {
-      throw new Error('expectedSize must be a non-negative safe integer');
+      throw new Error("expectedSize must be a non-negative safe integer");
     }
     if (input.expectedSha256) {
       const existing = await this.preflight(input.expectedSha256);
-      if (existing.custody === 'replicated' || existing.custody === 'remote-only') {
+      if (
+        existing.custody === "replicated" ||
+        existing.custody === "remote-only"
+      ) {
         return {
-          mode: 'existing',
+          mode: "existing",
           custody: existing.custody,
           staged: recordKnownStagedBlob(this.options.vault, {
             sha256: input.expectedSha256,
@@ -271,16 +302,21 @@ export class BlobTransferCoordinator {
         };
       }
     }
-    if (input.resumable && input.expectedSha256 && input.expectedSize !== undefined) {
+    if (
+      input.resumable &&
+      input.expectedSha256 &&
+      input.expectedSize !== undefined
+    ) {
       const resumed = this.state.openIngressSession({
         sha256: input.expectedSha256,
         expectedSize: input.expectedSize,
         ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
       });
       if (resumed) {
-        if (resumed.kind === 'stream-through') return this.stream.resume(resumed);
+        if (resumed.kind === "stream-through")
+          return this.stream.resume(resumed);
         return {
-          mode: 'spool',
+          mode: "spool",
           sessionId: resumed.session_id,
           offset: resumed.received_bytes,
           expiresAt: resumed.expires_at,
@@ -290,10 +326,17 @@ export class BlobTransferCoordinator {
     }
     if (input.expectedSize !== undefined) {
       try {
-        this.availableForSpool(input.expectedSize, input.expectedSha256 !== undefined);
+        this.availableForSpool(
+          input.expectedSize,
+          input.expectedSha256 !== undefined
+        );
       } catch (error) {
         if (error instanceof VaultBlobBackpressureError) {
-          const remote = await requireRemote(this.options.remote(), error, input.expectedSha256);
+          const remote = await requireRemote(
+            this.options.remote(),
+            error,
+            input.expectedSha256
+          );
           if (input.expectedSha256 && input.resumable) {
             return this.stream.begin({
               sha256: input.expectedSha256,
@@ -305,14 +348,18 @@ export class BlobTransferCoordinator {
           }
           if (input.expectedSha256) {
             return {
-              mode: 'one-shot-stream-through',
+              mode: "one-shot-stream-through",
               expectedSha256: input.expectedSha256,
               expectedSize: input.expectedSize,
             };
           }
-          if (!input.resumable && remote.transfer.getTemporary && remote.keyFor) {
+          if (
+            !input.resumable &&
+            remote.transfer.getTemporary &&
+            remote.keyFor
+          ) {
             return {
-              mode: 'one-shot-hash-pending',
+              mode: "one-shot-hash-pending",
               expectedSize: input.expectedSize,
             };
           }
@@ -323,25 +370,27 @@ export class BlobTransferCoordinator {
     const sessionId = uuidv7();
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
     const root =
-      this.options.dir === ':memory:'
-        ? path.join(os.tmpdir(), 'centraid-blob-ingress')
-        : path.join(this.options.dir, 'blob-ingress');
+      this.options.dir === ":memory:"
+        ? path.join(os.tmpdir(), "centraid-blob-ingress")
+        : path.join(this.options.dir, "blob-ingress");
     mkdirSync(root, { recursive: true });
     const tempPath = path.join(root, `${sessionId}.part`);
-    closeSync(openSync(tempPath, 'wx', 0o600));
+    closeSync(openSync(tempPath, "wx", 0o600));
     this.state.createSession({
       sessionId,
-      kind: 'fallback',
+      kind: "fallback",
       tempPath,
       expiresAt,
       ...(input.expectedSha256 ? { expectedSha256: input.expectedSha256 } : {}),
-      ...(input.expectedSize === undefined ? {} : { expectedSize: input.expectedSize }),
+      ...(input.expectedSize === undefined
+        ? {}
+        : { expectedSize: input.expectedSize }),
       ...(input.mediaType ? { mediaType: input.mediaType } : {}),
       ...(input.filename ? { filename: input.filename } : {}),
       ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
     });
     return {
-      mode: 'spool',
+      mode: "spool",
       sessionId,
       offset: 0,
       expiresAt,
@@ -352,9 +401,9 @@ export class BlobTransferCoordinator {
   async appendIngress(
     sessionId: string,
     offset: number,
-    bytes: Buffer,
+    bytes: Buffer
   ): Promise<{ offset: number }> {
-    if (this.state.session(sessionId)?.kind === 'stream-through') {
+    if (this.state.session(sessionId)?.kind === "stream-through") {
       return this.stream.append(sessionId, offset, bytes);
     }
     const row = this.requireOpenFallback(sessionId);
@@ -363,11 +412,17 @@ export class BlobTransferCoordinator {
     if (offset !== expectedOffset) {
       throw new VaultBlobSessionError(
         `upload offset ${offset} does not match current offset ${expectedOffset}`,
-        expectedOffset,
+        expectedOffset
       );
     }
-    if (row.expected_size !== null && offset + bytes.length > row.expected_size) {
-      throw new VaultBlobSessionError('chunk exceeds the declared upload size', row.received_bytes);
+    if (
+      row.expected_size !== null &&
+      offset + bytes.length > row.expected_size
+    ) {
+      throw new VaultBlobSessionError(
+        "chunk exceeds the declared upload size",
+        row.received_bytes
+      );
     }
     if (row.expected_size === null)
       this.availableForSpool(bytes.length, row.expected_sha256 !== null);
@@ -375,7 +430,7 @@ export class BlobTransferCoordinator {
     try {
       if (!write) {
         truncateSync(row.temp_path!, row.received_bytes); // discard bytes past the durable DB offset
-        const hash = createHash('sha256');
+        const hash = createHash("sha256");
         if (row.received_bytes > 0) {
           for await (const chunk of createReadStream(row.temp_path!, {
             start: 0,
@@ -385,7 +440,7 @@ export class BlobTransferCoordinator {
           }
         }
         write = {
-          fd: openSync(row.temp_path!, 'r+'),
+          fd: openSync(row.temp_path!, "r+"),
           offset: row.received_bytes,
           durableOffset: row.received_bytes,
           hash,
@@ -395,8 +450,12 @@ export class BlobTransferCoordinator {
       writeSync(write.fd, bytes, 0, bytes.length, write.offset);
       write.hash.update(bytes);
       write.offset += bytes.length;
-      const complete = row.expected_size !== null && write.offset === row.expected_size;
-      if (write.offset - write.durableOffset >= INGRESS_FSYNC_BATCH_BYTES || complete) {
+      const complete =
+        row.expected_size !== null && write.offset === row.expected_size;
+      if (
+        write.offset - write.durableOffset >= INGRESS_FSYNC_BATCH_BYTES ||
+        complete
+      ) {
         this.flushFallbackWrite(sessionId, write);
       }
     } catch (error) {
@@ -404,7 +463,7 @@ export class BlobTransferCoordinator {
         closeSync(write.fd);
         this.fallbackWrites.delete(sessionId);
       }
-      throw asVaultDiskFullError('resumable blob ingress', error);
+      throw asVaultDiskFullError("resumable blob ingress", error);
     }
     return { offset: write.offset };
   }
@@ -415,19 +474,24 @@ export class BlobTransferCoordinator {
     if (pending) {
       try {
         this.flushFallbackWrite(sessionId, pending);
-        pendingHash = pending.hash.digest('hex');
+        pendingHash = pending.hash.digest("hex");
       } finally {
         closeSync(pending.fd);
         this.fallbackWrites.delete(sessionId);
       }
     }
     let row = this.state.session(sessionId);
-    if (!row) throw new VaultBlobSessionError(`unknown upload session ${sessionId}`);
-    if (row.state === 'complete' && row.expected_sha256) {
+    if (!row)
+      throw new VaultBlobSessionError(`unknown upload session ${sessionId}`);
+    if (row.state === "complete" && row.expected_sha256) {
       let custody = (await this.preflight(row.expected_sha256)).custody;
-      if (row.kind === 'fallback' && custody === 'local-only' && this.options.remoteConfigured()) {
+      if (
+        row.kind === "fallback" &&
+        custody === "local-only" &&
+        this.options.remoteConfigured()
+      ) {
         this.recordLocalReceipt(row.expected_sha256, row.received_bytes);
-        custody = 'pending-offsite';
+        custody = "pending-offsite";
       }
       return {
         ...stageCompletedIngress(this.options.vault, row, row.expected_sha256),
@@ -435,14 +499,22 @@ export class BlobTransferCoordinator {
         custody,
       };
     }
-    if (row.kind === 'stream-through') return this.stream.commit(sessionId);
-    if (row.kind !== 'fallback' || (row.state !== 'open' && row.state !== 'committing')) {
-      throw new VaultBlobSessionError(`upload session ${sessionId} is ${row.state}`);
+    if (row.kind === "stream-through") return this.stream.commit(sessionId);
+    if (
+      row.kind !== "fallback" ||
+      (row.state !== "open" && row.state !== "committing")
+    ) {
+      throw new VaultBlobSessionError(
+        `upload session ${sessionId} is ${row.state}`
+      );
     }
-    if (row.expected_size !== null && row.received_bytes !== row.expected_size) {
+    if (
+      row.expected_size !== null &&
+      row.received_bytes !== row.expected_size
+    ) {
       throw new VaultBlobSessionError(
         `upload is incomplete: have ${row.received_bytes}, expected ${row.expected_size}`,
-        row.received_bytes,
+        row.received_bytes
       );
     }
     // A crash can leave non-fsynced tail bytes in the temp file beyond the
@@ -452,26 +524,26 @@ export class BlobTransferCoordinator {
       try {
         truncateSync(row.temp_path, row.received_bytes);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         // Idempotent replay after adoption: the temp path is expected gone.
       }
     }
     let hash = pendingHash;
-    if (!hash && row.state === 'committing' && row.expected_sha256) {
+    if (!hash && row.state === "committing" && row.expected_sha256) {
       hash = row.expected_sha256;
     }
     if (!hash) {
-      const source = createHash('sha256');
+      const source = createHash("sha256");
       for await (const chunk of createReadStream(row.temp_path!, {
         start: 0,
         end: Math.max(0, row.received_bytes - 1),
       })) {
         source.update(chunk as Buffer);
       }
-      hash = source.digest('hex');
+      hash = source.digest("hex");
     }
     if (row.expected_sha256 && hash !== row.expected_sha256) {
-      if (row.state === 'open') await this.abortIngress(sessionId);
+      if (row.state === "open") await this.abortIngress(sessionId);
       throw new VaultBlobHashMismatchError(row.expected_sha256, hash);
     }
 
@@ -489,8 +561,8 @@ export class BlobTransferCoordinator {
     this.recordLocalReceipt(hash, row.received_bytes);
     this.state.completeSession(sessionId, hash);
     const custody: CustodyState = this.options.remoteConfigured()
-      ? 'pending-offsite'
-      : 'local-only';
+      ? "pending-offsite"
+      : "local-only";
     return { ...staged, casAck: this.options.policy().casAck, custody };
   }
 
@@ -502,12 +574,15 @@ export class BlobTransferCoordinator {
       closeSync(pending.fd);
       this.fallbackWrites.delete(sessionId);
     }
-    this.state.setSessionState(sessionId, 'aborted');
+    this.state.setSessionState(sessionId, "aborted");
     if (row.temp_path) rmSync(row.temp_path, { force: true });
     if (row.remote_temp_id && row.remote_upload_id) {
       await this.options
         .remote()
-        ?.transfer?.abortTemporaryUpload(row.remote_temp_id, row.remote_upload_id)
+        ?.transfer?.abortTemporaryUpload(
+          row.remote_temp_id,
+          row.remote_upload_id
+        )
         .catch(() => undefined);
     }
   }
@@ -522,7 +597,7 @@ export class BlobTransferCoordinator {
 
   async streamThrough(
     input: BeginBlobIngressInput & { expectedSize: number },
-    source: NodeJS.ReadableStream,
+    source: NodeJS.ReadableStream
   ): Promise<CommittedBlob> {
     const deps = {
       vault: this.options.vault,
@@ -541,7 +616,7 @@ export class BlobTransferCoordinator {
             expectedSha256: string;
             expectedSize: number;
           },
-          source,
+          source
         )
       : streamThroughUnknownHash(deps, input, source);
   }
@@ -553,7 +628,7 @@ export class BlobTransferCoordinator {
   async completeDirect(
     sessionId: string,
     deviceIdentity: string,
-    parts: readonly MultipartPart[] = [],
+    parts: readonly MultipartPart[] = []
   ): Promise<CommittedBlob> {
     return this.direct.complete(sessionId, deviceIdentity, parts);
   }
@@ -562,16 +637,21 @@ export class BlobTransferCoordinator {
     sessionId: string,
     partNumber: number,
     etag: string,
-    deviceIdentity: string,
+    deviceIdentity: string
   ): MultipartPart[] {
     return this.direct.recordPart(sessionId, partNumber, etag, deviceIdentity);
   }
 
-  async directDownload(sha256: string, deviceId: string): Promise<DirectBlobDownloadResult> {
+  async directDownload(
+    sha256: string,
+    deviceId: string
+  ): Promise<DirectBlobDownloadResult> {
     return this.direct.download(sha256, deviceId);
   }
 
-  enrollPairedDevice(input: Parameters<BlobContentKeyRegistry['enrollPairedDevice']>[0]): string {
+  enrollPairedDevice(
+    input: Parameters<BlobContentKeyRegistry["enrollPairedDevice"]>[0]
+  ): string {
     return this.options.contentKeys.enrollPairedDevice(input);
   }
 
@@ -581,8 +661,15 @@ export class BlobTransferCoordinator {
 
   private requireOpenFallback(sessionId: string): IngressSessionRow {
     const row = this.state.session(sessionId);
-    if (!row || row.kind !== 'fallback' || row.state !== 'open' || !row.temp_path) {
-      throw new VaultBlobSessionError(`unknown or closed fallback session ${sessionId}`);
+    if (
+      !row ||
+      row.kind !== "fallback" ||
+      row.state !== "open" ||
+      !row.temp_path
+    ) {
+      throw new VaultBlobSessionError(
+        `unknown or closed fallback session ${sessionId}`
+      );
     }
     return row;
   }

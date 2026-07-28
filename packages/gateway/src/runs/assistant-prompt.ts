@@ -55,11 +55,11 @@ export interface AssistantLens {
 export function buildAssistantPrompt(
   vaultName: string,
   context: string,
-  lens?: AssistantLens,
+  lens?: AssistantLens
 ): string {
   const lensBlock = lens
     ? `# Lens\nYou are the copilot inside the "${lens.appName ?? lens.appId}" app (${lens.appId}).` +
-      (lens.appDescription ? ` ${lens.appDescription}` : '') +
+      (lens.appDescription ? ` ${lens.appDescription}` : "") +
       ` Bias answers and writes toward this app's domain; the whole vault stays available when a question reaches beyond it.`
     : undefined;
   return [
@@ -67,5 +67,5 @@ export function buildAssistantPrompt(
     ANSWER_FORMAT,
     ...(lensBlock ? [lensBlock] : []),
     `# The vault ("${vaultName}")\n${context}`,
-  ].join('\n\n');
+  ].join("\n\n");
 }

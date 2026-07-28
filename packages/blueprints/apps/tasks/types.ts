@@ -5,13 +5,17 @@
 // `search` queries return (open + logbook, with nested children, attachments,
 // tags and resolved cross-references); the presentation `AppState`/`BoardData`
 // bags app.tsx mutates in place (never reassigned) and logic.ts closes over.
-import type { Attachment, Reference } from './kit.ts';
+import type { Attachment, Reference } from "./kit.ts";
 
 /** VTODO lifecycle status (schedule.task). */
-export type TaskStatus = 'needs-action' | 'in-process' | 'completed' | 'cancelled';
+export type TaskStatus =
+  | "needs-action"
+  | "in-process"
+  | "completed"
+  | "cancelled";
 
 /** The five focus views the sidebar switches between. */
-export type View = 'today' | 'upcoming' | 'anytime' | 'all' | 'logbook';
+export type View = "today" | "upcoming" | "anytime" | "all" | "logbook";
 
 /** One tag edge decorated with its concept's label (board/search join). */
 export interface TaskTag {

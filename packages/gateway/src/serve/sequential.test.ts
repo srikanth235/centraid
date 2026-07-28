@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-import { findSequentially, forEachSequentially } from './sequential.js';
+import { findSequentially, forEachSequentially } from "./sequential.js";
 
-describe('sequential async primitives', () => {
-  it('visits each value in order', async () => {
+describe("sequential async primitives", () => {
+  it("visits each value in order", async () => {
     const visited: number[] = [];
 
     await forEachSequentially([1, 2, 3], async (value) => {
@@ -14,14 +14,14 @@ describe('sequential async primitives', () => {
     expect(visited).toStrictEqual([1, 2, 3]);
   });
 
-  it('does not treat an undefined value as the end of the sequence', async () => {
+  it("does not treat an undefined value as the end of the sequence", async () => {
     const visited: Array<string | undefined> = [];
 
-    await findSequentially<string | undefined>([undefined, 'next'], (value) => {
+    await findSequentially<string | undefined>([undefined, "next"], (value) => {
       visited.push(value);
-      return value === 'next';
+      return value === "next";
     });
 
-    expect(visited).toStrictEqual([undefined, 'next']);
+    expect(visited).toStrictEqual([undefined, "next"]);
   });
 });

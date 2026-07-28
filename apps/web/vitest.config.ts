@@ -1,8 +1,8 @@
-import { jsdomProject } from '@centraid/test-kit/vitest';
+import { jsdomProject } from "@centraid/test-kit/vitest";
 
 export default jsdomProject({
   test: {
-    name: '@centraid/web',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    name: "@centraid/web",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });

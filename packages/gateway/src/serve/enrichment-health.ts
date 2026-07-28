@@ -20,7 +20,7 @@
  * faked" case the task called for.
  */
 
-import type { HealthProbe } from './health-registry.js';
+import type { HealthProbe } from "./health-registry.js";
 
 /** The bundled enricher automation ids (`packages/blueprints/automations/*`)
  *  — mirrors `packages/automation/src/manifest/enricher-templates.test.ts`'s
@@ -29,15 +29,15 @@ import type { HealthProbe } from './health-registry.js';
  *  vault's installed automations without needing to read blueprints' own
  *  package layout at runtime. */
 export const ENRICHER_AUTOMATION_IDS = [
-  'photo-captioner',
-  'doc-text-extractor',
-  'screenshot-extractor',
-  'doc-filer',
-  'face-proposer',
-  'trip-albums',
-  'doc-entity-linker',
-  'obligation-extractor',
-  'renewal-reminders',
+  "photo-captioner",
+  "doc-text-extractor",
+  "screenshot-extractor",
+  "doc-filer",
+  "face-proposer",
+  "trip-albums",
+  "doc-entity-linker",
+  "obligation-extractor",
+  "renewal-reminders",
 ] as const;
 
 /** An installed automation row, narrowed to what this probe needs (`automation.list`'s `Row`). */
@@ -59,7 +59,10 @@ export interface EnrichmentHealthVaultEntry {
   /** Installed automation apps — the same read the scheduler reconcile uses (`automation.list`). */
   readonly listAutomations: () => Promise<readonly EnrichmentAutomationRow[]>;
   /** Newest-first run history for one automation ref, bounded by `limit` (`ConversationStore.listAutomationTurns`). */
-  readonly recentRuns: (automationRef: string, limit: number) => readonly EnrichmentRunOutcome[];
+  readonly recentRuns: (
+    automationRef: string,
+    limit: number
+  ) => readonly EnrichmentRunOutcome[];
 }
 
 export interface EnrichmentHealthOptions {
@@ -76,7 +79,9 @@ const DEFAULT_STREAK = 3;
 const DEFAULT_STALE_MS = 48 * 60 * 60 * 1000;
 
 /** Builds the `enrichment` component's `HealthProbe` (registered in `build-gateway.ts`). */
-export function createEnrichmentHealthProbe(options: EnrichmentHealthOptions): HealthProbe {
+export function createEnrichmentHealthProbe(
+  options: EnrichmentHealthOptions
+): HealthProbe {
   const now = options.now ?? Date.now;
   const streak = options.persistentFailureStreak ?? DEFAULT_STREAK;
   const staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_MS;
@@ -99,7 +104,7 @@ export function createEnrichmentHealthProbe(options: EnrichmentHealthOptions): H
           // component already flags a failed mount.
           return undefined;
         }
-      }),
+      })
     );
     for (const result of vaultRows) {
       if (!result) continue;
@@ -114,7 +119,10 @@ export function createEnrichmentHealthProbe(options: EnrichmentHealthOptions): H
         if (runs.length === 0) continue; // never fired — honest "unknown", not a failure
         const latest = runs[0]!;
         if (latest.ok) {
-          if (latest.endedAt !== undefined && now() - latest.endedAt > staleAfterMs) {
+          if (
+            latest.endedAt !== undefined &&
+            now() - latest.endedAt > staleAfterMs
+          ) {
             const hours = Math.round((now() - latest.endedAt) / 3_600_000);
             stale.push(`${tag} (last ok ${hours}h ago)`);
           }
@@ -128,22 +136,23 @@ export function createEnrichmentHealthProbe(options: EnrichmentHealthOptions): H
       }
     }
 
-    const enabledNote = `${enabledTotal} of ${installedTotal} enricher${installedTotal === 1 ? '' : 's'} enabled`;
+    const enabledNote = `${enabledTotal} of ${installedTotal} enricher${installedTotal === 1 ? "" : "s"} enabled`;
     if (persistentlyFailing.length > 0) {
       return {
-        status: 'error',
-        detail: `${enabledNote} — persistently failing: ${persistentlyFailing.join(', ')}`,
+        status: "error",
+        detail: `${enabledNote} — persistently failing: ${persistentlyFailing.join(", ")}`,
       };
     }
     if (recentlyFailing.length > 0 || stale.length > 0) {
       const parts: string[] = [];
-      if (recentlyFailing.length > 0) parts.push(`recent failure: ${recentlyFailing.join(', ')}`);
-      if (stale.length > 0) parts.push(`stale: ${stale.join(', ')}`);
+      if (recentlyFailing.length > 0)
+        parts.push(`recent failure: ${recentlyFailing.join(", ")}`);
+      if (stale.length > 0) parts.push(`stale: ${stale.join(", ")}`);
       return {
-        status: 'degraded',
-        detail: `${enabledNote} — ${parts.join('; ')}`,
+        status: "degraded",
+        detail: `${enabledNote} — ${parts.join("; ")}`,
       };
     }
-    return { status: 'ok', detail: enabledNote };
+    return { status: "ok", detail: enabledNote };
   };
 }

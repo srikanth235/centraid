@@ -1,20 +1,29 @@
-import { themes } from '@centraid/design-tokens';
-import { type CSSProperties, type JSX, useEffect, useMemo, useRef } from 'react';
+import { themes } from "@centraid/design-tokens";
+import {
+  type CSSProperties,
+  type JSX,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 
-import type { AppearancePrefs } from '../../../app-shell-context.js';
-import { appLiveUrl } from '../../../gateway-client.js';
+import type { AppearancePrefs } from "../../../app-shell-context.js";
+import { appLiveUrl } from "../../../gateway-client.js";
 import {
   attachAppFrameReplicaBridge,
   type AppFrameResourceRequest,
   type AppFrameResourceResponse,
-} from './appFrameReplicaBridge.js';
-import { isOpaqueAppTunnelUrl, prepareOpaqueAppDocument } from './opaqueAppDocument.js';
+} from "./appFrameReplicaBridge.js";
+import {
+  isOpaqueAppTunnelUrl,
+  prepareOpaqueAppDocument,
+} from "./opaqueAppDocument.js";
 
-import atomsCss from '../../styles/atoms.module.css';
-import styles from './AppFrame.module.css';
+import atomsCss from "../../styles/atoms.module.css";
+import styles from "./AppFrame.module.css";
 
-const APP_FRAME_URL_STORAGE = 'centraid.client.v1.app-frame-urls';
-const IROH_VIRTUAL_PREFIX = '/__centraid_iroh__/';
+const APP_FRAME_URL_STORAGE = "centraid.client.v1.app-frame-urls";
+const IROH_VIRTUAL_PREFIX = "/__centraid_iroh__/";
 
 interface RememberedAppFrameUrls {
   scope: string;
@@ -24,7 +33,10 @@ interface RememberedAppFrameUrls {
 function replayableTunnelUrl(raw: string): boolean {
   try {
     const url = new URL(raw);
-    return url.origin === window.location.origin && url.pathname.startsWith(IROH_VIRTUAL_PREFIX);
+    return (
+      url.origin === window.location.origin &&
+      url.pathname.startsWith(IROH_VIRTUAL_PREFIX)
+    );
   } catch {
     return false;
   }
@@ -33,11 +45,13 @@ function replayableTunnelUrl(raw: string): boolean {
 function readRememberedUrl(scope: string, appId: string): string | undefined {
   try {
     const saved = JSON.parse(
-      localStorage.getItem(APP_FRAME_URL_STORAGE) ?? '{}',
+      localStorage.getItem(APP_FRAME_URL_STORAGE) ?? "{}"
     ) as Partial<RememberedAppFrameUrls>;
     if (saved.scope !== scope || !saved.urls) return undefined;
     const url = saved.urls[appId];
-    return typeof url === 'string' && replayableTunnelUrl(url) ? url : undefined;
+    return typeof url === "string" && replayableTunnelUrl(url)
+      ? url
+      : undefined;
   } catch {
     return undefined;
   }
@@ -48,7 +62,7 @@ function writeRememberedUrl(scope: string, appId: string, url: string): void {
   let urls: Record<string, string> = {};
   try {
     const saved = JSON.parse(
-      localStorage.getItem(APP_FRAME_URL_STORAGE) ?? '{}',
+      localStorage.getItem(APP_FRAME_URL_STORAGE) ?? "{}"
     ) as Partial<RememberedAppFrameUrls>;
     if (saved.scope === scope && saved.urls) urls = saved.urls;
   } catch {
@@ -56,7 +70,7 @@ function writeRememberedUrl(scope: string, appId: string, url: string): void {
   }
   localStorage.setItem(
     APP_FRAME_URL_STORAGE,
-    JSON.stringify({ scope, urls: { ...urls, [appId]: url } }),
+    JSON.stringify({ scope, urls: { ...urls, [appId]: url } })
   );
 }
 
@@ -64,9 +78,11 @@ async function resolveAppFrameUrl(appId: string): Promise<string> {
   const gateway = await window.CentraidApi.getGatewayAuth();
   const durable =
     gateway.rememberDevice === true &&
-    typeof gateway.gatewayId === 'string' &&
-    typeof gateway.vaultId === 'string';
-  const scope = durable ? `${gateway.gatewayId}\u0000${gateway.vaultId}` : undefined;
+    typeof gateway.gatewayId === "string" &&
+    typeof gateway.vaultId === "string";
+  const scope = durable
+    ? `${gateway.gatewayId}\u0000${gateway.vaultId}`
+    : undefined;
   if (!scope) localStorage.removeItem(APP_FRAME_URL_STORAGE);
   try {
     const { url } = await appLiveUrl({ id: appId });
@@ -94,16 +110,20 @@ export default function AppFrame({
 }: {
   appId: string;
   accentColor: string;
-  theme: AppearancePrefs['theme'];
+  theme: AppearancePrefs["theme"];
   bgL: number;
 }): JSX.Element {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const resourceFetchRef = useRef<
-    ((request: AppFrameResourceRequest) => Promise<AppFrameResourceResponse>) | undefined
+    | ((request: AppFrameResourceRequest) => Promise<AppFrameResourceResponse>)
+    | undefined
   >(undefined);
-  const documentNonce = useMemo(() => `${appId}-${crypto.randomUUID()}`, [appId]);
-  const themeKind = themes[theme]?.kind ?? 'dark';
+  const documentNonce = useMemo(
+    () => `${appId}-${crypto.randomUUID()}`,
+    [appId]
+  );
+  const themeKind = themes[theme]?.kind ?? "dark";
   // Latest theme, read by the load handler so a frame that loads mid-change
   // paints the current theme without re-resolving its URL. Mirrored from a
   // commit-time effect (render stays free of ref writes); both readers are
@@ -125,9 +145,12 @@ export default function AppFrame({
       fetchResource: (request) => {
         const fetchResource = resourceFetchRef.current;
         if (!fetchResource) {
-          throw Object.assign(new Error('App resource bridge is unavailable.'), {
-            code: 'APP_RESOURCE_UNAVAILABLE',
-          });
+          throw Object.assign(
+            new Error("App resource bridge is unavailable."),
+            {
+              code: "APP_RESOURCE_UNAVAILABLE",
+            }
+          );
         }
         return fetchResource(request);
       },
@@ -145,20 +168,20 @@ export default function AppFrame({
       try {
         const t = themeRef.current;
         frame.contentWindow?.postMessage(
-          { type: 'centraid:theme', theme: t.themeKind, bgL: t.bgL },
-          '*',
+          { type: "centraid:theme", theme: t.themeKind, bgL: t.bgL },
+          "*"
         );
       } catch {
         /* noop */
       }
     };
-    frame.addEventListener('load', onLoad);
+    frame.addEventListener("load", onLoad);
     resourceFetchRef.current = undefined;
     void resolveAppFrameUrl(appId)
       .then(async (url) => {
         if (!alive) return;
         const t = themeRef.current;
-        const qsep = url.includes('?') ? '&' : '?';
+        const qsep = url.includes("?") ? "&" : "?";
         const themeQs = `theme=${t.themeKind}&bgL=${t.bgL}`;
         const themedUrl = `${url}${qsep}${themeQs}`;
         if (isOpaqueAppTunnelUrl(themedUrl)) {
@@ -169,25 +192,28 @@ export default function AppFrame({
           });
           if (!alive) return;
           resourceFetchRef.current = prepared.fetchResource;
-          frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-modals allow-downloads');
+          frame.setAttribute(
+            "sandbox",
+            "allow-scripts allow-forms allow-modals allow-downloads"
+          );
           frame.src = prepared.documentUrl;
           return;
         }
         // Direct desktop/gateway URLs already have a distinct origin. Keep
         // their natural browser behavior (nested viewers, downloads, etc.).
         resourceFetchRef.current = undefined;
-        frame.removeAttribute('sandbox');
+        frame.removeAttribute("sandbox");
         frame.src = `${themedUrl}#${themeQs}&bridge=${encodeURIComponent(documentNonce)}`;
       })
       .catch(() => {
         if (alive && wrapRef.current) {
-          wrapRef.current.innerHTML = `<div class="${atomsCss.empty ?? ''}">Could not reach the gateway. Check Settings.</div>`;
+          wrapRef.current.innerHTML = `<div class="${atomsCss.empty ?? ""}">Could not reach the gateway. Check Settings.</div>`;
         }
       });
     return () => {
       alive = false;
       resourceFetchRef.current = undefined;
-      frame.removeEventListener('load', onLoad);
+      frame.removeEventListener("load", onLoad);
     };
   }, [appId, documentNonce]);
 
@@ -196,8 +222,8 @@ export default function AppFrame({
   useEffect(() => {
     try {
       frameRef.current?.contentWindow?.postMessage(
-        { type: 'centraid:theme', theme: themeKind, bgL },
-        '*',
+        { type: "centraid:theme", theme: themeKind, bgL },
+        "*"
       );
     } catch {
       /* noop */
@@ -207,7 +233,7 @@ export default function AppFrame({
   return (
     <div
       className={styles.viewFullbleed}
-      style={{ '--accent-color': accentColor } as CSSProperties}
+      style={{ "--accent-color": accentColor } as CSSProperties}
     >
       <div className={styles.viewFrame} ref={wrapRef}>
         {/* Iroh apps are parent-fetched into a nonce-stamped data document and

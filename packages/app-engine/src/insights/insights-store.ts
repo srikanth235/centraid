@@ -14,10 +14,13 @@
  * live-arm only. `recent` is live-only (archived runs are ≥90d idle).
  */
 
-import { type DatabaseSync } from 'node:sqlite';
+import { type DatabaseSync } from "node:sqlite";
 
-import type { DatabaseProvider } from '../stores/gateway-db.js';
-import { prepareInsightsStatements, type InsightsPreparedStatements } from './insights-sql.js';
+import type { DatabaseProvider } from "../stores/gateway-db.js";
+import {
+  prepareInsightsStatements,
+  type InsightsPreparedStatements,
+} from "./insights-sql.js";
 import type {
   InsightsActivityRow,
   InsightsAttention,
@@ -29,9 +32,9 @@ import type {
   InsightsRunnerRow,
   InsightsSourceRow,
   InsightsSummary,
-} from './insights-types.js';
+} from "./insights-types.js";
 
-export type { InsightsSummary } from './insights-types.js';
+export type { InsightsSummary } from "./insights-types.js";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -56,7 +59,9 @@ export class InsightsStore {
   }
 
   /** Compute the full Insights payload for a trailing window. */
-  summary(opts: { windowDays?: number; recentLimit?: number } = {}): InsightsSummary {
+  summary(
+    opts: { windowDays?: number; recentLimit?: number } = {}
+  ): InsightsSummary {
     const stmts = this.ensureReady();
     const windowDays = Math.max(1, opts.windowDays ?? DEFAULT_WINDOW_DAYS);
     const recentLimit = Math.max(1, opts.recentLimit ?? 12);
@@ -153,9 +158,20 @@ export class InsightsStore {
   }
 }
 
-function foldDaily(stmts: InsightsPreparedStatements, since: number): InsightsDailyPoint[] {
-  const dayBuckets = new Map<string, { tokens: number; cost: number; runs: number }>();
-  const addDay = (day: string, tokens: number, cost: number, runs: number): void => {
+function foldDaily(
+  stmts: InsightsPreparedStatements,
+  since: number
+): InsightsDailyPoint[] {
+  const dayBuckets = new Map<
+    string,
+    { tokens: number; cost: number; runs: number }
+  >();
+  const addDay = (
+    day: string,
+    tokens: number,
+    cost: number,
+    runs: number
+  ): void => {
     const b = dayBuckets.get(day) ?? { tokens: 0, cost: 0, runs: 0 };
     b.tokens += tokens;
     b.cost += cost;
@@ -186,7 +202,10 @@ function foldDaily(stmts: InsightsPreparedStatements, since: number): InsightsDa
     }));
 }
 
-function foldBySource(stmts: InsightsPreparedStatements, since: number): InsightsSourceRow[] {
+function foldBySource(
+  stmts: InsightsPreparedStatements,
+  since: number
+): InsightsSourceRow[] {
   interface Acc {
     kind: string;
     automationRef: string | null;
@@ -202,9 +221,9 @@ function foldBySource(stmts: InsightsPreparedStatements, since: number): Insight
     name: string | null,
     runs: number,
     tokens: number,
-    cost: number,
+    cost: number
   ): void => {
-    const key = `${kind}\0${automationRef ?? ''}`;
+    const key = `${kind}\0${automationRef ?? ""}`;
     const g = groups.get(key) ?? {
       kind,
       automationRef,
@@ -250,9 +269,20 @@ function foldBySource(stmts: InsightsPreparedStatements, since: number): Insight
     }));
 }
 
-function foldByModel(stmts: InsightsPreparedStatements, since: number): InsightsModelRow[] {
-  const groups = new Map<string, { runs: number; tokens: number; cost: number }>();
-  const add = (model: string, runs: number, tokens: number, cost: number): void => {
+function foldByModel(
+  stmts: InsightsPreparedStatements,
+  since: number
+): InsightsModelRow[] {
+  const groups = new Map<
+    string,
+    { runs: number; tokens: number; cost: number }
+  >();
+  const add = (
+    model: string,
+    runs: number,
+    tokens: number,
+    cost: number
+  ): void => {
     const g = groups.get(model) ?? { runs: 0, tokens: 0, cost: 0 };
     g.runs += runs;
     g.tokens += tokens;
@@ -283,9 +313,20 @@ function foldByModel(stmts: InsightsPreparedStatements, since: number): Insights
     }));
 }
 
-function foldByEffort(stmts: InsightsPreparedStatements, since: number): InsightsEffortRow[] {
-  const groups = new Map<string, { runs: number; tokens: number; cost: number }>();
-  const add = (effort: string, runs: number, tokens: number, cost: number): void => {
+function foldByEffort(
+  stmts: InsightsPreparedStatements,
+  since: number
+): InsightsEffortRow[] {
+  const groups = new Map<
+    string,
+    { runs: number; tokens: number; cost: number }
+  >();
+  const add = (
+    effort: string,
+    runs: number,
+    tokens: number,
+    cost: number
+  ): void => {
     const g = groups.get(effort) ?? { runs: 0, tokens: 0, cost: 0 };
     g.runs += runs;
     g.tokens += tokens;
@@ -319,7 +360,7 @@ function foldByEffort(stmts: InsightsPreparedStatements, since: number): Insight
 function foldRecent(
   stmts: InsightsPreparedStatements,
   since: number,
-  recentLimit: number,
+  recentLimit: number
 ): InsightsActivityRow[] {
   return (
     stmts.recent.all(since, recentLimit) as Array<{
@@ -358,12 +399,15 @@ function foldRecent(
 function buildPeakDay(
   stmts: InsightsPreparedStatements,
   since: number,
-  daily: InsightsDailyPoint[],
+  daily: InsightsDailyPoint[]
 ): InsightsPeakDay | undefined {
   if (daily.length === 0) return undefined;
   let best = daily[0]!;
   for (const d of daily) {
-    if (d.costUsd > best.costUsd || (d.costUsd === best.costUsd && d.tokens > best.tokens)) {
+    if (
+      d.costUsd > best.costUsd ||
+      (d.costUsd === best.costUsd && d.tokens > best.tokens)
+    ) {
       best = d;
     }
   }
@@ -394,14 +438,14 @@ function buildPeakDay(
 
 function buildAttention(
   bySource: InsightsSourceRow[],
-  totalCostUsd: number,
+  totalCostUsd: number
 ): InsightsAttention | undefined {
   if (bySource.length === 0 || totalCostUsd <= 0) return undefined;
   const top = bySource[0]!;
   const share = top.costUsd / totalCostUsd;
   if (share < ATTENTION_SHARE || top.costUsd <= 0) return undefined;
   return {
-    kind: 'top_source',
+    kind: "top_source",
     key: top.key,
     label: top.label,
     kindLabel: bucketLabel(top.kind),
@@ -411,9 +455,9 @@ function buildAttention(
 }
 
 function bucketLabel(kind: string): string {
-  if (kind === 'chat') return 'Chat';
-  if (kind === 'build') return 'Builds';
-  if (kind === 'automation') return 'Automation';
+  if (kind === "chat") return "Chat";
+  if (kind === "build") return "Builds";
+  if (kind === "automation") return "Automation";
   return kind;
 }
 

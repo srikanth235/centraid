@@ -8,9 +8,6 @@
  * the SSH-connect feature; only ticket + known-gateway remain.)
  */
 
-import { handshakeGateway } from './version-handshake.js';
-import { fetchGatewayVaults } from './gateway-vaults-core.js';
-import { resolveGateway } from './gateway-store.js';
 import {
   assembleReport,
   buildTicketReport,
@@ -19,28 +16,37 @@ import {
   reachGuardFailureStages,
   stage,
   type ConnectivityReport,
-} from './gateway-connectivity-core.js';
+} from "./gateway-connectivity-core.js";
+import { resolveGateway } from "./gateway-store.js";
+import { fetchGatewayVaults } from "./gateway-vaults-core.js";
+import { handshakeGateway } from "./version-handshake.js";
 
-export type { ConnectivityReport } from './gateway-connectivity-core.js';
+export type { ConnectivityReport } from "./gateway-connectivity-core.js";
 
 export type TestConnectionInput =
-  | { kind: 'ticket'; ticket: string }
-  | { kind: 'gateway'; gatewayId: string };
+  | { kind: "ticket"; ticket: string }
+  | { kind: "gateway"; gatewayId: string };
 
 /** Run the known-gateway ladder against its local iroh proxy. */
-async function testUrl(url: string, token: string | undefined): Promise<ConnectivityReport> {
+async function testUrl(
+  url: string,
+  token: string | undefined
+): Promise<ConnectivityReport> {
   const handshake = await handshakeGateway(url, token);
   const identity = foldUrlIdentityStages(handshake);
-  const authStage = identity.stages.find((st) => st.id === 'auth');
+  const authStage = identity.stages.find((st) => st.id === "auth");
 
   // Only attempt the vaults read once reach + auth both passed — identify
   // failing (a version mismatch) doesn't block browsing vaults, but an
   // unreachable host or a rejected token does.
-  if (authStage?.status !== 'pass') {
-    return assembleReport([...identity.stages, stage('vaults', 'List vaults', 'skip')], {
-      ...(identity.gateway ? { gateway: identity.gateway } : {}),
-      ...(identity.errorCode ? { error: identity.errorCode } : {}),
-    });
+  if (authStage?.status !== "pass") {
+    return assembleReport(
+      [...identity.stages, stage("vaults", "List vaults", "skip")],
+      {
+        ...(identity.gateway ? { gateway: identity.gateway } : {}),
+        ...(identity.errorCode ? { error: identity.errorCode } : {}),
+      }
+    );
   }
 
   const vaultsResult = await fetchGatewayVaults(url, token);
@@ -57,29 +63,34 @@ async function testUrl(url: string, token: string | undefined): Promise<Connecti
 }
 
 export async function testGatewayConnection(
-  input: TestConnectionInput,
+  input: TestConnectionInput
 ): Promise<ConnectivityReport> {
   try {
     switch (input.kind) {
-      case 'ticket':
+      case "ticket":
         return buildTicketReport(input.ticket);
 
-      case 'gateway': {
+      case "gateway": {
         const resolved = await resolveGateway(input.gatewayId);
         if (!resolved || !resolved.url) {
-          return assembleReport(reachGuardFailureStages('Unknown or unreachable gateway.'), {
-            error: 'unknown_gateway',
-          });
+          return assembleReport(
+            reachGuardFailureStages("Unknown or unreachable gateway."),
+            {
+              error: "unknown_gateway",
+            }
+          );
         }
         return await testUrl(resolved.url, resolved.token || undefined);
       }
 
       default:
-        return assembleReport([], { error: 'bad_input' });
+        return assembleReport([], { error: "bad_input" });
     }
   } catch (err) {
     // Belt-and-suspenders: the contract promises this never throws even if
     // something upstream (a store read, a malformed input) does.
-    return assembleReport([], { error: err instanceof Error ? err.message : String(err) });
+    return assembleReport([], {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }

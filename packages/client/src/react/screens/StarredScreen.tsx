@@ -1,10 +1,14 @@
-import type { JSX } from 'react';
+import type { JSX } from "react";
 
-import type { HomeAppItemDTO, HomeAutoItemDTO, HomeMenuAnchor } from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { AppCard, AutoCard } from './HomeScreen.js';
+import type {
+  HomeAppItemDTO,
+  HomeAutoItemDTO,
+  HomeMenuAnchor,
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { AppCard, AutoCard } from "./HomeScreen.js";
 
-import styles from './HomeScreen.module.css';
+import styles from "./HomeScreen.module.css";
 
 export interface StarredScreenProps {
   appItems: readonly HomeAppItemDTO[];
@@ -31,7 +35,10 @@ export default function StarredScreen({
   onAutomationMenu,
 }: StarredScreenProps): JSX.Element {
   return (
-    <div className={cx(styles.appsGrid, styles.appsGridSmall)} data-layout="tiles">
+    <div
+      className={cx(styles.appsGrid, styles.appsGridSmall)}
+      data-layout="tiles"
+    >
       {appItems.map((a) => (
         <AppCard
           key={a.id}
@@ -42,7 +49,12 @@ export default function StarredScreen({
         />
       ))}
       {automationItems.map((r) => (
-        <AutoCard key={r.ref} r={r} onOpen={onOpenAutomation} onMenu={onAutomationMenu} />
+        <AutoCard
+          key={r.ref}
+          r={r}
+          onOpen={onOpenAutomation}
+          onMenu={onAutomationMenu}
+        />
       ))}
     </div>
   );

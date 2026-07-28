@@ -13,19 +13,19 @@
  * admit and only then marks ready-to-install (quitAndInstall).
  */
 
-import { readFile, stat } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import path from 'node:path';
+import { readFile, stat } from "node:fs/promises";
+import { createRequire } from "node:module";
+import path from "node:path";
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow } from "electron";
 
 import {
   fingerprintOf,
   UpdatePoller,
   WATCHED_DIST_FILES,
   type WatchedStat,
-} from './update-check.js';
-import { admitUpdate } from './update-rollout.js';
+} from "./update-check.js";
+import { admitUpdate } from "./update-rollout.js";
 
 const POLL_MS = 10_000;
 /** Packaged feed re-check interval (I4). */
@@ -36,7 +36,7 @@ const PACKAGED_CHECK_MS = 4 * 60 * 60 * 1000;
  * literal, like every other channel) in preload.ts; the invoke channels
  * live in ipc.ts's Channel table.
  */
-export const UPDATE_AVAILABLE_CHANNEL = 'centraid:update:available';
+export const UPDATE_AVAILABLE_CHANNEL = "centraid:update:available";
 
 export interface UpdateStatus {
   available: boolean;
@@ -85,7 +85,9 @@ export function relaunchToUpdate(): void {
   app.exit(0);
 }
 
-async function statWatched(distDir: string): Promise<Array<WatchedStat | null>> {
+async function statWatched(
+  distDir: string
+): Promise<Array<WatchedStat | null>> {
   return Promise.all(
     WATCHED_DIST_FILES.map(async (rel) => {
       try {
@@ -94,17 +96,19 @@ async function statWatched(distDir: string): Promise<Array<WatchedStat | null>> 
       } catch {
         return null;
       }
-    }),
+    })
   );
 }
 
 /** The on-disk version a relaunch would load (falls back to the running one). */
 async function readDiskVersion(appRoot: string): Promise<string> {
   try {
-    const pkg = JSON.parse(await readFile(path.join(appRoot, 'package.json'), 'utf8')) as {
+    const pkg = JSON.parse(
+      await readFile(path.join(appRoot, "package.json"), "utf8")
+    ) as {
       version?: string;
     };
-    return typeof pkg.version === 'string' ? pkg.version : app.getVersion();
+    return typeof pkg.version === "string" ? pkg.version : app.getVersion();
   } catch {
     return app.getVersion();
   }
@@ -113,7 +117,8 @@ async function readDiskVersion(appRoot: string): Promise<string> {
 async function broadcastUpdate(status: UpdateStatus): Promise<void> {
   current = status;
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(UPDATE_AVAILABLE_CHANNEL, current);
+    if (!win.isDestroyed())
+      win.webContents.send(UPDATE_AVAILABLE_CHANNEL, current);
   }
 }
 
@@ -143,8 +148,8 @@ export async function announceUpdateIfAdmitted(input: {
 }
 
 /** D5: beta tags use channel `beta`; everything else `latest`. */
-export function updaterChannelForVersion(version: string): 'beta' | 'latest' {
-  return /beta/iu.test(version) ? 'beta' : 'latest';
+export function updaterChannelForVersion(version: string): "beta" | "latest" {
+  return /beta/iu.test(version) ? "beta" : "latest";
 }
 
 /**
@@ -158,16 +163,19 @@ export function startUpdateWatcher(): void {
     return;
   }
   const appRoot = app.getAppPath();
-  const distDir = path.join(appRoot, 'dist');
+  const distDir = path.join(appRoot, "dist");
 
   void (async () => {
     const poller = new UpdatePoller(fingerprintOf(await statWatched(distDir)));
     const timer = setInterval(() => {
       void (async () => {
         const verdict = poller.tick(fingerprintOf(await statWatched(distDir)));
-        if (verdict !== 'update-available') return;
+        if (verdict !== "update-available") return;
         const stats = await statWatched(distDir);
-        const releasedAtMs = Math.max(0, ...stats.map((s) => (s ? s.mtimeMs : 0)));
+        const releasedAtMs = Math.max(
+          0,
+          ...stats.map((s) => (s ? s.mtimeMs : 0))
+        );
         const version = await readDiskVersion(appRoot);
         await announceUpdateIfAdmitted({
           version,
@@ -194,7 +202,7 @@ export function startPackagedUpdateChecker(): void {
       // Deferred CJS load — knip cannot see createRequire; dep is intentionally
       // runtime + ignoreDependencies in knip.json (apps/desktop).
       const req = createRequire(import.meta.url);
-      const { autoUpdater } = req('electron-updater') as {
+      const { autoUpdater } = req("electron-updater") as {
         autoUpdater: {
           autoDownload: boolean;
           autoInstallOnAppQuit: boolean;
@@ -202,7 +210,10 @@ export function startPackagedUpdateChecker(): void {
           allowPrerelease: boolean;
           checkForUpdates: () => Promise<unknown>;
           downloadUpdate: () => Promise<unknown>;
-          quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
+          quitAndInstall: (
+            isSilent?: boolean,
+            isForceRunAfter?: boolean
+          ) => void;
           on: (event: string, cb: (info: unknown) => void) => void;
         };
       };
@@ -210,15 +221,20 @@ export function startPackagedUpdateChecker(): void {
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = false;
       autoUpdater.channel = updaterChannelForVersion(app.getVersion());
-      autoUpdater.allowPrerelease = autoUpdater.channel === 'beta';
+      autoUpdater.allowPrerelease = autoUpdater.channel === "beta";
       autoUpdaterRef = autoUpdater;
 
-      autoUpdater.on('update-available', (info: unknown) => {
+      autoUpdater.on("update-available", (info: unknown) => {
         void (async () => {
           const release = info as { version?: string; releaseDate?: string };
-          const version = typeof release.version === 'string' ? release.version : app.getVersion();
+          const version =
+            typeof release.version === "string"
+              ? release.version
+              : app.getVersion();
           const parsed =
-            typeof release.releaseDate === 'string' ? Date.parse(release.releaseDate) : NaN;
+            typeof release.releaseDate === "string"
+              ? Date.parse(release.releaseDate)
+              : NaN;
           const releasedAtMs = Number.isFinite(parsed) ? parsed : null;
           const admitted = await admitUpdate({
             releasedAtMs,
@@ -239,13 +255,18 @@ export function startPackagedUpdateChecker(): void {
         })();
       });
 
-      autoUpdater.on('update-downloaded', (info: unknown) => {
+      autoUpdater.on("update-downloaded", (info: unknown) => {
         void (async () => {
           const release = info as { version?: string; releaseDate?: string };
-          const version = typeof release.version === 'string' ? release.version : app.getVersion();
+          const version =
+            typeof release.version === "string"
+              ? release.version
+              : app.getVersion();
           packagedDownloadReady = true;
           const parsed =
-            typeof release.releaseDate === 'string' ? Date.parse(release.releaseDate) : NaN;
+            typeof release.releaseDate === "string"
+              ? Date.parse(release.releaseDate)
+              : NaN;
           await announceUpdateIfAdmitted({
             version,
             releasedAtMs: Number.isFinite(parsed) ? parsed : null,

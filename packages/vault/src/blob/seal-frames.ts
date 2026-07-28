@@ -45,8 +45,8 @@
 // and are expected to be re-sealed by the next replication sweep; there is no
 // dual-format reader on purpose.
 
-import { createCipheriv, createDecipheriv, createHmac } from 'node:crypto';
-import * as zlib from 'node:zlib';
+import { createCipheriv, createDecipheriv, createHmac } from "node:crypto";
+import * as zlib from "node:zlib";
 
 import {
   CBSF_HEADER_BYTES,
@@ -57,13 +57,13 @@ import {
   cbsfFrameAad,
   decodeCbsfDirectory,
   encodeCbsfDirectory,
-} from '@centraid/blob-format';
+} from "@centraid/blob-format";
 
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 
 /** Format magic — "Centraid Blob Sealed Frames". */
-const MAGIC = Buffer.from(CBSF_MAGIC, 'ascii');
+const MAGIC = Buffer.from(CBSF_MAGIC, "ascii");
 /** Bumped whenever the wire layout changes; bound into every AAD. */
 export const SEAL_VERSION = CBSF_VERSION;
 
@@ -93,17 +93,19 @@ export const ALGO_DEFLATE = 0x02;
 // this never hard-depends on a runtime that lacks it — the deflate-raw path
 // (id 0x02) is the fallback. The READER handles all three ids regardless of
 // which the writer's runtime chose, so a mixed fleet interops.
-const zstdCompress = (zlib as { zstdCompressSync?: (b: Buffer) => Buffer }).zstdCompressSync;
-const zstdDecompress = (zlib as { zstdDecompressSync?: (b: Buffer) => Buffer }).zstdDecompressSync;
+const zstdCompress = (zlib as { zstdCompressSync?: (b: Buffer) => Buffer })
+  .zstdCompressSync;
+const zstdDecompress = (zlib as { zstdDecompressSync?: (b: Buffer) => Buffer })
+  .zstdDecompressSync;
 
 /** AAD pinning one frame to its blob, version, index and the total count. */
 function frameAad(sha: string, index: number, frameCount: number): Buffer {
-  return Buffer.from(cbsfFrameAad(sha, index, frameCount), 'utf8');
+  return Buffer.from(cbsfFrameAad(sha, index, frameCount), "utf8");
 }
 
 /** AAD pinning the directory to its blob, version and frame count. */
 function dirAad(sha: string, frameCount: number): Buffer {
-  return Buffer.from(cbsfDirectoryAad(sha, frameCount), 'utf8');
+  return Buffer.from(cbsfDirectoryAad(sha, frameCount), "utf8");
 }
 
 /**
@@ -115,15 +117,15 @@ function dirAad(sha: string, frameCount: number): Buffer {
  */
 function nonceFor(key: Buffer, aad: Buffer, plaintext: Buffer): Buffer {
   return (
-    createHmac('sha256', key)
-      .update('cbsf-nonce\0')
+    createHmac("sha256", key)
+      .update("cbsf-nonce\0")
       .update(aad)
       // A sha can legitimately be sealed by both the store-only streaming path
       // and the compressed outbox path. Binding the actual AEAD plaintext keeps
       // those encryptions retry-stable without ever reusing a GCM nonce for
       // different bytes under the same content key.
-      .update('\0')
-      .update(createHmac('sha256', key).update(plaintext).digest())
+      .update("\0")
+      .update(createHmac("sha256", key).update(plaintext).digest())
       .digest()
       .subarray(0, NONCE_BYTES)
   );
@@ -160,7 +162,8 @@ function decompressFrame(algoId: number, payload: Buffer): Buffer {
     case ALGO_STORE:
       return payload;
     case ALGO_ZSTD:
-      if (!zstdDecompress) throw new Error('sealed frame uses zstd but this runtime lacks it');
+      if (!zstdDecompress)
+        throw new Error("sealed frame uses zstd but this runtime lacks it");
       return zstdDecompress(payload);
     case ALGO_DEFLATE:
       return zlib.inflateRawSync(payload);
@@ -171,13 +174,21 @@ function decompressFrame(algoId: number, payload: Buffer): Buffer {
 
 /** Header identity is checked before any frame is trusted. */
 export function encodeHeader(sha: string): Buffer {
-  if (!/^[0-9a-f]{64}$/u.test(sha)) throw new Error('sealed blob: invalid header sha');
-  return Buffer.concat([MAGIC, Buffer.from([SEAL_VERSION]), Buffer.from(sha, 'hex')]);
+  if (!/^[0-9a-f]{64}$/u.test(sha))
+    throw new Error("sealed blob: invalid header sha");
+  return Buffer.concat([
+    MAGIC,
+    Buffer.from([SEAL_VERSION]),
+    Buffer.from(sha, "hex"),
+  ]);
 }
 
 function assertMagicVersion(buf: Buffer): void {
-  if (buf.length < MAGIC.length + 1 || !buf.subarray(0, MAGIC.length).equals(MAGIC)) {
-    throw new Error('sealed blob: bad magic (not a framed seal, or truncated)');
+  if (
+    buf.length < MAGIC.length + 1 ||
+    !buf.subarray(0, MAGIC.length).equals(MAGIC)
+  ) {
+    throw new Error("sealed blob: bad magic (not a framed seal, or truncated)");
   }
   if (buf[MAGIC.length] !== SEAL_VERSION) {
     throw new Error(`sealed blob: unsupported version ${buf[MAGIC.length]}`);
@@ -185,12 +196,18 @@ function assertMagicVersion(buf: Buffer): void {
 }
 
 /** Decode and optionally pin the AEAD-bound plaintext identity in the header. */
-export function decodeHeader(buf: Buffer, expectedSha?: string): { sha256: string } {
-  if (buf.length < HEADER_BYTES) throw new Error('sealed blob: truncated header');
+export function decodeHeader(
+  buf: Buffer,
+  expectedSha?: string
+): { sha256: string } {
+  if (buf.length < HEADER_BYTES)
+    throw new Error("sealed blob: truncated header");
   assertMagicVersion(buf);
-  const sha256 = buf.subarray(MAGIC.length + 1, HEADER_BYTES).toString('hex');
+  const sha256 = buf.subarray(MAGIC.length + 1, HEADER_BYTES).toString("hex");
   if (expectedSha !== undefined && sha256 !== expectedSha) {
-    throw new Error(`sealed blob: header sha mismatch (expected ${expectedSha}, got ${sha256})`);
+    throw new Error(
+      `sealed blob: header sha mismatch (expected ${expectedSha}, got ${sha256})`
+    );
   }
   return { sha256 };
 }
@@ -205,7 +222,7 @@ export function sealFrame(
   sha: string,
   index: number,
   frameCount: number,
-  plain: Buffer,
+  plain: Buffer
 ): Buffer {
   const { algoId, payload } = compressFrame(plain);
   return sealFramePayload(key, sha, index, frameCount, algoId, payload);
@@ -217,7 +234,7 @@ export function sealStoredFrame(
   sha: string,
   index: number,
   frameCount: number,
-  plain: Buffer,
+  plain: Buffer
 ): Buffer {
   return sealFramePayload(key, sha, index, frameCount, ALGO_STORE, plain);
 }
@@ -228,12 +245,12 @@ function sealFramePayload(
   index: number,
   frameCount: number,
   algoId: number,
-  payload: Buffer,
+  payload: Buffer
 ): Buffer {
   const body = Buffer.concat([Buffer.from([algoId]), payload]);
   const aad = frameAad(sha, index, frameCount);
   const nonce = nonceFor(key, aad, body);
-  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
   cipher.setAAD(aad);
   const ct = Buffer.concat([cipher.update(body), cipher.final()]);
   return Buffer.concat([nonce, ct, cipher.getAuthTag()]);
@@ -245,13 +262,14 @@ export function unsealFrame(
   sha: string,
   index: number,
   frameCount: number,
-  sealed: Buffer,
+  sealed: Buffer
 ): Buffer {
-  if (sealed.length < NONCE_BYTES + TAG_BYTES + 1) throw new Error('sealed frame truncated');
+  if (sealed.length < NONCE_BYTES + TAG_BYTES + 1)
+    throw new Error("sealed frame truncated");
   const nonce = sealed.subarray(0, NONCE_BYTES);
   const tag = sealed.subarray(sealed.length - TAG_BYTES);
   const ct = sealed.subarray(NONCE_BYTES, sealed.length - TAG_BYTES);
-  const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+  const decipher = createDecipheriv("aes-256-gcm", key, nonce);
   decipher.setAAD(frameAad(sha, index, frameCount));
   decipher.setAuthTag(tag);
   const body = Buffer.concat([decipher.update(ct), decipher.final()]);
@@ -269,12 +287,14 @@ export function sealDirectory(
   frameCount: number,
   frameSize: number,
   totalSize: number,
-  sealedLens: number[],
+  sealedLens: number[]
 ): Buffer {
-  const plain = Buffer.from(encodeCbsfDirectory(frameSize, totalSize, sealedLens));
+  const plain = Buffer.from(
+    encodeCbsfDirectory(frameSize, totalSize, sealedLens)
+  );
   const aad = dirAad(sha, frameCount);
   const nonce = nonceFor(key, aad, plain);
-  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
   cipher.setAAD(aad);
   const ct = Buffer.concat([cipher.update(plain), cipher.final()]);
   return Buffer.concat([nonce, ct, cipher.getAuthTag()]);
@@ -295,17 +315,21 @@ export function openDirectory(
   key: Buffer,
   sha: string,
   frameCount: number,
-  sealed: Buffer,
+  sealed: Buffer
 ): FrameDirectory {
-  if (sealed.length < NONCE_BYTES + TAG_BYTES) throw new Error('sealed directory truncated');
+  if (sealed.length < NONCE_BYTES + TAG_BYTES)
+    throw new Error("sealed directory truncated");
   const nonce = sealed.subarray(0, NONCE_BYTES);
   const tag = sealed.subarray(sealed.length - TAG_BYTES);
   const ct = sealed.subarray(NONCE_BYTES, sealed.length - TAG_BYTES);
-  const decipher = createDecipheriv('aes-256-gcm', key, nonce);
+  const decipher = createDecipheriv("aes-256-gcm", key, nonce);
   decipher.setAAD(dirAad(sha, frameCount));
   decipher.setAuthTag(tag);
   const plain = Buffer.concat([decipher.update(ct), decipher.final()]);
-  const { frameSize, totalSize, sealedLens } = decodeCbsfDirectory(plain, frameCount);
+  const { frameSize, totalSize, sealedLens } = decodeCbsfDirectory(
+    plain,
+    frameCount
+  );
   const offsets: number[] = [];
   let cursor = HEADER_BYTES;
   for (const len of sealedLens) {
@@ -316,7 +340,10 @@ export function openDirectory(
 }
 
 /** The fixed trailer: magic, version, directory byte-length, frame count. */
-export function encodeTrailer(directoryLength: number, frameCount: number): Buffer {
+export function encodeTrailer(
+  directoryLength: number,
+  frameCount: number
+): Buffer {
   const buf = Buffer.alloc(TRAILER_BYTES);
   MAGIC.copy(buf, 0);
   buf[MAGIC.length] = SEAL_VERSION;
@@ -349,7 +376,7 @@ export function frameCountFor(totalSize: number, frameSize: number): number {
 export function coveringFrames(
   frameSize: number,
   start: number,
-  end: number,
+  end: number
 ): { first: number; last: number } {
   return {
     first: Math.floor(start / frameSize),

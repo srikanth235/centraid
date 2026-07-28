@@ -10,13 +10,13 @@
  *
  * Run via `bun run build:manifest` (or as part of `bun run build`).
  */
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 const here = import.meta.dirname;
-const PACKAGE_ROOT = path.resolve(here, '..');
-const SOURCE_INDEX = path.join(PACKAGE_ROOT, 'index.json');
-const OUTPUT = path.join(PACKAGE_ROOT, 'manifest.json');
+const PACKAGE_ROOT = path.resolve(here, "..");
+const SOURCE_INDEX = path.join(PACKAGE_ROOT, "index.json");
+const OUTPUT = path.join(PACKAGE_ROOT, "manifest.json");
 
 async function walk(dir, base = dir) {
   const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -27,15 +27,17 @@ async function walk(dir, base = dir) {
         if (e.isDirectory()) {
           return walk(full, base);
         }
-        return e.isFile() ? [path.relative(base, full).split(path.sep).join('/')] : [];
-      }),
+        return e.isFile()
+          ? [path.relative(base, full).split(path.sep).join("/")]
+          : [];
+      })
     )
   )
     .flat()
     .toSorted();
 }
 
-const raw = await fs.readFile(SOURCE_INDEX, 'utf8');
+const raw = await fs.readFile(SOURCE_INDEX, "utf8");
 const src = JSON.parse(raw);
 
 const enriched = {
@@ -48,13 +50,15 @@ const templates = await Promise.all(
     // Kind-segment directory: automation apps live under `automations/`, every
     // other app under `apps/`. Derived from `kind` so the manifest, the disk
     // resolver, and the remote fetcher all agree on the prefix.
-    const kindDir = tmpl.kind === 'automation' ? 'automations' : 'apps';
+    const kindDir = tmpl.kind === "automation" ? "automations" : "apps";
     const dir = path.join(PACKAGE_ROOT, kindDir, tmpl.id);
     let files = [];
     try {
       files = await walk(dir);
     } catch {
-      console.warn(`[build-manifest] missing template dir for "${tmpl.id}", skipping`);
+      console.warn(
+        `[build-manifest] missing template dir for "${tmpl.id}", skipping`
+      );
       return undefined;
     }
     // Per-app knobs (font, width, radius…) are declared as `app.json#knobs`
@@ -64,7 +68,7 @@ const templates = await Promise.all(
     // reads manifest.json, so this rides along for free.
     let appKnobs;
     try {
-      const raw = await fs.readFile(path.join(dir, 'app.json'), 'utf8');
+      const raw = await fs.readFile(path.join(dir, "app.json"), "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
     } catch {
@@ -73,13 +77,15 @@ const templates = await Promise.all(
     }
     // `kind` is declared explicitly in index.json (`'automation'` for an
     // automation app); a normal UI app omits it and defaults to `'app'`.
-    const kind = tmpl.kind ?? 'app';
-    return appKnobs ? { ...tmpl, kind, files, appKnobs } : { ...tmpl, kind, files };
-  }),
+    const kind = tmpl.kind ?? "app";
+    return appKnobs
+      ? { ...tmpl, kind, files, appKnobs }
+      : { ...tmpl, kind, files };
+  })
 );
 enriched.templates.push(...templates.filter(Boolean));
 
-await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + '\n');
+await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + "\n");
 process.stdout.write(
-  `[build-manifest] wrote ${enriched.templates.length} templates → ${path.relative(process.cwd(), OUTPUT)}\n`,
+  `[build-manifest] wrote ${enriched.templates.length} templates → ${path.relative(process.cwd(), OUTPUT)}\n`
 );

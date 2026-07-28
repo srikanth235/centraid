@@ -21,8 +21,8 @@
  */
 
 // Mirrors packages/vault/src/commands/links.ts's RELATIONS_SCHEME_URI.
-const RELATIONS_SCHEME_URI = 'urn:duaility:relations';
-const REVISES_RELATION = 'revises';
+const RELATIONS_SCHEME_URI = "urn:duaility:relations";
+const REVISES_RELATION = "revises";
 // However long a document's real edit history runs, one walk step per
 // version is still a bounded read per step — this just caps runaway growth
 // (a document with more edits than this is not a realistic case today).
@@ -55,13 +55,13 @@ interface ContentRow {
 }
 
 export default async function historyHandler({ input, ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
-  const documentId = String(input?.document_id ?? '');
+  const purpose = "dpv:ServiceProvision";
+  const documentId = String(input?.document_id ?? "");
   if (!documentId) return { versions: [] };
   try {
     const docRes = await ctx.vault.read({
-      entity: 'core.document',
-      where: [{ column: 'document_id', op: 'eq', value: documentId }],
+      entity: "core.document",
+      where: [{ column: "document_id", op: "eq", value: documentId }],
       limit: 1,
       purpose,
     });
@@ -69,15 +69,17 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     if (!doc) return { versions: [] };
 
     const [schemes, concepts] = await Promise.all([
-      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
-      ctx.vault.read({ entity: 'core.concept', purpose }),
+      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ctx.vault.read({ entity: "core.concept", purpose }),
     ]);
     const relScheme = ((schemes.rows ?? []) as unknown as SchemeRow[]).find(
-      (s) => s.uri === RELATIONS_SCHEME_URI,
+      (s) => s.uri === RELATIONS_SCHEME_URI
     );
     const revisesConceptId = relScheme
       ? ((concepts.rows ?? []) as unknown as ConceptRow[]).find(
-          (c) => c.scheme_id === relScheme.scheme_id && c.notation === REVISES_RELATION,
+          (c) =>
+            c.scheme_id === relScheme.scheme_id &&
+            c.notation === REVISES_RELATION
         )?.concept_id
       : undefined;
 
@@ -90,19 +92,19 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
       const followNext = async (cur: string, step: number): Promise<void> => {
         if (step >= MAX_CHAIN_STEPS) return;
         const links = await ctx.vault.read({
-          entity: 'core.link',
+          entity: "core.link",
           where: [
-            { column: 'from_type', op: 'eq', value: 'core.content_item' },
-            { column: 'from_id', op: 'eq', value: cur },
-            { column: 'to_type', op: 'eq', value: 'core.content_item' },
+            { column: "from_type", op: "eq", value: "core.content_item" },
+            { column: "from_id", op: "eq", value: cur },
+            { column: "to_type", op: "eq", value: "core.content_item" },
             {
-              column: 'relation_concept_id',
-              op: 'eq',
+              column: "relation_concept_id",
+              op: "eq",
               value: revisesConceptId,
             },
-            { column: 'valid_to', op: 'is-null' },
+            { column: "valid_to", op: "is-null" },
           ],
-          orderBy: { column: 'valid_from', dir: 'desc' },
+          orderBy: { column: "valid_from", dir: "desc" },
           limit: 5,
           purpose,
         });
@@ -117,20 +119,23 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     }
 
     const contents = await ctx.vault.read({
-      entity: 'core.content_item',
-      where: [{ column: 'content_id', op: 'in', value: chainIds }],
+      entity: "core.content_item",
+      where: [{ column: "content_id", op: "in", value: chainIds }],
       purpose,
     });
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [c.content_id, c]),
+      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
+        c.content_id,
+        c,
+      ])
     );
 
     const srcOf = (c: ContentRow | undefined) =>
-      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+      typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`
         : c?.content_uri;
     const posterOf = (c: ContentRow | undefined) =>
-      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+      typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}?variant=poster`
         : null;
 

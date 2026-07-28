@@ -5,10 +5,10 @@
  * ON DELETE CASCADE. A source-less store remains in-memory for isolated tests.
  */
 
-import crypto from 'node:crypto';
-import path from 'node:path';
+import crypto from "node:crypto";
+import path from "node:path";
 
-import { GatewayDatabase } from './gateway-db.js';
+import { GatewayDatabase } from "./gateway-db.js";
 
 export const CONTROL_IDLE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const CONTROL_ABSOLUTE_TTL_MS = 180 * 24 * 60 * 60 * 1000;
@@ -35,7 +35,7 @@ interface StoredSessionRow {
 }
 
 export function hashControlToken(token: string): string {
-  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
 }
 
 function toSession(row: StoredSessionRow): ControlSessionRow {
@@ -56,7 +56,7 @@ export class WebControlSessionStore {
 
   private constructor(
     gatewayDatabase: GatewayDatabase | undefined,
-    private readonly now: () => number,
+    private readonly now: () => number
   ) {
     this.gatewayDatabase = gatewayDatabase;
     this.memory = gatewayDatabase ? undefined : [];
@@ -64,12 +64,12 @@ export class WebControlSessionStore {
 
   static open(
     source?: string | GatewayDatabase,
-    now: () => number = Date.now,
+    now: () => number = Date.now
   ): WebControlSessionStore {
     const gatewayDatabase =
       source instanceof GatewayDatabase
         ? source
-        : typeof source === 'string'
+        : typeof source === "string"
           ? GatewayDatabase.open(path.dirname(path.resolve(source)))
           : undefined;
     const store = new WebControlSessionStore(gatewayDatabase, now);
@@ -105,7 +105,7 @@ export class WebControlSessionStore {
             shell_origin = excluded.shell_origin,
             created_at = excluded.created_at,
             expires_at = excluded.expires_at,
-            last_used_at = excluded.last_used_at`,
+            last_used_at = excluded.last_used_at`
         )
         .run(
           row.tokenHash,
@@ -114,10 +114,12 @@ export class WebControlSessionStore {
           row.shellOrigin,
           row.createdAt,
           row.expiresAt,
-          row.lastUsedAt,
+          row.lastUsedAt
         );
     } else {
-      const existing = this.memory!.findIndex((candidate) => candidate.tokenHash === row.tokenHash);
+      const existing = this.memory!.findIndex(
+        (candidate) => candidate.tokenHash === row.tokenHash
+      );
       if (existing >= 0) this.memory!.splice(existing, 1);
       this.memory!.push(row);
     }
@@ -125,10 +127,14 @@ export class WebControlSessionStore {
   }
 
   find(tokenHash: string): ControlSessionRow | undefined {
-    const expected = Buffer.from(tokenHash, 'hex');
+    const expected = Buffer.from(tokenHash, "hex");
     for (const row of this.list()) {
-      const actual = Buffer.from(row.tokenHash, 'hex');
-      if (expected.length === actual.length && crypto.timingSafeEqual(expected, actual)) return row;
+      const actual = Buffer.from(row.tokenHash, "hex");
+      if (
+        expected.length === actual.length &&
+        crypto.timingSafeEqual(expected, actual)
+      )
+        return row;
     }
     return undefined;
   }
@@ -141,7 +147,9 @@ export class WebControlSessionStore {
     if (nextExpiry - row.expiresAt < TOUCH_THROTTLE_MS) return;
     if (this.gatewayDatabase) {
       this.gatewayDatabase.db
-        .prepare('UPDATE web_sessions SET expires_at = ?, last_used_at = ? WHERE token_hash = ?')
+        .prepare(
+          "UPDATE web_sessions SET expires_at = ?, last_used_at = ? WHERE token_hash = ?"
+        )
         .run(nextExpiry, now, tokenHash);
     } else {
       row.expiresAt = nextExpiry;
@@ -153,7 +161,7 @@ export class WebControlSessionStore {
     if (this.gatewayDatabase) {
       return (
         this.gatewayDatabase.db
-          .prepare('DELETE FROM web_sessions WHERE token_hash = ?')
+          .prepare("DELETE FROM web_sessions WHERE token_hash = ?")
           .run(tokenHash).changes > 0
       );
     }
@@ -166,7 +174,9 @@ export class WebControlSessionStore {
   sweepExpired(): void {
     const now = this.now();
     if (this.gatewayDatabase) {
-      this.gatewayDatabase.db.prepare('DELETE FROM web_sessions WHERE expires_at <= ?').run(now);
+      this.gatewayDatabase.db
+        .prepare("DELETE FROM web_sessions WHERE expires_at <= ?")
+        .run(now);
       return;
     }
     for (let index = this.memory!.length - 1; index >= 0; index--) {
@@ -185,7 +195,7 @@ export class WebControlSessionStore {
       this.gatewayDatabase.db
         .prepare(
           `SELECT token_hash, vault_id, device_key, shell_origin, created_at, expires_at, last_used_at
-             FROM web_sessions WHERE expires_at > ? ORDER BY created_at`,
+             FROM web_sessions WHERE expires_at > ? ORDER BY created_at`
         )
         .all(now) as unknown as StoredSessionRow[]
     ).map(toSession);

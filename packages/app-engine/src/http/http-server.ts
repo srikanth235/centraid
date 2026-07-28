@@ -1,19 +1,22 @@
-import crypto from 'node:crypto';
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
-import { AddressInfo } from 'node:net';
+import crypto from "node:crypto";
+import http, { type IncomingMessage, type ServerResponse } from "node:http";
+import { AddressInfo } from "node:net";
 
-import type { Runtime } from '../runtime.js';
-import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
-import { makeConversationRouteHandler } from './conversation-routes.js';
-import { COMPANION_GRANTS_HEADER } from './internal-headers.js';
+import type { Runtime } from "../runtime.js";
+import { makeUserStoreRouteHandler } from "../stores/prefs-store.js";
+import { makeConversationRouteHandler } from "./conversation-routes.js";
+import { COMPANION_GRANTS_HEADER } from "./internal-headers.js";
 import {
   decideCors,
   hasBearerAuthIntent,
   hostnameFromHostHeader,
   isAllowedHostHeader,
-} from './request-boundary.js';
-import { timingSafeEqual } from './security.js';
-import { GATEWAY_SHUTDOWN_GRACE_MS, tuneGatewayHttpServer } from './server-tuning.js';
+} from "./request-boundary.js";
+import { timingSafeEqual } from "./security.js";
+import {
+  GATEWAY_SHUTDOWN_GRACE_MS,
+  tuneGatewayHttpServer,
+} from "./server-tuning.js";
 
 export interface RuntimeHttpServerOptions {
   runtime: Runtime;
@@ -68,7 +71,9 @@ export interface RuntimeHttpServerOptions {
    * publish/session surface without baking a git backend into
    * `app-engine` (which the standalone daemon and desktop share).
    */
-  extraHandlers?: Array<(req: IncomingMessage, res: ServerResponse) => Promise<boolean>>;
+  extraHandlers?: Array<
+    (req: IncomingMessage, res: ServerResponse) => Promise<boolean>
+  >;
   /**
    * Exact pathnames served WITHOUT the bearer check (issue #304). The one
    * intended tenant is the OAuth consent callback — a provider redirects
@@ -117,8 +122,8 @@ export interface RuntimeHttpServerHandle {
   close: () => Promise<void>;
 }
 
-const CONVERSATIONS_PREFIX = '/_centraid-conversations';
-const USER_STORE_PREFIX = '/_centraid-user';
+const CONVERSATIONS_PREFIX = "/_centraid-conversations";
+const USER_STORE_PREFIX = "/_centraid-user";
 
 /**
  * Internal, server-stamped device-identity header (issue #376). Set ONLY
@@ -128,7 +133,7 @@ const USER_STORE_PREFIX = '/_centraid-user';
  * an identity for a downstream handler (the gateway's `composedHandler`)
  * to trust.
  */
-export const AUTHED_DEVICE_HEADER = 'x-centraid-authed-device';
+export const AUTHED_DEVICE_HEADER = "x-centraid-authed-device";
 /**
  * Internal, server-stamped marker naming the plane a presented credential
  * resolved to (issue #568 item C). Same trust rules as
@@ -138,12 +143,14 @@ export const AUTHED_DEVICE_HEADER = 'x-centraid-authed-device';
  * that is how a public handshake route can withhold a secret from an
  * anonymous caller while still answering it.
  */
-export const AUTHED_PLANE_HEADER = 'x-centraid-authed-plane';
-const WEB_APP_HEADER = 'x-centraid-web-app';
-const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
+export const AUTHED_PLANE_HEADER = "x-centraid-authed-plane";
+const WEB_APP_HEADER = "x-centraid-web-app";
+const WEB_SHELL_ORIGIN_HEADER = "x-centraid-web-shell-origin";
 
 /** What a presented bearer resolved to — the shared landlord token, or one tenant's device. */
-export type BearerAuthorization = { plane: 'admin' } | { plane: 'device'; deviceKey: string };
+export type BearerAuthorization =
+  | { plane: "admin" }
+  | { plane: "device"; deviceKey: string };
 
 /**
  * CORS for the loopback control plane (issue #504 batch 0).
@@ -170,10 +177,13 @@ export type BearerAuthorization = { plane: 'admin' } | { plane: 'device'; device
 function setCorsHeaders(
   req: IncomingMessage,
   res: ServerResponse,
-  credentialedCorsOrigins: readonly string[] | (() => readonly string[]) | undefined,
+  credentialedCorsOrigins:
+    | readonly string[]
+    | (() => readonly string[])
+    | undefined
 ): void {
   const origins =
-    typeof credentialedCorsOrigins === 'function'
+    typeof credentialedCorsOrigins === "function"
       ? credentialedCorsOrigins()
       : (credentialedCorsOrigins ?? []);
   const decision = decideCors({
@@ -181,27 +191,34 @@ function setCorsHeaders(
     credentialedOrigins: origins,
     bearerAuthIntent: hasBearerAuthIntent(
       req.headers.authorization,
-      req.headers['access-control-request-headers'],
+      req.headers["access-control-request-headers"]
     ),
   });
   if (decision.allowOrigin !== null) {
-    res.setHeader('Access-Control-Allow-Origin', decision.allowOrigin);
+    res.setHeader("Access-Control-Allow-Origin", decision.allowOrigin);
   }
   if (decision.credentials) {
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader("Access-Control-Allow-Credentials", "true");
   }
-  res.setHeader('Vary', 'Origin');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader("Vary", "Origin");
   res.setHeader(
-    'Access-Control-Allow-Headers',
-    'authorization, content-type, x-centraid-vault, x-centraid-client-session',
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, PATCH, OPTIONS"
   );
-  res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "authorization, content-type, x-centraid-vault, x-centraid-client-session"
+  );
+  res.setHeader("Access-Control-Max-Age", "86400");
 }
 
-function resolveAllowedHosts(opts: RuntimeHttpServerOptions, bindHost: string): string[] {
+function resolveAllowedHosts(
+  opts: RuntimeHttpServerOptions,
+  bindHost: string
+): string[] {
   const extra: string[] = [];
-  const bindHostname = hostnameFromHostHeader(bindHost) ?? bindHost.trim().toLowerCase();
+  const bindHostname =
+    hostnameFromHostHeader(bindHost) ?? bindHost.trim().toLowerCase();
   if (bindHostname) extra.push(bindHostname);
   for (const h of opts.allowedHosts ?? []) {
     const normalized = h.trim().toLowerCase();
@@ -227,11 +244,11 @@ function resolveAllowedHosts(opts: RuntimeHttpServerOptions, bindHost: string): 
  * daemon exposes on the remote gateway). The same bearer check applies.
  */
 export async function startRuntimeHttpServer(
-  opts: RuntimeHttpServerOptions,
+  opts: RuntimeHttpServerOptions
 ): Promise<RuntimeHttpServerHandle> {
-  const host = opts.host ?? '127.0.0.1';
+  const host = opts.host ?? "127.0.0.1";
   const port = opts.port ?? 0;
-  const token = opts.token ?? crypto.randomBytes(32).toString('hex');
+  const token = opts.token ?? crypto.randomBytes(32).toString("hex");
   const allowedHosts = resolveAllowedHosts(opts, host);
 
   // Both stores are owned by the caller (a single shared gateway DB
@@ -240,14 +257,16 @@ export async function startRuntimeHttpServer(
   // resolve the stores lazily through getters so a future runtime that
   // lazy-creates them still works.
   const userStore = opts.runtime.userStore;
-  const exposeUserStore = opts.exposeUserStoreRoute !== false && userStore !== undefined;
+  const exposeUserStore =
+    opts.exposeUserStoreRoute !== false && userStore !== undefined;
   const userStoreHandler = exposeUserStore
     ? makeUserStoreRouteHandler(() => userStore!, opts.ownerIdProvider)
     : undefined;
 
   const conversationHistoryStore = opts.runtime.conversationHistoryStore;
   const exposeConversation =
-    opts.exposeConversationRoute !== false && conversationHistoryStore !== undefined;
+    opts.exposeConversationRoute !== false &&
+    conversationHistoryStore !== undefined;
   const conversationHandler = exposeConversation
     ? makeConversationRouteHandler(() => conversationHistoryStore!)
     : undefined;
@@ -266,24 +285,27 @@ export async function startRuntimeHttpServer(
         return;
       }
       res.statusCode = 500;
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Connection', 'close');
-      res.end(JSON.stringify({ error: 'internal_server_error' }));
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Connection", "close");
+      res.end(JSON.stringify({ error: "internal_server_error" }));
     });
   });
   tuneGatewayHttpServer(server);
 
-  async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async function route(
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
     // Host check first — refuse DNS-rebinding before CORS, auth, or handlers.
     if (!isAllowedHostHeader(req.headers.host, allowedHosts)) {
       res.statusCode = 400;
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Connection', 'close');
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Connection", "close");
       res.end(
         JSON.stringify({
-          error: 'invalid_host',
-          message: 'Host header is not allowed.',
-        }),
+          error: "invalid_host",
+          message: "Host header is not allowed.",
+        })
       );
       return;
     }
@@ -293,15 +315,17 @@ export async function startRuntimeHttpServer(
     // Bearer check, or the browser never sends the real request. CORS
     // headers above already distinguish credentialed allowlist / Bearer
     // intent from foreign cookie-only origins (#504).
-    if ((req.method ?? '').toUpperCase() === 'OPTIONS') {
+    if ((req.method ?? "").toUpperCase() === "OPTIONS") {
       res.statusCode = 204;
       res.end();
       return;
     }
-    const pathname = (req.url ?? '/').split('?')[0] ?? '/';
+    const pathname = (req.url ?? "/").split("?")[0] ?? "/";
     const isPublic =
       (opts.publicPaths ?? []).includes(pathname) ||
-      (opts.publicPathPrefixes ?? []).some((prefix) => pathname.startsWith(prefix));
+      (opts.publicPathPrefixes ?? []).some((prefix) =>
+        pathname.startsWith(prefix)
+      );
     // Never trust a client-supplied device header — deleted unconditionally
     // before auth runs; only the `authorizeBearer` branch below re-sets it,
     // and only after verifying the bearer names a device token (#376).
@@ -310,28 +334,30 @@ export async function startRuntimeHttpServer(
     delete req.headers[COMPANION_GRANTS_HEADER];
     delete req.headers[WEB_APP_HEADER];
     delete req.headers[WEB_SHELL_ORIGIN_HEADER];
-    const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/iu, '');
+    const raw = (req.headers.authorization ?? "").replace(/^Bearer\s+/iu, "");
     const resolveAuthorization = (): BearerAuthorization | undefined => {
       if (opts.authorizeBearer || opts.authorizeRequest) {
         return raw
           ? opts.authorizeBearer
             ? opts.authorizeBearer(raw)
             : timingSafeEqual(raw, token)
-              ? { plane: 'admin' as const }
+              ? { plane: "admin" as const }
               : undefined
           : opts.authorizeRequest?.(req);
       }
-      return raw && timingSafeEqual(raw, token) ? { plane: 'admin' as const } : undefined;
+      return raw && timingSafeEqual(raw, token)
+        ? { plane: "admin" as const }
+        : undefined;
     };
     const authz = resolveAuthorization();
     if (!isPublic && !authz) {
       res.statusCode = 401;
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.end(
         JSON.stringify({
-          error: 'unauthorized',
-          message: 'Invalid bearer token.',
-        }),
+          error: "unauthorized",
+          message: "Invalid bearer token.",
+        })
       );
       return;
     }
@@ -339,13 +365,17 @@ export async function startRuntimeHttpServer(
     // still telling an authenticated caller apart from an anonymous one.
     if (authz) {
       req.headers[AUTHED_PLANE_HEADER] = authz.plane;
-      if (authz.plane === 'device') req.headers[AUTHED_DEVICE_HEADER] = authz.deviceKey;
+      if (authz.plane === "device")
+        req.headers[AUTHED_DEVICE_HEADER] = authz.deviceKey;
     }
-    if (conversationHandler && (req.url ?? '').startsWith(CONVERSATIONS_PREFIX)) {
+    if (
+      conversationHandler &&
+      (req.url ?? "").startsWith(CONVERSATIONS_PREFIX)
+    ) {
       const handled = await conversationHandler(req, res);
       if (handled) return;
     }
-    if (userStoreHandler && (req.url ?? '').startsWith(USER_STORE_PREFIX)) {
+    if (userStoreHandler && (req.url ?? "").startsWith(USER_STORE_PREFIX)) {
       const handled = await userStoreHandler(req, res);
       if (handled) return;
     }
@@ -360,17 +390,17 @@ export async function startRuntimeHttpServer(
   }
 
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
+    server.once("error", reject);
     server.listen(port, host, () => {
-      server.off('error', reject);
+      server.off("error", reject);
       resolve();
     });
   });
 
   const addr = server.address() as AddressInfo | null;
-  if (!addr || typeof addr === 'string') {
+  if (!addr || typeof addr === "string") {
     server.close();
-    throw new Error('runtime http server: failed to read bound address');
+    throw new Error("runtime http server: failed to read bound address");
   }
   const url = `http://${host}:${addr.port}`;
 
@@ -392,7 +422,10 @@ export async function startRuntimeHttpServer(
           else resolve();
         });
         server.closeIdleConnections();
-        force = setTimeout(() => server.closeAllConnections(), GATEWAY_SHUTDOWN_GRACE_MS);
+        force = setTimeout(
+          () => server.closeAllConnections(),
+          GATEWAY_SHUTDOWN_GRACE_MS
+        );
       }),
   };
 }

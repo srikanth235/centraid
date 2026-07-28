@@ -5,13 +5,17 @@
 // dispatched from `makeLifecycleRouteHandler` there. Webhook secrets are
 // minted here — the plaintext is returned once, only the hash persists.
 
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import nodePath from 'node:path';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import nodePath from "node:path";
 
-import * as automation from '@centraid/automation';
-import { AppScaffoldError, listTemplates, type ScaffoldFile } from '@centraid/blueprints';
+import * as automation from "@centraid/automation";
+import {
+  AppScaffoldError,
+  listTemplates,
+  type ScaffoldFile,
+} from "@centraid/blueprints";
 
 import {
   defaultSessionId,
@@ -22,8 +26,8 @@ import {
   stageAndMaybePublish,
   webhookUrl,
   type LifecycleRouteOptions,
-} from '../lifecycle/lifecycle-shared.js';
-import { readFileMap, readJson, sendJson } from './route-helpers.js';
+} from "../lifecycle/lifecycle-shared.js";
+import { readFileMap, readJson, sendJson } from "./route-helpers.js";
 
 // ---- POST /centraid/_automations/compile?ref= (hidden builder compile) ----
 
@@ -31,19 +35,19 @@ export async function handleAutomationCompile(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
   res: ServerResponse,
-  url: URL,
+  url: URL
 ): Promise<boolean> {
-  const rawRef = url.searchParams.get('ref') ?? '';
+  const rawRef = url.searchParams.get("ref") ?? "";
   const ref = automation.parseRef(rawRef);
   if (!ref)
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'compile needs ?ref=',
+      error: "bad_request",
+      message: "compile needs ?ref=",
     });
   if (!opts.compileAutomation) {
     return sendJson(res, 503, {
-      error: 'unavailable',
-      message: 'compile runner unavailable',
+      error: "unavailable",
+      message: "compile runner unavailable",
     });
   }
   const body = await readJson(req);
@@ -52,7 +56,7 @@ export async function handleAutomationCompile(
     .catch(() => undefined);
   if (!row) {
     return sendJson(res, 404, {
-      error: 'not_found',
+      error: "not_found",
       message: `Automation "${rawRef}" does not exist.`,
     });
   }
@@ -71,27 +75,27 @@ export async function handleAutomationRevise(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
   res: ServerResponse,
-  url: URL,
+  url: URL
 ): Promise<boolean> {
-  const rawRef = url.searchParams.get('ref') ?? '';
+  const rawRef = url.searchParams.get("ref") ?? "";
   const ref = automation.parseRef(rawRef);
   if (!ref)
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'revise needs ?ref=',
+      error: "bad_request",
+      message: "revise needs ?ref=",
     });
   if (!opts.reviseAutomation) {
     return sendJson(res, 503, {
-      error: 'unavailable',
-      message: 'revision runner unavailable',
+      error: "unavailable",
+      message: "revision runner unavailable",
     });
   }
   const body = await readJson(req);
-  const steering = typeof body.message === 'string' ? body.message.trim() : '';
+  const steering = typeof body.message === "string" ? body.message.trim() : "";
   if (!steering) {
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'revise body needs a non-empty {message}',
+      error: "bad_request",
+      message: "revise body needs a non-empty {message}",
     });
   }
   const row = await automation
@@ -99,7 +103,7 @@ export async function handleAutomationRevise(
     .catch(() => undefined);
   if (!row) {
     return sendJson(res, 404, {
-      error: 'not_found',
+      error: "not_found",
       message: `Automation "${rawRef}" does not exist.`,
     });
   }
@@ -115,24 +119,27 @@ export async function handleAutomationRevise(
 export async function handleAutomationCreate(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
-  res: ServerResponse,
+  res: ServerResponse
 ): Promise<boolean> {
   const body = await readJson(req);
-  const id = typeof body.id === 'string' ? body.id : '';
+  const id = typeof body.id === "string" ? body.id : "";
   if (!id)
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'create needs { id }',
+      error: "bad_request",
+      message: "create needs { id }",
     });
   const publish = body.publish === true;
   const explicitSession =
-    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+    typeof body.sessionId === "string" && body.sessionId ? body.sessionId : "";
   const sessionId = explicitSession || defaultSessionId(id);
   const ephemeralSession = !explicitSession;
 
   const existing = await opts.store.listAppsWithMeta();
   if (existing.some((a) => a.id === id)) {
-    throw new AppScaffoldError('already_exists', `Automation app "${id}" already exists.`);
+    throw new AppScaffoldError(
+      "already_exists",
+      `Automation app "${id}" already exists.`
+    );
   }
 
   // Mint webhook secrets gateway-side: plaintext returned once, manifest
@@ -144,59 +151,66 @@ export async function handleAutomationCreate(
   // rather than re-implemented here, so a malformed one (missing entity,
   // non-array `where`/`entities`, bad cron gate, …) 400s with the
   // validator's own field-scoped message.
-  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data', 'event']);
+  const ALLOWED_TRIGGER_KINDS = new Set([
+    "cron",
+    "webhook",
+    "condition",
+    "data",
+    "event",
+  ]);
   let webhook: { id: string; secret: string; url: string } | undefined;
   const triggerInput = Array.isArray(body.triggers)
     ? (body.triggers as Array<Record<string, unknown>>)
     : undefined;
   const badKind = triggerInput?.find(
-    (t) => t.kind !== undefined && !ALLOWED_TRIGGER_KINDS.has(t.kind as string),
+    (t) => t.kind !== undefined && !ALLOWED_TRIGGER_KINDS.has(t.kind as string)
   );
   if (badKind) {
     return sendJson(res, 400, {
-      error: 'bad_request',
+      error: "bad_request",
       message: `Unsupported trigger kind "${String(badKind.kind)}" — create accepts cron, webhook, condition, data and event triggers.`,
     });
   }
   const triggers: automation.Trigger[] | undefined = triggerInput?.map((t) => {
-    if (t.kind === 'webhook') {
+    if (t.kind === "webhook") {
       const wid = automation.generateWebhookId();
       const secret = automation.generateWebhookSecret();
       webhook = { id: wid, secret, url: webhookUrl(req, wid) };
       return {
-        kind: 'webhook',
+        kind: "webhook",
         id: wid,
         secretHash: automation.hashWebhookSecret(secret),
       };
     }
-    if (t.kind === 'condition') {
+    if (t.kind === "condition") {
       return {
-        kind: 'condition',
+        kind: "condition",
         entity: t.entity,
         ...(t.where === undefined ? {} : { where: t.where }),
         ...(t.every === undefined ? {} : { every: t.every }),
       } as automation.Trigger;
     }
-    if (t.kind === 'data') {
+    if (t.kind === "data") {
       return {
-        kind: 'data',
+        kind: "data",
         entities: t.entities,
         ...(t.every === undefined ? {} : { every: t.every }),
       } as automation.Trigger;
     }
-    if (t.kind === 'event') {
+    if (t.kind === "event") {
       return {
-        kind: 'event',
+        kind: "event",
         connectorKind: t.connectorKind,
         event: t.event,
         ...(t.filter === undefined ? {} : { filter: t.filter }),
         ...(t.every === undefined ? {} : { every: t.every }),
       } as automation.Trigger;
     }
-    const expr = typeof t.expr === 'string' ? t.expr : '0 9 * * *';
-    const tz = typeof t.tz === 'string' && t.tz.trim() ? t.tz.trim() : undefined;
+    const expr = typeof t.expr === "string" ? t.expr : "0 9 * * *";
+    const tz =
+      typeof t.tz === "string" && t.tz.trim() ? t.tz.trim() : undefined;
     return {
-      kind: 'cron',
+      kind: "cron",
       expr,
       ...(tz === undefined ? {} : { tz }),
     };
@@ -206,11 +220,15 @@ export async function handleAutomationCreate(
   // without one, so pass an explicit `{ vault }` body through untouched and
   // let the same validator reject a malformed one.
   const vaultInput =
-    body.vault !== null && typeof body.vault === 'object' && !Array.isArray(body.vault)
+    body.vault !== null &&
+    typeof body.vault === "object" &&
+    !Array.isArray(body.vault)
       ? (body.vault as automation.ManifestVault)
       : undefined;
   const connectorInput =
-    body.connector !== null && typeof body.connector === 'object' && !Array.isArray(body.connector)
+    body.connector !== null &&
+    typeof body.connector === "object" &&
+    !Array.isArray(body.connector)
       ? (body.connector as automation.ConnectorSpec)
       : undefined;
   const connectionsInput = Array.isArray(body.connections)
@@ -218,23 +236,35 @@ export async function handleAutomationCreate(
     : undefined;
 
   const files = automation.scaffoldAppFiles(id, {
-    ...(typeof body.name === 'string' && body.name ? { name: body.name } : {}),
-    ...(typeof body.description === 'string' && body.description
+    ...(typeof body.name === "string" && body.name ? { name: body.name } : {}),
+    ...(typeof body.description === "string" && body.description
       ? { description: body.description }
       : {}),
-    ...(typeof body.prompt === 'string' && body.prompt ? { prompt: body.prompt } : {}),
+    ...(typeof body.prompt === "string" && body.prompt
+      ? { prompt: body.prompt }
+      : {}),
     ...(triggers === undefined ? {} : { triggers }),
-    ...(Array.isArray(body.apps) ? { apps: body.apps.filter((a) => typeof a === 'string') } : {}),
-    ...(typeof body.runner === 'string' && body.runner ? { runner: body.runner } : {}),
-    ...(typeof body.model === 'string' && body.model ? { model: body.model } : {}),
+    ...(Array.isArray(body.apps)
+      ? { apps: body.apps.filter((a) => typeof a === "string") }
+      : {}),
+    ...(typeof body.runner === "string" && body.runner
+      ? { runner: body.runner }
+      : {}),
+    ...(typeof body.model === "string" && body.model
+      ? { model: body.model }
+      : {}),
     ...(parseHistoryKeep(body.historyKeep) === undefined
       ? {}
       : { historyKeep: parseHistoryKeep(body.historyKeep) }),
-    ...(typeof body.onFailure === 'string' && body.onFailure ? { onFailure: body.onFailure } : {}),
-    ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+    ...(typeof body.onFailure === "string" && body.onFailure
+      ? { onFailure: body.onFailure }
+      : {}),
+    ...(typeof body.enabled === "boolean" ? { enabled: body.enabled } : {}),
     ...(vaultInput === undefined ? {} : { vault: vaultInput }),
     ...(connectorInput === undefined ? {} : { connector: connectorInput }),
-    ...(connectionsInput === undefined ? {} : { connections: connectionsInput }),
+    ...(connectionsInput === undefined
+      ? {}
+      : { connections: connectionsInput }),
   });
   await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
@@ -266,25 +296,25 @@ export async function handleAutomationSetEnabled(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
   res: ServerResponse,
-  url: URL,
+  url: URL
 ): Promise<boolean> {
-  const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
+  const ref = automation.parseRef(url.searchParams.get("ref") ?? "");
   if (!ref)
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'set-enabled needs ?ref=',
+      error: "bad_request",
+      message: "set-enabled needs ?ref=",
     });
   const body = await readJson(req);
-  if (typeof body.enabled !== 'boolean') {
+  if (typeof body.enabled !== "boolean") {
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'set-enabled needs { enabled }',
+      error: "bad_request",
+      message: "set-enabled needs { enabled }",
     });
   }
 
   const publish = body.publish === true;
   const explicitSession =
-    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+    typeof body.sessionId === "string" && body.sessionId ? body.sessionId : "";
   const sessionId = explicitSession || defaultSessionId(ref.appId);
   const ephemeralSession = !explicitSession;
 
@@ -294,7 +324,7 @@ export async function handleAutomationSetEnabled(
   const changed = automation.setEnabledInFiles(
     current as ScaffoldFile[],
     ref.automationId,
-    body.enabled,
+    body.enabled
   );
   if (changed.length > 0) {
     await stageAndMaybePublish(opts, {
@@ -339,44 +369,46 @@ export async function handleAutomationUpdate(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
   res: ServerResponse,
-  url: URL,
+  url: URL
 ): Promise<boolean> {
-  const rawRef = url.searchParams.get('ref') ?? '';
+  const rawRef = url.searchParams.get("ref") ?? "";
   const ref = automation.parseRef(rawRef);
   if (!ref)
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'update needs ?ref=',
+      error: "bad_request",
+      message: "update needs ?ref=",
     });
   const body = await readJson(req);
 
-  const nameInput = typeof body.name === 'string' ? body.name : undefined;
-  const promptInput = typeof body.prompt === 'string' ? body.prompt : undefined;
+  const nameInput = typeof body.name === "string" ? body.name : undefined;
+  const promptInput = typeof body.prompt === "string" ? body.prompt : undefined;
   const triggersInput = Array.isArray(body.triggers)
     ? (body.triggers as Array<Record<string, unknown>>)
     : undefined;
   const vaultInput =
-    body.vault !== null && typeof body.vault === 'object' && !Array.isArray(body.vault)
+    body.vault !== null &&
+    typeof body.vault === "object" &&
+    !Array.isArray(body.vault)
       ? (body.vault as automation.ManifestVault)
       : undefined;
-  const hasConnectorKey = Object.hasOwn(body, 'connector');
+  const hasConnectorKey = Object.hasOwn(body, "connector");
   const connectorInput = hasConnectorKey
     ? body.connector === null
       ? null
       : body.connector !== null &&
-          typeof body.connector === 'object' &&
+          typeof body.connector === "object" &&
           !Array.isArray(body.connector)
         ? (body.connector as automation.ConnectorSpec)
         : undefined
     : undefined;
-  const hasConnectionsKey = Object.hasOwn(body, 'connections');
+  const hasConnectionsKey = Object.hasOwn(body, "connections");
   const connectionsInput = hasConnectionsKey
     ? Array.isArray(body.connections)
       ? (body.connections as automation.ConnectionBinding[])
       : undefined
     : undefined;
-  const hasRunnerKey = Object.hasOwn(body, 'runner');
-  const hasModelKey = Object.hasOwn(body, 'model');
+  const hasRunnerKey = Object.hasOwn(body, "runner");
+  const hasModelKey = Object.hasOwn(body, "model");
   if (
     nameInput === undefined &&
     promptInput === undefined &&
@@ -388,15 +420,15 @@ export async function handleAutomationUpdate(
     !hasModelKey
   ) {
     return sendJson(res, 400, {
-      error: 'bad_request',
+      error: "bad_request",
       message:
-        'update needs at least one of { name, prompt, triggers, connections, connector, runner, model }',
+        "update needs at least one of { name, prompt, triggers, connections, connector, runner, model }",
     });
   }
 
   const publish = body.publish === true;
   const explicitSession =
-    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+    typeof body.sessionId === "string" && body.sessionId ? body.sessionId : "";
   const sessionId = explicitSession || defaultSessionId(ref.appId);
   const ephemeralSession = !explicitSession;
 
@@ -409,7 +441,7 @@ export async function handleAutomationUpdate(
   if (!file) {
     if (ephemeralSession) await opts.store.closeSession(sessionId);
     return sendJson(res, 404, {
-      error: 'not_found',
+      error: "not_found",
       message: `Automation "${rawRef}" does not exist.`,
     });
   }
@@ -423,23 +455,30 @@ export async function handleAutomationUpdate(
   // (see the comment above `ALLOWED_TRIGGER_KINDS` there): reject an unknown
   // kind loudly instead of coercing it, let `validateManifest` below reject a
   // malformed condition/data spec with its own field-scoped message.
-  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data', 'event']);
+  const ALLOWED_TRIGGER_KINDS = new Set([
+    "cron",
+    "webhook",
+    "condition",
+    "data",
+    "event",
+  ]);
   let webhook: { id: string; secret: string; url: string } | undefined;
   let triggers: automation.Trigger[] | undefined;
   if (triggersInput) {
     const badKind = triggersInput.find(
-      (t) => t.kind !== undefined && !ALLOWED_TRIGGER_KINDS.has(t.kind as string),
+      (t) =>
+        t.kind !== undefined && !ALLOWED_TRIGGER_KINDS.has(t.kind as string)
     );
     if (badKind) {
       if (ephemeralSession) await opts.store.closeSession(sessionId);
       return sendJson(res, 400, {
-        error: 'bad_request',
+        error: "bad_request",
         message: `Unsupported trigger kind "${String(badKind.kind)}" — update accepts cron, webhook, condition, data and event triggers.`,
       });
     }
     const existingWebhook = automation.webhookTriggerOf(existing.triggers);
     triggers = triggersInput.map((t) => {
-      if (t.kind === 'webhook') {
+      if (t.kind === "webhook") {
         // Wire shape carries no id/secretHash (those are gateway-minted) —
         // the only way to tell "keep the existing one" from "mint a new
         // one" is whether the automation already had a provisioned webhook.
@@ -448,39 +487,40 @@ export async function handleAutomationUpdate(
         const secret = automation.generateWebhookSecret();
         webhook = { id: wid, secret, url: webhookUrl(req, wid) };
         return {
-          kind: 'webhook',
+          kind: "webhook",
           id: wid,
           secretHash: automation.hashWebhookSecret(secret),
         };
       }
-      if (t.kind === 'condition') {
+      if (t.kind === "condition") {
         return {
-          kind: 'condition',
+          kind: "condition",
           entity: t.entity,
           ...(t.where === undefined ? {} : { where: t.where }),
           ...(t.every === undefined ? {} : { every: t.every }),
         } as automation.Trigger;
       }
-      if (t.kind === 'data') {
+      if (t.kind === "data") {
         return {
-          kind: 'data',
+          kind: "data",
           entities: t.entities,
           ...(t.every === undefined ? {} : { every: t.every }),
         } as automation.Trigger;
       }
-      if (t.kind === 'event') {
+      if (t.kind === "event") {
         return {
-          kind: 'event',
+          kind: "event",
           connectorKind: t.connectorKind,
           event: t.event,
           ...(t.filter === undefined ? {} : { filter: t.filter }),
           ...(t.every === undefined ? {} : { every: t.every }),
         } as automation.Trigger;
       }
-      const expr = typeof t.expr === 'string' ? t.expr : '0 9 * * *';
-      const tz = typeof t.tz === 'string' && t.tz.trim() ? t.tz.trim() : undefined;
+      const expr = typeof t.expr === "string" ? t.expr : "0 9 * * *";
+      const tz =
+        typeof t.tz === "string" && t.tz.trim() ? t.tz.trim() : undefined;
       return {
-        kind: 'cron',
+        kind: "cron",
         expr,
         ...(tz === undefined ? {} : { tz }),
       };
@@ -500,8 +540,8 @@ export async function handleAutomationUpdate(
   if (hasConnectionsKey) {
     if (connectionsInput === undefined) {
       return sendJson(res, 400, {
-        error: 'bad_request',
-        message: 'connections must be an array when provided',
+        error: "bad_request",
+        message: "connections must be an array when provided",
       });
     }
     if (connectionsInput.length === 0) delete patched.connections;
@@ -526,7 +566,7 @@ export async function handleAutomationUpdate(
   const manifest = automation.validateManifest(patched);
   const changedFile: ScaffoldFile = {
     path: targetPath,
-    content: JSON.stringify(manifest, null, 2) + '\n',
+    content: JSON.stringify(manifest, null, 2) + "\n",
   };
 
   await stageAndMaybePublish(opts, {
@@ -573,20 +613,20 @@ export async function handleAutomationRotateWebhook(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
   res: ServerResponse,
-  url: URL,
+  url: URL
 ): Promise<boolean> {
-  const rawRef = url.searchParams.get('ref') ?? '';
+  const rawRef = url.searchParams.get("ref") ?? "";
   const ref = automation.parseRef(rawRef);
   if (!ref) {
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'rotate-webhook needs ?ref=',
+      error: "bad_request",
+      message: "rotate-webhook needs ?ref=",
     });
   }
   const body = await readJson(req);
   const publish = body.publish === true;
   const explicitSession =
-    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+    typeof body.sessionId === "string" && body.sessionId ? body.sessionId : "";
   const sessionId = explicitSession || defaultSessionId(ref.appId);
   const ephemeralSession = !explicitSession;
 
@@ -598,19 +638,19 @@ export async function handleAutomationRotateWebhook(
   if (!current.some((f) => f.path === targetPath)) {
     if (ephemeralSession) await opts.store.closeSession(sessionId);
     return sendJson(res, 404, {
-      error: 'not_found',
+      error: "not_found",
       message: `Automation "${rawRef}" does not exist.`,
     });
   }
 
   const { changed, rotated } = automation.rotateWebhookInFiles(
     current as ScaffoldFile[],
-    ref.automationId,
+    ref.automationId
   );
   if (!rotated) {
     if (ephemeralSession) await opts.store.closeSession(sessionId);
     return sendJson(res, 400, {
-      error: 'bad_request',
+      error: "bad_request",
       message: `Automation "${rawRef}" has no webhook trigger to rotate.`,
     });
   }
@@ -647,18 +687,20 @@ export async function handleAutomationRotateWebhook(
 export async function handleEnrichmentToggle(
   opts: LifecycleRouteOptions,
   req: IncomingMessage,
-  res: ServerResponse,
+  res: ServerResponse
 ): Promise<boolean> {
   const body = await readJson(req);
-  if (typeof body.enabled !== 'boolean') {
+  if (typeof body.enabled !== "boolean") {
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'enrichment needs { enabled }',
+      error: "bad_request",
+      message: "enrichment needs { enabled }",
     });
   }
   const enabled = body.enabled;
   const enricherIds = new Set(
-    (await listTemplates()).filter((t) => t.category === 'Enrichment').map((t) => t.id),
+    (await listTemplates())
+      .filter((t) => t.category === "Enrichment")
+      .map((t) => t.id)
   );
   const { rows } = await automation.list(opts.codeAppsDir());
   const toggled: string[] = [];
@@ -673,16 +715,23 @@ export async function handleEnrichmentToggle(
     }
     const sessionId = defaultSessionId(row.ownerApp);
     await prepareLifecycleSession(opts.store, sessionId, true);
-    const appDir = await opts.store.snapshotSessionAppDir(sessionId, row.ownerApp);
+    const appDir = await opts.store.snapshotSessionAppDir(
+      sessionId,
+      row.ownerApp
+    );
     const current = await readFileMap(appDir);
-    const changed = automation.setEnabledInFiles(current as ScaffoldFile[], row.id, enabled);
+    const changed = automation.setEnabledInFiles(
+      current as ScaffoldFile[],
+      row.id,
+      enabled
+    );
     if (changed.length > 0) {
       await stageAndMaybePublish(opts, {
         appId: row.ownerApp,
         sessionId,
         files: changed,
         publish: true,
-        message: `${enabled ? 'enable' : 'disable'} enrichment (${row.id})`,
+        message: `${enabled ? "enable" : "disable"} enrichment (${row.id})`,
         ephemeralSession: true,
       });
       toggled.push(row.ref);
@@ -703,22 +752,22 @@ export async function handleAutomationDelete(
   opts: LifecycleRouteOptions,
   _req: IncomingMessage,
   res: ServerResponse,
-  url: URL,
+  url: URL
 ): Promise<boolean> {
-  const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
+  const ref = automation.parseRef(url.searchParams.get("ref") ?? "");
   if (!ref)
     return sendJson(res, 400, {
-      error: 'bad_request',
-      message: 'delete needs ?ref=',
+      error: "bad_request",
+      message: "delete needs ?ref=",
     });
-  const publish = url.searchParams.get('publish') === 'true';
+  const publish = url.searchParams.get("publish") === "true";
 
   // A whole automation app (`kind: 'automation'`) is removed wholesale;
   // an app-owned automation loses just its `automations/<id>/` subdir.
   const apps = await opts.store.listAppsWithMeta().catch(() => []);
   const appKind = apps.find((a) => a.id === ref.appId)?.kind;
 
-  if (appKind === 'automation') {
+  if (appKind === "automation") {
     // Drop the code from `main`, deregister (removing the data dir + run
     // ledgers — NOT a stray `ensureRegistered`, which would re-create them),
     // and reconcile the scheduler. The sequence lives in lifecycle-shared.
@@ -733,7 +782,10 @@ export async function handleAutomationDelete(
   await prepareLifecycleSession(opts.store, sessionId, true);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
   const current = await readFileMap(appDir);
-  const { removed } = automation.deleteFromFiles(current as ScaffoldFile[], ref.automationId);
+  const { removed } = automation.deleteFromFiles(
+    current as ScaffoldFile[],
+    ref.automationId
+  );
   if (removed.length === 0) {
     await opts.store.closeSession(sessionId);
     return sendJson(res, 200, { ok: true, staged: !publish });
@@ -743,7 +795,9 @@ export async function handleAutomationDelete(
   // removed `automations/<id>/` subdir, then optionally publish so `main`
   // no longer lists it. The publish→reconcile→close sequence lives in
   // lifecycle-shared so this route doesn't hand-orchestrate it.
-  await Promise.all(removed.map((rel) => fs.rm(nodePath.resolve(appDir, rel), { force: true })));
+  await Promise.all(
+    removed.map((rel) => fs.rm(nodePath.resolve(appDir, rel), { force: true }))
+  );
   if (publish) {
     await publishAndReconcile(opts, {
       appId: ref.appId,

@@ -1,11 +1,11 @@
 /** Per-turn context handed to the injected `buildExtraSystemPrompt` /
  *  `onTurnComplete` seams once prefs are loaded and the cwd is resolved. */
-import type { Dispatcher } from '../handlers/dispatcher.js';
-import type { ModelSubsystem } from '../stores/prefs-store.js';
-import type { ProviderEgressConsentController } from './provider-egress-consent.js';
-import type { RunnerHealthController } from './runner-health.js';
-import type { ConversationTurnInput } from './runner.js';
-import type { RunKind } from './schema.js';
+import type { Dispatcher } from "../handlers/dispatcher.js";
+import type { ModelSubsystem } from "../stores/prefs-store.js";
+import type { ProviderEgressConsentController } from "./provider-egress-consent.js";
+import type { RunnerHealthController } from "./runner-health.js";
+import type { ConversationTurnInput } from "./runner.js";
+import type { RunKind } from "./schema.js";
 import type {
   RunnerKind,
   RunnerPrefs,
@@ -13,7 +13,7 @@ import type {
   VaultContentRunner,
   VaultInvokeRunner,
   VaultSqlRunner,
-} from './turn.js';
+} from "./turn.js";
 
 export interface TurnContext {
   input: ConversationTurnInput;
@@ -37,7 +37,7 @@ export interface ConversationRunnerCoreOptions {
    */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind,
+    runnerKind?: RunnerKind
   ) => Promise<RunnerPrefs | undefined>;
   /**
    * Which subsystem's prefs this runner rides — passed to `prefsLoader` on
@@ -81,7 +81,9 @@ export interface ConversationRunnerCoreOptions {
    * the data-only backend leaves it false (cwd is the live data dir, no
    * draft to override to).
    */
-  cwdIsDraftWorktree?: boolean | ((input: ConversationTurnInput, cwd: string) => boolean);
+  cwdIsDraftWorktree?:
+    | boolean
+    | ((input: ConversationTurnInput, cwd: string) => boolean);
   /**
    * The vault-assistant register (issue: shell-level vault Q&A). When set,
    * each turn's `ToolContext` carries this owner-side `vault_sql` runner and
@@ -111,7 +113,7 @@ export interface ConversationRunnerCoreOptions {
    */
   runnerLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind,
+    primary: RunnerKind
   ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
   /** Persistent workspace-scoped breaker controller. */
   runnerHealth?: RunnerHealthController;

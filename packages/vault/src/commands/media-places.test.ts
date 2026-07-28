@@ -1,45 +1,57 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, Gateway } from '../gateway/gateway.js';
-import type { Credential } from '../gateway/types.js';
-import { registerAttachmentCommands } from './attachments.js';
-import { registerMediaCommands } from './media.js';
+import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { createGateway, Gateway } from "../gateway/gateway.js";
+import type { Credential } from "../gateway/types.js";
+import { registerAttachmentCommands } from "./attachments.js";
+import { registerMediaCommands } from "./media.js";
 
 const PIXEL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-describe('media: places', () => {
+describe("media: places", () => {
   beforeEach(() => {
     db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: 'Priya' });
+    boot = bootstrapVault(db, { ownerName: "Priya" });
     gw = createGateway(db);
     registerMediaCommands(gw);
     registerAttachmentCommands(gw);
-    owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
+    owner = {
+      kind: "device",
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
   });
 
   function invoke(command: string, input: Record<string, unknown>) {
-    return gw.invoke(owner, { command, input, purpose: 'dpv:ServiceProvision' });
+    return gw.invoke(owner, {
+      command,
+      input,
+      purpose: "dpv:ServiceProvision",
+    });
   }
 
-  function addAsset(input: Record<string, unknown>): { asset_id: string; content_id: string } {
-    const outcome = invoke('media.add_asset', input);
-    expect(outcome.status).toBe('executed');
-    return (outcome as { output: { asset_id: string; content_id: string } }).output;
+  function addAsset(input: Record<string, unknown>): {
+    asset_id: string;
+    content_id: string;
+  } {
+    const outcome = invoke("media.add_asset", input);
+    expect(outcome.status).toBe("executed");
+    return (outcome as { output: { asset_id: string; content_id: string } })
+      .output;
   }
 
   function exifJpegAt(
     latDeg: number,
-    latRef: 'N' | 'S',
+    latRef: "N" | "S",
     lonDeg: number,
-    lonRef: 'E' | 'W',
-    padding = 0,
+    lonRef: "E" | "W",
+    padding = 0
   ): Buffer {
     const entrySize = 12;
     const ifd0At = 8;
@@ -48,7 +60,7 @@ describe('media: places', () => {
     const latAt = dataAt;
     const lonAt = latAt + 24;
     const tiff = Buffer.alloc(lonAt + 24);
-    tiff.write('II', 0, 'latin1');
+    tiff.write("II", 0, "latin1");
     tiff.writeUInt16LE(0x2a, 2);
     tiff.writeUInt32LE(ifd0At, 4);
     const entry = (
@@ -57,13 +69,13 @@ describe('media: places', () => {
       type: number,
       count: number,
       value: number,
-      inlineAscii?: string,
+      inlineAscii?: string
     ) => {
       tiff.writeUInt16LE(tag, at);
       tiff.writeUInt16LE(type, at + 2);
       tiff.writeUInt32LE(count, at + 4);
       if (inlineAscii === undefined) tiff.writeUInt32LE(value, at + 8);
-      else tiff.write(inlineAscii, at + 8, 'latin1');
+      else tiff.write(inlineAscii, at + 8, "latin1");
     };
     tiff.writeUInt16LE(1, ifd0At);
     entry(ifd0At + 2, 0x8825, 4, 1, gpsIfdAt);
@@ -87,7 +99,7 @@ describe('media: places', () => {
       [0, 1],
       [0, 1],
     ]);
-    const exifBody = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff]);
+    const exifBody = Buffer.concat([Buffer.from("Exif\0\0", "latin1"), tiff]);
     const app1 = Buffer.alloc(4);
     app1.writeUInt16BE(0xffe1, 0);
     app1.writeUInt16BE(exifBody.length + 2, 2);
@@ -101,84 +113,94 @@ describe('media: places', () => {
   }
 
   function stageAndAdd(jpeg: Buffer) {
-    const staged = gw.stageBlob(owner, { bytes: jpeg, filename: 'photo.jpg' });
+    const staged = gw.stageBlob(owner, { bytes: jpeg, filename: "photo.jpg" });
     return addAsset({ staged_sha: staged.sha256 });
   }
 
-  test('add_asset with EXIF GPS finds-or-creates a core.place and links it', () => {
-    const { asset_id } = stageAndAdd(exifJpegAt(37, 'N', 122, 'W'));
+  test("add_asset with EXIF GPS finds-or-creates a core.place and links it", () => {
+    const { asset_id } = stageAndAdd(exifJpegAt(37, "N", 122, "W"));
     const asset = db.vault
-      .prepare('SELECT place_id FROM media_media_asset WHERE asset_id = ?')
+      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string | null };
     expect(asset.place_id).not.toBeNull();
     const place = db.vault
-      .prepare('SELECT geo_lat, geo_lng FROM core_place WHERE place_id = ?')
+      .prepare("SELECT geo_lat, geo_lng FROM core_place WHERE place_id = ?")
       .get(asset.place_id) as { geo_lat: number; geo_lng: number };
     expect(place.geo_lat).toBeCloseTo(37, 3);
     expect(place.geo_lng).toBeCloseTo(-122, 3);
   });
 
-  test('two photos at the same rounded coordinates share one core.place', () => {
-    const first = stageAndAdd(exifJpegAt(37, 'N', 122, 'W', 1));
-    const second = stageAndAdd(exifJpegAt(37, 'N', 122, 'W', 2));
+  test("two photos at the same rounded coordinates share one core.place", () => {
+    const first = stageAndAdd(exifJpegAt(37, "N", 122, "W", 1));
+    const second = stageAndAdd(exifJpegAt(37, "N", 122, "W", 2));
     const places = db.vault
-      .prepare('SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)')
+      .prepare(
+        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
+      )
       .all(first.asset_id, second.asset_id) as { place_id: string }[];
     expect(places[0]?.place_id).toBe(places[1]?.place_id);
     expect(
-      (db.vault.prepare('SELECT count(*) AS n FROM core_place').get() as { n: number }).n,
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM core_place").get() as {
+          n: number;
+        }
+      ).n
     ).toBe(1);
   });
 
-  test('a photo at a different location gets a different core.place', () => {
-    const first = stageAndAdd(exifJpegAt(37, 'N', 122, 'W', 1));
-    const second = stageAndAdd(exifJpegAt(10, 'N', 20, 'E', 2));
+  test("a photo at a different location gets a different core.place", () => {
+    const first = stageAndAdd(exifJpegAt(37, "N", 122, "W", 1));
+    const second = stageAndAdd(exifJpegAt(10, "N", 20, "E", 2));
     const rows = db.vault
-      .prepare('SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)')
+      .prepare(
+        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
+      )
       .all(first.asset_id, second.asset_id) as { place_id: string }[];
     expect(rows[0]?.place_id).not.toBe(rows[1]?.place_id);
   });
 
-  test('a photo with no GPS gets no place', () => {
+  test("a photo with no GPS gets no place", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
     const asset = db.vault
-      .prepare('SELECT place_id FROM media_media_asset WHERE asset_id = ?')
+      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string | null };
     expect(asset.place_id).toBeNull();
   });
 
-  test('media.set_asset_place sets and clears an asset location explicitly', () => {
+  test("media.set_asset_place sets and clears an asset location explicitly", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
-    const placeId = 'test-place-1';
+    const placeId = "test-place-1";
     db.vault
       .prepare(
-        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at) VALUES (?, 'Home', 'home', 12.9, 77.6, datetime('now'))`,
+        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at) VALUES (?, 'Home', 'home', 12.9, 77.6, datetime('now'))`
       )
       .run(placeId);
-    expect(invoke('media.set_asset_place', { asset_id, place_id: placeId }).status).toBe(
-      'executed',
+    expect(
+      invoke("media.set_asset_place", { asset_id, place_id: placeId }).status
+    ).toBe("executed");
+    expect(
+      (
+        db.vault
+          .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+          .get(asset_id) as { place_id: string }
+      ).place_id
+    ).toBe(placeId);
+    expect(invoke("media.set_asset_place", { asset_id }).status).toBe(
+      "executed"
     );
     expect(
       (
         db.vault
-          .prepare('SELECT place_id FROM media_media_asset WHERE asset_id = ?')
-          .get(asset_id) as { place_id: string }
-      ).place_id,
-    ).toBe(placeId);
-    expect(invoke('media.set_asset_place', { asset_id }).status).toBe('executed');
-    expect(
-      (
-        db.vault
-          .prepare('SELECT place_id FROM media_media_asset WHERE asset_id = ?')
+          .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
           .get(asset_id) as { place_id: string | null }
-      ).place_id,
+      ).place_id
     ).toBeNull();
   });
 
-  test('media.set_asset_place refuses an unknown place id', () => {
+  test("media.set_asset_place refuses an unknown place id", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
-    expect(invoke('media.set_asset_place', { asset_id, place_id: 'nope' }).status).not.toBe(
-      'executed',
-    );
+    expect(
+      invoke("media.set_asset_place", { asset_id, place_id: "nope" }).status
+    ).not.toBe("executed");
   });
 });

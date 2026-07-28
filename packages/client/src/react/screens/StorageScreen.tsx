@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 
 import type {
   LocalUsageReportDTO,
   StorageLimitsDTO,
   StorageLimitsPatchDTO,
-} from '../../gateway-client-local-storage.js';
-import BackupCard, { type BackupCardProps } from './BackupCard.js';
-import LocalFootprintCard from './LocalFootprintCard.js';
-import StorageLimitsPanel from './StorageLimitsPanel.js';
+} from "../../gateway-client-local-storage.js";
+import BackupCard, { type BackupCardProps } from "./BackupCard.js";
+import LocalFootprintCard from "./LocalFootprintCard.js";
+import StorageLimitsPanel from "./StorageLimitsPanel.js";
 
-import styles from './StorageScreen.module.css';
+import styles from "./StorageScreen.module.css";
 
 // The Storage page (issue #544 — this was Backups). It answers the storage
 // question in the order an owner actually asks it:
@@ -33,23 +33,27 @@ export interface StorageScreenProps {
   /** Live clock (route ticks it) — drives the backup card's relative ages. */
   now: number;
   /** `GET _gateway/storage/local` — the footprint card's source. */
-  loadLocalUsage: (opts?: { refresh?: boolean }) => Promise<LocalUsageReportDTO>;
+  loadLocalUsage: (opts?: {
+    refresh?: boolean;
+  }) => Promise<LocalUsageReportDTO>;
   /** `PUT _gateway/storage/limits`. */
-  saveStorageLimits: (patch: StorageLimitsPatchDTO) => Promise<StorageLimitsDTO>;
+  saveStorageLimits: (
+    patch: StorageLimitsPatchDTO
+  ) => Promise<StorageLimitsDTO>;
   /** Backup card data — `GET/POST _gateway/backup`. */
-  loadBackupStatus: BackupCardProps['loadStatus'];
+  loadBackupStatus: BackupCardProps["loadStatus"];
   /** Aggregate provider usage — the Cost metric's source. */
-  loadStorageUsage?: BackupCardProps['loadUsage'];
-  streamBackupCustody?: BackupCardProps['streamCustody'];
-  onRunBackupNow: BackupCardProps['onRunNow'];
-  onVerifyBackupNow?: BackupCardProps['onVerifyNow'];
-  onUpdateBackupPolicy?: BackupCardProps['onUpdatePolicy'];
-  onVerifyBackupBucket?: BackupCardProps['onVerifyBucket'];
-  onExportRecoveryKit?: BackupCardProps['onExportRecoveryKit'];
+  loadStorageUsage?: BackupCardProps["loadUsage"];
+  streamBackupCustody?: BackupCardProps["streamCustody"];
+  onRunBackupNow: BackupCardProps["onRunNow"];
+  onVerifyBackupNow?: BackupCardProps["onVerifyNow"];
+  onUpdateBackupPolicy?: BackupCardProps["onUpdatePolicy"];
+  onVerifyBackupBucket?: BackupCardProps["onVerifyBucket"];
+  onExportRecoveryKit?: BackupCardProps["onExportRecoveryKit"];
   /** Recovery-kit confirmation gate — `POST _gateway/backup/kit-confirmed`. */
-  onConfirmRecoveryKit: BackupCardProps['onConfirmRecoveryKit'];
+  onConfirmRecoveryKit: BackupCardProps["onConfirmRecoveryKit"];
   /** Navigates to Settings → Storage provider — the card's "Manage" link. */
-  onOpenStorageSettings: BackupCardProps['onOpenSettings'];
+  onOpenStorageSettings: BackupCardProps["onOpenSettings"];
 }
 
 /** Footprint refresh cadence. Deliberately slower than the backup card's 10s:
@@ -82,7 +86,7 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
         setFootprintError(err instanceof Error ? err.message : String(err));
       }
     },
-    [loadLocalUsage],
+    [loadLocalUsage]
   );
 
   useEffect(() => {
@@ -120,7 +124,11 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
         rescanning={rescanning}
       />
 
-      <StorageLimitsPanel limits={limits} report={report} onSave={onSaveLimits} />
+      <StorageLimitsPanel
+        limits={limits}
+        report={report}
+        onSave={onSaveLimits}
+      />
 
       <BackupCard
         now={props.now}

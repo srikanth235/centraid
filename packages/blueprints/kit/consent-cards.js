@@ -11,7 +11,7 @@
 // (the kit's relative-fetch helper, or any auth-aware equivalent) plus the
 // route builders from conversation-client.js.
 
-import { parkedListPath, parkedDecisionPath } from './conversation-client.js';
+import { parkedListPath, parkedDecisionPath } from "./conversation-client.js";
 
 /**
  * Probe a tool result for a vault `InvokeOutcome` — bare, or nested under
@@ -20,9 +20,13 @@ import { parkedListPath, parkedDecisionPath } from './conversation-client.js';
  * @returns {{ status: string, [k: string]: unknown } | null} The nested or bare outcome.
  */
 export function outcomeOf(x) {
-  if (!x || typeof x !== 'object') return null;
-  if (typeof x.status === 'string') return x;
-  if (x.output && typeof x.output === 'object' && typeof x.output.status === 'string') {
+  if (!x || typeof x !== "object") return null;
+  if (typeof x.status === "string") return x;
+  if (
+    x.output &&
+    typeof x.output === "object" &&
+    typeof x.output.status === "string"
+  ) {
     return x.output;
   }
   return null;
@@ -30,8 +34,8 @@ export function outcomeOf(x) {
 
 /** Truncate a value for one-line display in a proposed-write card. */
 export function shortVal(v) {
-  let s = typeof v === 'string' ? v : JSON.stringify(v);
-  s = String(s == null ? '' : s);
+  let s = typeof v === "string" ? v : JSON.stringify(v);
+  s = String(s == null ? "" : s);
   return s.length > 60 ? `${s.slice(0, 57)}…` : s;
 }
 
@@ -44,10 +48,10 @@ export function describeParked(entry) {
   const input = entry.input || {};
   const detail = Object.keys(input)
     .map((k) => `${k}: ${shortVal(input[k])}`)
-    .join(' · ');
+    .join(" · ");
   return {
-    title: entry.command ?? 'Proposed write',
-    detail: (entry.caller ? `${entry.caller} · ` : '') + (detail || 'no input'),
+    title: entry.command ?? "Proposed write",
+    detail: (entry.caller ? `${entry.caller} · ` : "") + (detail || "no input"),
   };
 }
 
@@ -74,13 +78,14 @@ export async function fetchParkedEntry(invocationId, deps) {
  */
 export async function confirmParked(invocationId, approve, deps) {
   const r = await deps.fetchJson(parkedDecisionPath(invocationId), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ approve }),
   });
   if (!r.ok) {
     throw new Error(
-      (r.body && (r.body.message || r.body.error)) || `confirmation failed (${r.status})`,
+      (r.body && (r.body.message || r.body.error)) ||
+        `confirmation failed (${r.status})`
     );
   }
   return r.body;
@@ -93,14 +98,14 @@ export async function confirmParked(invocationId, approve, deps) {
  * @returns {{ ok: true, receipt: string } | { ok: false, note: string }} The card settle state.
  */
 export function normalizeApproveOutcome(outcome) {
-  if (outcome && outcome.status === 'executed') {
+  if (outcome && outcome.status === "executed") {
     return { ok: true, receipt: `approved · receipt ${outcome.receiptId}` };
   }
-  if (outcome && outcome.status === 'replayed') {
-    return { ok: true, receipt: 'already applied' };
+  if (outcome && outcome.status === "replayed") {
+    return { ok: true, receipt: "already applied" };
   }
   return {
     ok: false,
-    note: (outcome && outcome.reason) || 'The vault refused this write.',
+    note: (outcome && outcome.reason) || "The vault refused this write.",
   };
 }

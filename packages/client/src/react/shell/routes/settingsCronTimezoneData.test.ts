@@ -1,24 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CRON_DEFAULT_TIMEZONE_PREF,
   loadDefaultCronTimeZone,
   saveDefaultCronTimeZone,
-} from './settingsCronTimezoneData.js';
+} from "./settingsCronTimezoneData.js";
 
 const getUserPrefs = vi.hoisted(() =>
-  vi.fn<typeof import('../../../gateway-client.js').getUserPrefs>(),
+  vi.fn<typeof import("../../../gateway-client.js").getUserPrefs>()
 );
 const saveUserPrefs = vi.hoisted(() =>
-  vi.fn<typeof import('../../../gateway-client.js').saveUserPrefs>(),
+  vi.fn<typeof import("../../../gateway-client.js").saveUserPrefs>()
 );
 
-vi.mock(import('../../../gateway-client.js'), () => ({
+vi.mock(import("../../../gateway-client.js"), () => ({
   getUserPrefs: () => getUserPrefs(),
   saveUserPrefs: (patch: Record<string, unknown>) => saveUserPrefs(patch),
 }));
 
-describe('settingsCronTimezoneData', () => {
+describe("settingsCronTimezoneData", () => {
   beforeEach(() => {
     getUserPrefs.mockReset();
     saveUserPrefs.mockReset();
@@ -26,34 +26,36 @@ describe('settingsCronTimezoneData', () => {
     saveUserPrefs.mockResolvedValue({});
   });
 
-  describe('settingsCronTimezoneData', () => {
-    it('loads the gateway default cron timezone pref', async () => {
+  describe("settingsCronTimezoneData", () => {
+    it("loads the gateway default cron timezone pref", async () => {
       getUserPrefs.mockResolvedValue({
-        [CRON_DEFAULT_TIMEZONE_PREF]: 'America/New_York',
+        [CRON_DEFAULT_TIMEZONE_PREF]: "America/New_York",
       });
-      await expect(loadDefaultCronTimeZone()).resolves.toBe('America/New_York');
+      await expect(loadDefaultCronTimeZone()).resolves.toBe("America/New_York");
     });
 
-    it('returns empty string when the pref is unset', async () => {
-      await expect(loadDefaultCronTimeZone()).resolves.toBe('');
+    it("returns empty string when the pref is unset", async () => {
+      await expect(loadDefaultCronTimeZone()).resolves.toBe("");
     });
 
-    it('saves a valid IANA name', async () => {
-      await expect(saveDefaultCronTimeZone('Europe/London')).resolves.toBeNull();
+    it("saves a valid IANA name", async () => {
+      await expect(
+        saveDefaultCronTimeZone("Europe/London")
+      ).resolves.toBeNull();
       expect(saveUserPrefs).toHaveBeenCalledWith({
-        [CRON_DEFAULT_TIMEZONE_PREF]: 'Europe/London',
+        [CRON_DEFAULT_TIMEZONE_PREF]: "Europe/London",
       });
     });
 
-    it('clears the pref when empty', async () => {
-      await expect(saveDefaultCronTimeZone('  ')).resolves.toBeNull();
+    it("clears the pref when empty", async () => {
+      await expect(saveDefaultCronTimeZone("  ")).resolves.toBeNull();
       expect(saveUserPrefs).toHaveBeenCalledWith({
         [CRON_DEFAULT_TIMEZONE_PREF]: null,
       });
     });
 
-    it('refuses an unknown IANA name without writing', async () => {
-      const err = await saveDefaultCronTimeZone('Not/A_Zone');
+    it("refuses an unknown IANA name without writing", async () => {
+      const err = await saveDefaultCronTimeZone("Not/A_Zone");
       expect(err).toMatch(/not a known IANA timezone/u);
       expect(saveUserPrefs).not.toHaveBeenCalled();
     });

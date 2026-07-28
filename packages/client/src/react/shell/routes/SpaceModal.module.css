@@ -198,7 +198,7 @@
   background: color-mix(in srgb, var(--ink) 3%, transparent);
   color: var(--ink-2);
 }
-.profIconBtn[data-selected='true'] {
+.profIconBtn[data-selected="true"] {
   border: 1.5px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
@@ -217,7 +217,7 @@
   border: 0.5px solid var(--line);
   box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
 }
-.profColorBtn[data-selected='true'] {
+.profColorBtn[data-selected="true"] {
   border: 1.5px solid var(--ink);
   box-shadow: inset 0 0 0 2px var(--bg-elev);
 }

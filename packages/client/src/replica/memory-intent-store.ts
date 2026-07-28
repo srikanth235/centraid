@@ -1,6 +1,9 @@
-import { ReplicaProtocolError } from './errors.js';
-import type { IntentRecordStore, NewStoredIntent } from './intent-record-store.js';
-import type { IntentState, ReplicaIntent } from './types.js';
+import { ReplicaProtocolError } from "./errors.js";
+import type {
+  IntentRecordStore,
+  NewStoredIntent,
+} from "./intent-record-store.js";
+import type { IntentState, ReplicaIntent } from "./types.js";
 
 export class MemoryIntentStore implements IntentRecordStore {
   readonly #records = new Map<string, ReplicaIntent>();
@@ -11,7 +14,7 @@ export class MemoryIntentStore implements IntentRecordStore {
     if (existing) {
       if (existing.payloadHash !== intent.payloadHash) {
         throw new ReplicaProtocolError(
-          `Intent id ${intent.intentId} was reused with another payload`,
+          `Intent id ${intent.intentId} was reused with another payload`
         );
       }
       return clone(existing);
@@ -37,10 +40,10 @@ export class MemoryIntentStore implements IntentRecordStore {
   async claimNext(): Promise<ReplicaIntent | undefined> {
     const queued = [...this.#records.values()]
       .sort((left, right) => left.createdOrder - right.createdOrder)
-      .find((intent) => intent.state === 'queued');
+      .find((intent) => intent.state === "queued");
     if (!queued) return undefined;
-    return this.transition(queued.intentId, ['queued'], {
-      state: 'sending',
+    return this.transition(queued.intentId, ["queued"], {
+      state: "sending",
       attempts: queued.attempts + 1,
       reason: undefined,
     });
@@ -49,12 +52,14 @@ export class MemoryIntentStore implements IntentRecordStore {
   async transition(
     intentId: string,
     allowed: readonly IntentState[],
-    patch: Partial<ReplicaIntent>,
+    patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
     const existing = this.#records.get(intentId);
     if (!existing) throw new ReplicaProtocolError(`Unknown intent ${intentId}`);
     if (!allowed.includes(existing.state)) {
-      throw new ReplicaProtocolError(`Intent ${intentId} cannot transition from ${existing.state}`);
+      throw new ReplicaProtocolError(
+        `Intent ${intentId} cannot transition from ${existing.state}`
+      );
     }
     const updated = {
       ...existing,
@@ -69,12 +74,14 @@ export class MemoryIntentStore implements IntentRecordStore {
   async settle(
     intentId: string,
     allowed: readonly IntentState[],
-    patch: Partial<ReplicaIntent>,
+    patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
     const existing = this.#records.get(intentId);
     if (!existing) throw new ReplicaProtocolError(`Unknown intent ${intentId}`);
     if (!allowed.includes(existing.state)) {
-      throw new ReplicaProtocolError(`Intent ${intentId} cannot settle from ${existing.state}`);
+      throw new ReplicaProtocolError(
+        `Intent ${intentId} cannot settle from ${existing.state}`
+      );
     }
     const settled = {
       ...existing,

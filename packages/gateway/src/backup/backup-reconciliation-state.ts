@@ -1,6 +1,6 @@
-import type { ProviderAuditEvent } from '@centraid/backup';
+import type { ProviderAuditEvent } from "@centraid/backup";
 
-import type { InventorySource } from './backup-provider-observability.js';
+import type { InventorySource } from "./backup-provider-observability.js";
 
 export interface DriftSummary {
   count: number;
@@ -15,7 +15,7 @@ export interface InventoryAttestationDrift {
 
 export interface StoreReconciliationState {
   configured: boolean;
-  source: InventorySource | 'not-configured' | 'unavailable';
+  source: InventorySource | "not-configured" | "unavailable";
   providerAttested: boolean;
   /** Total objects/bytes the provider still holds, including soft-deleted custody. */
   objectCount: number;
@@ -32,8 +32,8 @@ export interface StoreReconciliationState {
 
 export interface BackupReconciliationState {
   checkedAt: string;
-  mode: 'scheduled' | 'bucket';
-  status: 'ok' | 'degraded' | 'error';
+  mode: "scheduled" | "bucket";
+  status: "ok" | "degraded" | "error";
   backup: StoreReconciliationState;
   cas: StoreReconciliationState;
   walGaps: DriftSummary;
@@ -57,7 +57,7 @@ export interface BackupReconciliationState {
     }>;
   };
   audit: {
-    source: 'provider' | 'unavailable';
+    source: "provider" | "unavailable";
     eventCount: number;
     recent: ProviderAuditEvent[];
     error?: string;
@@ -71,10 +71,13 @@ export function driftSummary(values: Iterable<string>): DriftSummary {
   return { count: rows.length, sample: rows.slice(0, SAMPLE_LIMIT) };
 }
 
-export function unavailableStore(configured: boolean, error?: string): StoreReconciliationState {
+export function unavailableStore(
+  configured: boolean,
+  error?: string
+): StoreReconciliationState {
   return {
     configured,
-    source: configured ? 'unavailable' : 'not-configured',
+    source: configured ? "unavailable" : "not-configured",
     providerAttested: false,
     objectCount: 0,
     bytes: 0,
@@ -89,13 +92,13 @@ export function unavailableStore(configured: boolean, error?: string): StoreReco
 
 export function failedReconciliation(
   checkedAt: string,
-  mode: BackupReconciliationState['mode'],
-  error: string,
+  mode: BackupReconciliationState["mode"],
+  error: string
 ): BackupReconciliationState {
   return {
     checkedAt,
     mode,
-    status: 'error',
+    status: "error",
     backup: unavailableStore(true, error),
     cas: unavailableStore(false),
     walGaps: driftSummary([]),
@@ -107,6 +110,6 @@ export function failedReconciliation(
       markerCount: 0,
     },
     snapshots: { live: 0, pruned: 0, recent: [] },
-    audit: { source: 'unavailable', eventCount: 0, recent: [] },
+    audit: { source: "unavailable", eventCount: 0, recent: [] },
   };
 }

@@ -4,12 +4,12 @@
  * without opening a database, and that unopened ops fail closed.
  */
 
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 const listeners: Array<(ev: MessageEvent) => void> = [];
 const posts: unknown[] = [];
 
-describe('sqlite-worker', () => {
+describe("sqlite-worker", () => {
   beforeAll(async () => {
     // Install a worker-like global before the module evaluates.
     const g = globalThis as unknown as {
@@ -18,17 +18,21 @@ describe('sqlite-worker', () => {
       close: () => void;
     };
     g.addEventListener = (type, fn) => {
-      if (type === 'message') listeners.push(fn);
+      if (type === "message") listeners.push(fn);
     };
     g.postMessage = (msg) => {
       posts.push(msg);
     };
     g.close = () => undefined;
 
-    await import('./sqlite-worker.js');
+    await import("./sqlite-worker.js");
   });
 
-  function send(request: { id: number; op: string; payload?: unknown }): Promise<unknown> {
+  function send(request: {
+    id: number;
+    op: string;
+    payload?: unknown;
+  }): Promise<unknown> {
     return new Promise((resolve) => {
       const before = posts.length;
       for (const fn of listeners) {
@@ -45,13 +49,13 @@ describe('sqlite-worker', () => {
     });
   }
 
-  describe('sqlite-worker entry', () => {
-    it('registers a message listener on import', () => {
+  describe("sqlite-worker entry", () => {
+    it("registers a message listener on import", () => {
       expect(listeners.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('status / read before open fails closed with a serialized error', async () => {
-      const res = (await send({ id: 1, op: 'status' })) as {
+    it("status / read before open fails closed with a serialized error", async () => {
+      const res = (await send({ id: 1, op: "status" })) as {
         id: number;
         ok: boolean;
         error?: { message: string };

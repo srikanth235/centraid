@@ -12,47 +12,60 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
-} from 'react';
+} from "react";
 
-import type { InlineAppProps } from '../inline-types.ts';
-import { Chrome, type ChromeAvatar } from './Chrome.tsx';
-import { ActivityFeed } from './components/Activity.tsx';
-import { Dashboard } from './components/Dashboard.tsx';
-import { DetailModal } from './components/DetailModal.tsx';
-import { ExpenseModal } from './components/ExpenseModal.tsx';
-import { FriendModal } from './components/FriendModal.tsx';
-import { GroupModal } from './components/GroupModal.tsx';
-import { Ledger } from './components/Ledger.tsx';
-import { SearchResults } from './components/Search.tsx';
-import { SettleModal } from './components/SettleModal.tsx';
-import { KitSkeleton } from './components/Shared.tsx';
-import { FriendsNav, GroupsNav, SmartNav } from './components/Sidebar.tsx';
-import { first, money } from './format.ts';
-import { observeWidth, onDataChange, onFocusRefresh, readFailed, wireThemeToggle } from './kit.ts';
-import { createLogic } from './logic.ts';
-import type { AppState, Dash, DashboardPayload, LedgerRow, NavPatch, ViewData } from './types.ts';
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome, type ChromeAvatar } from "./Chrome.tsx";
+import { ActivityFeed } from "./components/Activity.tsx";
+import { Dashboard } from "./components/Dashboard.tsx";
+import { DetailModal } from "./components/DetailModal.tsx";
+import { ExpenseModal } from "./components/ExpenseModal.tsx";
+import { FriendModal } from "./components/FriendModal.tsx";
+import { GroupModal } from "./components/GroupModal.tsx";
+import { Ledger } from "./components/Ledger.tsx";
+import { SearchResults } from "./components/Search.tsx";
+import { SettleModal } from "./components/SettleModal.tsx";
+import { KitSkeleton } from "./components/Shared.tsx";
+import { FriendsNav, GroupsNav, SmartNav } from "./components/Sidebar.tsx";
+import { first, money } from "./format.ts";
+import {
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+  wireThemeToggle,
+} from "./kit.ts";
+import { createLogic } from "./logic.ts";
+import type {
+  AppState,
+  Dash,
+  DashboardPayload,
+  LedgerRow,
+  NavPatch,
+  ViewData,
+} from "./types.ts";
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
 // when a change names one of these (or names none, i.e. "this app acted").
 export const CHANGE_TABLES = [
-  'tally.expense',
-  'tally.expense_split',
-  'tally.settlement',
-  'tally.friend',
-  'tally.group',
-  'social.circle',
-  'social.circle_member',
-  'core.party',
-  'core.vault',
-  'tally',
+  "tally.expense",
+  "tally.expense_split",
+  "tally.settlement",
+  "tally.friend",
+  "tally.group",
+  "social.circle",
+  "social.circle_member",
+  "core.party",
+  "core.vault",
+  "tally",
 ];
 
 function makeState(): AppState {
   return {
-    view: 'dashboard',
+    view: "dashboard",
     groupId: null,
     friendId: null,
-    search: '',
+    search: "",
     narrow: false,
     viewData: null,
     detail: null,
@@ -68,7 +81,7 @@ function makeState(): AppState {
 function makeDash(): Dash {
   return {
     me: null,
-    currency: 'USD',
+    currency: "USD",
     friends: [],
     groups: [],
     trash: [],
@@ -88,7 +101,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
   const themeBtnRef = useRef<HTMLButtonElement | null>(null);
   const viewSeqRef = useRef(0);
-  const lastViewKeyRef = useRef('');
+  const lastViewKeyRef = useRef("");
   const deniedRef = useRef<{ message: string } | null>(null);
   const dashReadyRef = useRef(false);
 
@@ -109,14 +122,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     bump(); // paint chrome + (on navigation) a skeleton immediately
     let next: ViewData | null = null;
     try {
-      if (state.view === 'group' && state.groupId) {
-        next = await logic.read('group', { group_id: state.groupId });
-      } else if (state.view === 'friend' && state.friendId) {
-        next = await logic.read('friend', { party_id: state.friendId });
-      } else if (state.view === 'activity') {
-        next = await logic.read('activity');
+      if (state.view === "group" && state.groupId) {
+        next = await logic.read("group", { group_id: state.groupId });
+      } else if (state.view === "friend" && state.friendId) {
+        next = await logic.read("friend", { party_id: state.friendId });
+      } else if (state.view === "activity") {
+        next = await logic.read("activity");
       } else if (state.search.trim()) {
-        next = await logic.read('search', { term: state.search.trim() });
+        next = await logic.read("search", { term: state.search.trim() });
       }
     } catch (err) {
       logic.notice(String((err as { message?: string })?.message ?? err));
@@ -125,7 +138,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     state.viewData = next;
     if (state.viewData?.me) dash.me = state.viewData.me;
     if (state.viewData?.vaultDenied) {
-      deniedRef.current = { message: state.viewData.vaultDenied.message ?? '' };
+      deniedRef.current = { message: state.viewData.vaultDenied.message ?? "" };
     }
     bump();
   }, []);
@@ -138,14 +151,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     const logic = logicRef.current!;
     let next: DashboardPayload | undefined;
     try {
-      next = await logic.read<DashboardPayload>('dashboard');
+      next = await logic.read<DashboardPayload>("dashboard");
     } catch {
-      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       return false;
     }
     dashReadyRef.current = true;
     if (next?.vaultDenied) {
-      deniedRef.current = { message: next.vaultDenied.message ?? '' };
+      deniedRef.current = { message: next.vaultDenied.message ?? "" };
       return false;
     }
     deniedRef.current = null;
@@ -208,7 +221,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       rootElRef.current = el;
       rootRef(el);
     },
-    [rootRef],
+    [rootRef]
   );
 
   // A nav that also closes the narrow drawer (logic.setNav's own
@@ -229,7 +242,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     });
     const stopFocus = onFocusRefresh(() => void refreshAll());
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       const l = logicRef.current!;
       if (l.anyModalOpen()) {
         l.closeAllModals();
@@ -238,7 +251,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       }
       setSideOpen(false);
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 900, (isNarrow: boolean) => {
           stateRef.current.narrow = isNarrow;
@@ -251,7 +264,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       stopDoorbell();
       stopFocus();
       stopWidth();
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener("keydown", onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
@@ -262,13 +275,13 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   // The optimistic rows that belong on the currently visible ledger.
   const pendingForView = (): LedgerRow[] => {
     if (!state.pendingExpenses.length) return [];
-    if (state.view === 'group')
+    if (state.view === "group")
       return state.pendingExpenses.filter((r) => r.group_id === state.groupId);
-    if (state.view === 'friend')
+    if (state.view === "friend")
       return state.pendingExpenses.filter(
         (r) =>
           r.paid_by === state.friendId ||
-          (r.splits ?? []).some((s) => s.party_id === state.friendId),
+          (r.splits ?? []).some((s) => s.party_id === state.friendId)
       );
     return [];
   };
@@ -281,8 +294,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     let owe = dash.owe_total_minor;
     let owed = dash.owed_total_minor;
     for (const r of inflight) {
-      if (r.your_role === 'lent') owed += r.your_amount_minor;
-      else if (r.your_role === 'borrowed') owe += r.your_amount_minor;
+      if (r.your_role === "lent") owed += r.your_amount_minor;
+      else if (r.your_role === "borrowed") owe += r.your_amount_minor;
     }
     return { ...dash, owe_total_minor: owe, owed_total_minor: owed };
   };
@@ -296,32 +309,32 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   if (q) {
     title = `Results for “${q}”`;
     const n = state.viewData?.results?.length ?? 0;
-    sub = `${n} match${n === 1 ? '' : 'es'}`;
-  } else if (state.view === 'group' && state.viewData?.group) {
+    sub = `${n} match${n === 1 ? "" : "es"}`;
+  } else if (state.view === "group" && state.viewData?.group) {
     const g = state.viewData.group;
-    avatar = { bg: g.color || '#0FA678', text: g.icon || '👥' };
+    avatar = { bg: g.color || "#0FA678", text: g.icon || "👥" };
     title = g.name;
     const n = state.viewData.members?.length ?? 0;
-    sub = `${n} member${n === 1 ? '' : 's'}`;
+    sub = `${n} member${n === 1 ? "" : "s"}`;
     showSettle = true;
-  } else if (state.view === 'friend' && state.viewData?.friend) {
+  } else if (state.view === "friend" && state.viewData?.friend) {
     const f = state.viewData.friend;
-    avatar = { bg: f.color || '#5C677D', text: f.initials };
+    avatar = { bg: f.color || "#5C677D", text: f.initials };
     title = f.name;
     const v = f.net_minor;
     sub =
       Math.abs(v) < 1
-        ? 'You are settled up'
+        ? "You are settled up"
         : v > 0
           ? `${first(f.name)} owes you ${money(v, dash.currency)}`
           : `You owe ${first(f.name)} ${money(v, dash.currency)}`;
     showSettle = true;
-  } else if (state.view === 'activity') {
-    title = 'Activity';
-    sub = 'Expenses and settlements, newest first';
+  } else if (state.view === "activity") {
+    title = "Activity";
+    sub = "Expenses and settlements, newest first";
   } else {
-    title = 'Dashboard';
-    sub = 'Your balances at a glance';
+    title = "Dashboard";
+    sub = "Your balances at a glance";
   }
 
   // ---- Main content (mirrors app.tsx render) ----
@@ -335,12 +348,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         onOpenDetail={handleOpenDetail}
       />
     );
-  } else if (state.view === 'dashboard') {
+  } else if (state.view === "dashboard") {
     content = dashReadyRef.current ? (
       <Dashboard
         dash={dashWithPending()}
-        onOpenFriend={(friendId) => navTo({ view: 'friend', friendId, search: '' })}
-        onOpenGroup={(groupId) => navTo({ view: 'group', groupId, search: '' })}
+        onOpenFriend={(friendId) =>
+          navTo({ view: "friend", friendId, search: "" })
+        }
+        onOpenGroup={(groupId) => navTo({ view: "group", groupId, search: "" })}
         onOpenAddFriend={handleOpenAddFriend}
         onOpenNewGroup={handleOpenNewGroup}
         onRestoreExpense={handleRestoreExpense}
@@ -348,9 +363,15 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     ) : (
       <KitSkeleton rows={4} />
     );
-  } else if (state.view === 'activity') {
-    content = <ActivityFeed viewData={state.viewData} me={dash.me} currency={dash.currency} />;
-  } else if (state.view === 'group' || state.view === 'friend') {
+  } else if (state.view === "activity") {
+    content = (
+      <ActivityFeed
+        viewData={state.viewData}
+        me={dash.me}
+        currency={dash.currency}
+      />
+    );
+  } else if (state.view === "group" || state.view === "friend") {
     // Optimistic adds render on top of the fetched ledger, newest first —
     // never mutating state.viewData, so a refresh replaces it wholesale.
     const pend = pendingForView();
@@ -434,7 +455,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   }
 
   const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== "Escape") return;
     e.preventDefault();
     logic.clearSearch();
   };
@@ -446,8 +467,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     <div
       ref={setRoot}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
         minWidth: 0,
         minHeight: 0,

@@ -1,21 +1,21 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { describe, expect, it } from 'vitest';
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { describe, expect, it } from "vitest";
 
-import { openJournalDb, makeJournalDbProvider } from './gateway-db.js';
+import { openJournalDb, makeJournalDbProvider } from "./gateway-db.js";
 
 function freshDbPath(): string {
-  const dir = tempDirSync('centraid-db-');
-  return path.join(dir, 'db.sqlite');
+  const dir = tempDirSync("centraid-db-");
+  return path.join(dir, "db.sqlite");
 }
 
 function userVersion(path: string): number {
   const db = new DatabaseSync(path);
   try {
-    const row = db.prepare('PRAGMA user_version').get() as {
+    const row = db.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
     return row.user_version;
@@ -28,29 +28,33 @@ function tableNames(path: string): string[] {
   const db = new DatabaseSync(path);
   try {
     return (
-      db.prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`).all() as Array<{
+      db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`
+        )
+        .all() as Array<{
         name: string;
       }>
     )
       .map((t) => t.name)
-      .filter((n) => !n.startsWith('sqlite_'));
+      .filter((n) => !n.startsWith("sqlite_"));
   } finally {
     db.close();
   }
 }
 
-describe('openJournalDb (the conversation-ledger band of the vault journal)', () => {
-  it('uses the bounded low-end read pragmas (#456 S1)', () => {
+describe("openJournalDb (the conversation-ledger band of the vault journal)", () => {
+  it("uses the bounded low-end read pragmas (#456 S1)", () => {
     const db = openJournalDb(freshDbPath());
     try {
       // Spread the null-prototype node:sqlite rows to compare column data only.
-      expect({ ...db.prepare('PRAGMA cache_size').get() }).toStrictEqual({
+      expect({ ...db.prepare("PRAGMA cache_size").get() }).toStrictEqual({
         cache_size: -16000,
       });
-      expect({ ...db.prepare('PRAGMA mmap_size').get() }).toStrictEqual({
+      expect({ ...db.prepare("PRAGMA mmap_size").get() }).toStrictEqual({
         mmap_size: 67_108_864,
       });
-      expect({ ...db.prepare('PRAGMA temp_store').get() }).toStrictEqual({
+      expect({ ...db.prepare("PRAGMA temp_store").get() }).toStrictEqual({
         temp_store: 2,
       });
     } finally {
@@ -58,85 +62,93 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     }
   });
 
-  it('NEVER touches PRAGMA user_version — that belongs to the vault audit ladder', () => {
+  it("NEVER touches PRAGMA user_version — that belongs to the vault audit ladder", () => {
     // Fresh file: the ensure creates the ledger band and leaves the version 0.
     const path = freshDbPath();
     openJournalDb(path).close();
     expect(userVersion(path)).toBe(0);
   });
 
-  it('is safe on a file the vault package already migrated (audit band intact)', () => {
+  it("is safe on a file the vault package already migrated (audit band intact)", () => {
     // Preserve a foreign table and nonzero user_version from the vault ladder.
     const path = freshDbPath();
     const seed = new DatabaseSync(path);
     seed.exec(`CREATE TABLE consent_receipt (receipt_id TEXT PRIMARY KEY);`);
-    seed.exec('PRAGMA user_version = 1');
+    seed.exec("PRAGMA user_version = 1");
     seed.close();
     openJournalDb(path).close();
     expect(userVersion(path)).toBe(1);
-    expect(tableNames(path)).toContain('consent_receipt');
-    expect(tableNames(path)).toContain('conversations');
+    expect(tableNames(path)).toContain("consent_receipt");
+    expect(tableNames(path)).toContain("conversations");
   });
 
-  it('creates the ledger tables + the run_summary VIEW in ONE file (no legacy tables)', () => {
+  it("creates the ledger tables + the run_summary VIEW in ONE file (no legacy tables)", () => {
     const path = freshDbPath();
     openJournalDb(path).close();
     // Exclude FTS5's `fts_conversation` virtual table and shadow tables (#420).
-    const ledgerTables = tableNames(path).filter((n) => !n.startsWith('fts_conversation'));
+    const ledgerTables = tableNames(path).filter(
+      (n) => !n.startsWith("fts_conversation")
+    );
     expect(ledgerTables).toStrictEqual([
-      'attachments',
-      'automation_state',
-      'automation_trigger_cursor',
-      'conversation_archive',
-      'conversation_digest',
-      'conversation_harness_sessions',
-      'conversation_provider_consent',
-      'conversation_turn_locks',
-      'conversation_workspace_selection',
-      'conversations',
-      'items',
-      'runner_health',
-      'trigger_ingress',
-      'turns',
+      "attachments",
+      "automation_state",
+      "automation_trigger_cursor",
+      "conversation_archive",
+      "conversation_digest",
+      "conversation_harness_sessions",
+      "conversation_provider_consent",
+      "conversation_turn_locks",
+      "conversation_workspace_selection",
+      "conversations",
+      "items",
+      "runner_health",
+      "trigger_ingress",
+      "turns",
     ]);
     // The search virtual table + its sync triggers exist.
-    expect(tableNames(path)).toContain('fts_conversation');
+    expect(tableNames(path)).toContain("fts_conversation");
     const db = new DatabaseSync(path);
     try {
       const views = db
-        .prepare(`SELECT name FROM sqlite_master WHERE type='view' ORDER BY name`)
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='view' ORDER BY name`
+        )
         .all() as Array<{ name: string }>;
-      expect(views.map((v) => v.name)).toStrictEqual(['run_summary']);
+      expect(views.map((v) => v.name)).toStrictEqual(["run_summary"]);
       const triggers = db
-        .prepare(`SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name`)
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name`
+        )
         .all() as Array<{ name: string }>;
       expect(triggers.map((t) => t.name)).toStrictEqual([
-        'conversation_item_count_ad',
-        'conversation_item_count_ai',
-        'fts_conversation_conv_ad',
-        'fts_conversation_conv_ai',
-        'fts_conversation_conv_au',
-        'fts_conversation_item_ai',
+        "conversation_item_count_ad",
+        "conversation_item_count_ai",
+        "fts_conversation_conv_ad",
+        "fts_conversation_conv_ai",
+        "fts_conversation_conv_au",
+        "fts_conversation_item_ai",
       ]);
     } finally {
       db.close();
     }
   });
 
-  it('conversations has NO foreign key (user_id carries the vault owner party id)', () => {
+  it("conversations has NO foreign key (user_id carries the vault owner party id)", () => {
     // The owner's party row lives in the vault's separate vault.db file;
     // SQLite has no cross-file FKs, so the scoping is application-enforced.
     const path = freshDbPath();
     openJournalDb(path).close();
     const db = new DatabaseSync(path);
     try {
-      expect(db.prepare(`PRAGMA foreign_key_list('conversations')`).all()).toHaveLength(0);
+      expect(
+        db.prepare(`PRAGMA foreign_key_list('conversations')`).all()
+      ).toHaveLength(0);
     } finally {
       db.close();
     }
   });
 
-  it('turns→conversations and items→turns and attachments→items are CASCADE FKs', () => {
+  it("turns→conversations and items→turns and attachments→items are CASCADE FKs", () => {
     const path = freshDbPath();
     openJournalDb(path).close();
     const db = new DatabaseSync(path);
@@ -148,43 +160,45 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
             on_delete: string;
           }>
         ).find((f) => f.table === parent);
-      expect(fk('turns', 'conversations')?.on_delete).toBe('CASCADE');
-      expect(fk('items', 'turns')?.on_delete).toBe('CASCADE');
-      expect(fk('attachments', 'items')?.on_delete).toBe('CASCADE');
+      expect(fk("turns", "conversations")?.on_delete).toBe("CASCADE");
+      expect(fk("items", "turns")?.on_delete).toBe("CASCADE");
+      expect(fk("attachments", "items")?.on_delete).toBe("CASCADE");
       // parent_turn_id is FK-free (a sub-run's parent may land in the same batch).
-      const turnFks = db.prepare(`PRAGMA foreign_key_list('turns')`).all() as Array<{
+      const turnFks = db
+        .prepare(`PRAGMA foreign_key_list('turns')`)
+        .all() as Array<{
         from: string;
       }>;
-      expect(!turnFks.some((f) => f.from === 'parent_turn_id')).toBeTruthy();
+      expect(!turnFks.some((f) => f.from === "parent_turn_id")).toBeTruthy();
     } finally {
       db.close();
     }
   });
 
-  it('deleting a conversation cascades to its turns, items, and attachments', () => {
+  it("deleting a conversation cascades to its turns, items, and attachments", () => {
     const path = freshDbPath();
     const db = openJournalDb(path);
     try {
       const now = Date.now();
       db.prepare(
         `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
-         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+         VALUES ('c1', 'chat', 'u1', ?, ?)`
       ).run(now, now);
       db.prepare(
         `INSERT INTO turns (id, conversation_id, seq, trigger, started_at)
-         VALUES ('t1', 'c1', 0, 'interactive', ?)`,
+         VALUES ('t1', 'c1', 0, 'interactive', ?)`
       ).run(now);
       db.prepare(
         `INSERT INTO items (id, turn_id, ordinal, kind, role, text, started_at)
-         VALUES ('i1', 't1', 0, 'message_in', 'user', 'hi', ?)`,
+         VALUES ('i1', 't1', 0, 'message_in', 'user', 'hi', ?)`
       ).run(now);
       db.prepare(
         `INSERT INTO attachments (id, item_id, hash, mime, size_bytes, created_at)
-         VALUES ('a1', 'i1', 'deadbeef', 'image/png', 10, ?)`,
+         VALUES ('a1', 'i1', 'deadbeef', 'image/png', 10, ?)`
       ).run(now);
 
       db.prepare(`DELETE FROM conversations WHERE id = 'c1'`).run();
-      for (const table of ['turns', 'items', 'attachments']) {
+      for (const table of ["turns", "items", "attachments"]) {
         const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as {
           n: number;
         };
@@ -195,7 +209,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     }
   });
 
-  it('CHECK constraints reject unknown conversation kind / turn trigger / item kind', () => {
+  it("CHECK constraints reject unknown conversation kind / turn trigger / item kind", () => {
     const path = freshDbPath();
     const db = openJournalDb(path);
     try {
@@ -203,112 +217,124 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
       expect(() =>
         db
           .prepare(
-            `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c', 'bogus', 'u', ?, ?)`,
+            `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c', 'bogus', 'u', ?, ?)`
           )
-          .run(now, now),
+          .run(now, now)
       ).toThrow(/CHECK/iu);
       db.prepare(
-        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c1','chat','u',?,?)`,
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at) VALUES ('c1','chat','u',?,?)`
       ).run(now, now);
       expect(() =>
         db
           .prepare(
-            `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t','c1',0,'bogus',?)`,
+            `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t','c1',0,'bogus',?)`
           )
-          .run(now),
+          .run(now)
       ).toThrow(/CHECK/iu);
       db.prepare(
-        `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t1','c1',0,'interactive',?)`,
+        `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES ('t1','c1',0,'interactive',?)`
       ).run(now);
       expect(() =>
         db
           .prepare(
-            `INSERT INTO items (id, turn_id, ordinal, kind, started_at) VALUES ('i','t1',0,'bogus',?)`,
+            `INSERT INTO items (id, turn_id, ordinal, kind, started_at) VALUES ('i','t1',0,'bogus',?)`
           )
-          .run(now),
+          .run(now)
       ).toThrow(/CHECK/iu);
     } finally {
       db.close();
     }
   });
 
-  it('re-opening an already-ensured DB is a no-op (rows survive)', () => {
+  it("re-opening an already-ensured DB is a no-op (rows survive)", () => {
     const path = freshDbPath();
     const first = openJournalDb(path);
     const now = Date.now();
     first
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
-         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+         VALUES ('c1', 'chat', 'u1', ?, ?)`
       )
       .run(now, now);
     first.close();
     const again = openJournalDb(path);
     try {
-      const n = again.prepare('SELECT COUNT(*) AS n FROM conversations').get() as { n: number };
+      const n = again
+        .prepare("SELECT COUNT(*) AS n FROM conversations")
+        .get() as { n: number };
       expect(Number(n.n)).toBe(1);
     } finally {
       again.close();
     }
   });
 
-  it('upgrades effort columns before recreating the run_summary view', () => {
+  it("upgrades effort columns before recreating the run_summary view", () => {
     const path = freshDbPath();
     const legacy = openJournalDb(path);
-    legacy.exec('DROP VIEW run_summary');
-    legacy.exec('ALTER TABLE items DROP COLUMN effort');
-    legacy.exec('ALTER TABLE conversation_digest DROP COLUMN efforts_json');
+    legacy.exec("DROP VIEW run_summary");
+    legacy.exec("ALTER TABLE items DROP COLUMN effort");
+    legacy.exec("ALTER TABLE conversation_digest DROP COLUMN efforts_json");
     legacy.close();
 
     const upgraded = openJournalDb(path);
     try {
       const itemColumns = (
-        upgraded.prepare('PRAGMA table_info(items)').all() as Array<{
+        upgraded.prepare("PRAGMA table_info(items)").all() as Array<{
           name: string;
         }>
       ).map((column) => column.name);
       const digestColumns = (
-        upgraded.prepare('PRAGMA table_info(conversation_digest)').all() as Array<{ name: string }>
+        upgraded
+          .prepare("PRAGMA table_info(conversation_digest)")
+          .all() as Array<{ name: string }>
       ).map((column) => column.name);
-      expect(itemColumns).toContain('effort');
-      expect(digestColumns).toContain('efforts_json');
+      expect(itemColumns).toContain("effort");
+      expect(digestColumns).toContain("efforts_json");
       expect(
         upgraded
-          .prepare(`SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'run_summary'`)
-          .get(),
+          .prepare(
+            `SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'run_summary'`
+          )
+          .get()
       ).toBeDefined();
     } finally {
       upgraded.close();
     }
   });
 
-  it('opens auto_vacuum=INCREMENTAL and incremental_vacuum reclaims freed pages (issue #438)', () => {
+  it("opens auto_vacuum=INCREMENTAL and incremental_vacuum reclaims freed pages (issue #438)", () => {
     const path = freshDbPath();
     const db = openJournalDb(path);
     try {
       // Fresh file: the pragma applied at first-table-create (the ledger DDL).
-      expect((db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum).toBe(
-        2,
-      );
+      expect(
+        (db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number })
+          .auto_vacuum
+      ).toBe(2);
       const now = Date.now();
       db.prepare(
         `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
-         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+         VALUES ('c1', 'chat', 'u1', ?, ?)`
       ).run(now, now);
       const ins = db.prepare(
-        `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES (?, 'c1', ?, 'interactive', ?)`,
+        `INSERT INTO turns (id, conversation_id, seq, trigger, started_at) VALUES (?, 'c1', ?, 'interactive', ?)`
       );
       for (let i = 0; i < 3000; i++) ins.run(`t${i}`, i, now);
       // Checkpoint so pages land in the main file, then measure, delete, reclaim.
-      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-      const before = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      const before = (
+        db.prepare("PRAGMA page_count").get() as { page_count: number }
+      ).page_count;
       db.prepare(`DELETE FROM turns`).run();
-      const freelist = (db.prepare('PRAGMA freelist_count').get() as { freelist_count: number })
-        .freelist_count;
+      const freelist = (
+        db.prepare("PRAGMA freelist_count").get() as { freelist_count: number }
+      ).freelist_count;
       expect(freelist).toBeGreaterThan(0);
-      db.exec('PRAGMA incremental_vacuum');
-      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-      const after = (db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
+      db.exec("PRAGMA incremental_vacuum");
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      const after = (
+        db.prepare("PRAGMA page_count").get() as { page_count: number }
+      ).page_count;
       // Incremental mode actually returned pages to the OS (freelist mode never
       // shrinks the file — this is the whole point of #438 step 0).
       expect(after).toBeLessThan(before);
@@ -317,61 +343,66 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     }
   });
 
-  it('uses 8 KiB pages for fresh low-end databases (#456 S7)', () => {
+  it("uses 8 KiB pages for fresh low-end databases (#456 S7)", () => {
     const db = openJournalDb(freshDbPath());
     try {
-      expect((db.prepare('PRAGMA page_size').get() as { page_size: number }).page_size).toBe(8192);
+      expect(
+        (db.prepare("PRAGMA page_size").get() as { page_size: number })
+          .page_size
+      ).toBe(8192);
     } finally {
       db.close();
     }
   });
 
-  it('converts a pre-#438 journal.db (auto_vacuum=0) to INCREMENTAL on open (issue #438)', () => {
+  it("converts a pre-#438 journal.db (auto_vacuum=0) to INCREMENTAL on open (issue #438)", () => {
     const path = freshDbPath();
     // A file written before the pragma existed: WAL, freelist mode, non-empty.
     const seed = new DatabaseSync(path);
-    seed.exec('PRAGMA journal_mode=WAL');
-    seed.exec('CREATE TABLE legacy(a TEXT)');
-    const ins = seed.prepare('INSERT INTO legacy VALUES (?)');
-    for (let i = 0; i < 300; i++) ins.run('x'.repeat(300));
-    seed.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-    expect((seed.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum).toBe(
-      0,
-    );
+    seed.exec("PRAGMA journal_mode=WAL");
+    seed.exec("CREATE TABLE legacy(a TEXT)");
+    const ins = seed.prepare("INSERT INTO legacy VALUES (?)");
+    for (let i = 0; i < 300; i++) ins.run("x".repeat(300));
+    seed.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    expect(
+      (seed.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number })
+        .auto_vacuum
+    ).toBe(0);
     seed.close();
 
     const db = openJournalDb(path);
     try {
-      expect((db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum).toBe(
-        2,
-      );
+      expect(
+        (db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number })
+          .auto_vacuum
+      ).toBe(2);
     } finally {
       db.close();
     }
   });
 
-  it('conversation_archive and conversation_digest CASCADE-delete with their conversation (issue #438)', () => {
+  it("conversation_archive and conversation_digest CASCADE-delete with their conversation (issue #438)", () => {
     const path = freshDbPath();
     const db = openJournalDb(path);
     try {
       const now = Date.now();
       db.prepare(
         `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
-         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+         VALUES ('c1', 'chat', 'u1', ?, ?)`
       ).run(now, now);
       db.prepare(
         `INSERT INTO conversation_archive
            (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count, item_count,
             segment_sha256, segment_bytes, plaintext_bytes, created_at)
-         VALUES ('ar1', 'c1', 0, 9, ?, ?, 10, 20, ?, 100, 200, ?)`,
-      ).run(now, now, 'a'.repeat(64), now);
+         VALUES ('ar1', 'c1', 0, 9, ?, ?, 10, 20, ?, 100, 200, ?)`
+      ).run(now, now, "a".repeat(64), now);
       db.prepare(
         `INSERT INTO conversation_digest (conversation_id, kind, updated_at)
-         VALUES ('c1', 'chat', ?)`,
+         VALUES ('c1', 'chat', ?)`
       ).run(now);
 
       db.prepare(`DELETE FROM conversations WHERE id = 'c1'`).run();
-      for (const table of ['conversation_archive', 'conversation_digest']) {
+      for (const table of ["conversation_archive", "conversation_digest"]) {
         const n = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as {
           n: number;
         };
@@ -382,14 +413,14 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     }
   });
 
-  it('conversation_archive rejects a non-64-char segment_sha256 (issue #438)', () => {
+  it("conversation_archive rejects a non-64-char segment_sha256 (issue #438)", () => {
     const path = freshDbPath();
     const db = openJournalDb(path);
     try {
       const now = Date.now();
       db.prepare(
         `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
-         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+         VALUES ('c1', 'chat', 'u1', ?, ?)`
       ).run(now, now);
       expect(() =>
         db
@@ -397,9 +428,9 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
             `INSERT INTO conversation_archive
                (id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count, item_count,
                 segment_sha256, segment_bytes, plaintext_bytes, created_at)
-             VALUES ('ar1', 'c1', 0, 9, ?, ?, 10, 20, 'tooshort', 100, 200, ?)`,
+             VALUES ('ar1', 'c1', 0, 9, ?, ?, 10, 20, 'tooshort', 100, 200, ?)`
           )
-          .run(now, now, now),
+          .run(now, now, now)
       ).toThrow(/CHECK/iu);
     } finally {
       db.close();
@@ -407,8 +438,8 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
   });
 });
 
-describe('STRICT tables (issue #374 SQLite hardening)', () => {
-  it('every ledger table is created STRICT', () => {
+describe("STRICT tables (issue #374 SQLite hardening)", () => {
+  it("every ledger table is created STRICT", () => {
     const path = freshDbPath();
     openJournalDb(path).close();
     const db = new DatabaseSync(path);
@@ -416,16 +447,22 @@ describe('STRICT tables (issue #374 SQLite hardening)', () => {
       const rows = db
         .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'table'`)
         .all() as Array<{ name: string; sql: string }>;
-      for (const table of ['conversations', 'turns', 'items', 'attachments', 'automation_state']) {
+      for (const table of [
+        "conversations",
+        "turns",
+        "items",
+        "attachments",
+        "automation_state",
+      ]) {
         const row = rows.find((r) => r.name === table);
-        expect(row?.sql.trim().endsWith('STRICT')).toBe(true);
+        expect(row?.sql.trim().endsWith("STRICT")).toBe(true);
       }
     } finally {
       db.close();
     }
   });
 
-  it('rejects a type-violating insert (STRICT enforcement)', () => {
+  it("rejects a type-violating insert (STRICT enforcement)", () => {
     const path = freshDbPath();
     const db = openJournalDb(path);
     try {
@@ -435,9 +472,9 @@ describe('STRICT tables (issue #374 SQLite hardening)', () => {
         db
           .prepare(
             `INSERT INTO conversations (id, kind, user_id, turn_count, created_at, updated_at)
-             VALUES ('c1', 'chat', 'u1', 'not-a-number', ?, ?)`,
+             VALUES ('c1', 'chat', 'u1', 'not-a-number', ?, ?)`
           )
-          .run(now, now),
+          .run(now, now)
       ).toThrow(/cannot store TEXT value in INTEGER column/u);
     } finally {
       db.close();
@@ -445,8 +482,8 @@ describe('STRICT tables (issue #374 SQLite hardening)', () => {
   });
 });
 
-describe('lazy provider', () => {
-  it('opens the DB once and reuses the handle for subsequent calls', () => {
+describe("lazy provider", () => {
+  it("opens the DB once and reuses the handle for subsequent calls", () => {
     const provider = makeJournalDbProvider(freshDbPath());
     const a = provider();
     const b = provider();
@@ -454,7 +491,7 @@ describe('lazy provider', () => {
     a.close();
   });
 
-  it('does not touch the filesystem until the first call', () => {
+  it("does not touch the filesystem until the first call", () => {
     const path = freshDbPath();
     makeJournalDbProvider(path);
     expect(existsSync(path)).toBe(false);

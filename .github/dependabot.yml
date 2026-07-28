@@ -19,7 +19,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '05:00'
+      time: "05:00"
       timezone: Etc/UTC
     open-pull-requests-limit: 5
     commit-message:
@@ -27,10 +27,10 @@ updates:
       # .governance/packs/.../commit-message-format. Dependabot cannot append
       # the "(#N)" suffix, so these land as `ci(deps): …` and the hook's
       # dependabot exemption (or a manual reword) applies — see the receipt.
-      prefix: 'ci(deps)'
+      prefix: "ci(deps)"
     groups:
       actions:
-        patterns: ['*']
+        patterns: ["*"]
 
   # ------------------------------------------------------------ javascript --
   # Bun workspaces: the root manifest + bun.lock cover every packages/* and
@@ -40,7 +40,7 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '05:00'
+      time: "05:00"
       timezone: Etc/UTC
     open-pull-requests-limit: 10
     # `prefix-development` is deliberately not set: it is documented for the
@@ -48,15 +48,15 @@ updates:
     # key disables the whole config rather than just that line. The dev/prod
     # split below already separates the two streams.
     commit-message:
-      prefix: 'chore(deps)'
+      prefix: "chore(deps)"
     groups:
       # Toolchain churn (lint/format/test/build) is noisy and low-risk to batch.
       dev-toolchain:
         dependency-type: development
-        patterns: ['*']
+        patterns: ["*"]
       production:
         dependency-type: production
-        patterns: ['*']
+        patterns: ["*"]
 
   # ----------------------------------------------------------------- cargo --
   # Three independent crates; Cargo.lock lives next to each manifest.
@@ -68,20 +68,21 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '05:00'
+      time: "05:00"
       timezone: Etc/UTC
     open-pull-requests-limit: 5
     commit-message:
-      prefix: 'chore(deps)'
+      prefix: "chore(deps)"
     groups:
       cargo:
-        patterns: ['*']
+        patterns: ["*"]
     ignore:
       # iroh is the wire protocol. A minor bump can change ALPN/relay behaviour
       # that only the nightly pairing lanes prove — upgrade deliberately, with
       # tests/agent-e2e-pairing green, never as a batched dependency PR.
       - dependency-name: iroh
-        update-types: ['version-update:semver-minor', 'version-update:semver-major']
+        update-types:
+          ["version-update:semver-minor", "version-update:semver-major"]
 
   # ----------------------------------------------------------------- docker --
   - package-ecosystem: docker
@@ -89,8 +90,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
-      time: '05:00'
+      time: "05:00"
       timezone: Etc/UTC
     open-pull-requests-limit: 3
     commit-message:
-      prefix: 'chore(deps)'
+      prefix: "chore(deps)"

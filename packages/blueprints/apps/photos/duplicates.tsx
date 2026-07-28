@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 // The duplicates shelf's render orchestrator (issue #352 phase 3) — same
 // shape as toolbar.jsx: owns its own private state (the loaded clusters,
@@ -8,9 +8,9 @@ import type { ReactNode } from 'react';
 // renderGrid()). Loaded lazily — the query walks up to 4000 live assets, so
 // it only runs once the owner actually opens this shelf, not on every
 // refresh() the way the (bounded, cheap) library window does.
-import { DuplicatesView } from './components/Duplicates.tsx';
-import { trashDuplicateAssets } from './duplicates-actions.ts';
-import type { DuplicateCluster } from './types.ts';
+import { DuplicatesView } from "./components/Duplicates.tsx";
+import { trashDuplicateAssets } from "./duplicates-actions.ts";
+import type { DuplicateCluster } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
@@ -55,7 +55,7 @@ export function createDuplicates({
           selected.clear();
           renderDuplicates();
         }}
-      />,
+      />
     );
   }
 
@@ -68,7 +68,7 @@ export function createDuplicates({
     let data: { clusters?: DuplicateCluster[] } | undefined;
     try {
       data = await window.centraid.read<{ clusters?: DuplicateCluster[] }>({
-        query: 'duplicates',
+        query: "duplicates",
         input: {},
       });
     } catch {

@@ -4,12 +4,12 @@
 // payload; it never touches `state`/`data` directly. Subtasks are captured
 // only from inside the open task's own detail drawer (Things-style) — this
 // bar always adds a top-level task.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
-import { fmtDay, parseNlDue } from '../format.ts';
+import { fmtDay, parseNlDue } from "../format.ts";
 
-import styles from './Capture.module.css';
-import shared from './shared.module.css';
+import styles from "./Capture.module.css";
+import shared from "./shared.module.css";
 
 /** The add payload the capture bar hands back to `logic.submitCapture`. */
 export interface CapturePayload {
@@ -25,22 +25,22 @@ export interface CaptureProps {
 }
 
 const DUE_CHIPS: Array<{ key: string; label: string }> = [
-  { key: 'none', label: 'None' },
-  { key: 'today', label: 'Today' },
-  { key: 'tomorrow', label: 'Tmrw' },
-  { key: 'week', label: 'Wk' },
+  { key: "none", label: "None" },
+  { key: "today", label: "Today" },
+  { key: "tomorrow", label: "Tmrw" },
+  { key: "week", label: "Wk" },
 ];
 const PRIO_CHIPS: Array<{ key: number; label: string }> = [
-  { key: 0, label: '—' },
-  { key: 1, label: 'High' },
-  { key: 5, label: 'Med' },
-  { key: 9, label: 'Low' },
+  { key: 0, label: "—" },
+  { key: 1, label: "High" },
+  { key: 5, label: "Med" },
+  { key: 9, label: "Low" },
 ];
 
 export function Capture({ onSubmit, registerFocus }: CaptureProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState('');
-  const [dueChoice, setDueChoice] = useState('none');
+  const [title, setTitle] = useState("");
+  const [dueChoice, setDueChoice] = useState("none");
   const [priority, setPriority] = useState(0);
   const [busy, setBusy] = useState(false);
 
@@ -48,7 +48,7 @@ export function Capture({ onSubmit, registerFocus }: CaptureProps) {
     registerFocus(() => inputRef.current?.focus());
   }, [registerFocus]);
 
-  const nl = dueChoice === 'none' ? parseNlDue(title) : null;
+  const nl = dueChoice === "none" ? parseNlDue(title) : null;
 
   const submit = async () => {
     if (!title.trim() || busy) return;
@@ -56,8 +56,8 @@ export function Capture({ onSubmit, registerFocus }: CaptureProps) {
     const ok = await onSubmit({ title, dueChoice, priority });
     setBusy(false);
     if (ok) {
-      setTitle('');
-      setDueChoice('none');
+      setTitle("");
+      setDueChoice("none");
       setPriority(0);
       inputRef.current?.focus();
     }
@@ -76,7 +76,7 @@ export function Capture({ onSubmit, registerFocus }: CaptureProps) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === "Enter") {
               e.preventDefault();
               submit();
             }
@@ -98,7 +98,7 @@ export function Capture({ onSubmit, registerFocus }: CaptureProps) {
             <button
               key={c.key}
               type="button"
-              className={dueChoice === c.key ? 'on' : ''}
+              className={dueChoice === c.key ? "on" : ""}
               aria-pressed={dueChoice === c.key}
               onClick={() => setDueChoice(c.key)}
             >
@@ -113,7 +113,7 @@ export function Capture({ onSubmit, registerFocus }: CaptureProps) {
             <button
               key={c.key}
               type="button"
-              className={priority === c.key ? 'on' : ''}
+              className={priority === c.key ? "on" : ""}
               aria-pressed={priority === c.key}
               onClick={() => setPriority(c.key)}
             >

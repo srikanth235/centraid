@@ -1,4 +1,9 @@
-export type BackupState = 'local-only' | 'queued' | 'uploading' | 'backed-up' | 'remote-only';
+export type BackupState =
+  | "local-only"
+  | "queued"
+  | "uploading"
+  | "backed-up"
+  | "remote-only";
 
 export interface PhotoAsset {
   id: string;
@@ -23,7 +28,7 @@ export interface PhotoAsset {
   thumbhash?: string;
   capturedAt: string;
   tzOffsetMin?: number;
-  kind: 'photo' | 'video' | 'audio' | 'scan';
+  kind: "photo" | "video" | "audio" | "scan";
   width?: number;
   height?: number;
   durationS?: number;
@@ -35,7 +40,7 @@ export interface PhotoAsset {
   backupState: BackupState;
   verifiedCasAck?: boolean;
   duplicateHint?: boolean;
-  source: 'device' | 'replica' | 'merged';
+  source: "device" | "replica" | "merged";
 }
 
 export interface PhotoSection {
@@ -46,13 +51,19 @@ export interface PhotoSection {
   assets: PhotoAsset[];
 }
 
-function withLocalId(existing: readonly string[] | undefined, localId?: string): string[] {
+function withLocalId(
+  existing: readonly string[] | undefined,
+  localId?: string
+): string[] {
   const ids = existing ? [...existing] : [];
   if (localId && !ids.includes(localId)) ids.push(localId);
   return ids;
 }
 
-export function mergePhotoAssets(device: PhotoAsset[], remote: PhotoAsset[]): PhotoAsset[] {
+export function mergePhotoAssets(
+  device: PhotoAsset[],
+  remote: PhotoAsset[]
+): PhotoAsset[] {
   const merged = [...remote];
   // sha → position in `merged`, so a second device copy of one sha folds onto
   // the same row instead of `indexOf(same)` returning -1 and dropping it. O(n).
@@ -61,13 +72,16 @@ export function mergePhotoAssets(device: PhotoAsset[], remote: PhotoAsset[]): Ph
     if (asset.sha256 !== undefined && !indexBySha.has(asset.sha256))
       indexBySha.set(asset.sha256, index);
   });
-  const remotePhash = new Set(remote.flatMap((asset) => (asset.phash ? [asset.phash] : [])));
+  const remotePhash = new Set(
+    remote.flatMap((asset) => (asset.phash ? [asset.phash] : []))
+  );
   for (const local of device) {
-    const index = local.sha256 === undefined ? undefined : indexBySha.get(local.sha256);
+    const index =
+      local.sha256 === undefined ? undefined : indexBySha.get(local.sha256);
     if (index !== undefined) {
       const existing = merged[index]!;
       merged[index] =
-        existing.source === 'merged'
+        existing.source === "merged"
           ? // Already carries a device copy: keep the primary identity, just
             // widen the set so every camera-roll duplicate is reachable.
             {
@@ -81,8 +95,8 @@ export function mergePhotoAssets(device: PhotoAsset[], remote: PhotoAsset[]): Ph
               localIds: withLocalId(undefined, local.localId),
               originalUri: local.originalUri,
               fileSize: local.fileSize ?? existing.fileSize,
-              source: 'merged',
-              backupState: 'backed-up',
+              source: "merged",
+              backupState: "backed-up",
               verifiedCasAck: local.verifiedCasAck,
             };
       continue;
@@ -96,33 +110,45 @@ export function mergePhotoAssets(device: PhotoAsset[], remote: PhotoAsset[]): Ph
   }
   const phashCounts = new Map<string, number>();
   for (const asset of merged) {
-    if (asset.phash) phashCounts.set(asset.phash, (phashCounts.get(asset.phash) ?? 0) + 1);
+    if (asset.phash)
+      phashCounts.set(asset.phash, (phashCounts.get(asset.phash) ?? 0) + 1);
   }
   const sorted = merged
     .map((asset) => ({
       ...asset,
       duplicateHint:
-        asset.duplicateHint || Boolean(asset.phash && (phashCounts.get(asset.phash) ?? 0) > 1),
+        asset.duplicateHint ||
+        Boolean(asset.phash && (phashCounts.get(asset.phash) ?? 0) > 1),
     }))
     // `capturedAt` is always an ISO-8601 UTC string, which sorts correctly by
     // raw code-unit comparison — no per-comparison Date.parse across 50k rows.
-    .sort((a, b) => (a.capturedAt < b.capturedAt ? 1 : a.capturedAt > b.capturedAt ? -1 : 0));
+    .sort((a, b) =>
+      a.capturedAt < b.capturedAt ? 1 : a.capturedAt > b.capturedAt ? -1 : 0
+    );
   const liveVideos = new Map(
     sorted.flatMap((asset) =>
-      asset.captureGroupId && asset.kind === 'video'
+      asset.captureGroupId && asset.kind === "video"
         ? [[asset.captureGroupId, asset.originalUri] as const]
-        : [],
-    ),
+        : []
+    )
   );
   const livePhotos = new Set(
     sorted.flatMap((asset) =>
-      asset.captureGroupId && asset.kind === 'photo' ? [asset.captureGroupId] : [],
-    ),
+      asset.captureGroupId && asset.kind === "photo"
+        ? [asset.captureGroupId]
+        : []
+    )
   );
   return sorted.flatMap((asset) => {
-    if (asset.captureGroupId && asset.kind === 'video' && livePhotos.has(asset.captureGroupId))
+    if (
+      asset.captureGroupId &&
+      asset.kind === "video" &&
+      livePhotos.has(asset.captureGroupId)
+    )
       return [];
-    const liveVideoUri = asset.captureGroupId ? liveVideos.get(asset.captureGroupId) : undefined;
+    const liveVideoUri = asset.captureGroupId
+      ? liveVideos.get(asset.captureGroupId)
+      : undefined;
     return [{ ...asset, ...(liveVideoUri ? { liveVideoUri } : {}) }];
   });
 }
@@ -135,20 +161,30 @@ export function mergePhotoAssets(device: PhotoAsset[], remote: PhotoAsset[]): Ph
  * that zone; otherwise we fall back to the viewing device's local day, which is
  * the same reference `onThisDay` uses — the two must always agree.
  */
-export function captureLocalDay(capturedAt: string, tzOffsetMin?: number): string {
+export function captureLocalDay(
+  capturedAt: string,
+  tzOffsetMin?: number
+): string {
   if (tzOffsetMin != null) {
-    return new Date(Date.parse(capturedAt) + tzOffsetMin * 60_000).toISOString().slice(0, 10);
+    return new Date(Date.parse(capturedAt) + tzOffsetMin * 60_000)
+      .toISOString()
+      .slice(0, 10);
   }
   const local = new Date(capturedAt);
   const year = local.getFullYear();
-  const month = String(local.getMonth() + 1).padStart(2, '0');
-  const day = String(local.getDate()).padStart(2, '0');
+  const month = String(local.getMonth() + 1).padStart(2, "0");
+  const day = String(local.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-export function sectionPhotoAssets(assets: PhotoAsset[], now = new Date()): PhotoSection[] {
+export function sectionPhotoAssets(
+  assets: PhotoAsset[],
+  now = new Date()
+): PhotoSection[] {
   const sections = new Map<string, PhotoAsset[]>();
-  for (const asset of assets.filter((item) => !item.archived && !item.deleted)) {
+  for (const asset of assets.filter(
+    (item) => !item.archived && !item.deleted
+  )) {
     const day = captureLocalDay(asset.capturedAt, asset.tzOffsetMin);
     const bucket = sections.get(day) ?? [];
     bucket.push(asset);
@@ -157,47 +193,66 @@ export function sectionPhotoAssets(assets: PhotoAsset[], now = new Date()): Phot
   // Build one formatter of each kind, not two per day section (50k assets can
   // span thousands of days).
   const dayFormat = new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   });
   const dayWithYearFormat = new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
   const monthFormat = new Intl.DateTimeFormat(undefined, {
-    month: 'long',
-    year: 'numeric',
+    month: "long",
+    year: "numeric",
   });
   const currentYear = now.getFullYear();
   return [...sections.entries()].map(([day, rows]) => {
     const sameYear = new Date(day).getFullYear() === currentYear;
     return {
       day,
-      title: (sameYear ? dayFormat : dayWithYearFormat).format(new Date(`${day}T12:00:00`)),
+      title: (sameYear ? dayFormat : dayWithYearFormat).format(
+        new Date(`${day}T12:00:00`)
+      ),
       month: day.slice(0, 7),
-      monthTitle: monthFormat.format(new Date(`${day.slice(0, 7)}-01T12:00:00`)),
+      monthTitle: monthFormat.format(
+        new Date(`${day.slice(0, 7)}-01T12:00:00`)
+      ),
       assets: rows,
     };
   });
 }
 
-export function onThisDay(assets: PhotoAsset[], now = new Date()): PhotoAsset[] {
+export function onThisDay(
+  assets: PhotoAsset[],
+  now = new Date()
+): PhotoAsset[] {
   const month = now.getMonth() + 1;
   const day = now.getDate();
   return assets.filter((asset) => {
     // Same capture-local reference as sectioning, so a memory and its timeline
     // row never disagree about which day the photo belongs to.
-    const [year, capturedMonth, capturedDay] = captureLocalDay(asset.capturedAt, asset.tzOffsetMin)
-      .split('-')
+    const [year, capturedMonth, capturedDay] = captureLocalDay(
+      asset.capturedAt,
+      asset.tzOffsetMin
+    )
+      .split("-")
       .map(Number);
-    return year! < now.getFullYear() && capturedMonth === month && capturedDay === day;
+    return (
+      year! < now.getFullYear() &&
+      capturedMonth === month &&
+      capturedDay === day
+    );
   });
 }
 
 /** Accumulate a drag path without mutating the selection owned by React state. */
-export function addDragSelection(selection: ReadonlySet<string>, assetId: string): Set<string> {
-  return selection.has(assetId) ? new Set(selection) : new Set([...selection, assetId]);
+export function addDragSelection(
+  selection: ReadonlySet<string>,
+  assetId: string
+): Set<string> {
+  return selection.has(assetId)
+    ? new Set(selection)
+    : new Set([...selection, assetId]);
 }

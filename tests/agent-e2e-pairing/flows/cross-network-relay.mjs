@@ -3,17 +3,22 @@
 // reach it (they run gateway + device on the same host with device relays
 // explicitly disabled) and how this one forces it (two Docker containers on
 // two non-interconnected bridge networks).
-import { runFlow } from '../lib/docker-harness.mjs';
+import { runFlow } from "../lib/docker-harness.mjs";
 
-await runFlow('cross-network-relay', async (ctx) => {
+await runFlow("cross-network-relay", async (ctx) => {
   // 1. Mint for the auto-founded Shared vault (#603);
   // the ticket is still minted inside the gateway container.
   // only the redemption crosses the network boundary.
-  const { raw, payload } = await ctx.mintTicket({ vault: 'Shared' });
-  if (payload.vaultName !== 'Shared') throw new Error(`ticket names vault "${payload.vaultName}"`);
-  if (payload.exp <= Date.now()) throw new Error('ticket minted already expired');
-  if (!payload.gw || !payload.t || !payload.s) throw new Error('ticket missing gw/t/s');
-  ctx.note(`minted ticket ${payload.t} (expires ${new Date(payload.exp).toISOString()})`);
+  const { raw, payload } = await ctx.mintTicket({ vault: "Shared" });
+  if (payload.vaultName !== "Shared")
+    throw new Error(`ticket names vault "${payload.vaultName}"`);
+  if (payload.exp <= Date.now())
+    throw new Error("ticket minted already expired");
+  if (!payload.gw || !payload.t || !payload.s)
+    throw new Error("ticket missing gw/t/s");
+  ctx.note(
+    `minted ticket ${payload.t} (expires ${new Date(payload.exp).toISOString()})`
+  );
 
   // 2. Redeem it from a container on the OTHER network — no shared route to
   // the gateway's container, no relay override. Whatever createTunnelClient's
@@ -21,31 +26,36 @@ await runFlow('cross-network-relay', async (ctx) => {
   // packages/tunnel/src/client.ts, not assumed) is what runs here.
   const device = await ctx.runDevice({
     ticket: raw,
-    probeTarget: '/centraid/_vault/vaults',
+    probeTarget: "/centraid/_vault/vaults",
   });
   if (device.error && !device.paired) {
     throw new Error(`device container reported a fatal error: ${device.error}`);
   }
-  if (!device.paired) throw new Error(`redeem failed: ${JSON.stringify(device)}`);
-  if (!device.vaultId || device.vaultName !== 'Shared') {
-    throw new Error(`pair response names the wrong vault: ${JSON.stringify(device)}`);
+  if (!device.paired)
+    throw new Error(`redeem failed: ${JSON.stringify(device)}`);
+  if (!device.vaultId || device.vaultName !== "Shared") {
+    throw new Error(
+      `pair response names the wrong vault: ${JSON.stringify(device)}`
+    );
   }
   ctx.note(
-    `device ${device.endpointId.slice(0, 10)}… (container on ${ctx.netB}) enrolled across the network boundary`,
+    `device ${device.endpointId.slice(0, 10)}… (container on ${ctx.netB}) enrolled across the network boundary`
   );
 
   // 3. The tunneled probe crossed the same boundary and got a real response.
   if (device.probeStatus !== 200) {
-    throw new Error(`tunneled probe from the isolated device container → ${device.probeStatus}`);
+    throw new Error(
+      `tunneled probe from the isolated device container → ${device.probeStatus}`
+    );
   }
-  ctx.note('cross-network tunneled probe: GET /centraid/_vault/vaults → 200');
+  ctx.note("cross-network tunneled probe: GET /centraid/_vault/vaults → 200");
 
   // 4. The replay attempt (same container run, second pairGateway call)
   // must have been refused — the ticket burns on first success same as the
   // loopback flow.
   if (!device.replayRefused) {
     throw new Error(
-      `replayed ticket redeemed twice across the network boundary: ${JSON.stringify(device)}`,
+      `replayed ticket redeemed twice across the network boundary: ${JSON.stringify(device)}`
     );
   }
   ctx.note(`replay refused (${device.replayError})`);
@@ -56,9 +66,13 @@ await runFlow('cross-network-relay', async (ctx) => {
     device.enrollment.endpointId !== device.endpointId ||
     device.enrollment.vaultId !== device.vaultId
   ) {
-    throw new Error(`gateway.db-backed roster does not show device: ${JSON.stringify(device)}`);
+    throw new Error(
+      `gateway.db-backed roster does not show device: ${JSON.stringify(device)}`
+    );
   }
-  ctx.note('gateway.db enrollment is visible through devices list on the gateway side');
+  ctx.note(
+    "gateway.db enrollment is visible through devices list on the gateway side"
+  );
 
   // 6. Path confirmation — the ONE thing this expensive Docker-network-
   // isolation harness exists to prove, and now a hard gate rather than an
@@ -75,8 +89,8 @@ await runFlow('cross-network-relay', async (ctx) => {
   // selected, and reports it as `device.path` (null if none was selected).
   if (!device.path) {
     throw new Error(
-      'device reported no selected path — cannot confirm relay traversal; check ' +
-        "device-redeem.mjs's paths() call and its stdout JSON contract",
+      "device reported no selected path — cannot confirm relay traversal; check " +
+        "device-redeem.mjs's paths() call and its stdout JSON contract"
     );
   }
   if (!device.path.isRelay) {
@@ -90,21 +104,21 @@ await runFlow('cross-network-relay', async (ctx) => {
     throw new Error(
       `network isolation didn't force the relay path as expected — selected path reports ` +
         `isIp=${device.path.isIp} isRelay=${device.path.isRelay} (${device.path.remoteAddr}) ` +
-        'despite the two networks having no route between them. This means the DOCKER-USER ' +
-        'firewall rules are not actually blocking direct routes, or OrbStack/Docker networking ' +
-        'changed — see the .md "What this does NOT prove" section.',
+        "despite the two networks having no route between them. This means the DOCKER-USER " +
+        "firewall rules are not actually blocking direct routes, or OrbStack/Docker networking " +
+        'changed — see the .md "What this does NOT prove" section.'
     );
   }
   ctx.note(
     `CONFIRMED at the QUIC layer: selected path is a RELAY (${device.path.remoteAddr}, ` +
-      `rtt=${device.path.rttMs}ms) — this run exercised the real n0 relay fallback, not a lucky direct route.`,
+      `rtt=${device.path.rttMs}ms) — this run exercised the real n0 relay fallback, not a lucky direct route.`
   );
 
   return {
     pass: true,
     notes:
-      'mint (gateway container) → redeem/tunnel/burn (device container, separate non-routable ' +
-      'network) all held, with real DOCKER-USER-enforced network isolation proven before the ' +
-      'ceremony ran, AND the QUIC connection confirmed on the real relay path',
+      "mint (gateway container) → redeem/tunnel/burn (device container, separate non-routable " +
+      "network) all held, with real DOCKER-USER-enforced network isolation proven before the " +
+      "ceremony ran, AND the QUIC connection confirmed on the real relay path",
   };
 });

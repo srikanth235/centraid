@@ -24,7 +24,7 @@
  * VOCABULARY: no reason string here may contain the word "vault" — app-facing
  * copy speaks of scopes by their human label only.
  */
-import type { InlineScope } from '../inline-types.ts';
+import type { InlineScope } from "../inline-types.ts";
 
 /** Where a write goes, or why it cannot go anywhere. */
 export type WriteTarget =
@@ -50,14 +50,17 @@ export function resolveWriteTarget(input: WriteTargetInput): WriteTarget {
 
   // Cases 1 + 2: "All" and the own chip both write to the member's own scope.
   if (selectedScopeId == null || selectedScopeId === ownScopeId) {
-    if (!own) return { disabled: true, reason: 'Your own space isn’t open right now.' };
-    if (!own.canWrite) return { disabled: true, reason: `You can’t add to ${own.label} yet.` };
+    if (!own)
+      return { disabled: true, reason: "Your own space isn’t open right now." };
+    if (!own.canWrite)
+      return { disabled: true, reason: `You can’t add to ${own.label} yet.` };
     return { disabled: false, scopeId: own.id, label: own.label };
   }
 
   const audience = scopes.find((scope) => scope.id === selectedScopeId);
   // Degenerate: the chip names something the app is no longer mounted over.
-  if (!audience) return { disabled: true, reason: 'That space isn’t open right now.' };
+  if (!audience)
+    return { disabled: true, reason: "That space isn’t open right now." };
 
   // Case 4 before case 3 — the read-only answer is the interesting one.
   if (!audience.canWrite) {

@@ -20,7 +20,7 @@ import type {
   LocalComponentUsageDTO,
   LocalUsageReportDTO,
   StorageLimitsDTO,
-} from '../../gateway-client-local-storage.js';
+} from "../../gateway-client-local-storage.js";
 
 export interface ComponentPresentation {
   label: string;
@@ -32,61 +32,66 @@ export interface ComponentPresentation {
 
 /** Fixed per-component presentation. Order of the keys is the tiebreak order
  *  used when two components report the same byte count. */
-export const COMPONENT_PRESENTATION: Readonly<Record<LocalComponentId, ComponentPresentation>> =
-  Object.freeze({
-    attachments: {
-      label: 'Attachments',
-      color: 'var(--icon-indigo)',
-      blurb: 'Files, photos, and the previews and archive segments derived from them.',
-    },
-    ledger: {
-      label: 'Ledger',
-      color: 'var(--icon-teal)',
-      blurb: 'Conversations, runs, and the audit trail — the file the ledger limit governs.',
-    },
-    'vault-db': {
-      label: 'Vault database',
-      color: 'var(--icon-violet)',
-      blurb: 'The ontology itself: every entity, link, and setting.',
-    },
-    code: {
-      label: 'App code',
-      color: 'var(--icon-forest)',
-      blurb: 'The code store behind your apps — every version you have built.',
-    },
-    apps: {
-      label: 'App data',
-      color: 'var(--icon-ochre)',
-      blurb: 'Per-app working directories.',
-    },
-    backup: {
-      label: 'Backup staging',
-      color: 'var(--icon-amber)',
-      blurb: 'Snapshot keyring, engine state, and bytes waiting to go offsite.',
-    },
-    cache: {
-      label: 'Runner cache',
-      color: 'var(--icon-slate)',
-      blurb: 'Coding-agent scratch space. Derived — safe to delete at any time.',
-    },
-    logs: {
-      label: 'Logs',
-      color: 'var(--icon-rose)',
-      blurb: 'Rotated gateway logs.',
-    },
-    templates: {
-      label: 'Templates',
-      color: 'var(--icon-slate)',
-      blurb: 'Cached app templates pulled from the remote manifest.',
-    },
-    storage: {
-      label: 'Gateway state',
-      color: 'var(--icon-slate)',
-      blurb: 'Storage-connection records and the recovery-kit flag.',
-    },
-  });
+export const COMPONENT_PRESENTATION: Readonly<
+  Record<LocalComponentId, ComponentPresentation>
+> = Object.freeze({
+  attachments: {
+    label: "Attachments",
+    color: "var(--icon-indigo)",
+    blurb:
+      "Files, photos, and the previews and archive segments derived from them.",
+  },
+  ledger: {
+    label: "Ledger",
+    color: "var(--icon-teal)",
+    blurb:
+      "Conversations, runs, and the audit trail — the file the ledger limit governs.",
+  },
+  "vault-db": {
+    label: "Vault database",
+    color: "var(--icon-violet)",
+    blurb: "The ontology itself: every entity, link, and setting.",
+  },
+  code: {
+    label: "App code",
+    color: "var(--icon-forest)",
+    blurb: "The code store behind your apps — every version you have built.",
+  },
+  apps: {
+    label: "App data",
+    color: "var(--icon-ochre)",
+    blurb: "Per-app working directories.",
+  },
+  backup: {
+    label: "Backup staging",
+    color: "var(--icon-amber)",
+    blurb: "Snapshot keyring, engine state, and bytes waiting to go offsite.",
+  },
+  cache: {
+    label: "Runner cache",
+    color: "var(--icon-slate)",
+    blurb: "Coding-agent scratch space. Derived — safe to delete at any time.",
+  },
+  logs: {
+    label: "Logs",
+    color: "var(--icon-rose)",
+    blurb: "Rotated gateway logs.",
+  },
+  templates: {
+    label: "Templates",
+    color: "var(--icon-slate)",
+    blurb: "Cached app templates pulled from the remote manifest.",
+  },
+  storage: {
+    label: "Gateway state",
+    color: "var(--icon-slate)",
+    blurb: "Storage-connection records and the recovery-kit flag.",
+  },
+});
 
-const COMPONENT_ORDER = Object.keys(COMPONENT_PRESENTATION) as LocalComponentId[];
+const COMPONENT_ORDER = Object.keys(
+  COMPONENT_PRESENTATION
+) as LocalComponentId[];
 
 export interface FootprintSlice {
   component: LocalComponentId;
@@ -104,7 +109,10 @@ export interface FootprintSlice {
  *  largest first. Zero-byte components are dropped — a legend row that always
  *  reads "0 B" is noise, and the per-vault detail still lists them. */
 export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
-  const totals = new Map<LocalComponentId, { bytes: number; unreadable?: string }>();
+  const totals = new Map<
+    LocalComponentId,
+    { bytes: number; unreadable?: string }
+  >();
   const add = (entry: LocalComponentUsageDTO): void => {
     const prior = totals.get(entry.component);
     totals.set(entry.component, {
@@ -115,7 +123,8 @@ export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
     });
   };
   for (const entry of report.components) add(entry);
-  for (const vault of report.vaults) for (const entry of vault.components) add(entry);
+  for (const vault of report.vaults)
+    for (const entry of vault.components) add(entry);
 
   const total = report.totalBytes;
   return [...totals.entries()]
@@ -135,11 +144,12 @@ export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
     .sort(
       (a, b) =>
         b.bytes - a.bytes ||
-        COMPONENT_ORDER.indexOf(a.component) - COMPONENT_ORDER.indexOf(b.component),
+        COMPONENT_ORDER.indexOf(a.component) -
+          COMPONENT_ORDER.indexOf(b.component)
     );
 }
 
-export type FootprintScaleKind = 'budget' | 'disk' | 'none';
+export type FootprintScaleKind = "budget" | "disk" | "none";
 
 export interface FootprintScale {
   /** What the rail is drawn against. */
@@ -169,7 +179,7 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
   if (budget !== null && budget > 0) {
     const raw = report.totalBytes / budget;
     return {
-      kind: 'budget',
+      kind: "budget",
       againstBytes: budget,
       fillFraction: Math.min(1, raw),
       over: raw > 1,
@@ -181,7 +191,7 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
   const diskTotal = report.disk?.totalBytes ?? 0;
   if (diskTotal > 0) {
     return {
-      kind: 'disk',
+      kind: "disk",
       againstBytes: diskTotal,
       fillFraction: Math.min(1, report.totalBytes / diskTotal),
       over: false,
@@ -189,7 +199,7 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
     };
   }
   return {
-    kind: 'none',
+    kind: "none",
     againstBytes: null,
     fillFraction: 0,
     over: false,
@@ -201,9 +211,9 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
  *  gateway's own `formatBytes` produces, so a health detail and this page
  *  never disagree by a rounding step. */
 export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${Math.round(bytes)} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
+  const units = ["KB", "MB", "GB", "TB"];
   let value = bytes / 1024;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
@@ -215,8 +225,14 @@ export function formatBytes(bytes: number): string {
 
 /** Parses "12", "12 GB", "500mb" into bytes. `null` for anything unparseable
  *  — the limit inputs refuse rather than guess at a unit. */
-export function parseBytes(input: string, defaultUnit: 'MB' | 'GB' = 'GB'): number | null {
-  const match = /^\s*(?<amount>[0-9]+(?:\.[0-9]+)?)\s*(?<unit>b|kb|mb|gb|tb)?\s*$/iu.exec(input);
+export function parseBytes(
+  input: string,
+  defaultUnit: "MB" | "GB" = "GB"
+): number | null {
+  const match =
+    /^\s*(?<amount>[0-9]+(?:\.[0-9]+)?)\s*(?<unit>b|kb|mb|gb|tb)?\s*$/iu.exec(
+      input
+    );
   if (!match) return null;
   const value = Number(match.groups?.amount);
   if (!Number.isFinite(value) || value <= 0) return null;
@@ -234,17 +250,22 @@ export function parseBytes(input: string, defaultUnit: 'MB' | 'GB' = 'GB'): numb
 /** One sentence naming the state of the budget. Deliberately says what is NOT
  *  happening when over-budget: nothing is blocked, and a user staring at a red
  *  bar deserves to know that before they start deleting things in a panic. */
-export function budgetSummary(report: LocalUsageReportDTO, limits: StorageLimitsDTO): string {
+export function budgetSummary(
+  report: LocalUsageReportDTO,
+  limits: StorageLimitsDTO
+): string {
   if (limits.totalLimitBytes === null) {
-    const free = report.disk ? ` ${formatBytes(report.disk.freeBytes)} free on this disk.` : '';
+    const free = report.disk
+      ? ` ${formatBytes(report.disk.freeBytes)} free on this disk.`
+      : "";
     return `No budget set — Centraid will use whatever the disk allows.${free}`;
   }
   const used = formatBytes(report.totalBytes);
   const of = formatBytes(limits.totalLimitBytes);
-  if (report.limit.status === 'error') {
+  if (report.limit.status === "error") {
     return `${used} of your ${of} budget — over. Nothing is being blocked; this is a warning so you can decide what to clear.`;
   }
-  if (report.limit.status === 'degraded') {
+  if (report.limit.status === "degraded") {
     return `${used} of your ${of} budget — past the ${limits.warnAtPercent}% mark.`;
   }
   return `${used} of your ${of} budget.`;

@@ -19,58 +19,62 @@
  */
 
 const BATCH = 6;
-const PURPOSE = 'dpv:ServiceProvision';
+const PURPOSE = "dpv:ServiceProvision";
 
 const OCR_SCHEMA = {
-  type: 'object',
-  required: ['text'],
+  type: "object",
+  required: ["text"],
   additionalProperties: false,
   properties: {
     text: {
-      type: 'string',
-      description: 'The document text, transcribed faithfully. Empty string if unreadable.',
+      type: "string",
+      description:
+        "The document text, transcribed faithfully. Empty string if unreadable.",
     },
   },
 };
 
 const SUMMARY_SCHEMA = {
-  type: 'object',
-  required: ['summary'],
+  type: "object",
+  required: ["summary"],
   additionalProperties: false,
   properties: {
     summary: {
-      type: 'string',
-      description: 'One factual paragraph: what this document is, key parties, amounts, dates.',
+      type: "string",
+      description:
+        "One factual paragraph: what this document is, key parties, amounts, dates.",
     },
   },
 };
 
 export default async ({ ctx, log }) => {
-  const cursor = (await ctx.state.get('cursor')) ?? '';
-  const derivativeCursor = (await ctx.state.get('derivativeCursor')) ?? '';
+  const cursor = (await ctx.state.get("cursor")) ?? "";
+  const derivativeCursor = (await ctx.state.get("derivativeCursor")) ?? "";
   const now = ctx.now;
   // A plugged-in device gets the first chance at PDF.js text. Do not move
   // the backlog cursor past a live lease: after completion the text variant
   // is summarized here; after expiry this gateway backstop takes over.
   const leased = await ctx.vault.read({
-    entity: 'enrich.request',
+    entity: "enrich.request",
     where: [
-      { column: 'entity_type', op: 'eq', value: 'core.content_item' },
-      { column: 'required_capability', op: 'eq', value: 'pdfText' },
-      { column: 'drained_at', op: 'is-null' },
-      { column: 'lease_expires_at', op: 'gt', value: now },
+      { column: "entity_type", op: "eq", value: "core.content_item" },
+      { column: "required_capability", op: "eq", value: "pdfText" },
+      { column: "drained_at", op: "is-null" },
+      { column: "lease_expires_at", op: "gt", value: now },
     ],
     limit: 100,
     purpose: PURPOSE,
   });
-  const deviceOwned = new Set((leased.rows ?? []).map((request) => request.entity_id));
+  const deviceOwned = new Set(
+    (leased.rows ?? []).map((request) => request.entity_id)
+  );
   const read = await ctx.vault.read({
-    entity: 'core.content_item',
+    entity: "core.content_item",
     where: [
-      { column: 'content_id', op: 'gt', value: cursor },
-      { column: 'deleted_at', op: 'is-null' },
+      { column: "content_id", op: "gt", value: cursor },
+      { column: "deleted_at", op: "is-null" },
     ],
-    orderBy: { column: 'content_id', dir: 'asc' },
+    orderBy: { column: "content_id", dir: "asc" },
     limit: BATCH,
     purpose: PURPOSE,
   });
@@ -79,20 +83,22 @@ export default async ({ ctx, log }) => {
   // content-item cursor permanently misses a preview/text row that arrives
   // after its parent was skipped, so tail the typed derivative stream too.
   const lateRead = await ctx.vault.read({
-    entity: 'core.content_derivative',
+    entity: "core.content_derivative",
     where: [
-      { column: 'derivative_id', op: 'gt', value: derivativeCursor },
-      { column: 'variant', op: 'in', value: ['text', 'preview', 'thumb'] },
+      { column: "derivative_id", op: "gt", value: derivativeCursor },
+      { column: "variant", op: "in", value: ["text", "preview", "thumb"] },
     ],
-    orderBy: { column: 'derivative_id', dir: 'asc' },
+    orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
     purpose: PURPOSE,
   });
   const late = (lateRead.rows ?? []).filter(
-    (row) => typeof row.derivative_id === 'string' && typeof row.content_id === 'string',
+    (row) =>
+      typeof row.derivative_id === "string" &&
+      typeof row.content_id === "string"
   );
   if (items.length === 0 && late.length === 0) {
-    return { summary: 'no new documents — all readable and summarized' };
+    return { summary: "no new documents — all readable and summarized" };
   }
 
   const summaryRows = [];
@@ -103,21 +109,21 @@ export default async ({ ctx, log }) => {
   let lastDerivative = derivativeCursor;
   const processed = new Set();
   const processItem = async (item) => {
-    const mediaType = String(item.media_type ?? '');
+    const mediaType = String(item.media_type ?? "");
     // Inline text items already feed FTS whole; skip non-documents.
-    if (mediaType.startsWith('text/')) return;
+    if (mediaType.startsWith("text/")) return;
     const derivatives = await ctx.vault.read({
-      entity: 'core.content_derivative',
-      where: [{ column: 'content_id', op: 'eq', value: item.content_id }],
+      entity: "core.content_derivative",
+      where: [{ column: "content_id", op: "eq", value: item.content_id }],
       limit: 5,
       purpose: PURPOSE,
     });
     const variants = (derivatives.rows ?? []).map((d) => d.variant);
-    const hasText = variants.includes('text');
-    const visual = variants.includes('preview')
-      ? 'preview'
-      : variants.includes('thumb')
-        ? 'thumb'
+    const hasText = variants.includes("text");
+    const visual = variants.includes("preview")
+      ? "preview"
+      : variants.includes("thumb")
+        ? "thumb"
         : null;
 
     if (!hasText && visual) {
@@ -126,15 +132,15 @@ export default async ({ ctx, log }) => {
       // transaction (issue #296 FTS rule).
       const out = await ctx.agent({
         prompt:
-          'The attached image is a page of a document. Transcribe ALL legible text faithfully, ' +
-          'preserving reading order. Return an empty string if nothing is legible.',
+          "The attached image is a page of a document. Transcribe ALL legible text faithfully, " +
+          "preserving reading order. Return an empty string if nothing is legible.",
         json: OCR_SCHEMA,
         content: [{ contentId: item.content_id, variant: visual }],
       });
-      const text = out && typeof out.text === 'string' ? out.text.trim() : '';
+      const text = out && typeof out.text === "string" ? out.text.trim() : "";
       if (text.length > 0) {
         await ctx.vault.invoke({
-          command: 'core.set_extracted_text',
+          command: "core.set_extracted_text",
           input: { content_id: item.content_id, text },
           purpose: PURPOSE,
         });
@@ -147,11 +153,11 @@ export default async ({ ctx, log }) => {
 
     if (hasText) {
       const prior = await ctx.vault.read({
-        entity: 'sync.external_entity',
+        entity: "sync.external_entity",
         where: [
           {
-            column: 'external_id',
-            op: 'eq',
+            column: "external_id",
+            op: "eq",
             value: `${item.content_id}:summary`,
           },
         ],
@@ -163,18 +169,19 @@ export default async ({ ctx, log }) => {
       // already-extracted text, size-bounded by the content surface.
       const out = await ctx.agent({
         prompt:
-          'Summarize the attached document text in ONE factual paragraph: what it is, the key ' +
-          'parties, amounts and dates. No speculation.',
+          "Summarize the attached document text in ONE factual paragraph: what it is, the key " +
+          "parties, amounts and dates. No speculation.",
         json: SUMMARY_SCHEMA,
-        content: [{ contentId: item.content_id, variant: 'text' }],
+        content: [{ contentId: item.content_id, variant: "text" }],
       });
-      const summary = out && typeof out.summary === 'string' ? out.summary.trim() : '';
+      const summary =
+        out && typeof out.summary === "string" ? out.summary.trim() : "";
       if (summary.length > 0) {
         summaryRows.push({
-          entity_type: 'knowledge.annotation',
+          entity_type: "knowledge.annotation",
           external_id: `${item.content_id}:summary`,
           payload: {
-            target_type: 'core.content_item',
+            target_type: "core.content_item",
             target_id: item.content_id,
             body: summary,
           },
@@ -186,7 +193,9 @@ export default async ({ ctx, log }) => {
 
     // Neither text nor a visual derivative: not enrichable yet.
     skipped += 1;
-    log.info(`content ${item.content_id}: no text or preview derivative — not enrichable yet`);
+    log.info(
+      `content ${item.content_id}: no text or preview derivative — not enrichable yet`
+    );
   };
 
   // Derivative rows are processed in their own order and their cursor moves
@@ -197,7 +206,7 @@ export default async ({ ctx, log }) => {
     if (!processed.has(row.content_id)) {
       await processItem({
         content_id: row.content_id,
-        media_type: 'application/octet-stream',
+        media_type: "application/octet-stream",
       });
       processed.add(row.content_id);
     }
@@ -213,13 +222,13 @@ export default async ({ ctx, log }) => {
 
   if (summaryRows.length > 0) {
     await ctx.vault.invoke({
-      command: 'sync.stage_rows',
-      input: { kind: 'enrichment.doctext', label: 'docs', rows: summaryRows },
+      command: "sync.stage_rows",
+      input: { kind: "enrichment.doctext", label: "docs", rows: summaryRows },
       purpose: PURPOSE,
     });
   }
-  await ctx.state.set('cursor', lastSeen);
-  await ctx.state.set('derivativeCursor', lastDerivative);
+  await ctx.state.set("cursor", lastSeen);
+  await ctx.state.set("derivativeCursor", lastDerivative);
   return {
     summary: `OCRed ${ocred}, summarized ${summarized}, skipped ${skipped}`,
     output: { ocred, summarized, skipped },

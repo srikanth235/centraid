@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
 import {
   cellsMissingRatchet,
@@ -9,51 +9,53 @@ import {
   mergeLaneMarkers,
   reconcileJobConclusions,
   summarizeCellStates,
-} from './report-signals.mjs';
+} from "./report-signals.mjs";
 import {
   REPORT_COMMENT_MARKER,
   coverageScopesBelowFloor,
   publicReportUrl,
   renderSummaryMarkdown,
-} from './summary-markdown.mjs';
-import { validateMatrix } from './validate-matrix.mjs';
+} from "./summary-markdown.mjs";
+import { validateMatrix } from "./validate-matrix.mjs";
 
-describe('extractUnhandledErrors', () => {
-  test('reads explicit unhandledErrors array from vitest JSON', () => {
+describe("extractUnhandledErrors", () => {
+  test("reads explicit unhandledErrors array from vitest JSON", () => {
     const messages = extractUnhandledErrors({
       success: false,
-      unhandledErrors: [{ message: 'write EPIPE' }, 'other'],
+      unhandledErrors: [{ message: "write EPIPE" }, "other"],
       testResults: [
         {
-          status: 'passed',
-          assertionResults: [{ status: 'passed' }],
+          status: "passed",
+          assertionResults: [{ status: "passed" }],
         },
       ],
     });
-    expect(messages).toContain('write EPIPE');
-    expect(messages).toContain('other');
+    expect(messages).toContain("write EPIPE");
+    expect(messages).toContain("other");
   });
 
-  test('flags success=false with zero failed tests (EPIPE-class process fail)', () => {
+  test("flags success=false with zero failed tests (EPIPE-class process fail)", () => {
     const messages = extractUnhandledErrors({
       success: false,
       testResults: [
         {
-          status: 'passed',
-          assertionResults: [{ status: 'passed' }, { status: 'passed' }],
+          status: "passed",
+          assertionResults: [{ status: "passed" }, { status: "passed" }],
         },
       ],
     });
-    expect(messages.some((m) => /success=false|unhandled/iu.test(m))).toBe(true);
+    expect(messages.some((m) => /success=false|unhandled/iu.test(m))).toBe(
+      true
+    );
   });
 
-  test('does not invent errors when suite genuinely failed assertions', () => {
+  test("does not invent errors when suite genuinely failed assertions", () => {
     const messages = extractUnhandledErrors({
       success: false,
       testResults: [
         {
-          status: 'failed',
-          assertionResults: [{ status: 'failed', fullName: 'x' }],
+          status: "failed",
+          assertionResults: [{ status: "failed", fullName: "x" }],
         },
       ],
     });
@@ -61,16 +63,16 @@ describe('extractUnhandledErrors', () => {
   });
 });
 
-describe('summarizeCellStates', () => {
-  test('separates failed from missing (lane ran vs not run)', () => {
+describe("summarizeCellStates", () => {
+  test("separates failed from missing (lane ran vs not run)", () => {
     const counts = summarizeCellStates([
-      { state: 'passed' },
-      { state: 'failed' },
-      { state: 'failed' },
-      { state: 'missing' },
-      { state: 'missing' },
-      { state: 'missing' },
-      { state: 'skipped' },
+      { state: "passed" },
+      { state: "failed" },
+      { state: "failed" },
+      { state: "missing" },
+      { state: "missing" },
+      { state: "missing" },
+      { state: "skipped" },
     ]);
     expect(counts.cellsFailed).toBe(2);
     expect(counts.cellsMissing).toBe(3);
@@ -79,7 +81,7 @@ describe('summarizeCellStates', () => {
   });
 });
 
-describe('detectDefaultCiEnvGate', () => {
+describe("detectDefaultCiEnvGate", () => {
   test('detects describe.skipIf(process.env.X !== "1") whole-file gates', () => {
     const src = `import { describe } from 'vitest';
 describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway relay', () => {
@@ -87,12 +89,12 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
 });
 `;
     expect(detectDefaultCiEnvGate(src)).toEqual({
-      env: 'CENTRAID_RUN_NATIVE_TUNNEL',
-      kind: 'skipIf-env-not-1',
+      env: "CENTRAID_RUN_NATIVE_TUNNEL",
+      kind: "skipIf-env-not-1",
     });
   });
 
-  test('detects env check + t.skip in the test body (disk-full pattern)', () => {
+  test("detects env check + t.skip in the test body (disk-full pattern)", () => {
     const src = `
 test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
   if (process.platform !== 'darwin') {
@@ -107,18 +109,20 @@ test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
 });
 `;
     expect(detectDefaultCiEnvGate(src)).toEqual({
-      env: 'CENTRAID_DISKFULL_E2E',
-      kind: 'early-env-return',
+      env: "CENTRAID_DISKFULL_E2E",
+      kind: "early-env-return",
     });
   });
 
-  test('returns null for ordinary tests', () => {
-    expect(detectDefaultCiEnvGate(`test('works', () => { expect(1).toBe(1); });`)).toBeNull();
+  test("returns null for ordinary tests", () => {
+    expect(
+      detectDefaultCiEnvGate(`test('works', () => { expect(1).toBe(1); });`)
+    ).toBeNull();
   });
 });
 
-describe('renderSummaryMarkdown', () => {
-  test('renders health table and report marker', () => {
+describe("renderSummaryMarkdown", () => {
+  test("renders health table and report marker", () => {
     const md = renderSummaryMarkdown(
       {
         passed: 10,
@@ -126,24 +130,24 @@ describe('renderSummaryMarkdown', () => {
         cellsFailed: 2,
         cellsMissing: 3,
         unhandledErrors: 1,
-        unhandledErrorMessages: ['write EPIPE'],
-        coverageBelowFloor: ['packages/gateway/**'],
+        unhandledErrorMessages: ["write EPIPE"],
+        coverageBelowFloor: ["packages/gateway/**"],
         validationErrorCount: 0,
-        generatedAt: '2026-07-19T00:00:00.000Z',
+        generatedAt: "2026-07-19T00:00:00.000Z",
       },
       {
-        reportUrl: 'https://example.test/report/',
-        runUrl: 'https://example.test/run/1',
-      },
+        reportUrl: "https://example.test/report/",
+        runUrl: "https://example.test/run/1",
+      }
     );
-    expect(md).toContain('needs attention');
-    expect(md).toContain('| Evidence failed | 1 |');
-    expect(md).toContain('https://example.test/report/');
+    expect(md).toContain("needs attention");
+    expect(md).toContain("| Evidence failed | 1 |");
+    expect(md).toContain("https://example.test/report/");
     expect(md).toContain(REPORT_COMMENT_MARKER);
-    expect(md).toContain('write EPIPE');
+    expect(md).toContain("write EPIPE");
   });
 
-  test('marks ok when all signals clean', () => {
+  test("marks ok when all signals clean", () => {
     const md = renderSummaryMarkdown({
       passed: 5,
       failed: 0,
@@ -153,110 +157,113 @@ describe('renderSummaryMarkdown', () => {
       coverageBelowFloor: [],
       validationErrorCount: 0,
     });
-    expect(md).toContain('**Status:** ok');
+    expect(md).toContain("**Status:** ok");
   });
 });
 
-describe('coverageScopesBelowFloor', () => {
-  test('lists scopes under line floor only', () => {
+describe("coverageScopesBelowFloor", () => {
+  test("lists scopes under line floor only", () => {
     expect(
       coverageScopesBelowFloor([
-        { scope: 'a', lines: 50, lineFloor: 60 },
-        { scope: 'b', lines: 90, lineFloor: 80 },
-        { scope: 'c', lines: null, lineFloor: 70 },
-      ]),
-    ).toEqual(['a']);
+        { scope: "a", lines: 50, lineFloor: 60 },
+        { scope: "b", lines: 90, lineFloor: 80 },
+        { scope: "c", lines: null, lineFloor: 70 },
+      ])
+    ).toEqual(["a"]);
   });
 });
 
-describe('publicReportUrl', () => {
-  test('builds project pages URL', () => {
-    expect(publicReportUrl({ owner: 'srikanth235', repo: 'centraid', slot: 'main' })).toBe(
-      'https://srikanth235.github.io/centraid/test-report/main/',
-    );
+describe("publicReportUrl", () => {
+  test("builds project pages URL", () => {
+    expect(
+      publicReportUrl({ owner: "srikanth235", repo: "centraid", slot: "main" })
+    ).toBe("https://srikanth235.github.io/centraid/test-report/main/");
   });
 });
 
-describe('findUnmappedEvidence', () => {
-  test('counts orphaned e2e results and separates failed unmapped', () => {
+describe("findUnmappedEvidence", () => {
+  test("counts orphaned e2e results and separates failed unmapped", () => {
     const matrix = {
       cellOwners: {
-        'mobile.journey': {
-          owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs',
-          tier: 'e2e',
+        "mobile.journey": {
+          owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
+          tier: "e2e",
         },
       },
       flows: [],
     };
     const results = [
       {
-        owner: 'tests/agent-e2e-mobile/flows/home-loads.mjs',
-        status: 'passed',
+        owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
+        status: "passed",
       },
       {
-        owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs',
-        status: 'failed',
+        owner: "tests/agent-e2e-mobile/flows/template-gate.mjs",
+        status: "failed",
       },
-      { owner: 'tests/orphan/no-owner.mjs', status: 'passed' },
+      { owner: "tests/orphan/no-owner.mjs", status: "passed" },
     ];
     const found = findUnmappedEvidence(results, matrix);
     expect(found.unmappedEvidence).toBe(2);
     expect(found.failedUnmapped.map((r) => r.owner)).toEqual([
-      'tests/agent-e2e-mobile/flows/template-gate.mjs',
+      "tests/agent-e2e-mobile/flows/template-gate.mjs",
     ]);
   });
 
-  test('treats flow owners as registered', () => {
+  test("treats flow owners as registered", () => {
     const matrix = {
-      cellOwners: { 'mobile.journey': null },
+      cellOwners: { "mobile.journey": null },
       flows: [
         {
-          id: 'mobile-template-gate',
-          owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs',
+          id: "mobile-template-gate",
+          owner: "tests/agent-e2e-mobile/flows/template-gate.mjs",
         },
       ],
     };
     const found = findUnmappedEvidence(
       [
         {
-          owner: 'tests/agent-e2e-mobile/flows/template-gate.mjs',
-          status: 'failed',
+          owner: "tests/agent-e2e-mobile/flows/template-gate.mjs",
+          status: "failed",
         },
       ],
-      matrix,
+      matrix
     );
     expect(found.unmappedEvidence).toBe(0);
     expect(found.failedUnmapped).toEqual([]);
   });
 });
 
-describe('reconcileJobConclusions', () => {
-  test('flags silent all-clear when needs jobs failed but summary.failed is 0', () => {
+describe("reconcileJobConclusions", () => {
+  test("flags silent all-clear when needs jobs failed but summary.failed is 0", () => {
     const recon = reconcileJobConclusions(
       {
-        'desktop-e2e': { result: 'success' },
-        'mobile-e2e': { result: 'failure' },
-        'mobile-e2e-android': { result: 'failure' },
+        "desktop-e2e": { result: "success" },
+        "mobile-e2e": { result: "failure" },
+        "mobile-e2e-android": { result: "failure" },
       },
-      { failed: 0 },
+      { failed: 0 }
     );
     expect(recon.silentAllClear).toBe(true);
-    expect(recon.failedJobs).toEqual(['mobile-e2e', 'mobile-e2e-android']);
+    expect(recon.failedJobs).toEqual(["mobile-e2e", "mobile-e2e-android"]);
     expect(recon.message).toMatch(/mobile-e2e/u);
   });
 
-  test('is quiet when failed evidence already accounts for the red jobs', () => {
-    const recon = reconcileJobConclusions({ 'mobile-e2e': { result: 'failure' } }, { failed: 2 });
+  test("is quiet when failed evidence already accounts for the red jobs", () => {
+    const recon = reconcileJobConclusions(
+      { "mobile-e2e": { result: "failure" } },
+      { failed: 2 }
+    );
     expect(recon.silentAllClear).toBe(false);
     expect(recon.message).toBeNull();
   });
 });
 
-describe('cellsMissingRatchet', () => {
-  test('detects grey creep vs prior durable history point', () => {
+describe("cellsMissingRatchet", () => {
+  test("detects grey creep vs prior durable history point", () => {
     const ratchet = cellsMissingRatchet(18, [
-      { label: '2026-07-20', cellsMissing: 12 },
-      { label: '2026-07-21', cellsMissing: 15 },
+      { label: "2026-07-20", cellsMissing: 12 },
+      { label: "2026-07-21", cellsMissing: 15 },
     ]);
     expect(ratchet.prior).toBe(15);
     expect(ratchet.current).toBe(18);
@@ -264,65 +271,75 @@ describe('cellsMissingRatchet', () => {
     expect(ratchet.rose).toBe(true);
   });
 
-  test('does not flag improvement or first run', () => {
+  test("does not flag improvement or first run", () => {
     expect(cellsMissingRatchet(10, [{ cellsMissing: 15 }]).rose).toBe(false);
     expect(cellsMissingRatchet(10, []).rose).toBe(false);
   });
 });
 
-describe('filterFloorConfigEntries', () => {
-  test('drops _comment and non-scope meta keys', () => {
+describe("filterFloorConfigEntries", () => {
+  test("drops _comment and non-scope meta keys", () => {
     const entries = filterFloorConfigEntries({
-      _comment: 'seed floors',
-      approvedDeviation: { reason: 'x' },
+      _comment: "seed floors",
+      approvedDeviation: { reason: "x" },
       lines: 70,
-      'packages/gateway/**': { lines: 80 },
+      "packages/gateway/**": { lines: 80 },
     });
-    expect(entries.map(([k]) => k).sort()).toEqual(['lines', 'packages/gateway/**']);
+    expect(entries.map(([k]) => k).sort()).toEqual([
+      "lines",
+      "packages/gateway/**",
+    ]);
   });
 });
 
-describe('mergeLaneMarkers', () => {
-  test('merges per-lane shards without last-write-win loss', () => {
+describe("mergeLaneMarkers", () => {
+  test("merges per-lane shards without last-write-win loss", () => {
     expect(
       mergeLaneMarkers([
-        { 'desktop-playwright': '2026-07-24T01:00:00.000Z' },
-        { 'web-playwright': '2026-07-24T02:00:00.000Z' },
-        { 'desktop-playwright': '2026-07-24T03:00:00.000Z' },
-      ]),
+        { "desktop-playwright": "2026-07-24T01:00:00.000Z" },
+        { "web-playwright": "2026-07-24T02:00:00.000Z" },
+        { "desktop-playwright": "2026-07-24T03:00:00.000Z" },
+      ])
     ).toEqual({
-      'desktop-playwright': '2026-07-24T03:00:00.000Z',
-      'web-playwright': '2026-07-24T02:00:00.000Z',
+      "desktop-playwright": "2026-07-24T03:00:00.000Z",
+      "web-playwright": "2026-07-24T02:00:00.000Z",
     });
   });
 });
 
-describe('validateMatrix skip notes (#535)', () => {
-  test('fails when a skip cell has no matrix.notes rationale', async () => {
+describe("validateMatrix skip notes (#535)", () => {
+  test("fails when a skip cell has no matrix.notes rationale", async () => {
     const matrix = {
-      dimensions: [{ id: 'journey', label: 'Journey', lane: 'e2e' }],
-      surfaces: [{ id: 'mobile', label: 'Mobile', assessment: { journey: 'skip' } }],
-      cellOwners: { 'mobile.journey': null },
+      dimensions: [{ id: "journey", label: "Journey", lane: "e2e" }],
+      surfaces: [
+        { id: "mobile", label: "Mobile", assessment: { journey: "skip" } },
+      ],
+      cellOwners: { "mobile.journey": null },
       flows: [],
       notes: {},
     };
     const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(errors.some((e) => e.includes('mobile.journey') && e.includes('matrix.notes'))).toBe(
-      true,
-    );
+    expect(
+      errors.some(
+        (e) => e.includes("mobile.journey") && e.includes("matrix.notes")
+      )
+    ).toBe(true);
   });
 
-  test('accepts a skip cell with a one-line note', async () => {
+  test("accepts a skip cell with a one-line note", async () => {
     const matrix = {
-      dimensions: [{ id: 'journey', label: 'Journey', lane: 'e2e' }],
-      surfaces: [{ id: 'mobile', label: 'Mobile', assessment: { journey: 'skip' } }],
-      cellOwners: { 'mobile.journey': null },
+      dimensions: [{ id: "journey", label: "Journey", lane: "e2e" }],
+      surfaces: [
+        { id: "mobile", label: "Mobile", assessment: { journey: "skip" } },
+      ],
+      cellOwners: { "mobile.journey": null },
       flows: [],
       notes: {
-        'mobile.journey': 'Delegated to consuming surface; no native journey surface.',
+        "mobile.journey":
+          "Delegated to consuming surface; no native journey surface.",
       },
     };
     const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(errors.filter((e) => e.includes('matrix.notes'))).toEqual([]);
+    expect(errors.filter((e) => e.includes("matrix.notes"))).toEqual([]);
   });
 });

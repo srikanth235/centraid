@@ -4,27 +4,31 @@
 // sealer and drainer take every one of these by injection so the vitest rig
 // can exercise them (the M0.2 lesson).
 
-import { OpSqliteDriver } from '../replica/op-sqlite-driver';
-import { webCryptoUploadCrypto, type UploadCrypto } from './crypto';
-import { enqueueLocalFile, type EnqueueInput } from './enqueue';
-import { expoFileSource, expoPartPutter } from './expo-native';
-import { httpDirectTransferClient } from './gateway-client';
-import { createNativeDigest } from './native-digest';
+import { OpSqliteDriver } from "../replica/op-sqlite-driver";
+import { webCryptoUploadCrypto, type UploadCrypto } from "./crypto";
+import { enqueueLocalFile, type EnqueueInput } from "./enqueue";
+import { expoFileSource, expoPartPutter } from "./expo-native";
+import { httpDirectTransferClient } from "./gateway-client";
+import { createNativeDigest } from "./native-digest";
 import {
   UploadQueueStore,
   type NewUploadFollowup,
   type UploadFollowupFactory,
   type UploadFollowup,
   type UploadItem,
-} from './store';
-import { UploadDrainer, type DrainSummary, type UploadPolicy } from './uploader';
+} from "./store";
+import {
+  UploadDrainer,
+  type DrainSummary,
+  type UploadPolicy,
+} from "./uploader";
 
 /**
  * The queue's own database, deliberately NOT the replica's — see the header of
  * `store.ts` for why. op-sqlite resolves a bare name under the app's documents
  * directory, which is backed up and survives app updates.
  */
-const UPLOAD_DB_NAME = 'centraid-uploads.db';
+const UPLOAD_DB_NAME = "centraid-uploads.db";
 
 export interface UploadQueueOptions {
   gatewayBaseUrl: string;
@@ -40,11 +44,13 @@ export class UploadQueue {
   private constructor(
     private readonly store: UploadQueueStore,
     private readonly drainer: UploadDrainer,
-    private readonly deps: { newId: () => string },
+    private readonly deps: { newId: () => string }
   ) {}
 
   static open(options: UploadQueueOptions): UploadQueue {
-    const store = UploadQueueStore.create(OpSqliteDriver.open({ name: UPLOAD_DB_NAME }));
+    const store = UploadQueueStore.create(
+      OpSqliteDriver.open({ name: UPLOAD_DB_NAME })
+    );
     const scope = { gatewayBaseUrl: options.gatewayBaseUrl };
     const drainer = new UploadDrainer({
       store,
@@ -59,17 +65,22 @@ export class UploadQueue {
       ...(options.policy ? { policy: options.policy } : {}),
       ...(options.onProgress
         ? {
-            onProgress: ({ completed, total }) => options.onProgress?.({ completed, total }),
+            onProgress: ({ completed, total }) =>
+              options.onProgress?.({ completed, total }),
           }
         : {}),
     });
     return new UploadQueue(store, drainer, {
-      newId: () => `upload-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+      newId: () =>
+        `upload-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
     });
   }
 
   /** Address the bytes and durably queue them. Idempotent by content sha. */
-  async enqueue(input: EnqueueInput, makeFollowup?: UploadFollowupFactory): Promise<UploadItem> {
+  async enqueue(
+    input: EnqueueInput,
+    makeFollowup?: UploadFollowupFactory
+  ): Promise<UploadItem> {
     return enqueueLocalFile(
       {
         store: this.store,
@@ -78,7 +89,7 @@ export class UploadQueue {
         createDigest: createNativeDigest,
       },
       input,
-      makeFollowup,
+      makeFollowup
     );
   }
 

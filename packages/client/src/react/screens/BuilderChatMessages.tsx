@@ -1,11 +1,11 @@
-import type { JSX } from 'react';
+import type { JSX } from "react";
 
-import type { BuilderMsgDTO } from '../screen-contracts.js';
-import { Icon } from '../ui/index.js';
+import type { BuilderMsgDTO } from "../screen-contracts.js";
+import { Icon } from "../ui/index.js";
 
-import chatCss from '../styles/chatMessage.module.css';
-import tgCss from '../styles/toolGroup.module.css';
-import styles from './BuilderChatPane.module.css';
+import chatCss from "../styles/chatMessage.module.css";
+import tgCss from "../styles/toolGroup.module.css";
+import styles from "./BuilderChatPane.module.css";
 
 function BoltGlyph(): JSX.Element {
   return (
@@ -45,7 +45,7 @@ function ToolGroup({
   message,
   onToggleGroup,
 }: {
-  message: Extract<BuilderMsgDTO, { kind: 'toolGroup' }>;
+  message: Extract<BuilderMsgDTO, { kind: "toolGroup" }>;
   onToggleGroup: (id: string) => void;
 }): JSX.Element {
   return (
@@ -75,7 +75,7 @@ function ToolGroup({
         <button
           type="button"
           className={styles.tgChangeCard}
-          aria-label={`${message.change.count} file${message.change.count === 1 ? '' : 's'} updated — toggle details`}
+          aria-label={`${message.change.count} file${message.change.count === 1 ? "" : "s"} updated — toggle details`}
           onClick={() => onToggleGroup(message.id)}
         >
           <span className={styles.tgCardIcon}>
@@ -83,11 +83,14 @@ function ToolGroup({
           </span>
           <span className={styles.tgCardMeta}>
             <span className={styles.tgCardTitle}>
-              {message.change.count} file{message.change.count === 1 ? '' : 's'} updated
+              {message.change.count} file{message.change.count === 1 ? "" : "s"}{" "}
+              updated
             </span>
             <span className={styles.tgCardSub}>{message.change.subtitle}</span>
           </span>
-          <span className={styles.tgCardVersion}>→ {message.change.version}</span>
+          <span className={styles.tgCardVersion}>
+            → {message.change.version}
+          </span>
         </button>
       )}
       {message.open && (
@@ -113,13 +116,13 @@ export function BuilderChatMessage({
   onToggleGroup: (id: string) => void;
 }): JSX.Element {
   switch (message.kind) {
-    case 'divider':
+    case "divider":
       return (
         <div className={styles.chatDivider}>
           <span>{message.text}</span>
         </div>
       );
-    case 'status':
+    case "status":
       return (
         <div className={styles.chatStatusRow}>
           <span className={chatCss.status}>
@@ -128,19 +131,22 @@ export function BuilderChatMessage({
             ) : (
               <Icon name="Check" size={12} strokeWidth={2.5} />
             )}
-            {' ' + message.text}
+            {" " + message.text}
           </span>
         </div>
       );
-    case 'user':
+    case "user":
       return (
         <div className={chatCss.user}>
           <div className={chatCss.userBubble}>{message.text}</div>
         </div>
       );
-    case 'thinking':
+    case "thinking":
       return (
-        <div className={styles.chatThinking} data-streaming={String(message.streaming)}>
+        <div
+          className={styles.chatThinking}
+          data-streaming={String(message.streaming)}
+        >
           <div className={styles.thinkingHeader}>
             <span className={styles.thinkingDot} />
             <span>{message.header}</span>
@@ -148,9 +154,9 @@ export function BuilderChatMessage({
           <div className={styles.thinkingBody}>{message.text}</div>
         </div>
       );
-    case 'toolGroup':
+    case "toolGroup":
       return <ToolGroup message={message} onToggleGroup={onToggleGroup} />;
-    case 'ai':
+    case "ai":
       return (
         <div className={chatCss.ai}>
           <span className={styles.msgAiAvatar}>

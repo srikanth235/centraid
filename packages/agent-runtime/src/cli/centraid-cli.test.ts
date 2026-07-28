@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from "node:child_process";
 /*
  * End-to-end smoke test for the centraid CLI bin, invoked as a subprocess
  * (using the built dist/cli/centraid-cli.js). The `sql` subcommands died
@@ -8,21 +8,28 @@ import { spawnSync } from 'node:child_process';
  * The test depends on a prior `bun run build` for this package; turbo
  * configures `test` to run after `build` so the dist file exists.
  */
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 // This test lives at src/cli/; the built CLI is at <pkg>/dist/cli/ (rootDir
 // src mirrors into dist). Two levels up from src/cli reaches the package root.
-const CLI_PATH = path.join(import.meta.dirname, '..', '..', 'dist', 'cli', 'centraid-cli.js');
+const CLI_PATH = path.join(
+  import.meta.dirname,
+  "..",
+  "..",
+  "dist",
+  "cli",
+  "centraid-cli.js"
+);
 
 let workspace: string;
 
-describe('centraid-cli', () => {
+describe("centraid-cli", () => {
   beforeAll(async () => {
-    workspace = await tempDir('centraid-cli-test-');
+    workspace = await tempDir("centraid-cli-test-");
   });
 
   afterAll(async () => {
@@ -36,41 +43,41 @@ describe('centraid-cli', () => {
   } {
     const result = spawnSync(process.execPath, [CLI_PATH, ...args], {
       cwd: workspace,
-      encoding: 'utf8',
+      encoding: "utf8",
     });
     return {
       stdout: result.stdout,
       stderr: result.stderr,
-      code: typeof result.status === 'number' ? result.status : -1,
+      code: typeof result.status === "number" ? result.status : -1,
     };
   }
 
-  test('the retired sql subcommand exits with usage error', () => {
-    const r = runCli('sql', 'read', 'SELECT 1');
+  test("the retired sql subcommand exits with usage error", () => {
+    const r = runCli("sql", "read", "SELECT 1");
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/unknown command "sql"/u);
   });
 
-  test('unknown command exits with usage error', () => {
-    const r = runCli('gibberish');
+  test("unknown command exits with usage error", () => {
+    const r = runCli("gibberish");
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/unknown command/u);
   });
 
-  test('preview snapshot reports exists:false when the file is missing', () => {
-    const r = runCli('preview', 'snapshot');
+  test("preview snapshot reports exists:false when the file is missing", () => {
+    const r = runCli("preview", "snapshot");
     expect(r.code).toBe(0);
     const parsed = JSON.parse(r.stdout) as { path: string; exists: boolean };
     expect(parsed.exists).toBe(false);
     expect(parsed.path).toMatch(/\.preview\/snapshot\.png$/u);
   });
 
-  test('preview snapshot returns size + age when the file exists', async () => {
-    const dir = path.join(workspace, '.preview');
+  test("preview snapshot returns size + age when the file exists", async () => {
+    const dir = path.join(workspace, ".preview");
     await fs.mkdir(dir, { recursive: true });
-    const png = path.join(dir, 'snapshot.png');
+    const png = path.join(dir, "snapshot.png");
     await fs.writeFile(png, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    const r = runCli('preview', 'snapshot');
+    const r = runCli("preview", "snapshot");
     expect(r.code).toBe(0);
     const parsed = JSON.parse(r.stdout) as {
       path: string;
@@ -86,14 +93,14 @@ describe('centraid-cli', () => {
     await fs.rm(dir, { recursive: true, force: true });
   });
 
-  test('preview with no subcommand exits with usage error', () => {
-    const r = runCli('preview');
+  test("preview with no subcommand exits with usage error", () => {
+    const r = runCli("preview");
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/unknown preview subcommand/u);
   });
 
-  test('preview snapshot rejects extra args', () => {
-    const r = runCli('preview', 'snapshot', 'extra');
+  test("preview snapshot rejects extra args", () => {
+    const r = runCli("preview", "snapshot", "extra");
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/takes no arguments/u);
   });

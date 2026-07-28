@@ -1,10 +1,10 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 
-import type { AutomationEditorBridgeProps } from '../screen-contracts.js';
-import AutomationEditorScreen from './AutomationEditorScreen.js';
-import { addTrigger, makeData, makeProps } from './automationEditorTestKit.js';
+import type { AutomationEditorBridgeProps } from "../screen-contracts.js";
+import AutomationEditorScreen from "./AutomationEditorScreen.js";
+import { addTrigger, makeData, makeProps } from "./automationEditorTestKit.js";
 
 // Data trigger authoring coverage for AutomationEditorScreen. Create form
 // only adds Schedule (cron) and Data change — condition/webhook stay
@@ -12,7 +12,7 @@ import { addTrigger, makeData, makeProps } from './automationEditorTestKit.js';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-describe('AutomationEditorTriggers', () => {
+describe("AutomationEditorTriggers", () => {
   afterEach(() => {
     act(() => root?.unmount());
     root = null;
@@ -21,8 +21,10 @@ describe('AutomationEditorTriggers', () => {
     vi.clearAllMocks();
   });
 
-  async function mount(props: AutomationEditorBridgeProps): Promise<HTMLDivElement> {
-    container = document.createElement('div');
+  async function mount(
+    props: AutomationEditorBridgeProps
+  ): Promise<HTMLDivElement> {
+    container = document.createElement("div");
     document.body.appendChild(container);
     await act(async () => {
       root = createRoot(container as HTMLDivElement);
@@ -31,334 +33,387 @@ describe('AutomationEditorTriggers', () => {
     return container;
   }
 
-  function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  function setValue(
+    el: HTMLInputElement | HTMLTextAreaElement,
+    value: string
+  ): void {
     const proto =
-      el.tagName === 'TEXTAREA'
+      el.tagName === "TEXTAREA"
         ? globalThis.HTMLTextAreaElement.prototype
         : globalThis.HTMLInputElement.prototype;
-    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
     act(() => {
       setter?.call(el, value);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
     });
   }
 
   function setSelect(el: HTMLSelectElement, value: string): void {
     const setter = Object.getOwnPropertyDescriptor(
       globalThis.HTMLSelectElement.prototype,
-      'value',
+      "value"
     )?.set;
     act(() => {
       setter?.call(el, value);
-      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
     });
   }
 
   function keydown(el: HTMLElement, key: string): void {
     act(() => {
-      el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
     });
   }
 
   function button(el: HTMLElement, label: string): HTMLButtonElement {
-    return [...el.querySelectorAll('button')].find(
-      (b) => b.textContent === label,
+    return [...el.querySelectorAll("button")].find(
+      (b) => b.textContent === label
     ) as HTMLButtonElement;
   }
 
-  describe('AutomationEditorScreen — authoring data triggers', () => {
-    async function mountNamed(over: Partial<AutomationEditorBridgeProps> = {}): Promise<{
+  describe("AutomationEditorScreen — authoring data triggers", () => {
+    async function mountNamed(
+      over: Partial<AutomationEditorBridgeProps> = {}
+    ): Promise<{
       el: HTMLDivElement;
       props: AutomationEditorBridgeProps;
     }> {
       const props = makeProps(over);
       const el = await mount(props);
-      setValue(el.querySelector('input[placeholder="My Automation"]') as HTMLInputElement, 'A');
+      setValue(
+        el.querySelector(
+          'input[placeholder="My Automation"]'
+        ) as HTMLInputElement,
+        "A"
+      );
       return { el, props };
     }
 
-    it('serializes a data trigger — entities split/trimmed, blank every omitted', async () => {
+    it("serializes a data trigger — entities split/trimmed, blank every omitted", async () => {
       const { el, props } = await mountNamed();
-      await addTrigger(el, 'Data change');
+      await addTrigger(el, "Data change");
       setValue(
         el.querySelector(
-          'input[placeholder="core.transaction, billing.invoice"]',
+          'input[placeholder="core.transaction, billing.invoice"]'
         ) as HTMLInputElement,
-        '  core.transaction , billing.invoice ,',
+        "  core.transaction , billing.invoice ,"
       );
       await act(async () =>
-        button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+        button(el, "Create automation").dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
       expect(props.onSave).toHaveBeenCalledWith({
         connections: [],
-        instructions: '',
-        name: 'A',
-        triggers: [{ entities: ['core.transaction', 'billing.invoice'], kind: 'data' }],
+        instructions: "",
+        name: "A",
+        triggers: [
+          { entities: ["core.transaction", "billing.invoice"], kind: "data" },
+        ],
       });
     });
 
-    it('skips an empty-entities data trigger', async () => {
+    it("skips an empty-entities data trigger", async () => {
       const { el, props } = await mountNamed();
-      await addTrigger(el, 'Data change');
+      await addTrigger(el, "Data change");
       await act(async () =>
-        button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+        button(el, "Create automation").dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
       expect(props.onSave).toHaveBeenCalledWith({
         connections: [],
-        instructions: '',
-        name: 'A',
+        instructions: "",
+        name: "A",
         triggers: [],
       });
     });
 
-    it('offers connector events only for a bound account and serializes the exact binding kind', async () => {
+    it("offers connector events only for a bound account and serializes the exact binding kind", async () => {
       const unbound = await mount(makeProps());
       await act(async () => {
-        button(unbound, '+ Add Trigger').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        button(unbound, "+ Add Trigger").dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        );
       });
       expect(
-        [...unbound.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-      ).not.toContain('Connector event');
+        [...unbound.querySelectorAll('[role="menuitem"]')].map(
+          (item) => item.textContent
+        )
+      ).not.toContain("Connector event");
       act(() => root?.unmount());
       root = null;
       unbound.remove();
       container = null;
 
       const props = makeProps({
-        loadData: vi.fn<AutomationEditorBridgeProps['loadData']>().mockResolvedValue(
-          makeData({
-            automationId: 'a/x',
-            mode: 'edit',
-            name: 'A',
-            connectors: {
-              connector: null,
-              mcps: [],
-              secrets: [],
-              vaultPurpose: null,
-              vaultScopes: [],
-              connections: [
-                {
-                  connectionId: 'github-account-1',
-                  kind: 'pull.github',
-                  label: 'Work GitHub',
-                },
-              ],
-            },
-          }),
-        ),
+        loadData: vi
+          .fn<AutomationEditorBridgeProps["loadData"]>()
+          .mockResolvedValue(
+            makeData({
+              automationId: "a/x",
+              mode: "edit",
+              name: "A",
+              connectors: {
+                connector: null,
+                mcps: [],
+                secrets: [],
+                vaultPurpose: null,
+                vaultScopes: [],
+                connections: [
+                  {
+                    connectionId: "github-account-1",
+                    kind: "pull.github",
+                    label: "Work GitHub",
+                  },
+                ],
+              },
+            })
+          ),
       });
       const el = await mount(props);
-      await addTrigger(el, 'Connector event');
+      await addTrigger(el, "Connector event");
       setValue(
-        el.querySelector('input[placeholder="owner/repository"]') as HTMLInputElement,
-        'acme/app',
+        el.querySelector(
+          'input[placeholder="owner/repository"]'
+        ) as HTMLInputElement,
+        "acme/app"
       );
       await act(async () =>
-        button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+        button(el, "Save changes").dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
       expect(props.onSave).toHaveBeenCalledWith({
         connections: [
           {
-            connectionId: 'github-account-1',
-            kind: 'pull.github',
-            label: 'Work GitHub',
+            connectionId: "github-account-1",
+            kind: "pull.github",
+            label: "Work GitHub",
           },
         ],
-        instructions: '',
-        name: 'A',
+        instructions: "",
+        name: "A",
         triggers: [
           {
-            connectorKind: 'pull.github',
-            event: 'pull-request',
-            filter: { repo: 'acme/app' },
-            kind: 'event',
+            connectorKind: "pull.github",
+            event: "pull-request",
+            filter: { repo: "acme/app" },
+            kind: "event",
           },
         ],
       });
     });
 
-    it('serializes a loaded condition trigger with per-op coerced where values + every', async () => {
+    it("serializes a loaded condition trigger with per-op coerced where values + every", async () => {
       // Condition is no longer addable from the form; authoring still works for
       // automations that already carry a condition trigger.
       const props = makeProps({
-        loadData: vi.fn<AutomationEditorBridgeProps['loadData']>().mockResolvedValue(
-          makeData({
-            automationId: 'a/x',
-            mode: 'edit',
-            name: 'A',
-            rowId: 'r1',
-            triggers: [{ entity: 'business.invoice', kind: 'condition', where: [] }],
-          }),
-        ),
+        loadData: vi
+          .fn<AutomationEditorBridgeProps["loadData"]>()
+          .mockResolvedValue(
+            makeData({
+              automationId: "a/x",
+              mode: "edit",
+              name: "A",
+              rowId: "r1",
+              triggers: [
+                { entity: "business.invoice", kind: "condition", where: [] },
+              ],
+            })
+          ),
       });
       const el = await mount(props);
 
       const addFilter = (): Promise<void> =>
         act(async () => {
-          button(el, '+ Add filter').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          button(el, "+ Add filter").dispatchEvent(
+            new MouseEvent("click", { bubbles: true })
+          );
         });
       const cols = (): HTMLInputElement[] =>
-        [...el.querySelectorAll('input[aria-label="Filter column"]')] as HTMLInputElement[];
+        [
+          ...el.querySelectorAll('input[aria-label="Filter column"]'),
+        ] as HTMLInputElement[];
       const ops = (): HTMLSelectElement[] =>
-        [...el.querySelectorAll('select[aria-label="Filter operator"]')] as HTMLSelectElement[];
+        [
+          ...el.querySelectorAll('select[aria-label="Filter operator"]'),
+        ] as HTMLSelectElement[];
       const vals = (): HTMLInputElement[] =>
-        [...el.querySelectorAll('input[aria-label="Filter value"]')] as HTMLInputElement[];
+        [
+          ...el.querySelectorAll('input[aria-label="Filter value"]'),
+        ] as HTMLInputElement[];
 
       await addFilter();
-      setValue(cols()[0]!, 'status');
-      setValue(vals()[0]!, 'open');
+      setValue(cols()[0]!, "status");
+      setValue(vals()[0]!, "open");
 
       await addFilter();
-      setValue(cols()[1]!, 'priority');
-      setSelect(ops()[1]!, 'in');
-      setValue(vals()[1]!, '1, 2, 3');
+      setValue(cols()[1]!, "priority");
+      setSelect(ops()[1]!, "in");
+      setValue(vals()[1]!, "1, 2, 3");
 
       await addFilter();
-      setValue(cols()[2]!, 'due');
-      setSelect(ops()[2]!, 'within-next-days');
-      setValue(vals()[2]!, '7');
+      setValue(cols()[2]!, "due");
+      setSelect(ops()[2]!, "within-next-days");
+      setValue(vals()[2]!, "7");
 
       await addFilter();
-      setValue(cols()[3]!, 'closed_at');
-      setSelect(ops()[3]!, 'not-null');
+      setValue(cols()[3]!, "closed_at");
+      setSelect(ops()[3]!, "not-null");
       expect(vals()).toHaveLength(3);
 
       setValue(
-        el.querySelector('input[placeholder="*/5 * * * *"]') as HTMLInputElement,
-        '*/10 * * * *',
+        el.querySelector(
+          'input[placeholder="*/5 * * * *"]'
+        ) as HTMLInputElement,
+        "*/10 * * * *"
       );
 
       await act(async () =>
-        button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+        button(el, "Save changes").dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        )
       );
       expect(props.onSave).toHaveBeenCalledWith({
         connections: [],
-        instructions: '',
-        name: 'A',
+        instructions: "",
+        name: "A",
         triggers: [
           {
-            entity: 'business.invoice',
-            every: '*/10 * * * *',
-            kind: 'condition',
+            entity: "business.invoice",
+            every: "*/10 * * * *",
+            kind: "condition",
             where: [
-              { column: 'status', op: 'eq', value: 'open' },
-              { column: 'priority', op: 'in', value: [1, 2, 3] },
-              { column: 'due', op: 'within-next-days', value: 7 },
-              { column: 'closed_at', op: 'not-null' },
+              { column: "status", op: "eq", value: "open" },
+              { column: "priority", op: "in", value: [1, 2, 3] },
+              { column: "due", op: "within-next-days", value: 7 },
+              { column: "closed_at", op: "not-null" },
             ],
           },
         ],
       });
     });
 
-    const KINDS = ['core.transaction', 'core.event', 'billing.invoice'];
+    const KINDS = ["core.transaction", "core.event", "billing.invoice"];
 
     async function mountWithDataTrigger(
-      loadEntityTypes: Mock<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>,
+      loadEntityTypes: Mock<
+        NonNullable<AutomationEditorBridgeProps["loadEntityTypes"]>
+      >
     ): Promise<{
       el: HTMLDivElement;
       input: HTMLInputElement;
     }> {
       const { el } = await mountNamed({ loadEntityTypes });
-      await addTrigger(el, 'Data change');
+      await addTrigger(el, "Data change");
       await act(async () => {
         await Promise.resolve();
       });
       const input = el.querySelector(
-        'input[placeholder="core.transaction, billing.invoice"]',
+        'input[placeholder="core.transaction, billing.invoice"]'
       ) as HTMLInputElement;
       return { el, input };
     }
 
     const optionLabels = (el: HTMLElement): string[] =>
-      [...el.querySelectorAll('.mentionOption span')].map((s) => s.textContent ?? '');
+      [...el.querySelectorAll(".mentionOption span")].map(
+        (s) => s.textContent ?? ""
+      );
 
-    it('fetches entity kinds lazily the first time a data trigger appears', async () => {
+    it("fetches entity kinds lazily the first time a data trigger appears", async () => {
       const loadEntityTypes = vi
-        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .fn<NonNullable<AutomationEditorBridgeProps["loadEntityTypes"]>>()
         .mockResolvedValue(KINDS);
       const { el } = await mountNamed({ loadEntityTypes });
       expect(loadEntityTypes).not.toHaveBeenCalled();
-      await addTrigger(el, 'Data change');
+      await addTrigger(el, "Data change");
       await act(async () => {
         await Promise.resolve();
       });
       expect(loadEntityTypes).toHaveBeenCalledOnce();
-      expect(el.querySelector('.mentionPopover')).toBeNull();
+      expect(el.querySelector(".mentionPopover")).toBeNull();
     });
 
-    it('filters kinds client-side as the user types, capped to the query', async () => {
+    it("filters kinds client-side as the user types, capped to the query", async () => {
       const loadEntityTypes = vi
-        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .fn<NonNullable<AutomationEditorBridgeProps["loadEntityTypes"]>>()
         .mockResolvedValue(KINDS);
       const { el, input } = await mountWithDataTrigger(loadEntityTypes);
-      setValue(input, 'core');
-      expect(optionLabels(el)).toStrictEqual(['core.transaction', 'core.event']);
-      setValue(input, 'bill');
-      expect(optionLabels(el)).toStrictEqual(['billing.invoice']);
+      setValue(input, "core");
+      expect(optionLabels(el)).toStrictEqual([
+        "core.transaction",
+        "core.event",
+      ]);
+      setValue(input, "bill");
+      expect(optionLabels(el)).toStrictEqual(["billing.invoice"]);
     });
 
-    it('keyboard-navigates and accepts a kind into the input (Enter)', async () => {
+    it("keyboard-navigates and accepts a kind into the input (Enter)", async () => {
       const loadEntityTypes = vi
-        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .fn<NonNullable<AutomationEditorBridgeProps["loadEntityTypes"]>>()
         .mockResolvedValue(KINDS);
       const { el, input } = await mountWithDataTrigger(loadEntityTypes);
-      setValue(input, 'core');
-      keydown(input, 'ArrowDown');
-      keydown(input, 'Enter');
-      expect(input.value).toBe('core.event');
-      expect(el.querySelector('.mentionPopover')).toBeNull();
+      setValue(input, "core");
+      keydown(input, "ArrowDown");
+      keydown(input, "Enter");
+      expect(input.value).toBe("core.event");
+      expect(el.querySelector(".mentionPopover")).toBeNull();
     });
 
-    it('Escape dismisses the picker without changing the input', async () => {
+    it("Escape dismisses the picker without changing the input", async () => {
       const loadEntityTypes = vi
-        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .fn<NonNullable<AutomationEditorBridgeProps["loadEntityTypes"]>>()
         .mockResolvedValue(KINDS);
       const { el, input } = await mountWithDataTrigger(loadEntityTypes);
-      setValue(input, 'core');
-      expect(el.querySelector('.mentionPopover')).not.toBeNull();
-      keydown(input, 'Escape');
-      expect(el.querySelector('.mentionPopover')).toBeNull();
-      expect(input.value).toBe('core');
+      setValue(input, "core");
+      expect(el.querySelector(".mentionPopover")).not.toBeNull();
+      keydown(input, "Escape");
+      expect(el.querySelector(".mentionPopover")).toBeNull();
+      expect(input.value).toBe("core");
     });
 
-    it('completes only the trailing comma segment for the data input', async () => {
+    it("completes only the trailing comma segment for the data input", async () => {
       const loadEntityTypes = vi
-        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .fn<NonNullable<AutomationEditorBridgeProps["loadEntityTypes"]>>()
         .mockResolvedValue(KINDS);
       const { input } = await mountWithDataTrigger(loadEntityTypes);
-      setValue(input, 'core.transaction, bill');
-      keydown(input, 'Enter');
-      expect(input.value).toBe('core.transaction, billing.invoice');
+      setValue(input, "core.transaction, bill");
+      keydown(input, "Enter");
+      expect(input.value).toBe("core.transaction, billing.invoice");
     });
 
-    it('accepts a kind by click for a loaded condition entity input', async () => {
+    it("accepts a kind by click for a loaded condition entity input", async () => {
       const loadEntityTypes = vi
-        .fn<NonNullable<AutomationEditorBridgeProps['loadEntityTypes']>>()
+        .fn<NonNullable<AutomationEditorBridgeProps["loadEntityTypes"]>>()
         .mockResolvedValue(KINDS);
       const el = await mount(
         makeProps({
-          loadData: vi.fn<AutomationEditorBridgeProps['loadData']>().mockResolvedValue(
-            makeData({
-              automationId: 'a/x',
-              mode: 'edit',
-              name: 'A',
-              rowId: 'r1',
-              triggers: [{ entity: '', kind: 'condition', where: [] }],
-            }),
-          ),
+          loadData: vi
+            .fn<AutomationEditorBridgeProps["loadData"]>()
+            .mockResolvedValue(
+              makeData({
+                automationId: "a/x",
+                mode: "edit",
+                name: "A",
+                rowId: "r1",
+                triggers: [{ entity: "", kind: "condition", where: [] }],
+              })
+            ),
           loadEntityTypes,
-        }),
+        })
       );
       await act(async () => {
         await Promise.resolve();
       });
-      const input = el.querySelector('input[placeholder="business.invoice"]') as HTMLInputElement;
-      setValue(input, 'invoice');
+      const input = el.querySelector(
+        'input[placeholder="business.invoice"]'
+      ) as HTMLInputElement;
+      setValue(input, "invoice");
       await act(async () => {
-        (el.querySelector('.mentionOption') as HTMLButtonElement).click();
+        (el.querySelector(".mentionOption") as HTMLButtonElement).click();
       });
-      expect(input.value).toBe('billing.invoice');
+      expect(input.value).toBe("billing.invoice");
     });
   });
 });

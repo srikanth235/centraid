@@ -5,29 +5,34 @@
 // to two extra rules (provenanceScopeFailure in gateway.ts) so a table-level
 // grant on `consent.provenance` cannot become a browse-everything key.
 
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
-import { registerDocumentCommands } from '../commands/documents.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, Gateway } from './gateway.js';
-import type { Credential } from './types.js';
+import {
+  bootstrapVault,
+  createGrant,
+  enrollApp,
+  type BootstrapResult,
+} from "../bootstrap.js";
+import { registerDocumentCommands } from "../commands/documents.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { createGateway, Gateway } from "./gateway.js";
+import type { Credential } from "./types.js";
 
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-const TEXT = 'data:text/plain;charset=utf-8,hello';
+const TEXT = "data:text/plain;charset=utf-8,hello";
 
-describe('activity-read', () => {
+describe("activity-read", () => {
   beforeEach(() => {
     db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: 'Priya' });
+    boot = bootstrapVault(db, { ownerName: "Priya" });
     gw = createGateway(db);
     registerDocumentCommands(gw);
     owner = {
-      kind: 'device',
+      kind: "device",
       deviceId: boot.deviceId,
       deviceKey: boot.deviceKey,
     };
@@ -38,108 +43,108 @@ describe('activity-read', () => {
     scopes: {
       schema: string;
       table?: string;
-      verbs: 'read' | 'read+act' | 'act';
-    }[],
+      verbs: "read" | "read+act" | "act";
+    }[]
   ): Credential {
     const app = enrollApp(db, { name });
     createGrant(db, {
       appId: app.appId,
-      purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
+      purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
       grantedByPartyId: boot.ownerPartyId,
       scopes,
     });
-    return { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    return { kind: "app", appId: app.appId, signingKey: app.signingKey };
   }
 
   function addDocument(): string {
     const outcome = gw.invoke(owner, {
-      command: 'core.add_document',
-      input: { data_uri: TEXT, title: 'Lease' },
-      purpose: 'dpv:ServiceProvision',
+      command: "core.add_document",
+      input: { data_uri: TEXT, title: "Lease" },
+      purpose: "dpv:ServiceProvision",
     });
-    expect(outcome.status).toBe('executed');
+    expect(outcome.status).toBe("executed");
     return (outcome as { output: { document_id: string } }).output.document_id;
   }
 
-  describe('activity read over consent.provenance', () => {
+  describe("activity read over consent.provenance", () => {
     test("an app holding both scopes reads the specific entity's activity", () => {
       const documentId = addDocument();
-      const cred = grantApp('docs-app', [
-        { schema: 'core', table: 'document', verbs: 'read' },
-        { schema: 'consent', table: 'provenance', verbs: 'read' },
+      const cred = grantApp("docs-app", [
+        { schema: "core", table: "document", verbs: "read" },
+        { schema: "consent", table: "provenance", verbs: "read" },
       ]);
       const result = gw.read(cred, {
-        entity: 'consent.provenance',
+        entity: "consent.provenance",
         where: [
-          { column: 'entity_type', op: 'eq', value: 'core.document' },
-          { column: 'entity_id', op: 'eq', value: documentId },
+          { column: "entity_type", op: "eq", value: "core.document" },
+          { column: "entity_id", op: "eq", value: documentId },
         ],
-        purpose: 'dpv:ServiceProvision',
+        purpose: "dpv:ServiceProvision",
       });
       expect(result.rows.length).toBeGreaterThan(0);
       expect(result.rows[0]).toMatchObject({
-        entity_type: 'core.document',
+        entity_type: "core.document",
         entity_id: documentId,
-        prov_activity: 'command.core.add_document',
+        prov_activity: "command.core.add_document",
       });
     });
 
-    test('unscoped reads (no entity_type/entity_id) are denied even with a table grant', () => {
+    test("unscoped reads (no entity_type/entity_id) are denied even with a table grant", () => {
       addDocument();
-      const cred = grantApp('docs-app-2', [
-        { schema: 'core', table: 'document', verbs: 'read' },
-        { schema: 'consent', table: 'provenance', verbs: 'read' },
+      const cred = grantApp("docs-app-2", [
+        { schema: "core", table: "document", verbs: "read" },
+        { schema: "consent", table: "provenance", verbs: "read" },
       ]);
       expect(() =>
         gw.read(cred, {
-          entity: 'consent.provenance',
-          purpose: 'dpv:ServiceProvision',
-        }),
+          entity: "consent.provenance",
+          purpose: "dpv:ServiceProvision",
+        })
       ).toThrow(/scope to exactly one/u);
     });
 
-    test('holding the provenance grant alone cannot browse a domain the app cannot read', () => {
+    test("holding the provenance grant alone cannot browse a domain the app cannot read", () => {
       const documentId = addDocument();
       // Grants read on consent.provenance but NOT on core.document — a health
       // app fishing for another domain's activity must not see it.
-      const cred = grantApp('health-app', [
-        { schema: 'health', verbs: 'read' },
-        { schema: 'consent', table: 'provenance', verbs: 'read' },
+      const cred = grantApp("health-app", [
+        { schema: "health", verbs: "read" },
+        { schema: "consent", table: "provenance", verbs: "read" },
       ]);
       expect(() =>
         gw.read(cred, {
-          entity: 'consent.provenance',
+          entity: "consent.provenance",
           where: [
-            { column: 'entity_type', op: 'eq', value: 'core.document' },
-            { column: 'entity_id', op: 'eq', value: documentId },
+            { column: "entity_type", op: "eq", value: "core.document" },
+            { column: "entity_id", op: "eq", value: documentId },
           ],
-          purpose: 'dpv:ServiceProvision',
-        }),
+          purpose: "dpv:ServiceProvision",
+        })
       ).toThrow(/no read consent for core\.document/u);
     });
 
-    test('an unrecognized entity_type is denied, never resolved to SQL', () => {
-      const cred = grantApp('docs-app-3', [
-        { schema: 'core', table: 'document', verbs: 'read' },
-        { schema: 'consent', table: 'provenance', verbs: 'read' },
+    test("an unrecognized entity_type is denied, never resolved to SQL", () => {
+      const cred = grantApp("docs-app-3", [
+        { schema: "core", table: "document", verbs: "read" },
+        { schema: "consent", table: "provenance", verbs: "read" },
       ]);
       expect(() =>
         gw.read(cred, {
-          entity: 'consent.provenance',
+          entity: "consent.provenance",
           where: [
-            { column: 'entity_type', op: 'eq', value: 'not.a.real.entity' },
-            { column: 'entity_id', op: 'eq', value: 'x' },
+            { column: "entity_type", op: "eq", value: "not.a.real.entity" },
+            { column: "entity_id", op: "eq", value: "x" },
           ],
-          purpose: 'dpv:ServiceProvision',
-        }),
+          purpose: "dpv:ServiceProvision",
+        })
       ).toThrow(/unknown entity/u);
     });
 
-    test('the owner bypasses the extra guard — no entity_type/entity_id required', () => {
+    test("the owner bypasses the extra guard — no entity_type/entity_id required", () => {
       addDocument();
       const result = gw.read(owner, {
-        entity: 'consent.provenance',
-        purpose: 'owner-assistant',
+        entity: "consent.provenance",
+        purpose: "owner-assistant",
       });
       expect(result.rows.length).toBeGreaterThan(0);
     });

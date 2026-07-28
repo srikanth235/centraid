@@ -74,7 +74,7 @@ interface PartyEntry {
   name?: string;
 }
 
-const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
+const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
 const DAY = 86400000;
 
 function daysSince(iso: string): number {
@@ -84,7 +84,7 @@ function daysSince(iso: string): number {
 
 // Days until the next annual occurrence of an MM-DD, from today (0 = today).
 function daysUntilMonthDay(monthDay: string): number {
-  const [m, d] = String(monthDay).split('-').map(Number);
+  const [m, d] = String(monthDay).split("-").map(Number);
   if (!m || !d) return 9999;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -94,18 +94,18 @@ function daysUntilMonthDay(monthDay: string): number {
 }
 
 export default async function dashboard({ ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   const window = 500;
   try {
     const [profiles, concepts, schemes] = await Promise.all([
       ctx.vault.read({
-        entity: 'people.profile',
-        orderBy: { column: 'created_at', dir: 'desc' },
+        entity: "people.profile",
+        orderBy: { column: "created_at", dir: "desc" },
         limit: window,
         purpose,
       }),
-      ctx.vault.read({ entity: 'core.concept', purpose }),
-      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+      ctx.vault.read({ entity: "core.concept", purpose }),
+      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
     ]);
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
@@ -122,39 +122,41 @@ export default async function dashboard({ ctx }: HandlerArgs) {
 
     const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
     const starredConceptId = flagsScheme
-      ? (conceptRows.find((c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred')
-          ?.concept_id ?? null)
+      ? (conceptRows.find(
+          (c) =>
+            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
+        )?.concept_id ?? null)
       : null;
 
     const [parties, tags, dates, activityLinks] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.party',
-        where: [{ column: 'party_id', op: 'in', value: partyIds }],
+        entity: "core.party",
+        where: [{ column: "party_id", op: "in", value: partyIds }],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.tag',
+        entity: "core.tag",
         where: [
-          { column: 'target_type', op: 'eq', value: 'core.party' },
-          { column: 'target_id', op: 'in', value: partyIds },
+          { column: "target_type", op: "eq", value: "core.party" },
+          { column: "target_id", op: "in", value: partyIds },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'people.important_date',
+        entity: "people.important_date",
         where: [
-          { column: 'party_id', op: 'in', value: partyIds },
-          { column: 'deleted_at', op: 'is-null' },
+          { column: "party_id", op: "in", value: partyIds },
+          { column: "deleted_at", op: "is-null" },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.link',
+        entity: "core.link",
         where: [
-          { column: 'from_type', op: 'eq', value: 'core.activity' },
-          { column: 'to_type', op: 'eq', value: 'core.party' },
-          { column: 'to_id', op: 'in', value: partyIds },
-          { column: 'valid_to', op: 'is-null' },
+          { column: "from_type", op: "eq", value: "core.activity" },
+          { column: "to_type", op: "eq", value: "core.party" },
+          { column: "to_id", op: "in", value: partyIds },
+          { column: "valid_to", op: "is-null" },
         ],
         purpose,
       }),
@@ -168,29 +170,36 @@ export default async function dashboard({ ctx }: HandlerArgs) {
     const [activities, activityAnnotations] = await Promise.all([
       activityIds.length
         ? ctx.vault.read({
-            entity: 'core.activity',
-            where: [{ column: 'activity_id', op: 'in', value: activityIds }],
-            orderBy: { column: 'started_at', dir: 'desc' },
+            entity: "core.activity",
+            where: [{ column: "activity_id", op: "in", value: activityIds }],
+            orderBy: { column: "started_at", dir: "desc" },
             limit: 30,
             purpose,
           })
         : Promise.resolve({ rows: [] }),
       activityIds.length
         ? ctx.vault.read({
-            entity: 'knowledge.annotation',
+            entity: "knowledge.annotation",
             where: [
-              { column: 'target_type', op: 'eq', value: 'core.activity' },
-              { column: 'target_id', op: 'in', value: activityIds },
+              { column: "target_type", op: "eq", value: "core.activity" },
+              { column: "target_id", op: "in", value: activityIds },
             ],
             purpose,
           })
         : Promise.resolve({ rows: [] }),
     ]);
     const activityRows = (activities.rows ?? []) as unknown as RawActivity[];
-    const annotationRows = (activityAnnotations.rows ?? []) as unknown as RawAnnotation[];
-    const partyByActivity = new Map(linkRows.map((link) => [link.from_id, link.to_id]));
-    const textByActivity = new Map(annotationRows.map((row) => [row.target_id, row.body_text]));
-    const kindById = new Map(conceptRows.map((row) => [row.concept_id, row.pref_label ?? 'Touch']));
+    const annotationRows = (activityAnnotations.rows ??
+      []) as unknown as RawAnnotation[];
+    const partyByActivity = new Map(
+      linkRows.map((link) => [link.from_id, link.to_id])
+    );
+    const textByActivity = new Map(
+      annotationRows.map((row) => [row.target_id, row.body_text])
+    );
+    const kindById = new Map(
+      conceptRows.map((row) => [row.concept_id, row.pref_label ?? "Touch"])
+    );
 
     const byParty = new Map<string, PartyEntry>();
     for (const pr of profileRows) byParty.set(pr.party_id, { profile: pr });
@@ -202,21 +211,23 @@ export default async function dashboard({ ctx }: HandlerArgs) {
       const e = byParty.get(partyId);
       return {
         party_id: partyId,
-        name: e?.name ?? '—',
+        name: e?.name ?? "—",
         avatar_color: e?.profile?.avatar_color ?? null,
-        role: e?.profile?.role ?? '',
+        role: e?.profile?.role ?? "",
       };
     };
 
     let starred = 0;
     for (const t of tagRows) {
-      if (starredConceptId != null && t.concept_id === starredConceptId) starred += 1;
+      if (starredConceptId != null && t.concept_id === starredConceptId)
+        starred += 1;
     }
 
     const reconnect = profileRows
       .map((pr) => ({
         pr,
-        over: daysSince(pr.last_contacted_at ?? pr.created_at) - pr.cadence_days,
+        over:
+          daysSince(pr.last_contacted_at ?? pr.created_at) - pr.cadence_days,
       }))
       .filter((x) => x.over >= 0)
       .toSorted((a, b) => b.over - a.over)
@@ -240,8 +251,8 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         return {
           ...card(partyId),
           interaction_id: activity.activity_id,
-          kind: kindById.get(activity.kind_concept_id) ?? 'Touch',
-          text: textByActivity.get(activity.activity_id) ?? '',
+          kind: kindById.get(activity.kind_concept_id) ?? "Touch",
+          text: textByActivity.get(activity.activity_id) ?? "",
           occurred_at: activity.started_at,
         };
       })

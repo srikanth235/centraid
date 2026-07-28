@@ -1,7 +1,7 @@
-import { createHash } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { createHash } from "node:crypto";
+import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import {
   createKeyring,
@@ -9,21 +9,21 @@ import {
   LocalBackupProvider,
   restoreSnapshot,
   type SourceEntry,
-} from '@centraid/backup';
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { generateVolumeFixture } from '@centraid/test-kit/volume-fixture';
-import { FsBlobStore, sha256OfBytes, blobUriFor } from '@centraid/vault';
-import { describe, expect, test } from 'vitest';
+} from "@centraid/backup";
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";
+import { FsBlobStore, sha256OfBytes, blobUriFor } from "@centraid/vault";
+import { describe, expect, test } from "vitest";
 
-import { createTestVault } from '../helpers/factories.js';
+import { createTestVault } from "../helpers/factories.js";
 
-const OWNER = 'tests/scale/backup-restore.scale.test.ts';
+const OWNER = "tests/scale/backup-restore.scale.test.ts";
 const APP_META = {
-  gatewayVersion: '0.1.0',
-  vaultUserVersion: '1',
-  ontologyVersion: '1.2',
-  sourceInstanceId: 'scale-lane',
+  gatewayVersion: "0.1.0",
+  vaultUserVersion: "1",
+  ontologyVersion: "1.2",
+  sourceInstanceId: "scale-lane",
 };
 
 // Realistic-but-nightly volume: 500 party rows + 160 content items each backed
@@ -51,12 +51,12 @@ function blobBytes(index: number): Buffer {
   return result;
 }
 
-describe('backup-restore.scale', () => {
-  test('backup restores a realistic populated vault byte- and row-faithfully', async () => {
-    const sourceDir = await tempDir('backup-scale-source-');
-    const providerDir = await tempDir('backup-scale-provider-');
-    const keyDir = await tempDir('backup-scale-key-');
-    const restoreDir = await tempDir('backup-scale-restore-');
+describe("backup-restore.scale", () => {
+  test("backup restores a realistic populated vault byte- and row-faithfully", async () => {
+    const sourceDir = await tempDir("backup-scale-source-");
+    const providerDir = await tempDir("backup-scale-provider-");
+    const keyDir = await tempDir("backup-scale-key-");
+    const restoreDir = await tempDir("backup-scale-restore-");
     await rm(restoreDir, { recursive: true, force: true });
 
     // A REAL vault (createTestVault === openVaultDb + bootstrapVault, on-disk WAL)
@@ -68,21 +68,21 @@ describe('backup-restore.scale', () => {
       parties: PARTY_COUNT,
       photos: BLOB_COUNT,
     });
-    const cas = new FsBlobStore(path.join(sourceDir, 'blobs'));
+    const cas = new FsBlobStore(path.join(sourceDir, "blobs"));
 
     const insertParty = db.vault.prepare(
       `INSERT INTO core_party
        (party_id, kind, display_name, created_at, updated_at, ontology_version)
-     VALUES (?, 'person', ?, ?, ?, '1.2')`,
+     VALUES (?, 'person', ?, ?, ?, '1.2')`
     );
     const insertContent = db.vault.prepare(
       `INSERT INTO core_content_item
        (content_id, media_type, content_uri, sha256, byte_size, created_at)
-     VALUES (?, 'application/octet-stream', ?, ?, ?, ?)`,
+     VALUES (?, 'application/octet-stream', ?, ?, ?, ?)`
     );
     const now = new Date().toISOString();
     const blobShas: string[] = [];
-    db.vault.exec('BEGIN IMMEDIATE');
+    db.vault.exec("BEGIN IMMEDIATE");
     for (const party of fixture.parties) {
       insertParty.run(party.id, party.displayName, 0, 0);
     }
@@ -90,58 +90,72 @@ describe('backup-restore.scale', () => {
       const bytes = blobBytes(index);
       const sha = sha256OfBytes(bytes);
       cas.putSync(sha, bytes);
-      insertContent.run(`content-${index}`, blobUriFor(sha), sha, bytes.length, now);
+      insertContent.run(
+        `content-${index}`,
+        blobUriFor(sha),
+        sha,
+        bytes.length,
+        now
+      );
       blobShas.push(sha);
     }
-    db.vault.exec('COMMIT');
+    db.vault.exec("COMMIT");
 
     // Flush the WAL into vault.db so the backed-up base file is self-consistent
     // (WAL mode + autocheckpoint=0 means uncheckpointed frames otherwise live
     // only in -wal). No writer touches the db after this, so its bytes are stable.
-    db.vault.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-    db.journal.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 
-    const vaultPath = path.join(sourceDir, 'vault.db');
-    const journalPath = path.join(sourceDir, 'journal.db');
+    const vaultPath = path.join(sourceDir, "vault.db");
+    const journalPath = path.join(sourceDir, "journal.db");
     const vaultBytes = await readFile(vaultPath);
     const journalBytes = await readFile(journalPath);
-    const sourceVaultHash = createHash('sha256').update(vaultBytes).digest('hex');
+    const sourceVaultHash = createHash("sha256")
+      .update(vaultBytes)
+      .digest("hex");
 
     const baseTickMs = 1_752_480_000_000;
     const entries: SourceEntry[] = [
       {
-        path: 'vault.db',
-        kind: 'db',
+        path: "vault.db",
+        kind: "db",
         absolutePath: vaultPath,
         sha256: sourceVaultHash,
-        walGeneration: '11'.repeat(16),
+        walGeneration: "11".repeat(16),
         baseTickMs,
       },
       {
-        path: 'journal.db',
-        kind: 'db',
+        path: "journal.db",
+        kind: "db",
         absolutePath: journalPath,
-        sha256: createHash('sha256').update(journalBytes).digest('hex'),
-        walGeneration: '22'.repeat(16),
+        sha256: createHash("sha256").update(journalBytes).digest("hex"),
+        walGeneration: "22".repeat(16),
         baseTickMs,
       },
       ...blobShas.map((sha) => ({
         path: `blobs/sha256/${sha.slice(0, 2)}/${sha}`,
-        kind: 'blob' as const,
-        absolutePath: path.join(sourceDir, 'blobs', 'sha256', sha.slice(0, 2), sha),
+        kind: "blob" as const,
+        absolutePath: path.join(
+          sourceDir,
+          "blobs",
+          "sha256",
+          sha.slice(0, 2),
+          sha
+        ),
       })),
     ];
 
     const provider = new LocalBackupProvider({ rootDir: providerDir });
-    const { targetId } = await provider.createTarget({ label: 'scale-lane' });
-    const keyring = await createKeyring(path.join(keyDir, 'keyring.json'));
+    const { targetId } = await provider.createTarget({ label: "scale-lane" });
+    const keyring = await createKeyring(path.join(keyDir, "keyring.json"));
 
     const started = performance.now();
     const snapshot = await createSnapshot({
       provider,
       targetId,
       keyring,
-      vaultId: 'scale-vault',
+      vaultId: "scale-vault",
       entries,
       generation: 1,
       appMeta: APP_META,
@@ -151,29 +165,33 @@ describe('backup-restore.scale', () => {
       provider,
       targetId,
       keyring,
-      vaultId: 'scale-vault',
+      vaultId: "scale-vault",
       destDir: restoreDir,
       current: {
-        gatewayVersion: '0.1.0',
-        vaultUserVersion: '1',
-        ontologyVersion: '1.2',
+        gatewayVersion: "0.1.0",
+        vaultUserVersion: "1",
+        ontologyVersion: "1.2",
       },
     });
     const durationMs = performance.now() - started;
 
     // Byte fidelity: the restored base db is identical to the source.
-    const restoredVaultBytes = await readFile(path.join(restoreDir, 'vault.db'));
-    const restoredVaultHash = createHash('sha256').update(restoredVaultBytes).digest('hex');
+    const restoredVaultBytes = await readFile(
+      path.join(restoreDir, "vault.db")
+    );
+    const restoredVaultHash = createHash("sha256")
+      .update(restoredVaultBytes)
+      .digest("hex");
 
     // Row fidelity: open the restored db and count the ontology rows back.
-    const restored = new DatabaseSync(path.join(restoreDir, 'vault.db'));
+    const restored = new DatabaseSync(path.join(restoreDir, "vault.db"));
     const partyRows = (
-      restored.prepare('SELECT count(*) AS n FROM core_party').get() as {
+      restored.prepare("SELECT count(*) AS n FROM core_party").get() as {
         n: number;
       }
     ).n;
     const contentRows = (
-      restored.prepare('SELECT count(*) AS n FROM core_content_item').get() as {
+      restored.prepare("SELECT count(*) AS n FROM core_content_item").get() as {
         n: number;
       }
     ).n;
@@ -186,10 +204,10 @@ describe('backup-restore.scale', () => {
       spotIndices.map(async (index) => {
         const sha = blobShas[index]!;
         const restoredBlob = await readFile(
-          path.join(restoreDir, 'blobs', 'sha256', sha.slice(0, 2), sha),
+          path.join(restoreDir, "blobs", "sha256", sha.slice(0, 2), sha)
         );
-        return createHash('sha256').update(restoredBlob).digest('hex') === sha;
-      }),
+        return createHash("sha256").update(restoredBlob).digest("hex") === sha;
+      })
     );
 
     const passed =
@@ -199,24 +217,24 @@ describe('backup-restore.scale', () => {
       blobHashesMatch.every(Boolean) &&
       durationMs < DURATION_BUDGET_MS;
     await recordQualityResult({
-      lane: 'scale',
+      lane: "scale",
       owner: OWNER,
       name: `Backup restore of a ${BLOB_COUNT} MiB populated vault`,
-      status: passed ? 'passed' : 'failed',
+      status: passed ? "passed" : "failed",
       measurements: [
         {
-          name: 'wall clock',
+          name: "wall clock",
           value: durationMs,
-          unit: 'ms',
+          unit: "ms",
           budget: DURATION_BUDGET_MS,
         },
         {
-          name: 'restored vault bytes',
+          name: "restored vault bytes",
           value: restoredVaultBytes.length,
-          unit: 'bytes',
+          unit: "bytes",
         },
-        { name: 'party rows restored', value: partyRows, unit: 'rows' },
-        { name: 'content rows restored', value: contentRows, unit: 'rows' },
+        { name: "party rows restored", value: partyRows, unit: "rows" },
+        { name: "content rows restored", value: contentRows, unit: "rows" },
       ],
     });
 

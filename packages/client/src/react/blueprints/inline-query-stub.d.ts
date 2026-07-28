@@ -5,7 +5,7 @@
 // contract, while vitest/Vite resolve the real source at run time (they don't
 // honour tsconfig paths). Used by inlineQueryCtx.test.ts, which runs the real
 // board query against a seeded replica double.
-import type { InlineQueryRun } from '@centraid/blueprints/apps/inline-types';
+import type { InlineQueryRun } from "@centraid/blueprints/apps/inline-types";
 
 declare const run: InlineQueryRun;
 export default run;

@@ -21,25 +21,29 @@ declare const chrome: {
     getURL: (path: string) => string;
     sendMessage: (
       message: unknown,
-      callback?: (response: unknown) => void,
+      callback?: (response: unknown) => void
     ) => Promise<unknown> | void;
     onMessage: ChromeEvent<
       (
         message: unknown,
         sender: ChromeMessageSender,
-        sendResponse: (response: unknown) => void,
+        sendResponse: (response: unknown) => void
       ) => boolean | void
     >;
     onInstalled: ChromeEvent<() => void>;
   };
   storage: {
     local: {
-      get: (keys?: string | string[] | null) => Promise<Record<string, unknown>>;
+      get: (
+        keys?: string | string[] | null
+      ) => Promise<Record<string, unknown>>;
       set: (items: Record<string, unknown>) => Promise<void>;
       remove: (keys: string | string[]) => Promise<void>;
     };
     session: {
-      get: (keys?: string | string[] | null) => Promise<Record<string, unknown>>;
+      get: (
+        keys?: string | string[] | null
+      ) => Promise<Record<string, unknown>>;
       set: (items: Record<string, unknown>) => Promise<void>;
       remove: (keys: string | string[]) => Promise<void>;
     };
@@ -58,18 +62,27 @@ declare const chrome: {
     sendMessage: (tabId: number, message: unknown) => Promise<unknown>;
     captureVisibleTab: (
       windowId?: number,
-      options?: { format?: 'png' | 'jpeg' },
+      options?: { format?: "png" | "jpeg" }
     ) => Promise<string>;
-    onActivated: ChromeEvent<(activeInfo: { tabId: number; windowId: number }) => void>;
+    onActivated: ChromeEvent<
+      (activeInfo: { tabId: number; windowId: number }) => void
+    >;
     onUpdated: ChromeEvent<
       (tabId: number, changeInfo: { status?: string }, tab: ChromeTab) => void
     >;
   };
   scripting: {
-    executeScript: (details: { target: { tabId: number }; files: string[] }) => Promise<unknown>;
+    executeScript: (details: {
+      target: { tabId: number };
+      files: string[];
+    }) => Promise<unknown>;
   };
   contextMenus: {
-    create: (properties: { id: string; title: string; contexts: string[] }) => void;
+    create: (properties: {
+      id: string;
+      title: string;
+      contexts: string[];
+    }) => void;
     onClicked: ChromeEvent<
       (
         info: {
@@ -77,7 +90,7 @@ declare const chrome: {
           selectionText?: string;
           pageUrl?: string;
         },
-        tab?: ChromeTab,
+        tab?: ChromeTab
       ) => void
     >;
   };

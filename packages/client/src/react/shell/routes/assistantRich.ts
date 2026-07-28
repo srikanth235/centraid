@@ -12,12 +12,12 @@ import {
   hydrateRefs as sharedHydrateRefs,
   wireCodeCopy as sharedWireCodeCopy,
   type AssistantRichClassOverrides,
-} from '@centraid/blueprints/kit/assistant-rich.js';
+} from "@centraid/blueprints/kit/assistant-rich.js";
 
-import { resolveAssistantRefs } from '../../../gateway-client.js';
+import { resolveAssistantRefs } from "../../../gateway-client.js";
 
-import asstPreCss from '../../styles/asstPre.module.css';
-import styles from './assistantRich.module.css';
+import asstPreCss from "../../styles/asstPre.module.css";
+import styles from "./assistantRich.module.css";
 
 // The shell's scoped/hashed class names, mapped onto the shared renderer's
 // slots. `asstPre` lives in a shared stylesheet reused by the tool timeline, so

@@ -2,13 +2,13 @@
 // calendars" visibility list — mounted at their own React roots. The brand
 // row, "Create event" button and the trust footer line are static HTML in
 // index.html (stable, no per-render data), wired once in chrome.ts.
-import { bucketByDay, colorForCalendar, startOfWeek } from '../format.ts';
-import { I } from '../icons.ts';
-import { localDayKey } from '../kit.ts';
-import type { AgEvent, Calendar } from '../types.ts';
-import { Icon } from './Shared.tsx';
+import { bucketByDay, colorForCalendar, startOfWeek } from "../format.ts";
+import { I } from "../icons.ts";
+import { localDayKey } from "../kit.ts";
+import type { AgEvent, Calendar } from "../types.ts";
+import { Icon } from "./Shared.tsx";
 
-import styles from './Sidebar.module.css';
+import styles from "./Sidebar.module.css";
 
 const MONDAY = new Date(2024, 0, 1); // a known Monday, for the weekday header labels
 
@@ -26,20 +26,28 @@ export function MiniMonth({
   onNext: () => void;
 }) {
   const byDay = bucketByDay(miniEvents ?? []);
-  const gridStart = startOfWeek(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
+  const gridStart = startOfWeek(
+    new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+  );
   const todayKey = localDayKey(new Date());
   const cursorKey = localDayKey(cursor);
   const days = Array.from(
     { length: 42 },
-    (_, i) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i),
+    (_, i) =>
+      new Date(
+        gridStart.getFullYear(),
+        gridStart.getMonth(),
+        gridStart.getDate() + i
+      )
   );
   const dow = Array.from({ length: 7 }, (_, i) =>
-    new Date(MONDAY.getFullYear(), MONDAY.getMonth(), MONDAY.getDate() + i).toLocaleDateString(
-      undefined,
-      {
-        weekday: 'narrow',
-      },
-    ),
+    new Date(
+      MONDAY.getFullYear(),
+      MONDAY.getMonth(),
+      MONDAY.getDate() + i
+    ).toLocaleDateString(undefined, {
+      weekday: "narrow",
+    })
   );
 
   return (
@@ -47,8 +55,8 @@ export function MiniMonth({
       <div className={styles.miniHead}>
         <span className={styles.miniLabel}>
           {cursor.toLocaleDateString(undefined, {
-            month: 'long',
-            year: 'numeric',
+            month: "long",
+            year: "numeric",
           })}
         </span>
         <div className={styles.miniNav}>
@@ -60,7 +68,12 @@ export function MiniMonth({
           >
             <Icon svg={I.miniLeft} />
           </button>
-          <button type="button" className="kit-icon-btn" onClick={onNext} aria-label="Next month">
+          <button
+            type="button"
+            className="kit-icon-btn"
+            onClick={onNext}
+            aria-label="Next month"
+          >
             <Icon svg={I.miniRight} />
           </button>
         </div>
@@ -82,9 +95,9 @@ export function MiniMonth({
           const isSelected = key === cursorKey && !isToday;
           const hasEvents = (byDay.get(key) ?? []).length > 0;
           const label = d.toLocaleDateString(undefined, {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
+            weekday: "long",
+            month: "long",
+            day: "numeric",
           });
           return (
             <button
@@ -98,7 +111,9 @@ export function MiniMonth({
               onClick={() => onPickDay(d)}
             >
               {d.getDate()}
-              {hasEvents ? <span className={styles.miniDot} aria-hidden="true" /> : null}
+              {hasEvents ? (
+                <span className={styles.miniDot} aria-hidden="true" />
+              ) : null}
             </button>
           );
         })}
@@ -140,9 +155,11 @@ export function CalendarList({
               {shown ? <Icon svg={I.check} /> : null}
             </span>
             <span className={styles.calName} data-shown={String(shown)}>
-              {c.name ?? 'Calendar'}
+              {c.name ?? "Calendar"}
             </span>
-            <span className={styles.calCount}>{counts.get(c.calendar_id) ?? 0}</span>
+            <span className={styles.calCount}>
+              {counts.get(c.calendar_id) ?? 0}
+            </span>
           </button>
         );
       })}

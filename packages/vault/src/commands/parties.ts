@@ -7,48 +7,48 @@
 // invariant: a (scheme, value) pair claimed by a different party is an
 // identity fork and is refused, never merged silently.
 
-import type { Gateway } from '../gateway/gateway.js';
-import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { ONTOLOGY_VERSION } from '../schema/migrate.js';
-import { registerMergeCommands } from './merge.js';
+import type { Gateway } from "../gateway/gateway.js";
+import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { ONTOLOGY_VERSION } from "../schema/migrate.js";
+import { registerMergeCommands } from "./merge.js";
 
-const IDENTIFIER_SCHEMES = ['email', 'tel', 'url', 'handle', 'other'] as const;
+const IDENTIFIER_SCHEMES = ["email", "tel", "url", "handle", "other"] as const;
 
 const ADD_PARTY: CommandDefinition = {
-  name: 'core.add_party',
-  ownerSchema: 'core',
+  name: "core.add_party",
+  ownerSchema: "core",
   inputSchema: {
-    type: 'object',
-    required: ['display_name'],
+    type: "object",
+    required: ["display_name"],
     additionalProperties: false,
     properties: {
-      display_name: { type: 'string', minLength: 1 },
+      display_name: { type: "string", minLength: 1 },
       // Agents enroll through their own path (agent.agent); apps mint people
       // and the organisations/groups those people belong to.
-      kind: { type: 'string', enum: ['person', 'org', 'group'] },
-      sort_name: { type: 'string' },
-      birth_date: { type: 'string' },
+      kind: { type: "string", enum: ["person", "org", "group"] },
+      sort_name: { type: "string" },
+      birth_date: { type: "string" },
       identifiers: {
-        type: 'array',
+        type: "array",
         items: {
-          type: 'object',
-          required: ['scheme', 'value'],
+          type: "object",
+          required: ["scheme", "value"],
           additionalProperties: false,
           properties: {
-            scheme: { type: 'string', enum: [...IDENTIFIER_SCHEMES] },
-            value: { type: 'string', minLength: 1 },
-            label: { type: 'string' },
+            scheme: { type: "string", enum: [...IDENTIFIER_SCHEMES] },
+            value: { type: "string", minLength: 1 },
+            label: { type: "string" },
           },
         },
       },
     },
   },
   outputSchema: {
-    type: 'object',
-    required: ['party_id'],
+    type: "object",
+    required: ["party_id"],
     properties: {
-      party_id: { type: 'string' },
-      identifiers_bound: { type: 'integer' },
+      party_id: { type: "string" },
+      identifiers_bound: { type: "integer" },
     },
   },
   // Identifier conflicts can't ride templated precondition SQL (array
@@ -56,15 +56,15 @@ const ADD_PARTY: CommandDefinition = {
   preconditions: [],
   postconditions: [
     {
-      name: 'party_created',
-      sql: 'SELECT count(*) AS n FROM core_party WHERE party_id = :party_id',
-      column: 'n',
-      op: 'eq',
+      name: "party_created",
+      sql: "SELECT count(*) AS n FROM core_party WHERE party_id = :party_id",
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  idempotency: 'once',
-  risk: 'low',
+  idempotency: "once",
+  risk: "low",
   handler: addParty,
 };
 
@@ -84,12 +84,14 @@ function addParty(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(
         `SELECT i.party_id, p.display_name FROM core_party_identifier i
            JOIN core_party p ON p.party_id = i.party_id
-          WHERE i.scheme = ? AND i.value = ?`,
+          WHERE i.scheme = ? AND i.value = ?`
       )
-      .get(id.scheme, id.value) as { party_id: string; display_name: string } | undefined;
+      .get(id.scheme, id.value) as
+      | { party_id: string; display_name: string }
+      | undefined;
     if (claimed) {
       throw new Error(
-        `${id.scheme}:${id.value} already identifies "${claimed.display_name}" (${claimed.party_id})`,
+        `${id.scheme}:${id.value} already identifies "${claimed.display_name}" (${claimed.party_id})`
       );
     }
   }
@@ -97,26 +99,26 @@ function addParty(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`
     )
     .run(
       partyId,
-      input.kind ?? 'person',
+      input.kind ?? "person",
       input.display_name,
       input.sort_name ?? null,
       input.birth_date ?? null,
       ctx.now,
       ctx.now,
-      ONTOLOGY_VERSION,
+      ONTOLOGY_VERSION
     );
-  ctx.wrote('core.party', partyId);
+  ctx.wrote("core.party", partyId);
   const seenSchemes = new Set<string>();
   for (const id of identifiers) {
     const identifierId = ctx.newId();
     ctx.db
       .prepare(
         `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, label, is_primary, verified_at, valid_from, valid_to)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL)`
       )
       .run(
         identifierId,
@@ -125,47 +127,47 @@ function addParty(ctx: HandlerCtx): Record<string, unknown> {
         id.value,
         id.label ?? null,
         seenSchemes.has(id.scheme) ? 0 : 1,
-        ctx.now,
+        ctx.now
       );
     seenSchemes.add(id.scheme);
-    ctx.wrote('core.party_identifier', identifierId);
+    ctx.wrote("core.party_identifier", identifierId);
   }
   return { party_id: partyId, identifiers_bound: identifiers.length };
 }
 
 const UPDATE_PARTY: CommandDefinition = {
-  name: 'core.update_party',
-  ownerSchema: 'core',
+  name: "core.update_party",
+  ownerSchema: "core",
   inputSchema: {
-    type: 'object',
-    required: ['party_id'],
+    type: "object",
+    required: ["party_id"],
     additionalProperties: false,
     properties: {
-      party_id: { type: 'string', minLength: 1 },
-      display_name: { type: 'string', minLength: 1 },
-      sort_name: { type: 'string' },
-      birth_date: { type: 'string' },
+      party_id: { type: "string", minLength: 1 },
+      display_name: { type: "string", minLength: 1 },
+      sort_name: { type: "string" },
+      birth_date: { type: "string" },
     },
   },
   outputSchema: {
-    type: 'object',
-    required: ['party_id'],
-    properties: { party_id: { type: 'string' } },
+    type: "object",
+    required: ["party_id"],
+    properties: { party_id: { type: "string" } },
   },
   preconditions: [
     {
       // Agent identity rows are managed by enrollment, not by contact apps.
-      name: 'party_exists_and_editable',
+      name: "party_exists_and_editable",
       sql: `SELECT count(*) AS n FROM core_party WHERE party_id = :party_id AND kind != 'agent'`,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
   postconditions: [
     {
       // Each field either wasn't asked for, or reads back exactly as sent.
-      name: 'edits_applied',
+      name: "edits_applied",
       sql: `SELECT (
               (SELECT CASE WHEN :display_name IS NULL THEN 1
                            ELSE EXISTS(SELECT 1 FROM core_party WHERE party_id = :party_id AND display_name = :display_name) END)
@@ -174,13 +176,13 @@ const UPDATE_PARTY: CommandDefinition = {
               AND (SELECT CASE WHEN :birth_date IS NULL THEN 1
                            ELSE EXISTS(SELECT 1 FROM core_party WHERE party_id = :party_id AND birth_date = :birth_date) END)
             ) AS n`,
-      column: 'n',
-      op: 'eq',
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  idempotency: 'idempotent',
-  risk: 'low',
+  idempotency: "idempotent",
+  risk: "low",
   handler: updateParty,
 };
 
@@ -194,22 +196,22 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
   const sets: string[] = [];
   const values: string[] = [];
   if (input.display_name !== undefined) {
-    sets.push('display_name = ?');
+    sets.push("display_name = ?");
     values.push(input.display_name);
   }
   if (input.sort_name !== undefined) {
-    sets.push('sort_name = ?');
+    sets.push("sort_name = ?");
     values.push(input.sort_name);
   }
   if (input.birth_date !== undefined) {
-    sets.push('birth_date = ?');
+    sets.push("birth_date = ?");
     values.push(input.birth_date);
   }
   if (sets.length > 0) {
-    sets.push('updated_at = ?');
+    sets.push("updated_at = ?");
     values.push(ctx.now);
     ctx.db
-      .prepare(`UPDATE core_party SET ${sets.join(', ')} WHERE party_id = ?`)
+      .prepare(`UPDATE core_party SET ${sets.join(", ")} WHERE party_id = ?`)
       .run(...values, input.party_id);
   }
   // Birthday is one logical fact with two surfaces (issue #441 A2.3): the
@@ -217,26 +219,30 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
   // birth_date moves, reconcile the matching People row's MM-DD so the two can
   // never disagree. (add_important_date reconciles the other direction.)
   if (input.birth_date !== undefined) {
-    const md = /(?<monthDay>\d{2}-\d{2})$/u.exec(input.birth_date)?.groups?.monthDay ?? null;
+    const md =
+      /(?<monthDay>\d{2}-\d{2})$/u.exec(input.birth_date)?.groups?.monthDay ??
+      null;
     if (md) {
       const stale = ctx.db
         .prepare(
           `SELECT date_id FROM people_important_date
-            WHERE party_id = ? AND label LIKE '%birthday%' AND month_day <> ?`,
+            WHERE party_id = ? AND label LIKE '%birthday%' AND month_day <> ?`
         )
         .all(input.party_id, md) as { date_id: string }[];
       for (const row of stale) {
         ctx.db
-          .prepare('UPDATE people_important_date SET month_day = ? WHERE date_id = ?')
+          .prepare(
+            "UPDATE people_important_date SET month_day = ? WHERE date_id = ?"
+          )
           .run(md, row.date_id);
-        ctx.wrote('people.important_date', row.date_id);
+        ctx.wrote("people.important_date", row.date_id);
       }
     }
   }
-  ctx.wrote('core.party', input.party_id);
+  ctx.wrote("core.party", input.party_id);
   ctx.cite({
-    claim: `party ${input.party_id} details revised${input.display_name ? ` → "${input.display_name}"` : ''}`,
-    entityType: 'core.party',
+    claim: `party ${input.party_id} details revised${input.display_name ? ` → "${input.display_name}"` : ""}`,
+    entityType: "core.party",
     entityId: input.party_id,
   });
   return { party_id: input.party_id };

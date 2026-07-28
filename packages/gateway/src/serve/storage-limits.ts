@@ -26,7 +26,7 @@
 
 /* eslint-disable max-classes-per-file -- the typed refusal error is colocated with the store that throws it (#247) */
 
-import { GatewayDatabase } from './gateway-db.js';
+import { GatewayDatabase } from "./gateway-db.js";
 
 /** Default warn threshold as a percentage of `totalLimitBytes`. */
 export const DEFAULT_WARN_AT_PERCENT = 80;
@@ -58,11 +58,14 @@ export const DEFAULT_STORAGE_LIMITS: StorageLimits = Object.freeze({
 /** A rejected limits write — the route maps this to a 400 with `code`. */
 export class StorageLimitsError extends Error {
   constructor(
-    readonly code: 'invalid_total_limit' | 'invalid_journal_limit' | 'invalid_warn_percent',
-    message: string,
+    readonly code:
+      | "invalid_total_limit"
+      | "invalid_journal_limit"
+      | "invalid_warn_percent",
+    message: string
   ) {
     super(message);
-    this.name = 'StorageLimitsError';
+    this.name = "StorageLimitsError";
   }
 }
 
@@ -75,7 +78,10 @@ export async function loadStorageLimits(dir: string): Promise<StorageLimits> {
   }
 }
 
-export async function saveStorageLimits(dir: string, limits: StorageLimits): Promise<void> {
+export async function saveStorageLimits(
+  dir: string,
+  limits: StorageLimits
+): Promise<void> {
   const database = GatewayDatabase.open(dir);
   try {
     const store = new StorageLimitsStore(database);
@@ -94,31 +100,42 @@ export interface StorageLimitsPatch {
 
 /** Pure validator + merge — exported so the route and the tests exercise the
  *  SAME rules, and so a bad value is rejected before it reaches disk. */
-export function applyLimitsPatch(current: StorageLimits, patch: StorageLimitsPatch): StorageLimits {
+export function applyLimitsPatch(
+  current: StorageLimits,
+  patch: StorageLimitsPatch
+): StorageLimits {
   const next: StorageLimits = { ...current };
-  if ('totalLimitBytes' in patch) {
+  if ("totalLimitBytes" in patch) {
     const value = patch.totalLimitBytes;
     if (value === null) {
       next.totalLimitBytes = null;
     } else {
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < MIN_TOTAL_LIMIT_BYTES) {
+      if (
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        value < MIN_TOTAL_LIMIT_BYTES
+      ) {
         throw new StorageLimitsError(
-          'invalid_total_limit',
-          `total limit must be null or at least ${MIN_TOTAL_LIMIT_BYTES} bytes`,
+          "invalid_total_limit",
+          `total limit must be null or at least ${MIN_TOTAL_LIMIT_BYTES} bytes`
         );
       }
       next.totalLimitBytes = Math.floor(value);
     }
   }
-  if ('journalLimitBytes' in patch) {
+  if ("journalLimitBytes" in patch) {
     const value = patch.journalLimitBytes;
     if (value === null) {
       next.journalLimitBytes = null;
     } else {
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < MIN_JOURNAL_LIMIT_BYTES) {
+      if (
+        typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        value < MIN_JOURNAL_LIMIT_BYTES
+      ) {
         throw new StorageLimitsError(
-          'invalid_journal_limit',
-          `ledger limit must be null or at least ${MIN_JOURNAL_LIMIT_BYTES} bytes`,
+          "invalid_journal_limit",
+          `ledger limit must be null or at least ${MIN_JOURNAL_LIMIT_BYTES} bytes`
         );
       }
       next.journalLimitBytes = Math.floor(value);
@@ -126,10 +143,15 @@ export function applyLimitsPatch(current: StorageLimits, patch: StorageLimitsPat
   }
   if (patch.warnAtPercent !== undefined) {
     const value = patch.warnAtPercent;
-    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 100) {
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      value > 100
+    ) {
       throw new StorageLimitsError(
-        'invalid_warn_percent',
-        'warn threshold must be a percentage in (0, 100]',
+        "invalid_warn_percent",
+        "warn threshold must be a percentage in (0, 100]"
       );
     }
     next.warnAtPercent = value;
@@ -137,7 +159,7 @@ export function applyLimitsPatch(current: StorageLimits, patch: StorageLimitsPat
   return next;
 }
 
-export type StorageLimitStatus = 'ok' | 'degraded' | 'error';
+export type StorageLimitStatus = "ok" | "degraded" | "error";
 
 export interface StorageLimitEvaluation {
   status: StorageLimitStatus;
@@ -156,16 +178,20 @@ export interface StorageLimitEvaluation {
  */
 export function evaluateStorageLimit(
   usedBytes: number,
-  limits: StorageLimits,
+  limits: StorageLimits
 ): StorageLimitEvaluation {
   const limitBytes = limits.totalLimitBytes;
   if (limitBytes === null || limitBytes <= 0) {
-    return { status: 'ok', fractionUsed: null, usedBytes, limitBytes: null };
+    return { status: "ok", fractionUsed: null, usedBytes, limitBytes: null };
   }
   const fractionUsed = usedBytes / limitBytes;
   const warnFraction = limits.warnAtPercent / 100;
   const status: StorageLimitStatus =
-    fractionUsed >= 1 ? 'error' : fractionUsed >= warnFraction ? 'degraded' : 'ok';
+    fractionUsed >= 1
+      ? "error"
+      : fractionUsed >= warnFraction
+        ? "degraded"
+        : "ok";
   return { status, fractionUsed, usedBytes, limitBytes };
 }
 
@@ -211,7 +237,7 @@ export class StorageLimitsStore {
           ON CONFLICT(singleton) DO UPDATE SET
             total_limit_bytes = excluded.total_limit_bytes,
             warn_at_percent = excluded.warn_at_percent,
-            journal_limit_bytes = excluded.journal_limit_bytes`,
+            journal_limit_bytes = excluded.journal_limit_bytes`
         )
         .run(next.totalLimitBytes, next.warnAtPercent, next.journalLimitBytes);
     } else {
@@ -222,11 +248,12 @@ export class StorageLimitsStore {
   }
 
   private loadFromDatabase(): StorageLimits {
-    if (!(this.source instanceof GatewayDatabase)) return { ...DEFAULT_STORAGE_LIMITS };
+    if (!(this.source instanceof GatewayDatabase))
+      return { ...DEFAULT_STORAGE_LIMITS };
     const row = this.source.db
       .prepare(
         `SELECT total_limit_bytes, warn_at_percent, journal_limit_bytes
-           FROM storage_limits WHERE singleton = 1`,
+           FROM storage_limits WHERE singleton = 1`
       )
       .get() as
       | {

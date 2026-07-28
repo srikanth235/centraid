@@ -20,8 +20,8 @@
 // secret live in secure storage; durable identity is the gateway EndpointId in
 // each row. Vault addressing and enrollment are enforced by the gateway.
 
-import { Store } from '../storage';
-import { hydrateSecure, setSecure } from './secure-storage';
+import { Store } from "../storage";
+import { hydrateSecure, setSecure } from "./secure-storage";
 
 // --- The active-slot projection keys (owned here; read by phone-link/replica) ---
 //
@@ -32,17 +32,17 @@ import { hydrateSecure, setSecure } from './secure-storage';
 // Persisted key names retain "ticket" for migration compatibility, but their
 // value is only an EndpointTicket dial hint. The one-time pairing capabilities
 // (`t` + `s`) are never stored.
-export const LINK_ENDPOINT_HINT_KEY = 'phoneLink.ticket'; // secure
-export const LINK_DESKTOP_NAME_KEY = 'phoneLink.desktopName';
-export const LINK_DEVICE_ID_KEY = 'phoneLink.deviceId';
-export const LINK_SECRET_KEY = 'phoneLink.secretKey'; // secure, device-wide (one EndpointId, many desktops)
-export const LAST_GATEWAY = 'replica.lastGateway'; // replica DB namespace — must match ReplicaProvider
-export const LAST_VAULT = 'replica.lastVault';
-export const LAST_BASE = 'replica.lastBase';
+export const LINK_ENDPOINT_HINT_KEY = "phoneLink.ticket"; // secure
+export const LINK_DESKTOP_NAME_KEY = "phoneLink.desktopName";
+export const LINK_DEVICE_ID_KEY = "phoneLink.deviceId";
+export const LINK_SECRET_KEY = "phoneLink.secretKey"; // secure, device-wide (one EndpointId, many desktops)
+export const LAST_GATEWAY = "replica.lastGateway"; // replica DB namespace — must match ReplicaProvider
+export const LAST_VAULT = "replica.lastVault";
+export const LAST_BASE = "replica.lastBase";
 
 // --- Registry storage keys (new) ---
-const REGISTRY_KEY = 'spaces.registry'; // Space[] (no secrets)
-const ACTIVE_ID_KEY = 'spaces.activeId'; // string
+const REGISTRY_KEY = "spaces.registry"; // Space[] (no secrets)
+const ACTIVE_ID_KEY = "spaces.activeId"; // string
 const endpointHintKeyFor = (id: string): string => `spaces.ticket.${id}`; // secure, per Space
 
 /**
@@ -82,7 +82,7 @@ export interface SpaceInput {
 
 // --- In-memory state (sync after hydrateSpaces, like Store/profile) ---
 let registry: Space[] = [];
-let activeId = '';
+let activeId = "";
 let hydrated = false;
 // The in-flight hydration promise, so concurrent boot callers (ReplicaProvider,
 // phone-link) share ONE run — the migration below is a read-modify-write that
@@ -101,9 +101,9 @@ function persist(): void {
 
 /** Content identity of a tuple — two Spaces are "the same" iff this matches. */
 function sameTuple(
-  a: Pick<Space, 'gatewayId' | 'vaultId'>,
+  a: Pick<Space, "gatewayId" | "vaultId">,
   gatewayId: string,
-  vaultId: string,
+  vaultId: string
 ): boolean {
   return a.gatewayId === gatewayId && a.vaultId === vaultId;
 }
@@ -121,7 +121,7 @@ function mintId(): string {
  * per-process value resolved by phone-link, not a per-Space fact.
  */
 async function projectActiveSlot(space: Space): Promise<void> {
-  const endpointHint = await hydrateSecure(endpointHintKeyFor(space.id), '');
+  const endpointHint = await hydrateSecure(endpointHintKeyFor(space.id), "");
   await setSecure(LINK_ENDPOINT_HINT_KEY, endpointHint);
   Store.set<string>(LINK_DESKTOP_NAME_KEY, space.desktopName);
   Store.set<string>(LINK_DEVICE_ID_KEY, space.deviceId);
@@ -131,10 +131,10 @@ async function projectActiveSlot(space: Space): Promise<void> {
 
 /** Clear the active slot when no Space is active (e.g. the last one is forgotten). */
 async function clearActiveSlot(): Promise<void> {
-  await setSecure(LINK_ENDPOINT_HINT_KEY, '');
-  Store.set<string>(LINK_DESKTOP_NAME_KEY, '');
-  Store.set<string>(LINK_DEVICE_ID_KEY, '');
-  Store.set<string>(LAST_VAULT, '');
+  await setSecure(LINK_ENDPOINT_HINT_KEY, "");
+  Store.set<string>(LINK_DESKTOP_NAME_KEY, "");
+  Store.set<string>(LINK_DEVICE_ID_KEY, "");
+  Store.set<string>(LAST_VAULT, "");
   // LAST_GATEWAY/LAST_BASE left as-is: harmless stale hints, overwritten on next activate.
 }
 
@@ -146,16 +146,17 @@ async function clearActiveSlot(): Promise<void> {
  * re-key to a fresh, empty replica DB.
  */
 async function migrateLegacySlot(): Promise<void> {
-  const [endpointHint, desktopName, deviceId, gatewayId, vaultId] = await Promise.all([
-    hydrateSecure(LINK_ENDPOINT_HINT_KEY, ''),
-    Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ''),
-    Store.hydrate<string>(LINK_DEVICE_ID_KEY, ''),
-    Store.hydrate<string>(LAST_GATEWAY, ''),
-    Store.hydrate<string>(LAST_VAULT, ''),
-  ]);
+  const [endpointHint, desktopName, deviceId, gatewayId, vaultId] =
+    await Promise.all([
+      hydrateSecure(LINK_ENDPOINT_HINT_KEY, ""),
+      Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ""),
+      Store.hydrate<string>(LINK_DEVICE_ID_KEY, ""),
+      Store.hydrate<string>(LAST_GATEWAY, ""),
+      Store.hydrate<string>(LAST_VAULT, ""),
+    ]);
   // Nothing to carry forward: no endpoint hint AND no resolved vault.
   if (!endpointHint && !vaultId) return;
-  const gw = gatewayId || desktopName || 'desktop';
+  const gw = gatewayId || desktopName || "desktop";
   const space: Space = {
     id: mintId(),
     gatewayId: gw,
@@ -179,11 +180,11 @@ export async function hydrateSpaces(): Promise<void> {
 
 async function doHydrate(): Promise<void> {
   registry = await Store.hydrate<Space[]>(REGISTRY_KEY, []);
-  activeId = await Store.hydrate<string>(ACTIVE_ID_KEY, '');
+  activeId = await Store.hydrate<string>(ACTIVE_ID_KEY, "");
   if (registry.length === 0) await migrateLegacySlot();
   // Repair a dangling active pointer (e.g. its Space was removed out from under it).
   if (activeId && !registry.some((s) => s.id === activeId)) {
-    activeId = registry[0]?.id ?? '';
+    activeId = registry[0]?.id ?? "";
     persist();
   }
   // Re-project so the single-slot keys always match the active Space on boot,
@@ -207,7 +208,7 @@ export function getActiveSpace(): Space | undefined {
  * and let the gateway pick the device's implied vault, exactly as before.
  */
 export function getActiveVaultId(): string {
-  return getActiveSpace()?.vaultId ?? '';
+  return getActiveSpace()?.vaultId ?? "";
 }
 
 /** Subscribe to any registry change (add/switch/forget/vault-resolved). Returns an unsubscribe. */
@@ -226,7 +227,9 @@ export function subscribeSpaces(callback: () => void): () => void {
  */
 export async function addSpace(input: SpaceInput): Promise<Space> {
   await hydrateSpaces();
-  const existing = registry.find((s) => sameTuple(s, input.gatewayId, input.vaultId));
+  const existing = registry.find((s) =>
+    sameTuple(s, input.gatewayId, input.vaultId)
+  );
   const space: Space = {
     id: existing?.id ?? mintId(),
     gatewayId: input.gatewayId,
@@ -237,7 +240,9 @@ export async function addSpace(input: SpaceInput): Promise<Space> {
     color: input.color ?? existing?.color,
     icon: input.icon ?? existing?.icon,
   };
-  registry = existing ? registry.map((s) => (s.id === space.id ? space : s)) : [...registry, space];
+  registry = existing
+    ? registry.map((s) => (s.id === space.id ? space : s))
+    : [...registry, space];
   activeId = space.id;
   if (input.endpointHint) {
     await setSecure(endpointHintKeyFor(space.id), input.endpointHint);
@@ -263,11 +268,11 @@ export async function addActiveGatewayVault(vault: {
 }): Promise<Space> {
   await hydrateSpaces();
   const active = getActiveSpace();
-  const endpointHint = await hydrateSecure(LINK_ENDPOINT_HINT_KEY, '');
+  const endpointHint = await hydrateSecure(LINK_ENDPOINT_HINT_KEY, "");
   return addSpace({
-    gatewayId: active?.gatewayId ?? 'manual',
-    desktopName: active?.desktopName ?? '',
-    deviceId: active?.deviceId ?? '',
+    gatewayId: active?.gatewayId ?? "manual",
+    desktopName: active?.desktopName ?? "",
+    deviceId: active?.deviceId ?? "",
     vaultId: vault.vaultId,
     endpointHint,
     vaultName: vault.vaultName,
@@ -300,14 +305,14 @@ export async function removeSpace(id: string): Promise<void> {
   await hydrateSpaces();
   const wasActive = activeId === id;
   registry = registry.filter((s) => s.id !== id);
-  await setSecure(endpointHintKeyFor(id), '');
+  await setSecure(endpointHintKeyFor(id), "");
   if (wasActive) {
     const next = registry[0];
     if (next) {
       activeId = next.id;
       await projectActiveSlot(next);
     } else {
-      activeId = '';
+      activeId = "";
       await clearActiveSlot();
     }
   }
@@ -331,9 +336,14 @@ export async function noteActiveIdentity(identity: {
   await hydrateSpaces();
   const active = getActiveSpace();
   if (!active) return;
-  if (active.gatewayId === identity.gatewayId && active.vaultId === identity.vaultId) return;
+  if (
+    active.gatewayId === identity.gatewayId &&
+    active.vaultId === identity.vaultId
+  )
+    return;
   const duplicate = registry.find(
-    (s) => s.id !== active.id && sameTuple(s, identity.gatewayId, identity.vaultId),
+    (s) =>
+      s.id !== active.id && sameTuple(s, identity.gatewayId, identity.vaultId)
   );
   const next: Space = {
     ...active,

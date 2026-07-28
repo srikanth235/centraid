@@ -2,15 +2,15 @@
 // inline create/rename editors), the trash entry, and the storage footprint —
 // three separate React roots in app.tsx (#smartNav / #folderList / #storage),
 // so this file exports three top-level components rather than one.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from "react";
 
-import { fmtBytes } from '../format.ts';
-import { DELETE_ICON, I, RENAME_ICON } from '../icons.ts';
-import { armConfirm } from '../kit.ts';
-import type { DriveDoc, Folder, Nav } from '../types.ts';
-import { Icon } from './Shared.tsx';
+import { fmtBytes } from "../format.ts";
+import { DELETE_ICON, I, RENAME_ICON } from "../icons.ts";
+import { armConfirm } from "../kit.ts";
+import type { DriveDoc, Folder, Nav } from "../types.ts";
+import { Icon } from "./Shared.tsx";
 
-import styles from './Sidebar.module.css';
+import styles from "./Sidebar.module.css";
 
 function NavItem({
   icon,
@@ -26,7 +26,12 @@ function NavItem({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={styles.navItem} aria-current={active} onClick={onClick}>
+    <button
+      type="button"
+      className={styles.navItem}
+      aria-current={active}
+      onClick={onClick}
+    >
       <Icon svg={icon} />
       <span>{label}</span>
       {count == null ? null : <span className={styles.navCount}>{count}</span>}
@@ -48,22 +53,22 @@ export function SmartNav({
       <NavItem
         icon={I.allDocs!}
         label="All documents"
-        active={navKind === 'all'}
+        active={navKind === "all"}
         count={counts.all}
-        onClick={() => onSelectNav({ kind: 'all' })}
+        onClick={() => onSelectNav({ kind: "all" })}
       />
       <NavItem
         icon={I.clock!}
         label="Recent"
-        active={navKind === 'recent'}
-        onClick={() => onSelectNav({ kind: 'recent' })}
+        active={navKind === "recent"}
+        onClick={() => onSelectNav({ kind: "recent" })}
       />
       <NavItem
         icon={I.star!}
         label="Starred"
-        active={navKind === 'starred'}
+        active={navKind === "starred"}
         count={counts.starred}
-        onClick={() => onSelectNav({ kind: 'starred' })}
+        onClick={() => onSelectNav({ kind: "starred" })}
       />
     </>
   );
@@ -87,7 +92,7 @@ function FolderCreateEdit({
     inputRef.current?.focus();
   }, []);
   const commit = () => {
-    const name = inputRef.current?.value.trim() ?? '';
+    const name = inputRef.current?.value.trim() ?? "";
     if (name) onCommit(name);
     else onCancel();
   };
@@ -100,11 +105,11 @@ function FolderCreateEdit({
         aria-label="New folder name"
         ref={inputRef}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             e.preventDefault();
             commit();
           }
-          if (e.key === 'Escape') onCancel();
+          if (e.key === "Escape") onCancel();
         }}
       />
       <button type="button" onClick={commit}>
@@ -132,7 +137,7 @@ function FolderRenameEdit({
     }
   }, []);
   const commit = () => {
-    const name = inputRef.current?.value.trim() ?? '';
+    const name = inputRef.current?.value.trim() ?? "";
     if (name && name !== f.name) onCommit(f.folder_id, name);
     else onCancel();
   };
@@ -145,11 +150,11 @@ function FolderRenameEdit({
         defaultValue={f.name}
         ref={inputRef}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             e.preventDefault();
             commit();
           }
-          if (e.key === 'Escape') onCancel();
+          if (e.key === "Escape") onCancel();
         }}
       />
       <button type="button" onClick={commit}>
@@ -183,17 +188,25 @@ function FolderRow({
   onRenameCancel: () => void;
 }) {
   if (renamingFolderId === f.folder_id)
-    return <FolderRenameEdit f={f} onCommit={onRenameCommit} onCancel={onRenameCancel} />;
-  const count = activeDocs.filter((d) => (d.folder_id ?? null) === f.folder_id).length;
-  const active = navKind === 'folder' && navFolderId === f.folder_id;
+    return (
+      <FolderRenameEdit
+        f={f}
+        onCommit={onRenameCommit}
+        onCancel={onRenameCancel}
+      />
+    );
+  const count = activeDocs.filter(
+    (d) => (d.folder_id ?? null) === f.folder_id
+  ).length;
+  const active = navKind === "folder" && navFolderId === f.folder_id;
   return (
     <div className={styles.folder}>
       <NavItem
         icon={I.folder!}
         label={f.name}
         active={active}
-        count={count || ''}
-        onClick={() => onSelectNav({ kind: 'folder', folderId: f.folder_id })}
+        count={count || ""}
+        onClick={() => onSelectNav({ kind: "folder", folderId: f.folder_id })}
       />
       <span className={styles.folderTools}>
         <button
@@ -213,7 +226,7 @@ function FolderRow({
           aria-label={`Delete ${f.name}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
+            if (!armConfirm(e.currentTarget, { armedLabel: "×?" })) return;
             onDeleteFolder(f);
           }}
         >
@@ -278,9 +291,9 @@ export function FolderList({
       <NavItem
         icon={I.trash!}
         label="Trash"
-        active={navKind === 'trash'}
-        count={trashCount || ''}
-        onClick={() => onSelectNav({ kind: 'trash' })}
+        active={navKind === "trash"}
+        count={trashCount || ""}
+        onClick={() => onSelectNav({ kind: "trash" })}
       />
     </>
   );
@@ -289,7 +302,13 @@ export function FolderList({
 // Storage → an honest footprint of what the drive is holding right now. The
 // vault gives no account-wide total, so we report real bytes + count over the
 // loaded window instead of a fabricated "used / total".
-export function Storage({ docs, truncated }: { docs: DriveDoc[]; truncated: boolean }) {
+export function Storage({
+  docs,
+  truncated,
+}: {
+  docs: DriveDoc[];
+  truncated: boolean;
+}) {
   const bytes = docs.reduce((s, f) => s + (f.byte_size ?? 0), 0);
   return (
     <>
@@ -299,8 +318,8 @@ export function Storage({ docs, truncated }: { docs: DriveDoc[]; truncated: bool
       </div>
       <div className={styles.storageLabel}>
         {fmtBytes(bytes)} across {docs.length} document
-        {docs.length === 1 ? '' : 's'}
-        {truncated ? ' — newest in view' : ''}
+        {docs.length === 1 ? "" : "s"}
+        {truncated ? " — newest in view" : ""}
       </div>
     </>
   );

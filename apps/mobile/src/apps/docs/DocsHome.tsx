@@ -1,44 +1,53 @@
-import { OnlineOnlyError } from '@centraid/client/replica/native';
-import { Feather } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
-import * as Haptics from 'expo-haptics';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { OnlineOnlyError } from "@centraid/client/replica/native";
+import { Feather } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
+import * as Haptics from "expo-haptics";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import HomeKey from '../../kit/components/HomeKey';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { useTheme } from '../../kit/theme';
-import { backupDocument } from '../../lib/upload/media-producer';
-import type { DocsScreenProps } from '../../navigation';
-import type { NativeDocument, NativeFolder } from './docs-model';
-import { styles } from './DocsHome.styles';
-import { GridItem, ListItem, type DriveItem } from './DocsLibraryItems';
-import { useDocsLibrary } from './useDocsLibrary';
+import HomeKey from "../../kit/components/HomeKey";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { useTheme } from "../../kit/theme";
+import { backupDocument } from "../../lib/upload/media-producer";
+import type { DocsScreenProps } from "../../navigation";
+import type { NativeDocument, NativeFolder } from "./docs-model";
+import { styles } from "./DocsHome.styles";
+import { GridItem, ListItem, type DriveItem } from "./DocsLibraryItems";
+import { useDocsLibrary } from "./useDocsLibrary";
 
-type LibraryFilter = 'all' | 'recent' | 'starred' | 'trash';
-type ViewMode = 'list' | 'grid';
+type LibraryFilter = "all" | "recent" | "starred" | "trash";
+type ViewMode = "list" | "grid";
 const FILTERS: readonly {
   key: LibraryFilter;
   label: string;
-  icon: React.ComponentProps<typeof Feather>['name'];
+  icon: React.ComponentProps<typeof Feather>["name"];
 }[] = [
-  { key: 'all', label: 'All', icon: 'file-text' },
-  { key: 'recent', label: 'Recent', icon: 'clock' },
-  { key: 'starred', label: 'Starred', icon: 'star' },
-  { key: 'trash', label: 'Trash', icon: 'trash-2' },
+  { key: "all", label: "All", icon: "file-text" },
+  { key: "recent", label: "Recent", icon: "clock" },
+  { key: "starred", label: "Starred", icon: "star" },
+  { key: "trash", label: "Trash", icon: "trash-2" },
 ];
 
 export default function DocsHome({
   route,
   navigation,
-}: DocsScreenProps<'DocsHome'>): React.JSX.Element {
+}: DocsScreenProps<"DocsHome">): React.JSX.Element {
   const { colors } = useTheme();
   const { session, gatewayBase } = useReplica();
   const drive = useDocsLibrary();
   const folderId = route.params?.folderId;
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   // Search results carry the query they were produced for, so a result can only
   // ever be shown against its own query — clearing them when the box empties is
   // then a derivation rather than a state update from the effect body, and a
@@ -48,10 +57,10 @@ export default function DocsHome({
     ids?: Set<string>;
     error?: string;
   }>();
-  const [filter, setFilter] = useState<LibraryFilter>('all');
-  const [view, setView] = useState<ViewMode>('list');
+  const [filter, setFilter] = useState<LibraryFilter>("all");
+  const [view, setView] = useState<ViewMode>("list");
   const [addOpen, setAddOpen] = useState(false);
-  const [folderName, setFolderName] = useState('');
+  const [folderName, setFolderName] = useState("");
 
   useEffect(() => {
     const needle = query.trim();
@@ -60,8 +69,8 @@ export default function DocsHome({
     const timeout = setTimeout(
       () =>
         void session
-          .search('docs', {
-            entity: 'core.document',
+          .search("docs", {
+            entity: "core.document",
             query: needle,
             limit: 100,
           })
@@ -69,7 +78,9 @@ export default function DocsHome({
             if (!active) return;
             setSearched({
               query: needle,
-              ids: new Set(result.rows.map((row) => String(row.values.document_id))),
+              ids: new Set(
+                result.rows.map((row) => String(row.values.document_id))
+              ),
             });
           })
           .catch((error: unknown) => {
@@ -82,10 +93,10 @@ export default function DocsHome({
               query: needle,
               ...(error instanceof OnlineOnlyError
                 ? {}
-                : { error: 'Search is unavailable right now.' }),
+                : { error: "Search is unavailable right now." }),
             });
           }),
-      160,
+      160
     );
     return () => {
       active = false;
@@ -98,10 +109,10 @@ export default function DocsHome({
   // folder), so each match shows where it lives.
   const folderById = useMemo(
     () => new Map(drive.folders.map((folder) => [folder.id, folder])),
-    [drive.folders],
+    [drive.folders]
   );
   const folderPathOf = (document: NativeDocument): string => {
-    if (!document.folderId) return 'Docs';
+    if (!document.folderId) return "Docs";
     const names: string[] = [];
     const seen = new Set<string>();
     let current: NativeFolder | undefined = folderById.get(document.folderId);
@@ -110,7 +121,7 @@ export default function DocsHome({
       names.unshift(current.name);
       current = current.parentId ? folderById.get(current.parentId) : undefined;
     }
-    return names.length ? names.join(' / ') : 'Docs';
+    return names.length ? names.join(" / ") : "Docs";
   };
 
   // Results only count while they still describe what is in the box.
@@ -126,36 +137,40 @@ export default function DocsHome({
         ? matches.has(document.id)
         : folderId
           ? document.folderId === folderId
-          : !document.folderId,
+          : !document.folderId
     );
     const visible = inScope.filter((document) => {
-      if (filter === 'trash') return document.trashed;
+      if (filter === "trash") return document.trashed;
       if (document.trashed) return false;
-      return filter !== 'starred' || document.starred;
+      return filter !== "starred" || document.starred;
     });
-    const sorted = [...visible].sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
-    return filter === 'recent' ? sorted.slice(0, 8) : sorted;
+    const sorted = [...visible].sort((a, b) =>
+      b.modifiedAt.localeCompare(a.modifiedAt)
+    );
+    return filter === "recent" ? sorted.slice(0, 8) : sorted;
   }, [drive.documents, filter, folderId, matches, searching]);
   const folders = drive.folders.filter(
     (folder) =>
-      filter === 'all' &&
+      filter === "all" &&
       !searching &&
-      (folderId ? folder.parentId === folderId : !folder.parentId),
+      (folderId ? folder.parentId === folderId : !folder.parentId)
   );
   const items: DriveItem[] = [
-    ...folders.map((folder) => ({ kind: 'folder' as const, folder })),
+    ...folders.map((folder) => ({ kind: "folder" as const, folder })),
     ...documents.map((document) => ({
-      kind: 'document' as const,
+      kind: "document" as const,
       document,
       ...(searching ? { location: folderPathOf(document) } : {}),
     })),
   ];
-  const parent = folderId ? drive.folders.find((folder) => folder.id === folderId) : undefined;
+  const parent = folderId
+    ? drive.folders.find((folder) => folder.id === folderId)
+    : undefined;
 
   const pick = async (): Promise<void> => {
     setAddOpen(false);
     if (!session || !gatewayBase) {
-      Alert.alert('Gateway unavailable', 'Reconnect before adding a document.');
+      Alert.alert("Gateway unavailable", "Reconnect before adding a document.");
       return;
     }
     const result = await DocumentPicker.getDocumentAsync({
@@ -169,7 +184,7 @@ export default function DocsHome({
       await backupDocument(session, gatewayBase, {
         localUri: asset.uri,
         title: asset.name,
-        mediaType: asset.mimeType ?? 'application/octet-stream',
+        mediaType: asset.mimeType ?? "application/octet-stream",
         plaintextSize: asset.size ?? new File(asset.uri).size,
         ...(folderId ? { folderId } : {}),
       });
@@ -180,24 +195,29 @@ export default function DocsHome({
   const createFolder = async (): Promise<void> => {
     if (!session || !folderName.trim()) return;
     try {
-      const result = await session.write('docs', {
-        action: 'create-folder',
+      const result = await session.write("docs", {
+        action: "create-folder",
         input: { name: folderName.trim() },
       });
-      setFolderName('');
+      setFolderName("");
       setAddOpen(false);
-      if (result.status === 'parked' || result.status === 'queued') {
-        navigation.navigate('Settings', { screen: 'Approvals' });
-      } else if (result.status === 'denied' || result.status === 'failed') {
-        Alert.alert('Folder not created', result.reason ?? 'The vault rejected this change.');
+      if (result.status === "parked" || result.status === "queued") {
+        navigation.navigate("Settings", { screen: "Approvals" });
+      } else if (result.status === "denied" || result.status === "failed") {
+        Alert.alert(
+          "Folder not created",
+          result.reason ?? "The vault rejected this change."
+        );
       } else {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success
+        );
       }
     } catch (error) {
       setAddOpen(false);
       Alert.alert(
-        'Folder not created',
-        error instanceof Error ? error.message : 'Please try again.',
+        "Folder not created",
+        error instanceof Error ? error.message : "Please try again."
       );
     }
   };
@@ -207,11 +227,17 @@ export default function DocsHome({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={["top"]}
+    >
       <View style={styles.header}>
         {folderId ? (
           // In a folder: chevron = up one level, still inside Docs.
-          <Pressable accessibilityLabel="Up to parent folder" onPress={() => navigation.goBack()}>
+          <Pressable
+            accessibilityLabel="Up to parent folder"
+            onPress={() => navigation.goBack()}
+          >
             <Feather name="chevron-left" size={26} color={colors.ink} />
           </Pressable>
         ) : (
@@ -219,10 +245,17 @@ export default function DocsHome({
           <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         )}
         <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.ink }]}>{parent?.name ?? 'Docs'}</Text>
-          <Text style={[styles.subtitle, { color: colors.ink2 }]}>Private document library</Text>
+          <Text style={[styles.title, { color: colors.ink }]}>
+            {parent?.name ?? "Docs"}
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.ink2 }]}>
+            Private document library
+          </Text>
         </View>
-        <Pressable accessibilityLabel="Add document or folder" onPress={() => setAddOpen(true)}>
+        <Pressable
+          accessibilityLabel="Add document or folder"
+          onPress={() => setAddOpen(true)}
+        >
           <Feather name="plus" size={24} color={colors.accent} />
         </Pressable>
       </View>
@@ -237,7 +270,10 @@ export default function DocsHome({
           style={[styles.input, { color: colors.ink }]}
         />
         {query ? (
-          <Pressable accessibilityLabel="Clear search" onPress={() => setQuery('')}>
+          <Pressable
+            accessibilityLabel="Clear search"
+            onPress={() => setQuery("")}
+          >
             <Feather name="x" size={17} color={colors.ink2} />
           </Pressable>
         ) : null}
@@ -253,10 +289,13 @@ export default function DocsHome({
           {FILTERS.map((item) => {
             const active = filter === item.key;
             const count =
-              item.key === 'starred'
-                ? drive.documents.filter((document) => document.starred && !document.trashed).length
-                : item.key === 'trash'
-                  ? drive.documents.filter((document) => document.trashed).length
+              item.key === "starred"
+                ? drive.documents.filter(
+                    (document) => document.starred && !document.trashed
+                  ).length
+                : item.key === "trash"
+                  ? drive.documents.filter((document) => document.trashed)
+                      .length
                   : undefined;
             return (
               <Pressable
@@ -264,12 +303,24 @@ export default function DocsHome({
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
                 onPress={() => selectFilter(item.key)}
-                style={[styles.filter, { backgroundColor: active ? colors.ink : colors.bgSunken }]}
+                style={[
+                  styles.filter,
+                  { backgroundColor: active ? colors.ink : colors.bgSunken },
+                ]}
               >
-                <Feather name={item.icon} size={14} color={active ? colors.bg : colors.ink2} />
-                <Text style={[styles.filterText, { color: active ? colors.bg : colors.ink2 }]}>
+                <Feather
+                  name={item.icon}
+                  size={14}
+                  color={active ? colors.bg : colors.ink2}
+                />
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: active ? colors.bg : colors.ink2 },
+                  ]}
+                >
                   {item.label}
-                  {count ? ` ${count}` : ''}
+                  {count ? ` ${count}` : ""}
                 </Text>
               </Pressable>
             );
@@ -280,27 +331,30 @@ export default function DocsHome({
       <View style={styles.libraryHeader}>
         <View>
           <Text style={[styles.libraryTitle, { color: colors.ink }]}>
-            {filter === 'all'
+            {filter === "all"
               ? folderId
-                ? (parent?.name ?? 'Folder')
-                : 'All documents'
+                ? (parent?.name ?? "Folder")
+                : "All documents"
               : FILTERS.find((item) => item.key === filter)?.label}
           </Text>
           <Text style={[styles.libraryMeta, { color: colors.ink2 }]}>
             {documents.length} documents
-            {folders.length ? ` · ${folders.length} folders` : ''}
+            {folders.length ? ` · ${folders.length} folders` : ""}
           </Text>
         </View>
         <View style={[styles.viewSwitch, { backgroundColor: colors.bgSunken }]}>
-          {(['list', 'grid'] as ViewMode[]).map((mode) => (
+          {(["list", "grid"] as ViewMode[]).map((mode) => (
             <Pressable
               key={mode}
               accessibilityLabel={`${mode} view`}
               onPress={() => setView(mode)}
-              style={[styles.viewButton, view === mode && { backgroundColor: colors.bgElev }]}
+              style={[
+                styles.viewButton,
+                view === mode && { backgroundColor: colors.bgElev },
+              ]}
             >
               <Feather
-                name={mode === 'list' ? 'list' : 'grid'}
+                name={mode === "list" ? "list" : "grid"}
                 size={16}
                 color={view === mode ? colors.ink : colors.ink3}
               />
@@ -312,39 +366,44 @@ export default function DocsHome({
       <FlatList
         key={view}
         data={items}
-        numColumns={view === 'grid' ? 2 : 1}
-        columnWrapperStyle={view === 'grid' ? styles.gridRow : undefined}
+        numColumns={view === "grid" ? 2 : 1}
+        columnWrapperStyle={view === "grid" ? styles.gridRow : undefined}
         keyExtractor={(item) =>
-          item.kind === 'folder' ? `f:${item.folder.id}` : `d:${item.document.id}`
+          item.kind === "folder"
+            ? `f:${item.folder.id}`
+            : `d:${item.document.id}`
         }
-        contentContainerStyle={[styles.list, view === 'grid' && styles.gridList]}
+        contentContainerStyle={[
+          styles.list,
+          view === "grid" && styles.gridList,
+        ]}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Feather
-              name={filter === 'trash' ? 'trash-2' : 'file-text'}
+              name={filter === "trash" ? "trash-2" : "file-text"}
               size={32}
               color={colors.accent}
             />
             <Text style={[styles.emptyTitle, { color: colors.ink }]}>
               {drive.loading
-                ? 'Opening your drive…'
+                ? "Opening your drive…"
                 : searchError
                   ? searchError
                   : query
-                    ? 'No matching documents'
-                    : 'Nothing here yet'}
+                    ? "No matching documents"
+                    : "Nothing here yet"}
             </Text>
             <Text style={[styles.empty, { color: colors.ink2 }]}>
               {searchError
-                ? 'Reconnect and try your search again.'
-                : filter === 'trash'
-                  ? 'Deleted documents will remain recoverable here.'
-                  : 'Import a file or create a folder to get started.'}
+                ? "Reconnect and try your search again."
+                : filter === "trash"
+                  ? "Deleted documents will remain recoverable here."
+                  : "Import a file or create a folder to get started."}
             </Text>
           </View>
         }
         renderItem={({ item }) =>
-          view === 'grid' ? (
+          view === "grid" ? (
             <GridItem item={item} navigation={navigation} colors={colors} />
           ) : (
             <ListItem item={item} navigation={navigation} colors={colors} />
@@ -360,16 +419,22 @@ export default function DocsHome({
       >
         <Pressable style={styles.backdrop} onPress={() => setAddOpen(false)} />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>Add to Docs</Text>
+          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
+            Add to Docs
+          </Text>
           <Pressable
             style={[styles.addRow, { borderBottomColor: colors.line }]}
             onPress={() => void pick()}
           >
-            <View style={[styles.addIcon, { backgroundColor: colors.bgSunken }]}>
+            <View
+              style={[styles.addIcon, { backgroundColor: colors.bgSunken }]}
+            >
               <Feather name="upload-cloud" size={20} color={colors.accent} />
             </View>
             <View style={styles.addCopy}>
-              <Text style={[styles.rowTitle, { color: colors.ink }]}>Import documents</Text>
+              <Text style={[styles.rowTitle, { color: colors.ink }]}>
+                Import documents
+              </Text>
               <Text style={[styles.meta, { color: colors.ink2 }]}>
                 Choose files from this device
               </Text>
@@ -377,26 +442,36 @@ export default function DocsHome({
           </Pressable>
           {folderId ? null : (
             <>
-              <Text style={[styles.newFolderLabel, { color: colors.ink2 }]}>NEW FOLDER</Text>
+              <Text style={[styles.newFolderLabel, { color: colors.ink2 }]}>
+                NEW FOLDER
+              </Text>
               <TextInput
                 value={folderName}
                 onChangeText={setFolderName}
                 placeholder="Folder name"
                 placeholderTextColor={colors.ink3}
-                style={[styles.folderInput, { borderColor: colors.lineStrong, color: colors.ink }]}
+                style={[
+                  styles.folderInput,
+                  { borderColor: colors.lineStrong, color: colors.ink },
+                ]}
               />
               <Pressable
                 disabled={!folderName.trim()}
                 style={[
                   styles.create,
                   {
-                    backgroundColor: folderName.trim() ? colors.accent : colors.bgSunken,
+                    backgroundColor: folderName.trim()
+                      ? colors.accent
+                      : colors.bgSunken,
                   },
                 ]}
                 onPress={() => void createFolder()}
               >
                 <Text
-                  style={[styles.createText, { color: folderName.trim() ? '#fff' : colors.ink3 }]}
+                  style={[
+                    styles.createText,
+                    { color: folderName.trim() ? "#fff" : colors.ink3 },
+                  ]}
                 >
                   Create folder
                 </Text>

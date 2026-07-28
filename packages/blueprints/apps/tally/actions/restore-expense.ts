@@ -3,16 +3,16 @@ export default async function restoreExpense({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as { expense_id?: unknown };
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'tally.restore_expense',
+      command: "tally.restore_expense",
       input: { expense_id: input.expense_id },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

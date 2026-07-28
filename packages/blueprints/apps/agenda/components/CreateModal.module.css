@@ -74,7 +74,7 @@
   font-size: 12px;
   color: var(--ink-2);
 }
-.calChip[aria-pressed='true'] {
+.calChip[aria-pressed="true"] {
   border-color: var(--selb);
   background: var(--sel);
   color: var(--ink);
@@ -98,7 +98,7 @@
   font-weight: 600;
   line-height: 1;
 }
-.calChip[aria-pressed='true'] .guestChipAvatar {
+.calChip[aria-pressed="true"] .guestChipAvatar {
   background: var(--bg-elev);
   color: var(--ink);
 }

@@ -1,6 +1,10 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
-import { coverageExclude, coverageInclude, coverageProjects } from './vitest.config';
+import {
+  coverageExclude,
+  coverageInclude,
+  coverageProjects,
+} from "./vitest.config";
 
 // Scoped coverage lane for the local diff-coverage gate (#576).
 //
@@ -25,13 +29,13 @@ export default defineConfig({
   test: {
     projects: coverageProjects,
     coverage: {
-      provider: 'v8',
+      provider: "v8",
       // No text/html here: this lane's only consumer is diff-coverage.mjs
       // reading coverage-final.json, and the text table for a scoped run
       // reports 0% for every project that did not run, which reads as alarming
       // and means nothing.
-      reporter: ['json'],
-      reportsDirectory: './coverage',
+      reporter: ["json"],
+      reportsDirectory: "./coverage",
       include: coverageInclude,
       exclude: coverageExclude,
     },

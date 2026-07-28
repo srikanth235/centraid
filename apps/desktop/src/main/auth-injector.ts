@@ -20,21 +20,21 @@
 // Pure rewrite rules live in `auth-injector-core.ts` (unit-tested without
 // Electron). This file only wires them onto `session.webRequest`.
 
-import { session, type Session } from 'electron';
+import { session, type Session } from "electron";
 
 import {
   applyIncomingFrameRelaxation,
   applyOutgoingAuthHeaders,
   type AuthInjectorSnapshot,
-} from './auth-injector-core.js';
-import { loadSettings } from './settings.js';
+} from "./auth-injector-core.js";
+import { loadSettings } from "./settings.js";
 
 let state: AuthInjectorSnapshot | null = null;
 let installed = false;
 
 async function readState(): Promise<AuthInjectorSnapshot> {
   const settings = await loadSettings();
-  let gatewayOrigin = '';
+  let gatewayOrigin = "";
   try {
     gatewayOrigin = new URL(settings.gatewayUrl).origin;
   } catch {
@@ -42,12 +42,14 @@ async function readState(): Promise<AuthInjectorSnapshot> {
   }
   return {
     gatewayOrigin,
-    gatewayToken: settings.gatewayToken ?? '',
-    gatewayVaultId: settings.activeVaultId ?? '',
+    gatewayToken: settings.gatewayToken ?? "",
+    gatewayVaultId: settings.activeVaultId ?? "",
   };
 }
 
-export async function installAuthInjector(targetSession?: Session): Promise<void> {
+export async function installAuthInjector(
+  targetSession?: Session
+): Promise<void> {
   state = await readState();
   if (installed) return;
   installed = true;
@@ -61,13 +63,21 @@ export async function installAuthInjector(targetSession?: Session): Promise<void
       return;
     }
     callback({
-      requestHeaders: applyOutgoingAuthHeaders(details.requestHeaders, snapshot, details.url),
+      requestHeaders: applyOutgoingAuthHeaders(
+        details.requestHeaders,
+        snapshot,
+        details.url
+      ),
     });
   });
 
   s.webRequest.onHeadersReceived((details, callback) => {
     callback({
-      responseHeaders: applyIncomingFrameRelaxation(details.responseHeaders, state, details.url),
+      responseHeaders: applyIncomingFrameRelaxation(
+        details.responseHeaders,
+        state,
+        details.url
+      ),
     });
   });
 }

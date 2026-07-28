@@ -1,22 +1,22 @@
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 /**
  * Replica-sync real-IO perf budget (#496 PD2).
  * Touches IndexedDB store open + enqueue/list — not an in-memory Map stringify.
  */
-import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { IndexedDbIntentStore } from '../../packages/client/src/replica/intent-store.js';
-import { IntentQueue } from '../../packages/client/src/replica/intents.js';
+import { IndexedDbIntentStore } from "../../packages/client/src/replica/intent-store.js";
+import { IntentQueue } from "../../packages/client/src/replica/intents.js";
 
-const OWNER = 'tests/perf/replica-sync-io.perf.test.ts';
+const OWNER = "tests/perf/replica-sync-io.perf.test.ts";
 const BUDGET_MS = 2_500;
 
-describe('replica-sync-io.perf', () => {
-  beforeEach(() => vi.stubGlobal('IDBKeyRange', IDBKeyRange));
+describe("replica-sync-io.perf", () => {
+  beforeEach(() => vi.stubGlobal("IDBKeyRange", IDBKeyRange));
   afterEach(() => vi.unstubAllGlobals());
 
-  test('intent store open + 200 enqueue/list stays under IO budget', async () => {
+  test("intent store open + 200 enqueue/list stays under IO budget", async () => {
     const factory = new IDBFactory();
     const name = `perf-replica-${crypto.randomUUID()}`;
     const started = performance.now();
@@ -27,16 +27,16 @@ describe('replica-sync-io.perf', () => {
       if (i >= 200) return;
       await queue.enqueue({
         intentId: `intent-${i}`,
-        appId: 'agenda',
-        action: 'complete',
+        appId: "agenda",
+        action: "complete",
         input: { taskId: `t-${i}` },
         optimistic: [
           {
-            op: 'upsert',
-            shapeId: 'shape-agenda',
-            entity: 'core.task',
+            op: "upsert",
+            shapeId: "shape-agenda",
+            entity: "core.task",
             rowId: `t-${i}`,
-            values: { status: 'done' },
+            values: { status: "done" },
           },
         ],
       });
@@ -48,15 +48,15 @@ describe('replica-sync-io.perf', () => {
     store.close();
     const passed = listed.length === 200 && durationMs < BUDGET_MS;
     await recordQualityResult({
-      lane: 'perf',
+      lane: "perf",
       owner: OWNER,
-      name: 'Replica intent IO (200 enqueues)',
-      status: passed ? 'passed' : 'failed',
+      name: "Replica intent IO (200 enqueues)",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
-          name: 'wall clock',
+          name: "wall clock",
           value: durationMs,
-          unit: 'ms',
+          unit: "ms",
           budget: BUDGET_MS,
         },
       ],

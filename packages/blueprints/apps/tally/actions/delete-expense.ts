@@ -2,23 +2,24 @@
  * tally.delete_expense — see app.json for the contract. Consent denials and precondition
  * refusals come back as first-class outcomes the app narrates.
  */
-const KEYS = ['expense_id'];
+const KEYS = ["expense_id"];
 export default async function deleteExpense({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   const cmdInput: Record<string, unknown> = {};
-  for (const k of KEYS) if (input[k] !== undefined && input[k] !== null) cmdInput[k] = input[k];
+  for (const k of KEYS)
+    if (input[k] !== undefined && input[k] !== null) cmdInput[k] = input[k];
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'tally.delete_expense',
+      command: "tally.delete_expense",
       input: cmdInput,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

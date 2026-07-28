@@ -26,11 +26,18 @@
  *               "extraArgs": ["--acp"] }
  */
 
-import { promises as fs } from 'node:fs';
+import { promises as fs } from "node:fs";
 
-import { RUNNER_KINDS, isRunnerKind, type RunnerKind } from '@centraid/app-engine';
+import {
+  RUNNER_KINDS,
+  isRunnerKind,
+  type RunnerKind,
+} from "@centraid/app-engine";
 
-import { validateBackupConfig, type BackupConfig } from '../backup/backup-config.js';
+import {
+  validateBackupConfig,
+  type BackupConfig,
+} from "../backup/backup-config.js";
 
 export interface DaemonRunnerConfig {
   /** Any kind the runtime registers — validated against `RUNNER_KINDS`. */
@@ -44,7 +51,11 @@ export interface DaemonRunnerConfig {
   extraArgs?: string[];
 }
 
-export type DaemonResourceMode = 'auto' | 'conserve' | 'balanced' | 'performance';
+export type DaemonResourceMode =
+  | "auto"
+  | "conserve"
+  | "balanced"
+  | "performance";
 
 export interface DaemonConfig {
   dataDir: string;
@@ -69,17 +80,17 @@ export interface DaemonConfig {
 export class DaemonConfigError extends Error {
   constructor(message: string) {
     super(`config: ${message}`);
-    this.name = 'DaemonConfigError';
+    this.name = "DaemonConfigError";
   }
 }
 
 export async function loadConfigFile(path: string): Promise<DaemonConfig> {
   let raw: string;
   try {
-    raw = await fs.readFile(path, 'utf8');
+    raw = await fs.readFile(path, "utf8");
   } catch (err) {
     throw new DaemonConfigError(
-      `could not read ${path}: ${err instanceof Error ? err.message : String(err)}`,
+      `could not read ${path}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
   let parsed: unknown;
@@ -87,29 +98,37 @@ export async function loadConfigFile(path: string): Promise<DaemonConfig> {
     parsed = JSON.parse(raw);
   } catch (err) {
     throw new DaemonConfigError(
-      `${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      `${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
     );
   }
   return validateConfig(parsed);
 }
 
 export function validateConfig(value: unknown): DaemonConfig {
-  if (!isRecord(value)) throw new DaemonConfigError('top-level value must be an object');
+  if (!isRecord(value))
+    throw new DaemonConfigError("top-level value must be an object");
   const dataDir = value.dataDir;
-  if (typeof dataDir !== 'string' || dataDir.length === 0) {
-    throw new DaemonConfigError('`dataDir` is required and must be a non-empty string');
+  if (typeof dataDir !== "string" || dataDir.length === 0) {
+    throw new DaemonConfigError(
+      "`dataDir` is required and must be a non-empty string"
+    );
   }
   const out: DaemonConfig = { dataDir };
   if (value.host !== undefined) {
-    if (typeof value.host !== 'string' || value.host.length === 0) {
-      throw new DaemonConfigError('`host` must be a non-empty string when set');
+    if (typeof value.host !== "string" || value.host.length === 0) {
+      throw new DaemonConfigError("`host` must be a non-empty string when set");
     }
     out.host = value.host;
   }
   if (value.port !== undefined) {
     const port = value.port;
-    if (typeof port !== 'number' || !Number.isInteger(port) || port < 0 || port > 65535) {
-      throw new DaemonConfigError('`port` must be an integer in [0, 65535]');
+    if (
+      typeof port !== "number" ||
+      !Number.isInteger(port) ||
+      port < 0 ||
+      port > 65535
+    ) {
+      throw new DaemonConfigError("`port` must be an integer in [0, 65535]");
     }
     out.port = port;
   }
@@ -117,8 +136,8 @@ export function validateConfig(value: unknown): DaemonConfig {
     out.runner = validateRunner(value.runner);
   }
   if (value.endpoint !== undefined) {
-    if (typeof value.endpoint !== 'boolean') {
-      throw new DaemonConfigError('`endpoint` must be a boolean when set');
+    if (typeof value.endpoint !== "boolean") {
+      throw new DaemonConfigError("`endpoint` must be a boolean when set");
     }
     out.endpoint = value.endpoint;
   }
@@ -126,18 +145,20 @@ export function validateConfig(value: unknown): DaemonConfig {
     try {
       out.backup = validateBackupConfig(value.backup);
     } catch (err) {
-      throw new DaemonConfigError(err instanceof Error ? err.message : String(err));
+      throw new DaemonConfigError(
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
   if (value.resourceMode !== undefined) {
     if (
-      value.resourceMode !== 'auto' &&
-      value.resourceMode !== 'conserve' &&
-      value.resourceMode !== 'balanced' &&
-      value.resourceMode !== 'performance'
+      value.resourceMode !== "auto" &&
+      value.resourceMode !== "conserve" &&
+      value.resourceMode !== "balanced" &&
+      value.resourceMode !== "performance"
     ) {
       throw new DaemonConfigError(
-        '`resourceMode` must be one of "auto", "conserve", "balanced", "performance"',
+        '`resourceMode` must be one of "auto", "conserve", "balanced", "performance"'
       );
     }
     out.resourceMode = value.resourceMode;
@@ -146,23 +167,29 @@ export function validateConfig(value: unknown): DaemonConfig {
 }
 
 function validateRunner(value: unknown): DaemonRunnerConfig {
-  if (!isRecord(value)) throw new DaemonConfigError('`runner` must be an object');
+  if (!isRecord(value))
+    throw new DaemonConfigError("`runner` must be an object");
   const kind = value.kind;
   if (!isRunnerKind(kind)) {
     throw new DaemonConfigError(
-      `\`runner.kind\` must be one of ${RUNNER_KINDS.map((k) => `"${k}"`).join(', ')}`,
+      `\`runner.kind\` must be one of ${RUNNER_KINDS.map((k) => `"${k}"`).join(", ")}`
     );
   }
   const out: DaemonRunnerConfig = { kind };
   if (value.binPath !== undefined) {
-    if (typeof value.binPath !== 'string') {
-      throw new DaemonConfigError('`runner.binPath` must be a string when set');
+    if (typeof value.binPath !== "string") {
+      throw new DaemonConfigError("`runner.binPath` must be a string when set");
     }
     out.binPath = value.binPath;
   }
   if (value.extraArgs !== undefined) {
-    if (!Array.isArray(value.extraArgs) || value.extraArgs.some((v) => typeof v !== 'string')) {
-      throw new DaemonConfigError('`runner.extraArgs` must be an array of strings when set');
+    if (
+      !Array.isArray(value.extraArgs) ||
+      value.extraArgs.some((v) => typeof v !== "string")
+    ) {
+      throw new DaemonConfigError(
+        "`runner.extraArgs` must be an array of strings when set"
+      );
     }
     out.extraArgs = value.extraArgs as string[];
   }
@@ -170,5 +197,5 @@ function validateRunner(value: unknown): DaemonRunnerConfig {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

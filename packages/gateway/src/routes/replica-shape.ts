@@ -4,8 +4,8 @@
 // in app manifests; this module projects the grants already enforced by the
 // vault gateway into a row/column-minimized offline shape.
 
-import crypto from 'node:crypto';
-import type { DatabaseSync, SQLInputValue, StatementSync } from 'node:sqlite';
+import crypto from "node:crypto";
+import type { DatabaseSync, SQLInputValue, StatementSync } from "node:sqlite";
 
 import {
   compileFilters,
@@ -19,13 +19,13 @@ import {
   type FilterClause,
   type ConsentAllow,
   type ReplicaRow,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
-import { canWrite, type GrantableRole } from '../serve/enrollment-store.js';
+import { canWrite, type GrantableRole } from "../serve/enrollment-store.js";
 
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
 export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
-export const REPLICA_SYNTHETIC_PRIMARY_KEY = '__centraid_row_id';
+export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id";
 
 export interface ReplicaShapeAccess {
   role: GrantableRole;
@@ -108,8 +108,12 @@ function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-function readGrantees(db: DatabaseSync, now: string, appId?: string): ReplicaGrantee[] {
-  const restriction = appId ? ` AND (a.name = ? OR a.app_id = ?)` : '';
+function readGrantees(
+  db: DatabaseSync,
+  now: string,
+  appId?: string
+): ReplicaGrantee[] {
+  const restriction = appId ? ` AND (a.name = ? OR a.app_id = ?)` : "";
   return db
     .prepare(
       `SELECT DISTINCT a.app_id, a.name AS app_name, a.signing_key,
@@ -122,7 +126,7 @@ function readGrantees(db: DatabaseSync, now: string, appId?: string): ReplicaGra
           AND g.status = 'active' AND g.revoked_at IS NULL
           AND (g.expires_at IS NULL OR g.expires_at > ?)
           AND s.verbs IN ('read', 'read+act')${restriction}
-        ORDER BY a.name, c.notation`,
+        ORDER BY a.name, c.notation`
     )
     .all(now, ...(appId ? [appId, appId] : [])) as unknown as ReplicaGrantee[];
 }
@@ -130,11 +134,11 @@ function readGrantees(db: DatabaseSync, now: string, appId?: string): ReplicaGra
 function alternativeFor(
   db: DatabaseSync,
   physical: string,
-  scope: Pick<ConsentAllow, 'rowFilter' | 'fieldMask'>,
+  scope: Pick<ConsentAllow, "rowFilter" | "fieldMask">,
   columns: TableColumn[],
   keyColumns: string[],
   unavailable: Set<string>,
-  now: string,
+  now: string
 ): ScopeAlternative | undefined {
   const filters = scope.rowFilter;
   const mask = scope.fieldMask;
@@ -143,34 +147,52 @@ function alternativeFor(
     filters.some(
       (filter) =>
         filter === null ||
-        typeof filter !== 'object' ||
-        typeof filter.column !== 'string' ||
-        typeof filter.op !== 'string',
+        typeof filter !== "object" ||
+        typeof filter.column !== "string" ||
+        typeof filter.op !== "string"
     ) ||
-    (mask !== null && (!Array.isArray(mask) || mask.some((column) => typeof column !== 'string')))
+    (mask !== null &&
+      (!Array.isArray(mask) ||
+        mask.some((column) => typeof column !== "string")))
   ) {
     return undefined;
   }
   const actual = new Set(columns.map((column) => column.name));
   // A malformed or unavailable-value filter fails closed; membership must never
   // become broader merely because a replica cannot evaluate the predicate.
-  if (filters.some((filter) => !actual.has(filter.column) || unavailable.has(filter.column))) {
+  if (
+    filters.some(
+      (filter) => !actual.has(filter.column) || unavailable.has(filter.column)
+    )
+  ) {
     return undefined;
   }
-  if (keyColumns.length === 0 || keyColumns.some((column) => unavailable.has(column))) {
+  if (
+    keyColumns.length === 0 ||
+    keyColumns.some((column) => unavailable.has(column))
+  ) {
     return undefined;
   }
   const allowed =
     mask === null
-      ? columns.map((column) => column.name).filter((column) => !unavailable.has(column))
+      ? columns
+          .map((column) => column.name)
+          .filter((column) => !unavailable.has(column))
       : mask.filter((column) => actual.has(column) && !unavailable.has(column));
   // Mirrors applyFieldMask: a scope that selects zero real fields is invalid,
   // not an identity-only widening through the replica protocol.
   if (allowed.length === 0) return undefined;
   try {
     const compiled = compileFilters(db, physical, filters, now);
-    const historical = compileReplicaHistoricalFilters(db, physical, filters, now);
-    const keys = keyColumns.map((column) => `${quoteIdentifier(column)} = ?`).join(' AND ');
+    const historical = compileReplicaHistoricalFilters(
+      db,
+      physical,
+      filters,
+      now
+    );
+    const keys = keyColumns
+      .map((column) => `${quoteIdentifier(column)} = ?`)
+      .join(" AND ");
     const alternative: ScopeAlternative = {
       filters,
       columns: [...new Set(allowed)],
@@ -183,14 +205,14 @@ function alternativeFor(
       membership: {
         value: db.prepare(
           `SELECT 1 AS matched FROM ${quoteIdentifier(physical)}
-            WHERE ${keys} AND (${compiled.where}) LIMIT 1`,
+            WHERE ${keys} AND (${compiled.where}) LIMIT 1`
         ),
         enumerable: false,
       },
       historicalMembership: {
         value: db.prepare(
           `WITH replica_old(value) AS (VALUES (?))
-           SELECT 1 AS matched WHERE (${historical.where})`,
+           SELECT 1 AS matched WHERE (${historical.where})`
         ),
         enumerable: false,
       },
@@ -216,22 +238,23 @@ function publicShape(shape: ReplicaServerShape): ReplicaShapeWire {
 }
 
 function isTemporal(filter: FilterClause): boolean {
-  return filter.op === 'within-days' || filter.op === 'within-next-days';
+  return filter.op === "within-days" || filter.op === "within-next-days";
 }
 
 function nextTemporalTransition(
   row: ReplicaRow,
   filter: FilterClause,
-  nowMs: number,
+  nowMs: number
 ): number | undefined {
   if (!isTemporal(filter)) return undefined;
   const raw = row.values[filter.column];
   const days = Number(filter.value);
-  if (typeof raw !== 'string' || !Number.isFinite(days) || days <= 0) return undefined;
+  if (typeof raw !== "string" || !Number.isFinite(days) || days <= 0)
+    return undefined;
   const at = Date.parse(raw);
   const span = days * DAY_MS;
   if (!Number.isFinite(at) || !Number.isFinite(span)) return undefined;
-  if (filter.op === 'within-days') {
+  if (filter.op === "within-days") {
     const exit = at + span + 1;
     return Number.isFinite(exit) && exit > nowMs ? exit : undefined;
   }
@@ -246,9 +269,13 @@ function temporalFingerprint(
   appId: string,
   purpose: string,
   entity: ReplicaEntityShape,
-  nowMs: number,
+  nowMs: number
 ): string | undefined {
-  if (!entity.alternatives.some((alternative) => alternative.filters.some(isTemporal))) {
+  if (
+    !entity.alternatives.some((alternative) =>
+      alternative.filters.some(isTemporal)
+    )
+  ) {
     return undefined;
   }
   const state = currentReplicaLogState(db);
@@ -256,11 +283,12 @@ function temporalFingerprint(
     entity.alternatives.map((alternative) => ({
       filters: alternative.filters,
       columns: alternative.columns,
-    })),
+    }))
   );
   const key = `${appId}\u0000${purpose}\u0000${entity.entity}\u0000${policy}`;
   const cache =
-    temporalFingerprintCache.get(db) ?? new Map<string, TemporalFingerprintCacheEntry>();
+    temporalFingerprintCache.get(db) ??
+    new Map<string, TemporalFingerprintCacheEntry>();
   temporalFingerprintCache.set(db, cache);
   const cached = cache.get(key);
   if (
@@ -283,23 +311,31 @@ function temporalFingerprint(
     });
     for (const row of page.rows) {
       const applicable = entity.alternatives.filter((alternative) =>
-        alternativeMatches(entity, row, alternative),
+        alternativeMatches(entity, row, alternative)
       );
       if (applicable.length > 0) {
-        const columns = new Set(applicable.flatMap((alternative) => alternative.columns));
+        const columns = new Set(
+          applicable.flatMap((alternative) => alternative.columns)
+        );
         if (entity.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) {
           columns.add(REPLICA_SYNTHETIC_PRIMARY_KEY);
         }
         membership.push([row.rowId, [...columns].sort()]);
       }
-      for (const filter of entity.alternatives.flatMap((alternative) => alternative.filters)) {
+      for (const filter of entity.alternatives.flatMap(
+        (alternative) => alternative.filters
+      )) {
         const transition = nextTemporalTransition(row, filter, nowMs);
-        if (transition !== undefined) validUntil = Math.min(validUntil, transition);
+        if (transition !== undefined)
+          validUntil = Math.min(validUntil, transition);
       }
     }
     after = page.nextAfter;
   } while (after);
-  const digest = crypto.createHash('sha256').update(JSON.stringify(membership)).digest('hex');
+  const digest = crypto
+    .createHash("sha256")
+    .update(JSON.stringify(membership))
+    .digest("hex");
   cache.set(key, {
     epoch: state.epoch,
     watermarkSeq: state.watermark.seq,
@@ -314,7 +350,7 @@ function temporalFingerprint(
 export function buildReplicaShapes(
   db: DatabaseSync,
   access: ReplicaShapeAccess,
-  now = new Date().toISOString(),
+  now = new Date().toISOString()
 ): ReplicaServerShape[] {
   const grantees = readGrantees(db, now, access.appId);
   const shapes: ReplicaServerShape[] = [];
@@ -327,25 +363,25 @@ export function buildReplicaShapes(
     const entities: ReplicaEntityShape[] = [];
     for (const entity of listVaultEntities(db)) {
       const ref = resolveEntity(entity, db);
-      if (!ref || ref.file !== 'vault') continue;
+      if (!ref || ref.file !== "vault") continue;
       let effective: ConsentAllow;
       try {
         const decision = evaluateConsent(
           db,
           {
-            kind: 'app',
+            kind: "app",
             callerId: grantee.app_id,
-            provAgentKind: 'app',
+            provAgentKind: "app",
             partyId: null,
             mayAct: canWrite(access.role),
           },
           ref.schema,
           ref.table,
-          'read',
+          "read",
           purpose,
-          now,
+          now
         );
-        if (decision.decision !== 'allow') continue;
+        if (decision.decision !== "allow") continue;
         effective = decision;
       } catch {
         // Malformed grant/policy JSON fails closed just as a replica shape
@@ -358,7 +394,15 @@ export function buildReplicaShapes(
         .filter((column) => column.pk > 0)
         .sort((left, right) => left.pk - right.pk)
         .map((column) => column.name);
-      const alternative = alternativeFor(db, ref.physical, effective, info, pk, unavailable, now);
+      const alternative = alternativeFor(
+        db,
+        ref.physical,
+        effective,
+        info,
+        pk,
+        unavailable,
+        now
+      );
       if (!alternative) continue;
       const alternatives = [alternative];
       const allowed = new Set(alternatives.flatMap((scope) => scope.columns));
@@ -368,14 +412,19 @@ export function buildReplicaShapes(
       // `undefined` would change the existing handler's semantics.
       const hasUnavailableFields =
         unavailable.size > 0 ||
-        alternatives.some((scope) => info.some((column) => !scope.columns.includes(column.name)));
+        alternatives.some((scope) =>
+          info.some((column) => !scope.columns.includes(column.name))
+        );
       const primaryKey =
-        pk.length === 1 && allowed.has(pk[0] ?? '')
+        pk.length === 1 && allowed.has(pk[0] ?? "")
           ? (pk[0] ?? REPLICA_SYNTHETIC_PRIMARY_KEY)
           : REPLICA_SYNTHETIC_PRIMARY_KEY;
       if (primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) allowed.add(primaryKey);
-      const ordered = info.map((column) => column.name).filter((column) => allowed.has(column));
-      if (allowed.has(REPLICA_SYNTHETIC_PRIMARY_KEY)) ordered.push(REPLICA_SYNTHETIC_PRIMARY_KEY);
+      const ordered = info
+        .map((column) => column.name)
+        .filter((column) => allowed.has(column));
+      if (allowed.has(REPLICA_SYNTHETIC_PRIMARY_KEY))
+        ordered.push(REPLICA_SYNTHETIC_PRIMARY_KEY);
       entities.push({
         entity,
         physical: ref.physical,
@@ -401,16 +450,27 @@ export function buildReplicaShapes(
           filters: alternative.filters,
           columns: alternative.columns,
         })),
-        temporalFingerprint: temporalFingerprint(db, appId, purpose, entity, nowMs),
+        temporalFingerprint: temporalFingerprint(
+          db,
+          appId,
+          purpose,
+          entity,
+          nowMs
+        ),
       })),
     };
-    const digest = crypto.createHash('sha256').update(JSON.stringify(digestInput)).digest('hex');
+    const digest = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(digestInput))
+      .digest("hex");
     const shapeId = `${appId}:${digest.slice(0, 24)}`;
-    const entityMap = new Map(entities.map((entity) => [entity.entity, entity]));
+    const entityMap = new Map(
+      entities.map((entity) => [entity.entity, entity])
+    );
     const rowKeySecret = crypto
-      .createHmac('sha256', grantee.signing_key)
+      .createHmac("sha256", grantee.signing_key)
       .update(`replica-row-key\u0000${replicaEpoch}`)
-      .digest('hex');
+      .digest("hex");
     const shape = {
       shapeId,
       appId,
@@ -418,7 +478,7 @@ export function buildReplicaShapes(
       entities,
       entityMap,
     } as ReplicaServerShape;
-    Object.defineProperty(shape, 'rowKeySecret', {
+    Object.defineProperty(shape, "rowKeySecret", {
       value: rowKeySecret,
       enumerable: false,
     });
@@ -427,15 +487,18 @@ export function buildReplicaShapes(
   return shapes;
 }
 
-function keyValues(entity: ReplicaEntityShape, row: ReplicaRow): SQLInputValue[] | undefined {
+function keyValues(
+  entity: ReplicaEntityShape,
+  row: ReplicaRow
+): SQLInputValue[] | undefined {
   const values: SQLInputValue[] = [];
   for (const column of entity.keyColumns) {
     const value = row.values[column];
     if (
       value === null ||
-      typeof value === 'string' ||
-      typeof value === 'number' ||
-      typeof value === 'bigint' ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "bigint" ||
       ArrayBuffer.isView(value)
     ) {
       values.push(value as SQLInputValue);
@@ -457,12 +520,15 @@ function keyValues(entity: ReplicaEntityShape, row: ReplicaRow): SQLInputValue[]
 function alternativeMatches(
   entity: ReplicaEntityShape,
   row: ReplicaRow,
-  alternative: ScopeAlternative,
+  alternative: ScopeAlternative
 ): boolean {
   const keys = keyValues(entity, row);
   if (!keys) return false;
   try {
-    return alternative.membership.get(...keys, ...alternative.membershipParams) !== undefined;
+    return (
+      alternative.membership.get(...keys, ...alternative.membershipParams) !==
+      undefined
+    );
   } catch {
     return false;
   }
@@ -473,15 +539,18 @@ export function replicaRowColumns(
   shape: ReplicaServerShape,
   entity: string,
   row: ReplicaRow,
-  nowMs = Date.now(),
+  nowMs = Date.now()
 ): Set<string> | undefined {
   void nowMs;
   const schema = shape.entityMap.get(entity);
   if (!schema) return undefined;
-  const applicable = schema.alternatives.filter((scope) => alternativeMatches(schema, row, scope));
+  const applicable = schema.alternatives.filter((scope) =>
+    alternativeMatches(schema, row, scope)
+  );
   if (applicable.length === 0) return undefined;
   const columns = new Set(applicable.flatMap((scope) => scope.columns));
-  if (schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) columns.add(schema.primaryKey);
+  if (schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY)
+    columns.add(schema.primaryKey);
   return columns;
 }
 
@@ -494,7 +563,7 @@ export interface ReplicaHistoricalRowState {
 export function replicaHistoricalRowState(
   shape: ReplicaServerShape,
   entity: string,
-  oldValuesJson: string | null,
+  oldValuesJson: string | null
 ): ReplicaHistoricalRowState {
   const schema = shape.entityMap.get(entity);
   if (!schema) return { known: true };
@@ -507,8 +576,10 @@ export function replicaHistoricalRowState(
     }
     try {
       if (
-        alternative.historicalMembership.get(oldValuesJson, ...alternative.historicalParams) !==
-        undefined
+        alternative.historicalMembership.get(
+          oldValuesJson,
+          ...alternative.historicalParams
+        ) !== undefined
       ) {
         applicable.push(alternative);
       }
@@ -516,9 +587,11 @@ export function replicaHistoricalRowState(
       unknown = true;
     }
   }
-  if (applicable.length === 0) return unknown ? { known: false } : { known: true };
+  if (applicable.length === 0)
+    return unknown ? { known: false } : { known: true };
   const columns = new Set(applicable.flatMap((scope) => scope.columns));
-  if (schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY) columns.add(schema.primaryKey);
+  if (schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY)
+    columns.add(schema.primaryKey);
   return { known: true, columns };
 }
 
@@ -526,15 +599,19 @@ export function replicaHistoricalRowState(
 export function replicaWireRowId(
   shape: ReplicaServerShape,
   entity: string,
-  canonicalRowId: string,
+  canonicalRowId: string
 ): string {
   const schema = shape.entityMap.get(entity);
-  if (!schema) throw new Error(`entity ${entity} is not present in shape ${shape.shapeId}`);
-  if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY) return canonicalRowId;
+  if (!schema)
+    throw new Error(
+      `entity ${entity} is not present in shape ${shape.shapeId}`
+    );
+  if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY)
+    return canonicalRowId;
   const digest = crypto
-    .createHmac('sha256', shape.rowKeySecret)
+    .createHmac("sha256", shape.rowKeySecret)
     .update(JSON.stringify([shape.shapeId, entity, canonicalRowId]))
-    .digest('base64url');
+    .digest("base64url");
   return `r_${digest}`;
 }
 
@@ -551,7 +628,7 @@ export function shapeReplicaRow(
   shape: ReplicaServerShape,
   entity: string,
   row: ReplicaRow,
-  nowMs = Date.now(),
+  nowMs = Date.now()
 ): ReplicaRowWire | undefined {
   const columns = replicaRowColumns(shape, entity, row, nowMs);
   const schema = shape.entityMap.get(entity);
@@ -562,7 +639,9 @@ export function shapeReplicaRow(
     if (column === REPLICA_SYNTHETIC_PRIMARY_KEY) values[column] = rowId;
     else if (column in row.values) values[column] = row.values[column];
   }
-  const oversizedFields = row.deferredColumns.filter((column) => columns.has(column));
+  const oversizedFields = row.deferredColumns.filter((column) =>
+    columns.has(column)
+  );
   return {
     shapeId: shape.shapeId,
     entity,
@@ -572,6 +651,8 @@ export function shapeReplicaRow(
   };
 }
 
-export function replicaShapesWire(shapes: ReplicaServerShape[]): ReplicaShapeWire[] {
+export function replicaShapesWire(
+  shapes: ReplicaServerShape[]
+): ReplicaShapeWire[] {
   return shapes.map(publicShape);
 }

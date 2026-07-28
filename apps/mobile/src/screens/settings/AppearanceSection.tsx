@@ -3,8 +3,8 @@
 // (kit/theme/appearance) re-renders every themed surface immediately, so the
 // choice previews live under the finger. 'System' follows the OS scheme.
 
-import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
   setAppearance,
@@ -14,13 +14,13 @@ import {
   useTheme,
   type Appearance,
   type ThemeColors,
-} from '../../kit/theme';
-import SettingsSection from './SettingsSection';
+} from "../../kit/theme";
+import SettingsSection from "./SettingsSection";
 
 const OPTIONS: ReadonlyArray<{ value: Appearance; label: string }> = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
 ];
 
 export default function AppearanceSection(): React.JSX.Element {
@@ -42,13 +42,16 @@ export default function AppearanceSection(): React.JSX.Element {
               onPress={() => setAppearance(opt.value)}
               style={[styles.seg, active && styles.segActive]}
             >
-              <Text style={[styles.segLabel, active && styles.segLabelActive]}>{opt.label}</Text>
+              <Text style={[styles.segLabel, active && styles.segLabelActive]}>
+                {opt.label}
+              </Text>
             </Pressable>
           );
         })}
       </View>
       <Text style={styles.help}>
-        Choose how Centraid looks. System follows your phone&apos;s light or dark setting.
+        Choose how Centraid looks. System follows your phone&apos;s light or
+        dark setting.
       </Text>
     </SettingsSection>
   );
@@ -56,22 +59,22 @@ export default function AppearanceSection(): React.JSX.Element {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    help: { ...t('small'), color: colors.ink3, marginTop: spacing[3] },
+    help: { ...t("small"), color: colors.ink3, marginTop: spacing[3] },
     seg: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 8,
       flex: 1,
       paddingVertical: 9,
     },
     segActive: { backgroundColor: colors.accent },
-    segLabel: { ...t('body'), color: colors.ink2 },
-    segLabelActive: { color: '#fff' },
+    segLabel: { ...t("body"), color: colors.ink2 },
+    segLabelActive: { color: "#fff" },
     segment: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       borderRadius: 11,
       borderWidth: 1,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 4,
       padding: 3,
     },

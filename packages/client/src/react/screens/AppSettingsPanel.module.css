@@ -130,7 +130,7 @@
 .settingsTabsWrap .settingsTabs button:hover {
   color: var(--ink-2);
 }
-.settingsTabsWrap .settingsTabs button[data-active='true'] {
+.settingsTabsWrap .settingsTabs button[data-active="true"] {
   box-shadow: 0 0 0 0.5px var(--line);
 }
 .settingsTabBadge {
@@ -150,7 +150,7 @@
 .settingsTabBadge[hidden] {
   display: none;
 }
-.settingsTabsWrap .settingsTabs button[data-active='true'] .settingsTabBadge {
+.settingsTabsWrap .settingsTabs button[data-active="true"] .settingsTabBadge {
   background: var(--accent);
   color: #fff;
 }
@@ -255,7 +255,7 @@
   border-radius: 5px;
   font-size: 12px;
 }
-.settingsPane .paneSeg button[data-active='true'] {
+.settingsPane .paneSeg button[data-active="true"] {
   background: var(--bg-elev);
   box-shadow: 0 0 0 0.5px var(--line);
 }
@@ -299,18 +299,21 @@
   align-self: stretch;
   width: 3px;
   border-radius: 0 2px 2px 0;
-  background: var(--accent-color, color-mix(in oklab, var(--ink) 35%, transparent));
+  background: var(
+    --accent-color,
+    color-mix(in oklab, var(--ink) 35%, transparent)
+  );
   transition:
     background 0.18s ease,
     opacity 0.18s ease;
 }
-.order[data-enabled='false'] .orderRail {
+.order[data-enabled="false"] .orderRail {
   background: color-mix(in oklab, var(--ink) 16%, transparent);
 }
-.order[data-enabled='false'] .orderSchedule {
+.order[data-enabled="false"] .orderSchedule {
   color: var(--ink-3);
 }
-.order[data-enabled='false'] .orderPrompt {
+.order[data-enabled="false"] .orderPrompt {
   opacity: 0.6;
 }
 .orderBody {
@@ -393,11 +396,11 @@
   border-radius: 3px;
   margin-left: auto;
 }
-.orderResult[data-ok='true'] {
+.orderResult[data-ok="true"] {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 10%, transparent);
 }
-.orderResult[data-ok='false'] {
+.orderResult[data-ok="false"] {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
@@ -448,7 +451,7 @@
     box-shadow 0.18s ease;
 }
 .orderToggleTrack::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 2px;
   left: 2px;
@@ -460,7 +463,10 @@
   transition: transform 0.18s cubic-bezier(0.34, 1.32, 0.7, 1);
 }
 .orderToggle input:checked + .orderToggleTrack {
-  background: var(--accent-color, color-mix(in oklab, var(--ink) 70%, transparent));
+  background: var(
+    --accent-color,
+    color-mix(in oklab, var(--ink) 70%, transparent)
+  );
 }
 .orderToggle input:checked + .orderToggleTrack::after {
   transform: translateX(12px);
@@ -543,10 +549,10 @@
 .settingsMenuItem:hover {
   background: color-mix(in oklab, var(--ink) 5%, transparent);
 }
-.settingsMenuItem[data-danger='true'] .settingsMenuLabel {
+.settingsMenuItem[data-danger="true"] .settingsMenuLabel {
   color: var(--danger);
 }
-.settingsMenuItem[data-danger='true']:hover {
+.settingsMenuItem[data-danger="true"]:hover {
   background: color-mix(in oklab, var(--danger) 10%, transparent);
 }
 button.orderName {

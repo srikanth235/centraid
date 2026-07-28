@@ -9,7 +9,13 @@
  * "no vault on this gateway" state rather than an error.
  */
 
-import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  enc,
+  readJson,
+} from "./gateway-client-core.js";
 
 /** Presence + the ADDRESSED vault's identity, from `GET /_vault/status`. */
 export interface VaultStatus {
@@ -63,20 +69,25 @@ export interface AppScopeEntry {
  * gateway mounts no scopes plane (route 404s) — an older gateway, not an error;
  * callers fall back to the single ambient scope.
  */
-export async function listAppScopes(appId?: string): Promise<AppScopeEntry[] | undefined> {
+export async function listAppScopes(
+  appId?: string
+): Promise<AppScopeEntry[] | undefined> {
   const { baseUrl, token } = await auth();
   const path = appId
     ? `/centraid/_vault/scopes?app=${encodeURIComponent(appId)}`
-    : '/centraid/_vault/scopes';
+    : "/centraid/_vault/scopes";
   const res = await doFetch(baseUrl, path, {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
   if (res.status === 404) {
     await res.body?.cancel().catch(() => {});
     return undefined;
   }
-  const body = await readJson<{ scopes: AppScopeEntry[] }>(res, 'list app scopes');
+  const body = await readJson<{ scopes: AppScopeEntry[] }>(
+    res,
+    "list app scopes"
+  );
   return body.scopes;
 }
 
@@ -123,11 +134,14 @@ export interface VaultAgentEntry {
 /** Active enrolled agents, including the stable id used by consent rows. */
 export async function listAgents(): Promise<VaultAgentEntry[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/agents', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/agents", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ agents: VaultAgentEntry[] }>(res, 'list agents');
+  const body = await readJson<{ agents: VaultAgentEntry[] }>(
+    res,
+    "list agents"
+  );
   return body.agents;
 }
 
@@ -142,7 +156,7 @@ export interface VaultEntityHit {
 }
 
 export interface VaultAnchorHit extends VaultEntityHit {
-  type: 'core.link_anchor';
+  type: "core.link_anchor";
   sourceType: string;
   sourceId: string;
   sourceField: string;
@@ -151,32 +165,53 @@ export interface VaultAnchorHit extends VaultEntityHit {
 /** Owner-trust entity search used by stable @-tokens in automation instructions. */
 export async function listVaultEntityTypes(): Promise<string[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/entities', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/entities", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ entities: string[] }>(res, 'list vault entity types');
+  const body = await readJson<{ entities: string[] }>(
+    res,
+    "list vault entity types"
+  );
   return body.entities;
 }
 
-export async function searchVaultEntities(term: string): Promise<VaultEntityHit[]> {
+export async function searchVaultEntities(
+  term: string
+): Promise<VaultEntityHit[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/picker?term=${enc(term)}&limit=8`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const body = await readJson<{ cards: VaultEntityHit[] }>(res, 'search vault entities');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/picker?term=${enc(term)}&limit=8`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  const body = await readJson<{ cards: VaultEntityHit[] }>(
+    res,
+    "search vault entities"
+  );
   return body.cards;
 }
 
 /** Owner-trust live anchors used for row/field/span-grade automation tags. */
-export async function searchVaultAnchors(term: string): Promise<VaultAnchorHit[]> {
+export async function searchVaultAnchors(
+  term: string
+): Promise<VaultAnchorHit[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/anchors?term=${enc(term)}&limit=8`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const body = await readJson<{ anchors: VaultAnchorHit[] }>(res, 'search vault anchors');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/anchors?term=${enc(term)}&limit=8`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  const body = await readJson<{ anchors: VaultAnchorHit[] }>(
+    res,
+    "search vault anchors"
+  );
   return body.anchors;
 }
 
@@ -192,7 +227,7 @@ export interface VaultParkedEntry {
   invocationId: string;
   command: string;
   parkedAt: string;
-  callerKind: 'app' | 'agent' | 'assistant' | 'owner-device';
+  callerKind: "app" | "agent" | "assistant" | "owner-device";
   callerId: string;
   caller: string | null;
   input: Record<string, unknown>;
@@ -204,15 +239,15 @@ export interface VaultParkedEntry {
  */
 export async function vaultStatus(): Promise<VaultStatus | undefined> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/status', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/status", {
+    method: "GET",
     headers: authHeaders(token),
   });
   if (res.status === 404) {
     await res.body?.cancel().catch(() => {});
     return undefined;
   }
-  return readJson<VaultStatus>(res, 'fetch vault status');
+  return readJson<VaultStatus>(res, "fetch vault status");
 }
 
 /**
@@ -221,15 +256,15 @@ export async function vaultStatus(): Promise<VaultStatus | undefined> {
  */
 export async function listVaults(): Promise<VaultListEntry[] | undefined> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/vaults', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/vaults", {
+    method: "GET",
     headers: authHeaders(token),
   });
   if (res.status === 404) {
     await res.body?.cancel().catch(() => {});
     return undefined;
   }
-  const body = await readJson<{ vaults: VaultListEntry[] }>(res, 'list vaults');
+  const body = await readJson<{ vaults: VaultListEntry[] }>(res, "list vaults");
   return body.vaults;
 }
 
@@ -249,27 +284,34 @@ export async function updateVault(input: {
   blurb?: string | null;
 }): Promise<VaultListEntry> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/vaults/${enc(input.vaultId)}`, {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
-      ...(input.name === undefined ? {} : { name: input.name }),
-      ...(input.color === undefined ? {} : { color: input.color }),
-      ...(input.icon === undefined ? {} : { icon: input.icon }),
-      ...(input.blurb === undefined ? {} : { blurb: input.blurb }),
-    }),
-  });
-  return readJson<VaultListEntry>(res, 'update vault');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/vaults/${enc(input.vaultId)}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.color === undefined ? {} : { color: input.color }),
+        ...(input.icon === undefined ? {} : { icon: input.icon }),
+        ...(input.blurb === undefined ? {} : { blurb: input.blurb }),
+      }),
+    }
+  );
+  return readJson<VaultListEntry>(res, "update vault");
 }
 
 /** Enrolled apps with their active grants. */
 export async function vaultApps(): Promise<VaultAppEntry[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/apps', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/apps", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ apps: VaultAppEntry[] }>(res, 'list vault apps');
+  const body = await readJson<{ apps: VaultAppEntry[] }>(
+    res,
+    "list vault apps"
+  );
   return body.apps;
 }
 
@@ -285,16 +327,20 @@ export async function approveVaultGrant(input: {
   expiresAt?: string;
 }): Promise<{ grantId: string }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/apps/${enc(input.appId)}/grants`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
-      purpose: input.purpose,
-      scopes: input.scopes,
-      ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
-    }),
-  });
-  return readJson<{ grantId: string }>(res, 'approve vault grant');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/apps/${enc(input.appId)}/grants`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({
+        purpose: input.purpose,
+        scopes: input.scopes,
+        ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
+      }),
+    }
+  );
+  return readJson<{ grantId: string }>(res, "approve vault grant");
 }
 
 /** Revoke one grant (owner act; the cascade runs gateway-side). */
@@ -302,21 +348,28 @@ export async function revokeVaultGrant(input: {
   grantId: string;
 }): Promise<{ viewsRevoked: number; parkedDropped: number }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/grants/${enc(input.grantId)}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
-  return readJson(res, 'revoke vault grant');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/grants/${enc(input.grantId)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson(res, "revoke vault grant");
 }
 
 /** Invocations parked for the owner's say-so. */
 export async function vaultParked(): Promise<VaultParkedEntry[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/parked', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/parked", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ parked: VaultParkedEntry[] }>(res, 'list parked invocations');
+  const body = await readJson<{ parked: VaultParkedEntry[] }>(
+    res,
+    "list parked invocations"
+  );
   return body.parked;
 }
 
@@ -326,12 +379,16 @@ export async function confirmVaultParked(input: {
   approve: boolean;
 }): Promise<{ status: string }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/parked/${enc(input.invocationId)}`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ approve: input.approve }),
-  });
-  return readJson<{ status: string }>(res, 'confirm parked invocation');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/parked/${enc(input.invocationId)}`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ approve: input.approve }),
+    }
+  );
+  return readJson<{ status: string }>(res, "confirm parked invocation");
 }
 
 /** One app's scenario-seed state (issue #290 phase 1). */
@@ -344,11 +401,14 @@ export interface VaultDemoApp {
 /** Per-app demo status: which apps ship a scenario, which have rows loaded. */
 export async function vaultDemoStatus(): Promise<VaultDemoApp[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/demo', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/demo", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ apps: VaultDemoApp[] }>(res, 'read demo status');
+  const body = await readJson<{ apps: VaultDemoApp[] }>(
+    res,
+    "read demo status"
+  );
   return body.apps;
 }
 
@@ -356,16 +416,16 @@ export async function vaultDemoStatus(): Promise<VaultDemoApp[]> {
 export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_vault/demo/${enc(appId)}`, {
-    method: 'POST',
+    method: "POST",
     headers: authHeaders(token),
   });
-  return readJson<{ rows: number }>(res, 'load demo data');
+  return readJson<{ rows: number }>(res, "load demo data");
 }
 
 /** One staged import batch as the shell lists it (issue #290 phase 2). */
 export interface VaultImportBatch {
   batchId: string;
-  status: 'draft' | 'published' | 'discarded';
+  status: "draft" | "published" | "discarded";
   createdAt: string;
   resolvedAt: string | null;
   summary: Record<string, number>;
@@ -378,7 +438,7 @@ export interface VaultImportRow {
   seq: number;
   entityType: string;
   externalId: string;
-  disposition: 'create' | 'update' | 'skip' | 'merge-candidate';
+  disposition: "create" | "update" | "skip" | "merge-candidate";
   note: string | null;
   publishedEntityId: string | null;
 }
@@ -398,33 +458,45 @@ export async function vaultImportStage(input: {
   unrouted: string[];
 }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/imports', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+  const res = await doFetch(baseUrl, "/centraid/_vault/imports", {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify(input),
   });
-  return readJson(res, 'stage import');
+  return readJson(res, "stage import");
 }
 
 /** Batches, newest first. */
 export async function vaultImportsList(): Promise<VaultImportBatch[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/imports', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/imports", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ batches: VaultImportBatch[] }>(res, 'list imports');
+  const body = await readJson<{ batches: VaultImportBatch[] }>(
+    res,
+    "list imports"
+  );
   return body.batches;
 }
 
 /** The staged rows of one batch, for review. */
-export async function vaultImportRows(batchId: string): Promise<VaultImportRow[]> {
+export async function vaultImportRows(
+  batchId: string
+): Promise<VaultImportRow[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/imports/${enc(batchId)}`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const body = await readJson<{ rows: VaultImportRow[] }>(res, 'read import batch');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/imports/${enc(batchId)}`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  const body = await readJson<{ rows: VaultImportRow[] }>(
+    res,
+    "read import batch"
+  );
   return body.rows;
 }
 
@@ -436,21 +508,31 @@ export async function vaultImportPublish(batchId: string): Promise<{
   failed: unknown[];
 }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/imports/${enc(batchId)}/publish`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  });
-  return readJson(res, 'publish import');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/imports/${enc(batchId)}/publish`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson(res, "publish import");
 }
 
 /** Discard a draft batch. */
-export async function vaultImportDiscard(batchId: string): Promise<{ receiptId: string }> {
+export async function vaultImportDiscard(
+  batchId: string
+): Promise<{ receiptId: string }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/imports/${enc(batchId)}/discard`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  });
-  return readJson(res, 'discard import');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/imports/${enc(batchId)}/discard`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson(res, "discard import");
 }
 
 /** One connection's health (issue #290 phase 4). */
@@ -459,7 +541,7 @@ export interface VaultConnection {
   kind: string;
   label: string;
   principal: string | null;
-  status: 'active' | 'needs-auth' | 'failing' | 'paused';
+  status: "active" | "needs-auth" | "failing" | "paused";
   lastRunAt: string | null;
   lastRun: {
     status: string;
@@ -473,28 +555,31 @@ export interface VaultConnection {
 /** Connection health — every connection with its latest run. */
 export async function vaultConnections(): Promise<VaultConnection[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/imports/connections', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/imports/connections", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ connections: VaultConnection[] }>(res, 'read connections');
+  const body = await readJson<{ connections: VaultConnection[] }>(
+    res,
+    "read connections"
+  );
   return body.connections;
 }
 
 /** Pause or resume a connection (owner act). */
 export async function vaultConnectionSetStatus(
   connectionId: string,
-  status: 'paused' | 'active',
+  status: "paused" | "active"
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_vault/imports/connections/${enc(connectionId)}/status`,
     {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
       body: JSON.stringify({ status }),
-    },
+    }
   );
-  await readJson(res, 'set connection status');
+  await readJson(res, "set connection status");
 }

@@ -1,14 +1,14 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 import {
   openLocalBackupProvider,
   wrapRecoveryKit,
   WAL_DB_FILES,
   type BackupProvider,
-} from '@centraid/backup';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
+} from "@centraid/backup";
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   updateBackupPolicy,
   updateBlobStoreSettings,
@@ -16,15 +16,22 @@ import {
   ReplicaIndex,
   sealKeyFileFor,
   type BackupPolicyPatch,
-} from '@centraid/vault';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+} from "@centraid/vault";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { HealthRegistry } from '../serve/health-registry.js';
-import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
-import { runCasOnlyReconciliation } from './backup-cas-reconciliation.js';
-import type { BackupConfig } from './backup-config.js';
-import { conflictAfterFirstCall } from './backup-conflict-provider.js';
-import { BackupService, recoveryWindowMs, walDrainDelayMs } from './backup-service.js';
+import { HealthRegistry } from "../serve/health-registry.js";
+import {
+  openVaultRegistry,
+  type VaultRegistry,
+} from "../serve/vault-registry.js";
+import { runCasOnlyReconciliation } from "./backup-cas-reconciliation.js";
+import type { BackupConfig } from "./backup-config.js";
+import { conflictAfterFirstCall } from "./backup-conflict-provider.js";
+import {
+  BackupService,
+  recoveryWindowMs,
+  walDrainDelayMs,
+} from "./backup-service.js";
 
 const silentLogger = {
   info: () => undefined,
@@ -32,17 +39,19 @@ const silentLogger = {
   error: () => undefined,
 };
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('backup-service', () => {
+describe("backup-service", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
   function openRegistry(rootDir: string): VaultRegistry {
     const registry = openVaultRegistry({
       rootDir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
-    registry.create('Test vault');
+    registry.create("Test vault");
     cleanups.push(() => registry.stop());
     return registry;
   }
@@ -59,33 +68,36 @@ describe('backup-service', () => {
   }
 
   async function verifyExportedKit(h: Harness) {
-    const kit = wrapRecoveryKit(await h.service.recoveryKitDocument(), 'test-password');
+    const kit = wrapRecoveryKit(
+      await h.service.recoveryKitDocument(),
+      "test-password"
+    );
     return h.service.verifyRecoveryKit({
       kit,
-      password: 'test-password',
+      password: "test-password",
       lossConsent: true,
     });
   }
 
   async function harness(
     policy: BackupPolicyPatch = {},
-    wrapProvider?: (real: BackupProvider) => BackupProvider,
+    wrapProvider?: (real: BackupProvider) => BackupProvider
   ): Promise<Harness> {
-    const vaultRoot = await tempDir('backup-svc-vault');
-    const providerDir = await tempDir('backup-svc-provider');
-    const backupDir = await tempDir('backup-svc-state');
+    const vaultRoot = await tempDir("backup-svc-vault");
+    const providerDir = await tempDir("backup-svc-provider");
+    const backupDir = await tempDir("backup-svc-state");
     const registry = openRegistry(vaultRoot);
     const health = new HealthRegistry();
     const vaultId = registry.defaultVaultId();
 
-    const fixtureDir = await tempDir('backup-svc-fixture');
-    const fixtureFile = path.join(fixtureDir, 'vault.db');
-    await fs.writeFile(fixtureFile, 'v0');
+    const fixtureDir = await tempDir("backup-svc-fixture");
+    const fixtureFile = path.join(fixtureDir, "vault.db");
+    await fs.writeFile(fixtureFile, "v0");
 
     const clock = { now: Date.now() };
     const config: BackupConfig = {
       enabled: true,
-      provider: { kind: 'local', dir: providerDir },
+      provider: { kind: "local", dir: providerDir },
     };
     updateBackupPolicy(registry.current().db.vault, policy);
     const realProvider = openLocalBackupProvider({ rootDir: providerDir });
@@ -102,15 +114,15 @@ describe('backup-service', () => {
         return Promise.resolve([
           ...bases.map((base) => ({
             path: WAL_DB_FILES[base.db],
-            kind: 'db' as const,
+            kind: "db" as const,
             absolutePath: base.file,
             sha256: base.sha256,
             walGeneration: base.generation,
             baseTickMs: base.createdAtMs,
           })),
           {
-            path: 'fixture.bin',
-            kind: 'blob' as const,
+            path: "fixture.bin",
+            kind: "blob" as const,
             absolutePath: fixtureFile,
           },
         ]);
@@ -129,22 +141,22 @@ describe('backup-service', () => {
     };
   }
 
-  test('recoveryWindowMs maps a retention ladder to its daily rung, non-ladder to none (issue #439 R4)', () => {
+  test("recoveryWindowMs maps a retention ladder to its daily rung, non-ladder to none (issue #439 R4)", () => {
     const DAY_MS = 24 * 60 * 60 * 1000;
     expect(
       recoveryWindowMs({
-        kind: 'ladder',
+        kind: "ladder",
         keepAllDays: 7,
         dailyDays: 30,
         weeklyDays: 90,
         neverPruneNewest: true,
-      }),
+      })
     ).toBe(30 * DAY_MS);
-    expect(recoveryWindowMs({ kind: 'none' })).toBeUndefined();
+    expect(recoveryWindowMs({ kind: "none" })).toBeUndefined();
     expect(recoveryWindowMs(undefined)).toBeUndefined();
   });
 
-  test('the WAL clock is absent without a backend and follows actual remaining RPO (#456 I4)', () => {
+  test("the WAL clock is absent without a backend and follows actual remaining RPO (#456 I4)", () => {
     const now = 1_000_000;
     expect(walDrainDelayMs(false, [{ rpoSeconds: 30 }], now)).toBeUndefined();
     expect(
@@ -155,15 +167,21 @@ describe('backup-service', () => {
           { rpoSeconds: 60, lastAttemptMs: now - 30_000 },
           { rpoSeconds: 300, lastAttemptMs: now - 250_000 },
         ],
-        now,
-      ),
+        now
+      )
     ).toBe(30_000);
-    expect(walDrainDelayMs(true, [{ rpoSeconds: 60, lastAttemptMs: now - 90_000 }], now)).toBe(0);
+    expect(
+      walDrainDelayMs(
+        true,
+        [{ rpoSeconds: 60, lastAttemptMs: now - 90_000 }],
+        now
+      )
+    ).toBe(0);
     expect(walDrainDelayMs(true, [{ rpoSeconds: 60 }], now)).toBe(60_000);
     expect(walDrainDelayMs(true, [], now)).toBe(30_000);
   });
 
-  test('first run creates a target, mints a keyring, and registers a snapshot', async () => {
+  test("first run creates a target, mints a keyring, and registers a snapshot", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);
 
@@ -173,20 +191,24 @@ describe('backup-service', () => {
     expect(status?.lastSeq).toBe(1);
     expect(status?.lastBackupAt).toBeTruthy();
     expect(status?.lastError).toBeUndefined();
-    expect(status?.providerPolicy?.status).toBe('synced');
+    expect(status?.providerPolicy?.status).toBe("synced");
 
-    const keys = new KeyStore(path.dirname(sealKeyFileFor(h.registry.current().dir)));
-    expect(keys.export('keyring.key')).not.toBeNull();
-    await expect(fs.access(path.join(h.backupDir, 'keys'))).rejects.toMatchObject({
-      code: 'ENOENT',
+    const keys = new KeyStore(
+      path.dirname(sealKeyFileFor(h.registry.current().dir))
+    );
+    expect(keys.export("keyring.key")).not.toBeNull();
+    await expect(
+      fs.access(path.join(h.backupDir, "keys"))
+    ).rejects.toMatchObject({
+      code: "ENOENT",
     });
 
     const snap = await h.health.snapshot();
-    const backups = snap.components.find((c) => c.component === 'backups');
-    expect(backups?.status).toBe('ok');
+    const backups = snap.components.find((c) => c.component === "backups");
+    expect(backups?.status).toBe("ok");
   });
 
-  test('erase fencing advances the provider generation before local state is removed', async () => {
+  test("erase fencing advances the provider generation before local state is removed", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);
     const target = (await h.service.status())[h.vaultId]!;
@@ -195,11 +217,13 @@ describe('backup-service', () => {
     await h.service.fenceVaultForErase(h.vaultId);
 
     const provider = openLocalBackupProvider({ rootDir: h.providerDir });
-    expect((await provider.getTarget(target.targetId)).currentGeneration).toBe(2);
+    expect((await provider.getTarget(target.targetId)).currentGeneration).toBe(
+      2
+    );
     expect((await h.service.status())[h.vaultId]?.generation).toBe(2);
   });
 
-  test('a local policy change is pushed and its provider echo is persisted', async () => {
+  test("a local policy change is pushed and its provider echo is persisted", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);
     updateBackupPolicy(h.registry.current().db.vault, { rpoSeconds: 15 * 60 });
@@ -207,36 +231,38 @@ describe('backup-service', () => {
     const synced = await h.service.syncPolicy(h.vaultId);
     const status = (await h.service.status())[h.vaultId];
     expect(synced).toMatchObject({
-      status: 'synced',
+      status: "synced",
       desired: { rpoSeconds: 15 * 60 },
     });
     expect(status?.providerPolicy?.echo?.rpoSeconds).toBe(15 * 60);
   });
 
-  test('a backup run pushes a policy changed outside the route', async () => {
+  test("a backup run pushes a policy changed outside the route", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);
     updateBackupPolicy(h.registry.current().db.vault, { verifyEveryDays: 3 });
 
     await h.service.runBackup(h.vaultId);
 
-    expect((await h.service.status())[h.vaultId]?.providerPolicy).toMatchObject({
-      status: 'synced',
-      desired: { verifyEveryDays: 3 },
-      echo: { verifyEveryDays: 3 },
-    });
+    expect((await h.service.status())[h.vaultId]?.providerPolicy).toMatchObject(
+      {
+        status: "synced",
+        desired: { verifyEveryDays: 3 },
+        echo: { verifyEveryDays: 3 },
+      }
+    );
   });
 
-  test('remote-primary CAS is reconciled and persisted on policy cadence without a backup target', async () => {
-    const vaultRoot = await tempDir('backup-svc-cas-only-vault');
-    const backupDir = await tempDir('backup-svc-cas-only-state');
+  test("remote-primary CAS is reconciled and persisted on policy cadence without a backup target", async () => {
+    const vaultRoot = await tempDir("backup-svc-cas-only-vault");
+    const backupDir = await tempDir("backup-svc-cas-only-state");
     const registry = openRegistry(vaultRoot);
     const plane = registry.current();
     updateBlobStoreSettings(plane.db, {
       blob_store: {
-        kind: 's3',
-        connectionId: 'cas-only',
-        connectionKind: 'provider',
+        kind: "s3",
+        connectionId: "cas-only",
+        connectionKind: "provider",
       },
     });
     const clock = { now: Date.now() };
@@ -246,12 +272,12 @@ describe('backup-service', () => {
         collect: async () => ({
           configured: true,
           collection: {
-            source: 'bucket',
+            source: "bucket",
             providerAttested: false,
             objects: [],
           },
         }),
-      }),
+      })
     );
     const health = new HealthRegistry();
     const service = new BackupService({
@@ -267,17 +293,21 @@ describe('backup-service', () => {
     await service.tick();
     expect(casReconcile).toHaveBeenCalledOnce();
     await expect(service.status()).resolves.toStrictEqual({});
-    expect((await service.casReconciliationStatus())[plane.boot.vaultId]).toMatchObject({
-      status: 'ok',
+    expect(
+      (await service.casReconciliationStatus())[plane.boot.vaultId]
+    ).toMatchObject({
+      status: "ok",
       backup: { configured: false },
-      cas: { configured: true, source: 'bucket' },
+      cas: { configured: true, source: "bucket" },
     });
     const snapshot = await health.snapshot();
     expect(
-      snapshot.components.find((component) => component.component === 'backups'),
+      snapshot.components.find((component) => component.component === "backups")
     ).toMatchObject({
-      status: 'degraded',
-      detail: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/iu),
+      status: "degraded",
+      detail: expect.stringMatching(
+        /offsite bytes.*recovery kit cannot restore/iu
+      ),
     });
 
     await service.tick();
@@ -287,19 +317,19 @@ describe('backup-service', () => {
     expect(casReconcile).toHaveBeenCalledTimes(2);
   });
 
-  test('CAS-only authenticated corruption remains an error through the health probe', async () => {
-    const vaultRoot = await tempDir('backup-svc-cas-health-vault');
-    const backupDir = await tempDir('backup-svc-cas-health-state');
+  test("CAS-only authenticated corruption remains an error through the health probe", async () => {
+    const vaultRoot = await tempDir("backup-svc-cas-health-vault");
+    const backupDir = await tempDir("backup-svc-cas-health-state");
     const registry = openRegistry(vaultRoot);
     const plane = registry.current();
     updateBlobStoreSettings(plane.db, {
       blob_store: {
-        kind: 's3',
-        connectionId: 'cas-only',
-        connectionKind: 'provider',
+        kind: "s3",
+        connectionId: "cas-only",
+        connectionKind: "provider",
       },
     });
-    const corrupt = 'b'.repeat(64);
+    const corrupt = "b".repeat(64);
     new ReplicaIndex(plane.db.vault).mark(corrupt, 10);
     const health = new HealthRegistry();
     const service = new BackupService({
@@ -313,7 +343,7 @@ describe('backup-service', () => {
           collect: async () => ({
             configured: true,
             collection: {
-              source: 'provider',
+              source: "provider",
               providerAttested: true,
               objects: [
                 {
@@ -321,7 +351,7 @@ describe('backup-service', () => {
                   sizeBytes: 10,
                   etagOrHash: corrupt,
                   storedAt: 1,
-                  state: 'live',
+                  state: "live",
                 },
               ],
             },
@@ -335,27 +365,33 @@ describe('backup-service', () => {
     const first = await health.snapshot();
     const second = await health.snapshot();
     for (const snapshot of [first, second]) {
-      expect(snapshot.components.find((row) => row.component === 'backups')).toMatchObject({
-        status: 'error',
+      expect(
+        snapshot.components.find((row) => row.component === "backups")
+      ).toMatchObject({
+        status: "error",
       });
-      expect(snapshot.components.find((row) => row.component === 'backups')?.detail).toMatch(
-        /1 missing\/corrupt/u,
-      );
+      expect(
+        snapshot.components.find((row) => row.component === "backups")?.detail
+      ).toMatch(/1 missing\/corrupt/u);
     }
   });
 
-  test('stop refuses new backup work after the in-flight chain is drained', async () => {
+  test("stop refuses new backup work after the in-flight chain is drained", async () => {
     const h = await harness();
     await h.service.stop();
 
-    await expect(h.service.runBackup(h.vaultId)).rejects.toThrow('backup service is stopped');
-    await expect(h.service.runVerify(h.vaultId)).rejects.toThrow('backup service is stopped');
+    await expect(h.service.runBackup(h.vaultId)).rejects.toThrow(
+      "backup service is stopped"
+    );
+    await expect(h.service.runVerify(h.vaultId)).rejects.toThrow(
+      "backup service is stopped"
+    );
     await expect(h.service.runRestoreVerify(h.vaultId)).rejects.toThrow(
-      'backup service is stopped',
+      "backup service is stopped"
     );
   });
 
-  test('a second run with nothing changed registers no new snapshot', async () => {
+  test("a second run with nothing changed registers no new snapshot", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);
     const first = (await h.service.status())[h.vaultId];
@@ -367,7 +403,7 @@ describe('backup-service', () => {
     expect(second?.generation).toBe(1);
   });
 
-  test('scheduled backups do not postpone the first restore-verification forever', async () => {
+  test("scheduled backups do not postpone the first restore-verification forever", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);
     const firstBackupAt = (await h.service.status())[h.vaultId]!.firstBackupAt;
@@ -381,15 +417,17 @@ describe('backup-service', () => {
     await h.service.tick(); // performs a fresh backup first, then checks restore due-ness
 
     expect(restoreVerifies).toBe(1);
-    expect((await h.service.status())[h.vaultId]!.firstBackupAt).toBe(firstBackupAt);
+    expect((await h.service.status())[h.vaultId]!.firstBackupAt).toBe(
+      firstBackupAt
+    );
   });
 
-  test('a real change registers an incremental snapshot', async () => {
+  test("a real change registers an incremental snapshot", async () => {
     const h = await harness();
     await h.service.runBackup(h.vaultId);
     expect((await h.service.status())[h.vaultId]?.lastSeq).toBe(1);
 
-    await fs.writeFile(h.fixtureFile, 'v1 — actually different content');
+    await fs.writeFile(h.fixtureFile, "v1 — actually different content");
     await h.service.runBackup(h.vaultId);
     expect((await h.service.status())[h.vaultId]?.lastSeq).toBe(2);
 
@@ -397,11 +435,11 @@ describe('backup-service', () => {
     expect(rows).toHaveLength(2);
   });
 
-  test('conflict_generation fences the target: health error, no bump, no further auto-backup', async () => {
+  test("conflict_generation fences the target: health error, no bump, no further auto-backup", async () => {
     const h = await harness({}, conflictAfterFirstCall);
     await h.service.runBackup(h.vaultId); // call #1 — succeeds, mints seq 1
 
-    await fs.writeFile(h.fixtureFile, 'v2 — after the rogue takeover');
+    await fs.writeFile(h.fixtureFile, "v2 — after the rogue takeover");
     await h.service.runBackup(h.vaultId); // call #2 — the wrapped provider 409s
 
     const fenced = (await h.service.status())[h.vaultId];
@@ -410,29 +448,33 @@ describe('backup-service', () => {
     expect(fenced?.lastError).toMatch(/another machine has taken over/u);
 
     const snap = await h.health.snapshot();
-    expect(snap.components.find((c) => c.component === 'backups')?.status).toBe('error');
+    expect(snap.components.find((c) => c.component === "backups")?.status).toBe(
+      "error"
+    );
 
     const before = fenced?.lastBackupAt;
     await h.service.runBackup(h.vaultId);
     expect((await h.service.status())[h.vaultId]?.lastBackupAt).toBe(before);
   });
 
-  test('the staleness probe flips after the clock advances past 2x the interval/verify window', async () => {
+  test("the staleness probe flips after the clock advances past 2x the interval/verify window", async () => {
     const h = await harness({ snapshotIntervalHours: 1, verifyEveryDays: 1 });
     await h.service.runBackup(h.vaultId);
     await h.service.runVerify(h.vaultId);
 
     let snap = await h.health.snapshot();
-    expect(snap.components.find((c) => c.component === 'backups')?.status).toBe('ok');
+    expect(snap.components.find((c) => c.component === "backups")?.status).toBe(
+      "ok"
+    );
 
     h.clock.now += 3 * 24 * 60 * 60 * 1000;
     snap = await h.health.snapshot();
-    const backups = snap.components.find((c) => c.component === 'backups');
-    expect(backups?.status).toBe('error');
+    const backups = snap.components.find((c) => c.component === "backups");
+    expect(backups?.status).toBe("error");
     expect(backups?.detail).toMatch(/stale/u);
   });
 
-  test('verify-only staleness (backup fresh, verify old) degrades without erroring', async () => {
+  test("verify-only staleness (backup fresh, verify old) degrades without erroring", async () => {
     const h = await harness({ snapshotIntervalHours: 24, verifyEveryDays: 7 });
     await h.service.runBackup(h.vaultId);
     await h.service.runVerify(h.vaultId);
@@ -442,12 +484,12 @@ describe('backup-service', () => {
     await h.service.runRestoreVerify(h.vaultId); // isolate ordinary verify staleness
 
     const snap = await h.health.snapshot();
-    const backups = snap.components.find((c) => c.component === 'backups');
-    expect(backups?.status).toBe('degraded');
+    const backups = snap.components.find((c) => c.component === "backups");
+    expect(backups?.status).toBe("degraded");
     expect(backups?.detail).toMatch(/verification is stale/u);
   });
 
-  test('recoveryKitStatus starts unconfirmed', async () => {
+  test("recoveryKitStatus starts unconfirmed", async () => {
     const h = await harness();
     await expect(h.service.recoveryKitStatus()).resolves.toStrictEqual({
       confirmedAt: null,
@@ -455,7 +497,7 @@ describe('backup-service', () => {
     });
   });
 
-  test('re-selecting and decrypting the exported kit stamps the current clock and persists it', async () => {
+  test("re-selecting and decrypting the exported kit stamps the current clock and persists it", async () => {
     const h = await harness();
     h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
     const result = await verifyExportedKit(h);
@@ -469,11 +511,11 @@ describe('backup-service', () => {
     });
   });
 
-  test('the hourly scheduler skips its tick while host power-context posture defers (#528 Phase D)', async () => {
+  test("the hourly scheduler skips its tick while host power-context posture defers (#528 Phase D)", async () => {
     vi.useFakeTimers();
     try {
-      const vaultRoot = await tempDir('backup-svc-posture-vault');
-      const backupDir = await tempDir('backup-svc-posture-state');
+      const vaultRoot = await tempDir("backup-svc-posture-vault");
+      const backupDir = await tempDir("backup-svc-posture-state");
       const registry = openRegistry(vaultRoot);
       let defer = true;
       const service = new BackupService({
@@ -484,7 +526,7 @@ describe('backup-service', () => {
         shouldDeferPosture: () => defer,
       });
       cleanups.push(() => service.stop());
-      const tick = vi.spyOn(service, 'tick').mockResolvedValue(undefined);
+      const tick = vi.spyOn(service, "tick").mockResolvedValue(undefined);
 
       service.start();
       await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);

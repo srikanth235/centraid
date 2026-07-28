@@ -12,15 +12,15 @@ on:
   workflow_call:
     inputs:
       profile:
-        description: 'EAS profile (preview = TestFlight/Play internal; production = store)'
+        description: "EAS profile (preview = TestFlight/Play internal; production = store)"
         required: true
         type: string
       platform:
-        description: 'Platform (all | ios | android)'
+        description: "Platform (all | ios | android)"
         required: true
         type: string
       submit:
-        description: 'Submit to TestFlight / Play internal after build'
+        description: "Submit to TestFlight / Play internal after build"
         required: true
         type: boolean
     secrets:
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - name: Setup Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
       - name: assembleDebug (scaffold — no release signing)

@@ -5,14 +5,14 @@
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
 
-import type { InlineAppModule } from '../inline-types.ts';
-import { Root, CHANGE_TABLES } from './app-root.tsx';
-import partiesQuery from './queries/parties.ts';
-import searchQuery from './queries/search.ts';
-import upcomingQuery from './queries/upcoming.ts';
+import type { InlineAppModule } from "../inline-types.ts";
+import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import partiesQuery from "./queries/parties.ts";
+import searchQuery from "./queries/search.ts";
+import upcomingQuery from "./queries/upcoming.ts";
 
 const agendaInlineApp: InlineAppModule = {
-  appId: 'agenda',
+  appId: "agenda",
   changeTables: CHANGE_TABLES,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
@@ -21,16 +21,16 @@ const agendaInlineApp: InlineAppModule = {
     upcoming: { default: upcomingQuery },
     search: { default: searchQuery },
     parties: { default: partiesQuery },
-  } as unknown as InlineAppModule['queries'],
+  } as unknown as InlineAppModule["queries"],
   kitAsk: {
-    scope: 'agenda',
-    placeholder: 'Ask your calendar…',
+    scope: "agenda",
+    placeholder: "Ask your calendar…",
     intro:
-      'Ask me to schedule, move, find or explain events. Proposed events show for your approval before they touch the vault.',
+      "Ask me to schedule, move, find or explain events. Proposed events show for your approval before they touch the vault.",
     suggest: [
-      'Book coffee with Dana Thursday at 10',
-      'What’s on this week?',
-      'Move the dentist to Friday',
+      "Book coffee with Dana Thursday at 10",
+      "What’s on this week?",
+      "Move the dentist to Friday",
     ],
   },
   Root,

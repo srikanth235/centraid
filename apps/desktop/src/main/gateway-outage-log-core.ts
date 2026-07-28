@@ -28,14 +28,14 @@ import type {
   GatewayComponentAlertAction,
   GatewayRuntimeState,
   GatewayVersionSkewAction,
-} from './gateway-monitor-core.js';
+} from "./gateway-monitor-core.js";
 
 export type OutageLogEventKind =
-  | 'down'
-  | 'degraded'
-  | 'component-error'
-  | 'version-skew'
-  | 'recovered';
+  | "down"
+  | "degraded"
+  | "component-error"
+  | "version-skew"
+  | "recovered";
 
 export interface OutageLogEvent {
   /** Event time, epoch ms (desktop clock — same clock the monitor's probes use). */
@@ -58,22 +58,22 @@ export function formatOutageLogLine(event: OutageLogEvent): string {
 }
 
 const KINDS: readonly OutageLogEventKind[] = [
-  'down',
-  'degraded',
-  'component-error',
-  'version-skew',
-  'recovered',
+  "down",
+  "degraded",
+  "component-error",
+  "version-skew",
+  "recovered",
 ];
 
 function isOutageLogEvent(value: unknown): value is OutageLogEvent {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
   const rec = value as Record<string, unknown>;
   return (
-    typeof rec.at === 'number' &&
-    typeof rec.kind === 'string' &&
+    typeof rec.at === "number" &&
+    typeof rec.kind === "string" &&
     (KINDS as readonly string[]).includes(rec.kind) &&
-    typeof rec.gatewayId === 'string' &&
-    typeof rec.gatewayLabel === 'string'
+    typeof rec.gatewayId === "string" &&
+    typeof rec.gatewayLabel === "string"
   );
 }
 
@@ -84,7 +84,7 @@ function isOutageLogEvent(value: unknown): value is OutageLogEvent {
  */
 export function parseOutageLogLines(raw: string): OutageLogEvent[] {
   const events: OutageLogEvent[] = [];
-  for (const line of raw.split('\n')) {
+  for (const line of raw.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
@@ -98,14 +98,17 @@ export function parseOutageLogLines(raw: string): OutageLogEvent[] {
 }
 
 /** Keep the most recent `cap` events, oldest-first order preserved. */
-export function capOutageLog(events: OutageLogEvent[], cap: number): OutageLogEvent[] {
+export function capOutageLog(
+  events: OutageLogEvent[],
+  cap: number
+): OutageLogEvent[] {
   return events.length > cap ? events.slice(events.length - cap) : events;
 }
 
 export interface DeriveOutageEventsInput {
   /** The tracked status/healthStatus just BEFORE this tick's probe was folded in. */
-  prevStatus: GatewayRuntimeState['status'];
-  prevHealthStatus: GatewayRuntimeState['healthStatus'];
+  prevStatus: GatewayRuntimeState["status"];
+  prevHealthStatus: GatewayRuntimeState["healthStatus"];
   /** The tracked state AFTER `applyProbe` (+ alert evaluation) folded this tick's probe in. */
   state: GatewayRuntimeState;
   /** This tick's de-duped component-error alert actions (`applyComponentAlerts`'s return). */
@@ -123,46 +126,61 @@ export interface DeriveOutageEventsInput {
  * tick's alert actions, and persists the result via
  * gateway-outage-log.ts's `persistOutageEvents`.
  */
-export function deriveOutageEvents(input: DeriveOutageEventsInput): OutageLogEvent[] {
-  const { prevStatus, prevHealthStatus, state, componentActions, versionSkewAction, now } = input;
+export function deriveOutageEvents(
+  input: DeriveOutageEventsInput
+): OutageLogEvent[] {
+  const {
+    prevStatus,
+    prevHealthStatus,
+    state,
+    componentActions,
+    versionSkewAction,
+    now,
+  } = input;
   const events: OutageLogEvent[] = [];
   const eventAt = state.lastCheckAt ?? now;
   const base = { gatewayId: state.gatewayId, gatewayLabel: state.gatewayLabel };
 
-  if (prevStatus !== 'down' && state.status === 'down') {
+  if (prevStatus !== "down" && state.status === "down") {
     events.push({
       at: eventAt,
-      kind: 'down',
+      kind: "down",
       ...base,
       ...(state.lastError ? { detail: state.lastError } : {}),
     });
   }
 
-  if (prevStatus === 'down' && state.status === 'up') {
+  if (prevStatus === "down" && state.status === "up") {
     const closed = state.outages[state.outages.length - 1];
     events.push({
       at: eventAt,
-      kind: 'recovered',
+      kind: "recovered",
       ...base,
-      ...(closed?.endedAt === undefined ? {} : { durationMs: closed.endedAt - closed.startedAt }),
+      ...(closed?.endedAt === undefined
+        ? {}
+        : { durationMs: closed.endedAt - closed.startedAt }),
     });
   }
 
-  if (prevHealthStatus !== 'degraded' && state.healthStatus === 'degraded') {
+  if (prevHealthStatus !== "degraded" && state.healthStatus === "degraded") {
     events.push({
       at: eventAt,
-      kind: 'degraded',
+      kind: "degraded",
       ...base,
-      ...(state.latencyMs === undefined ? {} : { detail: `${state.latencyMs}ms latency` }),
+      ...(state.latencyMs === undefined
+        ? {}
+        : { detail: `${state.latencyMs}ms latency` }),
     });
   }
 
   for (const action of componentActions) {
     events.push({
       at: now,
-      kind: 'component-error',
+      kind: "component-error",
       ...base,
-      detail: action.message ? `${action.component}: ${action.message}` : action.component,
+      detail: action.message
+        ? `${action.component}: ${action.message}`
+        : action.component,
       durationMs: action.downForMs,
     });
   }
@@ -170,7 +188,7 @@ export function deriveOutageEvents(input: DeriveOutageEventsInput): OutageLogEve
   if (versionSkewAction) {
     events.push({
       at: now,
-      kind: 'version-skew',
+      kind: "version-skew",
       ...base,
       detail: `v${versionSkewAction.gatewayVersion} (schema ${versionSkewAction.gatewaySchemaEpoch})`,
     });

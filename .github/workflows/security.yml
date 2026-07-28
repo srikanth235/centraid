@@ -20,7 +20,7 @@ on:
   schedule:
     # Sunday 04:00 UTC — before the 06:00 nightly e2e, so a red security lane
     # and a red nightly are never competing for attention in the same hour.
-    - cron: '0 4 * * 0'
+    - cron: "0 4 * * 0"
   workflow_dispatch:
 
 concurrency:

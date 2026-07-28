@@ -21,7 +21,13 @@
 // ---------- Typed-command outcome ----------
 
 /** Terminal states a vault write settles into (kit.ts `outcomeMessage`). */
-type VaultOutcomeStatus = 'executed' | 'parked' | 'queued' | 'in-flight' | 'failed' | 'denied';
+type VaultOutcomeStatus =
+  | "executed"
+  | "parked"
+  | "queued"
+  | "in-flight"
+  | "failed"
+  | "denied";
 
 /**
  * The outcome of a typed-command invocation — `window.centraid.write(...)`
@@ -55,7 +61,7 @@ interface VaultWhere {
 interface VaultReadRequest {
   entity: string;
   where?: VaultWhere[];
-  orderBy?: { column: string; dir?: 'asc' | 'desc' };
+  orderBy?: { column: string; dir?: "asc" | "desc" };
   limit?: number;
   purpose: string;
 }

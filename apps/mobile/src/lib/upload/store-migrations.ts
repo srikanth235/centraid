@@ -13,12 +13,12 @@
 //      its ALTER (e.g. a pre-transaction database from an older build) heals on
 //      the next open instead of throwing "duplicate column name" forever.
 
-import type { ReplicaSqliteDriver } from '@centraid/client/replica/native';
+import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
 
 /** Bumped when the DDL changes. Each step from any prior version is idempotent. */
 export const SCHEMA_VERSION = 4;
 
-type Driver = Pick<ReplicaSqliteDriver, 'exec' | 'run' | 'all'>;
+type Driver = Pick<ReplicaSqliteDriver, "exec" | "run" | "all">;
 
 interface ColumnRow {
   name: string;
@@ -36,14 +36,18 @@ function quote(literal: string): string {
 }
 
 /** Run `work` and the version bump atomically; roll back together on a kill. */
-function inTransaction(driver: Driver, toVersion: number, work: () => void): void {
-  driver.exec('BEGIN IMMEDIATE');
+function inTransaction(
+  driver: Driver,
+  toVersion: number,
+  work: () => void
+): void {
+  driver.exec("BEGIN IMMEDIATE");
   try {
     work();
     driver.exec(`PRAGMA user_version = ${toVersion};`);
-    driver.exec('COMMIT');
+    driver.exec("COMMIT");
   } catch (error) {
-    driver.exec('ROLLBACK');
+    driver.exec("ROLLBACK");
     throw error;
   }
 }
@@ -53,7 +57,11 @@ function inTransaction(driver: Driver, toVersion: number, work: () => void): voi
  * applying one transactional step per version gap. `followupDdl` recreates the
  * v1 follow-up ledger in place without touching the byte ledger.
  */
-export function migrateUploadSchema(driver: Driver, version: number, followupDdl: string): void {
+export function migrateUploadSchema(
+  driver: Driver,
+  version: number,
+  followupDdl: string
+): void {
   if (version < 1 || version >= SCHEMA_VERSION) return;
 
   if (version < 2) {
@@ -64,16 +72,16 @@ export function migrateUploadSchema(driver: Driver, version: number, followupDdl
   if (version < 3) {
     // v2 → v3: stable intent id for payload-idempotent replica writes.
     inTransaction(driver, 3, () => {
-      if (!hasColumn(driver, 'upload_followup', 'intent_id')) {
-        driver.exec('ALTER TABLE upload_followup ADD COLUMN intent_id TEXT;');
+      if (!hasColumn(driver, "upload_followup", "intent_id")) {
+        driver.exec("ALTER TABLE upload_followup ADD COLUMN intent_id TEXT;");
       }
       driver.exec(
         `UPDATE upload_followup
            SET intent_id = 'upload-followup-' || followup_id
-         WHERE intent_id IS NULL`,
+         WHERE intent_id IS NULL`
       );
       driver.exec(
-        'CREATE UNIQUE INDEX IF NOT EXISTS upload_followup_intent ON upload_followup(intent_id);',
+        "CREATE UNIQUE INDEX IF NOT EXISTS upload_followup_intent ON upload_followup(intent_id);"
       );
     });
   }
@@ -83,14 +91,16 @@ export function migrateUploadSchema(driver: Driver, version: number, followupDdl
     // one un-replayable follow-up can be quarantined instead of starving the
     // rest (F4). NULL defaults keep the column add cheap on a large ledger.
     inTransaction(driver, 4, () => {
-      if (!hasColumn(driver, 'upload_followup', 'attempts')) {
-        driver.exec('ALTER TABLE upload_followup ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;');
+      if (!hasColumn(driver, "upload_followup", "attempts")) {
+        driver.exec(
+          "ALTER TABLE upload_followup ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;"
+        );
       }
-      if (!hasColumn(driver, 'upload_followup', 'poisoned_at')) {
-        driver.exec('ALTER TABLE upload_followup ADD COLUMN poisoned_at TEXT;');
+      if (!hasColumn(driver, "upload_followup", "poisoned_at")) {
+        driver.exec("ALTER TABLE upload_followup ADD COLUMN poisoned_at TEXT;");
       }
-      if (!hasColumn(driver, 'upload_followup', 'last_error')) {
-        driver.exec('ALTER TABLE upload_followup ADD COLUMN last_error TEXT;');
+      if (!hasColumn(driver, "upload_followup", "last_error")) {
+        driver.exec("ALTER TABLE upload_followup ADD COLUMN last_error TEXT;");
       }
     });
   }

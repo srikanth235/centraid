@@ -21,10 +21,10 @@
 //   { paired, vaultId, vaultName, probeStatus, enrollment, replayRefused, replayError,
 //     path: { isRelay, isIp, remoteAddr, rttMs } | null, error? }
 
-import { createTunnelClient, tunnelRequest } from '@centraid/tunnel';
+import { createTunnelClient, tunnelRequest } from "@centraid/tunnel";
 
 function log(...args) {
-  console.error('[device-redeem]', ...args);
+  console.error("[device-redeem]", ...args);
 }
 
 /** Decode the pasteable one-line token — mirror of lib/harness.mjs's parseTicket
@@ -32,8 +32,10 @@ function log(...args) {
  * so this script has exactly one dependency (`@centraid/tunnel`) and runs
  * standalone inside the container with nothing else on the module path. */
 function parseTicket(raw) {
-  const payload = JSON.parse(Buffer.from(raw.trim(), 'base64url').toString('utf8'));
-  if (payload.v !== 1 || payload.kind !== 'centraid-gw-pair') {
+  const payload = JSON.parse(
+    Buffer.from(raw.trim(), "base64url").toString("utf8")
+  );
+  if (payload.v !== 1 || payload.kind !== "centraid-gw-pair") {
     throw new Error(`not a centraid-gw-pair ticket: ${raw.slice(0, 40)}…`);
   }
   return payload;
@@ -52,7 +54,9 @@ function selectedPath(connection) {
     if (paths.length > 0) {
       log(
         `paths() returned ${paths.length} candidate(s) but none flagged isSelected: ` +
-          JSON.stringify(paths.map((p) => ({ remoteAddr: p.remoteAddr, isRelay: p.isRelay }))),
+          JSON.stringify(
+            paths.map((p) => ({ remoteAddr: p.remoteAddr, isRelay: p.isRelay }))
+          )
       );
     }
     return null;
@@ -67,11 +71,11 @@ function selectedPath(connection) {
 
 async function main() {
   const raw = process.env.PAIR_TICKET;
-  if (!raw) throw new Error('PAIR_TICKET env var not set');
-  const target = process.env.PROBE_TARGET ?? '/centraid/_vault/vaults';
+  if (!raw) throw new Error("PAIR_TICKET env var not set");
+  const target = process.env.PROBE_TARGET ?? "/centraid/_vault/vaults";
   const payload = parseTicket(raw);
   log(
-    `ticket parsed: vault "${payload.vaultName}", expires ${new Date(payload.exp).toISOString()}`,
+    `ticket parsed: vault "${payload.vaultName}", expires ${new Date(payload.exp).toISOString()}`
   );
 
   // No `relays: 'disabled'` override — this is the whole point of the flow:
@@ -96,10 +100,10 @@ async function main() {
     const paired = await device.pairGateway(payload.gw, {
       ticketId: payload.t,
       secret: payload.s,
-      deviceName: 'agent-e2e cross-network device',
-      platform: 'agent-e2e-relay',
+      deviceName: "agent-e2e cross-network device",
+      platform: "agent-e2e-relay",
     });
-    log('pairGateway →', JSON.stringify(paired));
+    log("pairGateway →", JSON.stringify(paired));
     if (!paired.ok) {
       out.error = `redeem failed: ${JSON.stringify(paired)}`;
       console.log(JSON.stringify(out));
@@ -111,23 +115,24 @@ async function main() {
 
     const connection = await device.connect(payload.gw);
     try {
-      const probe = await tunnelRequest(connection, { method: 'GET', target });
+      const probe = await tunnelRequest(connection, { method: "GET", target });
       out.probeStatus = probe.status;
       log(`tunneled probe ${target} → ${probe.status}`);
       const roster = await tunnelRequest(connection, {
-        method: 'GET',
-        target: '/centraid/_gateway/devices',
+        method: "GET",
+        target: "/centraid/_gateway/devices",
       });
       if (roster.status === 200) {
-        const devices = JSON.parse(roster.body.toString('utf8')).devices ?? [];
-        out.enrollment = devices.find((row) => row.endpointId === device.endpointId) ?? null;
+        const devices = JSON.parse(roster.body.toString("utf8")).devices ?? [];
+        out.enrollment =
+          devices.find((row) => row.endpointId === device.endpointId) ?? null;
       }
       log(`gateway.db roster → ${roster.status}`);
       // Read paths AFTER the request has actually round-tripped data, so
       // path selection (direct vs relay) has settled rather than reporting
       // a pre-handshake candidate.
       out.path = selectedPath(connection);
-      log('selected path:', JSON.stringify(out.path));
+      log("selected path:", JSON.stringify(out.path));
     } finally {
       connection.close(0n, []);
     }
@@ -135,11 +140,11 @@ async function main() {
     const replay = await device.pairGateway(payload.gw, {
       ticketId: payload.t,
       secret: payload.s,
-      deviceName: 'agent-e2e cross-network device (replay)',
-      platform: 'agent-e2e-relay',
+      deviceName: "agent-e2e cross-network device (replay)",
+      platform: "agent-e2e-relay",
     });
     out.replayRefused = !replay.ok;
-    out.replayError = replay.ok ? null : (replay.error ?? 'refused');
+    out.replayError = replay.ok ? null : (replay.error ?? "refused");
     log(`replay → ok=${replay.ok} refused=${out.replayRefused}`);
   } finally {
     await device.close().catch(() => {});
@@ -149,7 +154,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  log('FATAL', err?.stack ?? String(err));
-  console.log(JSON.stringify({ paired: false, error: String(err?.message ?? err) }));
+  log("FATAL", err?.stack ?? String(err));
+  console.log(
+    JSON.stringify({ paired: false, error: String(err?.message ?? err) })
+  );
   process.exitCode = 1;
 });

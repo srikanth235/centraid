@@ -13,7 +13,7 @@ const enc = encodeURIComponent;
 
 /** This app's persisted chat sessions (list/create). */
 export function conversationsPath(appId) {
-  return `/_centraid-conversations/apps/${enc(appId ?? '')}/sessions`;
+  return `/_centraid-conversations/apps/${enc(appId ?? "")}/sessions`;
 }
 
 /** One chat session (load/rename/delete/pin/archive). */
@@ -24,8 +24,8 @@ export function conversationPath(appId, sessionId) {
 /** FTS search over this app's sessions (issue #420). `q` is the raw query. */
 export function conversationSearchPath(appId, query, limit) {
   const params = new URLSearchParams();
-  params.set('q', query ?? '');
-  if (limit) params.set('limit', String(limit));
+  params.set("q", query ?? "");
+  if (limit) params.set("limit", String(limit));
   return `${conversationsPath(appId)}/search?${params.toString()}`;
 }
 
@@ -40,7 +40,7 @@ export function conversationStatusPath(appId, sessionId) {
 
 /** This app's per-conversation attachment blob CAS (POST uploads). */
 export function blobsPath(appId) {
-  return `/_centraid-conversations/apps/${enc(appId ?? '')}/blobs`;
+  return `/_centraid-conversations/apps/${enc(appId ?? "")}/blobs`;
 }
 
 /** The app copilot turn surface (`POST` an SSE stream). */
@@ -98,11 +98,11 @@ export function vaultAppsPath() {
  * @returns {import('./conversation-client.js').ModelState} Normalized picker state.
  */
 export function normalizeModelState(body) {
-  const b = body && typeof body === 'object' ? body : {};
+  const b = body && typeof body === "object" ? body : {};
   return {
     loaded: true,
     current: b.current || null,
-    defaultModel: b.defaultModel || '',
+    defaultModel: b.defaultModel || "",
     catalog: Array.isArray(b.catalog) ? b.catalog : [],
   };
 }
@@ -114,8 +114,8 @@ export function normalizeModelState(body) {
  * @returns {string} The label displayed by the picker control.
  */
 export function modelLabel(state) {
-  if (!state || !state.loaded) return 'Model';
-  if (!state.current) return 'Default';
+  if (!state || !state.loaded) return "Model";
+  if (!state.current) return "Default";
   const found = state.catalog.find((m) => m.id === state.current);
   return found ? found.label || found.id : state.current;
 }
@@ -130,7 +130,7 @@ export function modelLabel(state) {
  * @returns {Promise<{ ok: boolean, status: number, body: unknown }>} The tolerant decoded response shape.
  */
 export async function readJsonResponse(res) {
-  const text = await res.text().catch(() => '');
+  const text = await res.text().catch(() => "");
   let body = null;
   try {
     body = text ? JSON.parse(text) : null;

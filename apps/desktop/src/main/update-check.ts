@@ -21,11 +21,11 @@
 
 /** Build outputs watched for change, relative to `dist/`. One per build step. */
 export const WATCHED_DIST_FILES = [
-  'main.js', // build:ts
-  'preload.cjs', // build:preload
-  'renderer/index.html', // build:assets
-  'renderer/styles.css', // build:assets
-  'renderer/react-boot.js', // build:react (vite entry — rewritten every build)
+  "main.js", // build:ts
+  "preload.cjs", // build:preload
+  "renderer/index.html", // build:assets
+  "renderer/styles.css", // build:assets
+  "renderer/react-boot.js", // build:react (vite entry — rewritten every build)
 ] as const;
 
 /** The stat slice a fingerprint is built from; `null` = file missing. */
@@ -35,17 +35,19 @@ export interface WatchedStat {
 }
 
 /** Order-sensitive print of the watched set — index i is WATCHED_DIST_FILES[i]. */
-export function fingerprintOf(stats: ReadonlyArray<WatchedStat | null>): string {
-  return stats.map((s) => (s ? `${s.mtimeMs}:${s.size}` : 'absent')).join('|');
+export function fingerprintOf(
+  stats: ReadonlyArray<WatchedStat | null>
+): string {
+  return stats.map((s) => (s ? `${s.mtimeMs}:${s.size}` : "absent")).join("|");
 }
 
 export type PollVerdict =
   /** Nothing new — matches the baseline, or the update was already announced. */
-  | 'unchanged'
+  | "unchanged"
   /** Differs from the last poll — a build is (probably) still writing. */
-  | 'settling'
+  | "settling"
   /** A new build settled: announce it (fires exactly once). */
-  | 'update-available';
+  | "update-available";
 
 /**
  * Debounced change detector over successive fingerprints. Feed it one
@@ -71,10 +73,10 @@ export class UpdatePoller {
   tick(fingerprint: string): PollVerdict {
     const settled = fingerprint === this.prev;
     this.prev = fingerprint;
-    if (fingerprint === this.baseline) return 'unchanged';
-    if (!settled) return 'settling';
-    if (this.announced) return 'unchanged';
+    if (fingerprint === this.baseline) return "unchanged";
+    if (!settled) return "settling";
+    if (this.announced) return "unchanged";
     this.announced = true;
-    return 'update-available';
+    return "update-available";
   }
 }

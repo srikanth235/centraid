@@ -14,14 +14,18 @@
  *     daemon (paths under a config-file `dataDir`).
  */
 
-import { startRuntimeHttpServer } from '@centraid/app-engine';
-import { WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
-import { ROUTES } from '@centraid/protocol';
+import { startRuntimeHttpServer } from "@centraid/app-engine";
+import { WEBHOOK_ROUTE_PREFIX } from "@centraid/automation";
+import { ROUTES } from "@centraid/protocol";
 
-import { OAUTH_CALLBACK_PATH } from '../routes/connections-routes.js';
-import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
-import { WEB_SESSION_REDEEM_PATH } from './web-app-sessions.js';
-import { startWebUiServer } from './web-ui-server.js';
+import { OAUTH_CALLBACK_PATH } from "../routes/connections-routes.js";
+import {
+  buildGateway,
+  type BuildGatewayOptions,
+  type BuiltGateway,
+} from "./build-gateway.js";
+import { WEB_SESSION_REDEEM_PATH } from "./web-app-sessions.js";
+import { startWebUiServer } from "./web-ui-server.js";
 
 export interface ServeOptions extends BuildGatewayOptions {
   /** HTTP bind host. Defaults to `127.0.0.1` (loopback). */
@@ -46,7 +50,12 @@ export interface ServeOptions extends BuildGatewayOptions {
 
 export interface GatewayServeHandle extends Omit<
   BuiltGateway,
-  'extraHandlers' | 'composedHandler' | 'webhookHandler' | 'webAppSessions' | 'start' | 'stop'
+  | "extraHandlers"
+  | "composedHandler"
+  | "webhookHandler"
+  | "webAppSessions"
+  | "start"
+  | "stop"
 > {
   /** Bound base URL — `http://<host>:<port>`. */
   url: string;
@@ -58,7 +67,9 @@ export interface GatewayServeHandle extends Omit<
   close: () => Promise<void>;
 }
 
-export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
+export async function serve(
+  options: ServeOptions
+): Promise<GatewayServeHandle> {
   const gateway = await buildGateway(options);
 
   // The composed handler owns the whole post-auth chain — including the
@@ -87,7 +98,11 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     // proves the EndpointId that gets persisted in its enrollment. Minting
     // (`_gateway/devices/ticket`) is NOT public either — it sits behind the
     // bearer, and behind host custody or a proved vault owner on top.
-    publicPaths: [OAUTH_CALLBACK_PATH, WEB_SESSION_REDEEM_PATH, ROUTES.gatewayInfo],
+    publicPaths: [
+      OAUTH_CALLBACK_PATH,
+      WEB_SESSION_REDEEM_PATH,
+      ROUTES.gatewayInfo,
+    ],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
   if (options.host !== undefined) serverOptions.host = options.host;
@@ -96,10 +111,12 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     serverOptions.allowedHosts = options.allowedHosts;
   }
   if (options.token !== undefined) serverOptions.token = options.token;
-  serverOptions.authorizeRequest = (req) => gateway.webAppSessions.authorize(req);
+  serverOptions.authorizeRequest = (req) =>
+    gateway.webAppSessions.authorize(req);
   // Session-bound shell origins for credentialed CORS (#504). Bearer-only
   // desktop embeds leave this empty and still get non-credentialed `*`.
-  serverOptions.credentialedCorsOrigins = () => gateway.webAppSessions.knownShellOrigins();
+  serverOptions.credentialedCorsOrigins = () =>
+    gateway.webAppSessions.knownShellOrigins();
   const server = await startRuntimeHttpServer(serverOptions);
   await gateway.start(server.url);
   const web = options.web

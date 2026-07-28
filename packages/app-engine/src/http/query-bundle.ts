@@ -9,32 +9,36 @@
  * Runtime code-dir resolution selects the live or draft worktree before this
  * module runs; the surrounding HTTP server authenticates the request.
  */
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
 
-import * as esbuild from 'esbuild';
+import * as esbuild from "esbuild";
 
-import { findQuery, ManifestError, parseManifest } from '../registry/manifest.js';
-import { computeEtag, finishStaticAsset } from './asset-variants.js';
-import type { Encoding } from './compression.js';
-import { sendError } from './http-utils.js';
+import {
+  findQuery,
+  ManifestError,
+  parseManifest,
+} from "../registry/manifest.js";
+import { computeEtag, finishStaticAsset } from "./asset-variants.js";
+import type { Encoding } from "./compression.js";
+import { sendError } from "./http-utils.js";
 
-export const QUERY_SOURCE_HASH_HEADER = 'X-Centraid-Query-Source-Hash';
-export const QUERY_NAME_HEADER = 'X-Centraid-Query-Name';
+export const QUERY_SOURCE_HASH_HEADER = "X-Centraid-Query-Source-Hash";
+export const QUERY_NAME_HEADER = "X-Centraid-Query-Name";
 
 const QUERY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
-const QUERY_MODULE_EXTENSIONS = new Set(['.js', '.mjs', '.ts']);
+const QUERY_MODULE_EXTENSIONS = new Set([".js", ".mjs", ".ts"]);
 
 export class QueryBundleError extends Error {
   constructor(
     readonly code: string,
     readonly status: number,
-    message: string,
+    message: string
   ) {
     super(message);
-    this.name = 'QueryBundleError';
+    this.name = "QueryBundleError";
   }
 }
 
@@ -68,76 +72,90 @@ export function clearQueryBundleCaches(): void {
 
 function isInside(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
 }
 
 async function queryTreeSignature(
   queryRoot: string,
-  manifestText: string,
+  manifestText: string
 ): Promise<{ signature: string; files: string[] }> {
-  const lines = [`app.json\0${createHash('sha256').update(manifestText).digest('hex')}`];
+  const lines = [
+    `app.json\0${createHash("sha256").update(manifestText).digest("hex")}`,
+  ];
   const seenDirs = new Set<string>();
   const files: string[] = [];
 
   async function walk(directory: string): Promise<void> {
     const realDirectory = await fs.realpath(directory);
-    if (!isInside(queryRoot, realDirectory) || seenDirs.has(realDirectory)) return;
+    if (!isInside(queryRoot, realDirectory) || seenDirs.has(realDirectory))
+      return;
     seenDirs.add(realDirectory);
     const entries = await fs.readdir(directory, { withFileTypes: true });
     await Promise.all(
       entries.map(async (entry) => {
-        if (entry.name.startsWith('.')) return;
+        if (entry.name.startsWith(".")) return;
         const file = path.join(directory, entry.name);
         const real = await fs.realpath(file).catch(() => undefined);
         if (!real || !isInside(queryRoot, real)) return;
         const stat = await fs.stat(real).catch(() => undefined);
         if (!stat) return;
         if (stat.isDirectory()) return walk(real);
-        if (!stat.isFile() || !QUERY_MODULE_EXTENSIONS.has(path.extname(real))) return;
-        const relative = path.relative(queryRoot, real).split(path.sep).join('/');
-        lines.push(`${relative}\0${stat.mtimeMs}\0${stat.ctimeMs}\0${stat.size}`);
+        if (!stat.isFile() || !QUERY_MODULE_EXTENSIONS.has(path.extname(real)))
+          return;
+        const relative = path
+          .relative(queryRoot, real)
+          .split(path.sep)
+          .join("/");
+        lines.push(
+          `${relative}\0${stat.mtimeMs}\0${stat.ctimeMs}\0${stat.size}`
+        );
         files.push(real);
-      }),
+      })
     );
   }
 
   await walk(queryRoot);
-  const signature = lines.sort().join('\n');
+  const signature = lines.sort().join("\n");
   return { signature, files };
 }
 
 async function hashQuerySources(
   queryRoot: string,
   manifestText: string,
-  files: string[],
+  files: string[]
 ): Promise<string> {
-  const hash = createHash('sha256');
-  hash.update('app.json\0').update(manifestText).update('\0');
+  const hash = createHash("sha256");
+  hash.update("app.json\0").update(manifestText).update("\0");
   const sortedFiles = [...new Set(files)].sort();
   async function hashNext(index: number): Promise<void> {
     const file = sortedFiles[index];
     if (!file) return;
-    const relative = path.relative(queryRoot, file).split(path.sep).join('/');
+    const relative = path.relative(queryRoot, file).split(path.sep).join("/");
     hash
       .update(relative)
-      .update('\0')
+      .update("\0")
       .update(await fs.readFile(file))
-      .update('\0');
+      .update("\0");
     return hashNext(index + 1);
   }
   // Hash updates are stateful and must follow the canonical filename order.
   await hashNext(0);
-  return hash.digest('hex');
+  return hash.digest("hex");
 }
 
 async function resolveQueryImport(
   queryRoot: string,
   resolveDir: string,
-  specifier: string,
+  specifier: string
 ): Promise<esbuild.OnResolveResult> {
-  if (!specifier.startsWith('./') && !specifier.startsWith('../')) {
+  if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
     return {
-      errors: [{ text: `query bundles allow relative imports only: "${specifier}"` }],
+      errors: [
+        { text: `query bundles allow relative imports only: "${specifier}"` },
+      ],
     };
   }
   const target = path.resolve(resolveDir, specifier);
@@ -148,7 +166,9 @@ async function resolveQueryImport(
   const candidates = extension
     ? [target]
     : [target, `${target}.ts`, `${target}.js`, `${target}.mjs`];
-  async function resolveCandidate(index: number): Promise<esbuild.OnResolveResult | undefined> {
+  async function resolveCandidate(
+    index: number
+  ): Promise<esbuild.OnResolveResult | undefined> {
     const candidate = candidates[index];
     if (!candidate) return undefined;
     const real = await fs.realpath(candidate).catch(() => undefined);
@@ -172,7 +192,7 @@ async function resolveQueryImport(
 
 function queryGraphPlugin(queryRoot: string): esbuild.Plugin {
   return {
-    name: 'centraid-query-only-graph',
+    name: "centraid-query-only-graph",
     setup(build) {
       // esbuild compiles plugin `filter` patterns with Go's RE2, not the JS engine.
       // RE2 has no `u` flag, so a unicode-flagged filter is rejected and the hook
@@ -180,7 +200,7 @@ function queryGraphPlugin(queryRoot: string): esbuild.Plugin {
       // `require-unicode-regexp` fix does not apply here.
       // oxlint-disable-next-line require-unicode-regexp
       build.onResolve({ filter: /.*/ }, (args) => {
-        if (args.kind === 'entry-point') return null;
+        if (args.kind === "entry-point") return null;
         return resolveQueryImport(queryRoot, args.resolveDir, args.path);
       });
     },
@@ -203,19 +223,19 @@ async function buildQuery(
   queryName: string,
   queryRoot: string,
   entryFile: string,
-  sourceHash: string,
+  sourceHash: string
 ): Promise<QueryBundleResult> {
   try {
     const result = await esbuild.build({
       absWorkingDir: queryRoot,
       entryPoints: [entryFile],
       bundle: true,
-      format: 'esm',
-      platform: 'browser',
-      target: 'es2022',
+      format: "esm",
+      platform: "browser",
+      target: "es2022",
       write: false,
-      logLevel: 'silent',
-      legalComments: 'none',
+      logLevel: "silent",
+      legalComments: "none",
       plugins: [queryGraphPlugin(queryRoot)],
     });
     const output = result.outputFiles?.[0];
@@ -223,9 +243,9 @@ async function buildQuery(
       return {
         ok: false,
         error: new QueryBundleError(
-          'query_bundle_failed',
+          "query_bundle_failed",
           422,
-          `Could not bundle query "${queryName}": esbuild produced no output.`,
+          `Could not bundle query "${queryName}": esbuild produced no output.`
         ),
       };
     }
@@ -244,7 +264,11 @@ async function buildQuery(
   } catch (error) {
     return {
       ok: false,
-      error: new QueryBundleError('query_bundle_failed', 422, safeBuildMessage(error, queryName)),
+      error: new QueryBundleError(
+        "query_bundle_failed",
+        422,
+        safeBuildMessage(error, queryName)
+      ),
     };
   }
 }
@@ -253,64 +277,76 @@ async function buildQuery(
 export async function bundleDeclaredQuery(
   codeDir: string,
   appId: string,
-  queryName: string,
+  queryName: string
 ): Promise<BuiltQueryBundle> {
   if (!QUERY_NAME_RE.test(queryName)) {
     throw new QueryBundleError(
-      'invalid_query_name',
+      "invalid_query_name",
       400,
-      'Query names must use letters, digits, hyphens, or underscores.',
+      "Query names must use letters, digits, hyphens, or underscores."
     );
   }
 
   const codeRoot = await fs.realpath(codeDir).catch(() => undefined);
   if (!codeRoot) {
-    throw new QueryBundleError('query_source_missing', 404, 'App code directory is missing.');
+    throw new QueryBundleError(
+      "query_source_missing",
+      404,
+      "App code directory is missing."
+    );
   }
 
   let manifestText: string;
   try {
-    const manifestFile = await fs.realpath(path.join(codeRoot, 'app.json'));
-    if (!isInside(codeRoot, manifestFile)) throw new Error('manifest escapes app code directory');
-    manifestText = await fs.readFile(manifestFile, 'utf8');
+    const manifestFile = await fs.realpath(path.join(codeRoot, "app.json"));
+    if (!isInside(codeRoot, manifestFile))
+      throw new Error("manifest escapes app code directory");
+    manifestText = await fs.readFile(manifestFile, "utf8");
   } catch {
-    throw new QueryBundleError('invalid_manifest', 422, 'App manifest is unavailable.');
+    throw new QueryBundleError(
+      "invalid_manifest",
+      422,
+      "App manifest is unavailable."
+    );
   }
   try {
     const manifest = parseManifest(manifestText);
     if (manifest.id !== appId) {
       throw new QueryBundleError(
-        'invalid_manifest',
+        "invalid_manifest",
         422,
-        `App manifest id "${manifest.id}" does not match registered app "${appId}".`,
+        `App manifest id "${manifest.id}" does not match registered app "${appId}".`
       );
     }
     if (!findQuery(manifest, queryName)) {
       throw new QueryBundleError(
-        'unknown_query',
+        "unknown_query",
         404,
-        `App "${appId}" has no declared query "${queryName}".`,
+        `App "${appId}" has no declared query "${queryName}".`
       );
     }
   } catch (error) {
     if (error instanceof QueryBundleError) throw error;
-    const message = error instanceof ManifestError ? error.message : 'App manifest is invalid.';
-    throw new QueryBundleError('invalid_manifest', 422, message);
+    const message =
+      error instanceof ManifestError
+        ? error.message
+        : "App manifest is invalid.";
+    throw new QueryBundleError("invalid_manifest", 422, message);
   }
 
-  const queryPath = path.join(codeRoot, 'queries');
+  const queryPath = path.join(codeRoot, "queries");
   const queryPathStat = await fs.lstat(queryPath).catch(() => undefined);
   const queryRoot = await fs.realpath(queryPath).catch(() => undefined);
   if (
     !queryRoot ||
     !queryPathStat?.isDirectory() ||
     queryPathStat.isSymbolicLink() ||
-    path.relative(codeRoot, queryRoot) !== 'queries'
+    path.relative(codeRoot, queryRoot) !== "queries"
   ) {
     throw new QueryBundleError(
-      'query_source_missing',
+      "query_source_missing",
       404,
-      'App query source directory is missing.',
+      "App query source directory is missing."
     );
   }
   const verifiedQueryRoot = queryRoot;
@@ -319,14 +355,26 @@ export async function bundleDeclaredQuery(
   // runs the same escape/real-file guards; the first that resolves wins.
   async function resolveEntry(index: number): Promise<string | undefined> {
     if (index > 1) return undefined;
-    const ext = index === 0 ? '.ts' : '.js';
-    const entryCandidate = path.resolve(verifiedQueryRoot, `${queryName}${ext}`);
+    const ext = index === 0 ? ".ts" : ".js";
+    const entryCandidate = path.resolve(
+      verifiedQueryRoot,
+      `${queryName}${ext}`
+    );
     if (!isInside(verifiedQueryRoot, entryCandidate)) {
-      throw new QueryBundleError('invalid_query_name', 400, 'Query path escapes queries/.');
+      throw new QueryBundleError(
+        "invalid_query_name",
+        400,
+        "Query path escapes queries/."
+      );
     }
     const real = await fs.realpath(entryCandidate).catch(() => undefined);
     const stat = real ? await fs.stat(real).catch(() => undefined) : undefined;
-    if (real && stat?.isFile() && isInside(verifiedQueryRoot, real) && path.extname(real) === ext) {
+    if (
+      real &&
+      stat?.isFile() &&
+      isInside(verifiedQueryRoot, real) &&
+      path.extname(real) === ext
+    ) {
       return real;
     }
     return resolveEntry(index + 1);
@@ -334,21 +382,24 @@ export async function bundleDeclaredQuery(
   const entryFile = await resolveEntry(0);
   if (!entryFile) {
     throw new QueryBundleError(
-      'query_source_missing',
+      "query_source_missing",
       404,
-      `Declared query "${queryName}" has no safe queries/${queryName}.{ts,js} source.`,
+      `Declared query "${queryName}" has no safe queries/${queryName}.{ts,js} source.`
     );
   }
 
   let signature: string;
   let files: string[];
   try {
-    ({ signature, files } = await queryTreeSignature(verifiedQueryRoot, manifestText));
+    ({ signature, files } = await queryTreeSignature(
+      verifiedQueryRoot,
+      manifestText
+    ));
   } catch {
     throw new QueryBundleError(
-      'query_source_unavailable',
+      "query_source_unavailable",
       409,
-      'Query sources changed while preparing the bundle; retry the request.',
+      "Query sources changed while preparing the bundle; retry the request."
     );
   }
   const cacheKey = `${codeRoot}\0${queryRoot}`;
@@ -359,9 +410,9 @@ export async function bundleDeclaredQuery(
       sourceHash = await hashQuerySources(queryRoot, manifestText, files);
     } catch {
       throw new QueryBundleError(
-        'query_source_unavailable',
+        "query_source_unavailable",
         409,
-        'Query sources changed while preparing the bundle; retry the request.',
+        "Query sources changed while preparing the bundle; retry the request."
       );
     }
     directory = { signature, sourceHash, bundles: new Map() };
@@ -376,9 +427,13 @@ export async function bundleDeclaredQuery(
   const flightKey = `${cacheKey}\0${queryName}\0${signature}`;
   let pending = inflight.get(flightKey);
   if (!pending) {
-    pending = buildQuery(appId, queryName, queryRoot, entryFile, directory.sourceHash).finally(() =>
-      inflight.delete(flightKey),
-    );
+    pending = buildQuery(
+      appId,
+      queryName,
+      queryRoot,
+      entryFile,
+      directory.sourceHash
+    ).finally(() => inflight.delete(flightKey));
     inflight.set(flightKey, pending);
   }
   const result = await pending;
@@ -391,18 +446,22 @@ export async function bundleDeclaredQuery(
 export async function serveQueryBundle(
   req: IncomingMessage,
   res: ServerResponse,
-  options: { codeDir: string; appId: string; queryName: string },
+  options: { codeDir: string; appId: string; queryName: string }
 ): Promise<true> {
   try {
-    const bundle = await bundleDeclaredQuery(options.codeDir, options.appId, options.queryName);
+    const bundle = await bundleDeclaredQuery(
+      options.codeDir,
+      options.appId,
+      options.queryName
+    );
     res.setHeader(QUERY_NAME_HEADER, bundle.queryName);
     res.setHeader(QUERY_SOURCE_HASH_HEADER, bundle.sourceHash);
     res.setHeader(
-      'Access-Control-Expose-Headers',
-      `ETag, ${QUERY_NAME_HEADER}, ${QUERY_SOURCE_HASH_HEADER}`,
+      "Access-Control-Expose-Headers",
+      `ETag, ${QUERY_NAME_HEADER}, ${QUERY_SOURCE_HASH_HEADER}`
     );
     return finishStaticAsset(req, res, {
-      contentType: 'application/javascript; charset=utf-8',
+      contentType: "application/javascript; charset=utf-8",
       etag: bundle.etag,
       rawSize: bundle.code.length,
       loadRaw: () => bundle.code,
@@ -412,6 +471,11 @@ export async function serveQueryBundle(
     if (error instanceof QueryBundleError) {
       return sendError(res, error.status, error.code, error.message);
     }
-    return sendError(res, 500, 'query_bundle_failed', 'Could not prepare query bundle.');
+    return sendError(
+      res,
+      500,
+      "query_bundle_failed",
+      "Could not prepare query bundle."
+    );
   }
 }

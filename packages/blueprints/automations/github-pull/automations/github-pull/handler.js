@@ -9,12 +9,12 @@
  * cursor, never a wall clock.
  */
 
-const API = 'https://api.github.com';
+const API = "https://api.github.com";
 const AUTH = {
-  authorization: 'Bearer {{connection:api_key}}',
-  accept: 'application/vnd.github+json',
-  'x-github-api-version': '2022-11-28',
-  'user-agent': 'centraid-connector',
+  authorization: "Bearer {{connection:api_key}}",
+  accept: "application/vnd.github+json",
+  "x-github-api-version": "2022-11-28",
+  "user-agent": "centraid-connector",
 };
 const MAX_PAGES_PER_RUN = 3;
 
@@ -22,7 +22,7 @@ async function api(ctx, path) {
   const res = await ctx.fetch({ url: `${API}${path}`, headers: AUTH });
   if (res.status !== 200) {
     throw new Error(
-      `github ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
+      `github ${path.split("?")[0]} answered ${res.status}: ${res.text.slice(0, 200)}`
     );
   }
   return JSON.parse(res.text);
@@ -31,12 +31,12 @@ async function api(ctx, path) {
 function toIssueRow(issue) {
   const repo =
     (issue.repository && issue.repository.full_name) ||
-    (issue.repository_url || '').split('/repos/')[1] ||
-    'unknown/unknown';
+    (issue.repository_url || "").split("/repos/")[1] ||
+    "unknown/unknown";
   const ref = `${repo}#${issue.number}`;
-  const kindWord = issue.pull_request ? 'PR' : 'issue';
+  const kindWord = issue.pull_request ? "PR" : "issue";
   return {
-    entity_type: 'social.message',
+    entity_type: "social.message",
     external_id: `github:${repo}/${issue.number}`,
     payload: {
       messageId: `github:${repo}/${issue.number}`,
@@ -46,7 +46,7 @@ function toIssueRow(issue) {
       sentAt: issue.created_at,
       body:
         `${kindWord} ${ref} is ${issue.state}` +
-        (issue.body ? `\n\n${String(issue.body).slice(0, 4000)}` : ''),
+        (issue.body ? `\n\n${String(issue.body).slice(0, 4000)}` : ""),
       threadKey: `github:${ref}`,
     },
     updatedAt: issue.updated_at,
@@ -54,27 +54,27 @@ function toIssueRow(issue) {
 }
 
 export default {
-  protocol: 'centraid.pull/v1',
+  protocol: "centraid.pull/v1",
 
   async principal({ ctx }) {
-    const user = await api(ctx, '/user');
+    const user = await api(ctx, "/user");
     return user.login;
   },
 
   async pull({ ctx, log, cursor }) {
-    const updatedAt = cursor.highWater('github.since');
+    const updatedAt = cursor.highWater("github.since");
     const since = updatedAt.current;
     const rows = [];
     for (let page = 1; page <= MAX_PAGES_PER_RUN; page++) {
       const params = new URLSearchParams({
-        filter: 'all',
-        state: 'all',
-        sort: 'updated',
-        direction: 'asc',
-        per_page: '100',
+        filter: "all",
+        state: "all",
+        sort: "updated",
+        direction: "asc",
+        per_page: "100",
         page: String(page),
       });
-      if (since) params.set('since', String(since));
+      if (since) params.set("since", String(since));
       const listing = await api(ctx, `/issues?${params.toString()}`);
       for (const issue of listing) {
         const row = toIssueRow(issue);

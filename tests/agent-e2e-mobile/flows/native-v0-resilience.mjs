@@ -1,6 +1,6 @@
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from '../lib/harness.mjs';
+import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
-await runFlow('native-v0-resilience', async (ctx) => {
+await runFlow("native-v0-resilience", async (ctx) => {
   await ctx.configureGateway();
   // The five tabs are Home, Photos, Docs, Agenda, Settings — there is no "Apps"
   // tab, and the old `tapOn: "Apps"` / `assertVisible: "Apps"` pair asserted on a
@@ -50,7 +50,7 @@ await runFlow('native-v0-resilience', async (ctx) => {
 - assertVisible: "Everything you build, in one place."
 - takeScreenshot: native-five-tabs
 `,
-    'five-tabs',
+    "five-tabs"
   );
   await ctx.restart();
   await ctx.run(
@@ -61,13 +61,13 @@ await runFlow('native-v0-resilience', async (ctx) => {
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: after-force-kill
 `,
-    'after-force-kill',
+    "after-force-kill"
   );
   ctx.note(
-    'Five native tabs survived navigation and a process restart; complete the documented network matrix on this device.',
+    "Five native tabs survived navigation and a process restart; complete the documented network matrix on this device."
   );
   return {
     pass: true,
-    notes: 'native five-tab shell and process-restart smoke passed',
+    notes: "native five-tab shell and process-restart smoke passed",
   };
 });

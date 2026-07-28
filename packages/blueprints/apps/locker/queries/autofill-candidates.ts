@@ -11,29 +11,29 @@ interface LoginRow {
   title: string;
   username?: string | null;
   url?: string | null;
-  url_match_policy?: 'registrable-domain' | 'exact-host' | null;
+  url_match_policy?: "registrable-domain" | "exact-host" | null;
   otp_seed?: string | null;
   compromised?: number | boolean | null;
 }
 
 export default async function autofillCandidates({ ctx }: { ctx: HandlerCtx }) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   try {
     const [response, watchtower] = await Promise.all([
       ctx.vault.read({
-        entity: 'locker.item',
+        entity: "locker.item",
         where: [
-          { column: 'type', op: 'eq', value: 'login' },
-          { column: 'deleted_at', op: 'is-null' },
+          { column: "type", op: "eq", value: "login" },
+          { column: "deleted_at", op: "is-null" },
         ],
-        orderBy: { column: 'updated_at', dir: 'desc' },
+        orderBy: { column: "updated_at", dir: "desc" },
         limit: 2000,
         purpose,
       }),
-      ctx.vault.invoke({ command: 'locker.watchtower', input: {}, purpose }),
+      ctx.vault.invoke({ command: "locker.watchtower", input: {}, purpose }),
     ]);
     const warned = new Set(
-      watchtower.status === 'executed'
+      watchtower.status === "executed"
         ? (
             (watchtower.output?.items ?? []) as Array<{
               item_id?: unknown;
@@ -42,22 +42,27 @@ export default async function autofillCandidates({ ctx }: { ctx: HandlerCtx }) {
             }>
           )
             .filter((item) => item.weak === true || item.reused === true)
-            .map((item) => String(item.item_id ?? ''))
+            .map((item) => String(item.item_id ?? ""))
             .filter(Boolean)
-        : [],
+        : []
     );
     const candidates = ((response.rows ?? []) as unknown as LoginRow[])
-      .filter((row) => typeof row.url === 'string' && row.url.length > 0)
+      .filter((row) => typeof row.url === "string" && row.url.length > 0)
       .map((row) => ({
         item_id: row.item_id,
         title: row.title,
         username: row.username ?? undefined,
         url: row.url!,
         url_match_policy:
-          row.url_match_policy === 'exact-host' ? 'exact-host' : 'registrable-domain',
+          row.url_match_policy === "exact-host"
+            ? "exact-host"
+            : "registrable-domain",
         has_totp: row.otp_seed != null,
         compromised: row.compromised === 1 || row.compromised === true,
-        warning: row.compromised === 1 || row.compromised === true || warned.has(row.item_id),
+        warning:
+          row.compromised === 1 ||
+          row.compromised === true ||
+          warned.has(row.item_id),
       }));
     return { candidates };
   } catch (err) {

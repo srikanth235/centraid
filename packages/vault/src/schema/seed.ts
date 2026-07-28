@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_seed_row_app ON consent_seed_row(app_id);
 `;
 
 /** Provenance activity stamped on every demo-seeded write. */
-export const SEED_DEMO_ACTIVITY = 'seed.demo';
+export const SEED_DEMO_ACTIVITY = "seed.demo";
 
 /** Provenance activity stamped when a demo row is purged. */
-export const SEED_PURGE_ACTIVITY = 'seed.purge';
+export const SEED_PURGE_ACTIVITY = "seed.purge";

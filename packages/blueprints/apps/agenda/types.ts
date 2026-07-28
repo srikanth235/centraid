@@ -6,7 +6,7 @@
 // logic.ts's/pending.ts's closures over them stay valid.
 
 /** The three canvas views (also the appDefaultView knob's domain). */
-export type ViewKind = 'month' | 'week' | 'schedule';
+export type ViewKind = "month" | "week" | "schedule";
 
 /** A schedule.calendar row, projected for the sidebar + chip picker. */
 export interface Calendar {

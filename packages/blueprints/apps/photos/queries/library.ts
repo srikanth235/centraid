@@ -43,7 +43,7 @@
  *
  * @type {import('@centraid/app-engine').QueryHandler}
  */
-import { readAssetJoins, readPlaces, srcOf } from './_shared.ts';
+import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 
 interface RawAsset {
   asset_id: string;
@@ -78,16 +78,19 @@ interface RawCollection {
 }
 
 export default async function libraryHandler({ input, ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   // The keyset cursor: a non-empty ISO timestamp, or nothing at all. An
   // absent/blank cursor must add no clause, so the uncursored window is
   // byte-identical to what it was before the cursor landed.
-  const before = typeof input?.before === 'string' && input.before !== '' ? input.before : null;
+  const before =
+    typeof input?.before === "string" && input.before !== ""
+      ? input.before
+      : null;
   const liveWhere = [
-    { column: 'deleted_at', op: 'is-null' },
-    { column: 'archived_at', op: 'is-null' },
-    ...(before ? [{ column: 'captured_at', op: 'lt', value: before }] : []),
+    { column: "deleted_at", op: "is-null" },
+    { column: "archived_at", op: "is-null" },
+    ...(before ? [{ column: "captured_at", op: "lt", value: before }] : []),
   ];
   try {
     const [liveAssets, trashedAssets, albums, places] = await Promise.all([
@@ -95,13 +98,13 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       // NULLs last, so camera-dated photos lead and undated imports trail
       // the window — acceptable semantics for a recency slice.
       ctx.vault.read({
-        entity: 'media.media_asset',
+        entity: "media.media_asset",
         // Live timeline excludes archived assets (issue #419): archive hides
         // from the timeline without trashing, so an archived photo is neither
         // here nor in the trash shelf. `liveWhere` also carries the optional
         // keyset cursor (`input.before`).
         where: liveWhere,
-        orderBy: { column: 'captured_at', dir: 'desc' },
+        orderBy: { column: "captured_at", dir: "desc" },
         limit: window,
         purpose,
       }),
@@ -109,14 +112,14 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       // the lifecycle sweep keeps short, so a fixed cap of 200 covers any
       // plausible shelf without a knob.
       ctx.vault.read({
-        entity: 'media.media_asset',
-        where: [{ column: 'deleted_at', op: 'not-null' }],
-        orderBy: { column: 'deleted_at', dir: 'desc' },
+        entity: "media.media_asset",
+        where: [{ column: "deleted_at", op: "not-null" }],
+        orderBy: { column: "deleted_at", dir: "desc" },
         limit: 200,
         purpose,
       }),
       // Albums are collections (issue #274) — the one curation mechanism.
-      ctx.vault.read({ entity: 'core.collection', purpose }),
+      ctx.vault.read({ entity: "core.collection", purpose }),
       readPlaces({ ctx, purpose }),
     ]);
 
@@ -127,22 +130,24 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const trashRows = (trashedAssets.rows ?? []) as unknown as RawAsset[];
     const windowed = [...liveRows, ...trashRows];
     const assetIds = windowed.map((a) => a.asset_id);
-    const contentIds = [...new Set(windowed.map((a) => a.content_id))].filter(Boolean);
+    const contentIds = [...new Set(windowed.map((a) => a.content_id))].filter(
+      Boolean
+    );
     const [entries, contents, joins] = await Promise.all([
       assetIds.length > 0
         ? ctx.vault.read({
-            entity: 'core.collection_entry',
+            entity: "core.collection_entry",
             where: [
-              { column: 'target_type', op: 'eq', value: 'media.media_asset' },
-              { column: 'target_id', op: 'in', value: assetIds },
+              { column: "target_type", op: "eq", value: "media.media_asset" },
+              { column: "target_id", op: "in", value: assetIds },
             ],
             purpose,
           })
         : { rows: [] },
       contentIds.length > 0
         ? ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] },
@@ -150,26 +155,33 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     ]);
 
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [c.content_id, c] as const),
+      ((contents.rows ?? []) as unknown as RawContent[]).map(
+        (c) => [c.content_id, c] as const
+      )
     );
     const { tagsByAsset, custodyByContent } = joins;
 
     // Keep the app's album row shape over collection rows: a collection may
     // also hold notes and documents; this surface renders its photo side.
-    const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map((c) => ({
-      album_id: c.collection_id,
-      title: c.name,
-      cover_content_id: c.cover_content_id ?? null,
-    }));
+    const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map(
+      (c) => ({
+        album_id: c.collection_id,
+        title: c.name,
+        cover_content_id: c.cover_content_id ?? null,
+      })
+    );
     const albumsById = new Map(albumRows.map((a) => [a.album_id, a] as const));
     const albumIdsByAsset = new Map<string, string[]>();
     for (const entry of (entries.rows ?? []) as unknown as RawEntry[]) {
-      if (!albumIdsByAsset.has(entry.target_id)) albumIdsByAsset.set(entry.target_id, []);
+      if (!albumIdsByAsset.has(entry.target_id))
+        albumIdsByAsset.set(entry.target_id, []);
       albumIdsByAsset.get(entry.target_id)!.push(entry.collection_id);
     }
 
     const placeOf = (asset: RawAsset) => {
-      const place = asset.place_id ? places.byId.get(asset.place_id) : undefined;
+      const place = asset.place_id
+        ? places.byId.get(asset.place_id)
+        : undefined;
       return place ? { place_id: place.place_id, name: place.name } : null;
     };
 
@@ -191,7 +203,9 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         // otherwise the content item's creation time in the vault.
         taken_at: asset.captured_at ?? content?.created_at ?? null,
         album_ids: albumIds,
-        album_titles: albumIds.map((id) => albumsById.get(id)?.title).filter((t) => t != null),
+        album_titles: albumIds
+          .map((id) => albumsById.get(id)?.title)
+          .filter((t) => t != null),
         place: placeOf(asset),
         tags: tagsByAsset.get(asset.asset_id) ?? [],
         custody_state: custodyByContent.get(asset.content_id) ?? null,
@@ -205,29 +219,37 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       // in memory — rare, and it costs a slot in the window, not correctness.
       .filter((asset) => contentById.get(asset.content_id)?.deleted_at == null)
       .map(join);
-    live.sort((a, b) => String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')));
+    live.sort((a, b) =>
+      String(b.taken_at ?? "").localeCompare(String(a.taken_at ?? ""))
+    );
 
     const trash = trashRows.map((asset) => {
       // The asset carries its own grace window (issue #274); the content
       // fallback covers vaults trashed before the pair landed.
-      const purgeAt = asset.purge_at ?? contentById.get(asset.content_id)?.purge_at ?? null;
+      const purgeAt =
+        asset.purge_at ?? contentById.get(asset.content_id)?.purge_at ?? null;
       const ms = purgeAt == null ? NaN : Date.parse(purgeAt) - Date.now();
       return {
         ...join(asset),
         purge_at: purgeAt,
         // Days until the lifecycle sweep purges — null when the bytes are
         // still rented elsewhere (no purge date) or the date is unreadable.
-        purge_in_days: Number.isNaN(ms) ? null : Math.max(0, Math.ceil(ms / 86400000)),
+        purge_in_days: Number.isNaN(ms)
+          ? null
+          : Math.max(0, Math.ceil(ms / 86400000)),
       };
     });
-    trash.sort((a, b) => String(b.deleted_at ?? '').localeCompare(String(a.deleted_at ?? '')));
+    trash.sort((a, b) =>
+      String(b.deleted_at ?? "").localeCompare(String(a.deleted_at ?? ""))
+    );
 
     // A full live window means there may be older photos beyond it — the
     // UI offers "Show more" (a re-read with a larger window).
     const truncated = liveRows.length >= window;
     // The cursor for the NEXT page: the oldest live asset's timestamp after the
     // newest-first sort. Null on an empty page (nothing left to page from).
-    const tail = live.length > 0 ? (live[live.length - 1]!.taken_at ?? null) : null;
+    const tail =
+      live.length > 0 ? (live[live.length - 1]!.taken_at ?? null) : null;
     return {
       assets: live,
       albums: albumRows,
@@ -244,7 +266,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // bridge) is ours, and saying "no vault access yet" about it sends the
     // reader off to fix a grant that was never the problem.
     const e = err as { code?: string; message?: string };
-    if (e.code === 'VAULT_CONSENT') {
+    if (e.code === "VAULT_CONSENT") {
       return { ...empty, vaultDenied: { code: e.code, message: e.message } };
     }
     return { ...empty, error: String(e.message ?? err) };

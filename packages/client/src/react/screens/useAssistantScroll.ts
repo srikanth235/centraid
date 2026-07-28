@@ -4,7 +4,14 @@
 // the reader is already there, surface a "jump to bottom" pill otherwise, and
 // restore each conversation's scroll position when switching threads.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 
 // Survives route remounts (navigating away and back) — in-memory is enough.
 const scrollPositions = new Map<string, number>();
@@ -13,7 +20,7 @@ const NEAR_BOTTOM_PX = 60;
 export function useAssistantScroll(
   scrollRef: RefObject<HTMLDivElement | null>,
   messages: unknown[],
-  conversationId: string | undefined,
+  conversationId: string | undefined
 ): { showJump: boolean; jumpToBottom: () => void } {
   const stuckRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -42,8 +49,8 @@ export function useAssistantScroll(
       const key = prevConvRef.current;
       if (key) scrollPositions.set(key, el.scrollTop);
     };
-    el.addEventListener('scroll', onScroll);
-    return () => el.removeEventListener('scroll', onScroll);
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
   }, [scrollRef]);
 
   // Restore the saved position (or the bottom) when the thread changes.
@@ -51,7 +58,9 @@ export function useAssistantScroll(
     const el = scrollRef.current;
     if (!el || prevConvRef.current === conversationId) return;
     prevConvRef.current = conversationId;
-    const saved = conversationId ? scrollPositions.get(conversationId) : undefined;
+    const saved = conversationId
+      ? scrollPositions.get(conversationId)
+      : undefined;
     if (saved === undefined) {
       el.scrollTop = el.scrollHeight;
       stuckRef.current = true;

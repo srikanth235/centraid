@@ -47,7 +47,10 @@ export function initialSupervisorState(): SupervisorState {
  * scheduled delay once `attempt` exceeds the schedule length.
  */
 export function backoffForAttempt(attempt: number): number {
-  const idx = Math.min(Math.max(attempt, 1) - 1, BACKOFF_SCHEDULE_MS.length - 1);
+  const idx = Math.min(
+    Math.max(attempt, 1) - 1,
+    BACKOFF_SCHEDULE_MS.length - 1
+  );
   return BACKOFF_SCHEDULE_MS[idx] as number;
 }
 
@@ -55,9 +58,11 @@ export function backoffForAttempt(attempt: number): number {
 export function recordFailure(
   state: SupervisorState,
   now: number,
-  message: string,
+  message: string
 ): SupervisorState {
-  const failures = [...state.failures, now].filter((t) => now - t <= CRASH_LOOP_WINDOW_MS);
+  const failures = [...state.failures, now].filter(
+    (t) => now - t <= CRASH_LOOP_WINDOW_MS
+  );
   return {
     failures,
     attempt: state.attempt + 1,

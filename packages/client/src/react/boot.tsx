@@ -9,50 +9,51 @@
 // loaded as a plain <script type="module"> — no dev server, so the strict
 // `script-src 'self'` CSP holds.
 
-import '../theme-vars.js';
-import '../icons.js';
-import type { ReactNode } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { Gallery } from './ui/index.js';
-import App from './shell/App.js';
-import ErrorBoundary from './shell/ErrorBoundary.js';
-import FirstRunGate from './screens/FirstRunGate.js';
-import { resetGatewayAuthCache } from '../gateway-client-core.js';
-import { updateVault } from '../gateway-client-vault.js';
-import { isWebHost } from './host-platform.js';
+import "../theme-vars.js";
+import "../icons.js";
+import type { ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+
 import {
   consumeInitialAssistHandoff,
   installDesktopAssistHandoff,
-} from '../assist-oauth-handoff.js';
+} from "../assist-oauth-handoff.js";
+import { resetGatewayAuthCache } from "../gateway-client-core.js";
+import { updateVault } from "../gateway-client-vault.js";
+import { isWebHost } from "./host-platform.js";
+import FirstRunGate from "./screens/FirstRunGate.js";
+import App from "./shell/App.js";
+import ErrorBoundary from "./shell/ErrorBoundary.js";
+import { Gallery } from "./ui/index.js";
 
 // Install terminal replica cleanup before any AppFrame asks for a local read;
 // inactive gateway removal and vault switches must also reach dormant storage.
-void import('../replica/shell-session.js')
+void import("../replica/shell-session.js")
   .then((module) => module.installReplicaStorageLifecycle())
   .catch(() => undefined);
 
 // Opted-in paired devices contribute PDF text and video posters only while
 // charging + unmetered. Dynamic import keeps the PDF.js worker off the shell's
 // startup path; the queue runner itself waits for browser idle time.
-void import('../device-enrichment-worker.js')
+void import("../device-enrichment-worker.js")
   .then((module) => module.installDeviceEnrichmentWorker())
   .catch(() => undefined);
 
-const PREVIEW_HASH = '#ui-preview';
-const HOST_SELECTOR = '#react-preview-root';
-const SHELL_SELECTOR = '#root';
+const PREVIEW_HASH = "#ui-preview";
+const HOST_SELECTOR = "#react-preview-root";
+const SHELL_SELECTOR = "#root";
 
 let root: Root | null = null;
 
 function styleHost(host: HTMLElement): void {
   const s = host.style;
-  s.position = 'fixed';
-  s.inset = '0';
-  s.overflow = 'auto';
-  s.zIndex = '9999';
-  s.background = 'var(--bg, #0f1115)';
+  s.position = "fixed";
+  s.inset = "0";
+  s.overflow = "auto";
+  s.zIndex = "9999";
+  s.background = "var(--bg, #0f1115)";
   // Leave room for the traffic-light inset title bar on macOS.
-  s.paddingTop = '28px';
+  s.paddingTop = "28px";
 }
 
 function sync(): void {
@@ -65,18 +66,18 @@ function sync(): void {
 
   if (active) {
     styleHost(host);
-    host.style.display = 'block';
+    host.style.display = "block";
     if (shell) {
-      shell.style.display = 'none';
+      shell.style.display = "none";
     }
     root ??= createRoot(host);
     root.render(<Gallery />);
     return;
   }
 
-  host.style.display = 'none';
+  host.style.display = "none";
   if (shell) {
-    shell.style.display = '';
+    shell.style.display = "";
   }
   if (root) {
     root.unmount();
@@ -84,7 +85,7 @@ function sync(): void {
   }
 }
 
-window.addEventListener('hashchange', sync);
+window.addEventListener("hashchange", sync);
 sync();
 
 // ── The shell (#325 flip) ────────────────────────────────────────────────
@@ -101,7 +102,7 @@ void (async (): Promise<void> => {
   installDesktopAssistHandoff();
   const shellRoot = createRoot(shell);
   const settings = await window.CentraidApi.getSettings().catch(
-    () => ({}) as Awaited<ReturnType<typeof window.CentraidApi.getSettings>>,
+    () => ({}) as Awaited<ReturnType<typeof window.CentraidApi.getSettings>>
   );
   const wrap = (node: ReactNode) => (
     <ErrorBoundary title="Centraid hit a problem">{node}</ErrorBoundary>
@@ -109,11 +110,11 @@ void (async (): Promise<void> => {
   if (settings.onboardingCompletedAt) {
     shellRoot.render(wrap(<App />));
     const assistHandoff = await assistHandoffPromise;
-    if (assistHandoff.status === 'error') window.alert(assistHandoff.message);
+    if (assistHandoff.status === "error") window.alert(assistHandoff.message);
     return;
   }
   void assistHandoffPromise.then((assistHandoff) => {
-    if (assistHandoff.status === 'error') window.alert(assistHandoff.message);
+    if (assistHandoff.status === "error") window.alert(assistHandoff.message);
   });
   // Both throws are deliberate: OnboardingScreen catches whatever
   // `onOnboardingComplete` rejects with and renders it inline, so a failed
@@ -129,33 +130,45 @@ void (async (): Promise<void> => {
   shellRoot.render(
     wrap(
       <FirstRunGate
-        host={isWebHost() ? 'web' : 'desktop'}
-        onOnboardingComplete={async ({ displayName, avatarColor, gatewayId, vaultId, path }) => {
+        host={isWebHost() ? "web" : "desktop"}
+        onOnboardingComplete={async ({
+          displayName,
+          avatarColor,
+          gatewayId,
+          vaultId,
+          path,
+        }) => {
           // Write metadata to the gateway this run actually connected.
           await window.CentraidApi.updateProfileMetadata({
-            id: gatewayId || 'local',
+            id: gatewayId || "local",
             displayName,
             avatarColor,
           });
           resetGatewayAuthCache();
-          if (path === 'fresh' && vaultId) {
+          if (path === "fresh" && vaultId) {
             // The auto-founded owner vault ships as "Personal"; first run
             // makes it theirs. Deliberately non-fatal — the user is already
             // in, and a generically-named space is a cosmetic problem they
             // can fix in Settings, not a reason to block onboarding. Logged
             // rather than swallowed so it is diagnosable.
-            await updateVault({ vaultId, name: displayName, color: avatarColor }).catch(
-              (err: unknown) => {
-                console.error('[first-run] renaming the Personal vault failed', err);
-              },
-            );
+            await updateVault({
+              vaultId,
+              name: displayName,
+              color: avatarColor,
+            }).catch((err: unknown) => {
+              console.error(
+                "[first-run] renaming the Personal vault failed",
+                err
+              );
+            });
           }
           await enterApp();
         }}
-      />,
-    ),
+      />
+    )
   );
 })();
 
-const READY_LOG = '[react] renderer ready — App on #root; open %s for the component gallery';
+const READY_LOG =
+  "[react] renderer ready — App on #root; open %s for the component gallery";
 console.log(READY_LOG, PREVIEW_HASH); // governance: allow-repo-hygiene (#363) one-time boot-readiness marker, not leftover debug output

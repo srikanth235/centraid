@@ -20,18 +20,18 @@
  * it never imports a backend.
  */
 
-import type { TurnStreamEvent } from './runner.js';
-import type { RunTurnFn, RunnerPrefs, TurnInput } from './turn.js';
+import type { TurnStreamEvent } from "./runner.js";
+import type { RunTurnFn, RunnerPrefs, TurnInput } from "./turn.js";
 
 /** Longest title we keep — matches the ledger's derived-title budget. */
 const MAX_TITLE_CHARS = 60;
 
 const TITLE_SYSTEM_PROMPT = [
-  'You name a conversation. Read the first user message and the assistant reply,',
-  'then output a single short title (3–6 words) that captures the topic.',
-  'Rules: no surrounding quotes, no trailing punctuation, no prefix like',
+  "You name a conversation. Read the first user message and the assistant reply,",
+  "then output a single short title (3–6 words) that captures the topic.",
+  "Rules: no surrounding quotes, no trailing punctuation, no prefix like",
   '"Title:", plain text only, sentence case. Output ONLY the title.',
-].join(' ');
+].join(" ");
 
 export interface GenerateTitleDeps {
   /** The shared turn driver — agent-runtime `runTurn` in production. */
@@ -58,7 +58,7 @@ export interface GenerateTitleDeps {
 export function cleanTitle(raw: string): string | undefined {
   let t = raw.trim();
   // Model sometimes echoes a leading marker despite the instruction.
-  t = t.replace(/^title\s*[:\-–]\s*/iu, '');
+  t = t.replace(/^title\s*[:\-–]\s*/iu, "");
   // Strip a single layer of wrapping quotes (straight or curly).
   const first = t[0];
   const last = t[t.length - 1];
@@ -66,17 +66,17 @@ export function cleanTitle(raw: string): string | undefined {
     t.length >= 2 &&
     ((first === '"' && last === '"') ||
       (first === "'" && last === "'") ||
-      (first === '“' && last === '”') ||
-      (first === '‘' && last === '’'))
+      (first === "“" && last === "”") ||
+      (first === "‘" && last === "’"))
   ) {
     t = t.slice(1, -1).trim();
   }
   // Keep only the first line — a stray explanation never becomes the title.
-  const nl = t.indexOf('\n');
+  const nl = t.indexOf("\n");
   if (nl >= 0) t = t.slice(0, nl).trim();
   t = t
-    .replace(/\s+/gu, ' ')
-    .replace(/[.,;:!?…]+$/u, '')
+    .replace(/\s+/gu, " ")
+    .replace(/[.,;:!?…]+$/u, "")
     .trim();
   if (t.length === 0) return undefined;
   if (t.length <= MAX_TITLE_CHARS) return t;
@@ -89,28 +89,30 @@ export function cleanTitle(raw: string): string | undefined {
  * propagate — the caller is responsible for the fire-and-forget swallow.
  */
 export async function generateConversationTitle(
-  deps: GenerateTitleDeps,
+  deps: GenerateTitleDeps
 ): Promise<string | undefined> {
   const userExcerpt = excerpt(deps.userMessage, 1500);
   const assistantExcerpt = excerpt(deps.assistantText, 1500);
   const prompt = [
-    'First user message:',
+    "First user message:",
     userExcerpt,
-    '',
-    'Assistant reply:',
+    "",
+    "Assistant reply:",
     assistantExcerpt,
-    '',
-    'Title:',
-  ].join('\n');
+    "",
+    "Title:",
+  ].join("\n");
 
   const controller = new AbortController();
-  const timer = deps.timeoutMs ? setTimeout(() => controller.abort(), deps.timeoutMs) : undefined;
+  const timer = deps.timeoutMs
+    ? setTimeout(() => controller.abort(), deps.timeoutMs)
+    : undefined;
   timer?.unref?.();
 
-  let text = '';
+  let text = "";
   const onEvent = (event: TurnStreamEvent): void => {
-    if (event.type === 'assistant.delta') text += event.delta;
-    else if (event.type === 'final') text ||= event.text;
+    if (event.type === "assistant.delta") text += event.delta;
+    else if (event.type === "final") text ||= event.text;
   };
 
   const input: TurnInput = {
@@ -130,6 +132,6 @@ export async function generateConversationTitle(
 }
 
 function excerpt(s: string, max: number): string {
-  const flat = s.replace(/\s+/gu, ' ').trim();
+  const flat = s.replace(/\s+/gu, " ").trim();
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
 }

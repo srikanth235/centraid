@@ -1,8 +1,12 @@
-import type { JSX } from 'react';
+import type { JSX } from "react";
 
-import { vaultAtlasGraph, vaultAtlasPulse, vaultAtlasStats } from '../../../gateway-client.js';
-import AtlasScreen from '../../screens/AtlasScreen.js';
-import PageScroll from '../PageScroll.js';
+import {
+  vaultAtlasGraph,
+  vaultAtlasPulse,
+  vaultAtlasStats,
+} from "../../../gateway-client.js";
+import AtlasScreen from "../../screens/AtlasScreen.js";
+import PageScroll from "../PageScroll.js";
 
 // React-owned Vault Atlas route (issue #441 Part B) — the ontology-at-a-glance
 // census that lives under the sidebar's Operations section. Thin like

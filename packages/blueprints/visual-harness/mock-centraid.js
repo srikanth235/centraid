@@ -16,20 +16,20 @@
 // it runs after the real bridge (which it fully replaces) and before any app
 // code reads `window.centraid`.
 (function () {
-  'use strict';
+  "use strict";
 
   var qs = new URLSearchParams(location.search);
-  var EMPTY_MODE = qs.get('empty') === '1';
-  var DENIED_MODE = qs.get('denied') === '1';
+  var EMPTY_MODE = qs.get("empty") === "1";
+  var DENIED_MODE = qs.get("denied") === "1";
 
   var m = /^\/centraid\/([^/]+)\//.exec(location.pathname);
   var appId = m ? decodeURIComponent(m[1]) : null;
 
-  var BLOB_ROUTE = '/centraid/_vault/blobs';
+  var BLOB_ROUTE = "/centraid/_vault/blobs";
   var uidCounters = {};
   function uid(prefix) {
     uidCounters[prefix] = (uidCounters[prefix] || 0) + 1;
-    return prefix + '-new-' + uidCounters[prefix];
+    return prefix + "-new-" + uidCounters[prefix];
   }
   function isoDaysAgo(days, hour) {
     var d = new Date(Date.now() - days * 86400000);
@@ -40,7 +40,7 @@
     return new Date(Date.now() + days * 86400000).toISOString();
   }
   function blobUri(id) {
-    return BLOB_ROUTE + '/' + encodeURIComponent(id);
+    return BLOB_ROUTE + "/" + encodeURIComponent(id);
   }
   // A real fetchable data: URI for a text version's bytes — unlike blobUri()
   // above (whose GET route always returns a placeholder SVG, real bytes
@@ -48,7 +48,7 @@
   // `fetch(...).then(r => r.text())` its way to a version's actual content
   // under the mock, not just an image.
   function textDataUri(mediaType, text) {
-    return 'data:' + mediaType + ';charset=utf-8,' + encodeURIComponent(text);
+    return "data:" + mediaType + ";charset=utf-8," + encodeURIComponent(text);
   }
   // Local YYYY-MM-DD day key (not a full ISO timestamp) — the shape tasks'
   // queries/board.js and app.jsx's format.js (localDayKey) both use for
@@ -57,16 +57,16 @@
     var d = new Date();
     d.setDate(d.getDate() + offsetDays);
     var p = function (n) {
-      return String(n).padStart(2, '0');
+      return String(n).padStart(2, "0");
     };
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
   }
   // The tasks fixture's parked-write trigger (see buildTasksStore below): any
   // add/edit/set-status/attach/detach touching a task whose title carries
   // "(park)" returns a parked outcome instead of executing, so the harness
   // can show the accent-rail/pending-chip treatment without a real vault.
   function isParkTrigger(text) {
-    return typeof text === 'string' && /\(park\)/i.test(text);
+    return typeof text === "string" && /\(park\)/i.test(text);
   }
 
   // ---------------------------------------------------------------------
@@ -84,7 +84,7 @@
     var detail = {
       tables: tables || [],
       ts: Date.now(),
-      source: 'visual-harness-mock',
+      source: "visual-harness-mock",
     };
     listeners.forEach(function (cb) {
       try {
@@ -94,7 +94,9 @@
       }
     });
     try {
-      window.dispatchEvent(new CustomEvent('centraid:datachange', { detail: detail }));
+      window.dispatchEvent(
+        new CustomEvent("centraid:datachange", { detail: detail })
+      );
     } catch (_) {}
   }
 
@@ -114,19 +116,19 @@
     if (EMPTY_MODE) return { folders: [], documents: [] };
 
     var folders = [
-      { folder_id: 'folder-taxes', name: 'Taxes', parent_id: null },
-      { folder_id: 'folder-leases', name: 'Leases', parent_id: null },
-      { folder_id: 'folder-warranties', name: 'Warranties', parent_id: null },
+      { folder_id: "folder-taxes", name: "Taxes", parent_id: null },
+      { folder_id: "folder-leases", name: "Leases", parent_id: null },
+      { folder_id: "folder-warranties", name: "Warranties", parent_id: null },
       // Nested: Receipts lives inside Taxes.
       {
-        folder_id: 'folder-receipts',
-        name: 'Receipts',
-        parent_id: 'folder-taxes',
+        folder_id: "folder-receipts",
+        name: "Receipts",
+        parent_id: "folder-taxes",
       },
     ];
 
     function doc(id, title, mediaType, folderId, days, bytes, extra) {
-      var contentId = id + '-c1';
+      var contentId = id + "-c1";
       var createdAt = isoDaysAgo(days);
       var base = {
         document_id: id,
@@ -163,28 +165,32 @@
     // load actually works under the mock, not just the placeholder SVG the
     // blob route serves for every other media type).
     var packingBodies = [
-      ['doc-16-c1', 'Packing list\n- Passport\n- Chargers\n', 20],
-      ['doc-16-c2', 'Packing list\n- Passport\n- Chargers\n- Sunscreen\n', 8],
-      ['doc-16-c3', 'Packing list\n- Passport\n- Chargers\n- Sunscreen\n- Adapter\n', 1],
+      ["doc-16-c1", "Packing list\n- Passport\n- Chargers\n", 20],
+      ["doc-16-c2", "Packing list\n- Passport\n- Chargers\n- Sunscreen\n", 8],
+      [
+        "doc-16-c3",
+        "Packing list\n- Passport\n- Chargers\n- Sunscreen\n- Adapter\n",
+        1,
+      ],
     ];
     var packingVersions = packingBodies
       .map(function (row) {
         var text = row[1];
         return {
           content_id: row[0],
-          media_type: 'text/plain',
+          media_type: "text/plain",
           byte_size: text.length,
-          content_uri: textDataUri('text/plain', text),
+          content_uri: textDataUri("text/plain", text),
           asserted_at: isoDaysAgo(row[2]),
         };
       })
       .reverse(); // newest first, matching queries/history.js's own order
     packingVersions[0].current = true;
     var packingDoc = {
-      document_id: 'doc-16',
+      document_id: "doc-16",
       content_id: packingVersions[0].content_id,
-      title: 'Packing list.txt',
-      media_type: 'text/plain',
+      title: "Packing list.txt",
+      media_type: "text/plain",
       byte_size: packingVersions[0].byte_size,
       content_uri: packingVersions[0].content_uri,
       created_at: isoDaysAgo(20),
@@ -197,47 +203,106 @@
     };
 
     var documents = [
-      doc('doc-1', 'Lease Agreement 2024.pdf', 'application/pdf', 'folder-leases', 20, 2_458_000, {
-        starred: true,
-      }),
-      doc('doc-2', 'Passport scan.jpg', 'image/jpeg', null, 45, 1_150_000, {
-        starred: true,
-      }),
-      doc('doc-3', 'W2-2023.pdf', 'application/pdf', 'folder-taxes', 200, 340_000),
-      doc('doc-4', '1099-INT.pdf', 'application/pdf', 'folder-receipts', 190, 120_000),
-      doc('doc-5', 'Budget 2025.xlsx', 'application/vnd.ms-excel', null, 5, 88_000, {
-        starred: true,
-      }),
-      doc('doc-6', 'Q1 Expenses.csv', 'text/csv', 'folder-taxes', 10, 12_000),
-      doc('doc-7', 'Homeowners policy.pdf', 'application/pdf', 'folder-warranties', 300, 900_000),
       doc(
-        'doc-8',
-        'Refrigerator warranty.docx',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'folder-warranties',
-        280,
-        45_000,
+        "doc-1",
+        "Lease Agreement 2024.pdf",
+        "application/pdf",
+        "folder-leases",
+        20,
+        2_458_000,
+        {
+          starred: true,
+        }
       ),
-      doc('doc-9', 'Trip itinerary.docx', 'application/msword', null, 60, 30_000),
+      doc("doc-2", "Passport scan.jpg", "image/jpeg", null, 45, 1_150_000, {
+        starred: true,
+      }),
       doc(
-        'doc-10',
-        'Pitch deck.pptx',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        "doc-3",
+        "W2-2023.pdf",
+        "application/pdf",
+        "folder-taxes",
+        200,
+        340_000
+      ),
+      doc(
+        "doc-4",
+        "1099-INT.pdf",
+        "application/pdf",
+        "folder-receipts",
+        190,
+        120_000
+      ),
+      doc(
+        "doc-5",
+        "Budget 2025.xlsx",
+        "application/vnd.ms-excel",
+        null,
+        5,
+        88_000,
+        {
+          starred: true,
+        }
+      ),
+      doc("doc-6", "Q1 Expenses.csv", "text/csv", "folder-taxes", 10, 12_000),
+      doc(
+        "doc-7",
+        "Homeowners policy.pdf",
+        "application/pdf",
+        "folder-warranties",
+        300,
+        900_000
+      ),
+      doc(
+        "doc-8",
+        "Refrigerator warranty.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "folder-warranties",
+        280,
+        45_000
+      ),
+      doc(
+        "doc-9",
+        "Trip itinerary.docx",
+        "application/msword",
+        null,
+        60,
+        30_000
+      ),
+      doc(
+        "doc-10",
+        "Pitch deck.pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         null,
         15,
-        5_600_000,
+        5_600_000
       ),
-      doc('doc-11', 'Vacation photo.png', 'image/png', null, 40, 3_200_000),
-      doc('doc-12', 'Car title scan.pdf', 'application/pdf', 'folder-receipts', 100, 500_000, {
-        trashed: true,
-        purge_at: isoDaysFromNow(12),
-      }),
-      doc('doc-13', 'Old resume.doc', 'application/msword', null, 500, 60_000, {
+      doc("doc-11", "Vacation photo.png", "image/png", null, 40, 3_200_000),
+      doc(
+        "doc-12",
+        "Car title scan.pdf",
+        "application/pdf",
+        "folder-receipts",
+        100,
+        500_000,
+        {
+          trashed: true,
+          purge_at: isoDaysFromNow(12),
+        }
+      ),
+      doc("doc-13", "Old resume.doc", "application/msword", null, 500, 60_000, {
         trashed: true,
         purge_at: isoDaysFromNow(3),
       }),
-      doc('doc-14', 'backup.zip', 'application/zip', null, 2, 12_400_000),
-      doc('doc-15', 'notes.bin', 'application/octet-stream', 'folder-taxes', 1, 4_000),
+      doc("doc-14", "backup.zip", "application/zip", null, 2, 12_400_000),
+      doc(
+        "doc-15",
+        "notes.bin",
+        "application/octet-stream",
+        "folder-taxes",
+        1,
+        4_000
+      ),
       packingDoc,
     ];
 
@@ -251,18 +316,18 @@
     // label) — each fixture label gets a stable synthetic id.
     function docLabelTags(documentId, labels) {
       return labels.map(function (label) {
-        return { tag_id: 'tag-' + documentId + '-' + label, label: label };
+        return { tag_id: "tag-" + documentId + "-" + label, label: label };
       });
     }
     var tagsByDoc = {
-      'doc-1': docLabelTags('doc-1', ['lease', '2024']),
-      'doc-3': docLabelTags('doc-3', ['taxes']),
-      'doc-4': docLabelTags('doc-4', ['taxes', 'receipts']),
-      'doc-6': docLabelTags('doc-6', ['taxes']),
-      'doc-9': docLabelTags('doc-9', ['travel']),
-      'doc-16': docLabelTags('doc-16', ['travel']),
+      "doc-1": docLabelTags("doc-1", ["lease", "2024"]),
+      "doc-3": docLabelTags("doc-3", ["taxes"]),
+      "doc-4": docLabelTags("doc-4", ["taxes", "receipts"]),
+      "doc-6": docLabelTags("doc-6", ["taxes"]),
+      "doc-9": docLabelTags("doc-9", ["travel"]),
+      "doc-16": docLabelTags("doc-16", ["travel"]),
     };
-    var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
+    var custodyStates = ["replicated", "local-only", "remote-only", "missing"];
     documents.forEach(function (d, i) {
       d.tags = tagsByDoc[d.document_id] || [];
       d.custody_state = custodyStates[i % custodyStates.length];
@@ -271,20 +336,20 @@
     return { folders: folders, documents: documents };
   }
 
-  var docsStore = appId === 'docs' ? buildDocsStore() : null;
+  var docsStore = appId === "docs" ? buildDocsStore() : null;
 
   function docsRead(query, input) {
-    if (query === 'drive') {
+    if (query === "drive") {
       return {
         folders: docsStore.folders,
         documents: docsStore.documents,
-        root_folder_id: 'folder-root',
+        root_folder_id: "folder-root",
         truncated: false,
         window: Math.min(Math.max(Number(input.limit) || 200, 20), 2000),
       };
     }
-    if (query === 'search') {
-      var term = String(input.term || '')
+    if (query === "search") {
+      var term = String(input.term || "")
         .trim()
         .toLowerCase();
       if (!term) return { documents: [] };
@@ -293,11 +358,11 @@
           return !d.trashed && d.title.toLowerCase().indexOf(term) !== -1;
         })
         .map(function (d) {
-          return Object.assign({}, d, { snippet: '…' + d.title + '…' });
+          return Object.assign({}, d, { snippet: "…" + d.title + "…" });
         });
       return { documents: docs };
     }
-    if (query === 'history') {
+    if (query === "history") {
       var hd = docsStore.documents.find(function (d) {
         return d.document_id === input.document_id;
       });
@@ -314,7 +379,7 @@
       });
       return { versions: versions };
     }
-    if (query === 'activity') {
+    if (query === "activity") {
       // Synthesizes what queries/activity.js's real consent.provenance read
       // would return — see that file's own header for the exact row shape
       // (`activity`/`agent_kind`/`occurred_at`). Not stored on the fixture
@@ -327,22 +392,22 @@
       if (!ad) return { events: [] };
       var events = [
         {
-          activity: 'command.core.add_document',
-          agent_kind: 'owner',
+          activity: "command.core.add_document",
+          agent_kind: "owner",
           occurred_at: ad.created_at,
         },
       ];
       if (ad.folder_id) {
         events.push({
-          activity: 'command.core.move_document',
-          agent_kind: 'app',
+          activity: "command.core.move_document",
+          agent_kind: "app",
           occurred_at: ad.created_at,
         });
       }
       if (ad.starred) {
         events.push({
-          activity: 'command.core.star_document',
-          agent_kind: 'ai_agent',
+          activity: "command.core.star_document",
+          agent_kind: "ai_agent",
           occurred_at: ad.updated_at,
         });
       }
@@ -354,19 +419,21 @@
       var editedVersions = (ad.__versions || []).slice(0, -1);
       editedVersions.forEach(function (v) {
         events.push({
-          activity: /^text\//i.test(ad.media_type || '')
-            ? 'command.core.edit_document'
-            : 'command.core.replace_document_content',
-          agent_kind: 'owner',
+          activity: /^text\//i.test(ad.media_type || "")
+            ? "command.core.edit_document"
+            : "command.core.replace_document_content",
+          agent_kind: "owner",
           occurred_at: v.asserted_at,
         });
       });
       events.sort(function (a, b) {
-        return String(b.occurred_at || '').localeCompare(String(a.occurred_at || ''));
+        return String(b.occurred_at || "").localeCompare(
+          String(a.occurred_at || "")
+        );
       });
       return { events: events };
     }
-    console.warn('[mock-centraid] docs: unmapped query', query);
+    console.warn("[mock-centraid] docs: unmapped query", query);
     return {};
   }
 
@@ -384,10 +451,10 @@
       });
     }
     function ok(output) {
-      return { status: 'executed', output: output || {} };
+      return { status: "executed", output: output || {} };
     }
     function refuse(predicate) {
-      return { status: 'failed', predicate: predicate, reason: predicate };
+      return { status: "failed", predicate: predicate, reason: predicate };
     }
     // A new version, unshifted onto __versions (newest first) — the shared
     // tail of edit/replace/restore-version below, mirroring how the real
@@ -407,31 +474,33 @@
     }
 
     switch (action) {
-      case 'upload': {
-        var id = uid('doc');
-        var title = String(input.title || 'Untitled');
-        var ext = (title.split('.').pop() || '').toLowerCase();
+      case "upload": {
+        var id = uid("doc");
+        var title = String(input.title || "Untitled");
+        var ext = (title.split(".").pop() || "").toLowerCase();
         var mediaByExt = {
-          pdf: 'application/pdf',
-          jpg: 'image/jpeg',
-          jpeg: 'image/jpeg',
-          png: 'image/png',
-          gif: 'image/gif',
-          xlsx: 'application/vnd.ms-excel',
-          csv: 'text/csv',
-          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          doc: 'application/msword',
-          pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          pdf: "application/pdf",
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          gif: "image/gif",
+          xlsx: "application/vnd.ms-excel",
+          csv: "text/csv",
+          docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          doc: "application/msword",
+          pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         };
-        var mediaType = mediaByExt[ext] || 'application/octet-stream';
-        var contentId = id + '-c1';
+        var mediaType = mediaByExt[ext] || "application/octet-stream";
+        var contentId = id + "-c1";
         var nowIso = new Date().toISOString();
         var newDoc = {
           document_id: id,
           content_id: contentId,
           title: title,
           media_type: mediaType,
-          byte_size: input.data_uri ? Math.round((input.data_uri.length * 3) / 4) : 256_000,
+          byte_size: input.data_uri
+            ? Math.round((input.data_uri.length * 3) / 4)
+            : 256_000,
           content_uri: blobUri(contentId),
           created_at: nowIso,
           updated_at: nowIso,
@@ -440,7 +509,7 @@
           trashed: false,
           purge_at: null,
           tags: [],
-          custody_state: 'local-only',
+          custody_state: "local-only",
         };
         newDoc.__versions = [
           {
@@ -455,54 +524,56 @@
         docs.unshift(newDoc);
         return ok({ document_id: id, content_id: contentId, deduped: false });
       }
-      case 'rename': {
+      case "rename": {
         var d1 = findDoc(input.document_id);
-        if (!d1) return refuse('not_found');
-        if (d1.trashed) return refuse('document_trashed');
+        if (!d1) return refuse("not_found");
+        if (d1.trashed) return refuse("document_trashed");
         d1.title = String(input.title);
         return ok({ document_id: d1.document_id });
       }
-      case 'move': {
+      case "move": {
         var d2 = findDoc(input.document_id);
-        if (!d2) return refuse('not_found');
+        if (!d2) return refuse("not_found");
         d2.folder_id = input.folder_id != null ? String(input.folder_id) : null;
         return ok({ document_id: d2.document_id });
       }
-      case 'trash': {
+      case "trash": {
         var d3 = findDoc(input.document_id);
-        if (!d3) return refuse('not_found');
+        if (!d3) return refuse("not_found");
         d3.trashed = true;
         d3.purge_at = isoDaysFromNow(30);
         return ok({ document_id: d3.document_id, purge_at: d3.purge_at });
       }
-      case 'restore': {
+      case "restore": {
         var d4 = findDoc(input.document_id);
-        if (!d4) return refuse('not_found');
+        if (!d4) return refuse("not_found");
         d4.trashed = false;
         d4.purge_at = null;
         return ok({ document_id: d4.document_id });
       }
-      case 'star': {
+      case "star": {
         var d5 = findDoc(input.document_id);
-        if (!d5) return refuse('not_found');
-        if (d5.trashed) return refuse('document_trashed');
+        if (!d5) return refuse("not_found");
+        if (d5.trashed) return refuse("document_trashed");
         d5.starred = true;
         return ok({ document_id: d5.document_id });
       }
-      case 'unstar': {
+      case "unstar": {
         var d6 = findDoc(input.document_id);
-        if (!d6) return refuse('not_found');
-        if (d6.trashed) return refuse('document_trashed');
+        if (!d6) return refuse("not_found");
+        if (d6.trashed) return refuse("document_trashed");
         d6.starred = false;
         return ok({ document_id: d6.document_id });
       }
-      case 'edit': {
+      case "edit": {
         var d7 = findDoc(input.document_id);
-        if (!d7) return refuse('not_found');
-        if (d7.trashed) return refuse('document_trashed');
-        if (!/^text\//i.test(d7.media_type || '')) return refuse('current_content_is_text');
-        var bodyText = String(input.body_text || '');
-        var newContentId7 = d7.document_id + '-c' + ((d7.__versions || []).length + 1);
+        if (!d7) return refuse("not_found");
+        if (d7.trashed) return refuse("document_trashed");
+        if (!/^text\//i.test(d7.media_type || ""))
+          return refuse("current_content_is_text");
+        var bodyText = String(input.body_text || "");
+        var newContentId7 =
+          d7.document_id + "-c" + ((d7.__versions || []).length + 1);
         pushVersion(d7, {
           content_id: newContentId7,
           media_type: d7.media_type,
@@ -513,30 +584,33 @@
         if (input.title != null) d7.title = String(input.title);
         return ok({ document_id: d7.document_id, content_id: newContentId7 });
       }
-      case 'replace': {
+      case "replace": {
         var d8 = findDoc(input.document_id);
-        if (!d8) return refuse('not_found');
-        if (d8.trashed) return refuse('document_trashed');
-        var newContentId8 = d8.document_id + '-c' + ((d8.__versions || []).length + 1);
+        if (!d8) return refuse("not_found");
+        if (d8.trashed) return refuse("document_trashed");
+        var newContentId8 =
+          d8.document_id + "-c" + ((d8.__versions || []).length + 1);
         pushVersion(d8, {
           content_id: newContentId8,
           media_type: d8.media_type,
-          byte_size: input.data_uri ? Math.round((input.data_uri.length * 3) / 4) : 256_000,
+          byte_size: input.data_uri
+            ? Math.round((input.data_uri.length * 3) / 4)
+            : 256_000,
           content_uri: blobUri(newContentId8),
           asserted_at: new Date().toISOString(),
         });
         if (input.title != null) d8.title = String(input.title);
         return ok({ document_id: d8.document_id, content_id: newContentId8 });
       }
-      case 'restore-version': {
+      case "restore-version": {
         var d9 = findDoc(input.document_id);
-        if (!d9) return refuse('not_found');
+        if (!d9) return refuse("not_found");
         var versions9 = d9.__versions || [];
         var idx9 = versions9.findIndex(function (v) {
           return v.content_id === input.content_id;
         });
-        if (idx9 === -1) return refuse('target_in_chain');
-        if (idx9 === 0) return refuse('not_already_current');
+        if (idx9 === -1) return refuse("target_in_chain");
+        if (idx9 === 0) return refuse("not_already_current");
         var restored9 = versions9.splice(idx9, 1)[0];
         pushVersion(d9, {
           content_id: restored9.content_id,
@@ -550,21 +624,21 @@
           content_id: restored9.content_id,
         });
       }
-      case 'tag': {
+      case "tag": {
         var dTag = findDoc(input.document_id);
-        if (!dTag) return refuse('not_found');
-        var label = String(input.label || '')
+        if (!dTag) return refuse("not_found");
+        var label = String(input.label || "")
           .trim()
           .toLowerCase();
-        if (!label) return refuse('label_not_blank');
+        if (!label) return refuse("label_not_blank");
         if (!dTag.tags) dTag.tags = [];
         var existingTag = dTag.tags.find(function (t) {
           return t.label === label;
         });
-        if (!existingTag) dTag.tags.push({ tag_id: uid('tag'), label: label });
+        if (!existingTag) dTag.tags.push({ tag_id: uid("tag"), label: label });
         return ok({ document_id: dTag.document_id });
       }
-      case 'untag': {
+      case "untag": {
         // core.untag_item removes by tag_id alone (no document_id sent) —
         // find whichever document currently owns this edge.
         var dUntag = docs.find(function (d) {
@@ -572,48 +646,51 @@
             return t.tag_id === input.tag_id;
           });
         });
-        if (!dUntag) return refuse('not_found');
+        if (!dUntag) return refuse("not_found");
         dUntag.tags = dUntag.tags.filter(function (t) {
           return t.tag_id !== input.tag_id;
         });
         return ok({ tag_id: input.tag_id });
       }
-      case 'create-folder': {
-        var parentId = input.parent_folder_id != null ? String(input.parent_folder_id) : null;
+      case "create-folder": {
+        var parentId =
+          input.parent_folder_id != null
+            ? String(input.parent_folder_id)
+            : null;
         var name = String(input.name);
         var dup = folders.some(function (f) {
           return f.parent_id === parentId && f.name === name;
         });
-        if (dup) return refuse('name_unused_among_siblings');
+        if (dup) return refuse("name_unused_among_siblings");
         var newFolder = {
-          folder_id: uid('folder'),
+          folder_id: uid("folder"),
           name: name,
           parent_id: parentId,
         };
         folders.push(newFolder);
         return ok({ folder_id: newFolder.folder_id });
       }
-      case 'rename-folder': {
+      case "rename-folder": {
         var f1 = findFolder(input.folder_id);
-        if (!f1) return refuse('not_found');
+        if (!f1) return refuse("not_found");
         var newName = String(input.name);
         var dup2 = folders.some(function (f) {
           return f.parent_id === f1.parent_id && f.name === newName && f !== f1;
         });
-        if (dup2) return refuse('name_unused_among_siblings');
+        if (dup2) return refuse("name_unused_among_siblings");
         f1.name = newName;
         return ok({ folder_id: f1.folder_id });
       }
-      case 'delete-folder': {
+      case "delete-folder": {
         var f2 = findFolder(input.folder_id);
-        if (!f2) return refuse('not_found');
+        if (!f2) return refuse("not_found");
         var hasDocs = docs.some(function (d) {
           return d.folder_id === f2.folder_id;
         });
         var hasSubfolders = folders.some(function (f) {
           return f.parent_id === f2.folder_id;
         });
-        if (hasDocs || hasSubfolders) return refuse('folder_is_empty');
+        if (hasDocs || hasSubfolders) return refuse("folder_is_empty");
         docsStore.folders = folders.filter(function (f) {
           return f.folder_id !== f2.folder_id;
         });
@@ -640,70 +717,77 @@
         people: [],
         places: [],
         phash: [],
-        enrichmentTier: 'local',
+        enrichmentTier: "local",
       };
     }
 
     var people = [
-      { party_id: 'party-mia', name: 'Mia' },
-      { party_id: 'party-sam', name: 'Sam' },
-      { party_id: 'party-ravi', name: 'Ravi' },
+      { party_id: "party-mia", name: "Mia" },
+      { party_id: "party-sam", name: "Sam" },
+      { party_id: "party-ravi", name: "Ravi" },
     ];
 
     var albums = [
-      { album_id: 'album-trip', title: 'Summer Trip', cover_content_id: null },
-      { album_id: 'album-family', title: 'Family', cover_content_id: null },
+      { album_id: "album-trip", title: "Summer Trip", cover_content_id: null },
+      { album_id: "album-family", title: "Family", cover_content_id: null },
       {
-        album_id: 'album-studio',
-        title: 'Studio work',
+        album_id: "album-studio",
+        title: "Studio work",
         cover_content_id: null,
       },
     ];
     var tripMembers = [
-      'asset-2',
-      'asset-5',
-      'asset-8',
-      'asset-11',
-      'asset-14',
-      'asset-17',
-      'asset-23',
-      'asset-31',
+      "asset-2",
+      "asset-5",
+      "asset-8",
+      "asset-11",
+      "asset-14",
+      "asset-17",
+      "asset-23",
+      "asset-31",
     ];
-    var familyMembers = ['asset-3', 'asset-6', 'asset-9', 'asset-12', 'asset-28', 'asset-40'];
-    var studioMembers = ['asset-45', 'asset-48', 'asset-52', 'asset-55'];
+    var familyMembers = [
+      "asset-3",
+      "asset-6",
+      "asset-9",
+      "asset-12",
+      "asset-28",
+      "asset-40",
+    ];
+    var studioMembers = ["asset-45", "asset-48", "asset-52", "asset-55"];
 
     // Issue #352 phase 3/4 fixtures — geolocation, free-form tags, custody.
     var places = [
-      { place_id: 'place-cafe', name: 'Blue Bottle Cafe' },
-      { place_id: 'place-park', name: 'Golden Gate Park' },
-      { place_id: 'place-coast', name: 'Half Moon Bay' },
+      { place_id: "place-cafe", name: "Blue Bottle Cafe" },
+      { place_id: "place-park", name: "Golden Gate Park" },
+      { place_id: "place-coast", name: "Half Moon Bay" },
     ];
     var placeByAsset = {
-      'asset-2': places[0],
-      'asset-5': places[1],
-      'asset-9': places[0],
-      'asset-23': places[2],
-      'asset-31': places[2],
+      "asset-2": places[0],
+      "asset-5": places[1],
+      "asset-9": places[0],
+      "asset-23": places[2],
+      "asset-31": places[2],
     };
     // core.tag_item's edges carry a tag_id (untag-asset.js removes by
     // tag_id, not label) — each fixture label gets a stable synthetic id.
     function labelTags(assetId, labels) {
       return labels.map(function (label) {
-        return { tag_id: 'tag-' + assetId + '-' + label, label: label };
+        return { tag_id: "tag-" + assetId + "-" + label, label: label };
       });
     }
     var tagsByAsset = {
-      'asset-2': labelTags('asset-2', ['beach', 'family']),
-      'asset-5': labelTags('asset-5', ['hike']),
-      'asset-8': labelTags('asset-8', ['family']),
-      'asset-11': labelTags('asset-11', ['beach']),
-      'asset-14': labelTags('asset-14', ['sunset']),
-      'asset-23': labelTags('asset-23', ['coast', 'beach']),
-      'asset-45': labelTags('asset-45', ['work']),
+      "asset-2": labelTags("asset-2", ["beach", "family"]),
+      "asset-5": labelTags("asset-5", ["hike"]),
+      "asset-8": labelTags("asset-8", ["family"]),
+      "asset-11": labelTags("asset-11", ["beach"]),
+      "asset-14": labelTags("asset-14", ["sunset"]),
+      "asset-23": labelTags("asset-23", ["coast", "beach"]),
+      "asset-45": labelTags("asset-45", ["work"]),
     };
     // Cycles through all four custody states so every badge tone renders
     // somewhere in the fixture.
-    var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
+    var custodyStates = ["replicated", "local-only", "remote-only", "missing"];
     // A spread of real-ish aspect ratios (landscape 4:3, portrait 3:4,
     // square, wide 16:9, ultra-wide panorama) so the justified timeline has
     // genuinely varying row shapes to pack, not a rigid square grid —
@@ -727,11 +811,11 @@
       d.setDate(day);
       d.setHours(9 + (i % 10), (i * 7) % 60, 0, 0);
       var isVideo = i % 11 === 0;
-      var id = 'asset-' + i;
+      var id = "asset-" + i;
       var albumIds = [];
-      if (tripMembers.indexOf(id) !== -1) albumIds.push('album-trip');
-      if (familyMembers.indexOf(id) !== -1) albumIds.push('album-family');
-      if (studioMembers.indexOf(id) !== -1) albumIds.push('album-studio');
+      if (tripMembers.indexOf(id) !== -1) albumIds.push("album-trip");
+      if (familyMembers.indexOf(id) !== -1) albumIds.push("album-family");
+      if (studioMembers.indexOf(id) !== -1) albumIds.push("album-studio");
       // A multiplicative hash (not a plain `% aspects.length`) decorrelates
       // the aspect pick from the day-bucket arithmetic above — day/month
       // both derive from `i` via small-modulus formulas, so any linear
@@ -742,12 +826,15 @@
       var dims = isVideo ? { width: 1920, height: 1080 } : aspects[aspectIdx];
       assets.push({
         asset_id: id,
-        content_id: 'content-' + id,
-        kind: isVideo ? 'video' : 'photo',
-        media_type: isVideo ? 'video/mp4' : 'image/jpeg',
-        title: (isVideo ? 'MOV_' : 'IMG_') + (1000 + i) + (isVideo ? '.mp4' : '.jpg'),
-        content_uri: blobUri('content-' + id),
-        thumb_uri: blobUri('content-' + id) + '?variant=thumb',
+        content_id: "content-" + id,
+        kind: isVideo ? "video" : "photo",
+        media_type: isVideo ? "video/mp4" : "image/jpeg",
+        title:
+          (isVideo ? "MOV_" : "IMG_") +
+          (1000 + i) +
+          (isVideo ? ".mp4" : ".jpg"),
+        content_uri: blobUri("content-" + id),
+        thumb_uri: blobUri("content-" + id) + "?variant=thumb",
         byte_size: isVideo ? 24_000_000 : 2_400_000 + i * 10_000,
         width: dims.width,
         height: dims.height,
@@ -773,18 +860,18 @@
     // collide with a live asset_id), split out of the live window like the
     // real `library` query's separate `trash` array.
     var trash = [ASSET_COUNT + 1, ASSET_COUNT + 2].map(function (n) {
-      var id = 'asset-' + n;
+      var id = "asset-" + n;
       var purgeInDays = n === ASSET_COUNT + 1 ? 20 : 25;
       var d = new Date();
       d.setDate(d.getDate() - (30 - purgeInDays));
       return {
         asset_id: id,
-        content_id: 'content-' + id,
-        kind: 'photo',
-        media_type: 'image/jpeg',
-        title: 'IMG_' + (1000 + n) + '.jpg',
-        content_uri: blobUri('content-' + id),
-        thumb_uri: blobUri('content-' + id) + '?variant=thumb',
+        content_id: "content-" + id,
+        kind: "photo",
+        media_type: "image/jpeg",
+        title: "IMG_" + (1000 + n) + ".jpg",
+        content_uri: blobUri("content-" + id),
+        thumb_uri: blobUri("content-" + id) + "?variant=thumb",
         byte_size: 1_800_000,
         width: 1600,
         height: 1200,
@@ -804,17 +891,17 @@
     // still-pending proposals, some with a guessed name, some anonymous.
     var faceRegions = [
       {
-        region_id: 'region-1',
-        asset_id: 'asset-2',
+        region_id: "region-1",
+        asset_id: "asset-2",
         bbox: { x: 0.2, y: 0.15, w: 0.3, h: 0.3 },
-        party_id: 'party-mia',
-        person_name: 'Mia',
+        party_id: "party-mia",
+        person_name: "Mia",
         confidence: 0.92,
         confirmed: true,
       },
       {
-        region_id: 'region-2',
-        asset_id: 'asset-2',
+        region_id: "region-2",
+        asset_id: "asset-2",
         bbox: { x: 0.55, y: 0.2, w: 0.25, h: 0.28 },
         party_id: null,
         person_name: null,
@@ -822,17 +909,17 @@
         confirmed: false,
       },
       {
-        region_id: 'region-3',
-        asset_id: 'asset-5',
+        region_id: "region-3",
+        asset_id: "asset-5",
         bbox: { x: 0.3, y: 0.18, w: 0.28, h: 0.3 },
-        party_id: 'party-sam',
-        person_name: 'Sam',
+        party_id: "party-sam",
+        person_name: "Sam",
         confidence: 0.88,
         confirmed: true,
       },
       {
-        region_id: 'region-4',
-        asset_id: 'asset-8',
+        region_id: "region-4",
+        asset_id: "asset-8",
         bbox: { x: 0.4, y: 0.22, w: 0.26, h: 0.27 },
         party_id: null,
         person_name: null,
@@ -847,11 +934,11 @@
     // group's lowest asset_id by convention — not load-bearing for the
     // mock, just documentary).
     var phash = [
-      { asset_id: 'asset-3', cluster_id: 'asset-3' },
-      { asset_id: 'asset-7', cluster_id: 'asset-3' },
-      { asset_id: 'asset-10', cluster_id: 'asset-10' },
-      { asset_id: 'asset-15', cluster_id: 'asset-10' },
-      { asset_id: 'asset-19', cluster_id: 'asset-10' },
+      { asset_id: "asset-3", cluster_id: "asset-3" },
+      { asset_id: "asset-7", cluster_id: "asset-3" },
+      { asset_id: "asset-10", cluster_id: "asset-10" },
+      { asset_id: "asset-15", cluster_id: "asset-10" },
+      { asset_id: "asset-19", cluster_id: "asset-10" },
     ];
 
     return {
@@ -862,14 +949,14 @@
       people: people,
       places: places,
       phash: phash,
-      enrichmentTier: 'local',
+      enrichmentTier: "local",
     };
   }
 
-  var photosStore = appId === 'photos' ? buildPhotosStore() : null;
+  var photosStore = appId === "photos" ? buildPhotosStore() : null;
 
   function photosRead(query, input) {
-    if (query === 'library') {
+    if (query === "library") {
       var limit = Math.min(Math.max(Number(input.limit) || 500, 20), 2000);
       var live = photosStore.assets.slice().sort(function (a, b) {
         return String(b.taken_at).localeCompare(String(a.taken_at));
@@ -886,21 +973,21 @@
         window: limit,
       };
     }
-    if (query === 'search') {
-      var term2 = String(input.term || '')
+    if (query === "search") {
+      var term2 = String(input.term || "")
         .trim()
         .toLowerCase();
       if (!term2) return { assets: [] };
       var matches = photosStore.assets.filter(function (a) {
         return (
-          String(a.title || '')
+          String(a.title || "")
             .toLowerCase()
             .indexOf(term2) !== -1
         );
       });
       return { assets: matches };
     }
-    if (query === 'duplicates') {
+    if (query === "duplicates") {
       var byCluster = {};
       photosStore.phash.forEach(function (p) {
         var asset = photosStore.assets.find(function (a) {
@@ -912,7 +999,7 @@
       });
       var clusters = Object.keys(byCluster)
         .map(function (key) {
-          return { key: key, tier: 'phash', assets: byCluster[key] };
+          return { key: key, tier: "phash", assets: byCluster[key] };
         })
         .filter(function (c) {
           return c.assets.length >= 2;
@@ -922,11 +1009,11 @@
       });
       return { clusters: clusters };
     }
-    if (query === 'enrichment-status') {
+    if (query === "enrichment-status") {
       return { tier: photosStore.enrichmentTier };
     }
-    if (query === 'faces') {
-      var assetId = String(input.asset_id || '');
+    if (query === "faces") {
+      var assetId = String(input.asset_id || "");
       var regions = photosStore.faceRegions.filter(function (r) {
         return r.asset_id === assetId;
       });
@@ -944,7 +1031,7 @@
         people: photosStore.people,
       };
     }
-    console.warn('[mock-centraid] photos: unmapped query', query);
+    console.warn("[mock-centraid] photos: unmapped query", query);
     return {};
   }
 
@@ -968,32 +1055,34 @@
       });
     }
     function ok(output) {
-      return { status: 'executed', output: output || {} };
+      return { status: "executed", output: output || {} };
     }
     function refuse(reason) {
-      return { status: 'failed', reason: reason };
+      return { status: "failed", reason: reason };
     }
 
     switch (action) {
-      case 'upload': {
-        var id = uid('asset');
-        var contentId = 'content-' + id;
-        var kind = input.kind || 'photo';
+      case "upload": {
+        var id = uid("asset");
+        var contentId = "content-" + id;
+        var kind = input.kind || "photo";
         var mediaByKind = {
-          photo: 'image/jpeg',
-          video: 'video/mp4',
-          audio: 'audio/mpeg',
-          scan: 'image/jpeg',
+          photo: "image/jpeg",
+          video: "video/mp4",
+          audio: "audio/mpeg",
+          scan: "image/jpeg",
         };
         var newAsset = {
           asset_id: id,
           content_id: contentId,
           kind: kind,
-          media_type: mediaByKind[kind] || 'image/jpeg',
-          title: input.title || 'Untitled',
+          media_type: mediaByKind[kind] || "image/jpeg",
+          title: input.title || "Untitled",
           content_uri: blobUri(contentId),
-          thumb_uri: blobUri(contentId) + '?variant=thumb',
-          byte_size: input.data_uri ? Math.round((input.data_uri.length * 3) / 4) : 2_000_000,
+          thumb_uri: blobUri(contentId) + "?variant=thumb",
+          byte_size: input.data_uri
+            ? Math.round((input.data_uri.length * 3) / 4)
+            : 2_000_000,
           width: input.width || 1600,
           height: input.height || 1200,
           duration_s: input.duration_s || null,
@@ -1008,9 +1097,9 @@
         assets.unshift(newAsset);
         return ok({ asset_id: id, deduped: false });
       }
-      case 'update-asset': {
+      case "update-asset": {
         var a1 = findAsset(input.asset_id);
-        if (!a1) return refuse('not_found');
+        if (!a1) return refuse("not_found");
         if (input.captured_at != null) {
           a1.captured_at = input.captured_at;
           a1.taken_at = input.captured_at;
@@ -1019,11 +1108,11 @@
         if (input.favorite != null) a1.favorite = Number(input.favorite);
         return ok({ asset_id: a1.asset_id });
       }
-      case 'delete-asset': {
+      case "delete-asset": {
         var idx = assets.findIndex(function (a) {
           return a.asset_id === input.asset_id;
         });
-        if (idx === -1) return refuse('not_found');
+        if (idx === -1) return refuse("not_found");
         var moved = assets.splice(idx, 1)[0];
         moved.deleted_at = new Date().toISOString();
         moved.purge_at = isoDaysFromNow(30);
@@ -1033,11 +1122,11 @@
         trash.unshift(moved);
         return ok({ asset_id: moved.asset_id });
       }
-      case 'restore': {
+      case "restore": {
         var tIdx = trash.findIndex(function (a) {
           return a.asset_id === input.asset_id;
         });
-        if (tIdx === -1) return refuse('not_in_trash');
+        if (tIdx === -1) return refuse("not_in_trash");
         var back = trash.splice(tIdx, 1)[0];
         back.deleted_at = null;
         back.purge_at = null;
@@ -1045,18 +1134,18 @@
         assets.unshift(back);
         return ok({ asset_id: back.asset_id });
       }
-      case 'create-album': {
+      case "create-album": {
         var album = {
-          album_id: uid('album'),
+          album_id: uid("album"),
           title: String(input.title),
           cover_content_id: null,
         };
         albums.push(album);
         return ok({ album_id: album.album_id });
       }
-      case 'rename-album': {
+      case "rename-album": {
         var al1 = findAlbum(input.album_id);
-        if (!al1) return refuse('not_found');
+        if (!al1) return refuse("not_found");
         al1.title = String(input.title);
         assets.forEach(function (a) {
           if (a.album_ids.indexOf(al1.album_id) !== -1) {
@@ -1067,9 +1156,9 @@
         });
         return ok({ album_id: al1.album_id });
       }
-      case 'delete-album': {
+      case "delete-album": {
         var al2 = findAlbum(input.album_id);
-        if (!al2) return refuse('not_found');
+        if (!al2) return refuse("not_found");
         photosStore.albums = albums.filter(function (a) {
           return a.album_id !== al2.album_id;
         });
@@ -1084,18 +1173,19 @@
         });
         return ok({});
       }
-      case 'add-to-album': {
+      case "add-to-album": {
         var a2 = findAsset(input.asset_id);
         var al3 = findAlbum(input.album_id);
-        if (!a2 || !al3) return refuse('not_found');
-        if (a2.album_ids.indexOf(al3.album_id) !== -1) return refuse('already_in_album');
+        if (!a2 || !al3) return refuse("not_found");
+        if (a2.album_ids.indexOf(al3.album_id) !== -1)
+          return refuse("already_in_album");
         a2.album_ids.push(al3.album_id);
         a2.album_titles.push(al3.title);
         return ok({});
       }
-      case 'remove-from-album': {
+      case "remove-from-album": {
         var a3 = findAsset(input.asset_id);
-        if (!a3) return refuse('not_found');
+        if (!a3) return refuse("not_found");
         var pos = a3.album_ids.indexOf(input.album_id);
         if (pos !== -1) {
           a3.album_ids.splice(pos, 1);
@@ -1105,11 +1195,11 @@
         }
         return ok({});
       }
-      case 'confirm-face': {
+      case "confirm-face": {
         var r1 = photosStore.faceRegions.find(function (r) {
           return r.region_id === input.region_id;
         });
-        if (!r1) return refuse('not_found');
+        if (!r1) return refuse("not_found");
         var person = photosStore.people.find(function (p) {
           return p.party_id === input.party_id;
         });
@@ -1118,22 +1208,23 @@
         r1.confirmed = true;
         return ok({ region_id: r1.region_id });
       }
-      case 'reject-face': {
+      case "reject-face": {
         var before = photosStore.faceRegions.length;
         photosStore.faceRegions = photosStore.faceRegions.filter(function (r) {
           return r.region_id !== input.region_id;
         });
-        if (photosStore.faceRegions.length === before) return refuse('not_found');
+        if (photosStore.faceRegions.length === before)
+          return refuse("not_found");
         return ok({});
       }
-      case 'set-place': {
+      case "set-place": {
         var a4 = findAsset(input.asset_id);
-        if (!a4) return refuse('not_found');
+        if (!a4) return refuse("not_found");
         if (input.place_id) {
           var place = photosStore.places.find(function (p) {
             return p.place_id === input.place_id;
           });
-          if (!place) return refuse('place_not_found');
+          if (!place) return refuse("place_not_found");
           a4.place = place;
         } else {
           a4.place = null;
@@ -1143,21 +1234,22 @@
           place_id: a4.place ? a4.place.place_id : null,
         });
       }
-      case 'tag-asset': {
+      case "tag-asset": {
         var a5 = findAsset(input.asset_id);
-        if (!a5) return refuse('not_found');
-        var label = String(input.label || '')
+        if (!a5) return refuse("not_found");
+        var label = String(input.label || "")
           .trim()
           .toLowerCase();
-        if (!label) return refuse('label_not_blank');
+        if (!label) return refuse("label_not_blank");
         if (!a5.tags) a5.tags = [];
         var existingAssetTag = a5.tags.find(function (t) {
           return t.label === label;
         });
-        if (!existingAssetTag) a5.tags.push({ tag_id: uid('tag'), label: label });
+        if (!existingAssetTag)
+          a5.tags.push({ tag_id: uid("tag"), label: label });
         return ok({ asset_id: a5.asset_id });
       }
-      case 'untag-asset': {
+      case "untag-asset": {
         // core.untag_item removes by tag_id alone (no asset_id sent) — find
         // whichever asset currently owns this edge.
         var a6 = assets.find(function (a) {
@@ -1165,15 +1257,16 @@
             return t.tag_id === input.tag_id;
           });
         });
-        if (!a6) return refuse('not_found');
+        if (!a6) return refuse("not_found");
         a6.tags = a6.tags.filter(function (t) {
           return t.tag_id !== input.tag_id;
         });
         return ok({ tag_id: input.tag_id });
       }
-      case 'request-enrichment': {
-        if (photosStore.enrichmentTier === 'off') return refuse('enrichment_off');
-        return ok({ request_id: uid('req') });
+      case "request-enrichment": {
+        if (photosStore.enrichmentTier === "off")
+          return refuse("enrichment_off");
+        return ok({ request_id: uid("req") });
       }
       default:
         return null; // unmapped — caller logs + returns {}
@@ -1199,11 +1292,16 @@
       return {
         task_id: id,
         title: title,
-        description: opts.description || '',
-        due_at: opts.due !== undefined ? (opts.due == null ? null : dayKey(opts.due)) : null,
+        description: opts.description || "",
+        due_at:
+          opts.due !== undefined
+            ? opts.due == null
+              ? null
+              : dayKey(opts.due)
+            : null,
         priority: opts.priority || 0,
         effort_min: opts.effort_min || null,
-        status: opts.status || 'needs-action',
+        status: opts.status || "needs-action",
         completed_at:
           opts.completedAt !== undefined
             ? opts.completedAt == null
@@ -1217,89 +1315,89 @@
     }
 
     var tasks = [
-      task('task-overdue-1', 'Reply to the studio contract email', {
+      task("task-overdue-1", "Reply to the studio contract email", {
         due: -2,
         priority: 1,
       }),
-      task('task-overdue-2', 'Book the dentist', { due: -1 }),
-      task('task-today-1', 'Finish Tasks reinvention writeup', {
+      task("task-overdue-2", "Book the dentist", { due: -1 }),
+      task("task-today-1", "Finish Tasks reinvention writeup", {
         due: 0,
         priority: 2,
         effort_min: 45,
-        status: 'in-process',
-        description: 'Ship the build prompt with the live URL.',
+        status: "in-process",
+        description: "Ship the build prompt with the live URL.",
         attachments: [
           {
-            attachment_id: 'att-1',
-            content_id: 'content-task-today-1-1',
-            role: 'other',
+            attachment_id: "att-1",
+            content_id: "content-task-today-1-1",
+            role: "other",
             is_primary: 1,
-            media_type: 'application/pdf',
-            title: 'writeup-draft.pdf',
-            content_uri: blobUri('content-task-today-1-1'),
+            media_type: "application/pdf",
+            title: "writeup-draft.pdf",
+            content_uri: blobUri("content-task-today-1-1"),
             byte_size: 182_000,
           },
         ],
       }),
-      task('task-today-2', 'Water the plants', {
+      task("task-today-2", "Water the plants", {
         due: 0,
         effort_min: 5,
-        rrule: 'FREQ=DAILY',
+        rrule: "FREQ=DAILY",
       }),
-      task('task-week-1', 'Sign the lease renewal (park)', {
+      task("task-week-1", "Sign the lease renewal (park)", {
         due: 1,
         priority: 1,
       }),
-      task('task-week-2', 'Review Q3 budget', {
+      task("task-week-2", "Review Q3 budget", {
         due: 3,
         priority: 4,
         effort_min: 60,
-        description: 'Cross-check against the vault ledger.',
+        description: "Cross-check against the vault ledger.",
       }),
-      task('task-week-3', 'Draft the Tasks v2 prompt', { due: 5, priority: 5 }),
-      task('task-later-1', 'Renew the domain', { due: 10 }),
-      task('task-later-2', 'Plan the coast weekend', {
+      task("task-week-3", "Draft the Tasks v2 prompt", { due: 5, priority: 5 }),
+      task("task-later-1", "Renew the domain", { due: 10 }),
+      task("task-later-2", "Plan the coast weekend", {
         due: 9,
         effort_min: 30,
-        description: 'Cabin + one big hike.',
+        description: "Cabin + one big hike.",
       }),
-      task('task-later-2-sub-1', 'Reserve the cabin', {
-        status: 'completed',
-        parent: 'task-later-2',
+      task("task-later-2-sub-1", "Reserve the cabin", {
+        status: "completed",
+        parent: "task-later-2",
       }),
-      task('task-later-2-sub-2', 'Map the trail', { parent: 'task-later-2' }),
-      task('task-later-2-sub-3', 'Pack list', { parent: 'task-later-2' }),
-      task('task-anytime-1', 'Read “Thinking in Systems”', {
+      task("task-later-2-sub-2", "Map the trail", { parent: "task-later-2" }),
+      task("task-later-2-sub-3", "Pack list", { parent: "task-later-2" }),
+      task("task-anytime-1", "Read “Thinking in Systems”", {
         priority: 8,
-        description: 'Chapter on stocks and flows.',
+        description: "Chapter on stocks and flows.",
       }),
-      task('task-anytime-2', 'Clean up the downloads folder', {
+      task("task-anytime-2", "Clean up the downloads folder", {
         effort_min: 20,
       }),
-      task('task-anytime-3', 'Sketch the Vitals dashboard', { priority: 5 }),
-      task('task-done-1', 'Ship Tasks reinvention', {
+      task("task-anytime-3", "Sketch the Vitals dashboard", { priority: 5 }),
+      task("task-done-1", "Ship Tasks reinvention", {
         priority: 1,
-        status: 'completed',
+        status: "completed",
         completedAt: 0,
       }),
-      task('task-done-2', 'Send the weekly review', {
-        status: 'completed',
+      task("task-done-2", "Send the weekly review", {
+        status: "completed",
         completedAt: -2,
       }),
-      task('task-cancel-1', 'Cancel the old newsletter', {
-        status: 'cancelled',
+      task("task-cancel-1", "Cancel the old newsletter", {
+        status: "cancelled",
         completedAt: -3,
       }),
     ];
     return { tasks: tasks };
   }
 
-  var tasksStore = appId === 'tasks' ? buildTasksStore() : null;
+  var tasksStore = appId === "tasks" ? buildTasksStore() : null;
 
   function tasksRead(query, input) {
-    if (query === 'board') {
+    if (query === "board") {
       var limit = Math.min(Math.max(Number(input.limit) || 500, 20), 2000);
-      var OPEN = { 'needs-action': true, 'in-process': true };
+      var OPEN = { "needs-action": true, "in-process": true };
       function withAttachments(t) {
         return Object.assign({}, t, {
           attachments: t.attachments || [],
@@ -1328,7 +1426,9 @@
         })
         .slice()
         .sort(function (a, b) {
-          return String(b.completed_at || '').localeCompare(String(a.completed_at || ''));
+          return String(b.completed_at || "").localeCompare(
+            String(a.completed_at || "")
+          );
         });
       return {
         open: openTop.slice(0, limit).map(withChildren),
@@ -1338,20 +1438,24 @@
         window: limit,
       };
     }
-    if (query === 'search') {
-      var term = String(input.term || '')
+    if (query === "search") {
+      var term = String(input.term || "")
         .trim()
         .toLowerCase();
       if (!term) return { tasks: [] };
       var hits = tasksStore.tasks.filter(function (t) {
-        return (t.title + ' ' + (t.description || '')).toLowerCase().indexOf(term) !== -1;
+        return (
+          (t.title + " " + (t.description || ""))
+            .toLowerCase()
+            .indexOf(term) !== -1
+        );
       });
       return {
         tasks: hits.map(function (t) {
           var snippet =
             t.description && t.description.toLowerCase().indexOf(term) !== -1
-              ? '…⟦' + t.description + '⟧…'
-              : '';
+              ? "…⟦" + t.description + "⟧…"
+              : "";
           return Object.assign({}, t, {
             attachments: t.attachments || [],
             snippet: snippet,
@@ -1359,7 +1463,7 @@
         }),
       };
     }
-    console.warn('[mock-centraid] tasks: unmapped query', query);
+    console.warn("[mock-centraid] tasks: unmapped query", query);
     return {};
   }
 
@@ -1371,32 +1475,32 @@
     }
     function ok(output) {
       return {
-        status: 'executed',
-        invocationId: uid('inv'),
-        receiptId: uid('receipt'),
+        status: "executed",
+        invocationId: uid("inv"),
+        receiptId: uid("receipt"),
         output: output || {},
       };
     }
     function refuse(reason) {
-      return { status: 'failed', reason: reason, predicate: reason };
+      return { status: "failed", reason: reason, predicate: reason };
     }
     function parked() {
-      return { status: 'parked', invocationId: uid('inv') };
+      return { status: "parked", invocationId: uid("inv") };
     }
 
     switch (action) {
-      case 'add': {
-        var title = String(input.title || '').trim();
+      case "add": {
+        var title = String(input.title || "").trim();
         if (isParkTrigger(title)) return parked();
-        var id = uid('task');
+        var id = uid("task");
         var t0 = {
           task_id: id,
           title: title,
-          description: input.description || '',
+          description: input.description || "",
           due_at: input.due_at || null,
           priority: input.priority || 0,
           effort_min: input.effort_min || null,
-          status: 'needs-action',
+          status: "needs-action",
           completed_at: null,
           parent_task_id: input.parent_task_id || null,
           rrule: null,
@@ -1405,47 +1509,49 @@
         tasksStore.tasks.unshift(t0);
         return ok({ task_id: id });
       }
-      case 'set-status': {
+      case "set-status": {
         var t1 = findTask(input.task_id);
-        if (!t1) return refuse('not_found');
+        if (!t1) return refuse("not_found");
         if (isParkTrigger(t1.title)) return parked();
         t1.status = input.status;
         t1.completed_at =
-          input.status === 'completed' || input.status === 'cancelled' ? dayKey(0) : null;
+          input.status === "completed" || input.status === "cancelled"
+            ? dayKey(0)
+            : null;
         return ok({ task_id: t1.task_id });
       }
-      case 'edit': {
+      case "edit": {
         var t2 = findTask(input.task_id);
-        if (!t2) return refuse('not_found');
+        if (!t2) return refuse("not_found");
         if (isParkTrigger(t2.title)) return parked();
         if (input.title) t2.title = String(input.title);
         if (input.description) t2.description = String(input.description);
-        if (input.clear_description) t2.description = '';
+        if (input.clear_description) t2.description = "";
         if (input.due_at) t2.due_at = String(input.due_at);
         if (input.clear_due) t2.due_at = null;
         if (input.priority !== undefined) t2.priority = Number(input.priority);
         if (input.effort_min) t2.effort_min = Number(input.effort_min);
         return ok({ task_id: t2.task_id });
       }
-      case 'attach': {
+      case "attach": {
         var t3 = findTask(input.subject_id);
-        if (!t3) return refuse('not_found');
+        if (!t3) return refuse("not_found");
         if (isParkTrigger(t3.title)) return parked();
-        var contentId = uid('content');
+        var contentId = uid("content");
         var attachment = {
-          attachment_id: uid('att'),
+          attachment_id: uid("att"),
           content_id: contentId,
-          role: input.role || 'other',
+          role: input.role || "other",
           is_primary: 0,
-          media_type: 'application/octet-stream',
-          title: input.title || 'file',
+          media_type: "application/octet-stream",
+          title: input.title || "file",
           content_uri: blobUri(contentId),
           byte_size: 40_000,
         };
         t3.attachments = (t3.attachments || []).concat([attachment]);
         return ok({ attachment_id: attachment.attachment_id });
       }
-      case 'detach': {
+      case "detach": {
         var owner = null;
         tasksStore.tasks.forEach(function (t) {
           var idx = (t.attachments || []).findIndex(function (a) {
@@ -1456,7 +1562,7 @@
             t.attachments.splice(idx, 1);
           }
         });
-        if (!owner) return refuse('not_found');
+        if (!owner) return refuse("not_found");
         return ok({});
       }
       default:
@@ -1479,11 +1585,11 @@
     if (EMPTY_MODE) return { notes: [], notebooks: [] };
 
     var notebooks = [
-      { notebook_id: 'nb-personal', name: 'Personal', sort_order: 0 },
-      { notebook_id: 'nb-work', name: 'Work', sort_order: 1 },
-      { notebook_id: 'nb-recipes', name: 'Recipes', sort_order: 2 },
-      { notebook_id: 'nb-travel', name: 'Travel', sort_order: 3 },
-      { notebook_id: 'nb-archive', name: 'Archive (park)', sort_order: 4 },
+      { notebook_id: "nb-personal", name: "Personal", sort_order: 0 },
+      { notebook_id: "nb-work", name: "Work", sort_order: 1 },
+      { notebook_id: "nb-recipes", name: "Recipes", sort_order: 2 },
+      { notebook_id: "nb-travel", name: "Travel", sort_order: 3 },
+      { notebook_id: "nb-archive", name: "Archive (park)", sort_order: 4 },
     ];
 
     function note(id, title, body, opts) {
@@ -1491,7 +1597,7 @@
       return {
         note_id: id,
         title: title,
-        format: 'markdown',
+        format: "markdown",
         pinned: opts.pinned ? 1 : 0,
         created_at: isoDaysAgo(opts.age != null ? opts.age : 1),
         updated_at: isoDaysAgo(opts.age != null ? opts.age : 1, opts.hour),
@@ -1504,118 +1610,121 @@
 
     var notes = [
       note(
-        'note-weekly',
-        'Weekly review ritual',
-        '## Every Friday, 25 min\n- [x] Clear the inbox to zero\n- [x] Skim last week’s notes\n- [ ] Pick 3 outcomes for next week\n- [ ] Park anything that can wait\n\nThe point is momentum, not perfection.',
-        { pinned: true, notebook: 'nb-work', age: 0, hour: 8 },
+        "note-weekly",
+        "Weekly review ritual",
+        "## Every Friday, 25 min\n- [x] Clear the inbox to zero\n- [x] Skim last week’s notes\n- [ ] Pick 3 outcomes for next week\n- [ ] Park anything that can wait\n\nThe point is momentum, not perfection.",
+        { pinned: true, notebook: "nb-work", age: 0, hour: 8 }
       ),
       note(
-        'note-reading',
-        'Reading list',
-        '- [ ] The Beginning of Infinity\n- [x] Thinking in Systems\n- [ ] A Pattern Language\n- [ ] The Timeless Way of Building',
-        { pinned: true, notebook: 'nb-personal', age: 3 },
+        "note-reading",
+        "Reading list",
+        "- [ ] The Beginning of Infinity\n- [x] Thinking in Systems\n- [ ] A Pattern Language\n- [ ] The Timeless Way of Building",
+        { pinned: true, notebook: "nb-personal", age: 3 }
       ),
       note(
-        'note-sourdough',
-        'Sourdough — the loaf that works (park)',
-        '## Levain\n50g starter, 50g water, 50g flour. 4–6h.\n\n## Dough\n500g flour, 350g water, 100g levain, 10g salt.\n\n- [ ] Autolyse 1h\n- [ ] 4 stretch-and-folds, 30 min apart\n- [ ] Bulk until +50%\n- [ ] Shape, cold proof overnight\n- [ ] Bake 500°F, lid on 20 min, off 20 min',
-        { notebook: 'nb-recipes', age: 5 },
+        "note-sourdough",
+        "Sourdough — the loaf that works (park)",
+        "## Levain\n50g starter, 50g water, 50g flour. 4–6h.\n\n## Dough\n500g flour, 350g water, 100g levain, 10g salt.\n\n- [ ] Autolyse 1h\n- [ ] 4 stretch-and-folds, 30 min apart\n- [ ] Bulk until +50%\n- [ ] Shape, cold proof overnight\n- [ ] Bake 500°F, lid on 20 min, off 20 min",
+        { notebook: "nb-recipes", age: 5 }
       ),
       note(
-        'note-parking-lot',
-        'Ideas parking lot',
-        'A tiny app that only tells you the *next* thing.\n\nA calendar that hides everything except today.\n\nNotes that decay unless you touch them.',
-        { age: 1 },
+        "note-parking-lot",
+        "Ideas parking lot",
+        "A tiny app that only tells you the *next* thing.\n\nA calendar that hides everything except today.\n\nNotes that decay unless you touch them.",
+        { age: 1 }
       ),
       note(
-        'note-lisbon',
-        'Trip to Lisbon',
-        '## Must do\n- [x] Book the Alfama place\n- [ ] Day trip to Sintra\n- [ ] Pastel de nata crawl\n- [ ] Sunset at Miradouro\n\nGetting around: buy the Viva Viagem card at the airport.',
-        { notebook: 'nb-travel', age: 12 },
+        "note-lisbon",
+        "Trip to Lisbon",
+        "## Must do\n- [x] Book the Alfama place\n- [ ] Day trip to Sintra\n- [ ] Pastel de nata crawl\n- [ ] Sunset at Miradouro\n\nGetting around: buy the Viva Viagem card at the airport.",
+        { notebook: "nb-travel", age: 12 }
       ),
       note(
-        'note-standup',
-        'Standup notes',
-        'Yesterday: shipped the vault receipt viewer.\nToday: notes reinvention, card wall + editor.\nBlockers: none.',
-        { notebook: 'nb-work', age: 0, hour: 9 },
+        "note-standup",
+        "Standup notes",
+        "Yesterday: shipped the vault receipt viewer.\nToday: notes reinvention, card wall + editor.\nBlockers: none.",
+        { notebook: "nb-work", age: 0, hour: 9 }
       ),
       note(
-        'note-gifts',
-        'Gift ideas',
-        '- [ ] Dad — the good headphones\n- [ ] Maya — pottery class\n- [x] Sam — that cookbook',
-        { notebook: 'nb-personal', age: 20 },
+        "note-gifts",
+        "Gift ideas",
+        "- [ ] Dad — the good headphones\n- [ ] Maya — pottery class\n- [x] Sam — that cookbook",
+        { notebook: "nb-personal", age: 20 }
       ),
       note(
-        'note-writing',
-        'On writing',
-        'Write the **boring** first draft fast.\n\nCut every sentence that is trying too hard.\n\nRead it aloud. If you stumble, so will they.',
-        { age: 30 },
+        "note-writing",
+        "On writing",
+        "Write the **boring** first draft fast.\n\nCut every sentence that is trying too hard.\n\nRead it aloud. If you stumble, so will they.",
+        { age: 30 }
       ),
       note(
-        'note-pasta',
-        'Weeknight pasta',
-        'Garlic in cold oil, low heat. Anchovy melts in. Chili. Pasta water does the rest.\n\n- [ ] Buy good parmesan\n- [ ] More lemon than you think',
-        { notebook: 'nb-recipes', age: 25 },
+        "note-pasta",
+        "Weeknight pasta",
+        "Garlic in cold oil, low heat. Anchovy melts in. Chili. Pasta water does the rest.\n\n- [ ] Buy good parmesan\n- [ ] More lemon than you think",
+        { notebook: "nb-recipes", age: 25 }
       ),
       note(
-        'note-wifi',
-        'Home wifi + accounts',
-        'Router lives behind the books.\n\n- [ ] Rename the guest network\n- [ ] Rotate the long password',
-        { notebook: 'nb-personal', age: 45 },
+        "note-wifi",
+        "Home wifi + accounts",
+        "Router lives behind the books.\n\n- [ ] Rename the guest network\n- [ ] Rotate the long password",
+        { notebook: "nb-personal", age: 45 }
       ),
       note(
-        'note-goals',
-        'Q3 goals',
-        '# Three bets\n1. Reinvent three vault apps end to end.\n2. Ship the receipt timeline everywhere.\n3. One doc a week, no exceptions.',
-        { notebook: 'nb-work', age: 60 },
+        "note-goals",
+        "Q3 goals",
+        "# Three bets\n1. Reinvent three vault apps end to end.\n2. Ship the receipt timeline everywhere.\n3. One doc a week, no exceptions.",
+        { notebook: "nb-work", age: 60 }
       ),
       note(
-        'note-plants',
-        'Plant care',
-        '- [ ] Monstera — water Sundays\n- [ ] Snake plant — every 3 weeks\n- [x] Repot the fiddle-leaf',
-        { age: 80 },
+        "note-plants",
+        "Plant care",
+        "- [ ] Monstera — water Sundays\n- [ ] Snake plant — every 3 weeks\n- [x] Repot the fiddle-leaf",
+        { age: 80 }
       ),
       note(
-        'note-onboarding',
-        'Onboarding packet',
-        'The signed PDF is attached below.\n\n- [x] Send the packet\n- [ ] Collect the signed copy',
+        "note-onboarding",
+        "Onboarding packet",
+        "The signed PDF is attached below.\n\n- [x] Send the packet\n- [ ] Collect the signed copy",
         {
-          notebook: 'nb-work',
+          notebook: "nb-work",
           age: 2,
           attachments: [
             {
-              attachment_id: 'att-onboard-1',
-              content_id: 'content-onboard-1',
-              role: 'other',
+              attachment_id: "att-onboard-1",
+              content_id: "content-onboard-1",
+              role: "other",
               is_primary: 1,
-              media_type: 'application/pdf',
-              title: 'onboarding-packet.pdf',
-              content_uri: blobUri('content-onboard-1'),
+              media_type: "application/pdf",
+              title: "onboarding-packet.pdf",
+              content_uri: blobUri("content-onboard-1"),
               byte_size: 240_000,
             },
           ],
-        },
+        }
       ),
     ];
     return { notes: notes, notebooks: notebooks };
   }
 
-  var notesStore = appId === 'notes' ? buildNotesStore() : null;
+  var notesStore = appId === "notes" ? buildNotesStore() : null;
 
   function notebookNamesFor(n) {
     return n.notebook_ids.map(function (id) {
       var nb = notesStore.notebooks.find(function (x) {
         return x.notebook_id === id;
       });
-      return nb ? nb.name : 'Notebook';
+      return nb ? nb.name : "Notebook";
     });
   }
 
   function notesRead(query, input) {
-    if (query === 'library') {
+    if (query === "library") {
       var limit = Math.min(Math.max(Number(input.limit) || 200, 20), 2000);
       var sorted = notesStore.notes.slice().sort(function (a, b) {
-        return b.pinned - a.pinned || String(b.updated_at).localeCompare(String(a.updated_at));
+        return (
+          b.pinned - a.pinned ||
+          String(b.updated_at).localeCompare(String(a.updated_at))
+        );
       });
       var windowed = sorted.slice(0, limit);
       // Pinned notes ride beside the window even when older than its edge —
@@ -1633,18 +1742,20 @@
         window: limit,
       };
     }
-    if (query === 'search') {
-      var term = String(input.term || '')
+    if (query === "search") {
+      var term = String(input.term || "")
         .trim()
         .toLowerCase();
       if (!term) return { notes: [] };
       var hits = notesStore.notes.filter(function (n) {
-        return (n.title + ' ' + n.body).toLowerCase().indexOf(term) !== -1;
+        return (n.title + " " + n.body).toLowerCase().indexOf(term) !== -1;
       });
       return {
         notes: hits.map(function (n) {
           var snippet =
-            n.body.toLowerCase().indexOf(term) !== -1 ? '…⟦' + n.body.slice(0, 80) + '⟧…' : '';
+            n.body.toLowerCase().indexOf(term) !== -1
+              ? "…⟦" + n.body.slice(0, 80) + "⟧…"
+              : "";
           return Object.assign({}, n, {
             notebook_names: notebookNamesFor(n),
             snippet: snippet,
@@ -1652,7 +1763,7 @@
         }),
       };
     }
-    console.warn('[mock-centraid] notes: unmapped query', query);
+    console.warn("[mock-centraid] notes: unmapped query", query);
     return {};
   }
 
@@ -1669,29 +1780,29 @@
     }
     function ok(output) {
       return {
-        status: 'executed',
-        invocationId: uid('inv'),
-        receiptId: uid('receipt'),
+        status: "executed",
+        invocationId: uid("inv"),
+        receiptId: uid("receipt"),
         output: output || {},
       };
     }
     function refuse(predicate) {
-      return { status: 'failed', reason: predicate, predicate: predicate };
+      return { status: "failed", reason: predicate, predicate: predicate };
     }
     function parked() {
-      return { status: 'parked', invocationId: uid('inv') };
+      return { status: "parked", invocationId: uid("inv") };
     }
 
     switch (action) {
-      case 'create-note': {
-        var title = String(input.title || '').trim();
-        var body = String(input.body_text || '');
+      case "create-note": {
+        var title = String(input.title || "").trim();
+        var body = String(input.body_text || "");
         if (isParkTrigger(title) || isParkTrigger(body)) return parked();
-        var id = uid('note');
+        var id = uid("note");
         var n0 = {
           note_id: id,
           title: title,
-          format: input.format || 'markdown',
+          format: input.format || "markdown",
           pinned: 0,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -1703,9 +1814,9 @@
         notesStore.notes.unshift(n0);
         return ok({ note_id: id });
       }
-      case 'edit-note': {
+      case "edit-note": {
         var n1 = findNote(input.note_id);
-        if (!n1) return refuse('not_found');
+        if (!n1) return refuse("not_found");
         if (isParkTrigger(n1.title)) return parked();
         if (input.title != null) n1.title = String(input.title);
         if (input.body_text != null) n1.body = String(input.body_text);
@@ -1714,22 +1825,22 @@
         n1.updated_at = new Date().toISOString();
         return ok({ note_id: n1.note_id });
       }
-      case 'move-note': {
+      case "move-note": {
         var n2 = findNote(input.note_id);
-        if (!n2) return refuse('not_found');
+        if (!n2) return refuse("not_found");
         if (isParkTrigger(n2.title)) return parked();
         n2.notebook_ids = input.notebook_id ? [input.notebook_id] : [];
         n2.updated_at = new Date().toISOString();
         return ok({ note_id: n2.note_id });
       }
-      case 'create-notebook': {
-        var name = String(input.name || '').trim();
+      case "create-notebook": {
+        var name = String(input.name || "").trim();
         if (isParkTrigger(name)) return parked();
         var already = notesStore.notebooks.some(function (nb) {
           return nb.name === name;
         });
-        if (already) return refuse('name_unused_by_owner');
-        var nbId = uid('nb');
+        if (already) return refuse("name_unused_by_owner");
+        var nbId = uid("nb");
         notesStore.notebooks.push({
           notebook_id: nbId,
           name: name,
@@ -1737,22 +1848,22 @@
         });
         return ok({ notebook_id: nbId });
       }
-      case 'rename-notebook': {
+      case "rename-notebook": {
         var nb1 = findNotebook(input.notebook_id);
-        if (!nb1) return refuse('not_found');
-        var newName = String(input.name || '').trim();
+        if (!nb1) return refuse("not_found");
+        var newName = String(input.name || "").trim();
         if (isParkTrigger(nb1.name) || isParkTrigger(newName)) return parked();
         if (newName === nb1.name) return ok({ notebook_id: nb1.notebook_id });
         var dupe = notesStore.notebooks.some(function (nb) {
           return nb.notebook_id !== nb1.notebook_id && nb.name === newName;
         });
-        if (dupe) return refuse('name_unused_by_owner');
+        if (dupe) return refuse("name_unused_by_owner");
         nb1.name = newName;
         return ok({ notebook_id: nb1.notebook_id });
       }
-      case 'delete-notebook': {
+      case "delete-notebook": {
         var nb2 = findNotebook(input.notebook_id);
-        if (!nb2) return refuse('not_found');
+        if (!nb2) return refuse("not_found");
         if (isParkTrigger(nb2.name)) return parked();
         var unfiled = 0;
         notesStore.notes.forEach(function (n) {
@@ -1767,34 +1878,34 @@
         });
         return ok({ notes_unfiled: unfiled });
       }
-      case 'delete-note': {
+      case "delete-note": {
         var n3 = findNote(input.note_id);
-        if (!n3) return refuse('not_found');
+        if (!n3) return refuse("not_found");
         if (isParkTrigger(n3.title)) return parked();
         notesStore.notes = notesStore.notes.filter(function (n) {
           return n.note_id !== n3.note_id;
         });
         return ok({});
       }
-      case 'attach': {
+      case "attach": {
         var n4 = findNote(input.subject_id);
-        if (!n4) return refuse('not_found');
+        if (!n4) return refuse("not_found");
         if (isParkTrigger(n4.title)) return parked();
-        var contentId = uid('content');
+        var contentId = uid("content");
         var attachment = {
-          attachment_id: uid('att'),
+          attachment_id: uid("att"),
           content_id: contentId,
-          role: input.role || 'other',
+          role: input.role || "other",
           is_primary: 0,
-          media_type: 'application/octet-stream',
-          title: input.title || 'file',
+          media_type: "application/octet-stream",
+          title: input.title || "file",
           content_uri: blobUri(contentId),
           byte_size: 40_000,
         };
         n4.attachments = (n4.attachments || []).concat([attachment]);
         return ok({ attachment_id: attachment.attachment_id });
       }
-      case 'detach': {
+      case "detach": {
         var owner = null;
         notesStore.notes.forEach(function (n) {
           var idx = (n.attachments || []).findIndex(function (a) {
@@ -1805,7 +1916,7 @@
             n.attachments.splice(idx, 1);
           }
         });
-        if (!owner) return refuse('not_found');
+        if (!owner) return refuse("not_found");
         return ok({});
       }
       default:
@@ -1833,10 +1944,10 @@
     if (EMPTY_MODE) return { calendars: [], events: [] };
 
     var calendars = [
-      { calendar_id: 'cal-personal', name: 'Personal', color: '#4E68DD' },
-      { calendar_id: 'cal-work', name: 'Work', color: '#2EA098' },
-      { calendar_id: 'cal-family', name: 'Family', color: '#E55772' },
-      { calendar_id: 'cal-focus', name: 'Focus', color: '#7C5BD9' },
+      { calendar_id: "cal-personal", name: "Personal", color: "#4E68DD" },
+      { calendar_id: "cal-work", name: "Work", color: "#2EA098" },
+      { calendar_id: "cal-family", name: "Family", color: "#E55772" },
+      { calendar_id: "cal-focus", name: "Focus", color: "#7C5BD9" },
     ];
 
     var base = new Date();
@@ -1853,9 +1964,9 @@
       return d.toISOString();
     }
     var you = {
-      party_id: 'party-you',
-      name: 'You',
-      partstat: 'accepted',
+      party_id: "party-you",
+      name: "You",
+      partstat: "accepted",
       is_you: true,
     };
     function guest(id, name, partstat) {
@@ -1864,74 +1975,74 @@
 
     var events = [
       {
-        event_id: 'ev-standup',
-        summary: 'Team standup',
-        description: 'Quick round — yesterday, today, blockers.',
+        event_id: "ev-standup",
+        summary: "Team standup",
+        description: "Quick round — yesterday, today, blockers.",
         dtstart: at(0, 9, 30),
         dtend: at(0, 9, 45),
-        status: 'confirmed',
-        calendar_id: 'cal-work',
+        status: "confirmed",
+        calendar_id: "cal-work",
         attachments: [],
         attendees: [
           you,
-          guest('p-sam', 'Sam Cole', 'accepted'),
-          guest('p-dana', 'Dana Ruiz', 'declined'),
+          guest("p-sam", "Sam Cole", "accepted"),
+          guest("p-dana", "Dana Ruiz", "declined"),
         ],
       },
       {
-        event_id: 'ev-review',
-        summary: 'Design review — Agenda',
-        description: 'Walk through the reinvented calendar canvas.',
+        event_id: "ev-review",
+        summary: "Design review — Agenda",
+        description: "Walk through the reinvented calendar canvas.",
         dtstart: at(0, 11, 0),
         dtend: at(0, 12, 0),
-        status: 'confirmed',
-        calendar_id: 'cal-work',
+        status: "confirmed",
+        calendar_id: "cal-work",
         attachments: [],
-        attendees: [you, guest('p-priya', 'Priya Nair', 'tentative')],
+        attendees: [you, guest("p-priya", "Priya Nair", "tentative")],
       },
       {
-        event_id: 'ev-lunch',
-        summary: 'Lunch with Dana',
-        description: '',
+        event_id: "ev-lunch",
+        summary: "Lunch with Dana",
+        description: "",
         dtstart: at(0, 12, 0),
         dtend: at(0, 13, 0),
-        status: 'confirmed',
-        calendar_id: 'cal-personal',
+        status: "confirmed",
+        calendar_id: "cal-personal",
         attachments: [],
         attendees: [],
       },
       {
         // Overlaps ev-lunch same day/slot — exercises the week view's
         // side-by-side overlap-column layout.
-        event_id: 'ev-vendor-call',
-        summary: 'Vendor call',
-        description: '',
+        event_id: "ev-vendor-call",
+        summary: "Vendor call",
+        description: "",
         dtstart: at(0, 12, 15),
         dtend: at(0, 13, 15),
-        status: 'confirmed',
-        calendar_id: 'cal-work',
+        status: "confirmed",
+        calendar_id: "cal-work",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-1on1',
-        summary: '1:1 with Sam',
-        description: '',
+        event_id: "ev-1on1",
+        summary: "1:1 with Sam",
+        description: "",
         dtstart: at(0, 15, 0),
         dtend: at(0, 15, 30),
-        status: 'confirmed',
-        calendar_id: 'cal-work',
+        status: "confirmed",
+        calendar_id: "cal-work",
         attachments: [],
-        attendees: [you, guest('p-sam', 'Sam Cole', 'accepted')],
+        attendees: [you, guest("p-sam", "Sam Cole", "accepted")],
       },
       {
-        event_id: 'ev-deepwork',
-        summary: 'Deep work — inbox to zero',
-        description: '',
+        event_id: "ev-deepwork",
+        summary: "Deep work — inbox to zero",
+        description: "",
         dtstart: at(0, 16, 0),
         dtend: at(0, 17, 30),
-        status: 'confirmed',
-        calendar_id: 'cal-focus',
+        status: "confirmed",
+        calendar_id: "cal-focus",
         attachments: [],
         attendees: [],
       },
@@ -1939,189 +2050,193 @@
         // Every write against this event parks (isParkTrigger on the title)
         // — the reliable way to exercise reschedule/rsvp/attach/cancel's
         // parked treatment from the harness.
-        event_id: 'ev-dentist',
-        summary: 'Dentist (park)',
-        description: 'Cleaning. Bring the insurance card.',
+        event_id: "ev-dentist",
+        summary: "Dentist (park)",
+        description: "Cleaning. Bring the insurance card.",
         dtstart: at(1, 8, 0),
         dtend: at(1, 9, 0),
-        status: 'confirmed',
-        calendar_id: 'cal-personal',
+        status: "confirmed",
+        calendar_id: "cal-personal",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-sprint',
-        summary: 'Sprint planning',
-        description: '',
+        event_id: "ev-sprint",
+        summary: "Sprint planning",
+        description: "",
         dtstart: at(1, 10, 0),
         dtend: at(1, 11, 30),
-        status: 'confirmed',
-        calendar_id: 'cal-work',
+        status: "confirmed",
+        calendar_id: "cal-work",
         attachments: [],
         attendees: [
           you,
-          guest('p-sam', 'Sam Cole', 'accepted'),
-          guest('p-priya', 'Priya Nair', 'declined'),
+          guest("p-sam", "Sam Cole", "accepted"),
+          guest("p-priya", "Priya Nair", "declined"),
         ],
       },
       {
-        event_id: 'ev-yoga',
-        summary: 'Yoga',
-        description: '',
+        event_id: "ev-yoga",
+        summary: "Yoga",
+        description: "",
         dtstart: at(1, 18, 0),
         dtend: at(1, 19, 0),
-        status: 'confirmed',
-        calendar_id: 'cal-personal',
+        status: "confirmed",
+        calendar_id: "cal-personal",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-family-dinner',
-        summary: 'Family dinner',
-        description: 'At mum’s. Bring dessert.',
+        event_id: "ev-family-dinner",
+        summary: "Family dinner",
+        description: "At mum’s. Bring dessert.",
         dtstart: at(2, 19, 0),
         dtend: at(2, 21, 0),
-        status: 'confirmed',
-        calendar_id: 'cal-family',
+        status: "confirmed",
+        calendar_id: "cal-family",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-coffee',
-        summary: 'Coffee with Alex',
-        description: '',
+        event_id: "ev-coffee",
+        summary: "Coffee with Alex",
+        description: "",
         dtstart: at(2, 14, 0),
         dtend: at(2, 14, 45),
-        status: 'confirmed',
-        calendar_id: 'cal-personal',
+        status: "confirmed",
+        calendar_id: "cal-personal",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-product-sync',
-        summary: 'Product sync',
-        description: '',
+        event_id: "ev-product-sync",
+        summary: "Product sync",
+        description: "",
         dtstart: at(3, 13, 30),
         dtend: at(3, 14, 30),
-        status: 'tentative',
-        calendar_id: 'cal-work',
+        status: "tentative",
+        calendar_id: "cal-work",
         attachments: [],
-        attendees: [you, guest('p-priya', 'Priya Nair', 'accepted')],
+        attendees: [you, guest("p-priya", "Priya Nair", "accepted")],
       },
       {
         // Multi-day, spans "today" — the still-running-at-`from` rule
         // (queries/upcoming.js's SPAN_BUFFER_MS) keeps it visible even
         // though it started before the visible window.
-        event_id: 'ev-offsite',
-        summary: 'Offsite retreat',
-        description: 'Coast cabin, team offsite.',
+        event_id: "ev-offsite",
+        summary: "Offsite retreat",
+        description: "Coast cabin, team offsite.",
         dtstart: atMid(-3),
         dtend: atMid(2),
-        status: 'confirmed',
-        calendar_id: 'cal-family',
+        status: "confirmed",
+        calendar_id: "cal-family",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-retro',
-        summary: 'Retro',
-        description: '',
+        event_id: "ev-retro",
+        summary: "Retro",
+        description: "",
         dtstart: at(-1, 16, 0),
         dtend: at(-1, 17, 0),
-        status: 'confirmed',
-        calendar_id: 'cal-work',
+        status: "confirmed",
+        calendar_id: "cal-work",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-museum',
-        summary: 'Museum with the kids',
-        description: '',
+        event_id: "ev-museum",
+        summary: "Museum with the kids",
+        description: "",
         dtstart: at(-2, 10, 0),
         dtend: at(-2, 12, 30),
-        status: 'confirmed',
-        calendar_id: 'cal-family',
+        status: "confirmed",
+        calendar_id: "cal-family",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-taxes',
-        summary: 'Pay quarterly taxes',
-        description: '',
+        event_id: "ev-taxes",
+        summary: "Pay quarterly taxes",
+        description: "",
         dtstart: atMid(9),
         dtend: atMid(10),
-        status: 'confirmed',
-        calendar_id: 'cal-personal',
+        status: "confirmed",
+        calendar_id: "cal-personal",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-bookclub',
-        summary: 'Book club',
-        description: '',
+        event_id: "ev-bookclub",
+        summary: "Book club",
+        description: "",
         dtstart: at(11, 19, 0),
         dtend: at(11, 20, 30),
-        status: 'confirmed',
-        calendar_id: 'cal-personal',
+        status: "confirmed",
+        calendar_id: "cal-personal",
         attachments: [],
         attendees: [],
       },
       {
-        event_id: 'ev-workshop',
-        summary: 'Client workshop',
-        description: 'Signed agenda is attached below.',
+        event_id: "ev-workshop",
+        summary: "Client workshop",
+        description: "Signed agenda is attached below.",
         dtstart: at(-5, 13, 0),
         dtend: at(-5, 16, 0),
-        status: 'confirmed',
-        calendar_id: 'cal-work',
+        status: "confirmed",
+        calendar_id: "cal-work",
         attendees: [],
         attachments: [
           {
-            attachment_id: 'att-workshop-1',
-            content_id: 'content-workshop-1',
-            role: 'other',
+            attachment_id: "att-workshop-1",
+            content_id: "content-workshop-1",
+            role: "other",
             is_primary: 1,
-            media_type: 'application/pdf',
-            title: 'workshop-agenda.pdf',
-            content_uri: blobUri('content-workshop-1'),
+            media_type: "application/pdf",
+            title: "workshop-agenda.pdf",
+            content_uri: blobUri("content-workshop-1"),
             byte_size: 180_000,
           },
         ],
       },
       {
-        event_id: 'ev-physio',
-        summary: 'Physio',
-        description: '',
+        event_id: "ev-physio",
+        summary: "Physio",
+        description: "",
         dtstart: at(15, 11, 0),
         dtend: at(15, 11, 45),
-        status: 'confirmed',
-        calendar_id: 'cal-personal',
+        status: "confirmed",
+        calendar_id: "cal-personal",
         attachments: [],
         attendees: [],
       },
     ];
 
     // A dense day (+4) for month view's "+N more".
-    ['Standup', 'Design sync', 'Investor call', 'Onboarding', 'Wrap-up'].forEach(
-      function (title, i) {
-        events.push({
-          event_id: 'ev-dense-' + i,
-          summary: title + ' (day+4)',
-          description: '',
-          dtstart: at(4, 9 + i, 0),
-          dtend: at(4, 9 + i, 30),
-          status: 'confirmed',
-          calendar_id: i % 2 === 0 ? 'cal-work' : 'cal-personal',
-          attachments: [],
-          attendees: [],
-        });
-      },
-    );
+    [
+      "Standup",
+      "Design sync",
+      "Investor call",
+      "Onboarding",
+      "Wrap-up",
+    ].forEach(function (title, i) {
+      events.push({
+        event_id: "ev-dense-" + i,
+        summary: title + " (day+4)",
+        description: "",
+        dtstart: at(4, 9 + i, 0),
+        dtend: at(4, 9 + i, 30),
+        status: "confirmed",
+        calendar_id: i % 2 === 0 ? "cal-work" : "cal-personal",
+        attachments: [],
+        attendees: [],
+      });
+    });
 
     return { calendars: calendars, events: events };
   }
 
-  var agendaStore = appId === 'agenda' ? buildAgendaStore() : null;
+  var agendaStore = appId === "agenda" ? buildAgendaStore() : null;
 
   /** Mirrors queries/upcoming.js's window semantics: keep an event that is
    *  still running at `from` even though it started earlier; `to` is an
@@ -2147,23 +2262,25 @@
   }
 
   function agendaRead(query, input) {
-    if (query === 'upcoming') {
+    if (query === "upcoming") {
       var from = input.from || agendaTodayStartIso();
       var to = input.to || null;
       var events = agendaStore.events.filter(function (e) {
-        return e.status !== 'cancelled' && agendaInRange(e, from, to);
+        return e.status !== "cancelled" && agendaInRange(e, from, to);
       });
       return { events: events, calendars: agendaStore.calendars };
     }
-    if (query === 'search') {
-      var term = String(input.term || '')
+    if (query === "search") {
+      var term = String(input.term || "")
         .trim()
         .toLowerCase();
       if (!term) return { events: [] };
       var hits = agendaStore.events.filter(function (e) {
         return (
-          e.status !== 'cancelled' &&
-          (e.summary + ' ' + (e.description || '')).toLowerCase().indexOf(term) !== -1
+          e.status !== "cancelled" &&
+          (e.summary + " " + (e.description || ""))
+            .toLowerCase()
+            .indexOf(term) !== -1
         );
       });
       return {
@@ -2175,19 +2292,19 @@
           var idx = hay.toLowerCase().indexOf(term);
           var snippet =
             idx === -1
-              ? ''
-              : '…' +
+              ? ""
+              : "…" +
                 hay.slice(0, idx) +
-                '⟦' +
+                "⟦" +
                 hay.slice(idx, idx + term.length) +
-                '⟧' +
+                "⟧" +
                 hay.slice(idx + term.length) +
-                '…';
+                "…";
           return Object.assign({}, e, { snippet: snippet });
         }),
       };
     }
-    console.warn('[mock-centraid] agenda: unmapped query', query);
+    console.warn("[mock-centraid] agenda: unmapped query", query);
     return {};
   }
 
@@ -2199,32 +2316,32 @@
     }
     function ok(output) {
       return {
-        status: 'executed',
-        invocationId: uid('inv'),
-        receiptId: uid('receipt'),
+        status: "executed",
+        invocationId: uid("inv"),
+        receiptId: uid("receipt"),
         output: output || {},
       };
     }
     function refuse(reason) {
-      return { status: 'failed', reason: reason, predicate: reason };
+      return { status: "failed", reason: reason, predicate: reason };
     }
     function parked() {
-      return { status: 'parked', invocationId: uid('inv') };
+      return { status: "parked", invocationId: uid("inv") };
     }
 
     switch (action) {
-      case 'propose': {
-        var summary = String(input.summary || '').trim();
+      case "propose": {
+        var summary = String(input.summary || "").trim();
         if (isParkTrigger(summary)) return parked();
-        if (/\(conflict\)/i.test(summary)) return refuse('busy_conflict');
-        var id = uid('event');
+        if (/\(conflict\)/i.test(summary)) return refuse("busy_conflict");
+        var id = uid("event");
         agendaStore.events.unshift({
           event_id: id,
           summary: summary,
-          description: input.description || '',
+          description: input.description || "",
           dtstart: input.dtstart,
           dtend: input.dtend,
-          status: 'tentative',
+          status: "tentative",
           calendar_id: input.calendar_id,
           rrule: input.rrule || null,
           conferencing_uri: input.conferencing_uri || null,
@@ -2233,51 +2350,51 @@
         });
         return ok({ event_id: id });
       }
-      case 'reschedule': {
+      case "reschedule": {
         var e1 = findEvent(input.event_id);
-        if (!e1) return refuse('not_found');
+        if (!e1) return refuse("not_found");
         if (isParkTrigger(e1.summary)) return parked();
         e1.dtstart = input.dtstart;
         e1.dtend = input.dtend;
         return ok({ event_id: e1.event_id });
       }
-      case 'rsvp': {
+      case "rsvp": {
         var e2 = findEvent(input.event_id);
-        if (!e2) return refuse('not_found');
+        if (!e2) return refuse("not_found");
         if (isParkTrigger(e2.summary)) return parked();
         var att = (e2.attendees || []).find(function (a) {
           return a.party_id === input.party_id;
         });
-        if (!att) return refuse('attendee_not_invited');
+        if (!att) return refuse("attendee_not_invited");
         att.partstat = input.partstat;
         return ok({ attendee_id: att.party_id, partstat: input.partstat });
       }
-      case 'cancel-event': {
+      case "cancel-event": {
         var e3 = findEvent(input.event_id);
-        if (!e3) return refuse('not_found');
+        if (!e3) return refuse("not_found");
         // Cancelling is medium-risk in the real vault — it ALWAYS parks for
         // the owner, regardless of the (park) marker (see cancel-event.js).
         return parked();
       }
-      case 'attach': {
+      case "attach": {
         var e4 = findEvent(input.subject_id);
-        if (!e4) return refuse('not_found');
+        if (!e4) return refuse("not_found");
         if (isParkTrigger(e4.summary)) return parked();
-        var contentId = uid('content');
+        var contentId = uid("content");
         var attachment = {
-          attachment_id: uid('att'),
+          attachment_id: uid("att"),
           content_id: contentId,
-          role: input.role || 'other',
+          role: input.role || "other",
           is_primary: 0,
-          media_type: 'application/octet-stream',
-          title: input.title || 'file',
+          media_type: "application/octet-stream",
+          title: input.title || "file",
           content_uri: blobUri(contentId),
           byte_size: 40_000,
         };
         e4.attachments = (e4.attachments || []).concat([attachment]);
         return ok({ attachment_id: attachment.attachment_id });
       }
-      case 'detach': {
+      case "detach": {
         var owner = null;
         agendaStore.events.forEach(function (e) {
           var idx = (e.attachments || []).findIndex(function (a) {
@@ -2288,7 +2405,7 @@
             e.attachments.splice(idx, 1);
           }
         });
-        if (!owner) return refuse('not_found');
+        if (!owner) return refuse("not_found");
         return ok({});
       }
       default:
@@ -2315,9 +2432,9 @@
     if (EMPTY_MODE) return { circles: [], people: [], journal: [] };
 
     var circles = [
-      { circle_id: 'circle-college', name: 'College' },
-      { circle_id: 'circle-family', name: 'Family' },
-      { circle_id: 'circle-work', name: 'Work' },
+      { circle_id: "circle-college", name: "College" },
+      { circle_id: "circle-family", name: "Family" },
+      { circle_id: "circle-work", name: "Work" },
     ];
 
     function person(id, name, opts) {
@@ -2325,12 +2442,15 @@
       return {
         party_id: id,
         name: name,
-        role: opts.role || '',
+        role: opts.role || "",
         avatar_color: opts.avatar_color || null,
         cadence_days: opts.cadence_days || 30,
-        last_contacted_at: opts.lastDays == null ? null : isoDaysAgo(opts.lastDays),
-        created_at: isoDaysAgo(opts.createdDays != null ? opts.createdDays : 120),
-        met: opts.met || '',
+        last_contacted_at:
+          opts.lastDays == null ? null : isoDaysAgo(opts.lastDays),
+        created_at: isoDaysAgo(
+          opts.createdDays != null ? opts.createdDays : 120
+        ),
+        met: opts.met || "",
         circle_id: opts.circle_id || null,
         starred: !!opts.starred,
         contact: opts.contact || [],
@@ -2346,200 +2466,200 @@
 
     var people = [
       // The rich profile — every drawer section populated.
-      person('party-dadu', 'Dadu', {
-        role: 'Grandfather',
-        avatar_color: '#E89A3C',
+      person("party-dadu", "Dadu", {
+        role: "Grandfather",
+        avatar_color: "#E89A3C",
         cadence_days: 7,
         lastDays: 2,
         createdDays: 400,
-        circle_id: 'circle-family',
+        circle_id: "circle-family",
         starred: true,
-        met: 'Family — my mother’s father.',
+        met: "Family — my mother’s father.",
         contact: [
-          { kind: 'phone', value: '+91 98400 22110' },
-          { kind: 'email', value: 'dadu.letters@gmail.com' },
+          { kind: "phone", value: "+91 98400 22110" },
+          { kind: "email", value: "dadu.letters@gmail.com" },
         ],
         relationships: [
           {
-            relationship_id: 'rel-dadu-1',
-            name: 'Nani',
-            kind: 'Spouse',
+            relationship_id: "rel-dadu-1",
+            name: "Nani",
+            kind: "Spouse",
             pet: null,
           },
           {
-            relationship_id: 'rel-dadu-2',
-            name: 'Laddu',
-            kind: 'Pet',
-            pet: 'dog',
+            relationship_id: "rel-dadu-2",
+            name: "Laddu",
+            kind: "Pet",
+            pet: "dog",
           },
         ],
         dates: [
           {
-            date_id: 'date-dadu-bday',
-            label: 'Birthday',
-            month_day: '08-14',
+            date_id: "date-dadu-bday",
+            label: "Birthday",
+            month_day: "08-14",
             reminder_on: true,
           },
           {
-            date_id: 'date-dadu-anniv',
-            label: 'Anniversary',
-            month_day: '02-21',
+            date_id: "date-dadu-anniv",
+            label: "Anniversary",
+            month_day: "02-21",
             reminder_on: false,
           },
         ],
         notes: [
           {
-            annotation_id: 'note-dadu-1',
-            text: 'Retold the Marina Beach story again — third time, still funnier every telling.',
+            annotation_id: "note-dadu-1",
+            text: "Retold the Marina Beach story again — third time, still funnier every telling.",
             created_at: isoDaysAgo(2, 15),
           },
           {
-            annotation_id: 'note-dadu-2',
-            text: 'Wants large-print books only now. Eyes tire after a page of normal type.',
+            annotation_id: "note-dadu-2",
+            text: "Wants large-print books only now. Eyes tire after a page of normal type.",
             created_at: isoDaysAgo(20, 11),
           },
         ],
         tasks: [
           {
-            task_id: 'task-dadu-1',
-            text: 'Fix the font size on his tablet',
+            task_id: "task-dadu-1",
+            text: "Fix the font size on his tablet",
             done: false,
           },
-          { task_id: 'task-dadu-2', text: 'Send the Ooty photos', done: true },
+          { task_id: "task-dadu-2", text: "Send the Ooty photos", done: true },
         ],
         gifts: [
           {
-            gift_id: 'gift-dadu-1',
-            text: 'Large-print edition of Malgudi Days',
-            state: 'idea',
+            gift_id: "gift-dadu-1",
+            text: "Large-print edition of Malgudi Days",
+            state: "idea",
           },
           {
-            gift_id: 'gift-dadu-2',
-            text: 'Wool shawl from the hill market',
-            state: 'given',
+            gift_id: "gift-dadu-2",
+            text: "Wool shawl from the hill market",
+            state: "given",
           },
         ],
         interactions: [
           {
-            interaction_id: 'int-dadu-1',
-            kind: 'visit',
-            text: 'Sunday lunch. BP is under control again; he beat me at carrom twice.',
+            interaction_id: "int-dadu-1",
+            kind: "visit",
+            text: "Sunday lunch. BP is under control again; he beat me at carrom twice.",
             occurred_at: isoDaysAgo(2, 13),
           },
           {
-            interaction_id: 'int-dadu-2',
-            kind: 'call',
-            text: 'Reminded him about the eye check-up on Thursday.',
+            interaction_id: "int-dadu-2",
+            kind: "call",
+            text: "Reminded him about the eye check-up on Thursday.",
             occurred_at: isoDaysAgo(9, 18),
           },
         ],
       }),
-      person('party-meera', 'Meera Pillai', {
-        role: 'College friend',
-        avatar_color: '#7C5BD9',
+      person("party-meera", "Meera Pillai", {
+        role: "College friend",
+        avatar_color: "#7C5BD9",
         cadence_days: 30,
         lastDays: 12,
         createdDays: 300,
-        circle_id: 'circle-college',
+        circle_id: "circle-college",
         dates: [
           {
-            date_id: 'date-meera-bday',
-            label: 'Birthday',
-            month_day: '11-02',
+            date_id: "date-meera-bday",
+            label: "Birthday",
+            month_day: "11-02",
             reminder_on: true,
           },
         ],
         interactions: [
           {
-            interaction_id: 'int-meera-1',
-            kind: 'call',
-            text: 'Caught up about her Pune move; she wants the Goa dates.',
+            interaction_id: "int-meera-1",
+            kind: "call",
+            text: "Caught up about her Pune move; she wants the Goa dates.",
             occurred_at: isoDaysAgo(12, 19),
           },
         ],
       }),
       // Overdue — cadence 45, last spoke 60 days ago (Reconnect material).
-      person('party-arjun', 'Arjun Rao', {
-        role: 'Flatmate from Bangalore days',
-        avatar_color: '#2EA098',
+      person("party-arjun", "Arjun Rao", {
+        role: "Flatmate from Bangalore days",
+        avatar_color: "#2EA098",
         cadence_days: 45,
         lastDays: 60,
         createdDays: 350,
-        circle_id: 'circle-college',
+        circle_id: "circle-college",
         debts: [
           {
-            debt_id: 'debt-arjun-1',
-            direction: 'owe',
+            debt_id: "debt-arjun-1",
+            direction: "owe",
             amount_minor: 120000,
-            currency: 'USD',
-            reason: 'His half of the deposit refund',
+            currency: "USD",
+            reason: "His half of the deposit refund",
           },
         ],
         interactions: [
           {
-            interaction_id: 'int-arjun-1',
-            kind: 'message',
-            text: 'Split the deposit refund; still owe him his half.',
+            interaction_id: "int-arjun-1",
+            kind: "message",
+            text: "Split the deposit refund; still owe him his half.",
             occurred_at: isoDaysAgo(60, 10),
           },
         ],
       }),
       // Due soon — 50 of 60 cadence days elapsed.
-      person('party-sana', 'Sana Qureshi', {
-        role: 'Design lead, ex-colleague',
-        avatar_color: '#E0567A',
+      person("party-sana", "Sana Qureshi", {
+        role: "Design lead, ex-colleague",
+        avatar_color: "#E0567A",
         cadence_days: 60,
         lastDays: 50,
         createdDays: 500,
-        circle_id: 'circle-work',
+        circle_id: "circle-work",
         starred: true,
         gifts: [
           {
-            gift_id: 'gift-sana-1',
-            text: 'Fountain pen ink sampler',
-            state: 'idea',
+            gift_id: "gift-sana-1",
+            text: "Fountain pen ink sampler",
+            state: "idea",
           },
         ],
         interactions: [
           {
-            interaction_id: 'int-sana-1',
-            kind: 'message',
-            text: 'Sent the portfolio feedback she asked for.',
+            interaction_id: "int-sana-1",
+            kind: "message",
+            text: "Sent the portfolio feedback she asked for.",
             occurred_at: isoDaysAgo(50, 16),
           },
         ],
       }),
       // No circle, no stored avatar colour (exercises the hash fallback),
       // never contacted (daysSince counts from created_at).
-      person('party-ravi', 'Ravi Menon', {
-        role: 'Neighbour',
+      person("party-ravi", "Ravi Menon", {
+        role: "Neighbour",
         cadence_days: 90,
         createdDays: 25,
       }),
       // "(park)" in the NAME: every write targeting this person parks —
       // the reliable way to see the pending treatment from the drawer.
-      person('party-priya', 'Priya Nair (park)', {
-        role: 'Mentor',
-        avatar_color: '#4E68DD',
+      person("party-priya", "Priya Nair (park)", {
+        role: "Mentor",
+        avatar_color: "#4E68DD",
         cadence_days: 21,
         lastDays: 30,
         createdDays: 200,
-        circle_id: 'circle-work',
+        circle_id: "circle-work",
       }),
     ];
 
     var journal = [
       {
-        entry_id: 'jr-1',
-        mood: '🙂',
-        text: 'Long walk after the standup. Called Dadu on the way back.',
+        entry_id: "jr-1",
+        mood: "🙂",
+        text: "Long walk after the standup. Called Dadu on the way back.",
         entry_date: dayKey(0),
         created_at: isoDaysAgo(0, 20),
       },
       {
-        entry_id: 'jr-2',
-        mood: '😄',
-        text: 'Meera confirmed the Goa dates. December, finally.',
+        entry_id: "jr-2",
+        mood: "😄",
+        text: "Meera confirmed the Goa dates. December, finally.",
         entry_date: dayKey(-3),
         created_at: isoDaysAgo(3, 21),
       },
@@ -2548,7 +2668,7 @@
     return { circles: circles, people: people, journal: journal };
   }
 
-  var peopleStore = appId === 'people' ? buildPeopleStore() : null;
+  var peopleStore = appId === "people" ? buildPeopleStore() : null;
 
   function peopleDaysSince(iso) {
     var t = new Date(iso).getTime();
@@ -2557,7 +2677,7 @@
   // Days until the next annual MM-DD from today (0 = today) — mirrors
   // queries/dashboard.js's daysUntilMonthDay.
   function peopleDaysUntil(monthDay) {
-    var parts = String(monthDay).split('-');
+    var parts = String(monthDay).split("-");
     var mo = Number(parts[0]);
     var da = Number(parts[1]);
     if (!mo || !da) return 9999;
@@ -2600,7 +2720,7 @@
     var sortedCircles = peopleStore.circles.slice().sort(function (a, b) {
       return String(a.name).localeCompare(String(b.name));
     });
-    if (query === 'people') {
+    if (query === "people") {
       var limit = Math.min(Math.max(Number(input.limit) || 200, 20), 2000);
       return {
         people: peopleStore.people.slice(0, limit).map(peopleRow),
@@ -2609,9 +2729,9 @@
         window: limit,
       };
     }
-    if (query === 'person') {
+    if (query === "person") {
       var p = peopleStore.people.find(function (x) {
-        return x.party_id === String(input.party_id || '');
+        return x.party_id === String(input.party_id || "");
       });
       if (!p) return { person: null };
       return {
@@ -2637,12 +2757,14 @@
         },
       };
     }
-    if (query === 'dashboard') {
+    if (query === "dashboard") {
       var reconnect = peopleStore.people
         .map(function (px) {
           return {
             p: px,
-            over: peopleDaysSince(px.last_contacted_at || px.created_at) - px.cadence_days,
+            over:
+              peopleDaysSince(px.last_contacted_at || px.created_at) -
+              px.cadence_days,
           };
         })
         .filter(function (x) {
@@ -2664,7 +2786,7 @@
               label: d.label,
               month_day: d.month_day,
               until: peopleDaysUntil(d.month_day),
-            }),
+            })
           );
         });
       });
@@ -2683,7 +2805,7 @@
               kind: i.kind,
               text: i.text,
               occurred_at: i.occurred_at,
-            }),
+            })
           );
         });
       });
@@ -2705,10 +2827,10 @@
         },
       };
     }
-    if (query === 'journal') {
+    if (query === "journal") {
       var owner = peopleStore.journal.map(function (e) {
         return {
-          kind: 'entry',
+          kind: "entry",
           id: e.entry_id,
           sort_at: e.created_at,
           date: e.entry_date,
@@ -2720,7 +2842,7 @@
       peopleStore.people.forEach(function (px) {
         px.interactions.forEach(function (i) {
           auto.push({
-            kind: 'auto',
+            kind: "auto",
             id: i.interaction_id,
             sort_at: i.occurred_at,
             date: i.occurred_at,
@@ -2737,8 +2859,8 @@
       });
       return { entries: entries };
     }
-    if (query === 'search') {
-      var term = String(input.term || '')
+    if (query === "search") {
+      var term = String(input.term || "")
         .trim()
         .toLowerCase();
       if (!term) return { people: [] };
@@ -2747,8 +2869,12 @@
           .map(function (n) {
             return n.text;
           })
-          .join(' ');
-        return (px.name + ' ' + px.role + ' ' + noteText).toLowerCase().indexOf(term) !== -1;
+          .join(" ");
+        return (
+          (px.name + " " + px.role + " " + noteText)
+            .toLowerCase()
+            .indexOf(term) !== -1
+        );
       });
       return {
         people: hits.map(function (px) {
@@ -2758,12 +2884,12 @@
           var row = peopleRow(px);
           // The real search query never re-fetches dates — reminders stays [].
           row.reminders = [];
-          row.snippet = noteHit ? '…⟦' + noteHit.text.slice(0, 80) + '⟧…' : '';
+          row.snippet = noteHit ? "…⟦" + noteHit.text.slice(0, 80) + "⟧…" : "";
           return row;
         }),
       };
     }
-    console.warn('[mock-centraid] people: unmapped query', query);
+    console.warn("[mock-centraid] people: unmapped query", query);
     return {};
   }
 
@@ -2780,17 +2906,17 @@
     }
     function ok(output) {
       return {
-        status: 'executed',
-        invocationId: uid('inv'),
-        receiptId: uid('receipt'),
+        status: "executed",
+        invocationId: uid("inv"),
+        receiptId: uid("receipt"),
         output: output || {},
       };
     }
     function refuse(predicate) {
-      return { status: 'failed', reason: predicate, predicate: predicate };
+      return { status: "failed", reason: predicate, predicate: predicate };
     }
     function parked() {
-      return { status: 'parked', invocationId: uid('inv') };
+      return { status: "parked", invocationId: uid("inv") };
     }
     // Park when the write targets a person whose NAME carries the marker, or
     // when the typed text itself does.
@@ -2799,19 +2925,19 @@
     }
 
     switch (action) {
-      case 'add-person': {
-        var displayName = String(input.display_name || '').trim();
+      case "add-person": {
+        var displayName = String(input.display_name || "").trim();
         if (isParkTrigger(displayName)) return parked();
-        var id = uid('party');
+        var id = uid("party");
         peopleStore.people.unshift({
           party_id: id,
           name: displayName,
-          role: input.role || '',
+          role: input.role || "",
           avatar_color: input.avatar_color || null,
           cadence_days: Number(input.cadence_days) || 30,
           last_contacted_at: null,
           created_at: new Date().toISOString(),
-          met: '',
+          met: "",
           circle_id: input.circle_id || null,
           starred: false,
           contact: [],
@@ -2825,78 +2951,81 @@
         });
         return ok({ party_id: id });
       }
-      case 'edit-person': {
+      case "edit-person": {
         var p1 = findPerson(input.party_id);
-        if (!p1) return refuse('not_found');
-        if (personParked(p1) || isParkTrigger(input.display_name)) return parked();
+        if (!p1) return refuse("not_found");
+        if (personParked(p1) || isParkTrigger(input.display_name))
+          return parked();
         if (input.display_name != null) p1.name = String(input.display_name);
         if (input.role != null) p1.role = String(input.role);
-        if (input.avatar_color != null) p1.avatar_color = String(input.avatar_color);
+        if (input.avatar_color != null)
+          p1.avatar_color = String(input.avatar_color);
         if (input.met != null) p1.met = String(input.met);
         return ok({ party_id: p1.party_id });
       }
-      case 'set-cadence': {
+      case "set-cadence": {
         var p2 = findPerson(input.party_id);
-        if (!p2) return refuse('not_found');
+        if (!p2) return refuse("not_found");
         if (personParked(p2)) return parked();
         p2.cadence_days = Number(input.cadence_days);
         return ok({ party_id: p2.party_id });
       }
-      case 'log-interaction': {
+      case "log-interaction": {
         var p3 = findPerson(input.party_id);
-        if (!p3) return refuse('not_found');
+        if (!p3) return refuse("not_found");
         if (personParked(p3) || isParkTrigger(input.text)) return parked();
         var now = new Date().toISOString();
         p3.interactions.unshift({
-          interaction_id: uid('int'),
+          interaction_id: uid("int"),
           kind: String(input.kind),
-          text: input.text ? String(input.text) : '',
+          text: input.text ? String(input.text) : "",
           occurred_at: now,
         });
         p3.last_contacted_at = now;
         return ok({ interaction_id: p3.interactions[0].interaction_id });
       }
-      case 'star-person':
-      case 'unstar-person': {
+      case "star-person":
+      case "unstar-person": {
         var p4 = findPerson(input.party_id);
-        if (!p4) return refuse('not_found');
+        if (!p4) return refuse("not_found");
         if (personParked(p4)) return parked();
-        p4.starred = action === 'star-person';
+        p4.starred = action === "star-person";
         return ok({ party_id: p4.party_id });
       }
-      case 'move-person': {
+      case "move-person": {
         var p5 = findPerson(input.party_id);
-        if (!p5) return refuse('not_found');
+        if (!p5) return refuse("not_found");
         if (personParked(p5)) return parked();
-        if (input.circle_id != null && !findCircle(input.circle_id)) return refuse('not_found');
+        if (input.circle_id != null && !findCircle(input.circle_id))
+          return refuse("not_found");
         p5.circle_id = input.circle_id != null ? String(input.circle_id) : null;
         return ok({ party_id: p5.party_id });
       }
-      case 'add-note': {
+      case "add-note": {
         var p6 = findPerson(input.party_id);
-        if (!p6) return refuse('not_found');
+        if (!p6) return refuse("not_found");
         if (personParked(p6) || isParkTrigger(input.text)) return parked();
         var note = {
-          annotation_id: uid('note'),
+          annotation_id: uid("note"),
           text: String(input.text),
           created_at: new Date().toISOString(),
         };
         p6.notes.unshift(note);
         return ok({ annotation_id: note.annotation_id });
       }
-      case 'add-task': {
+      case "add-task": {
         var p7 = findPerson(input.party_id);
-        if (!p7) return refuse('not_found');
+        if (!p7) return refuse("not_found");
         if (personParked(p7) || isParkTrigger(input.text)) return parked();
         var ptask = {
-          task_id: uid('ptask'),
+          task_id: uid("ptask"),
           text: String(input.text),
           done: false,
         };
         p7.tasks.unshift(ptask);
         return ok({ task_id: ptask.task_id });
       }
-      case 'toggle-task': {
+      case "toggle-task": {
         var ownerT = null;
         var hitT = null;
         peopleStore.people.forEach(function (px) {
@@ -2907,17 +3036,17 @@
             }
           });
         });
-        if (!hitT) return refuse('not_found');
+        if (!hitT) return refuse("not_found");
         if (personParked(ownerT)) return parked();
         hitT.done = !hitT.done;
         return ok({ task_id: hitT.task_id });
       }
-      case 'add-important-date': {
+      case "add-important-date": {
         var p8 = findPerson(input.party_id);
-        if (!p8) return refuse('not_found');
+        if (!p8) return refuse("not_found");
         if (personParked(p8) || isParkTrigger(input.label)) return parked();
         var date = {
-          date_id: uid('date'),
+          date_id: uid("date"),
           label: String(input.label),
           month_day: String(input.month_day),
           reminder_on: !!input.reminder_on,
@@ -2925,7 +3054,7 @@
         p8.dates.push(date);
         return ok({ date_id: date.date_id });
       }
-      case 'toggle-reminder': {
+      case "toggle-reminder": {
         var ownerD = null;
         var hitD = null;
         peopleStore.people.forEach(function (px) {
@@ -2936,17 +3065,17 @@
             }
           });
         });
-        if (!hitD) return refuse('not_found');
+        if (!hitD) return refuse("not_found");
         if (personParked(ownerD)) return parked();
         hitD.reminder_on = !hitD.reminder_on;
         return ok({ date_id: hitD.date_id });
       }
-      case 'add-relationship': {
+      case "add-relationship": {
         var p9 = findPerson(input.party_id);
-        if (!p9) return refuse('not_found');
+        if (!p9) return refuse("not_found");
         if (personParked(p9) || isParkTrigger(input.name)) return parked();
         var rel = {
-          relationship_id: uid('rel'),
+          relationship_id: uid("rel"),
           name: String(input.name),
           kind: String(input.kind),
           pet: input.pet != null ? String(input.pet) : null,
@@ -2954,19 +3083,19 @@
         p9.relationships.push(rel);
         return ok({ relationship_id: rel.relationship_id });
       }
-      case 'add-gift': {
+      case "add-gift": {
         var p10 = findPerson(input.party_id);
-        if (!p10) return refuse('not_found');
+        if (!p10) return refuse("not_found");
         if (personParked(p10) || isParkTrigger(input.text)) return parked();
         var gift = {
-          gift_id: uid('gift'),
+          gift_id: uid("gift"),
           text: String(input.text),
-          state: 'idea',
+          state: "idea",
         };
         p10.gifts.unshift(gift);
         return ok({ gift_id: gift.gift_id });
       }
-      case 'toggle-gift': {
+      case "toggle-gift": {
         var ownerG = null;
         var hitG = null;
         peopleStore.people.forEach(function (px) {
@@ -2977,26 +3106,26 @@
             }
           });
         });
-        if (!hitG) return refuse('not_found');
+        if (!hitG) return refuse("not_found");
         if (personParked(ownerG)) return parked();
-        hitG.state = hitG.state === 'given' ? 'idea' : 'given';
+        hitG.state = hitG.state === "given" ? "idea" : "given";
         return ok({ gift_id: hitG.gift_id });
       }
-      case 'add-debt': {
+      case "add-debt": {
         var p11 = findPerson(input.party_id);
-        if (!p11) return refuse('not_found');
+        if (!p11) return refuse("not_found");
         if (personParked(p11) || isParkTrigger(input.reason)) return parked();
         var debt = {
-          debt_id: uid('debt'),
+          debt_id: uid("debt"),
           direction: String(input.direction),
           amount_minor: Number(input.amount_minor),
-          currency: 'USD',
-          reason: input.reason ? String(input.reason) : '',
+          currency: "USD",
+          reason: input.reason ? String(input.reason) : "",
         };
         p11.debts.unshift(debt);
         return ok({ debt_id: debt.debt_id });
       }
-      case 'settle-debt': {
+      case "settle-debt": {
         var ownerDb = null;
         peopleStore.people.forEach(function (px) {
           var idx = px.debts.findIndex(function (d) {
@@ -3007,52 +3136,52 @@
             if (!isParkTrigger(px.name)) px.debts.splice(idx, 1);
           }
         });
-        if (!ownerDb) return refuse('not_found');
+        if (!ownerDb) return refuse("not_found");
         if (personParked(ownerDb)) return parked();
         // The real command stamps settled_at; the person query filters those
         // out, so dropping the row is observationally identical.
         return ok({});
       }
-      case 'create-circle': {
-        var cname = String(input.name || '').trim();
+      case "create-circle": {
+        var cname = String(input.name || "").trim();
         if (isParkTrigger(cname)) return parked();
         var dupC = peopleStore.circles.some(function (c) {
           return c.name === cname;
         });
-        if (dupC) return refuse('name_unused_by_owner');
-        var circle = { circle_id: uid('circle'), name: cname };
+        if (dupC) return refuse("name_unused_by_owner");
+        var circle = { circle_id: uid("circle"), name: cname };
         peopleStore.circles.push(circle);
         return ok({ circle_id: circle.circle_id });
       }
-      case 'rename-circle': {
+      case "rename-circle": {
         var c1 = findCircle(input.circle_id);
-        if (!c1) return refuse('not_found');
-        var newCName = String(input.name || '').trim();
+        if (!c1) return refuse("not_found");
+        var newCName = String(input.name || "").trim();
         if (isParkTrigger(c1.name) || isParkTrigger(newCName)) return parked();
         var dupC2 = peopleStore.circles.some(function (c) {
           return c.circle_id !== c1.circle_id && c.name === newCName;
         });
-        if (dupC2) return refuse('name_unused_by_owner');
+        if (dupC2) return refuse("name_unused_by_owner");
         c1.name = newCName;
         return ok({ circle_id: c1.circle_id });
       }
-      case 'delete-circle': {
+      case "delete-circle": {
         var c2 = findCircle(input.circle_id);
-        if (!c2) return refuse('not_found');
+        if (!c2) return refuse("not_found");
         if (isParkTrigger(c2.name)) return parked();
         var occupied = peopleStore.people.some(function (px) {
           return px.circle_id === c2.circle_id;
         });
-        if (occupied) return refuse('circle_is_empty');
+        if (occupied) return refuse("circle_is_empty");
         peopleStore.circles = peopleStore.circles.filter(function (c) {
           return c.circle_id !== c2.circle_id;
         });
         return ok({});
       }
-      case 'add-journal-entry': {
+      case "add-journal-entry": {
         if (isParkTrigger(input.text)) return parked();
         var entry = {
-          entry_id: uid('jr'),
+          entry_id: uid("jr"),
           mood: String(input.mood),
           text: String(input.text),
           entry_date: input.entry_date ? String(input.entry_date) : dayKey(0),
@@ -3083,13 +3212,13 @@
   // FRIEND_COLORS), so the fixture follows the components. "(park)" in an
   // expense description / friend / group name parks the write.
   // ---------------------------------------------------------------------
-  var TALLY_ME = 'party-you';
+  var TALLY_ME = "party-you";
 
   function buildTallyStore() {
     if (EMPTY_MODE)
       return {
         me: TALLY_ME,
-        currency: 'INR',
+        currency: "INR",
         friends: [],
         groups: [],
         expenses: [],
@@ -3097,28 +3226,37 @@
       };
 
     var friends = [
-      { party_id: 'party-meera', name: 'Meera', avatar_color: '#E0567A' },
-      { party_id: 'party-arjun', name: 'Arjun', avatar_color: '#2EA098' },
-      { party_id: 'party-sana', name: 'Sana', avatar_color: '#7C5BD9' },
+      { party_id: "party-meera", name: "Meera", avatar_color: "#E0567A" },
+      { party_id: "party-arjun", name: "Arjun", avatar_color: "#2EA098" },
+      { party_id: "party-sana", name: "Sana", avatar_color: "#7C5BD9" },
     ];
     var groups = [
       {
-        group_id: 'group-goa',
-        name: 'Goa Trip',
-        icon: '🏖️',
-        color: '#0FA678',
-        members: [TALLY_ME, 'party-meera', 'party-arjun', 'party-sana'],
+        group_id: "group-goa",
+        name: "Goa Trip",
+        icon: "🏖️",
+        color: "#0FA678",
+        members: [TALLY_ME, "party-meera", "party-arjun", "party-sana"],
       },
       {
-        group_id: 'group-flat',
-        name: 'Flat 4B',
-        icon: '🏠',
-        color: '#4E68DD',
-        members: [TALLY_ME, 'party-arjun'],
+        group_id: "group-flat",
+        name: "Flat 4B",
+        icon: "🏠",
+        color: "#4E68DD",
+        members: [TALLY_ME, "party-arjun"],
       },
     ];
 
-    function exp(id, groupId, description, amount, paidBy, category, daysAgo, splits) {
+    function exp(
+      id,
+      groupId,
+      description,
+      amount,
+      paidBy,
+      category,
+      daysAgo,
+      splits
+    ) {
       return {
         expense_id: id,
         group_id: groupId,
@@ -3133,80 +3271,125 @@
 
     var expenses = [
       // Equal 4-way splits (remainder on the payer, like seed.js's even()).
-      exp('exp-lunch', 'group-goa', 'Beach shack lunch', 248000, TALLY_ME, 'food', 6, {
-        'party-you': 62000,
-        'party-meera': 62000,
-        'party-arjun': 62000,
-        'party-sana': 62000,
-      }),
       exp(
-        'exp-scooter',
-        'group-goa',
-        'Scooter rentals, 2 days',
-        160000,
-        'party-arjun',
-        'transport',
+        "exp-lunch",
+        "group-goa",
+        "Beach shack lunch",
+        248000,
+        TALLY_ME,
+        "food",
         6,
         {
-          'party-you': 40000,
-          'party-meera': 40000,
-          'party-arjun': 40000,
-          'party-sana': 40000,
-        },
+          "party-you": 62000,
+          "party-meera": 62000,
+          "party-arjun": 62000,
+          "party-sana": 62000,
+        }
       ),
       exp(
-        'exp-groceries',
-        'group-goa',
-        'Groceries for the villa',
+        "exp-scooter",
+        "group-goa",
+        "Scooter rentals, 2 days",
+        160000,
+        "party-arjun",
+        "transport",
+        6,
+        {
+          "party-you": 40000,
+          "party-meera": 40000,
+          "party-arjun": 40000,
+          "party-sana": 40000,
+        }
+      ),
+      exp(
+        "exp-groceries",
+        "group-goa",
+        "Groceries for the villa",
         187550,
-        'party-meera',
-        'groceries',
+        "party-meera",
+        "groceries",
         5,
         {
-          'party-you': 46887,
-          'party-meera': 46889,
-          'party-arjun': 46887,
-          'party-sana': 46887,
-        },
+          "party-you": 46887,
+          "party-meera": 46889,
+          "party-arjun": 46887,
+          "party-sana": 46887,
+        }
       ),
       // Partial participation — Arjun sat this one out.
-      exp('exp-market', 'group-goa', 'Night market', 92000, 'party-sana', 'fun', 4, {
-        'party-you': 30666,
-        'party-meera': 30666,
-        'party-sana': 30668,
-      }),
-      exp('exp-ferry', 'group-goa', 'Ferry tickets', 60000, TALLY_ME, 'travel', 4, {
-        'party-you': 15000,
-        'party-meera': 15000,
-        'party-arjun': 15000,
-        'party-sana': 15000,
-      }),
+      exp(
+        "exp-market",
+        "group-goa",
+        "Night market",
+        92000,
+        "party-sana",
+        "fun",
+        4,
+        {
+          "party-you": 30666,
+          "party-meera": 30666,
+          "party-sana": 30668,
+        }
+      ),
+      exp(
+        "exp-ferry",
+        "group-goa",
+        "Ferry tickets",
+        60000,
+        TALLY_ME,
+        "travel",
+        4,
+        {
+          "party-you": 15000,
+          "party-meera": 15000,
+          "party-arjun": 15000,
+          "party-sana": 15000,
+        }
+      ),
       // Exact-style uneven split (bigger room, bigger share).
-      exp('exp-rent', 'group-flat', 'July rent', 3600000, TALLY_ME, 'rent', 10, {
-        'party-you': 2000000,
-        'party-arjun': 1600000,
-      }),
+      exp(
+        "exp-rent",
+        "group-flat",
+        "July rent",
+        3600000,
+        TALLY_ME,
+        "rent",
+        10,
+        {
+          "party-you": 2000000,
+          "party-arjun": 1600000,
+        }
+      ),
       // Percent-style split (60/40).
-      exp('exp-internet', 'group-flat', 'Fiber internet', 140000, 'party-arjun', 'utilities', 8, {
-        'party-you': 84000,
-        'party-arjun': 56000,
-      }),
+      exp(
+        "exp-internet",
+        "group-flat",
+        "Fiber internet",
+        140000,
+        "party-arjun",
+        "utilities",
+        8,
+        {
+          "party-you": 84000,
+          "party-arjun": 56000,
+        }
+      ),
     ];
 
     var settlements = [
       {
-        settlement_id: 'settle-1',
-        from_party: 'party-sana',
+        settlement_id: "settle-1",
+        from_party: "party-sana",
         to_party: TALLY_ME,
         amount_minor: 50000,
-        group_id: 'group-goa',
+        group_id: "group-goa",
         paid_on: dayKey(-2),
       },
     ];
 
     return {
       me: TALLY_ME,
-      currency: 'INR',
+      currency: "INR",
       friends: friends,
       groups: groups,
       expenses: expenses,
@@ -3214,26 +3397,26 @@
     };
   }
 
-  var tallyStore = appId === 'tally' ? buildTallyStore() : null;
+  var tallyStore = appId === "tally" ? buildTallyStore() : null;
 
   function tallyInitials(name) {
-    if (!name) return '?';
+    if (!name) return "?";
     return name
       .split(/\s+/)
       .slice(0, 2)
       .map(function (w) {
         return w[0];
       })
-      .join('')
+      .join("")
       .toUpperCase();
   }
   function tallyPerson(pid) {
     if (pid === tallyStore.me) {
       return {
         party_id: pid,
-        name: 'You',
-        color: '#0FA678',
-        initials: 'You',
+        name: "You",
+        color: "#0FA678",
+        initials: "You",
         is_me: true,
       };
     }
@@ -3243,15 +3426,15 @@
     if (!f)
       return {
         party_id: pid,
-        name: 'Someone',
-        color: '#5C677D',
-        initials: '?',
+        name: "Someone",
+        color: "#5C677D",
+        initials: "?",
         is_me: false,
       };
     return {
       party_id: pid,
       name: f.name,
-      color: f.avatar_color || '#5C677D',
+      color: f.avatar_color || "#5C677D",
       initials: tallyInitials(f.name),
       is_me: false,
     };
@@ -3269,7 +3452,8 @@
         if (pid === e.paid_by) return;
         var share = e.splits[pid];
         if (e.paid_by === me && pid !== me) b[pid] = (b[pid] || 0) + share;
-        else if (pid === me && e.paid_by !== me) b[e.paid_by] = (b[e.paid_by] || 0) - share;
+        else if (pid === me && e.paid_by !== me)
+          b[e.paid_by] = (b[e.paid_by] || 0) - share;
       });
     });
     tallyStore.settlements.forEach(function (s) {
@@ -3313,13 +3497,13 @@
     var role;
     var amount;
     if (e.paid_by === me) {
-      role = 'lent';
+      role = "lent";
       amount = e.amount_minor - yourShare;
     } else if (involved) {
-      role = 'borrowed';
+      role = "borrowed";
       amount = yourShare;
     } else {
-      role = 'none';
+      role = "none";
       amount = e.amount_minor;
     }
     return {
@@ -3349,7 +3533,7 @@
     var g = tallyStore.groups.find(function (x) {
       return x.group_id === gid;
     });
-    return g ? g.name : '';
+    return g ? g.name : "";
   }
   function tallySortedExpenses() {
     return tallyStore.expenses.slice().sort(function (a, b) {
@@ -3358,7 +3542,7 @@
   }
 
   function tallyRead(query, input) {
-    if (query === 'dashboard') {
+    if (query === "dashboard") {
       var bal = tallyPairwise();
       var friends = tallyStore.friends.map(function (f) {
         var p = tallyPerson(f.party_id);
@@ -3396,8 +3580,8 @@
         owed_total_minor: owed,
       };
     }
-    if (query === 'group') {
-      var gid = String(input.group_id || '');
+    if (query === "group") {
+      var gid = String(input.group_id || "");
       var g = tallyStore.groups.find(function (x) {
         return x.group_id === gid;
       });
@@ -3437,8 +3621,8 @@
           .map(tallyLedgerRow),
       };
     }
-    if (query === 'friend') {
-      var pid = String(input.party_id || '');
+    if (query === "friend") {
+      var pid = String(input.party_id || "");
       var isFriend = tallyStore.friends.some(function (f) {
         return f.party_id === pid;
       });
@@ -3474,22 +3658,22 @@
           .map(tallyLedgerRow),
       };
     }
-    if (query === 'activity') {
+    if (query === "activity") {
       var meA = tallyStore.me;
       var rows = [];
       tallyStore.expenses.forEach(function (e) {
         var yourShare = e.splits[meA] != null ? e.splits[meA] : 0;
-        var role = 'none';
+        var role = "none";
         var amount = 0;
         if (e.paid_by === meA) {
-          role = 'lent';
+          role = "lent";
           amount = e.amount_minor - yourShare;
         } else if (e.splits[meA] != null) {
-          role = 'borrowed';
+          role = "borrowed";
           amount = yourShare;
         }
         rows.push({
-          kind: 'expense',
+          kind: "expense",
           date: e.spent_on,
           description: e.description,
           category: e.category,
@@ -3503,7 +3687,7 @@
       });
       tallyStore.settlements.forEach(function (s) {
         rows.push({
-          kind: 'settlement',
+          kind: "settlement",
           date: s.paid_on,
           from_party: s.from_party,
           from_name: tallyPerson(s.from_party).name,
@@ -3517,15 +3701,15 @@
       });
       return { me: meA, currency: tallyStore.currency, activity: rows };
     }
-    if (query === 'search') {
-      var term = String(input.term || '')
+    if (query === "search") {
+      var term = String(input.term || "")
         .trim()
         .toLowerCase();
-      if (!term) return { me: null, currency: 'USD', results: [] };
+      if (!term) return { me: null, currency: "USD", results: [] };
       var results = tallySortedExpenses()
         .filter(function (e) {
           return (
-            String(e.description || '')
+            String(e.description || "")
               .toLowerCase()
               .indexOf(term) !== -1
           );
@@ -3541,7 +3725,7 @@
         results: results,
       };
     }
-    console.warn('[mock-centraid] tally: unmapped query', query);
+    console.warn("[mock-centraid] tally: unmapped query", query);
     return {};
   }
 
@@ -3565,31 +3749,31 @@
     }
     function ok(output) {
       return {
-        status: 'executed',
-        invocationId: uid('inv'),
-        receiptId: uid('receipt'),
+        status: "executed",
+        invocationId: uid("inv"),
+        receiptId: uid("receipt"),
         output: output || {},
       };
     }
     function refuse(predicate) {
-      return { status: 'failed', reason: predicate, predicate: predicate };
+      return { status: "failed", reason: predicate, predicate: predicate };
     }
     function parked() {
-      return { status: 'parked', invocationId: uid('inv') };
+      return { status: "parked", invocationId: uid("inv") };
     }
 
     switch (action) {
-      case 'add-expense': {
-        var desc = String(input.description || '').trim();
+      case "add-expense": {
+        var desc = String(input.description || "").trim();
         if (isParkTrigger(desc)) return parked();
         var g0 = findGroup(input.group_id);
-        if (!g0) return refuse('not_found');
+        if (!g0) return refuse("not_found");
         var e0 = {
-          expense_id: uid('exp'),
+          expense_id: uid("exp"),
           group_id: g0.group_id,
           description: desc,
           amount_minor: Number(input.amount_minor),
-          category: input.category || 'general',
+          category: input.category || "general",
           spent_on: input.spent_on ? String(input.spent_on) : dayKey(0),
           paid_by: String(input.paid_by),
           splits: splitsToMap(input.splits),
@@ -3597,30 +3781,33 @@
         tallyStore.expenses.unshift(e0);
         return ok({ expense_id: e0.expense_id });
       }
-      case 'edit-expense': {
+      case "edit-expense": {
         var e1 = findExpense(input.expense_id);
-        if (!e1) return refuse('not_found');
-        if (isParkTrigger(e1.description) || isParkTrigger(input.description)) return parked();
-        if (input.description != null) e1.description = String(input.description).trim();
-        if (input.amount_minor != null) e1.amount_minor = Number(input.amount_minor);
+        if (!e1) return refuse("not_found");
+        if (isParkTrigger(e1.description) || isParkTrigger(input.description))
+          return parked();
+        if (input.description != null)
+          e1.description = String(input.description).trim();
+        if (input.amount_minor != null)
+          e1.amount_minor = Number(input.amount_minor);
         if (input.paid_by != null) e1.paid_by = String(input.paid_by);
         if (input.category != null) e1.category = String(input.category);
         if (input.spent_on != null) e1.spent_on = String(input.spent_on);
         if (input.splits != null) e1.splits = splitsToMap(input.splits);
         return ok({ expense_id: e1.expense_id });
       }
-      case 'delete-expense': {
+      case "delete-expense": {
         var e2 = findExpense(input.expense_id);
-        if (!e2) return refuse('not_found');
+        if (!e2) return refuse("not_found");
         if (isParkTrigger(e2.description)) return parked();
         tallyStore.expenses = tallyStore.expenses.filter(function (e) {
           return e.expense_id !== e2.expense_id;
         });
         return ok({});
       }
-      case 'settle-up': {
+      case "settle-up": {
         var s0 = {
-          settlement_id: uid('settle'),
+          settlement_id: uid("settle"),
           from_party: String(input.from_party),
           to_party: String(input.to_party),
           amount_minor: Number(input.amount_minor),
@@ -3630,71 +3817,76 @@
         tallyStore.settlements.unshift(s0);
         return ok({ settlement_id: s0.settlement_id });
       }
-      case 'add-friend': {
-        var fname = String(input.name || '').trim();
+      case "add-friend": {
+        var fname = String(input.name || "").trim();
         if (isParkTrigger(fname)) return parked();
-        var fid = uid('party');
+        var fid = uid("party");
         tallyStore.friends.push({
           party_id: fid,
           name: fname,
-          avatar_color: input.avatar_color || '#5C677D',
+          avatar_color: input.avatar_color || "#5C677D",
         });
         return ok({ party_id: fid });
       }
-      case 'create-group': {
-        var gname = String(input.name || '').trim();
+      case "create-group": {
+        var gname = String(input.name || "").trim();
         if (isParkTrigger(gname)) return parked();
-        var gid2 = uid('group');
+        var gid2 = uid("group");
         var memberIds = (input.member_ids || []).map(String);
-        if (memberIds.indexOf(tallyStore.me) === -1) memberIds.unshift(tallyStore.me);
+        if (memberIds.indexOf(tallyStore.me) === -1)
+          memberIds.unshift(tallyStore.me);
         tallyStore.groups.push({
           group_id: gid2,
           name: gname,
-          icon: input.icon || '👥',
-          color: input.color || '#0FA678',
+          icon: input.icon || "👥",
+          color: input.color || "#0FA678",
           members: memberIds,
         });
         return ok({ group_id: gid2 });
       }
-      case 'rename-group': {
+      case "rename-group": {
         var g1 = findGroup(input.group_id);
-        if (!g1) return refuse('not_found');
-        var newGName = String(input.name || '').trim();
+        if (!g1) return refuse("not_found");
+        var newGName = String(input.name || "").trim();
         if (isParkTrigger(g1.name) || isParkTrigger(newGName)) return parked();
         g1.name = newGName;
         return ok({ group_id: g1.group_id });
       }
-      case 'add-group-member': {
+      case "add-group-member": {
         var g2 = findGroup(input.group_id);
-        if (!g2) return refuse('not_found');
+        if (!g2) return refuse("not_found");
         if (isParkTrigger(g2.name)) return parked();
         var pidAdd = String(input.party_id);
-        if (g2.members.indexOf(pidAdd) !== -1) return refuse('member_not_in_group');
+        if (g2.members.indexOf(pidAdd) !== -1)
+          return refuse("member_not_in_group");
         g2.members.push(pidAdd);
         return ok({});
       }
-      case 'remove-group-member': {
+      case "remove-group-member": {
         var g3 = findGroup(input.group_id);
-        if (!g3) return refuse('not_found');
+        if (!g3) return refuse("not_found");
         if (isParkTrigger(g3.name)) return parked();
         var pidRm = String(input.party_id);
         var onLedger = tallyStore.expenses.some(function (e) {
-          return e.group_id === g3.group_id && (e.paid_by === pidRm || e.splits[pidRm] != null);
+          return (
+            e.group_id === g3.group_id &&
+            (e.paid_by === pidRm || e.splits[pidRm] != null)
+          );
         });
-        if (onLedger) return refuse('member_off_ledger');
+        if (onLedger) return refuse("member_off_ledger");
         g3.members = g3.members.filter(function (m) {
           return m !== pidRm;
         });
         return ok({});
       }
-      case 'delete-group': {
+      case "delete-group": {
         var g4 = findGroup(input.group_id);
-        if (!g4) return refuse('not_found');
+        if (!g4) return refuse("not_found");
         if (isParkTrigger(g4.name)) return parked();
         var holdsExpenses = tallyStore.expenses.some(function (e) {
           return e.group_id === g4.group_id;
         });
-        if (holdsExpenses) return refuse('group_holds_no_expenses');
+        if (holdsExpenses) return refuse("group_holds_no_expenses");
         tallyStore.groups = tallyStore.groups.filter(function (g) {
           return g.group_id !== g4.group_id;
         });
@@ -3758,77 +3950,77 @@
     }
 
     var items = [
-      item('item-github', 'login', 'GitHub', {
-        username: 'maya-codes',
-        password: 'correct-horse-battery-9!',
-        url: 'https://github.com/login',
-        otp_seed: 'JBSWY3DPEHPK3PXP',
+      item("item-github", "login", "GitHub", {
+        username: "maya-codes",
+        password: "correct-horse-battery-9!",
+        url: "https://github.com/login",
+        otp_seed: "JBSWY3DPEHPK3PXP",
         favorite: true,
-        tags: ['dev', 'work'],
+        tags: ["dev", "work"],
         age: 2,
       }),
-      item('item-card-visa', 'card', 'HDFC Visa', {
-        cardholder: 'Maya Krishnan',
-        card_number: '4111111111111111',
-        expiry: '09/28',
-        cvv: '842',
-        brand: 'Visa',
-        tags: ['finance'],
+      item("item-card-visa", "card", "HDFC Visa", {
+        cardholder: "Maya Krishnan",
+        card_number: "4111111111111111",
+        expiry: "09/28",
+        cvv: "842",
+        brand: "Visa",
+        tags: ["finance"],
         age: 11,
       }),
-      item('item-note-server', 'note', 'Server room passcode', {
+      item("item-note-server", "note", "Server room passcode", {
         content:
-          'Rack B, cabinet 3. Combo 4-8-15-16.\nAsk facilities for the new badge before Friday.',
-        tags: ['office'],
+          "Rack B, cabinet 3. Combo 4-8-15-16.\nAsk facilities for the new badge before Friday.",
+        tags: ["office"],
         age: 60,
       }),
-      item('item-identity', 'identity', 'Personal', {
-        fullname: 'Maya Krishnan',
-        email: 'maya@fastmail.in',
-        phone: '+91 98765 43210',
-        address: '14 Cunningham Rd, Bengaluru 560052',
+      item("item-identity", "identity", "Personal", {
+        fullname: "Maya Krishnan",
+        email: "maya@fastmail.in",
+        phone: "+91 98765 43210",
+        address: "14 Cunningham Rd, Bengaluru 560052",
         age: 90,
       }),
       // Watchtower material: one weak+reused, one breached.
-      item('item-forum', 'login', 'Old Forum Account', {
-        username: 'maya',
-        password: 'password1',
-        url: 'https://forum.example.com',
+      item("item-forum", "login", "Old Forum Account", {
+        username: "maya",
+        password: "password1",
+        url: "https://forum.example.com",
         weak: true,
         reused: true,
         age: 200,
       }),
-      item('item-linkedin', 'login', 'LinkedIn', {
-        username: 'maya@fastmail.in',
-        password: 'Sunshine123!',
-        url: 'https://www.linkedin.com',
+      item("item-linkedin", "login", "LinkedIn", {
+        username: "maya@fastmail.in",
+        password: "Sunshine123!",
+        url: "https://www.linkedin.com",
         compromised: true,
-        tags: ['social'],
+        tags: ["social"],
         age: 150,
       }),
-      item('item-wifi-home', 'wifi', 'Home Wi-Fi', {
-        network: 'Casa-5G',
-        password: 'chai-biscuit-42',
+      item("item-wifi-home", "wifi", "Home Wi-Fi", {
+        network: "Casa-5G",
+        password: "chai-biscuit-42",
         age: 30,
       }),
-      item('item-door-code', 'password', 'Building door code', {
-        password: '4415#',
-        tags: ['home'],
+      item("item-door-code", "password", "Building door code", {
+        password: "4415#",
+        tags: ["home"],
         age: 45,
       }),
       // Parks every write against it (title marker).
-      item('item-bank', 'login', 'Netbanking (park)', {
-        username: 'maya.krishnan',
-        password: 'v3ry-s3cret-phrase',
-        url: 'https://netbanking.example.in',
-        tags: ['finance'],
+      item("item-bank", "login", "Netbanking (park)", {
+        username: "maya.krishnan",
+        password: "v3ry-s3cret-phrase",
+        url: "https://netbanking.example.in",
+        tags: ["finance"],
         age: 5,
       }),
       // Trashed — only the `trash` query returns it.
-      item('item-myspace', 'login', 'MySpace', {
-        username: 'maya_2006',
-        password: 'letmein',
-        url: 'https://myspace.com',
+      item("item-myspace", "login", "MySpace", {
+        username: "maya_2006",
+        password: "letmein",
+        url: "https://myspace.com",
         trashed: true,
         purge_at: isoDaysFromNow(18),
         age: 25,
@@ -3838,23 +4030,23 @@
     return { items: items };
   }
 
-  var lockerStore = appId === 'locker' ? buildLockerStore() : null;
+  var lockerStore = appId === "locker" ? buildLockerStore() : null;
 
   /** Replicates queries/items.js decorate(): the secret-free list row.
    *  Trash rows (queries/trash.js) never consult the watchtower, so their
    *  weak/reused read false and severity comes from `compromised` alone. */
   function lockerRow(it, inTrash) {
     var subtitle;
-    if (it.type === 'login') subtitle = it.username || '—';
-    else if (it.type === 'card')
-      subtitle = it.card_number ? '•••• ' + it.card_number.slice(-4) : 'Card';
-    else if (it.type === 'note') subtitle = 'Secure note';
-    else if (it.type === 'identity') subtitle = it.email || '—';
-    else if (it.type === 'wifi') subtitle = it.network || '—';
-    else subtitle = 'Password';
+    if (it.type === "login") subtitle = it.username || "—";
+    else if (it.type === "card")
+      subtitle = it.card_number ? "•••• " + it.card_number.slice(-4) : "Card";
+    else if (it.type === "note") subtitle = "Secure note";
+    else if (it.type === "identity") subtitle = it.email || "—";
+    else if (it.type === "wifi") subtitle = it.network || "—";
+    else subtitle = "Password";
     var weak = inTrash ? false : it.weak;
     var reused = inTrash ? false : it.reused;
-    var severity = it.compromised ? 'danger' : weak || reused ? 'warn' : '';
+    var severity = it.compromised ? "danger" : weak || reused ? "warn" : "";
     return {
       item_id: it.item_id,
       type: it.type,
@@ -3877,7 +4069,7 @@
         return !it.trashed;
       });
     }
-    if (query === 'items') {
+    if (query === "items") {
       var limit = Math.min(Math.max(Number(input.limit) || 300, 20), 2000);
       var rows = live().map(function (it) {
         return lockerRow(it, false);
@@ -3888,9 +4080,9 @@
         window: limit,
       };
     }
-    if (query === 'item') {
+    if (query === "item") {
       var it = lockerStore.items.find(function (x) {
-        return x.item_id === String(input.item_id || '');
+        return x.item_id === String(input.item_id || "");
       });
       if (!it) return { item: null };
       return {
@@ -3923,15 +4115,21 @@
         },
       };
     }
-    if (query === 'search') {
-      var term = String(input.term || '')
+    if (query === "search") {
+      var term = String(input.term || "")
         .trim()
         .toLowerCase();
       if (!term) return { items: [] };
       return {
         items: live()
           .filter(function (x) {
-            var hay = (x.title + ' ' + (x.username || '') + ' ' + (x.url || '')).toLowerCase();
+            var hay = (
+              x.title +
+              " " +
+              (x.username || "") +
+              " " +
+              (x.url || "")
+            ).toLowerCase();
             return hay.indexOf(term) !== -1;
           })
           .map(function (x) {
@@ -3939,7 +4137,7 @@
           }),
       };
     }
-    if (query === 'watchtower') {
+    if (query === "watchtower") {
       var affected = live().filter(function (x) {
         return x.compromised || x.weak || x.reused;
       });
@@ -3958,7 +4156,7 @@
         }),
       };
     }
-    if (query === 'trash') {
+    if (query === "trash") {
       return {
         items: lockerStore.items
           .filter(function (x) {
@@ -3969,7 +4167,7 @@
           }),
       };
     }
-    console.warn('[mock-centraid] locker: unmapped query', query);
+    console.warn("[mock-centraid] locker: unmapped query", query);
     return {};
   }
 
@@ -3977,22 +4175,22 @@
   // anything else (the UI's `alias`, notably) is silently dropped, exactly
   // like the real action wrappers' FIELDS whitelist.
   var LOCKER_FIELDS = [
-    'username',
-    'password',
-    'url',
-    'otp_seed',
-    'notes',
-    'cardholder',
-    'card_number',
-    'expiry',
-    'cvv',
-    'brand',
-    'content',
-    'fullname',
-    'email',
-    'phone',
-    'address',
-    'network',
+    "username",
+    "password",
+    "url",
+    "otp_seed",
+    "notes",
+    "cardholder",
+    "card_number",
+    "expiry",
+    "cvv",
+    "brand",
+    "content",
+    "fullname",
+    "email",
+    "phone",
+    "address",
+    "network",
   ];
 
   function lockerWrite(action, input) {
@@ -4003,27 +4201,27 @@
     }
     function ok(output) {
       return {
-        status: 'executed',
-        invocationId: uid('inv'),
-        receiptId: uid('receipt'),
+        status: "executed",
+        invocationId: uid("inv"),
+        receiptId: uid("receipt"),
         output: output || {},
       };
     }
     function refuse(predicate) {
-      return { status: 'failed', reason: predicate, predicate: predicate };
+      return { status: "failed", reason: predicate, predicate: predicate };
     }
     function parked() {
-      return { status: 'parked', invocationId: uid('inv') };
+      return { status: "parked", invocationId: uid("inv") };
     }
 
     switch (action) {
-      case 'add-item': {
-        var title = String(input.title || '').trim();
+      case "add-item": {
+        var title = String(input.title || "").trim();
         if (isParkTrigger(title)) return parked();
-        var id = uid('item');
+        var id = uid("item");
         var it0 = {
           item_id: id,
-          type: String(input.type || 'login'),
+          type: String(input.type || "login"),
           title: title,
           compromised: false,
           weak: false,
@@ -4040,11 +4238,12 @@
         lockerStore.items.unshift(it0);
         return ok({ item_id: id });
       }
-      case 'edit-item': {
+      case "edit-item": {
         var it1 = findItem(input.item_id);
-        if (!it1) return refuse('not_found');
-        if (it1.trashed) return refuse('item_trashed');
-        if (isParkTrigger(it1.title) || isParkTrigger(input.title)) return parked();
+        if (!it1) return refuse("not_found");
+        if (it1.trashed) return refuse("item_trashed");
+        if (isParkTrigger(it1.title) || isParkTrigger(input.title))
+          return parked();
         if (input.title != null) it1.title = String(input.title);
         if (input.tags != null) it1.tags = input.tags.map(String);
         LOCKER_FIELDS.forEach(function (f) {
@@ -4053,44 +4252,44 @@
         it1.updated_at = new Date().toISOString();
         return ok({ item_id: it1.item_id });
       }
-      case 'trash-item': {
+      case "trash-item": {
         var it2 = findItem(input.item_id);
-        if (!it2) return refuse('not_found');
+        if (!it2) return refuse("not_found");
         if (isParkTrigger(it2.title)) return parked();
         it2.trashed = true;
         it2.purge_at = isoDaysFromNow(30);
         it2.updated_at = new Date().toISOString();
         return ok({ item_id: it2.item_id });
       }
-      case 'restore-item': {
+      case "restore-item": {
         var it3 = findItem(input.item_id);
-        if (!it3) return refuse('not_found');
+        if (!it3) return refuse("not_found");
         if (isParkTrigger(it3.title)) return parked();
         it3.trashed = false;
         it3.purge_at = null;
         it3.updated_at = new Date().toISOString();
         return ok({ item_id: it3.item_id });
       }
-      case 'purge-item': {
+      case "purge-item": {
         var it4 = findItem(input.item_id);
-        if (!it4) return refuse('not_found');
+        if (!it4) return refuse("not_found");
         if (isParkTrigger(it4.title)) return parked();
         lockerStore.items = lockerStore.items.filter(function (x) {
           return x.item_id !== it4.item_id;
         });
         return ok({});
       }
-      case 'star-item': {
+      case "star-item": {
         var it5 = findItem(input.item_id);
-        if (!it5) return refuse('not_found');
-        if (it5.trashed) return refuse('item_trashed');
+        if (!it5) return refuse("not_found");
+        if (it5.trashed) return refuse("item_trashed");
         if (isParkTrigger(it5.title)) return parked();
         it5.favorite = true;
         return ok({ item_id: it5.item_id });
       }
-      case 'unstar-item': {
+      case "unstar-item": {
         var it6 = findItem(input.item_id);
-        if (!it6) return refuse('not_found');
+        if (!it6) return refuse("not_found");
         if (isParkTrigger(it6.title)) return parked();
         it6.favorite = false;
         return ok({ item_id: it6.item_id });
@@ -4110,33 +4309,44 @@
     appId: appId,
     async read(opts) {
       opts = opts || {};
-      if (DENIED_MODE) return { vaultDenied: { message: 'Grant revoked.' } };
-      if (appId === 'docs') return docsRead(opts.query, opts.input || {});
-      if (appId === 'photos') return photosRead(opts.query, opts.input || {});
-      if (appId === 'tasks') return tasksRead(opts.query, opts.input || {});
-      if (appId === 'notes') return notesRead(opts.query, opts.input || {});
-      if (appId === 'agenda') return agendaRead(opts.query, opts.input || {});
-      if (appId === 'people') return peopleRead(opts.query, opts.input || {});
-      if (appId === 'tally') return tallyRead(opts.query, opts.input || {});
-      if (appId === 'locker') return lockerRead(opts.query, opts.input || {});
-      console.warn('[mock-centraid] unknown appId for read()', appId);
+      if (DENIED_MODE) return { vaultDenied: { message: "Grant revoked." } };
+      if (appId === "docs") return docsRead(opts.query, opts.input || {});
+      if (appId === "photos") return photosRead(opts.query, opts.input || {});
+      if (appId === "tasks") return tasksRead(opts.query, opts.input || {});
+      if (appId === "notes") return notesRead(opts.query, opts.input || {});
+      if (appId === "agenda") return agendaRead(opts.query, opts.input || {});
+      if (appId === "people") return peopleRead(opts.query, opts.input || {});
+      if (appId === "tally") return tallyRead(opts.query, opts.input || {});
+      if (appId === "locker") return lockerRead(opts.query, opts.input || {});
+      console.warn("[mock-centraid] unknown appId for read()", appId);
       return {};
     },
     async write(opts) {
       opts = opts || {};
-      if (DENIED_MODE) return { status: 'denied', reason: 'Grant revoked.' };
+      if (DENIED_MODE) return { status: "denied", reason: "Grant revoked." };
       var result = null;
-      if (appId === 'docs') result = docsWrite(opts.action, opts.input || {});
-      else if (appId === 'photos') result = photosWrite(opts.action, opts.input || {});
-      else if (appId === 'tasks') result = tasksWrite(opts.action, opts.input || {});
-      else if (appId === 'notes') result = notesWrite(opts.action, opts.input || {});
-      else if (appId === 'agenda') result = agendaWrite(opts.action, opts.input || {});
-      else if (appId === 'people') result = peopleWrite(opts.action, opts.input || {});
-      else if (appId === 'tally') result = tallyWrite(opts.action, opts.input || {});
-      else if (appId === 'locker') result = lockerWrite(opts.action, opts.input || {});
-      else console.warn('[mock-centraid] unknown appId for write()', appId);
+      if (appId === "docs") result = docsWrite(opts.action, opts.input || {});
+      else if (appId === "photos")
+        result = photosWrite(opts.action, opts.input || {});
+      else if (appId === "tasks")
+        result = tasksWrite(opts.action, opts.input || {});
+      else if (appId === "notes")
+        result = notesWrite(opts.action, opts.input || {});
+      else if (appId === "agenda")
+        result = agendaWrite(opts.action, opts.input || {});
+      else if (appId === "people")
+        result = peopleWrite(opts.action, opts.input || {});
+      else if (appId === "tally")
+        result = tallyWrite(opts.action, opts.input || {});
+      else if (appId === "locker")
+        result = lockerWrite(opts.action, opts.input || {});
+      else console.warn("[mock-centraid] unknown appId for write()", appId);
       if (result == null) {
-        console.warn('[mock-centraid] unmapped action, returning {}', opts.action, opts.input);
+        console.warn(
+          "[mock-centraid] unmapped action, returning {}",
+          opts.action,
+          opts.input
+        );
         return {};
       }
       // A parked write hasn't landed — nothing in the store actually
@@ -4147,14 +4357,14 @@
       // Empty `tables` = "this app's own write" — the shape the real runtime
       // emits for handler writes, and the one the kit's table filter always
       // lets through (a bare app id would match no declared table name).
-      if (result.status !== 'parked') fireChange([]);
+      if (result.status !== "parked") fireChange([]);
       return result;
     },
     async describe() {
       return { app: appId };
     },
     onChange(cb) {
-      if (typeof cb !== 'function') return function () {};
+      if (typeof cb !== "function") return function () {};
       listeners.add(cb);
       return function () {
         listeners.delete(cb);
@@ -4169,42 +4379,42 @@
     emptyMode: EMPTY_MODE,
     deniedMode: DENIED_MODE,
     get state() {
-      return appId === 'docs'
+      return appId === "docs"
         ? docsStore
-        : appId === 'photos'
+        : appId === "photos"
           ? photosStore
-          : appId === 'tasks'
+          : appId === "tasks"
             ? tasksStore
-            : appId === 'notes'
+            : appId === "notes"
               ? notesStore
-              : appId === 'agenda'
+              : appId === "agenda"
                 ? agendaStore
-                : appId === 'people'
+                : appId === "people"
                   ? peopleStore
-                  : appId === 'tally'
+                  : appId === "tally"
                     ? tallyStore
-                    : appId === 'locker'
+                    : appId === "locker"
                       ? lockerStore
                       : null;
     },
     reset() {
-      if (appId === 'docs') docsStore = buildDocsStore();
-      else if (appId === 'photos') photosStore = buildPhotosStore();
-      else if (appId === 'tasks') tasksStore = buildTasksStore();
-      else if (appId === 'notes') notesStore = buildNotesStore();
-      else if (appId === 'agenda') agendaStore = buildAgendaStore();
-      else if (appId === 'people') peopleStore = buildPeopleStore();
-      else if (appId === 'tally') tallyStore = buildTallyStore();
-      else if (appId === 'locker') lockerStore = buildLockerStore();
+      if (appId === "docs") docsStore = buildDocsStore();
+      else if (appId === "photos") photosStore = buildPhotosStore();
+      else if (appId === "tasks") tasksStore = buildTasksStore();
+      else if (appId === "notes") notesStore = buildNotesStore();
+      else if (appId === "agenda") agendaStore = buildAgendaStore();
+      else if (appId === "people") peopleStore = buildPeopleStore();
+      else if (appId === "tally") tallyStore = buildTallyStore();
+      else if (appId === "locker") lockerStore = buildLockerStore();
       fireChange([appId]);
     },
     fireChange: fireChange,
   };
 
   console.info(
-    '[mock-centraid] armed for app=' +
+    "[mock-centraid] armed for app=" +
       appId +
-      (EMPTY_MODE ? ' (empty)' : '') +
-      (DENIED_MODE ? ' (denied)' : ''),
+      (EMPTY_MODE ? " (empty)" : "") +
+      (DENIED_MODE ? " (denied)" : "")
   );
 })();

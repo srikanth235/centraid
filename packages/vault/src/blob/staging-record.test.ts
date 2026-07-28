@@ -1,26 +1,26 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { openVaultDb } from '../db.js';
-import { recordKnownStagedBlob } from './staging-record.js';
+import { openVaultDb } from "../db.js";
+import { recordKnownStagedBlob } from "./staging-record.js";
 
-describe('staging-record', () => {
-  test('an idempotent completed-session reply preserves metadata learned from plaintext probes', () => {
+describe("staging-record", () => {
+  test("an idempotent completed-session reply preserves metadata learned from plaintext probes", () => {
     const db = openVaultDb();
     try {
-      const sha256 = 'a'.repeat(64);
+      const sha256 = "a".repeat(64);
       recordKnownStagedBlob(db.vault, {
         sha256,
         byteSize: 128,
-        mediaType: 'application/pdf',
-        meta: { text: 'bounded text learned while plaintext was flowing' },
+        mediaType: "application/pdf",
+        meta: { text: "bounded text learned while plaintext was flowing" },
       });
       const replay = recordKnownStagedBlob(db.vault, {
         sha256,
         byteSize: 128,
-        mediaType: 'application/pdf',
+        mediaType: "application/pdf",
       });
       expect(replay.meta).toStrictEqual({
-        text: 'bounded text learned while plaintext was flowing',
+        text: "bounded text learned while plaintext was flowing",
       });
     } finally {
       db.close();

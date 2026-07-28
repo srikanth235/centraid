@@ -1,9 +1,9 @@
-import type { InlineQueryModule } from '@centraid/blueprints/apps/inline-types';
+import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
 
 import type {
   ShellReplicaReadRequest,
   ShellReplicaSearchRequest,
-} from '../../replica/shell-session.js';
+} from "../../replica/shell-session.js";
 // Reproduce the served bridge's local-query execution (packages/app-engine
 // bridge-script.ts `runLocalQuery` / `localVault`, lines ~158-263) for the
 // INLINE path — but backed directly by the shell replica session instead of the
@@ -18,12 +18,18 @@ import type {
   ReplicaRowEnvelope,
   ReplicaSearchWireResult,
   ReplicaValue,
-} from '../../replica/types.js';
+} from "../../replica/types.js";
 
 /** The slice of the replica session an inline query context needs. */
 export interface InlineReplicaSession {
-  read: (appId: string, request: ShellReplicaReadRequest) => Promise<ReplicaReadWireResult>;
-  search: (appId: string, request: ShellReplicaSearchRequest) => Promise<ReplicaSearchWireResult>;
+  read: (
+    appId: string,
+    request: ShellReplicaReadRequest
+  ) => Promise<ReplicaReadWireResult>;
+  search: (
+    appId: string,
+    request: ShellReplicaSearchRequest
+  ) => Promise<ReplicaSearchWireResult>;
 }
 
 export interface OnlineOnlyError extends Error {
@@ -41,9 +47,11 @@ export function createOnlineGuard(): InlineOnlineGuard {
     error: null,
     mark(reason: string): OnlineOnlyError {
       if (!guard.error) {
-        const error = new Error(`Query requires the online vault: ${reason}`) as OnlineOnlyError;
-        error.code = 'ONLINE_ONLY';
-        error.name = 'OnlineOnlyError';
+        const error = new Error(
+          `Query requires the online vault: ${reason}`
+        ) as OnlineOnlyError;
+        error.code = "ONLINE_ONLY";
+        error.name = "OnlineOnlyError";
         guard.error = error;
       }
       return guard.error;
@@ -58,17 +66,23 @@ export function createOnlineGuard(): InlineOnlineGuard {
 // the same conditions the iframe path did.
 function guardedRow(
   envelope: ReplicaRowEnvelope,
-  guard: InlineOnlineGuard,
+  guard: InlineOnlineGuard
 ): Record<string, unknown> {
   const missing = new Map<string, string>();
-  for (const key of envelope.oversizedFields ?? []) missing.set(key, `oversized field ${key}`);
+  for (const key of envelope.oversizedFields ?? [])
+    missing.set(key, `oversized field ${key}`);
   const undisclosed = envelope.hasUnavailableFields === true;
   const values = { ...(envelope.values as Record<string, unknown>) };
-  const unavailable = (target: Record<string, unknown>, key: string | symbol): boolean =>
-    typeof key === 'string' && (missing.has(key) || (undisclosed && !(key in target)));
+  const unavailable = (
+    target: Record<string, unknown>,
+    key: string | symbol
+  ): boolean =>
+    typeof key === "string" &&
+    (missing.has(key) || (undisclosed && !(key in target)));
   const fail = (key?: string | symbol): never => {
     throw guard.mark(
-      (typeof key === 'string' && missing.get(key)) || 'accessing undisclosed unavailable fields',
+      (typeof key === "string" && missing.get(key)) ||
+        "accessing undisclosed unavailable fields"
     );
   };
   return new Proxy(values, {
@@ -91,9 +105,11 @@ function guardedRow(
   });
 }
 
-function receiptIdFor(result: { cursor?: { epoch: string; seq: number } }): string {
+function receiptIdFor(result: {
+  cursor?: { epoch: string; seq: number };
+}): string {
   const cursor = result.cursor;
-  return cursor ? `replica:${cursor.epoch}:${cursor.seq}` : 'replica:local';
+  return cursor ? `replica:${cursor.epoch}:${cursor.seq}` : "replica:local";
 }
 
 export interface InlineCtxOptions {
@@ -110,13 +126,18 @@ export interface InlineCtxOptions {
  * when no cards can be produced locally — a rejection would blank the board);
  * every other vault effect is online-only and rejects with the bridge's codes.
  */
-export function buildInlineCtx(options: InlineCtxOptions, guard: InlineOnlineGuard): unknown {
+export function buildInlineCtx(
+  options: InlineCtxOptions,
+  guard: InlineOnlineGuard
+): unknown {
   const { session, appId, signal } = options;
   const effect = (name: string) => (): Promise<never> =>
     Promise.reject(guard.mark(`${name} is online-only`));
 
   const vault = {
-    async read(request: ShellReplicaReadRequest): Promise<{ rows: unknown[]; receiptId: string }> {
+    async read(
+      request: ShellReplicaReadRequest
+    ): Promise<{ rows: unknown[]; receiptId: string }> {
       const result = await session.read(appId, request);
       return {
         rows: result.rows.map((row) => guardedRow(row, guard)),
@@ -124,7 +145,7 @@ export function buildInlineCtx(options: InlineCtxOptions, guard: InlineOnlineGua
       };
     },
     async search(
-      request: ShellReplicaSearchRequest,
+      request: ShellReplicaSearchRequest
     ): Promise<{ rows: unknown[]; receiptId: string }> {
       const result = await session.search(appId, request);
       return {
@@ -137,18 +158,19 @@ export function buildInlineCtx(options: InlineCtxOptions, guard: InlineOnlineGua
     resolve(): Promise<{ cards: ReplicaValue[] }> {
       return Promise.resolve({ cards: [] });
     },
-    invoke: effect('invoke'),
-    query: effect('query'),
-    describe: effect('describe'),
-    parked: effect('parked'),
-    reveal: effect('reveal'),
-    content: effect('content'),
-    changes: effect('changes'),
+    invoke: effect("invoke"),
+    query: effect("query"),
+    describe: effect("describe"),
+    parked: effect("parked"),
+    reveal: effect("reveal"),
+    content: effect("content"),
+    changes: effect("changes"),
   };
 
   return {
     abortSignal: signal,
-    fetch: (): Promise<never> => Promise.reject(guard.mark('fetch is online-only')),
+    fetch: (): Promise<never> =>
+      Promise.reject(guard.mark("fetch is online-only")),
     vault,
   };
 }
@@ -161,7 +183,7 @@ export function buildInlineCtx(options: InlineCtxOptions, guard: InlineOnlineGua
  */
 export async function runInlineQuery(
   module: InlineQueryModule,
-  options: InlineCtxOptions & { input?: Record<string, unknown> },
+  options: InlineCtxOptions & { input?: Record<string, unknown> }
 ): Promise<unknown> {
   const guard = createOnlineGuard();
   const ctx = buildInlineCtx(options, guard);
@@ -169,7 +191,7 @@ export async function runInlineQuery(
     params: {},
     query: options.input ?? {},
     input: options.input,
-    app: { id: options.appId, dir: '' },
+    app: { id: options.appId, dir: "" },
     log: { info: () => {}, warn: () => {}, error: () => {} },
     ctx,
   });

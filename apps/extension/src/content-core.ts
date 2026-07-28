@@ -10,8 +10,11 @@ export interface CompanionEnvelope<T> {
 }
 
 /** Unwrap a chrome.runtime.sendMessage envelope or throw. */
-export function unwrapCompanionEnvelope<T>(envelope: CompanionEnvelope<T> | undefined): T {
-  if (!envelope?.ok) throw new Error(envelope?.error ?? 'Centraid request failed.');
+export function unwrapCompanionEnvelope<T>(
+  envelope: CompanionEnvelope<T> | undefined
+): T {
+  if (!envelope?.ok)
+    throw new Error(envelope?.error ?? "Centraid request failed.");
   return envelope.value as T;
 }
 
@@ -25,9 +28,10 @@ export function randomPassword(
     const values = new Uint32Array(size);
     crypto.getRandomValues(values);
     return values;
-  },
+  }
 ): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+  const alphabet =
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*";
   const out: string[] = [];
   const bound = Math.floor(0x1_0000_0000 / alphabet.length) * alphabet.length;
   while (out.length < length) {
@@ -38,7 +42,7 @@ export function randomPassword(
       if (out.length === length) break;
     }
   }
-  return out.join('');
+  return out.join("");
 }
 
 /** Build a page capture from tab/context-menu inputs (worker context-menu path). */

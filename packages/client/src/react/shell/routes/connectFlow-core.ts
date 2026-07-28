@@ -23,15 +23,22 @@
  * events, mirroring the gatewayRegistry.ts pure-core / impure-glue split.
  */
 
-export type ConnectMethod = 'local' | 'gateway';
-export type ConnectStep = 'method' | 'details' | 'test' | 'vault' | 'committing' | 'done' | 'error';
+export type ConnectMethod = "local" | "gateway";
+export type ConnectStep =
+  | "method"
+  | "details"
+  | "test"
+  | "vault"
+  | "committing"
+  | "done"
+  | "error";
 
 /** One stage of the "handshake ladder" — mirrors the design doc's
  *  `ConnectivityReport.stages[]` contract (GATEWAY_TEST_CONNECTION output). */
 export interface ConnectivityStage {
-  id: 'reach' | 'identify' | 'auth' | 'vaults' | 'decode';
+  id: "reach" | "identify" | "auth" | "vaults" | "decode";
   label: string;
-  status: 'pass' | 'fail' | 'skip';
+  status: "pass" | "fail" | "skip";
   detail?: string;
 }
 
@@ -60,10 +67,12 @@ export interface ConnectivityReport {
 
 /** The input union GATEWAY_TEST_CONNECTION accepts (design doc). */
 export type ConnectTestInput =
-  | { kind: 'ticket'; ticket: string }
-  | { kind: 'gateway'; gatewayId: string };
+  | { kind: "ticket"; ticket: string }
+  | { kind: "gateway"; gatewayId: string };
 
-export type VaultChoice = { kind: 'existing'; vaultId: string } | { kind: 'create' };
+export type VaultChoice =
+  | { kind: "existing"; vaultId: string }
+  | { kind: "create" };
 
 export interface ConnectFlowResult {
   gatewayId: string;
@@ -112,93 +121,101 @@ export interface ConnectFlowState {
  * a one-card method grid would just be a redundant click.
  */
 export function createInitialConnectFlowState(
-  method: ConnectMethod | null = null,
+  method: ConnectMethod | null = null
 ): ConnectFlowState {
   const base: ConnectFlowState = {
     commitError: null,
     committing: false,
-    label: '',
+    label: "",
     method: null,
-    newVaultName: '',
+    newVaultName: "",
     report: null,
     result: null,
     rememberDevice: false,
-    step: 'method',
+    step: "method",
     testError: null,
     testing: false,
-    ticket: '',
+    ticket: "",
     vaultChoice: null,
     vaultsError: null,
   };
-  return method ? connectFlowReducer(base, { method, type: 'selectMethod' }) : base;
+  return method
+    ? connectFlowReducer(base, { method, type: "selectMethod" })
+    : base;
 }
 
-export type ConnectFlowTextField = 'ticket' | 'label' | 'newVaultName';
+export type ConnectFlowTextField = "ticket" | "label" | "newVaultName";
 
 export type ConnectFlowEvent =
-  | { type: 'selectMethod'; method: ConnectMethod }
-  | { type: 'back' }
-  | { type: 'setField'; field: ConnectFlowTextField; value: string }
-  | { type: 'setRememberDevice'; value: boolean }
-  | { type: 'startTest' }
-  | { type: 'testSettled'; report: ConnectivityReport }
-  | { type: 'localVaultsLoaded'; result: LocalVaultsResult }
-  | { type: 'continueToVault' }
-  | { type: 'selectVault'; choice: VaultChoice }
-  | { type: 'commit' }
-  | { type: 'commitSettled'; result: ConnectFlowResult }
-  | { type: 'commitFailed'; error: string }
-  | { type: 'reset' };
+  | { type: "selectMethod"; method: ConnectMethod }
+  | { type: "back" }
+  | { type: "setField"; field: ConnectFlowTextField; value: string }
+  | { type: "setRememberDevice"; value: boolean }
+  | { type: "startTest" }
+  | { type: "testSettled"; report: ConnectivityReport }
+  | { type: "localVaultsLoaded"; result: LocalVaultsResult }
+  | { type: "continueToVault" }
+  | { type: "selectVault"; choice: VaultChoice }
+  | { type: "commit" }
+  | { type: "commitSettled"; result: ConnectFlowResult }
+  | { type: "commitFailed"; error: string }
+  | { type: "reset" };
 
-const STEP_ORDER: readonly ConnectStep[] = ['method', 'details', 'test', 'vault'];
+const STEP_ORDER: readonly ConnectStep[] = [
+  "method",
+  "details",
+  "test",
+  "vault",
+];
 
 export function connectFlowReducer(
   state: ConnectFlowState,
-  event: ConnectFlowEvent,
+  event: ConnectFlowEvent
 ): ConnectFlowState {
   switch (event.type) {
-    case 'selectMethod': {
+    case "selectMethod": {
       const base = { ...createInitialConnectFlowState(), method: event.method };
       // `local` has nothing to fill in or probe — the embedded gateway is
       // always reachable — so it skips straight to picking/creating a vault.
-      return { ...base, step: event.method === 'local' ? 'vault' : 'details' };
+      return { ...base, step: event.method === "local" ? "vault" : "details" };
     }
-    case 'back': {
-      if (state.step === 'error') {
-        return { ...state, commitError: null, step: 'vault' };
+    case "back": {
+      if (state.step === "error") {
+        return { ...state, commitError: null, step: "vault" };
       }
       const idx = STEP_ORDER.indexOf(state.step);
       if (idx <= 0) {
         return { ...createInitialConnectFlowState() };
       }
       // Local skips `details`/`test` in both directions.
-      const prevIdx = state.method === 'local' && STEP_ORDER[idx] === 'vault' ? 0 : idx - 1;
-      const prev = STEP_ORDER[prevIdx] ?? 'method';
+      const prevIdx =
+        state.method === "local" && STEP_ORDER[idx] === "vault" ? 0 : idx - 1;
+      const prev = STEP_ORDER[prevIdx] ?? "method";
       return {
         ...state,
-        method: prev === 'method' ? null : state.method,
-        report: prev === 'test' ? state.report : null,
+        method: prev === "method" ? null : state.method,
+        report: prev === "test" ? state.report : null,
         step: prev,
         testError: null,
         vaultChoice: null,
         vaultsError: null,
       };
     }
-    case 'setField':
+    case "setField":
       return { ...state, [event.field]: event.value };
-    case 'setRememberDevice':
+    case "setRememberDevice":
       return { ...state, rememberDevice: event.value };
-    case 'startTest':
+    case "startTest":
       return {
         ...state,
         report: null,
-        step: 'test',
+        step: "test",
         testError: null,
         testing: true,
       };
-    case 'testSettled':
+    case "testSettled":
       return { ...state, report: event.report, testing: false };
-    case 'localVaultsLoaded':
+    case "localVaultsLoaded":
       // A failed read still settles `report` so the step leaves its loading
       // state — `vaultsError` is what tells the UI it settled UNHAPPILY.
       return event.result.ok
@@ -212,44 +229,44 @@ export function connectFlowReducer(
             report: { ok: false, stages: [], vaults: [] },
             vaultsError: event.result.message,
           };
-    case 'continueToVault': {
+    case "continueToVault": {
       const options = state.report?.vaults ?? [];
       const defaultChoice: VaultChoice | null =
         options.length > 0
-          ? { kind: 'existing', vaultId: options[0]!.vaultId }
+          ? { kind: "existing", vaultId: options[0]!.vaultId }
           : canCreateVaultFor(state)
-            ? { kind: 'create' }
+            ? { kind: "create" }
             : null;
       return {
         ...state,
-        step: 'vault',
+        step: "vault",
         vaultChoice: state.vaultChoice ?? defaultChoice,
       };
     }
-    case 'selectVault':
+    case "selectVault":
       return { ...state, vaultChoice: event.choice };
-    case 'commit':
+    case "commit":
       return {
         ...state,
         commitError: null,
         committing: true,
-        step: 'committing',
+        step: "committing",
       };
-    case 'commitSettled':
+    case "commitSettled":
       return {
         ...state,
         committing: false,
         result: event.result,
-        step: 'done',
+        step: "done",
       };
-    case 'commitFailed':
+    case "commitFailed":
       return {
         ...state,
         commitError: event.error,
         committing: false,
-        step: 'error',
+        step: "error",
       };
-    case 'reset':
+    case "reset":
       return createInitialConnectFlowState();
     default:
       return state;
@@ -258,10 +275,12 @@ export function connectFlowReducer(
 
 /** Input for GATEWAY_TEST_CONNECTION given the current details, or `null`
  *  when nothing testable has been supplied yet (`local` never has one). */
-export function buildTestInput(state: ConnectFlowState): ConnectTestInput | null {
-  if (state.method === 'gateway') {
+export function buildTestInput(
+  state: ConnectFlowState
+): ConnectTestInput | null {
+  if (state.method === "gateway") {
     if (!state.ticket.trim()) return null;
-    return { kind: 'ticket', ticket: state.ticket.trim() };
+    return { kind: "ticket", ticket: state.ticket.trim() };
   }
   return null;
 }
@@ -274,7 +293,7 @@ export function canStartTest(state: ConnectFlowState): boolean {
  *  flow (design doc step C): the desktop admins its own embedded gateway's
  *  vault lifecycle; a ticket's vault is fixed by the ticket payload. */
 export function canCreateVaultFor(state: ConnectFlowState): boolean {
-  return state.method === 'local';
+  return state.method === "local";
 }
 
 export interface ConnectVaultCapability {
@@ -285,11 +304,15 @@ export interface ConnectVaultCapability {
   canCreate: boolean;
 }
 
-export function vaultCapability(state: ConnectFlowState): ConnectVaultCapability {
-  if (state.method === 'gateway') {
+export function vaultCapability(
+  state: ConnectFlowState
+): ConnectVaultCapability {
+  if (state.method === "gateway") {
     return {
       canCreate: false,
-      locked: state.report?.ticket ? { vaultName: state.report.ticket.vaultName } : null,
+      locked: state.report?.ticket
+        ? { vaultName: state.report.ticket.vaultName }
+        : null,
       options: [],
     };
   }
@@ -301,11 +324,14 @@ export function vaultCapability(state: ConnectFlowState): ConnectVaultCapability
 }
 
 export function canCommitConnectFlow(state: ConnectFlowState): boolean {
-  if (state.method === 'local') {
+  if (state.method === "local") {
     if (state.vaultsError || !state.vaultChoice) return false;
-    return state.vaultChoice.kind === 'existing' || state.newVaultName.trim().length > 0;
+    return (
+      state.vaultChoice.kind === "existing" ||
+      state.newVaultName.trim().length > 0
+    );
   }
-  if (state.method === 'gateway') {
+  if (state.method === "gateway") {
     return state.ticket.trim().length > 0;
   }
   return false;

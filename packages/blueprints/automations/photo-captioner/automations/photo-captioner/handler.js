@@ -21,30 +21,31 @@
  */
 
 const BATCH = 8;
-const PURPOSE = 'dpv:ServiceProvision';
+const PURPOSE = "dpv:ServiceProvision";
 
 const CAPTION_SCHEMA = {
-  type: 'object',
-  required: ['caption', 'tags'],
+  type: "object",
+  required: ["caption", "tags"],
   additionalProperties: false,
   properties: {
     caption: {
-      type: 'string',
-      description: 'One factual sentence describing what is visibly in the photo.',
+      type: "string",
+      description:
+        "One factual sentence describing what is visibly in the photo.",
     },
     tags: {
-      type: 'array',
+      type: "array",
       maxItems: 6,
       items: {
-        type: 'object',
-        required: ['label', 'confidence'],
+        type: "object",
+        required: ["label", "confidence"],
         additionalProperties: false,
         properties: {
           label: {
-            type: 'string',
+            type: "string",
             description: 'A short scene/object label, e.g. "beach".',
           },
-          confidence: { type: 'number', minimum: 0, maximum: 1 },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
         },
       },
     },
@@ -52,23 +53,23 @@ const CAPTION_SCHEMA = {
 };
 
 export default async ({ ctx, log }) => {
-  const cursor = (await ctx.state.get('cursor')) ?? '';
+  const cursor = (await ctx.state.get("cursor")) ?? "";
   // Posters can arrive long after the original video crossed the asset
   // cursor. Follow the derivative's own UUIDv7 cursor as a second durable
   // feed so a completed device job always makes that video captionable.
-  const posterCursor = (await ctx.state.get('posterCursor')) ?? '';
+  const posterCursor = (await ctx.state.get("posterCursor")) ?? "";
   // The on-demand queue drains FIRST (issue #299 phase 5): an owner search
   // that found nothing, or an opened unenriched photo, names specific
   // assets — those jump the backlog regardless of the cursor.
   const requested = await ctx.vault.read({
-    entity: 'enrich.request',
+    entity: "enrich.request",
     where: [
-      { column: 'entity_type', op: 'eq', value: 'media.media_asset' },
-      { column: 'entity_id', op: 'not-null' },
-      { column: 'required_capability', op: 'is-null' },
-      { column: 'drained_at', op: 'is-null' },
+      { column: "entity_type", op: "eq", value: "media.media_asset" },
+      { column: "entity_id", op: "not-null" },
+      { column: "required_capability", op: "is-null" },
+      { column: "drained_at", op: "is-null" },
     ],
-    orderBy: { column: 'request_id', dir: 'asc' },
+    orderBy: { column: "request_id", dir: "asc" },
     limit: 5,
     purpose: PURPOSE,
   });
@@ -76,10 +77,10 @@ export default async ({ ctx, log }) => {
   const requestedAssets = [];
   for (const request of requests) {
     const hit = await ctx.vault.read({
-      entity: 'media.media_asset',
+      entity: "media.media_asset",
       where: [
-        { column: 'asset_id', op: 'eq', value: request.entity_id },
-        { column: 'deleted_at', op: 'is-null' },
+        { column: "asset_id", op: "eq", value: request.entity_id },
+        { column: "deleted_at", op: "is-null" },
       ],
       limit: 1,
       purpose: PURPOSE,
@@ -88,12 +89,12 @@ export default async ({ ctx, log }) => {
   }
 
   const posterRead = await ctx.vault.read({
-    entity: 'core.content_derivative',
+    entity: "core.content_derivative",
     where: [
-      { column: 'derivative_id', op: 'gt', value: posterCursor },
-      { column: 'variant', op: 'eq', value: 'poster' },
+      { column: "derivative_id", op: "gt", value: posterCursor },
+      { column: "variant", op: "eq", value: "poster" },
     ],
-    orderBy: { column: 'derivative_id', dir: 'asc' },
+    orderBy: { column: "derivative_id", dir: "asc" },
     limit: BATCH,
     purpose: PURPOSE,
   });
@@ -101,10 +102,10 @@ export default async ({ ctx, log }) => {
   const posterAssets = [];
   for (const derivative of posterDerivatives) {
     const hit = await ctx.vault.read({
-      entity: 'media.media_asset',
+      entity: "media.media_asset",
       where: [
-        { column: 'content_id', op: 'eq', value: derivative.content_id },
-        { column: 'deleted_at', op: 'is-null' },
+        { column: "content_id", op: "eq", value: derivative.content_id },
+        { column: "deleted_at", op: "is-null" },
       ],
       limit: 1,
       purpose: PURPOSE,
@@ -113,12 +114,12 @@ export default async ({ ctx, log }) => {
   }
 
   const read = await ctx.vault.read({
-    entity: 'media.media_asset',
+    entity: "media.media_asset",
     where: [
-      { column: 'asset_id', op: 'gt', value: cursor },
-      { column: 'deleted_at', op: 'is-null' },
+      { column: "asset_id", op: "gt", value: cursor },
+      { column: "deleted_at", op: "is-null" },
     ],
-    orderBy: { column: 'asset_id', dir: 'asc' },
+    orderBy: { column: "asset_id", dir: "asc" },
     limit: BATCH,
     purpose: PURPOSE,
   });
@@ -136,11 +137,11 @@ export default async ({ ctx, log }) => {
   ];
   const lastPosterSeen = posterDerivatives.reduce(
     (latest, row) => (row.derivative_id > latest ? row.derivative_id : latest),
-    posterCursor,
+    posterCursor
   );
   if (assets.length === 0) {
-    await ctx.state.set('posterCursor', lastPosterSeen);
-    return { summary: 'no new photos — library is fully captioned' };
+    await ctx.state.set("posterCursor", lastPosterSeen);
+    return { summary: "no new photos — library is fully captioned" };
   }
 
   const rows = [];
@@ -148,64 +149,67 @@ export default async ({ ctx, log }) => {
   let skipped = 0;
   let lastSeen = cursor;
   for (const asset of assets) {
-    if (fresh.includes(asset)) lastSeen = asset.asset_id > lastSeen ? asset.asset_id : lastSeen;
-    if (!['photo', 'scan', 'video'].includes(asset.kind)) continue;
+    if (fresh.includes(asset))
+      lastSeen = asset.asset_id > lastSeen ? asset.asset_id : lastSeen;
+    if (!["photo", "scan", "video"].includes(asset.kind)) continue;
     // Which derivative exists? Videos use the device-contributed poster;
     // there is deliberately no gateway video decoder/backstop in v0.
     const derivatives = await ctx.vault.read({
-      entity: 'core.content_derivative',
-      where: [{ column: 'content_id', op: 'eq', value: asset.content_id }],
+      entity: "core.content_derivative",
+      where: [{ column: "content_id", op: "eq", value: asset.content_id }],
       limit: 5,
       purpose: PURPOSE,
     });
     const variants = (derivatives.rows ?? []).map((d) => d.variant);
     const variant =
-      asset.kind === 'video'
-        ? variants.includes('poster')
-          ? 'poster'
-          : variants.includes('thumb')
-            ? 'thumb'
+      asset.kind === "video"
+        ? variants.includes("poster")
+          ? "poster"
+          : variants.includes("thumb")
+            ? "thumb"
             : null
-        : variants.includes('preview')
-          ? 'preview'
-          : variants.includes('thumb')
-            ? 'thumb'
+        : variants.includes("preview")
+          ? "preview"
+          : variants.includes("thumb")
+            ? "thumb"
             : null;
     if (!variant) {
       // No derivative yet (e.g. upload without a client thumb) — honest
       // skip. A late video poster re-enters through posterCursor above.
       skipped += 1;
-      log.info(`asset ${asset.asset_id}: no captionable derivative yet — skipped`);
+      log.info(
+        `asset ${asset.asset_id}: no captionable derivative yet — skipped`
+      );
       continue;
     }
     const out = await ctx.agent({
       prompt:
-        'Look at the attached image or representative video frame. Return a one-sentence factual caption of what is visibly ' +
-        'in it, plus up to 6 short scene/object tags with confidence 0..1. Describe only what ' +
-        'you can see — no guesses about who people are or where this is.',
+        "Look at the attached image or representative video frame. Return a one-sentence factual caption of what is visibly " +
+        "in it, plus up to 6 short scene/object tags with confidence 0..1. Describe only what " +
+        "you can see — no guesses about who people are or where this is.",
       json: CAPTION_SCHEMA,
       content: [{ contentId: asset.content_id, variant }],
     });
-    if (!out || typeof out.caption !== 'string' || out.caption.length === 0) {
+    if (!out || typeof out.caption !== "string" || out.caption.length === 0) {
       skipped += 1;
       continue;
     }
     rows.push({
-      entity_type: 'knowledge.annotation',
+      entity_type: "knowledge.annotation",
       external_id: `${asset.asset_id}:caption`,
       payload: {
-        target_type: 'media.media_asset',
+        target_type: "media.media_asset",
         target_id: asset.asset_id,
         body: out.caption,
       },
     });
     for (const tag of Array.isArray(out.tags) ? out.tags : []) {
-      if (typeof tag.label !== 'string' || tag.label.length === 0) continue;
+      if (typeof tag.label !== "string" || tag.label.length === 0) continue;
       rows.push({
-        entity_type: 'core.tag',
+        entity_type: "core.tag",
         external_id: `${asset.asset_id}:tag:${tag.label.toLowerCase()}`,
         payload: {
-          target_type: 'media.media_asset',
+          target_type: "media.media_asset",
           target_id: asset.asset_id,
           label: tag.label,
           confidence: Math.max(0, Math.min(1, Number(tag.confidence) || 0)),
@@ -218,23 +222,23 @@ export default async ({ ctx, log }) => {
   let staged = null;
   if (rows.length > 0) {
     staged = await ctx.vault.invoke({
-      command: 'sync.stage_rows',
-      input: { kind: 'enrichment.vision', label: 'photos', rows },
+      command: "sync.stage_rows",
+      input: { kind: "enrichment.vision", label: "photos", rows },
       purpose: PURPOSE,
     });
   }
   if (requests.length > 0) {
     await ctx.vault.invoke({
-      command: 'enrich.mark_requests_drained',
+      command: "enrich.mark_requests_drained",
       input: { request_ids: requests.map((r) => r.request_id) },
       purpose: PURPOSE,
     });
   }
-  await ctx.state.set('cursor', lastSeen);
-  await ctx.state.set('posterCursor', lastPosterSeen);
+  await ctx.state.set("cursor", lastSeen);
+  await ctx.state.set("posterCursor", lastPosterSeen);
   const published = staged && staged.output && staged.output.published;
   return {
-    summary: `captioned ${captioned} photo(s), skipped ${skipped}${published ? ' (auto-published)' : rows.length > 0 ? ' (staged for review)' : ''}`,
+    summary: `captioned ${captioned} photo(s), skipped ${skipped}${published ? " (auto-published)" : rows.length > 0 ? " (staged for review)" : ""}`,
     output: { captioned, skipped, staged: rows.length },
   };
 };

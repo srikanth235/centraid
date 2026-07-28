@@ -16,17 +16,17 @@
 // user-facing export ramp ("copy two files and a directory"), not the
 // backup path.
 
-import { createHash } from 'node:crypto';
-import { closeSync, openSync, readSync, rmSync } from 'node:fs';
-import path from 'node:path';
+import { createHash } from "node:crypto";
+import { closeSync, openSync, readSync, rmSync } from "node:fs";
+import path from "node:path";
 
-import type { VaultDb } from '../db.js';
-import { writeReceipt } from './evidence.js';
-import { GatewayError } from './types.js';
+import type { VaultDb } from "../db.js";
+import { writeReceipt } from "./evidence.js";
+import { GatewayError } from "./types.js";
 
 function requireDir(db: VaultDb, action: string): string {
-  if (db.dir === ':memory:') {
-    throw new GatewayError('execution', `${action} needs a file-backed vault`);
+  if (db.dir === ":memory:") {
+    throw new GatewayError("execution", `${action} needs a file-backed vault`);
   }
   return db.dir;
 }
@@ -46,10 +46,10 @@ export function checkpointVault(db: VaultDb): {
   vault: string;
   journal: string;
 } {
-  requireDir(db, 'checkpoint');
-  db.vault.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-  db.journal.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-  return { vault: 'truncated', journal: 'truncated' };
+  requireDir(db, "checkpoint");
+  db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  return { vault: "truncated", journal: "truncated" };
 }
 
 /**
@@ -61,8 +61,8 @@ export function checkpointVault(db: VaultDb): {
  * reproduce — and pulled multi-GB files into memory to do it.)
  */
 export function sha256File(file: string): string {
-  const hash = createHash('sha256');
-  const fd = openSync(file, 'r');
+  const hash = createHash("sha256");
+  const fd = openSync(file, "r");
   try {
     const buf = Buffer.alloc(4 * 1024 * 1024);
     for (;;) {
@@ -73,7 +73,7 @@ export function sha256File(file: string): string {
   } finally {
     closeSync(fd);
   }
-  return hash.digest('hex');
+  return hash.digest("hex");
 }
 
 export interface BackupResult {
@@ -93,9 +93,9 @@ export interface BackupResult {
  * remote tier settings name). Portability.ts stays the semantic half.
  */
 export function backupVault(db: VaultDb, destDir: string): BackupResult {
-  requireDir(db, 'backup');
-  const vaultPath = path.join(destDir, 'vault.backup.db');
-  const journalPath = path.join(destDir, 'journal.backup.db');
+  requireDir(db, "backup");
+  const vaultPath = path.join(destDir, "vault.backup.db");
+  const journalPath = path.join(destDir, "journal.backup.db");
   for (const p of [vaultPath, journalPath]) rmSync(p, { force: true });
   db.vault.exec(`VACUUM INTO '${vaultPath.replaceAll("'", "''")}'`);
   db.journal.exec(`VACUUM INTO '${journalPath.replaceAll("'", "''")}'`);
@@ -106,11 +106,11 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
     invocationId: null,
-    action: 'act consent.backup_vault',
-    objectType: 'core.vault',
+    action: "act consent.backup_vault",
+    objectType: "core.vault",
     objectId: null,
     purpose: null,
-    decision: 'allow',
+    decision: "allow",
     detail: { vaultSha256, journalSha256, destDir, blobsCopied: copied },
   });
   return {

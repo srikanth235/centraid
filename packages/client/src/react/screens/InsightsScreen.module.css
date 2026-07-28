@@ -138,13 +138,13 @@
   font-size: 11.5px;
   font-weight: 600;
 }
-.delta[data-tone='up'] {
+.delta[data-tone="up"] {
   color: var(--c-amber);
 }
-.delta[data-tone='down'] {
+.delta[data-tone="down"] {
   color: var(--ink-3);
 }
-.delta[data-tone='flat'] {
+.delta[data-tone="flat"] {
   color: var(--ink-4);
 }
 

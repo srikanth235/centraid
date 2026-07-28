@@ -5,16 +5,16 @@
 // journal nav is active, leaving stale content hidden otherwise, same as the
 // old Lit version's module-level `journalDraft`/`journalMood` vars), so a
 // mood pick or partial line survives a trip to another view and back.
-import { useRef, useState } from 'react';
+import { useRef, useState } from "react";
 
-import { fmtJournalDate, hashInt, PALETTE } from '../format.ts';
-import type { JournalItem } from '../types.ts';
-import { KitAvatar } from './Shared.tsx';
+import { fmtJournalDate, hashInt, PALETTE } from "../format.ts";
+import type { JournalItem } from "../types.ts";
+import { KitAvatar } from "./Shared.tsx";
 
-import styles from './Journal.module.css';
-import shared from './shared.module.css';
+import styles from "./Journal.module.css";
+import shared from "./shared.module.css";
 
-const MOODS = ['😔', '😐', '🙂', '😄'];
+const MOODS = ["😔", "😐", "🙂", "😄"];
 
 function JournalEntry({
   j,
@@ -23,12 +23,12 @@ function JournalEntry({
   j: JournalItem;
   onOpenDetails: (id: string) => void;
 }) {
-  if (j.kind === 'auto') {
+  if (j.kind === "auto") {
     const color = j.avatar_color || PALETTE[hashInt(j.name) % PALETTE.length]!;
     return (
       <div className={styles.entry}>
         <KitAvatar
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: "pointer" }}
           name={j.name}
           size="40px"
           color={color}
@@ -63,8 +63,8 @@ export function Journal({
   onSubmit: (mood: string, text: string) => Promise<boolean>;
   onOpenDetails: (id: string) => void;
 }) {
-  const [mood, setMood] = useState('🙂');
-  const [draft, setDraft] = useState('');
+  const [mood, setMood] = useState("🙂");
+  const [draft, setDraft] = useState("");
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   const submit = async () => {
@@ -72,14 +72,16 @@ export function Journal({
     if (!text) return;
     const ok = await onSubmit(mood, text);
     if (!ok) return;
-    setDraft('');
+    setDraft("");
     textRef.current?.focus();
   };
 
   return (
     <div className={shared.jWrap}>
       <div className={styles.compose}>
-        <div style={{ font: 'var(--t-strong)', fontSize: '14px' }}>How was today?</div>
+        <div style={{ font: "var(--t-strong)", fontSize: "14px" }}>
+          How was today?
+        </div>
         <div className={styles.moodrow}>
           {MOODS.map((emoji) => (
             <button
@@ -103,9 +105,9 @@ export function Journal({
         />
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            marginTop: '8px',
+            display: "flex",
+            justifyContent: "flex-end",
+            marginTop: "8px",
           }}
         >
           <button
@@ -118,19 +120,21 @@ export function Journal({
           </button>
         </div>
       </div>
-      <div style={{ marginTop: '8px' }}>
+      <div style={{ marginTop: "8px" }}>
         {entries.length === 0 ? (
           <p
             style={{
-              font: 'var(--t-small)',
-              color: 'var(--ink-3)',
-              padding: '16px 0',
+              font: "var(--t-small)",
+              color: "var(--ink-3)",
+              padding: "16px 0",
             }}
           >
             No entries yet — start with a line above.
           </p>
         ) : (
-          entries.map((j, i) => <JournalEntry key={i} j={j} onOpenDetails={onOpenDetails} />)
+          entries.map((j, i) => (
+            <JournalEntry key={i} j={j} onOpenDetails={onOpenDetails} />
+          ))
         )}
       </div>
     </div>

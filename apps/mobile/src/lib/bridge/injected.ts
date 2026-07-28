@@ -11,7 +11,7 @@
 // token-less dev gateway), so no fetch shim / header tricks are needed —
 // the page's own fetch()/EventSource just work.
 
-import { CENTRAID_HANDSHAKE } from './protocol';
+import { CENTRAID_HANDSHAKE } from "./protocol";
 
 export const INJECTED_JS = `(function () {
   if (window.centraid) return;

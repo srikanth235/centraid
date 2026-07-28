@@ -1,20 +1,23 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ChangeBus } from '../changes/change-bus.ts';
-import { Runtime } from '../runtime.ts';
-import { ChangesSubscriberCap, handleAppChanges } from './changes-sse.ts';
-import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
+import { ChangeBus } from "../changes/change-bus.ts";
+import { Runtime } from "../runtime.ts";
+import { ChangesSubscriberCap, handleAppChanges } from "./changes-sse.ts";
+import {
+  startRuntimeHttpServer,
+  type RuntimeHttpServerHandle,
+} from "./http-server.ts";
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
 let runtime: Runtime;
 
-describe('changes-sse', () => {
+describe("changes-sse", () => {
   beforeEach(async () => {
     workspace = await tempDir(`sse-${crypto.randomUUID()}-`);
     runtime = new Runtime({ appsDir: workspace });
@@ -42,13 +45,13 @@ describe('changes-sse', () => {
   async function readChangeEvents(
     res: Response,
     predicate: (events: ChangeEvt[]) => boolean,
-    timeoutMs = 2000,
+    timeoutMs = 2000
   ): Promise<ChangeEvt[]> {
-    if (!res.body) throw new Error('no body');
+    if (!res.body) throw new Error("no body");
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     const out: ChangeEvt[] = [];
-    let buf = '';
+    let buf = "";
     const start = Date.now();
     try {
       const readNext = async (): Promise<void> => {
@@ -56,22 +59,22 @@ describe('changes-sse', () => {
         const { value, done } = await Promise.race([
           reader.read(),
           new Promise<{ value?: undefined; done?: undefined }>((resolve) =>
-            setTimeout(() => resolve({}), 100),
+            setTimeout(() => resolve({}), 100)
           ),
         ]);
         if (done) return;
         if (value) {
           buf += decoder.decode(value, { stream: true });
           // SSE frames are separated by blank lines.
-          const frames = buf.split('\n\n');
-          buf = frames.pop() ?? '';
+          const frames = buf.split("\n\n");
+          buf = frames.pop() ?? "";
           for (const frame of frames) {
-            const lines = frame.split('\n');
+            const lines = frame.split("\n");
             let isChange = false;
-            let data = '';
+            let data = "";
             for (const line of lines) {
-              if (line.startsWith('event: change')) isChange = true;
-              else if (line.startsWith('data: ')) data = line.slice(6);
+              if (line.startsWith("event: change")) isChange = true;
+              else if (line.startsWith("data: ")) data = line.slice(6);
             }
             if (isChange && data) {
               try {
@@ -96,30 +99,32 @@ describe('changes-sse', () => {
     return out;
   }
 
-  test('SSE: delivers a change event when the bus emits for the subscribed app', async () => {
+  test("SSE: delivers a change event when the bus emits for the subscribed app", async () => {
     const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('text/event-stream; charset=utf-8');
+    expect(res.headers.get("content-type")).toBe(
+      "text/event-stream; charset=utf-8"
+    );
 
     // Emit after the connection is open. We use the bus directly because the
     // /_changes endpoint is the consumer side; producers are tested elsewhere.
     queueMicrotask(() => {
       runtime.changeBus.emit({
-        appId: 'myapp',
-        tables: ['todos'],
+        appId: "myapp",
+        tables: ["todos"],
         ts: 1234,
-        source: 'handler',
+        source: "handler",
       });
     });
 
     const events = await readChangeEvents(res, (e) => e.length >= 1);
     expect(events).toHaveLength(1);
-    expect(events[0]!.tables).toStrictEqual(['todos']);
+    expect(events[0]!.tables).toStrictEqual(["todos"]);
   });
 
-  test('SSE: does not deliver events for OTHER apps to this subscriber', async () => {
+  test("SSE: does not deliver events for OTHER apps to this subscriber", async () => {
     const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
@@ -127,25 +132,25 @@ describe('changes-sse', () => {
 
     queueMicrotask(() => {
       runtime.changeBus.emit({
-        appId: 'otherapp',
-        tables: ['x'],
+        appId: "otherapp",
+        tables: ["x"],
         ts: 1,
-        source: 'handler',
+        source: "handler",
       });
       runtime.changeBus.emit({
-        appId: 'myapp',
-        tables: ['todos'],
+        appId: "myapp",
+        tables: ["todos"],
         ts: 2,
-        source: 'handler',
+        source: "handler",
       });
     });
 
     const events = await readChangeEvents(res, (e) => e.length >= 1);
     expect(events).toHaveLength(1);
-    expect(events[0]!.tables).toStrictEqual(['todos']);
+    expect(events[0]!.tables).toStrictEqual(["todos"]);
   });
 
-  test('SSE: client disconnect unsubscribes the listener from the bus', async () => {
+  test("SSE: client disconnect unsubscribes the listener from the bus", async () => {
     const res = await fetch(`${server.url}/centraid/cleanup-app/_changes`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
@@ -154,23 +159,23 @@ describe('changes-sse', () => {
     // subscribe() has run on the server.
     const reader = res.body!.getReader();
     await vi.waitFor(() => {
-      expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(1);
+      expect(runtime.changeBus.listenerCount("cleanup-app")).toBe(1);
     });
 
     // Cancel the reader → underlying socket closes → server cleanup fires.
     await reader.cancel();
     // The cleanup runs on the next tick of the close event; poll for unsubscribe.
     await vi.waitFor(() => {
-      expect(runtime.changeBus.listenerCount('cleanup-app')).toBe(0);
+      expect(runtime.changeBus.listenerCount("cleanup-app")).toBe(0);
     });
   });
 
-  test('SSE: requires the bearer token (gated by the surrounding http-server)', async () => {
+  test("SSE: requires the bearer token (gated by the surrounding http-server)", async () => {
     const res = await fetch(`${server.url}/centraid/myapp/_changes`);
     expect(res.status).toBe(401);
   });
 
-  test('SSE: agent-sourced events carry source, toolCallId, and turnId', async () => {
+  test("SSE: agent-sourced events carry source, toolCallId, and turnId", async () => {
     const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
@@ -178,23 +183,23 @@ describe('changes-sse', () => {
 
     queueMicrotask(() => {
       runtime.changeBus.emit({
-        appId: 'myapp',
-        tables: ['todos'],
+        appId: "myapp",
+        tables: ["todos"],
         ts: 5,
-        source: 'agent',
-        toolCallId: 'call-abc',
-        turnId: 'turn-xyz',
+        source: "agent",
+        toolCallId: "call-abc",
+        turnId: "turn-xyz",
       });
     });
 
     const events = await readChangeEvents(res, (e) => e.length >= 1);
     expect(events).toHaveLength(1);
-    expect(events[0]!.source).toBe('agent');
-    expect(events[0]!.toolCallId).toBe('call-abc');
-    expect(events[0]!.turnId).toBe('turn-xyz');
+    expect(events[0]!.source).toBe("agent");
+    expect(events[0]!.toolCallId).toBe("call-abc");
+    expect(events[0]!.turnId).toBe("turn-xyz");
   });
 
-  test('SSE: handler-sourced events carry source but omit toolCallId/turnId', async () => {
+  test("SSE: handler-sourced events carry source but omit toolCallId/turnId", async () => {
     const res = await fetch(`${server.url}/centraid/myapp/_changes`, {
       headers: { Authorization: `Bearer ${server.token}` },
     });
@@ -202,16 +207,16 @@ describe('changes-sse', () => {
 
     queueMicrotask(() => {
       runtime.changeBus.emit({
-        appId: 'myapp',
-        tables: ['notes'],
+        appId: "myapp",
+        tables: ["notes"],
         ts: 6,
-        source: 'handler',
+        source: "handler",
       });
     });
 
     const events = await readChangeEvents(res, (e) => e.length >= 1);
     expect(events).toHaveLength(1);
-    expect(events[0]!.source).toBe('handler');
+    expect(events[0]!.source).toBe("handler");
     expect(events[0]!.toolCallId).toBeUndefined();
     expect(events[0]!.turnId).toBeUndefined();
   });
@@ -261,7 +266,7 @@ describe('changes-sse', () => {
     };
     const req = {
       on(event: string, fn: () => void) {
-        if (event === 'close') reqCloseListener = fn;
+        if (event === "close") reqCloseListener = fn;
         return this;
       },
     };
@@ -269,78 +274,79 @@ describe('changes-sse', () => {
       req: req as unknown as IncomingMessage,
       res: res as unknown as ServerResponse,
       status: () => res.statusCode,
-      body: () => chunks.join(''),
+      body: () => chunks.join(""),
       header: (name: string) => headers.get(name.toLowerCase()),
       ended: () => isEnded,
       close: () => reqCloseListener?.(),
     };
   }
 
-  const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+  const settle = (): Promise<void> =>
+    new Promise((resolve) => setImmediate(resolve));
 
-  test('SSE cap: subscribers past the per-app limit get 503 + Retry-After; the count decrements on disconnect', async () => {
+  test("SSE cap: subscribers past the per-app limit get 503 + Retry-After; the count decrements on disconnect", async () => {
     const bus = new ChangeBus();
     const cap = new ChangesSubscriberCap(2);
 
     const a = mockClient();
     const b = mockClient();
-    const pendingA = handleAppChanges(a.req, a.res, bus, 'myapp', cap);
-    const pendingB = handleAppChanges(b.req, b.res, bus, 'myapp', cap);
+    const pendingA = handleAppChanges(a.req, a.res, bus, "myapp", cap);
+    const pendingB = handleAppChanges(b.req, b.res, bus, "myapp", cap);
     await settle();
     expect(a.status()).toBe(200);
     expect(b.status()).toBe(200);
-    expect(cap.current('myapp')).toBe(2);
+    expect(cap.current("myapp")).toBe(2);
 
     // The 3rd subscriber is over the cap — refused, never joins the stream.
     const c = mockClient();
-    await handleAppChanges(c.req, c.res, bus, 'myapp', cap);
+    await handleAppChanges(c.req, c.res, bus, "myapp", cap);
     expect(c.status()).toBe(503);
-    expect(c.header('Retry-After')).toBeDefined();
+    expect(c.header("Retry-After")).toBeDefined();
     const errBody = JSON.parse(c.body()) as { error: string };
-    expect(errBody.error).toBe('sse_capacity');
+    expect(errBody.error).toBe("sse_capacity");
     expect(c.ended()).toBe(true);
-    expect(cap.current('myapp')).toBe(2); // the refusal never incremented the count
+    expect(cap.current("myapp")).toBe(2); // the refusal never incremented the count
 
     // Disconnecting one subscriber frees a slot for the next one.
     a.close();
     await pendingA;
-    expect(cap.current('myapp')).toBe(1);
+    expect(cap.current("myapp")).toBe(1);
 
     const d = mockClient();
-    const pendingD = handleAppChanges(d.req, d.res, bus, 'myapp', cap);
+    const pendingD = handleAppChanges(d.req, d.res, bus, "myapp", cap);
     await settle();
     expect(d.status()).toBe(200);
-    expect(cap.current('myapp')).toBe(2);
+    expect(cap.current("myapp")).toBe(2);
 
     b.close();
     d.close();
     await Promise.all([pendingB, pendingD]);
-    expect(cap.current('myapp')).toBe(0);
+    expect(cap.current("myapp")).toBe(0);
   });
 
-  test('SSE cap: is scoped per appId — saturating one app does not refuse another', async () => {
+  test("SSE cap: is scoped per appId — saturating one app does not refuse another", async () => {
     const bus = new ChangeBus();
     const cap = new ChangesSubscriberCap(1);
 
     const a = mockClient();
-    const pendingA = handleAppChanges(a.req, a.res, bus, 'app-one', cap);
+    const pendingA = handleAppChanges(a.req, a.res, bus, "app-one", cap);
     await settle();
     expect(a.status()).toBe(200);
-    expect(cap.current('app-one')).toBe(1);
+    expect(cap.current("app-one")).toBe(1);
 
     // app-one is saturated (cap 1) — a 2nd app-one subscriber is refused...
     const b = mockClient();
-    await handleAppChanges(b.req, b.res, bus, 'app-one', cap);
+    await handleAppChanges(b.req, b.res, bus, "app-one", cap);
     expect(b.status()).toBe(503);
 
     // ...but a subscriber to a DIFFERENT app is admitted normally — the two
     // apps have independent budgets, exactly the "several windows of one
     // app shouldn't starve every other app's stream" property this is for.
     const c = mockClient();
-    const pendingC = handleAppChanges(c.req, c.res, bus, 'app-two', cap);
+    const pendingC = handleAppChanges(c.req, c.res, bus, "app-two", cap);
     await settle();
     expect(c.status()).toBe(200);
-    expect(cap.current('app-two')).toBe(1);
+    expect(cap.current("app-two")).toBe(1);
     expect(cap.total()).toBe(2);
 
     a.close();

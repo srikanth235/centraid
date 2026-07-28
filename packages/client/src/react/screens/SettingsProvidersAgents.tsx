@@ -1,10 +1,10 @@
-import type { CSSProperties, JSX } from 'react';
+import type { CSSProperties, JSX } from "react";
 
-import type { AgentCardDTO } from '../screen-contracts.js';
-import { AgentGlyph } from './agentGlyphs.js';
-import { ConfigSelect, ModelSelect } from './SettingsProvidersSelects.js';
+import type { AgentCardDTO } from "../screen-contracts.js";
+import { AgentGlyph } from "./agentGlyphs.js";
+import { ConfigSelect, ModelSelect } from "./SettingsProvidersSelects.js";
 
-import styles from './SettingsProvidersScreen.module.css';
+import styles from "./SettingsProvidersScreen.module.css";
 
 // Settings → Agents' inventory section: what is installed and which routing
 // lanes land on it. Carries no routing choice — those all live in the Routing
@@ -41,10 +41,20 @@ export default function AgentEntry({
   onSetEffort: (v: string) => void;
 }): JSX.Element {
   return (
-    <div className={styles.entry} style={{ '--row-accent': card.accent } as CSSProperties}>
-      <div className={styles.row} data-unavail={card.connected ? '' : 'true'}>
-        <span className={styles.glyphTile} data-unavail={card.connected ? '' : 'true'}>
-          <AgentGlyph kind={card.kind} accent={card.accent} connected={card.connected} />
+    <div
+      className={styles.entry}
+      style={{ "--row-accent": card.accent } as CSSProperties}
+    >
+      <div className={styles.row} data-unavail={card.connected ? "" : "true"}>
+        <span
+          className={styles.glyphTile}
+          data-unavail={card.connected ? "" : "true"}
+        >
+          <AgentGlyph
+            kind={card.kind}
+            accent={card.accent}
+            connected={card.connected}
+          />
         </span>
         <div className={styles.rowMeta}>
           <div className={styles.rowName}>{card.title}</div>
@@ -68,8 +78,10 @@ export default function AgentEntry({
                 key={c}
                 className={styles.usedByChip}
                 data-warn={
-                  c === 'no vault HTTP' || c === 'sign-in needed' || c === 'probe failed'
-                    ? 'true'
+                  c === "no vault HTTP" ||
+                  c === "sign-in needed" ||
+                  c === "probe failed"
+                    ? "true"
                     : undefined
                 }
               >

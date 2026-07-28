@@ -68,7 +68,7 @@
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   outline: none;
 }
-.row[data-active='true'] {
+.row[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
 .rail {
@@ -78,10 +78,10 @@
   border-radius: 2px;
   background: var(--ink-4);
 }
-.rail[data-status='ready'] {
+.rail[data-status="ready"] {
   background: var(--success);
 }
-.rail[data-status='error'] {
+.rail[data-status="error"] {
   background: var(--danger);
 }
 .text {

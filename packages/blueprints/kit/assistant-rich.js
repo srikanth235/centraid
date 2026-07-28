@@ -38,38 +38,38 @@
 //      visible (escaped) code block, never silent loss and never eval.
 // Adversarial coverage lives in packages/blueprints/src/assistant-sanitize.test.ts.
 
-import { highlightCode } from './code-highlight.js';
-import { cx, el, blockNodes } from './gfm.js';
+import { highlightCode } from "./code-highlight.js";
+import { cx, el, blockNodes } from "./gfm.js";
 
 /** The literal class names the kit's kit.css styles. Callers may override any. */
 export const DEFAULT_CLASSES = {
-  asstRich: 'asstRich',
-  asstP: 'asstP',
-  asstH: 'asstH',
-  asstUl: 'asstUl',
-  asstOl: 'asstOl',
-  asstQuote: 'asstQuote',
-  asstHr: 'asstHr',
-  asstA: 'asstA',
-  asstImg: 'asstImg',
-  asstDel: 'asstDel',
-  asstRef: 'asstRef',
-  asstBlock: 'asstBlock',
-  asstTableWrap: 'asstTableWrap',
-  asstTable: 'asstTable',
-  asstCaption: 'asstCaption',
-  asstStat: 'asstStat',
-  asstStatValue: 'asstStatValue',
-  asstStatLabel: 'asstStatLabel',
-  asstStatSub: 'asstStatSub',
-  asstChart: 'asstChart',
-  asstChartPlot: 'asstChartPlot',
-  asstChartSvg: 'asstChartSvg',
-  asstChartX: 'asstChartX',
-  asstChartLegend: 'asstChartLegend',
-  asstPre: 'asstPre',
-  asstCodeWrap: 'asstCodeWrap',
-  asstCopyBtn: 'asstCopyBtn',
+  asstRich: "asstRich",
+  asstP: "asstP",
+  asstH: "asstH",
+  asstUl: "asstUl",
+  asstOl: "asstOl",
+  asstQuote: "asstQuote",
+  asstHr: "asstHr",
+  asstA: "asstA",
+  asstImg: "asstImg",
+  asstDel: "asstDel",
+  asstRef: "asstRef",
+  asstBlock: "asstBlock",
+  asstTableWrap: "asstTableWrap",
+  asstTable: "asstTable",
+  asstCaption: "asstCaption",
+  asstStat: "asstStat",
+  asstStatValue: "asstStatValue",
+  asstStatLabel: "asstStatLabel",
+  asstStatSub: "asstStatSub",
+  asstChart: "asstChart",
+  asstChartPlot: "asstChartPlot",
+  asstChartSvg: "asstChartSvg",
+  asstChartX: "asstChartX",
+  asstChartLegend: "asstChartLegend",
+  asstPre: "asstPre",
+  asstCodeWrap: "asstCodeWrap",
+  asstCopyBtn: "asstCopyBtn",
 };
 
 /**
@@ -83,61 +83,77 @@ export const DEFAULT_CLASSES = {
  * @returns {HTMLElement} The wrapped code block element.
  */
 function codeBlock(code, lang, C) {
-  const btn = el('button', { class: C.asstCopyBtn }, 'Copy');
-  btn.type = 'button';
-  btn.setAttribute('aria-label', 'Copy code');
+  const btn = el("button", { class: C.asstCopyBtn }, "Copy");
+  btn.type = "button";
+  btn.setAttribute("aria-label", "Copy code");
   const highlighted = lang ? highlightCode(code, lang) : null;
   const pre = highlighted
-    ? el('pre', { class: C.asstPre, trustedHtml: highlighted })
-    : el('pre', { class: C.asstPre }, code);
+    ? el("pre", { class: C.asstPre, trustedHtml: highlighted })
+    : el("pre", { class: C.asstPre }, code);
   if (lang) pre.dataset.lang = lang;
-  return el('div', { class: C.asstCodeWrap }, [btn, pre]);
+  return el("div", { class: C.asstCodeWrap }, [btn, pre]);
 }
 
 function tableBlock(spec, C) {
-  if (!spec || !Array.isArray(spec.columns) || !Array.isArray(spec.rows)) return null;
-  const table = el('table', { class: C.asstTable });
+  if (!spec || !Array.isArray(spec.columns) || !Array.isArray(spec.rows))
+    return null;
+  const table = el("table", { class: C.asstTable });
   table.append(
     el(
-      'thead',
+      "thead",
       {},
       el(
-        'tr',
+        "tr",
         {},
-        spec.columns.map((c) => el('th', {}, String(c))),
-      ),
-    ),
+        spec.columns.map((c) => el("th", {}, String(c)))
+      )
+    )
   );
-  const body = el('tbody');
+  const body = el("tbody");
   for (const row of spec.rows.slice(0, 100)) {
     if (!Array.isArray(row)) continue;
     body.append(
       el(
-        'tr',
+        "tr",
         {},
-        row.map((v) => el('td', {}, v === null || v === undefined ? '—' : String(v))),
-      ),
+        row.map((v) =>
+          el("td", {}, v === null || v === undefined ? "—" : String(v))
+        )
+      )
     );
   }
   table.append(body);
-  const wrap = el('div', { class: cx(C.asstBlock, C.asstTableWrap) }, table);
-  if (typeof spec.caption === 'string' && spec.caption) {
-    wrap.append(el('div', { class: C.asstCaption }, spec.caption));
+  const wrap = el("div", { class: cx(C.asstBlock, C.asstTableWrap) }, table);
+  if (typeof spec.caption === "string" && spec.caption) {
+    wrap.append(el("div", { class: C.asstCaption }, spec.caption));
   }
   return wrap;
 }
 
 function statBlock(spec, C) {
-  if (!spec || (typeof spec.value !== 'string' && typeof spec.value !== 'number')) return null;
-  return el('div', { class: cx(C.asstBlock, C.asstStat) }, [
-    el('div', { class: C.asstStatValue }, String(spec.value)),
-    typeof spec.label === 'string' ? el('div', { class: C.asstStatLabel }, spec.label) : false,
-    typeof spec.sub === 'string' ? el('div', { class: C.asstStatSub }, spec.sub) : false,
+  if (
+    !spec ||
+    (typeof spec.value !== "string" && typeof spec.value !== "number")
+  )
+    return null;
+  return el("div", { class: cx(C.asstBlock, C.asstStat) }, [
+    el("div", { class: C.asstStatValue }, String(spec.value)),
+    typeof spec.label === "string"
+      ? el("div", { class: C.asstStatLabel }, spec.label)
+      : false,
+    typeof spec.sub === "string"
+      ? el("div", { class: C.asstStatSub }, spec.sub)
+      : false,
   ]);
 }
 
 function chartBlock(spec, C) {
-  if (!spec || (spec.type !== 'bar' && spec.type !== 'line') || !Array.isArray(spec.x)) return null;
+  if (
+    !spec ||
+    (spec.type !== "bar" && spec.type !== "line") ||
+    !Array.isArray(spec.x)
+  )
+    return null;
   const series = (Array.isArray(spec.series) ? spec.series : [])
     .filter((r) => r && Array.isArray(r.values))
     .slice(0, 3);
@@ -153,7 +169,7 @@ function chartBlock(spec, C) {
   const span = max - min || 1;
   const py = (v) => H - PADY - ((v - min) / span) * (H - PADY * 2);
   const parts = [];
-  if (spec.type === 'bar') {
+  if (spec.type === "bar") {
     const group = (W - PADX * 2) / Math.max(n, 1);
     const bw = Math.max(4, (group * 0.7) / series.length);
     series.forEach((r, si) => {
@@ -163,7 +179,7 @@ function chartBlock(spec, C) {
         const y = Math.min(py(v), py(0));
         const h = Math.abs(py(v) - py(0));
         parts.push(
-          `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 1).toFixed(1)}" rx="2" fill="var(--accent)" opacity="${1 - si * 0.35}"/>`,
+          `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 1).toFixed(1)}" rx="2" fill="var(--accent)" opacity="${1 - si * 0.35}"/>`
         );
       });
     });
@@ -172,32 +188,38 @@ function chartBlock(spec, C) {
     series.forEach((r, si) => {
       const pts = r.values
         .slice(0, n)
-        .map((v, i) => `${i ? 'L' : 'M'}${px(i).toFixed(1)} ${py(v).toFixed(1)}`)
-        .join(' ');
+        .map(
+          (v, i) => `${i ? "L" : "M"}${px(i).toFixed(1)} ${py(v).toFixed(1)}`
+        )
+        .join(" ");
       parts.push(
-        `<path d="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" opacity="${1 - si * 0.35}" stroke-linecap="round" stroke-linejoin="round"/>`,
+        `<path d="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" opacity="${1 - si * 0.35}" stroke-linecap="round" stroke-linejoin="round"/>`
       );
     });
   }
-  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="${C.asstChartSvg}">${parts.join('')}</svg>`;
+  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="${C.asstChartSvg}">${parts.join("")}</svg>`;
   const labels = el(
-    'div',
+    "div",
     { class: C.asstChartX },
-    spec.x.slice(0, 12).map((v) => el('span', {}, String(v))),
+    spec.x.slice(0, 12).map((v) => el("span", {}, String(v)))
   );
-  const wrap = el('div', { class: cx(C.asstBlock, C.asstChart) });
-  if (typeof spec.title === 'string' && spec.title)
-    wrap.append(el('div', { class: C.asstCaption }, spec.title));
-  wrap.append(el('div', { class: C.asstChartPlot, trustedHtml: svg }), labels);
+  const wrap = el("div", { class: cx(C.asstBlock, C.asstChart) });
+  if (typeof spec.title === "string" && spec.title)
+    wrap.append(el("div", { class: C.asstCaption }, spec.title));
+  wrap.append(el("div", { class: C.asstChartPlot, trustedHtml: svg }), labels);
   if (series.some((r) => r.label)) {
     wrap.append(
       el(
-        'div',
+        "div",
         { class: C.asstChartLegend },
         series.map((r, si) =>
-          el('span', { style: { opacity: String(1 - si * 0.35) } }, r.label ?? `Series ${si + 1}`),
-        ),
-      ),
+          el(
+            "span",
+            { style: { opacity: String(1 - si * 0.35) } },
+            r.label ?? `Series ${si + 1}`
+          )
+        )
+      )
     );
   }
   return wrap;
@@ -219,7 +241,7 @@ export function richAnswerHtml(text, classes) {
     C = { ...DEFAULT_CLASSES };
     for (const k in classes) if (classes[k]) C[k] = classes[k];
   }
-  const host = el('div', { class: C.asstRich });
+  const host = el("div", { class: C.asstRich });
   const fence =
     /```(?<tag>block:table|block:chart|block:stat|[A-Za-z0-9+#_-]*)\n(?<payload>[\s\S]*?)```/gu;
   let last = 0;
@@ -230,24 +252,24 @@ export function richAnswerHtml(text, classes) {
   while ((m = fence.exec(text)) !== null) {
     pushProse(text.slice(last, m.index));
     last = m.index + m[0].length;
-    const tag = m.groups?.tag ?? '';
-    const payload = m.groups?.payload ?? '';
-    if (tag.startsWith('block:')) {
+    const tag = m.groups?.tag ?? "";
+    const payload = m.groups?.payload ?? "";
+    if (tag.startsWith("block:")) {
       let node = null;
       try {
         const spec = JSON.parse(payload);
         node =
-          tag === 'block:table'
+          tag === "block:table"
             ? tableBlock(spec, C)
-            : tag === 'block:chart'
+            : tag === "block:chart"
               ? chartBlock(spec, C)
               : statBlock(spec, C);
       } catch {
         node = null;
       }
-      host.append(node ?? codeBlock(payload.trim(), '', C));
+      host.append(node ?? codeBlock(payload.trim(), "", C));
     } else {
-      host.append(codeBlock(payload.replace(/\n$/u, ''), tag, C));
+      host.append(codeBlock(payload.replace(/\n$/u, ""), tag, C));
     }
   }
   pushProse(text.slice(last));
@@ -265,9 +287,9 @@ export function richAnswerHtml(text, classes) {
 export async function defaultResolveRefs(refs) {
   if (refs.length === 0) return [];
   try {
-    const res = await fetch('/centraid/_vault/assistant/resolve', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    const res = await fetch("/centraid/_vault/assistant/resolve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ refs }),
     });
     if (!res.ok) return [];
@@ -297,21 +319,21 @@ export function hydrateRefs(host, options = {}) {
   const chips = [...host.querySelectorAll(`.${refClass}:not([data-resolved])`)];
   if (chips.length === 0) return;
   const refs = chips.map((c) => ({
-    type: c.dataset.refType ?? '',
-    id: c.dataset.refId ?? '',
+    type: c.dataset.refType ?? "",
+    id: c.dataset.refId ?? "",
   }));
   void resolveRefs(refs)
     .then((cards) => {
       chips.forEach((chip, i) => {
         const card = cards[i];
-        chip.dataset.resolved = 'true';
-        if (!card || card.status !== 'live') {
-          chip.dataset.state = 'missing';
-          chip.title = 'Not found in the vault';
+        chip.dataset.resolved = "true";
+        if (!card || card.status !== "live") {
+          chip.dataset.state = "missing";
+          chip.title = "Not found in the vault";
           return;
         }
         if (card.title) chip.textContent = card.title;
-        chip.title = [card.title, card.subtitle].filter(Boolean).join(' — ');
+        chip.title = [card.title, card.subtitle].filter(Boolean).join(" — ");
       });
     })
     .catch(() => undefined);
@@ -330,26 +352,26 @@ export function hydrateRefs(host, options = {}) {
  * @returns {void} Nothing; the delegated handler is installed once.
  */
 export function wireCodeCopy(host, options = {}) {
-  if (!host || host.dataset.copyWired === 'true') return;
+  if (!host || host.dataset.copyWired === "true") return;
   const copyClass = options.copyClass ?? DEFAULT_CLASSES.asstCopyBtn;
-  host.dataset.copyWired = 'true';
-  host.addEventListener('click', (ev) => {
+  host.dataset.copyWired = "true";
+  host.addEventListener("click", (ev) => {
     const target = ev.target;
     if (!(target instanceof Element)) return;
     const btn = target.closest(`.${copyClass}`);
     if (!btn || !host.contains(btn)) return;
-    const pre = btn.parentElement?.querySelector('pre');
-    const text = pre?.textContent ?? '';
+    const pre = btn.parentElement?.querySelector("pre");
+    const text = pre?.textContent ?? "";
     if (!text) return;
     try {
       void (async () => {
         try {
           await navigator.clipboard.writeText(text);
-          btn.dataset.copied = 'true';
-          btn.textContent = 'Copied';
+          btn.dataset.copied = "true";
+          btn.textContent = "Copied";
           setTimeout(() => {
             delete btn.dataset.copied;
-            btn.textContent = 'Copy';
+            btn.textContent = "Copy";
           }, 1400);
         } catch {
           /* clipboard write failed — leave the button as-is */

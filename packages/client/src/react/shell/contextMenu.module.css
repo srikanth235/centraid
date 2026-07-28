@@ -40,17 +40,17 @@
 .item:hover {
   background: color-mix(in oklab, var(--ink) 6%, transparent);
 }
-.item[data-danger='true'] {
+.item[data-danger="true"] {
   color: var(--c-rose);
 }
-.item[data-danger='true']:hover {
+.item[data-danger="true"]:hover {
   background: color-mix(in oklab, var(--c-rose) 12%, transparent);
 }
 .item svg {
   color: var(--ink-3);
   flex: none;
 }
-.item[data-danger='true'] svg {
+.item[data-danger="true"] svg {
   color: var(--c-rose);
 }
 .sep {

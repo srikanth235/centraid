@@ -15,46 +15,46 @@
  */
 export const NATIVE_PLATFORMS = [
   {
-    id: 'linux-x64',
-    platform: 'linux',
-    arch: 'x64',
+    id: "linux-x64",
+    platform: "linux",
+    arch: "x64",
     required: true,
-    runnerHint: 'ubuntu-latest',
+    runnerHint: "ubuntu-latest",
   },
   {
-    id: 'linux-arm64',
-    platform: 'linux',
-    arch: 'arm64',
+    id: "linux-arm64",
+    platform: "linux",
+    arch: "arm64",
     required: false,
-    runnerHint: 'ubuntu-24.04-arm',
+    runnerHint: "ubuntu-24.04-arm",
   },
   {
-    id: 'darwin-arm64',
-    platform: 'darwin',
-    arch: 'arm64',
+    id: "darwin-arm64",
+    platform: "darwin",
+    arch: "arm64",
     required: true,
-    runnerHint: 'macos-latest',
+    runnerHint: "macos-latest",
   },
   {
-    id: 'darwin-x64',
-    platform: 'darwin',
-    arch: 'x64',
+    id: "darwin-x64",
+    platform: "darwin",
+    arch: "x64",
     required: false,
-    runnerHint: 'macos-15-intel',
+    runnerHint: "macos-15-intel",
   },
   {
-    id: 'win32-x64',
-    platform: 'win32',
-    arch: 'x64',
+    id: "win32-x64",
+    platform: "win32",
+    arch: "x64",
     required: true,
-    runnerHint: 'windows-latest',
+    runnerHint: "windows-latest",
   },
   {
-    id: 'win32-arm64',
-    platform: 'win32',
-    arch: 'arm64',
+    id: "win32-arm64",
+    platform: "win32",
+    arch: "arm64",
     required: false,
-    runnerHint: 'windows-11-arm',
+    runnerHint: "windows-11-arm",
   },
 ];
 
@@ -95,13 +95,17 @@ export function auditNativeArtifacts(basenames, opts = {}) {
   const requiredIds = opts.requiredIds ?? requiredNativePlatformIds();
   const expected = new Set(
     (requireAll ? NATIVE_PLATFORMS.map((p) => p.id) : requiredIds).map((id) =>
-      nativeArtifactNameForId(id),
-    ),
+      nativeArtifactNameForId(id)
+    )
   );
-  const presentSet = new Set(basenames.filter((n) => n.endsWith('.node')));
+  const presentSet = new Set(basenames.filter((n) => n.endsWith(".node")));
   const present = [...presentSet].sort();
-  const missingRequired = [...expected].filter((n) => !presentSet.has(n)).sort();
-  const known = new Set(NATIVE_PLATFORMS.map((p) => nativeArtifactName(p.platform, p.arch)));
+  const missingRequired = [...expected]
+    .filter((n) => !presentSet.has(n))
+    .sort();
+  const known = new Set(
+    NATIVE_PLATFORMS.map((p) => nativeArtifactName(p.platform, p.arch))
+  );
   const extra = present.filter((n) => !known.has(n)).sort();
   return { present, missingRequired, extra };
 }
@@ -114,15 +118,20 @@ export function auditNativeArtifacts(basenames, opts = {}) {
  */
 export function hostToPlatformId(host) {
   const platform =
-    host.os === 'Windows_NT' || host.os === 'win32'
-      ? 'win32'
-      : host.os === 'Darwin' || host.os === 'darwin'
-        ? 'darwin'
-        : host.os === 'Linux' || host.os === 'linux'
-          ? 'linux'
+    host.os === "Windows_NT" || host.os === "win32"
+      ? "win32"
+      : host.os === "Darwin" || host.os === "darwin"
+        ? "darwin"
+        : host.os === "Linux" || host.os === "linux"
+          ? "linux"
           : null;
   if (!platform) return null;
-  const arch = host.arch === 'x86_64' ? 'x64' : host.arch === 'aarch64' ? 'arm64' : host.arch;
+  const arch =
+    host.arch === "x86_64"
+      ? "x64"
+      : host.arch === "aarch64"
+        ? "arm64"
+        : host.arch;
   const id = `${platform}-${arch}`;
   return NATIVE_PLATFORMS.some((p) => p.id === id) ? id : null;
 }

@@ -1,22 +1,35 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, BackHandler, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ActivityIndicator,
+  BackHandler,
+  Platform,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 import type {
   WebViewErrorEvent,
   WebViewHttpErrorEvent,
   WebViewMessageEvent,
   WebViewNavigation,
-} from 'react-native-webview/lib/WebViewTypes';
+} from "react-native-webview/lib/WebViewTypes";
 
-import AppHeader from '../kit/components/AppHeader';
-import Button from '../kit/components/Button';
-import { spacing, t, useTheme, type ThemeColors } from '../kit/theme';
-import { dispatch } from '../lib/bridge/dispatch';
-import { INJECTED_JS } from '../lib/bridge/injected';
-import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
-import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from '../lib/gateway';
-import type { AppDetailScreenProps } from '../navigation';
+import AppHeader from "../kit/components/AppHeader";
+import Button from "../kit/components/Button";
+import { spacing, t, useTheme, type ThemeColors } from "../kit/theme";
+import { dispatch } from "../lib/bridge/dispatch";
+import { INJECTED_JS } from "../lib/bridge/injected";
+import { CENTRAID_HANDSHAKE, type BridgeRequest } from "../lib/bridge/protocol";
+import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from "../lib/gateway";
+import type { AppDetailScreenProps } from "../navigation";
 
 type BaseResolveSetters = {
   setBaseUrl: (next: string | undefined) => void;
@@ -98,7 +111,7 @@ export default function AppDetailScreen({
   // component's lifetime — memoized once so the effect below can depend on it.
   const setters = useMemo<BaseResolveSetters>(
     () => ({ setBaseUrl, setNoGateway, setLoadError, setLoading }),
-    [],
+    []
   );
 
   // Resolve the gateway base (tunnel first) each time we mount or retry.
@@ -131,20 +144,20 @@ export default function AppDetailScreen({
       } catch {
         return;
       }
-      if (!parsed || typeof parsed !== 'object') return;
+      if (!parsed || typeof parsed !== "object") return;
       const envelope = parsed as { __centraid?: string } & BridgeRequest;
       if (envelope.__centraid !== CENTRAID_HANDSHAKE) return;
       const response = await dispatch(
         appId,
         envelope,
-        baseUrl ? { gatewayBaseUrl: baseUrl } : undefined,
+        baseUrl ? { gatewayBaseUrl: baseUrl } : undefined
       );
       const js = `window.__centraidResolve && window.__centraidResolve(${JSON.stringify(
-        response,
+        response
       )}); true;`;
       webViewRef.current?.injectJavaScript(js);
     },
-    [appId, baseUrl],
+    [appId, baseUrl]
   );
 
   const reload = useCallback((): void => {
@@ -157,8 +170,8 @@ export default function AppDetailScreen({
   // we're at the entry page, fall through to React Navigation's default
   // (pop the screen). iOS edge-swipe always pops the screen — fine.
   useEffect(() => {
-    if (Platform.OS !== 'android') return undefined;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+    if (Platform.OS !== "android") return undefined;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (canGoBack && webViewRef.current) {
         webViewRef.current.goBack();
         return true;
@@ -169,7 +182,7 @@ export default function AppDetailScreen({
   }, [canGoBack]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <AppHeader
         title={meta.name}
         subtitle={meta.desc || undefined}
@@ -182,7 +195,9 @@ export default function AppDetailScreen({
           title="Not connected"
           message="Pair with your desktop (or set a gateway URL under Advanced) to open apps."
           actionLabel="Open Settings"
-          onAction={() => navigation.navigate('Settings', { screen: 'Settings' })}
+          onAction={() =>
+            navigation.navigate("Settings", { screen: "Settings" })
+          }
           styles={styles}
         />
       ) : loadError ? (
@@ -213,7 +228,7 @@ export default function AppDetailScreen({
               injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
               style={styles.web}
               allowsBackForwardNavigationGestures={false}
-              originWhitelist={['*']}
+              originWhitelist={["*"]}
             />
           ) : null}
           {loading ? (
@@ -257,19 +272,19 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     empty: {
       flex: 1,
-      justifyContent: 'center',
+      justifyContent: "center",
       paddingHorizontal: spacing[5],
     },
-    emptyAction: { alignSelf: 'stretch', marginTop: spacing[4] },
-    emptyMsg: { ...t('body'), color: colors.ink2 },
-    emptyTitle: { ...t('title'), color: colors.ink, marginBottom: spacing[2] },
+    emptyAction: { alignSelf: "stretch", marginTop: spacing[4] },
+    emptyMsg: { ...t("body"), color: colors.ink2 },
+    emptyTitle: { ...t("title"), color: colors.ink, marginBottom: spacing[2] },
     loadingOverlay: {
-      alignItems: 'center',
-      backgroundColor: 'transparent',
+      alignItems: "center",
+      backgroundColor: "transparent",
       bottom: 0,
-      justifyContent: 'center',
+      justifyContent: "center",
       left: 0,
-      position: 'absolute',
+      position: "absolute",
       right: 0,
       top: 0,
     },

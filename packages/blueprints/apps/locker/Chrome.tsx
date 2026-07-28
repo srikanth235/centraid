@@ -14,9 +14,9 @@
 // exactly as they do served. Classes otherwise come from Chrome.module.css
 // (scoped frame) + the global kit-* vocabulary (kit.css, loaded once by the
 // route host).
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
-import styles from './Chrome.module.css';
+import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
@@ -37,18 +37,18 @@ export function Chrome(props: ChromeProps): ReactNode {
     // Global state classes the reused component modules' `:global(.locker.…)`
     // rules key on — mirror the served static #root's classList (app.tsx's
     // render() toggled these on #root; inline they live on this frame instead).
-    'locker',
-    props.narrow ? 'is-narrow' : '',
-    props.narrow && props.sideOpen ? 'side-open' : '',
-    props.showList ? 'show-list' : '',
-    props.denied ? 'denied' : '',
+    "locker",
+    props.narrow ? "is-narrow" : "",
+    props.narrow && props.sideOpen ? "side-open" : "",
+    props.showList ? "show-list" : "",
+    props.denied ? "denied" : "",
     // Local (hashed) marker: the drawer slide transition is suppressed until
     // this is present (Chrome.module.css), so the pre-paint narrow snap and
     // remounts don't animate.
-    props.ready ? styles.ready : '',
+    props.ready ? styles.ready : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   return (
     <div className={frameClass}>
@@ -57,9 +57,10 @@ export function Chrome(props: ChromeProps): ReactNode {
           getElementById verbatim. Rendered once, never reconciled, so those
           imperative DOM writes are never clobbered. */}
       <div id="consentBanner" className={styles.banner} hidden>
-        <strong>No vault access yet.</strong>{' '}
+        <strong>No vault access yet.</strong>{" "}
         <span id="consentDetail">
-          Ask the owner to approve this app’s requested scopes in vault settings.
+          Ask the owner to approve this app’s requested scopes in vault
+          settings.
         </span>
       </div>
       <output

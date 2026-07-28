@@ -1,12 +1,20 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { promisify } from 'node:util';
-import { brotliCompress, constants, gzip } from 'node:zlib';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
+import { brotliCompress, constants, gzip } from "node:zlib";
 
 const compressBrotli = promisify(brotliCompress);
 const compressGzip = promisify(gzip);
-const root = path.resolve('dist');
-const COMPRESSIBLE = new Set(['.css', '.js', '.json', '.mjs', '.svg', '.wasm', '.webmanifest']);
+const root = path.resolve("dist");
+const COMPRESSIBLE = new Set([
+  ".css",
+  ".js",
+  ".json",
+  ".mjs",
+  ".svg",
+  ".wasm",
+  ".webmanifest",
+]);
 const MIN_BYTES = 1024;
 
 async function filesUnder(dir) {
@@ -17,7 +25,7 @@ async function filesUnder(dir) {
         const file = path.join(dir, entry.name);
         if (entry.isDirectory()) return filesUnder(file);
         return entry.isFile() ? [file] : [];
-      }),
+      })
     )
   ).flat();
 }
@@ -39,9 +47,12 @@ const emitted = (
         }),
         compressGzip(bytes, { level: 9 }),
       ]);
-      await Promise.all([fs.writeFile(`${file}.br`, br), fs.writeFile(`${file}.gz`, gz)]);
+      await Promise.all([
+        fs.writeFile(`${file}.br`, br),
+        fs.writeFile(`${file}.gz`, gz),
+      ]);
       return 2;
-    }),
+    })
   )
 ).reduce((sum, count) => sum + count, 0);
 

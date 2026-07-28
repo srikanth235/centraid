@@ -1,11 +1,17 @@
-import type { GatewayComponentIssue, GatewayProbe } from './gateway-monitor-core.js';
+import type {
+  GatewayComponentIssue,
+  GatewayProbe,
+} from "./gateway-monitor-core.js";
 
 const PROBE_TIMEOUT_MS = 4000;
-const HEALTH_PATH = '/centraid/_gateway/health';
-const INFO_PATH = '/centraid/_gateway/info';
+const HEALTH_PATH = "/centraid/_gateway/health";
+const INFO_PATH = "/centraid/_gateway/info";
 
 /** Probe a legacy gateway's liveness endpoint when it has no health endpoint. */
-async function probeInfo(baseUrl: string, token: string | undefined): Promise<GatewayProbe> {
+async function probeInfo(
+  baseUrl: string,
+  token: string | undefined
+): Promise<GatewayProbe> {
   const startedAt = Date.now();
   try {
     const res = await fetch(new URL(INFO_PATH, `${baseUrl}/`).toString(), {
@@ -14,15 +20,24 @@ async function probeInfo(baseUrl: string, token: string | undefined): Promise<Ga
     });
     const at = Date.now();
     if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = (await res.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
     return {
       at,
       ok: true,
       latencyMs: at - startedAt,
-      ...(typeof body.startedAt === 'number' ? { gatewayStartedAt: body.startedAt } : {}),
-      ...(typeof body.uptimeMs === 'number' ? { gatewayUptimeMs: body.uptimeMs } : {}),
-      ...(typeof body.version === 'string' ? { version: body.version } : {}),
-      ...(typeof body.schemaEpoch === 'number' ? { schemaEpoch: body.schemaEpoch } : {}),
+      ...(typeof body.startedAt === "number"
+        ? { gatewayStartedAt: body.startedAt }
+        : {}),
+      ...(typeof body.uptimeMs === "number"
+        ? { gatewayUptimeMs: body.uptimeMs }
+        : {}),
+      ...(typeof body.version === "string" ? { version: body.version } : {}),
+      ...(typeof body.schemaEpoch === "number"
+        ? { schemaEpoch: body.schemaEpoch }
+        : {}),
     };
   } catch (error) {
     return {
@@ -33,18 +48,20 @@ async function probeInfo(baseUrl: string, token: string | undefined): Promise<Ga
   }
 }
 
-function extractComponentIssues(body: Record<string, unknown>): GatewayComponentIssue[] {
+function extractComponentIssues(
+  body: Record<string, unknown>
+): GatewayComponentIssue[] {
   const raw = Array.isArray(body.components) ? body.components : [];
   const issues: GatewayComponentIssue[] = [];
   for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     const record = entry as Record<string, unknown>;
-    if (record.status !== 'degraded' && record.status !== 'error') continue;
-    if (typeof record.component !== 'string') continue;
+    if (record.status !== "degraded" && record.status !== "error") continue;
+    if (typeof record.component !== "string") continue;
     const message =
-      typeof record.lastError === 'string'
+      typeof record.lastError === "string"
         ? record.lastError
-        : typeof record.detail === 'string'
+        : typeof record.detail === "string"
           ? record.detail
           : undefined;
     issues.push({
@@ -59,7 +76,7 @@ function extractComponentIssues(body: Record<string, unknown>): GatewayComponent
 /** Probe component health, falling back to the legacy liveness endpoint on 404. */
 export async function probeGateway(
   baseUrl: string,
-  token: string | undefined,
+  token: string | undefined
 ): Promise<GatewayProbe> {
   const startedAt = Date.now();
   try {
@@ -70,9 +87,14 @@ export async function probeGateway(
     if (res.status === 404) return probeInfo(baseUrl, token);
     const at = Date.now();
     if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = (await res.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
     const healthStatus =
-      body.status === 'ok' || body.status === 'degraded' || body.status === 'error'
+      body.status === "ok" ||
+      body.status === "degraded" ||
+      body.status === "error"
         ? body.status
         : undefined;
     return {
@@ -81,10 +103,13 @@ export async function probeGateway(
       latencyMs: at - startedAt,
       ...(healthStatus ? { healthStatus } : {}),
       componentIssues: extractComponentIssues(body),
-      ...(typeof body.startedAt === 'string' && !Number.isNaN(Date.parse(body.startedAt))
+      ...(typeof body.startedAt === "string" &&
+      !Number.isNaN(Date.parse(body.startedAt))
         ? { gatewayStartedAt: Date.parse(body.startedAt) }
         : {}),
-      ...(typeof body.uptimeMs === 'number' ? { gatewayUptimeMs: body.uptimeMs } : {}),
+      ...(typeof body.uptimeMs === "number"
+        ? { gatewayUptimeMs: body.uptimeMs }
+        : {}),
     };
   } catch (error) {
     return {

@@ -7,9 +7,9 @@ export function isOAuthFinishDeepLink(rawUrl: string): boolean {
   try {
     const url = new URL(rawUrl);
     if (
-      url.protocol !== 'centraid:' ||
-      url.hostname !== 'oauth' ||
-      url.pathname !== '/finish' ||
+      url.protocol !== "centraid:" ||
+      url.hostname !== "oauth" ||
+      url.pathname !== "/finish" ||
       url.username ||
       url.password ||
       url.port ||
@@ -19,20 +19,20 @@ export function isOAuthFinishDeepLink(rawUrl: string): boolean {
       return false;
     }
     const fragment = new URLSearchParams(url.hash.slice(1));
-    const state = fragment.get('state');
+    const state = fragment.get("state");
     if (!state || !/^d\.[A-Za-z0-9_-]{43}$/u.test(state)) return false;
-    const providerError = fragment.get('error');
+    const providerError = fragment.get("error");
     if (providerError) {
       return providerError.length <= 128 && fragment.size === 2;
     }
-    const code = fragment.get('code');
-    const receipt = fragment.get('receipt');
+    const code = fragment.get("code");
+    const receipt = fragment.get("receipt");
     return (
       fragment.size === 3 &&
-      typeof code === 'string' &&
+      typeof code === "string" &&
       code.length > 0 &&
       code.length <= 4_096 &&
-      typeof receipt === 'string' &&
+      typeof receipt === "string" &&
       /^v1\.\d{10}\.[A-Za-z0-9_-]{43}$/u.test(receipt)
     );
   } catch {

@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import type { FC } from "react";
 
 // The duplicates shelf (issue #352 / #299's deferred duplicates shelf): one
 // card per cluster, its assets laid out side by side so the owner can eyeball
@@ -6,16 +6,16 @@ import type { FC } from 'react';
 // one batch. Pure view — `duplicates.tsx` (the app-root orchestrator) owns
 // the load/selection state and passes it down, same split as toolbar.jsx/
 // Chips.jsx.
-import { armConfirm, fmtBytes } from '../kit.ts';
-import { mountMedia } from '../media.ts';
-import type { Asset, DuplicateCluster } from '../types.ts';
+import { armConfirm, fmtBytes } from "../kit.ts";
+import { mountMedia } from "../media.ts";
+import type { Asset, DuplicateCluster } from "../types.ts";
 
-import styles from './Duplicates.module.css';
+import styles from "./Duplicates.module.css";
 
 // The genuine <kit-skeleton> custom element, rendered as ordinary JSX — the
 // runtime value stays the string 'kit-skeleton', so the emitted DOM is
 // identical (pilot custom-element pattern).
-const KitSkeleton = 'kit-skeleton' as unknown as FC<{ rows?: number }>;
+const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 
 function ClusterTile({
   asset,
@@ -33,7 +33,7 @@ function ClusterTile({
         type="checkbox"
         checked={checked}
         onChange={() => onToggle(asset.asset_id)}
-        aria-label={`Select ${asset.title ?? 'photo'} to trash`}
+        aria-label={`Select ${asset.title ?? "photo"} to trash`}
       />
       <span className={styles.tileMeta}>
         {[
@@ -41,7 +41,7 @@ function ClusterTile({
           fmtBytes(asset.byte_size),
         ]
           .filter(Boolean)
-          .join(' · ')}
+          .join(" · ")}
       </span>
     </label>
   );
@@ -96,15 +96,17 @@ export function DuplicatesView({
       <div className={styles.shelfHead}>
         <p className="kit-muted">
           {clusters.length === 0
-            ? 'No duplicates found — nice and tidy.'
-            : 'Photos that look like the same shot, grouped by visual similarity (issue #352). Nothing is trashed until you say so.'}
+            ? "No duplicates found — nice and tidy."
+            : "Photos that look like the same shot, grouped by visual similarity (issue #352). Nothing is trashed until you say so."}
         </p>
       </div>
       {clusters.length > 0 ? (
         <>
           <div className={styles.actions}>
             <span className={styles.count}>
-              {selected.size === 0 ? 'Select copies to trash' : `${selected.size} selected`}
+              {selected.size === 0
+                ? "Select copies to trash"
+                : `${selected.size} selected`}
             </span>
             <button
               type="button"

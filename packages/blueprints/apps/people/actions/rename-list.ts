@@ -4,16 +4,16 @@
 export default async function renameList({ body, ctx }: HandlerArgs) {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.rename_list',
+      command: "people.rename_list",
       input: (body ?? {}) as Record<string, unknown>,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

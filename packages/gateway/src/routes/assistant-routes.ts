@@ -17,8 +17,8 @@
  * behind the gateway's host-level auth like the rest of `_vault`.
  */
 
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
   ASSISTANT_APP_ID,
@@ -36,15 +36,15 @@ import {
   type RunnerKind,
   type TurnAttachmentRef,
   type TurnLimiter,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
 
-import { assistantCwd } from '../runs/assistant-conversation-runner.js';
-import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import { parseProviderConsent, readJson, sendJson } from './route-helpers.js';
+import { assistantCwd } from "../runs/assistant-conversation-runner.js";
+import { buildAssistantPrompt } from "../runs/assistant-prompt.js";
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
+import { parseProviderConsent, readJson, sendJson } from "./route-helpers.js";
 
-const PREFIX = '/centraid/_vault/assistant';
+const PREFIX = "/centraid/_vault/assistant";
 
 export interface AssistantRouteOptions {
   vaults: VaultRegistry;
@@ -62,7 +62,7 @@ export interface AssistantRouteOptions {
   resolveModel?: (
     subsystem: ModelSubsystem,
     explicit?: string,
-    requestedRunner?: RunnerKind,
+    requestedRunner?: RunnerKind
   ) => Promise<string | undefined>;
   /**
    * Fire-and-forget LLM auto-title hook (issue #420). Wired by the gateway to a
@@ -83,60 +83,73 @@ export interface AssistantRouteOptions {
   limiter?: () => TurnLimiter | undefined;
 }
 
-export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHandler {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
-    if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
-    const method = (req.method ?? 'GET').toUpperCase();
+export function makeAssistantRouteHandler(
+  opts: AssistantRouteOptions
+): RouteHandler {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
+    if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`))
+      return false;
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, "");
+    const method = (req.method ?? "GET").toUpperCase();
 
     try {
-      if (method === 'POST' && rest === 'resolve') {
+      if (method === "POST" && rest === "resolve") {
         const body = await readJson(req);
         const refs = Array.isArray(body.refs)
           ? body.refs.filter(
               (r): r is { type: string; id: string } =>
                 !!r &&
-                typeof r === 'object' &&
-                typeof (r as { type?: unknown }).type === 'string' &&
-                typeof (r as { id?: unknown }).id === 'string',
+                typeof r === "object" &&
+                typeof (r as { type?: unknown }).type === "string" &&
+                typeof (r as { id?: unknown }).id === "string"
             )
           : [];
         if (refs.length === 0) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'resolve body needs {refs: [{type, id}]}',
+            error: "bad_request",
+            message: "resolve body needs {refs: [{type, id}]}",
           });
         }
         return sendJson(res, 200, opts.vaults.current().resolveAsOwner(refs));
       }
 
-      if (method === 'POST' && rest === '_turn') {
+      if (method === "POST" && rest === "_turn") {
         const body = await readJson(req);
-        const conversationId = typeof body.conversationId === 'string' ? body.conversationId : '';
-        const message = typeof body.message === 'string' ? body.message : '';
+        const conversationId =
+          typeof body.conversationId === "string" ? body.conversationId : "";
+        const message = typeof body.message === "string" ? body.message : "";
         if (!conversationId || !message) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'turn body needs {conversationId, message}',
+            error: "bad_request",
+            message: "turn body needs {conversationId, message}",
           });
         }
         if (!isValidConversationId(conversationId)) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'Invalid conversationId.',
+            error: "bad_request",
+            message: "Invalid conversationId.",
           });
         }
-        const session = opts.conversationStore.getSessionMeta(ASSISTANT_APP_ID, conversationId);
+        const session = opts.conversationStore.getSessionMeta(
+          ASSISTANT_APP_ID,
+          conversationId
+        );
         if (!session) {
           return sendJson(res, 404, {
-            error: 'not_found',
-            message: 'No such assistant thread.',
+            error: "not_found",
+            message: "No such assistant thread.",
           });
         }
 
         const plane = opts.vaults.current();
-        const extraSystemPrompt = buildAssistantPrompt(plane.name, plane.assistantContext());
+        const extraSystemPrompt = buildAssistantPrompt(
+          plane.name,
+          plane.assistantContext()
+        );
 
         // Attachments uploaded ahead of the turn (issue #190), mirroring the
         // per-app `_turn` route exactly: the bytes already live in the
@@ -144,44 +157,48 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
           opts.conversationStore,
           ASSISTANT_APP_ID,
-          parseTurnAttachmentRefs(body.attachments),
+          parseTurnAttachmentRefs(body.attachments)
         );
         const turnAttachments = resolveTurnAttachments(
           opts.conversationStore,
           ASSISTANT_APP_ID,
-          attachmentRefs,
+          attachmentRefs
         );
 
-        const explicitModel = typeof body.model === 'string' ? body.model : undefined;
-        const runnerKind = isRunnerKind(body.runnerKind) ? body.runnerKind : undefined;
+        const explicitModel =
+          typeof body.model === "string" ? body.model : undefined;
+        const runnerKind = isRunnerKind(body.runnerKind)
+          ? body.runnerKind
+          : undefined;
         if (body.runnerKind !== undefined && !runnerKind) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'runnerKind must name a registered runner.',
+            error: "bad_request",
+            message: "runnerKind must name a registered runner.",
           });
         }
         const providerConsent = parseProviderConsent(body.providerConsent);
-        if (providerConsent === 'invalid') {
+        if (providerConsent === "invalid") {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'providerConsent must name registered runners.',
+            error: "bad_request",
+            message: "providerConsent must name registered runners.",
           });
         }
         const requestedWorkspaceKind = parseWorkspaceKind(body.workspaceKind);
         if (body.workspaceKind !== undefined && !requestedWorkspaceKind) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'workspaceKind must be one of vault-data, app, or draft.',
+            error: "bad_request",
+            message: "workspaceKind must be one of vault-data, app, or draft.",
           });
         }
         const savedWorkspace = opts.conversationStore.getWorkspaceSelection(
           ASSISTANT_APP_ID,
-          conversationId,
+          conversationId
         );
-        const workspaceKind = requestedWorkspaceKind ?? savedWorkspace?.primaryKind ?? 'vault-data';
-        if (workspaceKind !== 'vault-data') {
+        const workspaceKind =
+          requestedWorkspaceKind ?? savedWorkspace?.primaryKind ?? "vault-data";
+        if (workspaceKind !== "vault-data") {
           return sendJson(res, 400, {
-            error: 'bad_request',
+            error: "bad_request",
             message: `The ${workspaceKind} workspace is unavailable in the vault assistant.`,
           });
         }
@@ -189,41 +206,47 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         let additionalDirectories = savedWorkspace?.additionalDirectories ?? [];
         if (body.additionalDirectories !== undefined) {
           try {
-            additionalDirectories = await parseAdditionalDirectories(body.additionalDirectories);
+            additionalDirectories = await parseAdditionalDirectories(
+              body.additionalDirectories
+            );
           } catch (err) {
             return sendJson(res, 400, {
-              error: 'bad_request',
-              message: err instanceof Error ? err.message : 'Invalid additional directory.',
+              error: "bad_request",
+              message:
+                err instanceof Error
+                  ? err.message
+                  : "Invalid additional directory.",
             });
           }
         }
         additionalDirectories = additionalDirectories.filter(
-          (directory) => directory !== workspaceDirectory,
+          (directory) => directory !== workspaceDirectory
         );
         // Every turn used to rewrite this row even when nothing changed. The
         // selection is per conversation and rarely moves, so compare first.
         const selectionUnchanged =
           savedWorkspace?.primaryKind === workspaceKind &&
-          savedWorkspace.additionalDirectories.length === additionalDirectories.length &&
+          savedWorkspace.additionalDirectories.length ===
+            additionalDirectories.length &&
           savedWorkspace.additionalDirectories.every(
-            (directory, index) => directory === additionalDirectories[index],
+            (directory, index) => directory === additionalDirectories[index]
           );
         if (!selectionUnchanged) {
           opts.conversationStore.setWorkspaceSelection(
             ASSISTANT_APP_ID,
             conversationId,
             workspaceKind,
-            additionalDirectories,
+            additionalDirectories
           );
         }
         const model = opts.resolveModel
-          ? await opts.resolveModel('assistant', explicitModel, runnerKind)
+          ? await opts.resolveModel("assistant", explicitModel, runnerKind)
           : explicitModel;
 
         const resume = opts.conversationStore.getAdapterResumeState(
           ASSISTANT_APP_ID,
           conversationId,
-          runnerKind,
+          runnerKind
         );
         await driveTurnOverSse({
           req,
@@ -231,7 +254,10 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           appId: ASSISTANT_APP_ID,
           conversationId,
           message,
-          idempotencyKey: typeof body.idempotencyKey === 'string' ? body.idempotencyKey : undefined,
+          idempotencyKey:
+            typeof body.idempotencyKey === "string"
+              ? body.idempotencyKey
+              : undefined,
           dataDir: assistantCwd(opts.vaults),
           workspaceKind,
           workspaceDirectory,
@@ -239,15 +265,19 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           runner: opts.runner,
           ...(opts.limiter ? { limiter: opts.limiter() } : {}),
           conversationStore: opts.conversationStore,
-          conversationRunnerSessionDir: opts.vaults.currentWorkspace().runnerSessionDir,
+          conversationRunnerSessionDir:
+            opts.vaults.currentWorkspace().runnerSessionDir,
           conversationLocks: opts.conversationLocks,
           banner: `assistant vault ${plane.boot.vaultId} session ${conversationId}`,
           model,
           ...(runnerKind ? { runnerKind } : {}),
-          thinking: typeof body.thinking === 'string' ? body.thinking : undefined,
+          thinking:
+            typeof body.thinking === "string" ? body.thinking : undefined,
           ...(providerConsent ? { providerConsent } : {}),
           ...(additionalDirectories.length ? { additionalDirectories } : {}),
-          ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
+          ...(typeof body.retryOf === "string" && body.retryOf
+            ? { retryOf: body.retryOf }
+            : {}),
           prevAdapterSessionId: resume?.sessionId,
           prevAdapterKind: resume?.kind,
           prevAdapterUsageSnapshot: resume?.usageSnapshot,
@@ -259,8 +289,8 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
       }
 
       return sendJson(res, 404, {
-        error: 'not_found',
-        message: 'unknown assistant route',
+        error: "not_found",
+        message: "unknown assistant route",
       });
     } catch (err) {
       if (res.headersSent) {
@@ -268,7 +298,7 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         return true;
       }
       return sendJson(res, 500, {
-        error: 'internal_error',
+        error: "internal_error",
         message: err instanceof Error ? err.message : String(err),
       });
     }

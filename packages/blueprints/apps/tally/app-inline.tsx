@@ -5,16 +5,16 @@
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
 
-import type { InlineAppModule } from '../inline-types.ts';
-import { Root, CHANGE_TABLES } from './app-root.tsx';
-import activityQuery from './queries/activity.ts';
-import dashboardQuery from './queries/dashboard.ts';
-import friendQuery from './queries/friend.ts';
-import groupQuery from './queries/group.ts';
-import searchQuery from './queries/search.ts';
+import type { InlineAppModule } from "../inline-types.ts";
+import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import activityQuery from "./queries/activity.ts";
+import dashboardQuery from "./queries/dashboard.ts";
+import friendQuery from "./queries/friend.ts";
+import groupQuery from "./queries/group.ts";
+import searchQuery from "./queries/search.ts";
 
 const tallyInlineApp: InlineAppModule = {
-  appId: 'tally',
+  appId: "tally",
   changeTables: CHANGE_TABLES,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
@@ -25,13 +25,13 @@ const tallyInlineApp: InlineAppModule = {
     friend: { default: friendQuery },
     activity: { default: activityQuery },
     search: { default: searchQuery },
-  } as unknown as InlineAppModule['queries'],
+  } as unknown as InlineAppModule["queries"],
   kitAsk: {
-    scope: 'tally',
-    placeholder: 'Ask about your expenses…',
+    scope: "tally",
+    placeholder: "Ask about your expenses…",
     intro:
-      'Ask me to add an expense, settle up, or see who owes whom. Writes show for your approval before they touch the vault.',
-    suggest: ['Split dinner four ways', 'Who do I owe?', 'Settle up with Alex'],
+      "Ask me to add an expense, settle up, or see who owes whom. Writes show for your approval before they touch the vault.",
+    suggest: ["Split dinner four ways", "Who do I owe?", "Settle up with Alex"],
   },
   Root,
 };

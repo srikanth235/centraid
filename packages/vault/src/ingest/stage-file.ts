@@ -4,29 +4,29 @@
 // zip is just a bag of the same file kinds — entries route recursively and
 // land in ONE batch on one `file.takeout` connection.
 
-import { stageBlobBytes } from '../blob/staging.js';
-import type { VaultDb } from '../db.js';
-import type { Identity } from '../gateway/types.js';
-import { parseCsvRows, parseTransactionsCsv } from './csv.js';
-import { parseIcs } from './ics.js';
-import { parseMbox, threadKey } from './mbox.js';
-import { isPasswordsCsvHeader, parsePasswordsCsv } from './passwords-csv.js';
-import { PUBLISHERS } from './publishers.js';
+import { stageBlobBytes } from "../blob/staging.js";
+import type { VaultDb } from "../db.js";
+import type { Identity } from "../gateway/types.js";
+import { parseCsvRows, parseTransactionsCsv } from "./csv.js";
+import { parseIcs } from "./ics.js";
+import { parseMbox, threadKey } from "./mbox.js";
+import { isPasswordsCsvHeader, parsePasswordsCsv } from "./passwords-csv.js";
+import { PUBLISHERS } from "./publishers.js";
 import type {
   EventPayload,
   LockerItemPayload,
   MessagePayload,
   PartyPayload,
   TransactionPayload,
-} from './publishers.js';
+} from "./publishers.js";
 import {
   ensureConnection,
   stageCandidates,
   type StageCandidate,
   type StageResult,
-} from './staging.js';
-import { parseVcards } from './vcard.js';
-import { readZipEntries } from './zip.js';
+} from "./staging.js";
+import { parseVcards } from "./vcard.js";
+import { readZipEntries } from "./zip.js";
 
 export interface StageFileOptions {
   /** Original filename — routes the parser and labels the connection. */
@@ -47,7 +47,7 @@ export interface StageFileResult extends StageResult {
 
 function eventCandidates(text: string): StageCandidate[] {
   return parseIcs(text).map((event) => ({
-    entityType: 'core.event',
+    entityType: "core.event",
     externalId: event.uid,
     payload: {
       uid: event.uid,
@@ -64,7 +64,7 @@ function eventCandidates(text: string): StageCandidate[] {
 
 function partyCandidates(text: string): StageCandidate[] {
   return parseVcards(text).map((card, i) => ({
-    entityType: 'core.party',
+    entityType: "core.party",
     externalId:
       card.identifiers[0] === undefined
         ? `vcard:${card.fn}:${i}`
@@ -89,9 +89,13 @@ function partyCandidates(text: string): StageCandidate[] {
  * publish. A batch hold (applied after the batch id exists) pins the stage
  * past the TTL while the owner reviews.
  */
-function messageCandidates(db: VaultDb, text: string, stagedShas: string[]): StageCandidate[] {
+function messageCandidates(
+  db: VaultDb,
+  text: string,
+  stagedShas: string[]
+): StageCandidate[] {
   return parseMbox(text).map((message) => ({
-    entityType: 'social.message',
+    entityType: "social.message",
     externalId: message.messageId,
     payload: {
       messageId: message.messageId,
@@ -122,15 +126,15 @@ function messageCandidates(db: VaultDb, text: string, stagedShas: string[]): Sta
 function transactionCandidates(
   text: string,
   accountName: string,
-  fallbackCurrency: string,
+  fallbackCurrency: string
 ): StageCandidate[] {
   return parseTransactionsCsv(text).map((txn) => {
     const currency = txn.currency ?? fallbackCurrency;
     const externalId =
       txn.externalId ??
-      `csv:${txn.postedAt.slice(0, 10)}:${txn.amountMinor}:${txn.direction}:${txn.description ?? ''}`;
+      `csv:${txn.postedAt.slice(0, 10)}:${txn.amountMinor}:${txn.direction}:${txn.description ?? ""}`;
     return {
-      entityType: 'core.transaction',
+      entityType: "core.transaction",
       externalId,
       payload: {
         externalId,
@@ -147,10 +151,10 @@ function transactionCandidates(
 
 function passwordCandidates(text: string): StageCandidate[] {
   return parsePasswordsCsv(text).map((item) => ({
-    entityType: 'locker.item',
+    entityType: "locker.item",
     // Stable across re-imports of the same export: a login's identity is
     // where + who, not its (rotating) password.
-    externalId: `login:${item.title}:${item.username ?? ''}`,
+    externalId: `login:${item.title}:${item.username ?? ""}`,
     payload: {
       title: item.title,
       url: item.url,
@@ -165,7 +169,7 @@ function passwordCandidates(text: string): StageCandidate[] {
 /** CSVs route by CONTENT: a password column means a password-manager export. */
 function csvCandidates(
   text: string,
-  opts: { accountName: string; currency: string },
+  opts: { accountName: string; currency: string }
 ): StageCandidate[] {
   const header = parseCsvRows(text)[0];
   return header && isPasswordsCsvHeader(header)
@@ -174,21 +178,21 @@ function csvCandidates(
 }
 
 function extension(name: string): string {
-  const dot = name.lastIndexOf('.');
-  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
 }
 
 function stem(name: string): string {
-  const base = name.split('/').at(-1) ?? name;
-  const dot = base.lastIndexOf('.');
+  const base = name.split("/").at(-1) ?? name;
+  const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
 }
 
 function baseCurrency(db: VaultDb): string {
-  const row = db.vault.prepare('SELECT base_currency FROM core_vault LIMIT 1').get() as
-    | { base_currency: string }
-    | undefined;
-  return row?.base_currency ?? 'USD';
+  const row = db.vault
+    .prepare("SELECT base_currency FROM core_vault LIMIT 1")
+    .get() as { base_currency: string } | undefined;
+  return row?.base_currency ?? "USD";
 }
 
 /** Route ONE file's content to candidates. Unknown extensions yield none. */
@@ -196,17 +200,17 @@ function candidatesFor(
   db: VaultDb,
   filename: string,
   text: string,
-  opts: { accountName: string; currency: string; stagedShas: string[] },
+  opts: { accountName: string; currency: string; stagedShas: string[] }
 ): StageCandidate[] | null {
   switch (extension(filename)) {
-    case 'ics':
+    case "ics":
       return eventCandidates(text);
-    case 'vcf':
-    case 'vcard':
+    case "vcf":
+    case "vcard":
       return partyCandidates(text);
-    case 'mbox':
+    case "mbox":
       return messageCandidates(db, text, opts.stagedShas);
-    case 'csv':
+    case "csv":
       return csvCandidates(text, opts);
     default:
       return null;
@@ -221,7 +225,7 @@ function candidatesFor(
 export function stageFile(
   db: VaultDb,
   importer: Identity,
-  options: StageFileOptions,
+  options: StageFileOptions
 ): StageFileResult {
   const currency = options.currency ?? baseCurrency(db);
   const accountName = options.accountName ?? stem(options.filename);
@@ -232,21 +236,31 @@ export function stageFile(
   // below so the review pause never races the staging TTL (issue #296).
   const stagedShas: string[] = [];
 
-  if (extension(options.filename) === 'zip') {
-    kind = 'file.takeout';
+  if (extension(options.filename) === "zip") {
+    kind = "file.takeout";
     const buffer =
-      typeof options.data === 'string' ? Buffer.from(options.data, 'base64') : options.data;
+      typeof options.data === "string"
+        ? Buffer.from(options.data, "base64")
+        : options.data;
     for (const entry of readZipEntries(buffer)) {
-      const routed = candidatesFor(db, entry.name, entry.data.toString('utf8'), {
-        accountName: stem(entry.name),
-        currency,
-        stagedShas,
-      });
+      const routed = candidatesFor(
+        db,
+        entry.name,
+        entry.data.toString("utf8"),
+        {
+          accountName: stem(entry.name),
+          currency,
+          stagedShas,
+        }
+      );
       if (routed === null) unrouted.push(entry.name);
       else candidates.push(...routed);
     }
   } else {
-    const text = typeof options.data === 'string' ? options.data : options.data.toString('utf8');
+    const text =
+      typeof options.data === "string"
+        ? options.data
+        : options.data.toString("utf8");
     const routed = candidatesFor(db, options.filename, text, {
       accountName,
       currency,
@@ -254,18 +268,24 @@ export function stageFile(
     });
     if (routed === null) {
       throw new Error(
-        `no importer for "${options.filename}" — supported: .ics, .vcf, .mbox, .csv, .zip`,
+        `no importer for "${options.filename}" — supported: .ics, .vcf, .mbox, .csv, .zip`
       );
     }
-    kind = `file.${extension(options.filename) === 'vcard' ? 'vcf' : extension(options.filename)}`;
+    kind = `file.${extension(options.filename) === "vcard" ? "vcf" : extension(options.filename)}`;
     candidates.push(...routed);
   }
 
   const connectionId = ensureConnection(db, { kind, label: options.filename });
-  const result = stageCandidates(db, importer, connectionId, candidates, PUBLISHERS);
+  const result = stageCandidates(
+    db,
+    importer,
+    connectionId,
+    candidates,
+    PUBLISHERS
+  );
   if (stagedShas.length > 0) {
     const hold = db.vault.prepare(
-      'UPDATE blob_staging SET held_by_batch = ? WHERE sha256 = ? AND variant IS NULL',
+      "UPDATE blob_staging SET held_by_batch = ? WHERE sha256 = ? AND variant IS NULL"
     );
     for (const sha of stagedShas) hold.run(result.batchId, sha);
   }

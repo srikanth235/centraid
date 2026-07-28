@@ -32,7 +32,7 @@ import {
   enc,
   readJson,
   scopedAuthHeaders,
-} from './gateway-client-core.js';
+} from "./gateway-client-core.js";
 
 // One open editing session per app id, opened lazily and reused across
 // reads / writes / lifecycle mutations / publish. The id scheme matches
@@ -59,11 +59,11 @@ window.CentraidApi.onGatewayChanged(() => resetAppSessions());
 async function openAppSession(sessionId: string): Promise<string> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/_sessions`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ sessionId }),
   });
-  const out = await readJson<{ sessionId: string }>(res, 'open session');
+  const out = await readJson<{ sessionId: string }>(res, "open session");
   return out.sessionId;
 }
 
@@ -84,7 +84,8 @@ export async function ensureAppSession(appId: string): Promise<string> {
   }
   const wanted = sessionIdFor(appId);
   const p = openAppSession(wanted).catch((err: unknown) => {
-    if (err instanceof GatewayClientError && err.code === 'conflict') return wanted;
+    if (err instanceof GatewayClientError && err.code === "conflict")
+      return wanted;
     throw err;
   });
   appSessions.set(appId, p);
@@ -105,7 +106,7 @@ export async function dropAppSession(appId: string): Promise<void> {
   }
   const { baseUrl, token } = await auth();
   await doFetch(baseUrl, `/centraid/_apps/_sessions/${enc(sessionId)}`, {
-    method: 'DELETE',
+    method: "DELETE",
     headers: authHeaders(token),
   }).catch(() => undefined);
 }
@@ -127,14 +128,16 @@ export async function dropAppSession(appId: string): Promise<void> {
  * The returned `url` carries a cache-buster so re-resolving after a save
  * forces the iframe to re-navigate.
  */
-export async function draftPreviewUrl(appId: string): Promise<{ url: string; available: boolean }> {
+export async function draftPreviewUrl(
+  appId: string
+): Promise<{ url: string; available: boolean }> {
   const sessionId = await ensureAppSession(appId);
   const { baseUrl, token } = await auth();
   const draftPath = `/centraid/_draft/${enc(sessionId)}/${enc(appId)}/`;
   let available = false;
   try {
     const res = await doFetch(baseUrl, draftPath, {
-      method: 'GET',
+      method: "GET",
       headers: authHeaders(token),
     });
     available = res.ok;
@@ -146,7 +149,7 @@ export async function draftPreviewUrl(appId: string): Promise<{ url: string; ava
   // re-navigate after a staged edit). `parseWithDraft` preserves the query
   // string and the inner app-index route ignores unknown params.
   const launchUrl = await appSessionUrl(appId, draftPath, sessionId);
-  const url = `${launchUrl}${launchUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  const url = `${launchUrl}${launchUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
   return { url, available };
 }
 
@@ -159,9 +162,12 @@ export async function readAppFiles(input: {
   const res = await doFetch(
     baseUrl,
     `/centraid/_apps/${enc(input.id)}/files?sessionId=${enc(sessionId)}`,
-    { method: 'GET', headers: authHeaders(token) },
+    { method: "GET", headers: authHeaders(token) }
   );
-  const out = await readJson<{ files: { path: string; content: string }[] }>(res, 'read files');
+  const out = await readJson<{ files: { path: string; content: string }[] }>(
+    res,
+    "read files"
+  );
   return out.files ?? [];
 }
 
@@ -177,16 +183,19 @@ export async function writeAppFile(input: {
     baseUrl,
     `/centraid/_apps/${enc(input.id)}/files/${enc(input.path)}?sessionId=${enc(sessionId)}`,
     {
-      method: 'PUT',
-      headers: authHeaders(token, 'text/plain; charset=utf-8'),
+      method: "PUT",
+      headers: authHeaders(token, "text/plain; charset=utf-8"),
       body: input.content,
-    },
+    }
   );
-  return readJson<{ path: string; size: number }>(res, 'write file');
+  return readJson<{ path: string; size: number }>(res, "write file");
 }
 
 /** Explicit Publish: validate + merge the draft session onto `main`. */
-export async function publish(input: { id: string; skipBuild?: boolean }): Promise<{
+export async function publish(input: {
+  id: string;
+  skipBuild?: boolean;
+}): Promise<{
   id: string;
   versionId: string;
   sha256: string;
@@ -198,12 +207,19 @@ export async function publish(input: { id: string; skipBuild?: boolean }): Promi
   void input.skipBuild;
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/publish`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ sessionId, message: `publish ${input.id}` }),
-  });
-  const out = await readJson<{ id: string; versionTag: string; sha: string }>(res, 'publish');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_apps/${enc(input.id)}/publish`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ sessionId, message: `publish ${input.id}` }),
+    }
+  );
+  const out = await readJson<{ id: string; versionTag: string; sha: string }>(
+    res,
+    "publish"
+  );
   // Shape into the renderer's CentraidPublishResult: the git backend ships
   // no per-version files/bytes aggregates, and publish == merge into main.
   return {
@@ -229,12 +245,19 @@ export async function resetAppData(input: {
 }): Promise<{ id: string; seeded: boolean; migrationsApplied: number[] }> {
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/reset-data`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ sessionId }),
-  });
-  return readJson<{ id: string; seeded: boolean; migrationsApplied: number[] }>(res, 'reset-data');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_apps/${enc(input.id)}/reset-data`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ sessionId }),
+    }
+  );
+  return readJson<{ id: string; seeded: boolean; migrationsApplied: number[] }>(
+    res,
+    "reset-data"
+  );
 }
 
 // ───────────────────────── lifecycle ─────────────────────
@@ -251,18 +274,18 @@ export async function createApp(input: {
   /** The space the new app is created in (issue #599). A creation flow names
    *  its target explicitly; omitted falls back to the internal default. */
   scopeId?: string;
-}): Promise<{ id: string; name?: string; kind?: 'app' | 'automation' }> {
+}): Promise<{ id: string; name?: string; kind?: "app" | "automation" }> {
   const { scopeId, ...body } = input;
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps`, {
-    method: 'POST',
-    headers: scopedAuthHeaders(token, scopeId, 'application/json'),
+    method: "POST",
+    headers: scopedAuthHeaders(token, scopeId, "application/json"),
     body: JSON.stringify({ ...body, sessionId, publish: true }),
   });
   const out = await readJson<{
-    app: { id: string; name?: string; kind?: 'app' | 'automation' };
-  }>(res, 'create app');
+    app: { id: string; name?: string; kind?: "app" | "automation" };
+  }>(res, "create app");
   return out.app;
 }
 
@@ -274,7 +297,7 @@ interface ClonedTemplateMeta {
   colorKey: string;
   iconKey: string;
   version: string;
-  kind: 'app' | 'automation';
+  kind: "app" | "automation";
 }
 
 /** Clone a bundled template into a fresh app; mints any webhook secrets. */
@@ -283,15 +306,15 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
     id: string;
     name?: string;
     description?: string;
-    kind?: 'app' | 'automation';
+    kind?: "app" | "automation";
   };
   template: ClonedTemplateMeta;
   webhooks: CentraidMintedWebhook[];
 }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/_clone`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ templateId: input.templateId, publish: true }),
   });
   const out = await readJson<{
@@ -299,11 +322,11 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
       id: string;
       name?: string;
       description?: string;
-      kind?: 'app' | 'automation';
+      kind?: "app" | "automation";
     };
     template: ClonedTemplateMeta;
     webhooks?: CentraidMintedWebhook[];
-  }>(res, 'clone template');
+  }>(res, "clone template");
   return { app: out.app, template: out.template, webhooks: out.webhooks ?? [] };
 }
 
@@ -332,8 +355,8 @@ export async function installTemplate(input: {
 }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/_install`, {
-    method: 'POST',
-    headers: scopedAuthHeaders(token, input.scopeId, 'application/json'),
+    method: "POST",
+    headers: scopedAuthHeaders(token, input.scopeId, "application/json"),
     body: JSON.stringify({ templateId: input.templateId }),
   });
   const out = await readJson<{
@@ -345,7 +368,7 @@ export async function installTemplate(input: {
       colorKey?: string;
     };
     alreadyInstalled?: boolean;
-  }>(res, 'install template');
+  }>(res, "install template");
   return { app: out.app, alreadyInstalled: out.alreadyInstalled ?? false };
 }
 
@@ -363,11 +386,11 @@ export async function renameInstalledApp(input: {
 }): Promise<{ ok: true }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/meta`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ name: input.name }),
   });
-  await readJson(res, 'rename installed app');
+  await readJson(res, "rename installed app");
   return { ok: true };
 }
 
@@ -380,16 +403,18 @@ export async function updateAppMeta(input: {
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/meta`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({
       ...(input.name === undefined ? {} : { name: input.name }),
-      ...(input.description === undefined ? {} : { description: input.description }),
+      ...(input.description === undefined
+        ? {}
+        : { description: input.description }),
       sessionId,
       publish: true,
     }),
   });
-  await readJson(res, 'update meta');
+  await readJson(res, "update meta");
   return { ok: true };
 }
 
@@ -397,13 +422,13 @@ export async function updateAppMeta(input: {
 export async function deleteApp(input: { id: string }): Promise<{ ok: true }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}`, {
-    method: 'DELETE',
+    method: "DELETE",
     headers: authHeaders(token),
   });
   // Surface a gateway rejection (401/404/409/500) instead of reporting a
   // phantom success — and only drop the draft session once the delete is
   // confirmed, so a failed delete leaves the editing session intact.
-  await readJson(res, 'delete app');
+  await readJson(res, "delete app");
   await dropAppSession(input.id);
   return { ok: true };
 }

@@ -40,10 +40,10 @@
  * host falls back to the data-only `makeConversationRunner`.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { defaultCentraidCliDir, runTurn } from '@centraid/agent-runtime';
+import { defaultCentraidCliDir, runTurn } from "@centraid/agent-runtime";
 import {
   makeConversationRunnerCore,
   type ConversationTurnInput,
@@ -59,15 +59,18 @@ import {
   type VaultInvokeRunner,
   type VaultContentRunner,
   type VaultSqlRunner,
-} from '@centraid/app-engine';
-import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
+} from "@centraid/app-engine";
+import {
+  provisionAppPendingWebhooks,
+  WEBHOOK_ROUTE_PREFIX,
+} from "@centraid/automation";
 
-import { ensureDraftBand, type ExtBandOps } from '../lifecycle/ext-band.js';
-import { ensureSession } from '../lifecycle/lifecycle-shared.js';
-import { buildAuthoringExtraPrompt } from '../skills/index.js';
-import { WorktreeStore } from '../worktree-store/index.js';
+import { ensureDraftBand, type ExtBandOps } from "../lifecycle/ext-band.js";
+import { ensureSession } from "../lifecycle/lifecycle-shared.js";
+import { buildAuthoringExtraPrompt } from "../skills/index.js";
+import { WorktreeStore } from "../worktree-store/index.js";
 
-export { type RunTurnFn } from '@centraid/app-engine';
+export { type RunTurnFn } from "@centraid/app-engine";
 
 export interface UnifiedConversationRunnerOptions {
   /** Git store backing app code; the draft worktree lives in its sessions. */
@@ -78,7 +81,7 @@ export interface UnifiedConversationRunnerOptions {
    *  answers with THIS register's kind. */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind,
+    runnerKind?: RunnerKind
   ) => Promise<RunnerPrefs | undefined>;
   /** Which subsystem's runner/model prefs builder turns ride. The gateway
    *  passes `'builder'`; unset → the host's default agent. */
@@ -114,12 +117,12 @@ export interface UnifiedConversationRunnerOptions {
   runTurn?: RunTurnFn;
   runnerLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind,
+    primary: RunnerKind
   ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
   runnerHealth?: RunnerHealthController;
   runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
   providerEgressConsent?: ProviderEgressConsentController;
-  onFailover?: Parameters<typeof makeConversationRunnerCore>[0]['onFailover'];
+  onFailover?: Parameters<typeof makeConversationRunnerCore>[0]["onFailover"];
 }
 
 function defaultSessionIdFor(appId: string): string {
@@ -136,13 +139,13 @@ function defaultSessionIdFor(appId: string): string {
  * the right authoring prompt (an automation has no front end → skip UI
  * grounding). Defaults to `'app'` when the file is missing/unreadable.
  */
-async function readAppKind(appDir: string): Promise<'app' | 'automation'> {
+async function readAppKind(appDir: string): Promise<"app" | "automation"> {
   try {
-    const raw = await fs.readFile(path.join(appDir, 'app.json'), 'utf8');
+    const raw = await fs.readFile(path.join(appDir, "app.json"), "utf8");
     const parsed = JSON.parse(raw) as { kind?: unknown };
-    return parsed.kind === 'automation' ? 'automation' : 'app';
+    return parsed.kind === "automation" ? "automation" : "app";
   } catch {
-    return 'app';
+    return "app";
   }
 }
 
@@ -156,13 +159,13 @@ async function readAppKind(appDir: string): Promise<'app' | 'automation'> {
 async function mintPendingWebhooks(
   cwd: string,
   publicBaseUrl: () => string,
-  onEvent: (event: TurnStreamEvent) => void,
+  onEvent: (event: TurnStreamEvent) => void
 ): Promise<void> {
   const minted = await provisionAppPendingWebhooks(cwd);
   if (minted.length === 0) return;
   const base = publicBaseUrl();
   onEvent({
-    type: 'webhooks',
+    type: "webhooks",
     minted: minted.map((w) => ({
       automationId: w.automationId,
       ownerApp: w.ownerApp,
@@ -174,7 +177,7 @@ async function mintPendingWebhooks(
 }
 
 export function makeUnifiedConversationRunner(
-  opts: UnifiedConversationRunnerOptions,
+  opts: UnifiedConversationRunnerOptions
 ): ConversationRunner {
   const sessionIdFor = opts.sessionIdFor ?? defaultSessionIdFor;
   const extraPath = defaultCentraidCliDir();
@@ -191,20 +194,24 @@ export function makeUnifiedConversationRunner(
     // This IS the builder surface — its turns author code in the draft
     // worktree, so they persist as `kind: 'build'` in the run ledger. The
     // data-only `makeConversationRunner` leaves this unset (records as `'chat'`).
-    runKind: 'build',
+    runKind: "build",
     // The model turn driver — the local codex/claude `runTurn` unless a
     // test injects a stub.
     runTurn: opts.runTurn ?? runTurn,
     ...(opts.runnerLadder ? { runnerLadder: opts.runnerLadder } : {}),
     ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
-    ...(opts.runnerHealthContext ? { runnerHealthContext: opts.runnerHealthContext } : {}),
-    ...(opts.providerEgressConsent ? { providerEgressConsent: opts.providerEgressConsent } : {}),
+    ...(opts.runnerHealthContext
+      ? { runnerHealthContext: opts.runnerHealthContext }
+      : {}),
+    ...(opts.providerEgressConsent
+      ? { providerEgressConsent: opts.providerEgressConsent }
+      : {}),
     ...(opts.onFailover ? { onFailover: opts.onFailover } : {}),
 
     // cwd IS the draft session worktree (issue #144's draft-code framing
     // survives; the branched data.sqlite did not — #286 phase 2).
     cwdIsDraftWorktree: (input) =>
-      input.workspaceKind === undefined || input.workspaceKind === 'draft',
+      input.workspaceKind === undefined || input.workspaceKind === "draft",
 
     // The builder's data tools are the vault register — the same
     // vault_sql/vault_invoke surface the assistant and ask turns ride.
@@ -220,8 +227,12 @@ export function makeUnifiedConversationRunner(
       if (input.workspaceDirectory) return input.workspaceDirectory;
       const sessionId = input.draftSessionId ?? sessionIdFor(input.appId);
       await ensureSession(opts.store, sessionId);
-      const worktreeAppDir = await opts.store.snapshotSessionAppDir(sessionId, input.appId);
-      if (opts.ext) await ensureDraftBand(opts.ext, input.appId, worktreeAppDir);
+      const worktreeAppDir = await opts.store.snapshotSessionAppDir(
+        sessionId,
+        input.appId
+      );
+      if (opts.ext)
+        await ensureDraftBand(opts.ext, input.appId, worktreeAppDir);
       return worktreeAppDir;
     },
 
@@ -233,6 +244,7 @@ export function makeUnifiedConversationRunner(
         appKind: await readAppKind(cwd),
       }),
 
-    onTurnComplete: ({ input, cwd }) => mintPendingWebhooks(cwd, opts.publicBaseUrl, input.onEvent),
+    onTurnComplete: ({ input, cwd }) =>
+      mintPendingWebhooks(cwd, opts.publicBaseUrl, input.onEvent),
   });
 }

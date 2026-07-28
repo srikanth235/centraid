@@ -16,7 +16,7 @@
  * stall a write.
  */
 
-import type { RuntimeLogger } from '../runtime.js';
+import type { RuntimeLogger } from "../runtime.js";
 
 export interface AppChange {
   appId: string;
@@ -33,7 +33,7 @@ export interface AppChange {
    * Subscribers can use this to render differently (e.g. flash agent-driven
    * rows) without needing to listen on a separate bus.
    */
-  source: 'agent' | 'handler' | 'external';
+  source: "agent" | "handler" | "external";
   /**
    * When `source === 'agent'`, the tool-call id from the underlying CLI's
    * dispatch (codex `callId` / Claude `tool_use_id`). Lets a renderer pin a
@@ -115,7 +115,7 @@ export class ChangeBus {
         this.logger?.warn(
           `[change-bus] listener for app "${change.appId}" threw: ${
             err instanceof Error ? err.message : String(err)
-          }`,
+          }`
         );
       }
     }

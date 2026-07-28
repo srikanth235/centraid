@@ -22,18 +22,26 @@
 // Identity/dedup key off the PLAINTEXT sha; the local tier stays plaintext (it
 // shares vault.db's disk trust; the remote tier is the third party).
 
-import { nowIso } from '../ids.js';
+import { nowIso } from "../ids.js";
 import {
   DEFAULT_REPLICATION_CONCURRENCY,
   EMPTY_BLOB_METRICS,
   type BlobCache,
   type BlobMetrics,
-} from './cache.js';
-import { exportLocalTier } from './custody-export.js';
-import { localBlobPath, openLocalBlobStream, readLocalBlob } from './custody-local-read.js';
-import { fetchFrameDirectory, fetchRemoteRange, fetchRemoteWhole } from './custody-read.js';
-import { reconcileCustody } from './custody-reconcile.js';
-import { createRemoteBlobStream } from './custody-remote-stream.js';
+} from "./cache.js";
+import { exportLocalTier } from "./custody-export.js";
+import {
+  localBlobPath,
+  openLocalBlobStream,
+  readLocalBlob,
+} from "./custody-local-read.js";
+import {
+  fetchFrameDirectory,
+  fetchRemoteRange,
+  fetchRemoteWhole,
+} from "./custody-read.js";
+import { reconcileCustody } from "./custody-reconcile.js";
+import { createRemoteBlobStream } from "./custody-remote-stream.js";
 // Re-export the split custody types so existing facade importers stay untouched.
 import {
   remoteEncryptionKey,
@@ -43,23 +51,28 @@ import {
   type ReconcileResult,
   type ReconcileOptions,
   type BlobSweepStatus,
-} from './custody-types.js';
-import type { LocalBlobStore } from './local.js';
-import type { ReplicaStore } from './replica-index.js';
-import { driveReplication } from './replicate-driver.js';
-import type { FrameDirectory } from './seal-frames.js';
-import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
-import { resolveWriteStore } from './store-routing.js';
-import { resolveRange, sha256OfBytes, type BlobRange, type BlobStore } from './store.js';
+} from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import type { ReplicaStore } from "./replica-index.js";
+import { driveReplication } from "./replicate-driver.js";
+import type { FrameDirectory } from "./seal-frames.js";
+import { sealBlob, sealBlobStream, unsealBlob } from "./seal.js";
+import { resolveWriteStore } from "./store-routing.js";
+import {
+  resolveRange,
+  sha256OfBytes,
+  type BlobRange,
+  type BlobStore,
+} from "./store.js";
 
-export { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
+export { sealBlob, sealBlobStream, unsealBlob } from "./seal.js";
 export type {
   CustodyState,
   RemoteTier,
   ReconcileResult,
   ReconcileOptions,
   BlobSweepStatus,
-} from './custody-types.js';
+} from "./custody-types.js";
 // Custody-state projection helpers live in a sibling module (issue #352);
 // re-exported here so `./custody.js` importers (index.ts, gateway.ts) are
 // untouched by the split.
@@ -67,7 +80,7 @@ export {
   refreshCustodyState,
   custodyStateCounts,
   custodyStateByteCounts,
-} from './custody-state.js';
+} from "./custody-state.js";
 
 /**
  * Blobs at or above this size stream from disk into the remote tier instead
@@ -92,7 +105,10 @@ export class BlobCustody {
    * settle so a later read re-fetches (never a stale cache).
    */
   private readonly wholeInflight = new Map<string, Promise<Buffer | null>>();
-  private readonly dirInflight = new Map<string, Promise<FrameDirectory | null>>();
+  private readonly dirInflight = new Map<
+    string,
+    Promise<FrameDirectory | null>
+  >();
 
   constructor(
     readonly local: LocalBlobStore,
@@ -114,12 +130,12 @@ export class BlobCustody {
      * `(sha) => desiredStoreForSha(vault, sha)`; absent (legacy unit tests) ⇒
      * everything routes to `cas`, byte-for-byte pre-Wave-2 behavior.
      */
-    private readonly desiredStore?: (sha: string) => ReplicaStore,
+    private readonly desiredStore?: (sha: string) => ReplicaStore
   ) {}
 
   /** The remote store a sha's replica lives in for READS (issue #425 Wave 2). */
   private storeForRead(remote: RemoteTier, sha: string): BlobStore {
-    return storeForClass(remote, this.cache?.replica.storeOf(sha) ?? 'cas');
+    return storeForClass(remote, this.cache?.replica.storeOf(sha) ?? "cas");
   }
 
   /** The `blob-sweep` health probe's read of the last `reconcile()` run. */
@@ -172,7 +188,7 @@ export class BlobCustody {
       size,
       range,
       this.cache,
-      this.local,
+      this.local
     );
   }
 
@@ -197,7 +213,13 @@ export class BlobCustody {
       if (range && encryptionKey) {
         const dir = await this.readDirectory(store, sha, encryptionKey);
         if (!dir) return null;
-        const sliced = await fetchRemoteRange(store, encryptionKey, sha, range, dir);
+        const sliced = await fetchRemoteRange(
+          store,
+          encryptionKey,
+          sha,
+          range,
+          dir
+        );
         if (sliced) this.cache?.onRangedRemote(sliced.length);
         return sliced;
       }
@@ -218,7 +240,11 @@ export class BlobCustody {
    * into the local tier — sharing ONE in-flight promise across concurrent
    * callers so a cold sha triggers exactly one provider GET.
    */
-  private readWhole(remote: RemoteTier, store: BlobStore, sha: string): Promise<Buffer | null> {
+  private readWhole(
+    remote: RemoteTier,
+    store: BlobStore,
+    sha: string
+  ): Promise<Buffer | null> {
     const existing = this.wholeInflight.get(sha);
     if (existing) return existing;
     const started = (async () => {
@@ -226,7 +252,7 @@ export class BlobCustody {
         store,
         remoteEncryptionKey(remote, sha),
         sha,
-        unsealBlob,
+        unsealBlob
       );
       if (plain === null) return null;
       if (sha256OfBytes(plain) !== sha) {
@@ -254,7 +280,7 @@ export class BlobCustody {
   private readDirectory(
     store: BlobStore,
     sha: string,
-    key: Buffer,
+    key: Buffer
   ): Promise<FrameDirectory | null> {
     const existing = this.dirInflight.get(sha);
     if (existing) return existing;
@@ -297,7 +323,12 @@ export class BlobCustody {
    */
   evictAfterReconcile(): { evictedBlobs: number; evictedBytes: number } {
     if (!this.cache) return { evictedBlobs: 0, evictedBytes: 0 };
-    const { evicted, bytes } = this.cache.runEviction(0, 0, 0, 'reconciled-sweep');
+    const { evicted, bytes } = this.cache.runEviction(
+      0,
+      0,
+      0,
+      "reconciled-sweep"
+    );
     return { evictedBlobs: evicted.length, evictedBytes: bytes };
   }
 
@@ -318,14 +349,19 @@ export class BlobCustody {
     const remote = this.remoteTier();
     if (!remote) return [];
     const want = shas ?? this.local.listSync();
-    const alreadyThere = this.cache ? this.cache.replica.all() : new Set(await remote.store.list());
+    const alreadyThere = this.cache
+      ? this.cache.replica.all()
+      : new Set(await remote.store.list());
     return driveReplication({
       want,
       alreadyThere,
       pushOne: (sha) => this.pushOne(remote, sha),
-      concurrency: this.cache?.replicationConcurrency ?? DEFAULT_REPLICATION_CONCURRENCY,
+      concurrency:
+        this.cache?.replicationConcurrency ?? DEFAULT_REPLICATION_CONCURRENCY,
       // QoS (issue #405 §7): with a cache, park behind interactive reads.
-      qosWait: this.cache ? () => this.cache!.qosWait() : () => Promise.resolve(),
+      qosWait: this.cache
+        ? () => this.cache!.qosWait()
+        : () => Promise.resolve(),
     });
   }
 
@@ -347,15 +383,19 @@ export class BlobCustody {
    * or `null` when the local tier no longer has this sha (raced with a delete —
    * not an error, just nothing to push).
    */
-  private async replicateOne(remote: RemoteTier, sha: string): Promise<ReplicaStore | null> {
+  private async replicateOne(
+    remote: RemoteTier,
+    sha: string
+  ): Promise<ReplicaStore | null> {
     const encryptionKey = remoteEncryptionKey(remote, sha);
-    const desired = this.desiredStore?.(sha) ?? 'cas';
+    const desired = this.desiredStore?.(sha) ?? "cas";
     const byteSize = this.local.statSync(sha)?.size ?? 0;
     const { store, storeClass } = resolveWriteStore(remote, desired, byteSize);
     // Direct-to-cold heuristic (issue #425 Wave 3): a large media original goes
     // to STANDARD_IA; derived writes always resolve undefined (never cold).
     const storageClass = remote.storageClassFor?.(sha, storeClass);
-    const threshold = remote.streamThresholdBytes ?? STREAMING_REPLICATE_THRESHOLD_BYTES;
+    const threshold =
+      remote.streamThresholdBytes ?? STREAMING_REPLICATE_THRESHOLD_BYTES;
     const openStream = this.local.openReadStreamSync?.bind(this.local);
     if (openStream && store.putStream) {
       const opened = openStream(sha);
@@ -370,7 +410,14 @@ export class BlobCustody {
           // frame count into every frame's AAD while never buffering more than
           // one frame.
           const source = encryptionKey
-            ? opened.stream.pipe(sealBlobStream(encryptionKey, sha, opened.size, remote.frameSize))
+            ? opened.stream.pipe(
+                sealBlobStream(
+                  encryptionKey,
+                  sha,
+                  opened.size,
+                  remote.frameSize
+                )
+              )
             : opened.stream;
           await store.putStream(sha, source, opened.size, storageClass);
           return storeClass;
@@ -383,8 +430,10 @@ export class BlobCustody {
     if (!bytes) return null;
     await store.put(
       sha,
-      encryptionKey ? sealBlob(encryptionKey, sha, bytes, remote.frameSize) : bytes,
-      storageClass,
+      encryptionKey
+        ? sealBlob(encryptionKey, sha, bytes, remote.frameSize)
+        : bytes,
+      storageClass
     );
     return storeClass;
   }
@@ -396,7 +445,10 @@ export class BlobCustody {
    * the `blob-sweep` health probe can read the last outcome; the original throw
    * still propagates (`VaultPlane.runSweep` catches it to log a warning).
    */
-  async reconcile(liveShas: Set<string>, options: ReconcileOptions = {}): Promise<ReconcileResult> {
+  async reconcile(
+    liveShas: Set<string>,
+    options: ReconcileOptions = {}
+  ): Promise<ReconcileResult> {
     this.lastSweepAttemptedAt = nowIso();
     try {
       // The deep pass DOES list every granted store (issue #405 §4, made
@@ -408,12 +460,12 @@ export class BlobCustody {
           local: this.local,
           ...(this.cache ? { cache: this.cache } : {}),
           ...(this.cache ? { orphans: this.cache.orphan } : {}),
-          desiredStore: (sha) => this.desiredStore?.(sha) ?? 'cas',
+          desiredStore: (sha) => this.desiredStore?.(sha) ?? "cas",
           open: (sha) => this.open(sha),
           replicate: (shas) => this.replicate(shas),
         },
         liveShas,
-        options,
+        options
       );
       this.lastSweepCompletedAt = nowIso();
       this.lastSweepError = null;
@@ -441,7 +493,7 @@ export class BlobCustody {
         shas.map(async (sha) => {
           await remote.store.delete(sha);
           this.cache?.replica.unmark(sha);
-        }),
+        })
       );
       return shas;
     })();
@@ -471,15 +523,15 @@ export class BlobCustody {
       const local = this.local.hasSync(sha);
       const remoteHas = remoteShas?.has(sha) ?? false;
       if (remoteShas === null) {
-        out.set(sha, local ? 'local-only' : 'missing');
+        out.set(sha, local ? "local-only" : "missing");
       } else if (local && remoteHas) {
-        out.set(sha, 'replicated');
+        out.set(sha, "replicated");
       } else if (local) {
-        out.set(sha, 'local-only');
+        out.set(sha, "local-only");
       } else if (remoteHas) {
-        out.set(sha, 'remote-only');
+        out.set(sha, "remote-only");
       } else {
-        out.set(sha, 'missing');
+        out.set(sha, "missing");
       }
     }
     return out;

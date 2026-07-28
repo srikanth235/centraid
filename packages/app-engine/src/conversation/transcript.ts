@@ -10,7 +10,7 @@
  * JSON — a corrupt row degrades to an empty message, never throws.
  */
 
-import type { Turn } from './schema.js';
+import type { Turn } from "./schema.js";
 
 /**
  * Group a conversation's turns (seq ASC) into retry families for the
@@ -49,18 +49,18 @@ export function parseStepOutput(outputJson: string | undefined): {
   text: string;
   error: boolean;
 } {
-  if (!outputJson) return { text: '', error: false };
+  if (!outputJson) return { text: "", error: false };
   try {
     const parsed = JSON.parse(outputJson) as {
       text?: unknown;
       error?: unknown;
     };
     return {
-      text: typeof parsed.text === 'string' ? parsed.text : '',
+      text: typeof parsed.text === "string" ? parsed.text : "",
       error: parsed.error === true,
     };
   } catch {
-    return { text: '', error: false };
+    return { text: "", error: false };
   }
 }
 

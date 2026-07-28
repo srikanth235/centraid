@@ -3,11 +3,11 @@
 // same picker (issue #498). The selected swatch reads with a ring + check; the
 // value is a raw hex string, matching how both callers store it.
 
-import { Feather } from '@expo/vector-icons';
-import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Feather } from "@expo/vector-icons";
+import React, { useMemo } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 
-import { useTheme, type ThemeColors } from '../../kit/theme';
+import { useTheme, type ThemeColors } from "../../kit/theme";
 
 export interface ColorSwatchRowProps {
   value: string;
@@ -37,7 +37,7 @@ export default function ColorSwatchRow({
               styles.swatch,
               {
                 backgroundColor: hex,
-                borderColor: active ? colors.ink : 'transparent',
+                borderColor: active ? colors.ink : "transparent",
               },
               pressed && styles.pressed,
             ]}
@@ -55,13 +55,13 @@ const SIZE = 34;
 const makeStyles = (_colors: ThemeColors) =>
   StyleSheet.create({
     pressed: { opacity: 0.7 },
-    row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    row: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
     swatch: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: SIZE / 2,
       borderWidth: 2,
       height: SIZE,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: SIZE,
     },
   });

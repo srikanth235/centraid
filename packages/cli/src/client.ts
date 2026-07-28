@@ -1,4 +1,8 @@
-import { handshakeGateway, ROUTES, type HandshakeResult } from '@centraid/protocol';
+import {
+  handshakeGateway,
+  ROUTES,
+  type HandshakeResult,
+} from "@centraid/protocol";
 
 export interface GatewayClientOptions {
   baseUrl: string;
@@ -12,12 +16,15 @@ function authHeaders(token: string | undefined): Record<string, string> {
 
 export async function fetchJson(
   opts: GatewayClientOptions,
-  routePath: string,
+  routePath: string
 ): Promise<{ status: number; body: unknown }> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const res = await fetchImpl(new URL(routePath, `${opts.baseUrl}/`).toString(), {
-    headers: authHeaders(opts.token),
-  });
+  const res = await fetchImpl(
+    new URL(routePath, `${opts.baseUrl}/`).toString(),
+    {
+      headers: authHeaders(opts.token),
+    }
+  );
   let body: unknown = null;
   const text = await res.text();
   if (text) {
@@ -30,7 +37,9 @@ export async function fetchJson(
   return { status: res.status, body };
 }
 
-export function handshake(opts: GatewayClientOptions): Promise<HandshakeResult> {
+export function handshake(
+  opts: GatewayClientOptions
+): Promise<HandshakeResult> {
   return handshakeGateway(opts.baseUrl, opts.token, opts.fetchImpl);
 }
 

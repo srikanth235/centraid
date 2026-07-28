@@ -1,35 +1,36 @@
-import { act, useEffect } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, useEffect } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { listAppScopes, listVaults } = vi.hoisted(() => ({
-  listAppScopes: vi.fn<typeof import('../../gateway-client.js').listAppScopes>(),
-  listVaults: vi.fn<typeof import('../../gateway-client.js').listVaults>(),
+  listAppScopes:
+    vi.fn<typeof import("../../gateway-client.js").listAppScopes>(),
+  listVaults: vi.fn<typeof import("../../gateway-client.js").listVaults>(),
 }));
-vi.mock(import('../../gateway-client.js') as Promise<unknown>, () => ({
+vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   listAppScopes,
   listVaults,
 }));
 
-let useMemberScopes: typeof import('./useMemberScopes.js').useMemberScopes;
+let useMemberScopes: typeof import("./useMemberScopes.js").useMemberScopes;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-describe('useMemberScopes suite', () => {
+describe("useMemberScopes suite", () => {
   beforeEach(async () => {
     listAppScopes.mockReset();
     listVaults.mockReset();
     (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
-      getGatewayAuth: () => Promise.resolve({ baseUrl: '', vaultId: 'a' }),
+      getGatewayAuth: () => Promise.resolve({ baseUrl: "", vaultId: "a" }),
       getSettings: () =>
         Promise.resolve({
-          activeGatewayId: 'local',
-          activeGatewayLabel: 'This Mac',
-          activeGatewayKind: 'local',
+          activeGatewayId: "local",
+          activeGatewayLabel: "This Mac",
+          activeGatewayKind: "local",
         }),
       onVaultChanged: () => () => {},
       onGatewayChanged: () => () => {},
     };
-    ({ useMemberScopes } = await import('./useMemberScopes.js'));
+    ({ useMemberScopes } = await import("./useMemberScopes.js"));
   });
 
   afterEach(() => {
@@ -50,7 +51,7 @@ describe('useMemberScopes suite', () => {
     return null;
   }
   async function mount(): Promise<void> {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
     await act(async () => {
@@ -61,51 +62,55 @@ describe('useMemberScopes suite', () => {
     });
   }
 
-  describe('useMemberScopes', () => {
-    it('reads the member scope plane, keeping roles and own space first', async () => {
+  describe("useMemberScopes", () => {
+    it("reads the member scope plane, keeping roles and own space first", async () => {
       listAppScopes.mockResolvedValue([
-        { vaultId: 'a', label: 'Mine', role: 'admin', color: '#4E68DD' },
-        { vaultId: 'b', label: 'Family', role: 'read' },
+        { vaultId: "a", label: "Mine", role: "admin", color: "#4E68DD" },
+        { vaultId: "b", label: "Family", role: "read" },
       ]);
       await mount();
       expect(ctl.loading).toBe(false);
-      expect(ctl.scopes.map((s) => s.label)).toStrictEqual(['Mine', 'Family']);
-      expect(ctl.primary?.id).toBe('a');
+      expect(ctl.scopes.map((s) => s.label)).toStrictEqual(["Mine", "Family"]);
+      expect(ctl.primary?.id).toBe("a");
       expect(ctl.scopes[1]?.canWrite).toBe(false);
-      expect(ctl.defaultScopeId).toBe('a');
-      expect(ctl.gatewayLabel).toBe('This Mac');
-      expect(ctl.gatewayKind).toBe('local');
+      expect(ctl.defaultScopeId).toBe("a");
+      expect(ctl.gatewayLabel).toBe("This Mac");
+      expect(ctl.gatewayKind).toBe("local");
       expect(listVaults).not.toHaveBeenCalled();
     });
 
-    it('falls back to the vault list when the gateway mounts no scopes plane', async () => {
+    it("falls back to the vault list when the gateway mounts no scopes plane", async () => {
       listAppScopes.mockResolvedValue(undefined);
-      listVaults.mockResolvedValue([{ vaultId: 'only', name: 'Solo', ownerPartyId: 'p1' }]);
+      listVaults.mockResolvedValue([
+        { vaultId: "only", name: "Solo", ownerPartyId: "p1" },
+      ]);
       await mount();
       expect(ctl.scopes).toHaveLength(1);
       // A gateway without the member layer is a single-owner world: the one
       // person there owns what they can see.
       expect(ctl.scopes[0]).toMatchObject({
-        id: 'only',
-        label: 'Solo',
-        role: 'admin',
+        id: "only",
+        label: "Solo",
+        role: "admin",
       });
     });
 
-    it('falls back to the first scope when nothing names a default pointer', async () => {
+    it("falls back to the first scope when nothing names a default pointer", async () => {
       (
         globalThis as unknown as {
           CentraidApi: { getGatewayAuth: () => Promise<unknown> };
         }
-      ).CentraidApi.getGatewayAuth = () => Promise.resolve({ baseUrl: '' });
-      listAppScopes.mockResolvedValue([{ vaultId: 'first', label: 'First', role: 'admin' }]);
+      ).CentraidApi.getGatewayAuth = () => Promise.resolve({ baseUrl: "" });
+      listAppScopes.mockResolvedValue([
+        { vaultId: "first", label: "First", role: "admin" },
+      ]);
       await mount();
-      expect(ctl.defaultScopeId).toBe('first');
+      expect(ctl.defaultScopeId).toBe("first");
     });
 
-    it('degrades to an empty, non-crashing registry when both sources fail', async () => {
-      listAppScopes.mockRejectedValue(new Error('offline'));
-      listVaults.mockRejectedValue(new Error('offline'));
+    it("degrades to an empty, non-crashing registry when both sources fail", async () => {
+      listAppScopes.mockRejectedValue(new Error("offline"));
+      listVaults.mockRejectedValue(new Error("offline"));
       await mount();
       expect(ctl.loading).toBe(false);
       expect(ctl.scopes).toStrictEqual([]);

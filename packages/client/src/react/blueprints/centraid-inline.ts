@@ -1,4 +1,7 @@
-import type { InlineAppModule, InlineScope } from '@centraid/blueprints/apps/inline-types';
+import type {
+  InlineAppModule,
+  InlineScope,
+} from "@centraid/blueprints/apps/inline-types";
 // The inline `window.centraid` — the shell-side replacement for the served
 // bridge's `w.centraid` client (packages/app-engine bridge-script.ts). Backed
 // by the shell replica session: reads run the app's query modules locally
@@ -19,13 +22,19 @@ import type { InlineAppModule, InlineScope } from '@centraid/blueprints/apps/inl
 // `installInlineCentraid` publishes it on `window.centraid` and returns a
 // teardown that restores whatever was there before. Only one inline app is
 // mounted at a time, so a single module-level install is still enough.
-import { appQueryPath } from '@centraid/protocol';
+import { appQueryPath } from "@centraid/protocol";
 
-import { auth, authHeaders, doFetch, readJson, VAULT_HEADER } from '../../gateway-client-core.js';
-import type { ReplicaShellSession } from '../../replica/shell-session.js';
-import type { ReplicaInvalidation } from '../../replica/types.js';
-import { authorizeBlobUrl } from './blob-auth.js';
-import { runInlineQuery } from './inlineQueryCtx.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  readJson,
+  VAULT_HEADER,
+} from "../../gateway-client-core.js";
+import type { ReplicaShellSession } from "../../replica/shell-session.js";
+import type { ReplicaInvalidation } from "../../replica/types.js";
+import { authorizeBlobUrl } from "./blob-auth.js";
+import { runInlineQuery } from "./inlineQueryCtx.js";
 
 /** The kit change-feed event shape (blueprints' ambient `CentraidChangeDetail`). */
 interface InlineChangeDetail {
@@ -41,7 +50,7 @@ interface InlineChangeDetail {
 /** The replica surface one scope binding needs. */
 export type InlineScopeSession = Pick<
   ReplicaShellSession,
-  'read' | 'search' | 'write' | 'subscribe'
+  "read" | "search" | "write" | "subscribe"
 >;
 
 /** One mounted scope: its shell-resolved descriptor and its replica session. */
@@ -58,11 +67,11 @@ export type InlineScopeRead<T> =
 /** A refusal the app is expected to render, not a crash. */
 export class InlineScopeError extends Error {
   constructor(
-    readonly code: 'SCOPE_READONLY' | 'UNKNOWN_SCOPE',
-    message: string,
+    readonly code: "SCOPE_READONLY" | "UNKNOWN_SCOPE",
+    message: string
   ) {
     super(message);
-    this.name = 'InlineScopeError';
+    this.name = "InlineScopeError";
   }
 }
 
@@ -98,15 +107,15 @@ export interface InlineCentraidClient {
 
 /** Codes on which a failed local read escalates to the gateway tool route. */
 const FALLBACK_CODES = new Set([
-  'ONLINE_ONLY',
-  'REPLICA_UNAVAILABLE',
-  'REPLICA_NOT_READY',
-  'REPLICA_REBOOTSTRAP_REQUIRED',
+  "ONLINE_ONLY",
+  "REPLICA_UNAVAILABLE",
+  "REPLICA_NOT_READY",
+  "REPLICA_REBOOTSTRAP_REQUIRED",
 ]);
 
 function canFallbackOnline(error: unknown): boolean {
   const code = (error as { code?: unknown })?.code;
-  return typeof code === 'string' && FALLBACK_CODES.has(code);
+  return typeof code === "string" && FALLBACK_CODES.has(code);
 }
 
 /**
@@ -120,13 +129,13 @@ async function gatewayRead(
   appId: string,
   query: string,
   input: Record<string, unknown> | undefined,
-  scope: string | undefined,
+  scope: string | undefined
 ): Promise<unknown> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, appQueryPath(appId, query), {
-    method: 'POST',
+    method: "POST",
     headers: {
-      ...authHeaders(token, 'application/json'),
+      ...authHeaders(token, "application/json"),
       ...(scope ? { [VAULT_HEADER]: scope } : {}),
     },
     body: JSON.stringify({ input }),
@@ -135,12 +144,17 @@ async function gatewayRead(
 }
 
 /** Map one replica invalidation into the kit change-feed detail shape. */
-function toChangeDetail(invalidation: ReplicaInvalidation, scope: string): InlineChangeDetail {
+function toChangeDetail(
+  invalidation: ReplicaInvalidation,
+  scope: string
+): InlineChangeDetail {
   return {
     tables: invalidation.entity ? [invalidation.entity] : [],
     source: invalidation.source,
     ...(invalidation.intentId ? { intentId: invalidation.intentId } : {}),
-    ...(invalidation.intentState ? { intentState: invalidation.intentState } : {}),
+    ...(invalidation.intentState
+      ? { intentState: invalidation.intentState }
+      : {}),
     ts: Date.now(),
     ...(scope ? { scope } : {}),
   };
@@ -149,7 +163,7 @@ function toChangeDetail(invalidation: ReplicaInvalidation, scope: string): Inlin
 function errorDetail(error: unknown): { code?: string; message: string } {
   const code = (error as { code?: unknown })?.code;
   return {
-    ...(typeof code === 'string' ? { code } : {}),
+    ...(typeof code === "string" ? { code } : {}),
     message: error instanceof Error ? error.message : String(error),
   };
 }
@@ -159,11 +173,11 @@ function errorDetail(error: unknown): { code?: string; message: string } {
  * every scope-addressed transport reads as "the ambient scope" — exactly the
  * behaviour that path had before.
  */
-const AMBIENT_SCOPE: InlineScope = { id: '', label: 'Library', canWrite: true };
+const AMBIENT_SCOPE: InlineScope = { id: "", label: "Library", canWrite: true };
 
 export interface CreateInlineCentraidOptions {
   appId: string;
-  queries: InlineAppModule['queries'];
+  queries: InlineAppModule["queries"];
   /** Mounted scopes, primary first. Mutually exclusive with `session`. */
   scopes?: readonly InlineScopeBinding[];
   /** Single-scope shorthand (pre-#599 callers and single-scope apps). */
@@ -171,10 +185,13 @@ export interface CreateInlineCentraidOptions {
   isOnline?: () => boolean;
 }
 
-function bindingsOf(options: CreateInlineCentraidOptions): InlineScopeBinding[] {
+function bindingsOf(
+  options: CreateInlineCentraidOptions
+): InlineScopeBinding[] {
   if (options.scopes && options.scopes.length > 0) return [...options.scopes];
-  if (options.session) return [{ scope: AMBIENT_SCOPE, session: options.session }];
-  throw new Error('An inline client needs at least one mounted scope');
+  if (options.session)
+    return [{ scope: AMBIENT_SCOPE, session: options.session }];
+  throw new Error("An inline client needs at least one mounted scope");
 }
 
 /**
@@ -194,8 +211,12 @@ const controls = new WeakMap<object, InlineClientControls>();
  * are extended to the new scope and then told it arrived, so an app refetches
  * exactly the scope that appeared rather than re-reading all of them.
  */
-export function addInlineScope(client: unknown, binding: InlineScopeBinding): boolean {
-  const control = typeof client === 'object' && client ? controls.get(client) : undefined;
+export function addInlineScope(
+  client: unknown,
+  binding: InlineScopeBinding
+): boolean {
+  const control =
+    typeof client === "object" && client ? controls.get(client) : undefined;
   if (!control) return false;
   control.add(binding);
   return true;
@@ -203,7 +224,7 @@ export function addInlineScope(client: unknown, binding: InlineScopeBinding): bo
 
 /** Build the inline client for one app over N scopes. Writes nothing global. */
 export function createInlineCentraidClient(
-  options: CreateInlineCentraidOptions,
+  options: CreateInlineCentraidOptions
 ): InlineCentraidClient {
   const { appId, queries } = options;
   const bindings = bindingsOf(options);
@@ -217,21 +238,25 @@ export function createInlineCentraidClient(
   }>();
   const isOnline =
     options.isOnline ??
-    (() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+    (() =>
+      typeof navigator === "undefined" ? true : navigator.onLine !== false);
 
   const bindingFor = (scope: string | undefined): InlineScopeBinding => {
     if (scope === undefined) return primary;
     const binding = byId.get(scope);
-    if (!binding) throw new InlineScopeError('UNKNOWN_SCOPE', `${scope} is not mounted`);
+    if (!binding)
+      throw new InlineScopeError("UNKNOWN_SCOPE", `${scope} is not mounted`);
     return binding;
   };
 
   const subscribe = (
     cb: (detail: InlineChangeDetail) => void,
-    binding: InlineScopeBinding,
+    binding: InlineScopeBinding
   ): (() => void) =>
     binding.session.subscribe(appId, undefined, (invalidations) =>
-      invalidations.forEach((invalidation) => cb(toChangeDetail(invalidation, binding.scope.id))),
+      invalidations.forEach((invalidation) =>
+        cb(toChangeDetail(invalidation, binding.scope.id))
+      )
     );
 
   const readIn = async <T>(
@@ -240,7 +265,7 @@ export function createInlineCentraidClient(
       query: string;
       input?: Record<string, unknown>;
       signal?: AbortSignal;
-    },
+    }
   ): Promise<T> => {
     const module = queries[opts.query];
     if (!module) throw new Error(`Unknown query: ${opts.query}`);
@@ -254,7 +279,12 @@ export function createInlineCentraidClient(
       })) as T;
     } catch (error) {
       if (!canFallbackOnline(error)) throw error;
-      return (await gatewayRead(appId, opts.query, opts.input, binding.scope.id)) as T;
+      return (await gatewayRead(
+        appId,
+        opts.query,
+        opts.input,
+        binding.scope.id
+      )) as T;
     }
   };
 
@@ -289,10 +319,12 @@ export function createInlineCentraidClient(
       const targets = opts.scopes
         ? bindings.filter((binding) => opts.scopes!.includes(binding.scope.id))
         : bindings;
-      const settled = await Promise.allSettled(targets.map((binding) => readIn<T>(binding, opts)));
+      const settled = await Promise.allSettled(
+        targets.map((binding) => readIn<T>(binding, opts))
+      );
       return settled.map((result, index): InlineScopeRead<T> => {
         const scope = targets[index]!.scope.id;
-        return result.status === 'fulfilled'
+        return result.status === "fulfilled"
           ? { scope, ok: true, data: result.value }
           : { scope, ok: false, error: errorDetail(result.reason) };
       });
@@ -311,8 +343,8 @@ export function createInlineCentraidClient(
       // 403 after the user already committed to the action.
       if (!binding.scope.canWrite) {
         throw new InlineScopeError(
-          'SCOPE_READONLY',
-          `You can view ${binding.scope.label}, but not add to it.`,
+          "SCOPE_READONLY",
+          `You can view ${binding.scope.label}, but not add to it.`
         );
       }
       const result = await binding.session.write(appId, {
@@ -332,7 +364,9 @@ export function createInlineCentraidClient(
       return {
         status: outcome.status,
         invocationId: outcome.intentId,
-        ...(outcome.reason ? { reason: outcome.reason, message: outcome.reason } : {}),
+        ...(outcome.reason
+          ? { reason: outcome.reason, message: outcome.reason }
+          : {}),
         ...(outcome.output === undefined ? {} : { output: outcome.output }),
       } as T;
     },
@@ -368,12 +402,15 @@ export function createInlineCentraidClient(
       byId.set(binding.scope.id, binding);
       client.scopes.push(binding.scope);
       for (const registration of listeners) {
-        registration.stops.set(binding.scope.id, subscribe(registration.cb, binding));
+        registration.stops.set(
+          binding.scope.id,
+          subscribe(registration.cb, binding)
+        );
         // Announce the arrival on the same channel a burst uses, tagged with
         // the new scope — the app's existing per-scope refetch handles it, and
         // nothing has to re-read the scopes that were already painted.
         registration.cb({
-          source: 'scope-added',
+          source: "scope-added",
           scope: binding.scope.id,
           ts: Date.now(),
         });
@@ -395,7 +432,9 @@ export interface InstallInlineCentraidOptions extends CreateInlineCentraidOption
 }
 
 /** Install `window.centraid` for one inline app mount; returns the teardown. */
-export function installInlineCentraid(options: InstallInlineCentraidOptions): () => void {
+export function installInlineCentraid(
+  options: InstallInlineCentraidOptions
+): () => void {
   const target = (options.target ?? (window as unknown)) as {
     centraid?: unknown;
   };

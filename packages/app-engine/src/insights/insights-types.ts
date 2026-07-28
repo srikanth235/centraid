@@ -104,7 +104,7 @@ export interface InsightsPeakDay {
 }
 
 export interface InsightsAttention {
-  kind: 'top_source';
+  kind: "top_source";
   key: string;
   label: string;
   kindLabel: string;

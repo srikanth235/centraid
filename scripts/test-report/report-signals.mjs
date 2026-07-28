@@ -9,13 +9,13 @@
  * class of "all tests green, process still fails").
  */
 export function extractUnhandledErrors(vitest) {
-  if (!vitest || typeof vitest !== 'object') return [];
+  if (!vitest || typeof vitest !== "object") return [];
   const messages = [];
 
   if (Array.isArray(vitest.unhandledErrors)) {
     for (const entry of vitest.unhandledErrors) {
-      if (typeof entry === 'string') messages.push(entry);
-      else if (entry && typeof entry === 'object') {
+      if (typeof entry === "string") messages.push(entry);
+      else if (entry && typeof entry === "object") {
         messages.push(String(entry.message ?? entry.name ?? entry));
       }
     }
@@ -24,14 +24,20 @@ export function extractUnhandledErrors(vitest) {
   let failedAssertions = 0;
   for (const file of vitest.testResults ?? vitest.files ?? []) {
     for (const assertion of file.assertionResults ?? file.tests ?? []) {
-      if (assertion.status === 'failed') failedAssertions += 1;
+      if (assertion.status === "failed") failedAssertions += 1;
     }
     // Suite-level failure with no assertions often means load/runtime error.
     if (
-      file.status === 'failed' &&
-      !(file.assertionResults ?? file.tests ?? []).some((t) => t.status === 'failed')
+      file.status === "failed" &&
+      !(file.assertionResults ?? file.tests ?? []).some(
+        (t) => t.status === "failed"
+      )
     ) {
-      const msg = file.message || file.name || file.filepath || 'suite failed without assertions';
+      const msg =
+        file.message ||
+        file.name ||
+        file.filepath ||
+        "suite failed without assertions";
       messages.push(String(msg));
     }
   }
@@ -40,7 +46,7 @@ export function extractUnhandledErrors(vitest) {
     const hasExplicit = messages.length > 0;
     if (!hasExplicit) {
       messages.push(
-        'vitest reported success=false with zero failed tests (likely unhandled exception)',
+        "vitest reported success=false with zero failed tests (likely unhandled exception)"
       );
     }
   }
@@ -61,11 +67,11 @@ export function summarizeCellStates(cells) {
     cellsStale: 0,
   };
   for (const cell of cells ?? []) {
-    if (cell.state === 'passed') counts.cellsPassed += 1;
-    else if (cell.state === 'failed') counts.cellsFailed += 1;
-    else if (cell.state === 'missing') counts.cellsMissing += 1;
-    else if (cell.state === 'skipped') counts.cellsSkipped += 1;
-    else if (cell.state === 'stale') counts.cellsStale += 1;
+    if (cell.state === "passed") counts.cellsPassed += 1;
+    else if (cell.state === "failed") counts.cellsFailed += 1;
+    else if (cell.state === "missing") counts.cellsMissing += 1;
+    else if (cell.state === "skipped") counts.cellsSkipped += 1;
+    else if (cell.state === "stale") counts.cellsStale += 1;
   }
   return counts;
 }
@@ -75,69 +81,79 @@ export function summarizeCellStates(cells) {
  * (no special CENTRAID_* flags). Used by matrix validation and report inventory.
  */
 export function detectDefaultCiEnvGate(source) {
-  if (typeof source !== 'string' || !source.trim()) return null;
+  if (typeof source !== "string" || !source.trim()) return null;
   // describe.skipIf(process.env.FOO !== '1')
   const skipIfNeq = source.match(
-    /describe\.skipIf\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)/u,
+    /describe\.skipIf\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)/u
   );
-  if (skipIfNeq) return { env: skipIfNeq.groups?.env, kind: 'skipIf-env-not-1' };
+  if (skipIfNeq)
+    return { env: skipIfNeq.groups?.env, kind: "skipIf-env-not-1" };
   // describe.skipIf(!enabled) where enabled = process.env.X === '1' nearby
   const enabled =
-    source.match(/const\s+\w+\s*=\s*process\.env\.(?<env>[A-Z0-9_]+)\s*===\s*['"]1['"]/u) ||
-    source.match(/const\s+\w+\s*=\s*process\.env\.(?<env>[A-Z0-9_]+)\s*===\s*['"]1['"]\s*\|\|/u);
+    source.match(
+      /const\s+\w+\s*=\s*process\.env\.(?<env>[A-Z0-9_]+)\s*===\s*['"]1['"]/u
+    ) ||
+    source.match(
+      /const\s+\w+\s*=\s*process\.env\.(?<env>[A-Z0-9_]+)\s*===\s*['"]1['"]\s*\|\|/u
+    );
   if (enabled && /describe\.skipIf\(\s*!?\w+\s*\)/u.test(source)) {
-    return { env: enabled.groups?.env, kind: 'skipIf-enabled-flag' };
+    return { env: enabled.groups?.env, kind: "skipIf-enabled-flag" };
   }
   // if (process.env.FOO !== '1') { t.skip / test.skip / describe.skip / return }
   // Covers disk-full.integration.test.ts style: env check then t.skip in the
   // test callback (whole owner is a no-op on default CI without the flag).
-  const skipCall = '(?:test|it|t|describe)\\.skip';
+  const skipCall = "(?:test|it|t|describe)\\.skip";
   const early =
     source.match(
       new RegExp(
         String.raw`if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?${skipCall}`,
-        'u',
-      ),
+        "u"
+      )
     ) ||
     source.match(
       new RegExp(
         String.raw`if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*${skipCall}`,
-        'u',
-      ),
+        "u"
+      )
     ) ||
     source.match(
-      /if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?\breturn\b/u,
+      /if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?\breturn\b/u
     );
-  if (early) return { env: early.groups?.env, kind: 'early-env-return' };
+  if (early) return { env: early.groups?.env, kind: "early-env-return" };
   return null;
 }
 
 /** Inventory solid/partial cell owners that are whole-file env-gated off default CI. */
 export async function collectEnvGatedOwners(manifest, { root, readFile }) {
   const rows = await Promise.all(
-    Object.entries(manifest.cellOwners ?? {}).map(async ([cellId, cellOwner]) => {
-      if (!cellOwner?.owner) return undefined;
-      const [surfaceId, dimensionId] = cellId.split('.');
-      const surface = (manifest.surfaces ?? []).find((entry) => entry.id === surfaceId);
-      const assessment = surface?.assessment?.[dimensionId];
-      if (assessment !== 'solid' && assessment !== 'partial') return undefined;
-      try {
-        const source = await readFile(`${root}/${cellOwner.owner}`, 'utf8');
-        const gate = detectDefaultCiEnvGate(source);
-        if (gate) {
-          return {
-            cellId,
-            owner: cellOwner.owner,
-            assessment,
-            env: gate.env,
-            kind: gate.kind,
-          };
+    Object.entries(manifest.cellOwners ?? {}).map(
+      async ([cellId, cellOwner]) => {
+        if (!cellOwner?.owner) return undefined;
+        const [surfaceId, dimensionId] = cellId.split(".");
+        const surface = (manifest.surfaces ?? []).find(
+          (entry) => entry.id === surfaceId
+        );
+        const assessment = surface?.assessment?.[dimensionId];
+        if (assessment !== "solid" && assessment !== "partial")
+          return undefined;
+        try {
+          const source = await readFile(`${root}/${cellOwner.owner}`, "utf8");
+          const gate = detectDefaultCiEnvGate(source);
+          if (gate) {
+            return {
+              cellId,
+              owner: cellOwner.owner,
+              assessment,
+              env: gate.env,
+              kind: gate.kind,
+            };
+          }
+        } catch {
+          // missing file is a matrix validation error, not inventory
         }
-      } catch {
-        // missing file is a matrix validation error, not inventory
+        return undefined;
       }
-      return undefined;
-    }),
+    )
   );
   return rows.filter((row) => row !== undefined);
 }
@@ -149,10 +165,11 @@ export async function collectEnvGatedOwners(manifest, { root, readFile }) {
 export function collectRegisteredOwners(manifest) {
   const owners = new Set();
   for (const cellOwner of Object.values(manifest?.cellOwners ?? {})) {
-    if (cellOwner?.owner) owners.add(String(cellOwner.owner).replaceAll('\\', '/'));
+    if (cellOwner?.owner)
+      owners.add(String(cellOwner.owner).replaceAll("\\", "/"));
   }
   for (const flow of manifest?.flows ?? []) {
-    if (flow?.owner) owners.add(String(flow.owner).replaceAll('\\', '/'));
+    if (flow?.owner) owners.add(String(flow.owner).replaceAll("\\", "/"));
   }
   return owners;
 }
@@ -161,12 +178,16 @@ export function collectRegisteredOwners(manifest) {
  * Evidence JSON whose owner is not registered on any matrix cell/flow.
  * @returns {{ unmapped: object[], failedUnmapped: object[], unmappedEvidence: number }} Unmapped rows and counts.
  */
-export function findUnmappedEvidence(results, manifest, { normalizeOwner } = {}) {
+export function findUnmappedEvidence(
+  results,
+  manifest,
+  { normalizeOwner } = {}
+) {
   const registered = collectRegisteredOwners(manifest);
   const norm =
-    typeof normalizeOwner === 'function'
+    typeof normalizeOwner === "function"
       ? normalizeOwner
-      : (value) => String(value ?? '').replaceAll('\\', '/');
+      : (value) => String(value ?? "").replaceAll("\\", "/");
   const unmapped = [];
   for (const result of results ?? []) {
     const owner = norm(result?.owner);
@@ -174,8 +195,8 @@ export function findUnmappedEvidence(results, manifest, { normalizeOwner } = {})
     if (!registered.has(owner)) unmapped.push({ ...result, owner });
   }
   const failedUnmapped = unmapped.filter((item) => {
-    const status = String(item.status ?? '').toLowerCase();
-    return status === 'failed' || status === 'fail' || status === 'error';
+    const status = String(item.status ?? "").toLowerCase();
+    return status === "failed" || status === "fail" || status === "error";
   });
   return {
     unmapped,
@@ -199,7 +220,7 @@ export function reconcileJobConclusions(needs, summary, options = {}) {
   for (const [job, info] of Object.entries(needs ?? {})) {
     if (evidenceJobs && !evidenceJobs.includes(job)) continue;
     const result = info?.result ?? info?.conclusion ?? info;
-    if (result === 'failure' || result === 'failed') failedJobs.push(job);
+    if (result === "failure" || result === "failed") failedJobs.push(job);
   }
   failedJobs.sort();
   const evidenceFailed = Number(summary?.failed ?? 0);
@@ -208,7 +229,7 @@ export function reconcileJobConclusions(needs, summary, options = {}) {
     failedJobs,
     silentAllClear,
     message: silentAllClear
-      ? `Evidence-producing job(s) failed but report shows failed: 0 — ${failedJobs.join(', ')}`
+      ? `Evidence-producing job(s) failed but report shows failed: 0 — ${failedJobs.join(", ")}`
       : null,
   };
 }
@@ -220,7 +241,7 @@ export function reconcileJobConclusions(needs, summary, options = {}) {
 export function cellsMissingRatchet(currentMissing, historyPoints) {
   const current = Number(currentMissing ?? 0);
   const priorPoints = (historyPoints ?? []).filter(
-    (point) => point != null && Number.isFinite(Number(point.cellsMissing)),
+    (point) => point != null && Number.isFinite(Number(point.cellsMissing))
   );
   if (!priorPoints.length) {
     return { prior: null, current, delta: 0, rose: false };
@@ -237,9 +258,9 @@ export function cellsMissingRatchet(currentMissing, historyPoints) {
 export function filterFloorConfigEntries(floorConfig) {
   return Object.entries(floorConfig ?? {}).filter(
     ([key, value]) =>
-      !key.startsWith('_') &&
-      key !== 'approvedDeviation' &&
-      (typeof value === 'number' || (value && typeof value === 'object')),
+      !key.startsWith("_") &&
+      key !== "approvedDeviation" &&
+      (typeof value === "number" || (value && typeof value === "object"))
   );
 }
 
@@ -250,9 +271,9 @@ export function filterFloorConfigEntries(floorConfig) {
 export function mergeLaneMarkers(markerMaps) {
   const merged = {};
   for (const map of markerMaps ?? []) {
-    if (!map || typeof map !== 'object') continue;
+    if (!map || typeof map !== "object") continue;
     for (const [lane, at] of Object.entries(map)) {
-      if (typeof at === 'string' && at) merged[lane] = at;
+      if (typeof at === "string" && at) merged[lane] = at;
     }
   }
   return merged;

@@ -1,7 +1,7 @@
-import { defineConfig } from 'oxlint';
-import core from 'ultracite/oxlint/core';
-import react from 'ultracite/oxlint/react';
-import vitest from 'ultracite/oxlint/vitest';
+import { defineConfig } from "oxlint";
+import core from "ultracite/oxlint/core";
+import react from "ultracite/oxlint/react";
+import vitest from "ultracite/oxlint/vitest";
 
 // Ultracite ships its oxlint presets as ESM modules from 7.5 on, so the former
 // .oxlintrc.json "extends" paths stopped resolving and the config moved here.
@@ -18,13 +18,13 @@ import vitest from 'ultracite/oxlint/vitest';
 export default defineConfig({
   extends: [core, react],
   ignorePatterns: (core.ignorePatterns ?? []).concat([
-    '**/dist/**',
-    '**/.expo/**',
-    '**/node_modules/**',
-    'apps/oauth-worker/worker-configuration.d.ts',
-    'apps/web/src/generated/**',
-    'packages/blueprints/automations/**',
-    'packages/blueprints/visual-harness/mock-centraid.js',
+    "**/dist/**",
+    "**/.expo/**",
+    "**/node_modules/**",
+    "apps/oauth-worker/worker-configuration.d.ts",
+    "apps/web/src/generated/**",
+    "packages/blueprints/automations/**",
+    "packages/blueprints/visual-harness/mock-centraid.js",
   ]),
   rules: {
     // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
@@ -44,121 +44,121 @@ export default defineConfig({
     // rule applies equally to production code and test scenarios. Ordered work
     // belongs behind a named, tested primitive; independent work uses bounded
     // or unbounded concurrency as its resource contract permits. #573
-    'no-await-in-loop': 'error',
+    "no-await-in-loop": "error",
 
     // Repo profile (#210).
-    'arrow-body-style': 'off',
-    'class-methods-use-this': 'off',
-    complexity: 'off',
-    curly: 'off',
-    'default-case': 'off',
-    eqeqeq: 'off',
-    'func-names': 'off',
-    'func-style': 'off',
-    'import/consistent-type-specifier-style': 'off',
-    'max-lines': 'off',
-    'no-accumulating-spread': 'off',
-    'no-alert': 'off',
-    'no-bitwise': 'off',
-    'no-console': 'off',
-    'no-else-return': 'off',
-    'no-empty-function': 'off',
-    'no-eq-null': 'off',
-    'no-inline-comments': 'off',
-    'no-lonely-if': 'off',
-    'no-loop-func': 'off',
-    'no-negated-condition': 'off',
-    'no-nested-ternary': 'off',
-    'no-plusplus': 'off',
-    'no-promise-executor-return': 'off',
-    'no-restricted-imports': [
-      'error',
+    "arrow-body-style": "off",
+    "class-methods-use-this": "off",
+    complexity: "off",
+    curly: "off",
+    "default-case": "off",
+    eqeqeq: "off",
+    "func-names": "off",
+    "func-style": "off",
+    "import/consistent-type-specifier-style": "off",
+    "max-lines": "off",
+    "no-accumulating-spread": "off",
+    "no-alert": "off",
+    "no-bitwise": "off",
+    "no-console": "off",
+    "no-else-return": "off",
+    "no-empty-function": "off",
+    "no-eq-null": "off",
+    "no-inline-comments": "off",
+    "no-lonely-if": "off",
+    "no-loop-func": "off",
+    "no-negated-condition": "off",
+    "no-nested-ternary": "off",
+    "no-plusplus": "off",
+    "no-promise-executor-return": "off",
+    "no-restricted-imports": [
+      "error",
       {
         patterns: [
           {
-            group: ['@centraid/*/src/*', '@centraid/*/dist/*'],
+            group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
             message:
               "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
           },
         ],
       },
     ],
-    'no-shadow': 'off',
-    'no-throw-literal': 'off',
-    'no-unmodified-loop-condition': 'off',
-    'no-use-before-define': 'off',
-    'no-useless-constructor': 'off',
-    'no-void': 'off',
-    'no-warning-comments': 'off',
-    'prefer-const': 'off',
-    'prefer-destructuring': 'off',
-    'prefer-object-spread': 'off',
-    'prefer-template': 'off',
-    'promise/avoid-new': 'off',
-    'promise/no-nesting': 'off',
-    'promise/no-promise-in-callback': 'off',
-    'promise/prefer-await-to-callbacks': 'off',
-    'promise/prefer-await-to-then': 'off',
-    'react-perf/jsx-no-new-function-as-prop': 'off',
-    'react/exhaustive-deps': 'warn',
-    'react/jsx-curly-brace-presence': 'off',
-    'react/jsx-no-constructed-context-values': 'off',
-    'react/jsx-no-useless-fragment': 'off',
-    'react/no-array-index-key': 'off',
-    'react/no-danger': 'off',
-    'react/no-unescaped-entities': 'off',
-    'react/rules-of-hooks': 'error',
-    'react/style-prop-object': 'off',
-    'require-await': 'off',
-    'sort-keys': 'off',
-    'typescript/array-type': 'off',
-    'typescript/ban-ts-comment': 'error',
-    'typescript/consistent-type-definitions': 'off',
-    'typescript/consistent-type-imports': 'off',
-    'typescript/no-dynamic-delete': 'off',
-    'typescript/no-empty-interface': 'off',
-    'typescript/no-empty-object-type': 'off',
-    'typescript/no-explicit-any': 'error',
-    'typescript/no-import-type-side-effects': 'off',
-    'typescript/no-inferrable-types': 'off',
-    'typescript/no-invalid-void-type': 'off',
-    'typescript/no-non-null-assertion': 'off',
-    'typescript/parameter-properties': 'off',
-    'unicorn/catch-error-name': 'off',
-    'unicorn/consistent-existence-index-check': 'off',
-    'unicorn/consistent-function-scoping': 'off',
-    'unicorn/filename-case': 'off',
-    'unicorn/no-array-for-each': 'off',
-    'unicorn/no-array-reduce': 'off',
-    'unicorn/no-array-sort': 'off',
-    'unicorn/no-await-expression-member': 'off',
-    'unicorn/no-hex-escape': 'off',
-    'unicorn/no-immediate-mutation': 'off',
-    'unicorn/no-lonely-if': 'off',
-    'unicorn/no-nested-ternary': 'off',
-    'unicorn/no-object-as-default-parameter': 'off',
-    'unicorn/no-typeof-undefined': 'off',
-    'unicorn/no-useless-undefined': 'off',
-    'unicorn/number-literal-case': 'off',
-    'unicorn/numeric-separators-style': 'off',
-    'unicorn/prefer-at': 'off',
-    'unicorn/prefer-code-point': 'off',
-    'unicorn/prefer-dom-node-append': 'off',
-    'unicorn/prefer-logical-operator-over-ternary': 'off',
-    'unicorn/prefer-math-min-max': 'off',
-    'unicorn/prefer-math-trunc': 'off',
-    'unicorn/prefer-module': 'off',
-    'unicorn/prefer-negative-index': 'off',
-    'unicorn/prefer-number-properties': 'off',
-    'unicorn/prefer-response-static-json': 'off',
-    'unicorn/prefer-set-has': 'off',
-    'unicorn/prefer-spread': 'off',
-    'unicorn/prefer-string-replace-all': 'off',
-    'unicorn/prefer-string-slice': 'off',
-    'unicorn/prefer-ternary': 'off',
-    'unicorn/prefer-type-error': 'off',
-    'unicorn/switch-case-braces': 'off',
-    'unicorn/text-encoding-identifier-case': 'off',
+    "no-shadow": "off",
+    "no-throw-literal": "off",
+    "no-unmodified-loop-condition": "off",
+    "no-use-before-define": "off",
+    "no-useless-constructor": "off",
+    "no-void": "off",
+    "no-warning-comments": "off",
+    "prefer-const": "off",
+    "prefer-destructuring": "off",
+    "prefer-object-spread": "off",
+    "prefer-template": "off",
+    "promise/avoid-new": "off",
+    "promise/no-nesting": "off",
+    "promise/no-promise-in-callback": "off",
+    "promise/prefer-await-to-callbacks": "off",
+    "promise/prefer-await-to-then": "off",
+    "react-perf/jsx-no-new-function-as-prop": "off",
+    "react/exhaustive-deps": "warn",
+    "react/jsx-curly-brace-presence": "off",
+    "react/jsx-no-constructed-context-values": "off",
+    "react/jsx-no-useless-fragment": "off",
+    "react/no-array-index-key": "off",
+    "react/no-danger": "off",
+    "react/no-unescaped-entities": "off",
+    "react/rules-of-hooks": "error",
+    "react/style-prop-object": "off",
+    "require-await": "off",
+    "sort-keys": "off",
+    "typescript/array-type": "off",
+    "typescript/ban-ts-comment": "error",
+    "typescript/consistent-type-definitions": "off",
+    "typescript/consistent-type-imports": "off",
+    "typescript/no-dynamic-delete": "off",
+    "typescript/no-empty-interface": "off",
+    "typescript/no-empty-object-type": "off",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-import-type-side-effects": "off",
+    "typescript/no-inferrable-types": "off",
+    "typescript/no-invalid-void-type": "off",
+    "typescript/no-non-null-assertion": "off",
+    "typescript/parameter-properties": "off",
+    "unicorn/catch-error-name": "off",
+    "unicorn/consistent-existence-index-check": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/filename-case": "off",
+    "unicorn/no-array-for-each": "off",
+    "unicorn/no-array-reduce": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-await-expression-member": "off",
+    "unicorn/no-hex-escape": "off",
+    "unicorn/no-immediate-mutation": "off",
+    "unicorn/no-lonely-if": "off",
+    "unicorn/no-nested-ternary": "off",
+    "unicorn/no-object-as-default-parameter": "off",
+    "unicorn/no-typeof-undefined": "off",
+    "unicorn/no-useless-undefined": "off",
+    "unicorn/number-literal-case": "off",
+    "unicorn/numeric-separators-style": "off",
+    "unicorn/prefer-at": "off",
+    "unicorn/prefer-code-point": "off",
+    "unicorn/prefer-dom-node-append": "off",
+    "unicorn/prefer-logical-operator-over-ternary": "off",
+    "unicorn/prefer-math-min-max": "off",
+    "unicorn/prefer-math-trunc": "off",
+    "unicorn/prefer-module": "off",
+    "unicorn/prefer-negative-index": "off",
+    "unicorn/prefer-number-properties": "off",
+    "unicorn/prefer-response-static-json": "off",
+    "unicorn/prefer-set-has": "off",
+    "unicorn/prefer-spread": "off",
+    "unicorn/prefer-string-replace-all": "off",
+    "unicorn/prefer-string-slice": "off",
+    "unicorn/prefer-ternary": "off",
+    "unicorn/prefer-type-error": "off",
+    "unicorn/switch-case-braces": "off",
+    "unicorn/text-encoding-identifier-case": "off",
   },
   overrides: [
     // The vitest preset applies through `overrides`, and an extended preset's
@@ -177,11 +177,14 @@ export default defineConfig({
       // rewrites 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker
       // assertions. Everything else in the preset is adopted as-is; these two
       // are held off deliberately. See TESTING.md, "ultracite vitest preset (#573)".
-      files: ['**/*.{test,spec}.{ts,tsx,js,jsx}', '**/__tests__/**/*.{ts,tsx,js,jsx}'],
-      plugins: ['vitest'],
+      files: [
+        "**/*.{test,spec}.{ts,tsx,js,jsx}",
+        "**/__tests__/**/*.{ts,tsx,js,jsx}",
+      ],
+      plugins: ["vitest"],
       rules: {
-        'vitest/prefer-to-be-falsy': 'off',
-        'vitest/prefer-to-be-truthy': 'off',
+        "vitest/prefer-to-be-falsy": "off",
+        "vitest/prefer-to-be-truthy": "off",
         // The rule defaults to jest's signature, where `expect` takes exactly
         // one argument. vitest's takes an optional second one — the message
         // printed when the assertion fails, e.g.
@@ -190,7 +193,7 @@ export default defineConfig({
         // of the "clear failure output" rule in TESTING.md. This corrects the
         // rule for the runner rather than relaxing it: everything else it
         // checks still applies.
-        'vitest/valid-expect': ['error', { maxArgs: 2 }],
+        "vitest/valid-expect": ["error", { maxArgs: 2 }],
         // The preset's default is 5. This suite is deliberately built around
         // integration-shaped tests that drive one scenario and then assert the
         // whole resulting state — splitting those to satisfy a count would mean
@@ -205,7 +208,7 @@ export default defineConfig({
         // One behavior-focused integration test may need a compact assertion
         // matrix. 31 still catches sprawling tests while avoiding test splits
         // driven solely by one additional assertion in a shared contract matrix.
-        'vitest/max-expects': ['error', { max: 31 }],
+        "vitest/max-expects": ["error", { max: 31 }],
       },
     },
     {
@@ -214,12 +217,12 @@ export default defineConfig({
       // `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on
       // top of the `@playwright/test` one and the files stop parsing. This is
       // about which runner owns the file, not about opting out of a rule.
-      files: ['apps/desktop/tests/e2e/**', 'apps/web/tests/e2e/**'],
-      plugins: ['vitest'],
+      files: ["apps/desktop/tests/e2e/**", "apps/web/tests/e2e/**"],
+      plugins: ["vitest"],
       rules: Object.fromEntries(
         Object.keys(vitest.overrides[0].rules)
-          .filter((rule) => rule.startsWith('vitest/'))
-          .map((rule) => [rule, 'off']),
+          .filter((rule) => rule.startsWith("vitest/"))
+          .map((rule) => [rule, "off"])
       ),
     },
     {
@@ -236,29 +239,29 @@ export default defineConfig({
       // photos/app-root.tsx is NOT here — it had the same shape and was
       // genuinely converted, proving this list is architectural, not a dodge.
       files: [
-        'packages/blueprints/apps/agenda/app-root.tsx',
-        'packages/blueprints/apps/docs/app-root.tsx',
-        'packages/blueprints/apps/locker/app-root.tsx',
-        'packages/blueprints/apps/notes/app-root.tsx',
-        'packages/blueprints/apps/people/app-root.tsx',
-        'packages/blueprints/apps/tally/app-root.tsx',
-        'packages/blueprints/apps/tasks/app-root.tsx',
+        "packages/blueprints/apps/agenda/app-root.tsx",
+        "packages/blueprints/apps/docs/app-root.tsx",
+        "packages/blueprints/apps/locker/app-root.tsx",
+        "packages/blueprints/apps/notes/app-root.tsx",
+        "packages/blueprints/apps/people/app-root.tsx",
+        "packages/blueprints/apps/tally/app-root.tsx",
+        "packages/blueprints/apps/tasks/app-root.tsx",
       ],
       rules: {
-        'react/react-compiler': 'off',
+        "react/react-compiler": "off",
       },
     },
     {
-      files: ['packages/app-engine/**/*.ts'],
+      files: ["packages/app-engine/**/*.ts"],
       rules: {
-        'no-restricted-imports': [
-          'error',
+        "no-restricted-imports": [
+          "error",
           {
             patterns: [
               {
-                group: ['@centraid/*'],
+                group: ["@centraid/*"],
                 message:
-                  'app-engine is the stable core of the dependency DAG \u2014 it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, gateway CLI). See governance: module-layering.',
+                  "app-engine is the stable core of the dependency DAG \u2014 it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, gateway CLI). See governance: module-layering.",
               },
             ],
           },
@@ -266,26 +269,26 @@ export default defineConfig({
       },
     },
     {
-      files: ['packages/automation/**/*.ts'],
+      files: ["packages/automation/**/*.ts"],
       rules: {
-        'no-restricted-imports': [
-          'error',
+        "no-restricted-imports": [
+          "error",
           {
             patterns: [
               {
                 group: [
-                  '@centraid/agent-runtime',
-                  '@centraid/agent-runtime/*',
-                  '@centraid/gateway',
-                  '@centraid/gateway/*',
+                  "@centraid/agent-runtime",
+                  "@centraid/agent-runtime/*",
+                  "@centraid/gateway",
+                  "@centraid/gateway/*",
                 ],
                 message:
-                  'automation must not depend on an agent backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.',
+                  "automation must not depend on an agent backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.",
               },
               {
-                group: ['@centraid/*/src/*', '@centraid/*/dist/*'],
+                group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
                 message:
-                  'Import from the package root barrel, not its internals. See governance: no-deep-imports.',
+                  "Import from the package root barrel, not its internals. See governance: no-deep-imports.",
               },
             ],
           },
@@ -293,9 +296,9 @@ export default defineConfig({
       },
     },
     {
-      files: ['packages/blueprints/kit/**', 'packages/blueprints/apps/**'],
+      files: ["packages/blueprints/kit/**", "packages/blueprints/apps/**"],
       rules: {
-        'typescript/no-explicit-any': 'off',
+        "typescript/no-explicit-any": "off",
       },
     },
   ],

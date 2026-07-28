@@ -16,22 +16,22 @@
 // stays low so the live blur reads through — the blur carries the "glass", the
 // film only colours it.
 
-import { BlurView } from 'expo-blur';
-import React, { useMemo } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { BlurView } from "expo-blur";
+import React, { useMemo } from "react";
+import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 
-import { useTheme, type ThemeColors, type Scheme } from '../theme';
+import { useTheme, type ThemeColors, type Scheme } from "../theme";
 
 // A light colour cast over the live blur — not an opaque fill.
 const TINT: Record<Scheme, string> = {
-  light: 'rgba(251, 248, 241, 0.5)',
-  dark: 'rgba(24, 28, 34, 0.42)',
+  light: "rgba(251, 248, 241, 0.5)",
+  dark: "rgba(24, 28, 34, 0.42)",
 };
 
 // A faint light sheen along the top half sells the curved-glass highlight.
 const SHEEN: Record<Scheme, string> = {
-  light: 'rgba(255, 255, 255, 0.4)',
-  dark: 'rgba(255, 255, 255, 0.05)',
+  light: "rgba(255, 255, 255, 0.4)",
+  dark: "rgba(255, 255, 255, 0.05)",
 };
 
 export interface GlassBarProps {
@@ -55,13 +55,19 @@ export default function GlassBar({
     <View style={[styles.pill, { borderRadius: radius }, style]}>
       <BlurView
         intensity={intensity}
-        tint={scheme === 'dark' ? 'dark' : 'light'}
+        tint={scheme === "dark" ? "dark" : "light"}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
-      <View style={[StyleSheet.absoluteFill, styles.tint]} pointerEvents="none" />
       <View
-        style={[styles.sheen, { borderTopLeftRadius: radius, borderTopRightRadius: radius }]}
+        style={[StyleSheet.absoluteFill, styles.tint]}
+        pointerEvents="none"
+      />
+      <View
+        style={[
+          styles.sheen,
+          { borderTopLeftRadius: radius, borderTopRightRadius: radius },
+        ]}
         pointerEvents="none"
       />
       {children}
@@ -76,17 +82,17 @@ const makeStyles = (colors: ThemeColors, scheme: Scheme) =>
       borderWidth: StyleSheet.hairlineWidth,
       // Elevation/shadow lifts the glass off the canvas on both platforms.
       elevation: 6,
-      overflow: 'hidden',
-      shadowColor: '#000',
+      overflow: "hidden",
+      shadowColor: "#000",
       shadowOffset: { height: 6, width: 0 },
-      shadowOpacity: scheme === 'dark' ? 0.4 : 0.14,
+      shadowOpacity: scheme === "dark" ? 0.4 : 0.14,
       shadowRadius: 16,
     },
     sheen: {
       backgroundColor: SHEEN[scheme],
-      height: '52%',
+      height: "52%",
       left: 0,
-      position: 'absolute',
+      position: "absolute",
       right: 0,
       top: 0,
     },

@@ -1,10 +1,10 @@
 // Grid view card (#grid root's mapped children).
-import { avatarColor, metaLine, statusOf } from '../format.ts';
-import { I } from '../icons.ts';
-import type { Person } from '../types.ts';
-import { Icon, KitAvatar } from './Shared.tsx';
+import { avatarColor, metaLine, statusOf } from "../format.ts";
+import { I } from "../icons.ts";
+import type { Person } from "../types.ts";
+import { Icon, KitAvatar } from "./Shared.tsx";
 
-import styles from './Grid.module.css';
+import styles from "./Grid.module.css";
 
 export function GridCard({
   p,
@@ -53,7 +53,9 @@ export function GridCard({
       </button>
       <button
         type="button"
-        className={p.starred ? `${styles.cardStar} ${styles.on}` : styles.cardStar}
+        className={
+          p.starred ? `${styles.cardStar} ${styles.on}` : styles.cardStar
+        }
         aria-label="Favorite"
         onClick={(e) => {
           e.stopPropagation();
@@ -64,7 +66,7 @@ export function GridCard({
           width="16"
           height="16"
           viewBox="0 0 24 24"
-          fill={p.starred ? 'currentColor' : 'none'}
+          fill={p.starred ? "currentColor" : "none"}
           stroke="currentColor"
           strokeWidth="1.6"
           strokeLinecap="round"
@@ -75,7 +77,7 @@ export function GridCard({
       </button>
       <div className={styles.cardBody}>
         <div className={styles.cardTitle}>{p.name}</div>
-        <div className={styles.cardRole}>{p.role || ''}</div>
+        <div className={styles.cardRole}>{p.role || ""}</div>
         <div className={styles.cardMeta}>
           <span className="kit-dotmini" style={{ background: st.color }} />
           {metaLine(p)}

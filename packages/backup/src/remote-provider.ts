@@ -22,8 +22,8 @@
  * absent (a deliberate, spec-faithful choice, not a gap).
  */
 
-import { requestStorageGrant } from './cas-grant.js';
-import type { ObjectStore } from './object-store.js';
+import { requestStorageGrant } from "./cas-grant.js";
+import type { ObjectStore } from "./object-store.js";
 import {
   BackupProviderError,
   type AccountStatus,
@@ -42,13 +42,16 @@ import {
   type TargetInfo,
   type Usage,
   type UsageByStore,
-} from './provider.js';
-import { S3ObjectStore } from './s3-store.js';
-import { callProviderRoute } from './wire-client.js';
+} from "./provider.js";
+import { S3ObjectStore } from "./s3-store.js";
+import { callProviderRoute } from "./wire-client.js";
 
 const DEFAULT_GRANT_TTL_SECONDS = 3600;
 
-function appendQuery(route: string, query: Record<string, string | number | undefined>): string {
+function appendQuery(
+  route: string,
+  query: Record<string, string | number | undefined>
+): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) params.set(key, String(value));
@@ -74,38 +77,48 @@ export class RemoteBackupProvider implements BackupProvider {
   private readonly grantTtlSeconds: number;
 
   constructor(options: RemoteBackupProviderOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/$/u, '');
+    this.baseUrl = options.baseUrl.replace(/\/$/u, "");
     this.apiKey = options.apiKey;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.grantTtlSeconds = options.grantTtlSeconds ?? DEFAULT_GRANT_TTL_SECONDS;
   }
 
-  private call<T>(method: string, routePath: string, body?: unknown): Promise<T> {
+  private call<T>(
+    method: string,
+    routePath: string,
+    body?: unknown
+  ): Promise<T> {
     return callProviderRoute<T>(
       { baseUrl: this.baseUrl, apiKey: this.apiKey, fetchImpl: this.fetchImpl },
       method,
       routePath,
-      body,
+      body
     );
   }
 
   async capabilities(): Promise<ProviderCapabilities> {
-    return this.call<ProviderCapabilities>('GET', '/v1/storage/provider');
+    return this.call<ProviderCapabilities>("GET", "/v1/storage/provider");
   }
 
   async createTarget(opts: { label: string }): Promise<{ targetId: string }> {
-    const row = await this.call<{ id: string }>('POST', '/v1/storage/vaults', {
+    const row = await this.call<{ id: string }>("POST", "/v1/storage/vaults", {
       name: opts.label,
     });
     return { targetId: row.id };
   }
 
   async deleteTarget(targetId: string): Promise<void> {
-    await this.call<unknown>('DELETE', `/v1/storage/vaults/${encodeURIComponent(targetId)}`);
+    await this.call<unknown>(
+      "DELETE",
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}`
+    );
   }
 
   async undeleteTarget(targetId: string): Promise<void> {
-    await this.call<unknown>('POST', `/v1/storage/vaults/${encodeURIComponent(targetId)}/undelete`);
+    await this.call<unknown>(
+      "POST",
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/undelete`
+    );
   }
 
   async purgeTarget(targetId: string): Promise<void> {
@@ -113,14 +126,17 @@ export class RemoteBackupProvider implements BackupProvider {
     // (PROTOCOL.md § Auth) — `call` surfaces that as a normal thrown
     // BackupProviderError('interactive_auth_required'); there is no
     // client-side special case, the server enforces the tier.
-    await this.call<unknown>('POST', `/v1/storage/vaults/${encodeURIComponent(targetId)}/purge`);
+    await this.call<unknown>(
+      "POST",
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/purge`
+    );
   }
 
   async requestGrant(
     targetId: string,
     store: StoreClass,
-    mode: 'read' | 'read-write',
-    ttlSeconds?: number,
+    mode: "read" | "read-write",
+    ttlSeconds?: number
   ): Promise<S3Grant> {
     return requestStorageGrant({
       baseUrl: this.baseUrl,
@@ -136,7 +152,7 @@ export class RemoteBackupProvider implements BackupProvider {
   async openDataPlane(
     targetId: string,
     store: StoreClass,
-    mode: 'read' | 'read-write',
+    mode: "read" | "read-write"
   ): Promise<ObjectStore> {
     const grant = await this.requestGrant(targetId, store, mode);
     return new S3ObjectStore(grant, {
@@ -144,29 +160,32 @@ export class RemoteBackupProvider implements BackupProvider {
     });
   }
 
-  async registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow> {
+  async registerSnapshot(
+    targetId: string,
+    reg: SnapshotRegistration
+  ): Promise<SnapshotRow> {
     return this.call<SnapshotRow>(
-      'POST',
+      "POST",
       `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots`,
-      reg,
+      reg
     );
   }
 
   async listSnapshots(
     targetId: string,
-    opts?: { includePruned?: boolean },
+    opts?: { includePruned?: boolean }
   ): Promise<SnapshotRow[]> {
-    const qs = opts?.includePruned ? '?includePruned=1' : '';
+    const qs = opts?.includePruned ? "?includePruned=1" : "";
     return this.call<SnapshotRow[]>(
-      'GET',
-      `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots${qs}`,
+      "GET",
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots${qs}`
     );
   }
 
   async getSnapshot(targetId: string, seq: number): Promise<SnapshotRow> {
     return this.call<SnapshotRow>(
-      'GET',
-      `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots/${seq}`,
+      "GET",
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/snapshots/${seq}`
     );
   }
 
@@ -186,9 +205,10 @@ export class RemoteBackupProvider implements BackupProvider {
         currentGeneration: number;
         usage: Usage;
       }[];
-    }>('GET', '/v1/storage/vaults');
+    }>("GET", "/v1/storage/vaults");
     const row = listing.vaults.find((v) => v.id === targetId);
-    if (!row) throw BackupProviderError.of('not_found', `unknown target "${targetId}"`);
+    if (!row)
+      throw BackupProviderError.of("not_found", `unknown target "${targetId}"`);
     return row;
   }
 
@@ -197,69 +217,84 @@ export class RemoteBackupProvider implements BackupProvider {
     return {
       id: row.id,
       name: row.name,
-      status: row.status === 'active' ? 'active' : 'deleted',
+      status: row.status === "active" ? "active" : "deleted",
       currentGeneration: row.currentGeneration,
       usage: row.usage,
     };
   }
 
-  async usage(targetId: string): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
+  async usage(
+    targetId: string
+  ): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
     const listing = await this.call<{
       accountStatus: AccountStatus;
       vaults: { id: string; usage: Usage }[];
-    }>('GET', '/v1/storage/vaults');
+    }>("GET", "/v1/storage/vaults");
     const row = listing.vaults.find((v) => v.id === targetId);
-    if (!row) throw BackupProviderError.of('not_found', `unknown target "${targetId}"`);
+    if (!row)
+      throw BackupProviderError.of("not_found", `unknown target "${targetId}"`);
     return { usage: row.usage, accountStatus: listing.accountStatus };
   }
 
   async usageReport(targetId: string): Promise<UsageByStore> {
     return this.call<UsageByStore>(
-      'GET',
-      `/v1/storage/vaults/${encodeURIComponent(targetId)}/usage`,
+      "GET",
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/usage`
     );
   }
 
-  async putPolicy(targetId: string, policy: ProviderPolicyDeclaration): Promise<ProviderPolicy> {
+  async putPolicy(
+    targetId: string,
+    policy: ProviderPolicyDeclaration
+  ): Promise<ProviderPolicy> {
     return this.call<ProviderPolicy>(
-      'PUT',
+      "PUT",
       `/v1/storage/vaults/${encodeURIComponent(targetId)}/policy`,
-      policy,
+      policy
     );
   }
 
   async getPolicy(targetId: string): Promise<ProviderPolicy> {
     return this.call<ProviderPolicy>(
-      'GET',
-      `/v1/storage/vaults/${encodeURIComponent(targetId)}/policy`,
+      "GET",
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/policy`
     );
   }
 
   async listInventory(
     targetId: string,
-    query: ProviderInventoryQuery,
+    query: ProviderInventoryQuery
   ): Promise<ProviderInventoryPage> {
-    const route = appendQuery(`/v1/storage/vaults/${encodeURIComponent(targetId)}/inventory`, {
-      store: query.store,
-      cursor: query.cursor,
-      since: query.since,
-      limit: query.limit,
-    });
-    return this.call<ProviderInventoryPage>('GET', route);
+    const route = appendQuery(
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/inventory`,
+      {
+        store: query.store,
+        cursor: query.cursor,
+        since: query.since,
+        limit: query.limit,
+      }
+    );
+    return this.call<ProviderInventoryPage>("GET", route);
   }
 
-  async listEvents(targetId: string, query: ProviderAuditQuery = {}): Promise<ProviderAuditPage> {
-    const route = appendQuery(`/v1/storage/vaults/${encodeURIComponent(targetId)}/events`, {
-      cursor: query.cursor,
-      since: query.since,
-      limit: query.limit,
-    });
-    return this.call<ProviderAuditPage>('GET', route);
+  async listEvents(
+    targetId: string,
+    query: ProviderAuditQuery = {}
+  ): Promise<ProviderAuditPage> {
+    const route = appendQuery(
+      `/v1/storage/vaults/${encodeURIComponent(targetId)}/events`,
+      {
+        cursor: query.cursor,
+        since: query.since,
+        limit: query.limit,
+      }
+    );
+    return this.call<ProviderAuditPage>("GET", route);
   }
 }
 
 export function openRemoteBackupProvider(
-  options: RemoteBackupProviderOptions,
+  options: RemoteBackupProviderOptions
 ): RemoteBackupProvider {
   return new RemoteBackupProvider(options);
 }

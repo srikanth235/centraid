@@ -1,43 +1,43 @@
-import { act, useEffect } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, useEffect } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const listApps = vi.fn<typeof import('../../gateway-client.js').listApps>();
-vi.mock(import('../../gateway-client.js'), () => ({
+const listApps = vi.fn<typeof import("../../gateway-client.js").listApps>();
+vi.mock(import("../../gateway-client.js"), () => ({
   listApps: () => listApps(),
   listVaults: () => Promise.resolve([]),
 }));
 // tileVisualFromListing/colorForIcon are pure — use the real ones.
 // The client-local store is a plain module now; back it with an in-memory Map.
 const store = vi.hoisted(() => new Map<string, unknown>());
-vi.mock(import('./store.js'), () => ({
+vi.mock(import("./store.js"), () => ({
   Store: {
     get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
     set: (k: string, v: unknown) => store.set(k, v),
   },
 }));
 
-let useShellApps: typeof import('./useShellApps.js').useShellApps;
+let useShellApps: typeof import("./useShellApps.js").useShellApps;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-describe('useShellApps', () => {
+describe("useShellApps", () => {
   beforeEach(async () => {
     store.clear();
     // tileVisualFromListing (real, pure) probes the ambient Icon registry to
     // validate an icon key — stub it with the keys the fixtures use.
     (globalThis as unknown as { Icon: unknown }).Icon = {
-      Todo: () => '',
-      Habit: () => '',
-      Sparkle: () => '',
+      Todo: () => "",
+      Habit: () => "",
+      Sparkle: () => "",
     };
     (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = {
-      teal: '#3EC8B4',
-      violet: '#7C5BD9',
-      blue: '#4950F6',
+      teal: "#3EC8B4",
+      violet: "#7C5BD9",
+      blue: "#4950F6",
     };
     listApps.mockReset();
-    ({ useShellApps } = await import('./useShellApps.js'));
+    ({ useShellApps } = await import("./useShellApps.js"));
   });
 
   afterEach(() => {
@@ -57,7 +57,7 @@ describe('useShellApps', () => {
     return null;
   }
   async function mount(): Promise<void> {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
     await act(async () => {
@@ -68,121 +68,133 @@ describe('useShellApps', () => {
     });
   }
 
-  describe('useShellApps', () => {
-    it('derives drafts from the listing, excluding pinned + automation entries', async () => {
-      store.set('home.userApps', [{ id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#1' }]);
+  describe("useShellApps", () => {
+    it("derives drafts from the listing, excluding pinned + automation entries", async () => {
+      store.set("home.userApps", [
+        { id: "todos", name: "Todos", iconKey: "Todo", color: "#1" },
+      ]);
       listApps.mockResolvedValue([
-        { id: 'todos', name: 'Todos', kind: 'app', hasIndex: false },
-        { id: 'wip', name: 'WIP', kind: 'app', hasIndex: true },
-        { id: 'auto1', name: 'Cron', kind: 'automation', hasIndex: false },
+        { id: "todos", name: "Todos", kind: "app", hasIndex: false },
+        { id: "wip", name: "WIP", kind: "app", hasIndex: true },
+        { id: "auto1", name: "Cron", kind: "automation", hasIndex: false },
       ]);
       await mount();
-      expect(ctl.drafts.map((d) => d.id)).toStrictEqual(['wip']);
-      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(['todos']);
+      expect(ctl.drafts.map((d) => d.id)).toStrictEqual(["wip"]);
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["todos"]);
     });
 
-    it('prunes orphan pins whose app no longer exists on the gateway', async () => {
-      store.set('home.userApps', [
-        { id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#1' },
-        { id: 'gone', name: 'Gone', iconKey: 'Todo', color: '#2' },
+    it("prunes orphan pins whose app no longer exists on the gateway", async () => {
+      store.set("home.userApps", [
+        { id: "todos", name: "Todos", iconKey: "Todo", color: "#1" },
+        { id: "gone", name: "Gone", iconKey: "Todo", color: "#2" },
       ]);
-      listApps.mockResolvedValue([{ id: 'todos', name: 'Todos', kind: 'app', hasIndex: false }]);
+      listApps.mockResolvedValue([
+        { id: "todos", name: "Todos", kind: "app", hasIndex: false },
+      ]);
       await mount();
-      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(['todos']);
-      expect(store.get('home.userApps') as unknown[]).toHaveLength(1);
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["todos"]);
+      expect(store.get("home.userApps") as unknown[]).toHaveLength(1);
     });
 
-    it('overlays tile identity from the listing app.json', async () => {
-      store.set('home.userApps', [{ id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#old' }]);
+    it("overlays tile identity from the listing app.json", async () => {
+      store.set("home.userApps", [
+        { id: "todos", name: "Todos", iconKey: "Todo", color: "#old" },
+      ]);
       listApps.mockResolvedValue([
         {
-          id: 'todos',
-          name: 'Todos',
-          kind: 'app',
-          iconKey: 'Habit',
-          colorKey: 'teal',
+          id: "todos",
+          name: "Todos",
+          kind: "app",
+          iconKey: "Habit",
+          colorKey: "teal",
           hasIndex: false,
         },
       ]);
       await mount();
-      expect(ctl.userApps[0]?.iconKey).toBe('Habit');
+      expect(ctl.userApps[0]?.iconKey).toBe("Habit");
     });
 
-    it('overlays a renamed app.json name/description onto the cached pin', async () => {
+    it("overlays a renamed app.json name/description onto the cached pin", async () => {
       // Reproduces the Home-tile-never-updates-after-rename bug: updateAppMeta
       // only writes the new name to the gateway's app.json — the Home pin
       // cached in the Store must pick it up via this reconciliation, since
       // nothing else calls setUserApps() after a rename.
-      store.set('home.userApps', [
+      store.set("home.userApps", [
         {
-          id: 'agenda',
-          name: 'Agenda',
-          desc: 'Old desc',
-          iconKey: 'Todo',
-          color: '#old',
+          id: "agenda",
+          name: "Agenda",
+          desc: "Old desc",
+          iconKey: "Todo",
+          color: "#old",
         },
       ]);
       listApps.mockResolvedValue([
         {
-          id: 'agenda',
-          name: 'Agenda Renamed',
-          description: 'New desc',
-          kind: 'app',
+          id: "agenda",
+          name: "Agenda Renamed",
+          description: "New desc",
+          kind: "app",
           hasIndex: false,
         },
       ]);
       await mount();
-      expect(ctl.userApps[0]?.name).toBe('Agenda Renamed');
-      expect(ctl.userApps[0]?.desc).toBe('New desc');
+      expect(ctl.userApps[0]?.name).toBe("Agenda Renamed");
+      expect(ctl.userApps[0]?.desc).toBe("New desc");
     });
 
-    it('empties drafts when the listing fetch fails', async () => {
-      listApps.mockRejectedValue(new Error('offline'));
+    it("empties drafts when the listing fetch fails", async () => {
+      listApps.mockRejectedValue(new Error("offline"));
       await mount();
       expect(ctl.drafts).toStrictEqual([]);
     });
 
-    it('a vault switch parks the outgoing vault’s pins instead of pruning them', async () => {
+    it("a vault switch parks the outgoing vault’s pins instead of pruning them", async () => {
       // Reproduces the DRAFT-demotion bug: pins live in a non-vault-scoped
       // store, so a switch to an empty vault made every pin look orphaned,
       // and the prune destroyed them permanently.
       const api = (vaultId: string) => ({
-        getGatewayAuth: async () => ({ baseUrl: '', vaultId }),
+        getGatewayAuth: async () => ({ baseUrl: "", vaultId }),
       });
-      (window as unknown as { CentraidApi: unknown }).CentraidApi = api('A');
-      store.set('home.userApps', [{ id: 'notes', name: 'Notes', iconKey: 'Todo', color: '#1' }]);
-      listApps.mockResolvedValue([{ id: 'notes', name: 'Notes', kind: 'app', hasIndex: false }]);
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
+      store.set("home.userApps", [
+        { id: "notes", name: "Notes", iconKey: "Todo", color: "#1" },
+      ]);
+      listApps.mockResolvedValue([
+        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
+      ]);
       await mount();
-      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(['notes']);
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
 
       // Switch to empty vault B: Home empties, but A's pins are parked.
-      (window as unknown as { CentraidApi: unknown }).CentraidApi = api('B');
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = api("B");
       listApps.mockResolvedValue([]);
       await act(async () => ctl.refresh());
       expect(ctl.userApps).toStrictEqual([]);
 
       // Back to A: the pin is restored, not demoted to a draft.
-      (window as unknown as { CentraidApi: unknown }).CentraidApi = api('A');
-      listApps.mockResolvedValue([{ id: 'notes', name: 'Notes', kind: 'app', hasIndex: false }]);
+      (window as unknown as { CentraidApi: unknown }).CentraidApi = api("A");
+      listApps.mockResolvedValue([
+        { id: "notes", name: "Notes", kind: "app", hasIndex: false },
+      ]);
       await act(async () => ctl.refresh());
-      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(['notes']);
+      expect(ctl.userApps.map((a) => a.id)).toStrictEqual(["notes"]);
       expect(ctl.drafts).toStrictEqual([]);
     });
 
-    it('setUserApps persists to the Store', async () => {
+    it("setUserApps persists to the Store", async () => {
       listApps.mockResolvedValue([]);
       await mount();
       await act(async () => {
         ctl.setUserApps([
           {
-            id: 'x',
-            name: 'X',
-            iconKey: 'Todo',
-            color: '#3',
+            id: "x",
+            name: "X",
+            iconKey: "Todo",
+            color: "#3",
           } as unknown as UserAppMeta,
         ]);
       });
-      expect((store.get('home.userApps') as UserAppMeta[])[0]?.id).toBe('x');
+      expect((store.get("home.userApps") as UserAppMeta[])[0]?.id).toBe("x");
     });
   });
 });

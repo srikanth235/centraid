@@ -42,7 +42,7 @@ export interface PaletteConversationSearchOptions {
 const MIN_QUERY_CHARS = 2;
 
 export function createPaletteConversationSearch(
-  opts: PaletteConversationSearchOptions,
+  opts: PaletteConversationSearchOptions
 ): PaletteConversationSearch {
   const cache = new Map<string, PaletteConversationHit[]>();
   const inFlight = new Set<string>();

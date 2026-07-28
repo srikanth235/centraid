@@ -12,11 +12,11 @@
  * sessions and replica checkpoints.
  */
 
-import crypto from 'node:crypto';
-import path from 'node:path';
+import crypto from "node:crypto";
+import path from "node:path";
 
-import { GatewayDatabase } from './gateway-db.js';
-import { MemberStore, type Member, type MemberGrant } from './member-store.js';
+import { GatewayDatabase } from "./gateway-db.js";
+import { MemberStore, type Member, type MemberGrant } from "./member-store.js";
 
 /*
  * ROLE is the authority a MEMBER is granted in a vault — what they may DO.
@@ -33,12 +33,12 @@ import { MemberStore, type Member, type MemberGrant } from './member-store.js';
  * never granted, never offered in a picker — hence its absence from
  * `GrantableRole`, which is exactly the set a ticket grant may carry.
  */
-export type DeviceRole = 'admin' | 'write' | 'read' | 'revoked';
-export type GrantableRole = 'admin' | 'write' | 'read';
+export type DeviceRole = "admin" | "write" | "read" | "revoked";
+export type GrantableRole = "admin" | "write" | "read";
 
 /** The one predicate for "may this role mutate" — admin is write's superset. */
 export function canWrite(role: DeviceRole): boolean {
-  return role === 'admin' || role === 'write';
+  return role === "admin" || role === "write";
 }
 
 const ROLE_RANK: Record<GrantableRole, number> = {
@@ -48,7 +48,10 @@ const ROLE_RANK: Record<GrantableRole, number> = {
 };
 
 /** True when `candidate` grants no more authority than `ceiling`. */
-export function roleWithin(candidate: GrantableRole, ceiling: GrantableRole): boolean {
+export function roleWithin(
+  candidate: GrantableRole,
+  ceiling: GrantableRole
+): boolean {
   return ROLE_RANK[candidate] <= ROLE_RANK[ceiling];
 }
 
@@ -142,7 +145,9 @@ function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
   const resolved = path.resolve(source);
   const root =
-    path.basename(resolved) === 'gateway.db' ? path.dirname(resolved) : path.dirname(resolved);
+    path.basename(resolved) === "gateway.db"
+      ? path.dirname(resolved)
+      : path.dirname(resolved);
   return GatewayDatabase.open(root);
 }
 
@@ -169,7 +174,7 @@ function toEnrollment(row: EnrollmentRow): DeviceEnrollment {
     ...(row.platform === null ? {} : { platform: row.platform }),
     // The tombstone wins over the member's authored role: a stolen phone
     // keeps its owner's grants on paper and none of them in practice.
-    role: row.revoked === 1 ? 'revoked' : row.role,
+    role: row.revoked === 1 ? "revoked" : row.role,
     rememberDevice: row.remember_device === 1,
     ...(Array.isArray(grantProfile) ? { grantProfile } : {}),
     ...(compute ? { compute } : {}),
@@ -189,7 +194,7 @@ export class EnrollmentStore {
 
   static open(
     source: string | GatewayDatabase,
-    _options: { statTtlMs?: number; now?: () => number } = {},
+    _options: { statTtlMs?: number; now?: () => number } = {}
   ): EnrollmentStore {
     return new EnrollmentStore(databaseFor(source));
   }
@@ -197,7 +202,9 @@ export class EnrollmentStore {
   list(): DeviceEnrollment[] {
     return (
       this.gatewayDatabase.db
-        .prepare(`${ENROLLMENT_VIEW_SQL} ORDER BY d.added_at, d.enrollment_id, r.vault_id`)
+        .prepare(
+          `${ENROLLMENT_VIEW_SQL} ORDER BY d.added_at, d.enrollment_id, r.vault_id`
+        )
         .all() as unknown as EnrollmentRow[]
     ).map(toEnrollment);
   }
@@ -213,7 +220,9 @@ export class EnrollmentStore {
   /** The principal a proved EndpointId acts as, tombstone included. */
   memberFor(endpointId: string): Member | undefined {
     const row = this.gatewayDatabase.db
-      .prepare('SELECT member_id FROM devices WHERE endpoint_id = ? AND revoked = 0')
+      .prepare(
+        "SELECT member_id FROM devices WHERE endpoint_id = ? AND revoked = 0"
+      )
       .get(endpointId) as { member_id: string } | undefined;
     return row ? this.members.get(row.member_id) : undefined;
   }
@@ -225,7 +234,7 @@ export class EnrollmentStore {
           `SELECT r.vault_id FROM devices d
              JOIN member_roles r ON r.member_id = d.member_id
             WHERE d.endpoint_id = ? AND d.revoked = 0
-            ORDER BY r.vault_id`,
+            ORDER BY r.vault_id`
         )
         .all(endpointId) as Array<{ vault_id: string }>
     ).map((row) => row.vault_id);
@@ -239,7 +248,8 @@ export class EnrollmentStore {
     return this.gatewayDatabase.transaction(() => {
       const enrolled = this.enrollWithinTransaction(input);
       const first = enrolled[0];
-      if (!first) throw new Error('enrollment must grant at least one vault role');
+      if (!first)
+        throw new Error("enrollment must grant at least one vault role");
       return first;
     });
   }
@@ -253,11 +263,15 @@ export class EnrollmentStore {
     const grants = resolveGrants(input);
     const memberId = this.resolveMemberWithinTransaction(input);
     for (const grant of grants) {
-      this.members.setGrantWithinTransaction(memberId, grant.vaultId, grant.role);
+      this.members.setGrantWithinTransaction(
+        memberId,
+        grant.vaultId,
+        grant.role
+      );
     }
     const existing = this.gatewayDatabase.db
       .prepare(
-        'SELECT enrollment_id, platform, grant_profile_json FROM devices WHERE endpoint_id = ?',
+        "SELECT enrollment_id, platform, grant_profile_json FROM devices WHERE endpoint_id = ?"
       )
       .get(input.endpointId) as
       | {
@@ -267,10 +281,11 @@ export class EnrollmentStore {
         }
       | undefined;
     if (existing) {
-      const platform = input.platform === undefined ? existing.platform : input.platform;
+      const platform =
+        input.platform === undefined ? existing.platform : input.platform;
       const grantProfile =
         input.grantProfile === undefined
-          ? input.platform !== undefined && input.platform !== 'extension'
+          ? input.platform !== undefined && input.platform !== "extension"
             ? null
             : existing.grant_profile_json
           : JSON.stringify(input.grantProfile);
@@ -279,7 +294,7 @@ export class EnrollmentStore {
           `UPDATE devices
               SET member_id = ?, label = ?, platform = ?, remember_device = ?,
                   grant_profile_json = ?, revoked = 0
-            WHERE endpoint_id = ?`,
+            WHERE endpoint_id = ?`
         )
         .run(
           memberId,
@@ -287,7 +302,7 @@ export class EnrollmentStore {
           platform,
           input.rememberDevice === true ? 1 : 0,
           grantProfile,
-          input.endpointId,
+          input.endpointId
         );
     } else {
       this.gatewayDatabase.db
@@ -295,7 +310,7 @@ export class EnrollmentStore {
           `INSERT INTO devices (
             enrollment_id, endpoint_id, member_id, label, platform,
             remember_device, grant_profile_json, revoked, added_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`
         )
         .run(
           crypto.randomUUID(),
@@ -305,22 +320,24 @@ export class EnrollmentStore {
           input.platform ?? null,
           input.rememberDevice === true ? 1 : 0,
           input.grantProfile ? JSON.stringify(input.grantProfile) : null,
-          new Date().toISOString(),
+          new Date().toISOString()
         );
     }
     const vaultIds = new Set(
       grants.length > 0
         ? grants.map((grant) => grant.vaultId)
-        : this.members.grants(memberId).map((grant) => grant.vaultId),
+        : this.members.grants(memberId).map((grant) => grant.vaultId)
     );
     return this.list().filter(
-      (row) => row.endpointId === input.endpointId && vaultIds.has(row.vaultId),
+      (row) => row.endpointId === input.endpointId && vaultIds.has(row.vaultId)
     );
   }
 
   get(endpointId: string, vaultId: string): DeviceEnrollment | undefined {
     const row = this.gatewayDatabase.db
-      .prepare(`${ENROLLMENT_VIEW_SQL} WHERE d.endpoint_id = ? AND r.vault_id = ?`)
+      .prepare(
+        `${ENROLLMENT_VIEW_SQL} WHERE d.endpoint_id = ? AND r.vault_id = ?`
+      )
       .get(endpointId, vaultId) as EnrollmentRow | undefined;
     return row ? toEnrollment(row) : undefined;
   }
@@ -328,7 +345,7 @@ export class EnrollmentStore {
   resetCheckpoint(
     endpointId: string,
     vaultId: string,
-    cursor: Omit<ReplicaCheckpoint, 'updatedAt'>,
+    cursor: Omit<ReplicaCheckpoint, "updatedAt">
   ): ReplicaCheckpoint {
     const checkpoint = checkpointNow(cursor);
     this.require(endpointId, vaultId);
@@ -337,7 +354,7 @@ export class EnrollmentStore {
         `INSERT INTO device_checkpoints (endpoint_id, vault_id, checkpoint_json)
          VALUES (?, ?, ?)
          ON CONFLICT(endpoint_id, vault_id)
-           DO UPDATE SET checkpoint_json = excluded.checkpoint_json`,
+           DO UPDATE SET checkpoint_json = excluded.checkpoint_json`
       )
       .run(endpointId, vaultId, JSON.stringify(checkpoint));
     return checkpoint;
@@ -346,16 +363,20 @@ export class EnrollmentStore {
   advanceCheckpoint(
     endpointId: string,
     vaultId: string,
-    cursor: Omit<ReplicaCheckpoint, 'updatedAt'>,
+    cursor: Omit<ReplicaCheckpoint, "updatedAt">
   ): ReplicaCheckpoint {
     const enrollment = this.require(endpointId, vaultId);
     const previous = enrollment.checkpoint;
-    if (!previous) throw new Error('replica checkpoint must be initialized by bootstrap');
-    if (previous.epoch !== cursor.epoch || previous.schemaEpoch !== cursor.schemaEpoch) {
-      throw new Error('replica checkpoint epoch changed; rebootstrap required');
+    if (!previous)
+      throw new Error("replica checkpoint must be initialized by bootstrap");
+    if (
+      previous.epoch !== cursor.epoch ||
+      previous.schemaEpoch !== cursor.schemaEpoch
+    ) {
+      throw new Error("replica checkpoint epoch changed; rebootstrap required");
     }
     if (!Number.isSafeInteger(cursor.seq) || cursor.seq < previous.seq) {
-      throw new Error('replica checkpoint must advance monotonically');
+      throw new Error("replica checkpoint must advance monotonically");
     }
     return this.resetCheckpoint(endpointId, vaultId, cursor);
   }
@@ -365,14 +386,19 @@ export class EnrollmentStore {
    * `revoked` pseudo-role — tombstone the binding. The two land on different
    * layers by design (#599 Decision 6) and this is the seam that says so.
    */
-  setRole(endpointId: string, vaultId: string, role: DeviceRole): DeviceEnrollment {
+  setRole(
+    endpointId: string,
+    vaultId: string,
+    role: DeviceRole
+  ): DeviceEnrollment {
     return this.gatewayDatabase.transaction(() => {
       const current = this.get(endpointId, vaultId);
-      if (!current) throw new Error('device is not enrolled for this vault');
-      if (role === 'revoked') {
+      if (!current) throw new Error("device is not enrolled for this vault");
+      if (role === "revoked") {
         this.tombstoneWithinTransaction(endpointId);
         const revoked = this.get(endpointId, vaultId);
-        if (!revoked) throw new Error('device binding vanished during revocation');
+        if (!revoked)
+          throw new Error("device binding vanished during revocation");
         return revoked;
       }
       this.members.setGrantWithinTransaction(current.memberId, vaultId, role);
@@ -382,14 +408,18 @@ export class EnrollmentStore {
 
   setCompute(
     enrollmentId: string,
-    input: Omit<DeviceComputeProfile, 'updatedAt'>,
+    input: Omit<DeviceComputeProfile, "updatedAt">
   ): DeviceEnrollment {
     const compute = { ...input, updatedAt: new Date().toISOString() };
     this.gatewayDatabase.db
-      .prepare('UPDATE devices SET compute_json = ? WHERE enrollment_id = ? AND revoked = 0')
+      .prepare(
+        "UPDATE devices SET compute_json = ? WHERE enrollment_id = ? AND revoked = 0"
+      )
       .run(JSON.stringify(compute), enrollmentId);
-    const row = this.list().find((candidate) => candidate.enrollmentId === enrollmentId);
-    if (!row) throw new Error('device enrollment was not found');
+    const row = this.list().find(
+      (candidate) => candidate.enrollmentId === enrollmentId
+    );
+    if (!row) throw new Error("device enrollment was not found");
     return row;
   }
 
@@ -402,8 +432,9 @@ export class EnrollmentStore {
     return this.gatewayDatabase.transaction(() => {
       const removed = this.list().filter(
         (row) =>
-          row.role !== 'revoked' &&
-          (row.enrollmentId === idOrEndpointId || row.endpointId === idOrEndpointId),
+          row.role !== "revoked" &&
+          (row.enrollmentId === idOrEndpointId ||
+            row.endpointId === idOrEndpointId)
       );
       for (const endpointId of new Set(removed.map((row) => row.endpointId))) {
         this.tombstoneWithinTransaction(endpointId);
@@ -423,7 +454,7 @@ export class EnrollmentStore {
     return this.gatewayDatabase.transaction(() => {
       const removed = this.listByVault(vaultId);
       this.gatewayDatabase.db
-        .prepare('DELETE FROM device_checkpoints WHERE vault_id = ?')
+        .prepare("DELETE FROM device_checkpoints WHERE vault_id = ?")
         .run(vaultId);
       this.members.removeVault(vaultId);
       return removed;
@@ -432,16 +463,16 @@ export class EnrollmentStore {
 
   private tombstoneWithinTransaction(endpointId: string): void {
     this.gatewayDatabase.db
-      .prepare('UPDATE devices SET revoked = 1 WHERE endpoint_id = ?')
+      .prepare("UPDATE devices SET revoked = 1 WHERE endpoint_id = ?")
       .run(endpointId);
     this.gatewayDatabase.db
-      .prepare('DELETE FROM device_checkpoints WHERE endpoint_id = ?')
+      .prepare("DELETE FROM device_checkpoints WHERE endpoint_id = ?")
       .run(endpointId);
     // The binding survives as a tombstone, so the web_sessions FK cascade
     // (which fires on DELETE) never runs. Kill the durable browser sessions
     // here instead, or a revoked laptop keeps its cookie alive.
     this.gatewayDatabase.db
-      .prepare('DELETE FROM web_sessions WHERE device_key = ?')
+      .prepare("DELETE FROM web_sessions WHERE device_key = ?")
       .run(endpointId);
   }
 
@@ -455,7 +486,7 @@ export class EnrollmentStore {
       return this.members.createWithinTransaction(input.memberLabel).memberId;
     }
     const bound = this.gatewayDatabase.db
-      .prepare('SELECT member_id FROM devices WHERE endpoint_id = ?')
+      .prepare("SELECT member_id FROM devices WHERE endpoint_id = ?")
       .get(input.endpointId) as { member_id: string } | undefined;
     if (bound) return bound.member_id;
     // The host-custody lane (`devices add`, loopback host enrollment) names no
@@ -466,8 +497,8 @@ export class EnrollmentStore {
 
   private require(endpointId: string, vaultId: string): DeviceEnrollment {
     const enrollment = this.get(endpointId, vaultId);
-    if (!enrollment || enrollment.role === 'revoked') {
-      throw new Error('device is not enrolled for this vault');
+    if (!enrollment || enrollment.role === "revoked") {
+      throw new Error("device is not enrolled for this vault");
     }
     return enrollment;
   }
@@ -476,12 +507,14 @@ export class EnrollmentStore {
 function resolveGrants(input: EnrollInput): MemberGrant[] {
   if (input.grants !== undefined) return [...input.grants];
   if (input.vaultId !== undefined) {
-    return [{ vaultId: input.vaultId, role: input.role ?? 'write' }];
+    return [{ vaultId: input.vaultId, role: input.role ?? "write" }];
   }
   return [];
 }
 
-function checkpointNow(cursor: Omit<ReplicaCheckpoint, 'updatedAt'>): ReplicaCheckpoint {
+function checkpointNow(
+  cursor: Omit<ReplicaCheckpoint, "updatedAt">
+): ReplicaCheckpoint {
   if (
     !cursor.epoch ||
     !Number.isSafeInteger(cursor.seq) ||
@@ -489,7 +522,7 @@ function checkpointNow(cursor: Omit<ReplicaCheckpoint, 'updatedAt'>): ReplicaChe
     !Number.isSafeInteger(cursor.schemaEpoch) ||
     cursor.schemaEpoch < 0
   ) {
-    throw new Error('invalid replica checkpoint');
+    throw new Error("invalid replica checkpoint");
   }
   return { ...cursor, updatedAt: new Date().toISOString() };
 }

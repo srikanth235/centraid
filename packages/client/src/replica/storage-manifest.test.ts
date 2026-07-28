@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from "vitest";
 
 import {
   forgetReplicaIdentity,
@@ -11,14 +11,17 @@ import {
   type ReplicaIdentityInventory,
   type ReplicaIdentityInventoryEntry,
   type ReplicaStoragePurgeOptions,
-} from './storage-manifest.js';
-import { TerminalReplicaPurgeRetryLoop } from './terminal-purge-retry.js';
-import type { ReplicaIdentity } from './types.js';
-import type { ReplicaWorkerLike } from './worker-client.js';
-import type { ReplicaWorkerRequest, ReplicaWorkerResponse } from './worker-protocol.js';
+} from "./storage-manifest.js";
+import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
+import type { ReplicaIdentity } from "./types.js";
+import type { ReplicaWorkerLike } from "./worker-client.js";
+import type {
+  ReplicaWorkerRequest,
+  ReplicaWorkerResponse,
+} from "./worker-protocol.js";
 
 /** The `purgeIdentity` test seam every purge/retry option bag accepts. */
-type PurgeIdentity = NonNullable<ReplicaStoragePurgeOptions['purgeIdentity']>;
+type PurgeIdentity = NonNullable<ReplicaStoragePurgeOptions["purgeIdentity"]>;
 
 function memoryStorage() {
   const values = new Map<string, string>();
@@ -44,10 +47,10 @@ function memoryInventory(): ReplicaIdentityInventory & {
     values,
     async activate(identity) {
       const key = `${identity.gatewayId}\u0000${identity.vaultId}`;
-      if (values.get(key)?.state === 'terminal-pending') return false;
+      if (values.get(key)?.state === "terminal-pending") return false;
       values.set(key, {
         ...structuredClone(identity),
-        state: 'remembered',
+        state: "remembered",
         purgeAttempts: 0,
         retryAt: 0,
       });
@@ -58,9 +61,10 @@ function memoryInventory(): ReplicaIdentityInventory & {
       const existing = values.get(key);
       values.set(key, {
         ...structuredClone(identity),
-        state: 'terminal-pending',
-        purgeAttempts: existing?.state === 'terminal-pending' ? existing.purgeAttempts : 0,
-        retryAt: existing?.state === 'terminal-pending' ? existing.retryAt : 0,
+        state: "terminal-pending",
+        purgeAttempts:
+          existing?.state === "terminal-pending" ? existing.purgeAttempts : 0,
+        retryAt: existing?.state === "terminal-pending" ? existing.retryAt : 0,
       });
     },
     async deferTerminal(identity, failedAt, baseDelayMs, maxDelayMs) {
@@ -68,9 +72,11 @@ function memoryInventory(): ReplicaIdentityInventory & {
       const attempts = (values.get(key)?.purgeAttempts ?? 0) + 1;
       values.set(key, {
         ...structuredClone(identity),
-        state: 'terminal-pending',
+        state: "terminal-pending",
         purgeAttempts: attempts,
-        retryAt: failedAt + Math.min(baseDelayMs * 2 ** Math.min(attempts - 1, 10), maxDelayMs),
+        retryAt:
+          failedAt +
+          Math.min(baseDelayMs * 2 ** Math.min(attempts - 1, 10), maxDelayMs),
       });
     },
     async remove(identity) {
@@ -83,20 +89,22 @@ function memoryInventory(): ReplicaIdentityInventory & {
 }
 
 class SuccessfulPurgeWorker implements ReplicaWorkerLike {
-  readonly #messages = new Set<(event: MessageEvent<ReplicaWorkerResponse>) => void>();
+  readonly #messages = new Set<
+    (event: MessageEvent<ReplicaWorkerResponse>) => void
+  >();
   readonly #errors = new Set<(event: ErrorEvent) => void>();
 
   postMessage(request: ReplicaWorkerRequest): void {
     const response: ReplicaWorkerResponse =
-      request.op === 'open'
+      request.op === "open"
         ? {
             id: request.id,
             ok: true,
-            result: { mode: 'opfs-sahpool', cursor: null, schemaEpoch: null },
+            result: { mode: "opfs-sahpool", cursor: null, schemaEpoch: null },
           }
         : { id: request.id, ok: true, result: undefined };
     queueMicrotask(() => {
-      const event = new MessageEvent<ReplicaWorkerResponse>('message', {
+      const event = new MessageEvent<ReplicaWorkerResponse>("message", {
         data: response,
       });
       for (const listener of this.#messages) listener(event);
@@ -104,26 +112,30 @@ class SuccessfulPurgeWorker implements ReplicaWorkerLike {
   }
 
   addEventListener(
-    type: 'message' | 'error',
+    type: "message" | "error",
     listener:
       | ((event: MessageEvent<ReplicaWorkerResponse>) => void)
-      | ((event: ErrorEvent) => void),
+      | ((event: ErrorEvent) => void)
   ): void {
-    if (type === 'message') {
-      this.#messages.add(listener as (event: MessageEvent<ReplicaWorkerResponse>) => void);
+    if (type === "message") {
+      this.#messages.add(
+        listener as (event: MessageEvent<ReplicaWorkerResponse>) => void
+      );
     } else {
       this.#errors.add(listener as (event: ErrorEvent) => void);
     }
   }
 
   removeEventListener(
-    type: 'message' | 'error',
+    type: "message" | "error",
     listener:
       | ((event: MessageEvent<ReplicaWorkerResponse>) => void)
-      | ((event: ErrorEvent) => void),
+      | ((event: ErrorEvent) => void)
   ): void {
-    if (type === 'message') {
-      this.#messages.delete(listener as (event: MessageEvent<ReplicaWorkerResponse>) => void);
+    if (type === "message") {
+      this.#messages.delete(
+        listener as (event: MessageEvent<ReplicaWorkerResponse>) => void
+      );
     } else {
       this.#errors.delete(listener as (event: ErrorEvent) => void);
     }
@@ -132,79 +144,96 @@ class SuccessfulPurgeWorker implements ReplicaWorkerLike {
   terminate(): void {}
 }
 
-const first: ReplicaIdentity = { gatewayId: 'gateway-a', vaultId: 'vault-1' };
-const second: ReplicaIdentity = { gatewayId: 'gateway-a', vaultId: 'vault-2' };
+const first: ReplicaIdentity = { gatewayId: "gateway-a", vaultId: "vault-1" };
+const second: ReplicaIdentity = { gatewayId: "gateway-a", vaultId: "vault-2" };
 const inactive: ReplicaIdentity = {
-  gatewayId: 'gateway-b',
-  vaultId: 'vault-3',
+  gatewayId: "gateway-b",
+  vaultId: "vault-3",
 };
 
-describe('remembered replica manifest', () => {
-  test('deduplicates identities and forgets only the exact gateway/vault scope', () => {
+describe("remembered replica manifest", () => {
+  test("deduplicates identities and forgets only the exact gateway/vault scope", () => {
     const storage = memoryStorage();
     rememberReplicaIdentity(first, storage);
     rememberReplicaIdentity(first, storage);
     rememberReplicaIdentity(second, storage);
 
-    expect(listRememberedReplicaIdentities(storage)).toStrictEqual([first, second]);
+    expect(listRememberedReplicaIdentities(storage)).toStrictEqual([
+      first,
+      second,
+    ]);
     forgetReplicaIdentity(first, storage);
     expect(listRememberedReplicaIdentities(storage)).toStrictEqual([second]);
   });
 
-  test('targeted purge reaches dormant identities on an inactive gateway', async () => {
+  test("targeted purge reaches dormant identities on an inactive gateway", async () => {
     const storage = memoryStorage();
-    for (const identity of [first, second, inactive]) rememberReplicaIdentity(identity, storage);
+    for (const identity of [first, second, inactive])
+      rememberReplicaIdentity(identity, storage);
     const purgeIdentity = vi.fn<PurgeIdentity>().mockResolvedValue(undefined);
 
-    await purgeRememberedReplicaIdentities((identity) => identity.gatewayId === 'gateway-b', {
-      storage,
-      purgeIdentity,
-    });
+    await purgeRememberedReplicaIdentities(
+      (identity) => identity.gatewayId === "gateway-b",
+      {
+        storage,
+        purgeIdentity,
+      }
+    );
 
     expect(purgeIdentity).toHaveBeenCalledExactlyOnceWith(inactive);
-    expect(listRememberedReplicaIdentities(storage)).toStrictEqual([first, second]);
+    expect(listRememberedReplicaIdentities(storage)).toStrictEqual([
+      first,
+      second,
+    ]);
   });
 
-  test('retains failed scopes so a later lifecycle event can retry cleanup', async () => {
+  test("retains failed scopes so a later lifecycle event can retry cleanup", async () => {
     const storage = memoryStorage();
     rememberReplicaIdentity(first, storage);
 
     await expect(
       purgeRememberedReplicaIdentities(() => true, {
         storage,
-        purgeIdentity: vi.fn<PurgeIdentity>().mockRejectedValue(new Error('OPFS busy')),
-      }),
-    ).rejects.toThrow('One or more replica scopes remain');
+        purgeIdentity: vi
+          .fn<PurgeIdentity>()
+          .mockRejectedValue(new Error("OPFS busy")),
+      })
+    ).rejects.toThrow("One or more replica scopes remain");
     expect(listRememberedReplicaIdentities(storage)).toStrictEqual([first]);
   });
 
-  test('authoritative inventory survives localStorage clearing for inactive cleanup', async () => {
+  test("authoritative inventory survives localStorage clearing for inactive cleanup", async () => {
     const storage = memoryStorage();
     const inventory = memoryInventory();
-    await expect(prepareRememberedReplicaIdentity(inactive, { storage, inventory })).resolves.toBe(
-      true,
-    );
+    await expect(
+      prepareRememberedReplicaIdentity(inactive, { storage, inventory })
+    ).resolves.toBe(true);
     storage.values.clear();
     const purgeIdentity = vi.fn<PurgeIdentity>().mockResolvedValue(undefined);
 
-    await purgeRememberedReplicaIdentities((identity) => identity.gatewayId === 'gateway-b', {
-      storage,
-      inventory,
-      purgeIdentity,
-    });
+    await purgeRememberedReplicaIdentities(
+      (identity) => identity.gatewayId === "gateway-b",
+      {
+        storage,
+        inventory,
+        purgeIdentity,
+      }
+    );
 
     expect(purgeIdentity).toHaveBeenCalledExactlyOnceWith(inactive);
     await expect(inventory.list()).resolves.toStrictEqual([]);
   });
 
-  test('retries a durably selected inactive scope after inventory discovery fails', async () => {
+  test("retries a durably selected inactive scope after inventory discovery fails", async () => {
     vi.useFakeTimers();
     try {
       const storage = memoryStorage();
       const inventory = memoryInventory();
       await prepareRememberedReplicaIdentity(inactive, { storage, inventory });
       storage.values.clear();
-      vi.spyOn(inventory, 'list').mockRejectedValueOnce(new Error('IDB read interrupted'));
+      vi.spyOn(inventory, "list").mockRejectedValueOnce(
+        new Error("IDB read interrupted")
+      );
       const purgeIdentity = vi.fn<PurgeIdentity>().mockResolvedValue(undefined);
       const options = {
         storage,
@@ -212,7 +241,7 @@ describe('remembered replica manifest', () => {
         purgeIdentity,
         retryBaseDelayMs: 10,
         purgeSelector: {
-          kind: 'gateway' as const,
+          kind: "gateway" as const,
           gatewayId: inactive.gatewayId,
         },
       };
@@ -221,7 +250,7 @@ describe('remembered replica manifest', () => {
       // selector must remain durable for a fresh browser-lifetime retry loop.
       await purgeRememberedReplicaIdentities(
         (identity) => identity.gatewayId === inactive.gatewayId,
-        options,
+        options
       ).catch(() => undefined);
       expect(purgeIdentity).not.toHaveBeenCalled();
 
@@ -237,25 +266,29 @@ describe('remembered replica manifest', () => {
     }
   });
 
-  test('refuses durable mode when the authoritative inventory cannot persist', async () => {
+  test("refuses durable mode when the authoritative inventory cannot persist", async () => {
     const inventory: ReplicaIdentityInventory = {
       activate: vi
-        .fn<ReplicaIdentityInventory['activate']>()
-        .mockRejectedValue(new Error('IDB denied')),
+        .fn<ReplicaIdentityInventory["activate"]>()
+        .mockRejectedValue(new Error("IDB denied")),
       markTerminal: vi
-        .fn<ReplicaIdentityInventory['markTerminal']>()
-        .mockRejectedValue(new Error('IDB denied')),
+        .fn<ReplicaIdentityInventory["markTerminal"]>()
+        .mockRejectedValue(new Error("IDB denied")),
       deferTerminal: vi
-        .fn<ReplicaIdentityInventory['deferTerminal']>()
-        .mockRejectedValue(new Error('IDB denied')),
-      remove: vi.fn<ReplicaIdentityInventory['remove']>().mockResolvedValue(undefined),
-      list: vi.fn<ReplicaIdentityInventory['list']>().mockResolvedValue([]),
+        .fn<ReplicaIdentityInventory["deferTerminal"]>()
+        .mockRejectedValue(new Error("IDB denied")),
+      remove: vi
+        .fn<ReplicaIdentityInventory["remove"]>()
+        .mockResolvedValue(undefined),
+      list: vi.fn<ReplicaIdentityInventory["list"]>().mockResolvedValue([]),
     };
 
-    await expect(prepareRememberedReplicaIdentity(first, { inventory })).resolves.toBe(false);
+    await expect(
+      prepareRememberedReplicaIdentity(first, { inventory })
+    ).resolves.toBe(false);
   });
 
-  test('retains inventory when IDB is unavailable during terminal purge', async () => {
+  test("retains inventory when IDB is unavailable during terminal purge", async () => {
     const storage = memoryStorage();
     const inventory = memoryInventory();
     await inventory.activate(first);
@@ -265,27 +298,31 @@ describe('remembered replica manifest', () => {
         storage,
         inventory,
         workerFactory: () => new SuccessfulPurgeWorker(),
-      }),
-    ).rejects.toThrow('Could not purge replica');
+      })
+    ).rejects.toThrow("Could not purge replica");
     await expect(inventory.list()).resolves.toStrictEqual([
       {
         ...first,
-        state: 'terminal-pending',
+        state: "terminal-pending",
         purgeAttempts: 1,
         retryAt: expect.any(Number),
       },
     ]);
   });
 
-  test('uses the durable terminal hint when the inventory mark fails transiently', async () => {
+  test("uses the durable terminal hint when the inventory mark fails transiently", async () => {
     const storage = memoryStorage();
     const inventory = memoryInventory();
     await prepareRememberedReplicaIdentity(first, { storage, inventory });
-    vi.spyOn(inventory, 'markTerminal').mockRejectedValueOnce(new Error('IDB transaction failed'));
-    vi.spyOn(inventory, 'deferTerminal').mockRejectedValueOnce(
-      new Error('IDB transaction still failed'),
+    vi.spyOn(inventory, "markTerminal").mockRejectedValueOnce(
+      new Error("IDB transaction failed")
     );
-    const purgeIdentity = vi.fn<PurgeIdentity>().mockRejectedValueOnce(new Error('OPFS busy'));
+    vi.spyOn(inventory, "deferTerminal").mockRejectedValueOnce(
+      new Error("IDB transaction still failed")
+    );
+    const purgeIdentity = vi
+      .fn<PurgeIdentity>()
+      .mockRejectedValueOnce(new Error("OPFS busy"));
 
     await expect(
       purgeReplicaIdentityStorage(first, {
@@ -294,8 +331,8 @@ describe('remembered replica manifest', () => {
         purgeIdentity,
         retryBaseDelayMs: 10,
         now: () => 500,
-      }),
-    ).rejects.toThrow('Could not purge replica');
+      })
+    ).rejects.toThrow("Could not purge replica");
 
     purgeIdentity.mockResolvedValue(undefined);
     await expect(
@@ -305,36 +342,40 @@ describe('remembered replica manifest', () => {
         purgeIdentity,
         retryBaseDelayMs: 10,
         now: () => 500,
-      }),
+      })
     ).resolves.toBeUndefined();
     expect(purgeIdentity).toHaveBeenCalledTimes(2);
     await expect(inventory.list()).resolves.toStrictEqual([]);
   });
 
-  test('does not delete data when neither terminal tracking store can record the request', async () => {
+  test("does not delete data when neither terminal tracking store can record the request", async () => {
     const storage: MemoryStorage = memoryStorage();
     storage.setItem = () => {
-      throw new Error('localStorage denied');
+      throw new Error("localStorage denied");
     };
     const inventory = memoryInventory();
     await inventory.activate(first);
-    vi.spyOn(inventory, 'markTerminal').mockRejectedValue(new Error('IDB denied'));
+    vi.spyOn(inventory, "markTerminal").mockRejectedValue(
+      new Error("IDB denied")
+    );
     const purgeIdentity = vi.fn<PurgeIdentity>().mockResolvedValue(undefined);
 
     await expect(
-      purgeReplicaIdentityStorage(first, { storage, inventory, purgeIdentity }),
-    ).rejects.toThrow('Could not durably schedule replica purge');
+      purgeReplicaIdentityStorage(first, { storage, inventory, purgeIdentity })
+    ).rejects.toThrow("Could not durably schedule replica purge");
     expect(purgeIdentity).not.toHaveBeenCalled();
     await expect(inventory.list()).resolves.toStrictEqual([
-      { ...first, state: 'remembered', purgeAttempts: 0, retryAt: 0 },
+      { ...first, state: "remembered", purgeAttempts: 0, retryAt: 0 },
     ]);
   });
 
-  test('retries only terminal rows after backoff and never purges an active remembered scope', async () => {
+  test("retries only terminal rows after backoff and never purges an active remembered scope", async () => {
     const inventory = memoryInventory();
     await inventory.activate(first);
     await inventory.activate(inactive);
-    const failedPurge = vi.fn<PurgeIdentity>().mockRejectedValue(new Error('OPFS busy'));
+    const failedPurge = vi
+      .fn<PurgeIdentity>()
+      .mockRejectedValue(new Error("OPFS busy"));
 
     await expect(
       purgeReplicaIdentityStorage(inactive, {
@@ -342,9 +383,11 @@ describe('remembered replica manifest', () => {
         purgeIdentity: failedPurge,
         now: () => 1_000,
         retryBaseDelayMs: 10,
-      }),
-    ).rejects.toThrow('Could not purge replica');
-    await expect(prepareRememberedReplicaIdentity(inactive, { inventory })).resolves.toBe(false);
+      })
+    ).rejects.toThrow("Could not purge replica");
+    await expect(
+      prepareRememberedReplicaIdentity(inactive, { inventory })
+    ).resolves.toBe(false);
 
     const recoveredPurge = vi.fn<PurgeIdentity>().mockResolvedValue(undefined);
     await expect(
@@ -353,7 +396,7 @@ describe('remembered replica manifest', () => {
         purgeIdentity: recoveredPurge,
         now: () => 1_009,
         retryBaseDelayMs: 10,
-      }),
+      })
     ).resolves.toBe(1_010);
     expect(recoveredPurge).not.toHaveBeenCalled();
 
@@ -363,15 +406,15 @@ describe('remembered replica manifest', () => {
         purgeIdentity: recoveredPurge,
         now: () => 1_010,
         retryBaseDelayMs: 10,
-      }),
+      })
     ).resolves.toBeUndefined();
     expect(recoveredPurge).toHaveBeenCalledExactlyOnceWith(inactive);
     await expect(inventory.list()).resolves.toStrictEqual([
-      { ...first, state: 'remembered', purgeAttempts: 0, retryAt: 0 },
+      { ...first, state: "remembered", purgeAttempts: 0, retryAt: 0 },
     ]);
   });
 
-  test('automatically resumes terminal cleanup across a fresh retry loop after two failures', async () => {
+  test("automatically resumes terminal cleanup across a fresh retry loop after two failures", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(2_000);
     try {
@@ -380,8 +423,8 @@ describe('remembered replica manifest', () => {
       await prepareRememberedReplicaIdentity(inactive, { storage, inventory });
       const purgeIdentity = vi
         .fn<PurgeIdentity>()
-        .mockRejectedValueOnce(new Error('OPFS busy'))
-        .mockRejectedValueOnce(new Error('OPFS still busy'))
+        .mockRejectedValueOnce(new Error("OPFS busy"))
+        .mockRejectedValueOnce(new Error("OPFS still busy"))
         .mockResolvedValue(undefined);
       const options = {
         storage,
@@ -390,9 +433,9 @@ describe('remembered replica manifest', () => {
         retryBaseDelayMs: 10,
       };
 
-      await expect(purgeReplicaIdentityStorage(inactive, options)).rejects.toThrow(
-        'Could not purge replica',
-      );
+      await expect(
+        purgeReplicaIdentityStorage(inactive, options)
+      ).rejects.toThrow("Could not purge replica");
 
       // A new loop models a renderer reload: its startup sweep reads only the
       // fixed-name inventory state, not an in-memory retry closure.

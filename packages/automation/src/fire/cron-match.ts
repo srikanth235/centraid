@@ -25,12 +25,22 @@
  * #570). DST gap minutes never exist as wall-clock fields → they never match
  * (skip). Overlap minutes are deduped by wall-clock key in the cursor reader.
  */
-import { wallClockFields } from '../cron-timezone.js';
+import { wallClockFields } from "../cron-timezone.js";
 
-export function cronMatches(expr: string, date: Date, timeZone?: string): boolean {
+export function cronMatches(
+  expr: string,
+  date: Date,
+  timeZone?: string
+): boolean {
   const fields = expr.trim().split(/\s+/u);
   if (fields.length !== 5) return false;
-  const [minute, hour, dom, month, dow] = fields as [string, string, string, string, string];
+  const [minute, hour, dom, month, dow] = fields as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
   const wall = wallClockFields(date, timeZone);
 
   if (!matchField(minute, wall.minute, 0, 59)) return false;
@@ -42,7 +52,9 @@ export function cronMatches(expr: string, date: Date, timeZone?: string): boolea
   const domMatch = matchField(dom, wall.day, 1, 31);
   // cron day-of-week: 0 and 7 both mean Sunday.
   const weekday = wall.weekday;
-  const dowMatch = matchField(dow, weekday, 0, 7) || (weekday === 0 && matchField(dow, 7, 0, 7));
+  const dowMatch =
+    matchField(dow, weekday, 0, 7) ||
+    (weekday === 0 && matchField(dow, 7, 0, 7));
 
   if (domStar && dowStar) return true;
   if (domStar) return dowMatch;
@@ -51,18 +63,28 @@ export function cronMatches(expr: string, date: Date, timeZone?: string): boolea
 }
 
 function isWildcard(field: string): boolean {
-  return field === '*' || field === '?';
+  return field === "*" || field === "?";
 }
 
-function matchField(field: string, value: number, min: number, max: number): boolean {
+function matchField(
+  field: string,
+  value: number,
+  min: number,
+  max: number
+): boolean {
   if (isWildcard(field)) return true;
-  return field.split(',').some((part) => partMatches(part, value, min, max));
+  return field.split(",").some((part) => partMatches(part, value, min, max));
 }
 
-function partMatches(part: string, value: number, min: number, max: number): boolean {
+function partMatches(
+  part: string,
+  value: number,
+  min: number,
+  max: number
+): boolean {
   let base = part;
   let step = 1;
-  const slash = part.indexOf('/');
+  const slash = part.indexOf("/");
   if (slash !== -1) {
     step = Number(part.slice(slash + 1));
     base = part.slice(0, slash);
@@ -74,8 +96,8 @@ function partMatches(part: string, value: number, min: number, max: number): boo
   if (isWildcard(base)) {
     lo = min;
     hi = max;
-  } else if (base.includes('-')) {
-    const [a, b] = base.split('-');
+  } else if (base.includes("-")) {
+    const [a, b] = base.split("-");
     lo = Number(a);
     hi = Number(b);
   } else {

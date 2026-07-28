@@ -8,49 +8,51 @@
  * valid value; it is no longer hardcoded here.
  */
 
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac } from "node:crypto";
 
-import type { ObjectListEntry, ObjectStore } from './object-store.js';
-import { assertSafeKey } from './object-store.js';
-import type { S3Grant } from './provider.js';
+import type { ObjectListEntry, ObjectStore } from "./object-store.js";
+import { assertSafeKey } from "./object-store.js";
+import type { S3Grant } from "./provider.js";
 
-const SERVICE = 's3';
+const SERVICE = "s3";
 const REFRESH_SLACK_SECONDS = 60;
 
 function hex(input: Buffer): string {
-  return createHash('sha256').update(input).digest('hex');
+  return createHash("sha256").update(input).digest("hex");
 }
 
 function hmac(key: Buffer, data: string): Buffer {
-  return createHmac('sha256', key).update(data, 'utf8').digest();
+  return createHmac("sha256", key).update(data, "utf8").digest();
 }
 
 /** AWS SigV4 URI-encoding: unreserved chars pass through, everything else is %XX. */
 function awsUriEncode(input: string, encodeSlashChar: boolean): string {
   let out = encodeURIComponent(input).replace(
     /[!'()*]/gu,
-    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
   );
-  if (!encodeSlashChar) out = out.replace(/%2F/gu, '/');
+  if (!encodeSlashChar) out = out.replace(/%2F/gu, "/");
   return out;
 }
 
 function canonicalUri(pathname: string): string {
   return pathname
-    .split('/')
+    .split("/")
     .map((seg) => awsUriEncode(seg, true))
-    .join('/');
+    .join("/");
 }
 
 function canonicalQuery(query: Record<string, string>): string {
   return Object.keys(query)
     .sort()
-    .map((k) => `${awsUriEncode(k, true)}=${awsUriEncode(query[k] ?? '', true)}`)
-    .join('&');
+    .map(
+      (k) => `${awsUriEncode(k, true)}=${awsUriEncode(query[k] ?? "", true)}`
+    )
+    .join("&");
 }
 
 function amzTimestamp(now: Date): { amzDate: string; dateStamp: string } {
-  const iso = now.toISOString().replace(/[:-]|\.\d{3}/gu, '');
+  const iso = now.toISOString().replace(/[:-]|\.\d{3}/gu, "");
   return { amzDate: iso, dateStamp: iso.slice(0, 8) };
 }
 
@@ -76,14 +78,17 @@ function signRequest(opts: {
   const payloadHash = hex(body);
 
   const headerEntries: [string, string][] = [
-    ['host', host],
-    ['x-amz-content-sha256', payloadHash],
-    ['x-amz-date', amzDate],
+    ["host", host],
+    ["x-amz-content-sha256", payloadHash],
+    ["x-amz-date", amzDate],
   ];
-  if (grant.sessionToken) headerEntries.push(['x-amz-security-token', grant.sessionToken]);
+  if (grant.sessionToken)
+    headerEntries.push(["x-amz-security-token", grant.sessionToken]);
   headerEntries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  const canonicalHeaders = headerEntries.map(([k, v]) => `${k}:${v}\n`).join('');
-  const signedHeaders = headerEntries.map(([k]) => k).join(';');
+  const canonicalHeaders = headerEntries
+    .map(([k, v]) => `${k}:${v}\n`)
+    .join("");
+  const signedHeaders = headerEntries.map(([k]) => k).join(";");
 
   const canonicalRequest = [
     method,
@@ -92,41 +97,47 @@ function signRequest(opts: {
     canonicalHeaders,
     signedHeaders,
     payloadHash,
-  ].join('\n');
+  ].join("\n");
 
   const credentialScope = `${dateStamp}/${grant.region}/${SERVICE}/aws4_request`;
   const stringToSign = [
-    'AWS4-HMAC-SHA256',
+    "AWS4-HMAC-SHA256",
     amzDate,
     credentialScope,
-    hex(Buffer.from(canonicalRequest, 'utf8')),
-  ].join('\n');
+    hex(Buffer.from(canonicalRequest, "utf8")),
+  ].join("\n");
 
-  const kDate = hmac(Buffer.from(`AWS4${grant.secretAccessKey}`, 'utf8'), dateStamp);
+  const kDate = hmac(
+    Buffer.from(`AWS4${grant.secretAccessKey}`, "utf8"),
+    dateStamp
+  );
   const kRegion = hmac(kDate, grant.region);
   const kService = hmac(kRegion, SERVICE);
-  const kSigning = hmac(kService, 'aws4_request');
-  const signature = hmac(kSigning, stringToSign).toString('hex');
+  const kSigning = hmac(kService, "aws4_request");
+  const signature = hmac(kSigning, stringToSign).toString("hex");
 
   const authorization =
     `AWS4-HMAC-SHA256 Credential=${grant.accessKeyId}/${credentialScope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
   const qs = canonicalQuery(query);
-  const fullUrl = `${url.protocol}//${host}${canonicalUri(opts.path)}${qs ? `?${qs}` : ''}`;
+  const fullUrl = `${url.protocol}//${host}${canonicalUri(opts.path)}${qs ? `?${qs}` : ""}`;
 
   const headers: Record<string, string> = {
-    'x-amz-content-sha256': payloadHash,
-    'x-amz-date': amzDate,
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date": amzDate,
     authorization,
   };
-  if (grant.sessionToken) headers['x-amz-security-token'] = grant.sessionToken;
+  if (grant.sessionToken) headers["x-amz-security-token"] = grant.sessionToken;
 
   return { url: fullUrl, headers };
 }
 
-async function collectBody(data: Uint8Array | AsyncIterable<Uint8Array>): Promise<Buffer> {
-  if (data instanceof Uint8Array) return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+async function collectBody(
+  data: Uint8Array | AsyncIterable<Uint8Array>
+): Promise<Buffer> {
+  if (data instanceof Uint8Array)
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
   const parts: Buffer[] = [];
   const iterator = data[Symbol.asyncIterator]();
   const collectNextChunk = async (): Promise<void> => {
@@ -147,11 +158,11 @@ async function collectBody(data: Uint8Array | AsyncIterable<Uint8Array>): Promis
 
 function unescapeXml(s: string): string {
   return s
-    .replace(/&lt;/gu, '<')
-    .replace(/&gt;/gu, '>')
+    .replace(/&lt;/gu, "<")
+    .replace(/&gt;/gu, ">")
     .replace(/&quot;/gu, '"')
     .replace(/&apos;/gu, "'")
-    .replace(/&amp;/gu, '&');
+    .replace(/&amp;/gu, "&");
 }
 
 async function* streamResponseBody(res: Response): AsyncGenerator<Uint8Array> {
@@ -218,7 +229,7 @@ export class S3ObjectStore implements ObjectStore {
   private async request(
     method: string,
     pathAndKey: { path: string; query?: Record<string, string> },
-    body?: Buffer,
+    body?: Buffer
   ): Promise<Response> {
     await this.ensureFreshGrant();
     const signed = signRequest({
@@ -235,33 +246,46 @@ export class S3ObjectStore implements ObjectStore {
     });
   }
 
-  async put(key: string, data: Uint8Array | AsyncIterable<Uint8Array>): Promise<void> {
-    if (this.grant.mode !== 'read-write') {
-      throw new Error(`object store opened in "${this.grant.mode}" mode; put refused for "${key}"`);
+  async put(
+    key: string,
+    data: Uint8Array | AsyncIterable<Uint8Array>
+  ): Promise<void> {
+    if (this.grant.mode !== "read-write") {
+      throw new Error(
+        `object store opened in "${this.grant.mode}" mode; put refused for "${key}"`
+      );
     }
     const body = await collectBody(data);
-    const res = await this.request('PUT', { path: this.objectPath(key) }, body);
+    const res = await this.request("PUT", { path: this.objectPath(key) }, body);
     if (!res.ok) {
-      throw new Error(`S3 PUT ${key} failed: ${res.status} ${await res.text().catch(() => '')}`);
+      throw new Error(
+        `S3 PUT ${key} failed: ${res.status} ${await res.text().catch(() => "")}`
+      );
     }
   }
 
   async get(key: string): Promise<Uint8Array> {
-    const res = await this.request('GET', { path: this.objectPath(key) });
+    const res = await this.request("GET", { path: this.objectPath(key) });
     if (res.status === 404) throw new Error(`object not found: ${key}`);
     if (!res.ok) {
-      throw new Error(`S3 GET ${key} failed: ${res.status} ${await res.text().catch(() => '')}`);
+      throw new Error(
+        `S3 GET ${key} failed: ${res.status} ${await res.text().catch(() => "")}`
+      );
     }
     return new Uint8Array(await res.arrayBuffer());
   }
 
   getStream(key: string): AsyncIterable<Uint8Array> {
     /** @yields {Uint8Array} Successive byte ranges of the response body, in order. */
-    const gen = async function* (this: S3ObjectStore): AsyncGenerator<Uint8Array> {
-      const res = await this.request('GET', { path: this.objectPath(key) });
+    const gen = async function* (
+      this: S3ObjectStore
+    ): AsyncGenerator<Uint8Array> {
+      const res = await this.request("GET", { path: this.objectPath(key) });
       if (res.status === 404) throw new Error(`object not found: ${key}`);
       if (!res.ok) {
-        throw new Error(`S3 GET ${key} failed: ${res.status} ${await res.text().catch(() => '')}`);
+        throw new Error(
+          `S3 GET ${key} failed: ${res.status} ${await res.text().catch(() => "")}`
+        );
       }
       yield* streamResponseBody(res);
     }.bind(this);
@@ -269,34 +293,35 @@ export class S3ObjectStore implements ObjectStore {
   }
 
   async head(key: string): Promise<{ size: number } | null> {
-    const res = await this.request('HEAD', { path: this.objectPath(key) });
+    const res = await this.request("HEAD", { path: this.objectPath(key) });
     if (res.status === 404) return null;
     if (!res.ok) {
       throw new Error(`S3 HEAD ${key} failed: ${res.status}`);
     }
-    const len = res.headers.get('content-length');
+    const len = res.headers.get("content-length");
     return { size: len ? Math.trunc(Number(len)) : 0 };
   }
 
   async *list(prefix: string): AsyncIterable<ObjectListEntry> {
-    if (prefix.length > 0) assertSafeKey(prefix.endsWith('/') ? `${prefix}x` : prefix);
+    if (prefix.length > 0)
+      assertSafeKey(prefix.endsWith("/") ? `${prefix}x` : prefix);
     const fullPrefix = `${this.grant.prefix}${prefix}`;
     const listPage = async function* (
       this: S3ObjectStore,
-      continuationToken: string | undefined,
+      continuationToken: string | undefined
     ): AsyncGenerator<ObjectListEntry> {
       const query: Record<string, string> = {
-        'list-type': '2',
+        "list-type": "2",
         prefix: fullPrefix,
       };
-      if (continuationToken) query['continuation-token'] = continuationToken;
-      const res = await this.request('GET', {
+      if (continuationToken) query["continuation-token"] = continuationToken;
+      const res = await this.request("GET", {
         path: `/${this.grant.bucket}`,
         query,
       });
       if (!res.ok) {
         throw new Error(
-          `S3 ListObjectsV2 failed: ${res.status} ${await res.text().catch(() => '')}`,
+          `S3 ListObjectsV2 failed: ${res.status} ${await res.text().catch(() => "")}`
         );
       }
       const xml = await res.text();
@@ -304,51 +329,63 @@ export class S3ObjectStore implements ObjectStore {
         const keyMatch = /<Key>(?<key>[\s\S]*?)<\/Key>/u.exec(block);
         const sizeMatch = /<Size>(?<size>\d+)<\/Size>/u.exec(block);
         const etagMatch = /<ETag>(?<etag>[\s\S]*?)<\/ETag>/u.exec(block);
-        const modifiedMatch = /<LastModified>(?<lastModified>[\s\S]*?)<\/LastModified>/u.exec(
-          block,
-        );
-        const storageClassMatch = /<StorageClass>(?<storageClass>[\s\S]*?)<\/StorageClass>/u.exec(
-          block,
-        );
+        const modifiedMatch =
+          /<LastModified>(?<lastModified>[\s\S]*?)<\/LastModified>/u.exec(
+            block
+          );
+        const storageClassMatch =
+          /<StorageClass>(?<storageClass>[\s\S]*?)<\/StorageClass>/u.exec(
+            block
+          );
         if (!keyMatch) continue;
-        const fullKey = unescapeXml(keyMatch.groups?.key ?? '');
+        const fullKey = unescapeXml(keyMatch.groups?.key ?? "");
         if (!fullKey.startsWith(this.grant.prefix)) continue;
         const etag = etagMatch
-          ? unescapeXml(etagMatch.groups?.etag ?? '').replace(/^"|"$/gu, '')
+          ? unescapeXml(etagMatch.groups?.etag ?? "").replace(/^"|"$/gu, "")
           : undefined;
         const modifiedMs = modifiedMatch
-          ? Date.parse(unescapeXml(modifiedMatch.groups?.lastModified ?? ''))
+          ? Date.parse(unescapeXml(modifiedMatch.groups?.lastModified ?? ""))
           : NaN;
         yield {
           key: fullKey.slice(this.grant.prefix.length),
-          size: sizeMatch ? Math.trunc(Number(sizeMatch.groups?.size ?? '0')) : 0,
+          size: sizeMatch
+            ? Math.trunc(Number(sizeMatch.groups?.size ?? "0"))
+            : 0,
           ...(etag ? { etagOrHash: etag } : {}),
-          ...(Number.isFinite(modifiedMs) ? { storedAt: Math.floor(modifiedMs / 1000) } : {}),
+          ...(Number.isFinite(modifiedMs)
+            ? { storedAt: Math.floor(modifiedMs / 1000) }
+            : {}),
           ...(storageClassMatch
             ? {
-                storageClass: unescapeXml(storageClassMatch.groups?.storageClass ?? ''),
+                storageClass: unescapeXml(
+                  storageClassMatch.groups?.storageClass ?? ""
+                ),
               }
             : {}),
         };
       }
       const truncated = /<IsTruncated>true<\/IsTruncated>/u.test(xml);
-      const tokenMatch = /<NextContinuationToken>(?<token>[\s\S]*?)<\/NextContinuationToken>/u.exec(
-        xml,
-      );
+      const tokenMatch =
+        /<NextContinuationToken>(?<token>[\s\S]*?)<\/NextContinuationToken>/u.exec(
+          xml
+        );
       const nextContinuationToken =
-        truncated && tokenMatch ? unescapeXml(tokenMatch.groups?.token ?? '') : undefined;
-      if (nextContinuationToken) yield* listPage.call(this, nextContinuationToken);
+        truncated && tokenMatch
+          ? unescapeXml(tokenMatch.groups?.token ?? "")
+          : undefined;
+      if (nextContinuationToken)
+        yield* listPage.call(this, nextContinuationToken);
     }.bind(this);
     yield* listPage(undefined);
   }
 
   async delete(key: string): Promise<void> {
-    if (this.grant.mode !== 'read-write') {
+    if (this.grant.mode !== "read-write") {
       throw new Error(
-        `object store opened in "${this.grant.mode}" mode; delete refused for "${key}"`,
+        `object store opened in "${this.grant.mode}" mode; delete refused for "${key}"`
       );
     }
-    const res = await this.request('DELETE', { path: this.objectPath(key) });
+    const res = await this.request("DELETE", { path: this.objectPath(key) });
     if (!res.ok && res.status !== 404) {
       throw new Error(`S3 DELETE ${key} failed: ${res.status}`);
     }

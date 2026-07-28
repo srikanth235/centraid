@@ -13,11 +13,11 @@
  * and every binding they own.
  */
 
-import crypto from 'node:crypto';
-import path from 'node:path';
+import crypto from "node:crypto";
+import path from "node:path";
 
-import type { GrantableRole } from './enrollment-store.js';
-import { GatewayDatabase } from './gateway-db.js';
+import type { GrantableRole } from "./enrollment-store.js";
+import { GatewayDatabase } from "./gateway-db.js";
 
 export interface Member {
   memberId: string;
@@ -64,82 +64,106 @@ export class MemberStore {
   list(): Member[] {
     return (
       this.gatewayDatabase.db
-        .prepare('SELECT member_id, label, created_at FROM members ORDER BY created_at, member_id')
+        .prepare(
+          "SELECT member_id, label, created_at FROM members ORDER BY created_at, member_id"
+        )
         .all() as unknown as MemberRow[]
     ).map(toMember);
   }
 
   get(memberId: string): Member | undefined {
     const row = this.gatewayDatabase.db
-      .prepare('SELECT member_id, label, created_at FROM members WHERE member_id = ?')
+      .prepare(
+        "SELECT member_id, label, created_at FROM members WHERE member_id = ?"
+      )
       .get(memberId) as MemberRow | undefined;
     return row ? toMember(row) : undefined;
   }
 
   /** Resolve a CLI/UI selector: an exact id first, then an exact label. */
   find(selector: string): Member | undefined {
-    return this.get(selector) ?? this.list().find((member) => member.label === selector);
+    return (
+      this.get(selector) ??
+      this.list().find((member) => member.label === selector)
+    );
   }
 
   create(label: string): Member {
-    return this.gatewayDatabase.transaction(() => this.createWithinTransaction(label));
+    return this.gatewayDatabase.transaction(() =>
+      this.createWithinTransaction(label)
+    );
   }
 
   createWithinTransaction(label: string): Member {
     const trimmed = label.trim();
-    if (!trimmed) throw new Error('member label must not be empty');
+    if (!trimmed) throw new Error("member label must not be empty");
     const memberId = crypto.randomUUID();
     this.gatewayDatabase.db
-      .prepare('INSERT INTO members (member_id, label, created_at) VALUES (?, ?, ?)')
+      .prepare(
+        "INSERT INTO members (member_id, label, created_at) VALUES (?, ?, ?)"
+      )
       .run(memberId, trimmed, Date.now());
     const created = this.get(memberId);
-    if (!created) throw new Error('member row vanished immediately after insert');
+    if (!created)
+      throw new Error("member row vanished immediately after insert");
     return created;
   }
 
   rename(memberId: string, label: string): Member {
     const trimmed = label.trim();
-    if (!trimmed) throw new Error('member label must not be empty');
+    if (!trimmed) throw new Error("member label must not be empty");
     const changed = this.gatewayDatabase.db
-      .prepare('UPDATE members SET label = ? WHERE member_id = ?')
+      .prepare("UPDATE members SET label = ? WHERE member_id = ?")
       .run(trimmed, memberId);
-    if (changed.changes !== 1) throw new Error(`no member matches "${memberId}"`);
+    if (changed.changes !== 1)
+      throw new Error(`no member matches "${memberId}"`);
     const renamed = this.get(memberId);
-    if (!renamed) throw new Error('member row vanished immediately after rename');
+    if (!renamed)
+      throw new Error("member row vanished immediately after rename");
     return renamed;
   }
 
   grants(memberId: string): MemberGrant[] {
     return (
       this.gatewayDatabase.db
-        .prepare('SELECT vault_id, role FROM member_roles WHERE member_id = ? ORDER BY vault_id')
+        .prepare(
+          "SELECT vault_id, role FROM member_roles WHERE member_id = ? ORDER BY vault_id"
+        )
         .all(memberId) as Array<{ vault_id: string; role: GrantableRole }>
     ).map((row) => ({ vaultId: row.vault_id, role: row.role }));
   }
 
   roleIn(memberId: string, vaultId: string): GrantableRole | undefined {
     const row = this.gatewayDatabase.db
-      .prepare('SELECT role FROM member_roles WHERE member_id = ? AND vault_id = ?')
+      .prepare(
+        "SELECT role FROM member_roles WHERE member_id = ? AND vault_id = ?"
+      )
       .get(memberId, vaultId) as { role: GrantableRole } | undefined;
     return row?.role;
   }
 
   setGrant(memberId: string, vaultId: string, role: GrantableRole): void {
-    this.gatewayDatabase.transaction(() => this.setGrantWithinTransaction(memberId, vaultId, role));
+    this.gatewayDatabase.transaction(() =>
+      this.setGrantWithinTransaction(memberId, vaultId, role)
+    );
   }
 
-  setGrantWithinTransaction(memberId: string, vaultId: string, role: GrantableRole): void {
+  setGrantWithinTransaction(
+    memberId: string,
+    vaultId: string,
+    role: GrantableRole
+  ): void {
     this.gatewayDatabase.db
       .prepare(
         `INSERT INTO member_roles (member_id, vault_id, role) VALUES (?, ?, ?)
-         ON CONFLICT(member_id, vault_id) DO UPDATE SET role = excluded.role`,
+         ON CONFLICT(member_id, vault_id) DO UPDATE SET role = excluded.role`
       )
       .run(memberId, vaultId, role);
   }
 
   clearGrant(memberId: string, vaultId: string): void {
     this.gatewayDatabase.db
-      .prepare('DELETE FROM member_roles WHERE member_id = ? AND vault_id = ?')
+      .prepare("DELETE FROM member_roles WHERE member_id = ? AND vault_id = ?")
       .run(memberId, vaultId);
   }
 
@@ -149,7 +173,7 @@ export class MemberStore {
       this.gatewayDatabase.db
         .prepare(
           `SELECT member_id FROM member_roles
-            WHERE vault_id = ? AND role = 'admin' ORDER BY member_id`,
+            WHERE vault_id = ? AND role = 'admin' ORDER BY member_id`
         )
         .all(vaultId) as Array<{ member_id: string }>
     ).map((row) => row.member_id);
@@ -158,7 +182,7 @@ export class MemberStore {
   /** Vaults this member would leave without an admin if they were removed. */
   vaultsLosingLastAdmin(memberId: string): string[] {
     return this.grants(memberId)
-      .filter((grant) => grant.role === 'admin')
+      .filter((grant) => grant.role === "admin")
       .filter((grant) => {
         const admins = this.adminsOf(grant.vaultId);
         return admins.length === 1 && admins[0] === memberId;
@@ -179,27 +203,34 @@ export class MemberStore {
     return this.gatewayDatabase.transaction(() => {
       const endpointIds = (
         this.gatewayDatabase.db
-          .prepare('SELECT endpoint_id FROM devices WHERE member_id = ?')
+          .prepare("SELECT endpoint_id FROM devices WHERE member_id = ?")
           .all(memberId) as Array<{ endpoint_id: string }>
       ).map((row) => row.endpoint_id);
       const vaultIds = this.grants(memberId).map((grant) => grant.vaultId);
       this.gatewayDatabase.db
         .prepare(
-          'DELETE FROM device_checkpoints WHERE endpoint_id IN (SELECT endpoint_id FROM devices WHERE member_id = ?)',
+          "DELETE FROM device_checkpoints WHERE endpoint_id IN (SELECT endpoint_id FROM devices WHERE member_id = ?)"
         )
         .run(memberId);
-      this.gatewayDatabase.db.prepare('DELETE FROM devices WHERE member_id = ?').run(memberId);
-      this.gatewayDatabase.db.prepare('DELETE FROM member_roles WHERE member_id = ?').run(memberId);
-      const deleted = this.gatewayDatabase.db
-        .prepare('DELETE FROM members WHERE member_id = ?')
+      this.gatewayDatabase.db
+        .prepare("DELETE FROM devices WHERE member_id = ?")
         .run(memberId);
-      if (deleted.changes !== 1) throw new Error(`no member matches "${memberId}"`);
+      this.gatewayDatabase.db
+        .prepare("DELETE FROM member_roles WHERE member_id = ?")
+        .run(memberId);
+      const deleted = this.gatewayDatabase.db
+        .prepare("DELETE FROM members WHERE member_id = ?")
+        .run(memberId);
+      if (deleted.changes !== 1)
+        throw new Error(`no member matches "${memberId}"`);
       return { removedEndpointIds: endpointIds, removedVaultIds: vaultIds };
     });
   }
 
   /** Drop every grant on an erased vault; members and devices survive. */
   removeVault(vaultId: string): void {
-    this.gatewayDatabase.db.prepare('DELETE FROM member_roles WHERE vault_id = ?').run(vaultId);
+    this.gatewayDatabase.db
+      .prepare("DELETE FROM member_roles WHERE vault_id = ?")
+      .run(vaultId);
   }
 }

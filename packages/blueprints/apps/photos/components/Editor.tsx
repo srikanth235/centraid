@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent } from "react";
 
 // Crop/rotate editor (issue #352 phase 3/4). Non-destructive by design: the
 // vault has no media-domain equivalent of core.replace_document_content (no
@@ -14,11 +14,11 @@ import type { PointerEvent } from 'react';
 // CURRENT rotated frame, so it always lines up with what's on screen.
 // CSS split: own bits in Editor.module.css; `lightbox-note` (bare, no rule)
 // and `kit-*` classes stay global strings.
-import { isPendingOffsite, stageFileBytes, toast } from '../kit.ts';
-import { act, narrate } from '../outcomes.ts';
-import type { Asset } from '../types.ts';
+import { isPendingOffsite, stageFileBytes, toast } from "../kit.ts";
+import { act, narrate } from "../outcomes.ts";
+import type { Asset } from "../types.ts";
 
-import styles from './Editor.module.css';
+import styles from "./Editor.module.css";
 
 interface Crop {
   x: number;
@@ -37,10 +37,10 @@ function cropCanvas(source: HTMLCanvasElement, crop: Crop): HTMLCanvasElement {
   const sy = Math.round(crop.y * source.height);
   const sw = Math.max(1, Math.round(crop.w * source.width));
   const sh = Math.max(1, Math.round(crop.h * source.height));
-  const out = document.createElement('canvas');
+  const out = document.createElement("canvas");
   out.width = sw;
   out.height = sh;
-  out.getContext('2d')!.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
+  out.getContext("2d")!.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
   return out;
 }
 
@@ -74,7 +74,7 @@ export function EditorView({
     const h = swapped ? img.naturalWidth : img.naturalHeight;
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = canvas.getContext("2d")!;
     ctx.save();
     ctx.translate(w / 2, h / 2);
     ctx.rotate((rotation * Math.PI) / 180);
@@ -88,15 +88,15 @@ export function EditorView({
   useEffect(() => {
     let cancelled = false;
     const img = new Image();
-    img.addEventListener('load', () => {
+    img.addEventListener("load", () => {
       if (cancelled) return;
       imgRef.current = img;
       draw();
     });
-    img.addEventListener('error', () => {
+    img.addEventListener("error", () => {
       if (!cancelled) setLoadError(true);
     });
-    img.src = asset.content_uri ?? '';
+    img.src = asset.content_uri ?? "";
     return () => {
       cancelled = true;
     };
@@ -148,42 +148,46 @@ export function EditorView({
     try {
       const source = crop ? cropCanvas(canvas, crop) : canvas;
       const blob = await new Promise<Blob | null>((resolve) =>
-        source.toBlob(resolve, 'image/jpeg', 0.92),
+        source.toBlob(resolve, "image/jpeg", 0.92)
       );
-      if (!blob) throw new Error('Could not render the edit.');
-      const baseName = (asset.title || 'photo').replace(/\.[a-z0-9]+$/iu, '');
+      if (!blob) throw new Error("Could not render the edit.");
+      const baseName = (asset.title || "photo").replace(/\.[a-z0-9]+$/iu, "");
       const file = new File([blob], `${baseName}-edited.jpg`, {
-        type: 'image/jpeg',
+        type: "image/jpeg",
       });
       // An edit is a NEW asset beside the original, so it lands in the
       // original's scope (issue #599) — never in the chip selection, which
       // could be a different audience entirely.
       const scope = asset.scope_id ?? undefined;
-      const staged = await stageFileBytes(file, '', scope ? { scope } : {});
+      const staged = await stageFileBytes(file, "", scope ? { scope } : {});
       const outcome = await act(
-        'upload',
+        "upload",
         {
           staged_sha: staged.sha256,
-          kind: 'photo',
-          captured_at: asset.captured_at || asset.taken_at || new Date().toISOString(),
-          title: asset.title || 'Edited photo',
+          kind: "photo",
+          captured_at:
+            asset.captured_at || asset.taken_at || new Date().toISOString(),
+          title: asset.title || "Edited photo",
           width: source.width,
           height: source.height,
         },
-        scope,
+        scope
       );
       if (!narrate(outcome, noteRef.current)) return;
-      if (alsoTrash) await act('delete-asset', { asset_id: asset.asset_id }, scope);
+      if (alsoTrash)
+        await act("delete-asset", { asset_id: asset.asset_id }, scope);
       toast(
         isPendingOffsite(staged)
-          ? 'Saved locally as a new photo · pending offsite.'
-          : 'Saved as a new photo — the original is untouched.',
+          ? "Saved locally as a new photo · pending offsite."
+          : "Saved as a new photo — the original is untouched."
       );
       await refresh();
       onSaved();
     } catch (err) {
       if (noteRef.current) {
-        noteRef.current.textContent = String((err as { message?: string })?.message ?? err);
+        noteRef.current.textContent = String(
+          (err as { message?: string })?.message ?? err
+        );
       }
     } finally {
       setBusy(false);
@@ -200,7 +204,9 @@ export function EditorView({
         onPointerCancel={onPointerUp}
       >
         {loadError ? (
-          <p className={`kit-muted ${styles.loadError}`}>Could not load this photo for editing.</p>
+          <p className={`kit-muted ${styles.loadError}`}>
+            Could not load this photo for editing.
+          </p>
         ) : (
           <canvas ref={canvasRef} className={styles.canvas} />
         )}
@@ -249,17 +255,27 @@ export function EditorView({
           Also move the original to trash
         </label>
         <span className={styles.spacer} />
-        <button type="button" className="kit-btn" disabled={busy} onClick={onCancel}>
+        <button
+          type="button"
+          className="kit-btn"
+          disabled={busy}
+          onClick={onCancel}
+        >
           Cancel
         </button>
-        <button type="button" className="kit-btn primary" disabled={busy} onClick={handleSave}>
-          {busy ? 'Saving…' : 'Save as new photo'}
+        <button
+          type="button"
+          className="kit-btn primary"
+          disabled={busy}
+          onClick={handleSave}
+        >
+          {busy ? "Saving…" : "Save as new photo"}
         </button>
       </div>
       <p className={`lightbox-note ${styles.note}`} ref={noteRef} />
       <p className={`kit-muted kit-small ${styles.hint}`}>
-        Drag on the photo to crop. The original stays in your library unless you check “Also move
-        the original to trash.”
+        Drag on the photo to crop. The original stays in your library unless you
+        check “Also move the original to trash.”
       </p>
     </div>
   );

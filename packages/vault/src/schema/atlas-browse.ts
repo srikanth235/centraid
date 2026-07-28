@@ -20,12 +20,12 @@
 // is the acceptance criterion "counts polymorphic dependents via the registry,
 // not only engine FKs".
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { maskSealed } from './atlas-browse-mask.js';
-import { atlasTables, packKindOf, type AtlasPackKind } from './atlas.js';
-import { sealedColumnsOf } from './sealed.js';
-import { resolveEntity, type EntityRef } from './tables.js';
+import { maskSealed } from "./atlas-browse-mask.js";
+import { atlasTables, packKindOf, type AtlasPackKind } from "./atlas.js";
+import { sealedColumnsOf } from "./sealed.js";
+import { resolveEntity, type EntityRef } from "./tables.js";
 
 /** Hard cap on a Browse page — some tables are 40k+ rows (issue #441 B3). */
 export const BROWSE_MAX_LIMIT = 100;
@@ -40,12 +40,12 @@ export const BROWSE_REF_SEARCH_LIMIT = 20;
  * metadata agree on what a row "reads as".
  */
 export const DISPLAY_FIELD_CANDIDATES: readonly string[] = [
-  'display_name',
-  'name',
-  'title',
-  'label',
-  'pref_label',
-  'summary',
+  "display_name",
+  "name",
+  "title",
+  "label",
+  "pref_label",
+  "summary",
 ];
 
 interface TableInfoRow {
@@ -65,13 +65,19 @@ interface ForeignKeyRow {
   to: string;
 }
 
-export function tableInfo(vault: DatabaseSync, physical: string): TableInfoRow[] {
+export function tableInfo(
+  vault: DatabaseSync,
+  physical: string
+): TableInfoRow[] {
   return vault
     .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
     .all() as unknown as TableInfoRow[];
 }
 
-export function foreignKeys(vault: DatabaseSync, physical: string): ForeignKeyRow[] {
+export function foreignKeys(
+  vault: DatabaseSync,
+  physical: string
+): ForeignKeyRow[] {
   return vault
     .prepare(`PRAGMA foreign_key_list(${JSON.stringify(physical)})`)
     .all() as unknown as ForeignKeyRow[];
@@ -90,7 +96,10 @@ function countRows(vault: DatabaseSync, physical: string): number {
 }
 
 /** The pk columns of a table in declared order (`pk` is 1-based, 0 = not pk). */
-export function primaryKeyColumns(vault: DatabaseSync, physical: string): string[] {
+export function primaryKeyColumns(
+  vault: DatabaseSync,
+  physical: string
+): string[] {
   return tableInfo(vault, physical)
     .filter((c) => c.pk > 0)
     .sort((a, b) => a.pk - b.pk)
@@ -105,10 +114,12 @@ export function primaryKeyColumns(vault: DatabaseSync, physical: string): string
  */
 export function keysetKey(
   vault: DatabaseSync,
-  physical: string,
+  physical: string
 ): { column: string; rowid: boolean } {
   const pks = primaryKeyColumns(vault, physical);
-  return pks.length === 1 ? { column: pks[0]!, rowid: false } : { column: 'rowid', rowid: true };
+  return pks.length === 1
+    ? { column: pks[0]!, rowid: false }
+    : { column: "rowid", rowid: true };
 }
 
 /** The display field for a table given its columns, per the shared heuristic. */
@@ -117,10 +128,13 @@ export function displayFieldOf(columns: readonly string[], pk: string): string {
 }
 
 /** Resolve a logical name to a vault-file table, or throw a clean rejection. */
-export function resolveBrowseTable(vault: DatabaseSync, logical: string): EntityRef {
+export function resolveBrowseTable(
+  vault: DatabaseSync,
+  logical: string
+): EntityRef {
   const ref = resolveEntity(logical, vault);
-  if (!ref || ref.file !== 'vault') {
-    throw new BrowseError('unknown_table', `unknown vault table "${logical}"`);
+  if (!ref || ref.file !== "vault") {
+    throw new BrowseError("unknown_table", `unknown vault table "${logical}"`);
   }
   return ref;
 }
@@ -128,11 +142,11 @@ export function resolveBrowseTable(vault: DatabaseSync, logical: string): Entity
 /** A clean, mappable failure — the route turns `code` into a status. */
 export class BrowseError extends Error {
   constructor(
-    readonly code: 'unknown_table' | 'bad_request' | 'not_found',
-    message: string,
+    readonly code: "unknown_table" | "bad_request" | "not_found",
+    message: string
   ) {
     super(message);
-    this.name = 'BrowseError';
+    this.name = "BrowseError";
   }
 }
 
@@ -161,7 +175,7 @@ export interface BrowseTableEntry {
  */
 export function browseTableList(vault: DatabaseSync): BrowseTableEntry[] {
   return atlasTables()
-    .filter((e) => e.file === 'vault')
+    .filter((e) => e.file === "vault")
     .map((e) => ({
       logical: e.logical,
       physical: e.physical,
@@ -170,7 +184,7 @@ export function browseTableList(vault: DatabaseSync): BrowseTableEntry[] {
       packKind: e.packKind,
       label: e.label,
       rows: countRows(vault, e.physical),
-      machinery: e.packKind === 'machinery',
+      machinery: e.packKind === "machinery",
       singlePk: primaryKeyColumns(vault, e.physical).length === 1,
     }));
 }
@@ -207,7 +221,10 @@ export interface BrowseColumnsResult {
   machinery: boolean;
 }
 
-export function browseColumns(vault: DatabaseSync, logical: string): BrowseColumnsResult {
+export function browseColumns(
+  vault: DatabaseSync,
+  logical: string
+): BrowseColumnsResult {
   const ref = resolveBrowseTable(vault, logical);
   const info = tableInfo(vault, ref.physical);
   const fks = foreignKeys(vault, ref.physical);
@@ -229,7 +246,7 @@ export function browseColumns(vault: DatabaseSync, logical: string): BrowseColum
     };
   });
   const pks = primaryKeyColumns(vault, ref.physical);
-  const displayPk = pks[0] ?? 'rowid';
+  const displayPk = pks[0] ?? "rowid";
   return {
     logical,
     physical: ref.physical,
@@ -237,9 +254,9 @@ export function browseColumns(vault: DatabaseSync, logical: string): BrowseColum
     keysetKey: keysetKey(vault, ref.physical).column,
     displayField: displayFieldOf(
       info.map((c) => c.name),
-      displayPk,
+      displayPk
     ),
-    machinery: packKindOf(ref.schema) === 'machinery',
+    machinery: packKindOf(ref.schema) === "machinery",
   };
 }
 
@@ -254,7 +271,7 @@ export interface BrowseRowsParams {
   after?: string;
   /** A real column to order by; defaults to the keyset key. */
   orderBy?: string;
-  dir?: 'asc' | 'desc';
+  dir?: "asc" | "desc";
 }
 
 export interface BrowseRowsResult {
@@ -265,7 +282,7 @@ export interface BrowseRowsResult {
   /** Cursor for the next page, or null when the page is the last. */
   nextCursor: string | null;
   orderBy: string;
-  dir: 'asc' | 'desc';
+  dir: "asc" | "desc";
   keysetKey: string;
 }
 
@@ -277,18 +294,20 @@ interface Cursor {
 }
 
 function encodeCursor(c: Cursor): string {
-  return Buffer.from(JSON.stringify(c), 'utf8').toString('base64url');
+  return Buffer.from(JSON.stringify(c), "utf8").toString("base64url");
 }
 
 function decodeCursor(raw: string): Cursor {
   try {
-    const c = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as Cursor;
-    if (typeof c !== 'object' || c === null || !('o' in c) || !('k' in c)) {
-      throw new Error('shape');
+    const c = JSON.parse(
+      Buffer.from(raw, "base64url").toString("utf8")
+    ) as Cursor;
+    if (typeof c !== "object" || c === null || !("o" in c) || !("k" in c)) {
+      throw new Error("shape");
     }
     return c;
   } catch {
-    throw new BrowseError('bad_request', 'invalid page cursor');
+    throw new BrowseError("bad_request", "invalid page cursor");
   }
 }
 
@@ -299,24 +318,34 @@ function decodeCursor(raw: string): Cursor {
  * NULL-aware (SQLite sorts NULLs first ASC, last DESC) so a nullable orderBy
  * column paginates without dropping rows at the NULL boundary.
  */
-export function browseRows(vault: DatabaseSync, params: BrowseRowsParams): BrowseRowsResult {
+export function browseRows(
+  vault: DatabaseSync,
+  params: BrowseRowsParams
+): BrowseRowsResult {
   const ref = resolveBrowseTable(vault, params.table);
   const info = tableInfo(vault, ref.physical);
   const realColumns = new Set(info.map((c) => c.name));
   const key = keysetKey(vault, ref.physical);
-  const dir: 'asc' | 'desc' = params.dir === 'desc' ? 'desc' : 'asc';
-  const cmp = dir === 'desc' ? '<' : '>';
+  const dir: "asc" | "desc" = params.dir === "desc" ? "desc" : "asc";
+  const cmp = dir === "desc" ? "<" : ">";
 
   // orderBy is a real column only (registry/PRAGMA whitelist) or the key.
   let orderBy = params.orderBy ?? key.column;
-  if (orderBy !== key.column && orderBy !== 'rowid' && !realColumns.has(orderBy)) {
-    throw new BrowseError('bad_request', `unknown order column "${orderBy}"`);
+  if (
+    orderBy !== key.column &&
+    orderBy !== "rowid" &&
+    !realColumns.has(orderBy)
+  ) {
+    throw new BrowseError("bad_request", `unknown order column "${orderBy}"`);
   }
   // When ordering by the key itself, the tuple collapses to one column.
   const singleKey = orderBy === key.column;
 
-  const limit = Math.min(Math.max(params.limit ?? BROWSE_DEFAULT_LIMIT, 1), BROWSE_MAX_LIMIT);
-  const selectCols = key.rowid ? `rowid AS __rowid, *` : '*';
+  const limit = Math.min(
+    Math.max(params.limit ?? BROWSE_DEFAULT_LIMIT, 1),
+    BROWSE_MAX_LIMIT
+  );
+  const selectCols = key.rowid ? `rowid AS __rowid, *` : "*";
 
   const where: string[] = [];
   const bind: (string | number | null)[] = [];
@@ -330,10 +359,12 @@ export function browseRows(vault: DatabaseSync, params: BrowseRowsParams): Brows
       const oExpr = `"${orderBy}"`;
       const kExpr = `"${key.column}"`;
       if (cur.o === null) {
-        if (dir === 'asc') {
+        if (dir === "asc") {
           // After a NULL boundary ascending: remaining NULLs (k > kv), then
           // every non-null row.
-          where.push(`((${oExpr} IS NULL AND ${kExpr} ${cmp} ?) OR ${oExpr} IS NOT NULL)`);
+          where.push(
+            `((${oExpr} IS NULL AND ${kExpr} ${cmp} ?) OR ${oExpr} IS NOT NULL)`
+          );
         } else {
           // Descending, NULLs last: only later NULLs remain.
           where.push(`(${oExpr} IS NULL AND ${kExpr} ${cmp} ?)`);
@@ -341,11 +372,13 @@ export function browseRows(vault: DatabaseSync, params: BrowseRowsParams): Brows
         bind.push(cur.k);
       } else {
         const tail = `(${oExpr} ${cmp} ? OR (${oExpr} = ? AND ${kExpr} ${cmp} ?))`;
-        if (dir === 'asc') {
+        if (dir === "asc") {
           where.push(`(${oExpr} IS NOT NULL AND ${tail})`);
         } else {
           // Descending, NULLs last: non-null comparisons, then trailing NULLs.
-          where.push(`(${oExpr} IS NULL OR (${oExpr} IS NOT NULL AND ${tail}))`);
+          where.push(
+            `(${oExpr} IS NULL OR (${oExpr} IS NOT NULL AND ${tail}))`
+          );
         }
         bind.push(cur.o, cur.o, cur.k);
       }
@@ -355,10 +388,10 @@ export function browseRows(vault: DatabaseSync, params: BrowseRowsParams): Brows
   const orderSql = singleKey
     ? `"${key.column}" ${dir}`
     : `"${orderBy}" ${dir}, "${key.column}" ${dir}`;
-  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
   const rows = vault
     .prepare(
-      `SELECT ${selectCols} FROM "${ref.physical}" ${whereSql} ORDER BY ${orderSql} LIMIT ${limit + 1}`,
+      `SELECT ${selectCols} FROM "${ref.physical}" ${whereSql} ORDER BY ${orderSql} LIMIT ${limit + 1}`
     )
     .all(...bind) as Record<string, unknown>[];
 
@@ -369,12 +402,16 @@ export function browseRows(vault: DatabaseSync, params: BrowseRowsParams): Brows
   let nextCursor: string | null = null;
   const last = pageRows.at(-1);
   if (hasMore && last) {
-    const kValue = key.rowid ? (last['__rowid'] as number) : (last[key.column] as string | number);
-    const oValue = singleKey ? kValue : ((last[orderBy] ?? null) as string | number | null);
+    const kValue = key.rowid
+      ? (last["__rowid"] as number)
+      : (last[key.column] as string | number);
+    const oValue = singleKey
+      ? kValue
+      : ((last[orderBy] ?? null) as string | number | null);
     nextCursor = encodeCursor({ o: oValue, k: kValue });
   }
   // The synthetic rowid selector is an implementation detail, not a column.
-  if (key.rowid) for (const r of pageRows) delete r['__rowid'];
+  if (key.rowid) for (const r of pageRows) delete r["__rowid"];
 
   return {
     logical: params.table,
@@ -400,7 +437,11 @@ export interface BrowseRowResult {
 }
 
 /** One row by primary key. Composite PKs take a JSON array of pk values. */
-export function browseRow(vault: DatabaseSync, table: string, id: string): BrowseRowResult {
+export function browseRow(
+  vault: DatabaseSync,
+  table: string,
+  id: string
+): BrowseRowResult {
   const ref = resolveBrowseTable(vault, table);
   const info = tableInfo(vault, ref.physical);
   const pks = primaryKeyColumns(vault, ref.physical);
@@ -415,20 +456,23 @@ export function browseRow(vault: DatabaseSync, table: string, id: string): Brows
       parts = JSON.parse(id);
     } catch {
       throw new BrowseError(
-        'bad_request',
-        `composite key needs a JSON array of ${pks.length} values`,
+        "bad_request",
+        `composite key needs a JSON array of ${pks.length} values`
       );
     }
     if (!Array.isArray(parts) || parts.length !== pks.length) {
-      throw new BrowseError('bad_request', `composite key needs ${pks.length} values`);
+      throw new BrowseError(
+        "bad_request",
+        `composite key needs ${pks.length} values`
+      );
     }
-    where = pks.map((c) => `"${c}" = ?`).join(' AND ');
-    bind = parts.map((p) => (typeof p === 'number' ? p : String(p)));
+    where = pks.map((c) => `"${c}" = ?`).join(" AND ");
+    bind = parts.map((p) => (typeof p === "number" ? p : String(p)));
   }
   const row = vault
     .prepare(`SELECT * FROM "${ref.physical}" WHERE ${where} LIMIT 1`)
     .get(...bind) as Record<string, unknown> | undefined;
-  if (!row) throw new BrowseError('not_found', `no row ${id} in ${table}`);
+  if (!row) throw new BrowseError("not_found", `no row ${id} in ${table}`);
   maskSealed(vault, table, [row]);
   return {
     logical: table,

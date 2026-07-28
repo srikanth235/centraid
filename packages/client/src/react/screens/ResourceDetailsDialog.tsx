@@ -1,10 +1,14 @@
-import { useEffect, useRef, type JSX } from 'react';
+import { useEffect, useRef, type JSX } from "react";
 
-import type { ResourceKnobPrefs, ResourceProfileDTO, TunableKnobKey } from './resource-summary.js';
-import ResourceAdvancedKnobs from './ResourceAdvancedKnobs.js';
-import ResourceCardDetails from './ResourceCardDetails.js';
+import type {
+  ResourceKnobPrefs,
+  ResourceProfileDTO,
+  TunableKnobKey,
+} from "./resource-summary.js";
+import ResourceAdvancedKnobs from "./ResourceAdvancedKnobs.js";
+import ResourceCardDetails from "./ResourceCardDetails.js";
 
-import styles from './ResourceDialogs.module.css';
+import styles from "./ResourceDialogs.module.css";
 
 // "How we sized this" dialog (issue #528 follow-up): the L2 host facts +
 // resolved knobs (ResourceCardDetails, embedded) and the L3 owner-tunable knobs
@@ -27,11 +31,11 @@ const X_ICON = (
   </svg>
 );
 
-const MODE_LABEL: Record<ResourceProfileDTO['mode'], string> = {
-  auto: 'Auto',
-  conserve: 'Conserve',
-  balanced: 'Balanced',
-  performance: 'Performance',
+const MODE_LABEL: Record<ResourceProfileDTO["mode"], string> = {
+  auto: "Auto",
+  conserve: "Conserve",
+  balanced: "Balanced",
+  performance: "Performance",
 };
 
 export interface ResourceDetailsDialogProps {
@@ -39,7 +43,9 @@ export interface ResourceDetailsDialogProps {
   /** L3 knob overrides — when both are present (and the profile carries
       `sources`+`bounds`) the Advanced section renders inside the dialog. */
   loadKnobPrefs?: () => Promise<ResourceKnobPrefs>;
-  saveKnobPrefs?: (patch: Partial<Record<TunableKnobKey, number | null>>) => Promise<void>;
+  saveKnobPrefs?: (
+    patch: Partial<Record<TunableKnobKey, number | null>>
+  ) => Promise<void>;
   onClose: () => void;
 }
 
@@ -50,19 +56,21 @@ export default function ResourceDetailsDialog({
   onClose,
 }: ResourceDetailsDialogProps): JSX.Element {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const showKnobs = Boolean(profile.sources && profile.bounds && loadKnobPrefs && saveKnobPrefs);
+  const showKnobs = Boolean(
+    profile.sources && profile.bounds && loadKnobPrefs && saveKnobPrefs
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
     const t = setTimeout(() => closeRef.current?.focus(), 30);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
       clearTimeout(t);
     };
   }, [onClose]);
@@ -81,7 +89,8 @@ export default function ResourceDetailsDialog({
           <div className={styles.headText}>
             <h3 className={styles.title}>How we sized this</h3>
             <p className={styles.sub}>
-              The <b>{MODE_LABEL[profile.mode]}</b> profile, resolved against this gateway’s host.
+              The <b>{MODE_LABEL[profile.mode]}</b> profile, resolved against
+              this gateway’s host.
             </p>
           </div>
           <button

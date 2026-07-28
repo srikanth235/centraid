@@ -6,7 +6,7 @@
 // `import styles from './X.module.css'` sites. A broad `Record<string, string>`
 // keeps the declaration shared across every component module without generating
 // a per-file `.d.ts`.
-declare module '*.module.css' {
+declare module "*.module.css" {
   const classes: Record<string, string>;
   export default classes;
 }

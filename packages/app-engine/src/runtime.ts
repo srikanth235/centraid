@@ -1,35 +1,46 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import os from 'node:os';
+import type { IncomingMessage, ServerResponse } from "node:http";
+import os from "node:os";
 // governance: allow-repo-hygiene file-size-limit pending split into changes-feed / app-routes modules
-import path from 'node:path';
+import path from "node:path";
 
-import { ChangeBus } from './changes/change-bus.js';
-import type { ConversationHistoryStore } from './conversation/history.js';
-import type { ConversationRunner } from './conversation/runner.js';
-import type { ConversationWorkspaceKind } from './conversation/schema.js';
-import type { RunnerKind } from './conversation/turn.js';
-import { Dispatcher, statusForToolError, type ToolResult } from './handlers/dispatcher.js';
-import type { VaultBridge } from './handlers/vault-bridge.js';
-import { handleAppChanges } from './http/changes-sse.js';
-import { handleLogsRoute, handleSettingsWrite } from './http/cloud-routes.js';
-import { sendJsonNegotiated } from './http/compression.js';
-import { readBody, sendError, sendJson } from './http/http-utils.js';
-import { COMPANION_GRANTS_HEADER, companionHandlerAllowed } from './http/internal-headers.js';
-import { serveQueryBundle } from './http/query-bundle.js';
-import { parseWithDraft } from './http/router.js';
-import { serveStatic } from './http/static-server.js';
-import type { TurnLimiter } from './http/turn-limiter.js';
-import { handleTurnRoute, parseTurnSubRoute, type AskModelPrefs } from './http/turn-routes.js';
-import { appDataDir } from './registry/app-paths.js';
-import { cleanupDeregisteredApp } from './registry/deregister-cleanup.js';
-import { Registry, RegistryError } from './registry/registry.js';
-import { readAppSettings } from './settings/app-settings.js';
-import { buildSettingsInject } from './settings/settings-merge.js';
-import type { PrefsStore } from './stores/prefs-store.js';
-import type { AppRef, RegistryEntry } from './types.js';
+import { ChangeBus } from "./changes/change-bus.js";
+import type { ConversationHistoryStore } from "./conversation/history.js";
+import type { ConversationRunner } from "./conversation/runner.js";
+import type { ConversationWorkspaceKind } from "./conversation/schema.js";
+import type { RunnerKind } from "./conversation/turn.js";
+import {
+  Dispatcher,
+  statusForToolError,
+  type ToolResult,
+} from "./handlers/dispatcher.js";
+import type { VaultBridge } from "./handlers/vault-bridge.js";
+import { handleAppChanges } from "./http/changes-sse.js";
+import { handleLogsRoute, handleSettingsWrite } from "./http/cloud-routes.js";
+import { sendJsonNegotiated } from "./http/compression.js";
+import { readBody, sendError, sendJson } from "./http/http-utils.js";
+import {
+  COMPANION_GRANTS_HEADER,
+  companionHandlerAllowed,
+} from "./http/internal-headers.js";
+import { serveQueryBundle } from "./http/query-bundle.js";
+import { parseWithDraft } from "./http/router.js";
+import { serveStatic } from "./http/static-server.js";
+import type { TurnLimiter } from "./http/turn-limiter.js";
+import {
+  handleTurnRoute,
+  parseTurnSubRoute,
+  type AskModelPrefs,
+} from "./http/turn-routes.js";
+import { appDataDir } from "./registry/app-paths.js";
+import { cleanupDeregisteredApp } from "./registry/deregister-cleanup.js";
+import { Registry, RegistryError } from "./registry/registry.js";
+import { readAppSettings } from "./settings/app-settings.js";
+import { buildSettingsInject } from "./settings/settings-merge.js";
+import type { PrefsStore } from "./stores/prefs-store.js";
+import type { AppRef, RegistryEntry } from "./types.js";
 
-const WEB_APP_HEADER = 'x-centraid-web-app';
-const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
+const WEB_APP_HEADER = "x-centraid-web-app";
+const WEB_SHELL_ORIGIN_HEADER = "x-centraid-web-shell-origin";
 
 export interface RuntimeLogger {
   info: (message: string) => void;
@@ -104,7 +115,9 @@ export interface RuntimeOptions {
    * Defaults to "no metadata" — chat still works, just with the bare
    * app-id as the display name.
    */
-  appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
+  appMeta?: (
+    entry: RegistryEntry
+  ) => Promise<{ name?: string; description?: string }>;
   /**
    * Optional preflight reporter for the gateway-wide
    * `GET /centraid/_turn/runner-status` route. Returns the host's view of
@@ -132,11 +145,14 @@ export interface RuntimeOptions {
    * serving path is wholly unaffected when no draft resolver is
    * configured.
    */
-  draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
+  draftCodeDir?: (
+    appId: string,
+    sessionId: string
+  ) => Promise<string | undefined>;
   /** Host-owned Centraid roots exposed through the per-conversation selector. */
   conversationWorkspaceRoots?: (
     appId: string,
-    conversationId: string,
+    conversationId: string
   ) => Promise<Partial<Record<ConversationWorkspaceKind, string>>>;
   /**
    * Optional per-app `ctx.vault` bridge factory (duaility §12). The gateway
@@ -162,7 +178,7 @@ export interface RuntimeOptions {
 }
 
 /** Provider-agnostic capability tier a model is classified into. */
-export type ModelTier = 'smart' | 'balanced' | 'fast';
+export type ModelTier = "smart" | "balanced" | "fast";
 
 /**
  * One model a runtime can serve, as surfaced by a runtime that can
@@ -192,7 +208,7 @@ export interface RunnerModel {
  * Lives here (not agent-runtime) because `RunnerStatus` carries it and
  * app-engine is the lower layer; agent-runtime re-exports it.
  */
-export type SurfaceStatus = 'loading' | 'ready' | 'empty';
+export type SurfaceStatus = "loading" | "ready" | "empty";
 
 /** Options for the runner-status reporter (e.g. force a model reclassify). */
 export interface RunnerStatusOptions {
@@ -205,7 +221,7 @@ export interface RunnerStatusOptions {
  * the schema, reporting the configured CLI adapter.
  */
 export interface RunnerStatus {
-  kind: RunnerKind | 'none';
+  kind: RunnerKind | "none";
   ok: boolean;
   /** Adapter version string when detectable (e.g. "codex 0.20.4"). */
   version?: string;
@@ -278,7 +294,9 @@ export class Runtime {
   /** Optional per-app chat runner. See `RuntimeOptions.conversationRunner`. */
   readonly conversationRunner?: ConversationRunner;
   /** Optional app-metadata reader for chat extra-system-prompt. */
-  readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
+  readonly appMeta?: (
+    entry: RegistryEntry
+  ) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
   readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   /** Optional ask-model picker backing. See `RuntimeOptions.askModel`. */
@@ -295,9 +313,14 @@ export class Runtime {
   private readonly registries = new Map<string, Registry>();
   private readonly sharedAssetsDir?: string;
   private readonly logger: RuntimeLogger;
-  private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
-  private readonly draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
-  private readonly conversationWorkspaceRoots?: RuntimeOptions['conversationWorkspaceRoots'];
+  private readonly codeDirOverride?: (
+    appId: string
+  ) => Promise<string | undefined>;
+  private readonly draftCodeDir?: (
+    appId: string,
+    sessionId: string
+  ) => Promise<string | undefined>;
+  private readonly conversationWorkspaceRoots?: RuntimeOptions["conversationWorkspaceRoots"];
   /**
    * Per-runtime (and therefore per-gateway) chat-session lock map for the
    * `(appId, conversationId)` chat serialization. Was a module-level map in
@@ -309,7 +332,7 @@ export class Runtime {
 
   constructor(opts: RuntimeOptions) {
     this.appsDirProvider =
-      typeof opts.appsDir === 'string'
+      typeof opts.appsDir === "string"
         ? (
             (dir) => () =>
               dir
@@ -323,8 +346,9 @@ export class Runtime {
     this.conversationRunner = opts.conversationRunner;
     const sessionDir =
       opts.conversationRunnerSessionDir ??
-      path.join(os.tmpdir(), 'centraid-conversation-runner-sessions');
-    this.sessionDirProvider = typeof sessionDir === 'string' ? () => sessionDir : sessionDir;
+      path.join(os.tmpdir(), "centraid-conversation-runner-sessions");
+    this.sessionDirProvider =
+      typeof sessionDir === "string" ? () => sessionDir : sessionDir;
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     this.askModel = opts.askModel;
@@ -336,8 +360,10 @@ export class Runtime {
     }
     this.dispatcher = new Dispatcher({
       registry: () => this.registry,
-      onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
-      ...(this.codeDirOverride ? { codeDirOverride: this.codeDirOverride } : {}),
+      onWriteFor: (appId) => this.emitForApp(appId, "handler"),
+      ...(this.codeDirOverride
+        ? { codeDirOverride: this.codeDirOverride }
+        : {}),
       ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
     });
   }
@@ -368,7 +394,10 @@ export class Runtime {
    * `'external'` for cloud-panel SQL writes, etc. Agent writes flow through
    * the chat runner's own emit closure (see `agentEmitForApp`).
    */
-  private emitForApp(appId: string, source: 'handler' | 'external'): (tables: string[]) => void {
+  private emitForApp(
+    appId: string,
+    source: "handler" | "external"
+  ): (tables: string[]) => void {
     // Empty `tables` still notifies — post-#286 handler writes ride
     // ctx.vault, so "the app acted" is all the runtime knows (and all a
     // view needs to re-derive).
@@ -383,14 +412,18 @@ export class Runtime {
    * so the iframe can correlate refreshes with chat pills.
    */
   agentEmitForApp(
-    appId: string,
-  ): (payload: { tables: string[]; toolCallId?: string; turnId?: string }) => void {
+    appId: string
+  ): (payload: {
+    tables: string[];
+    toolCallId?: string;
+    turnId?: string;
+  }) => void {
     return (payload) => {
       this.changeBus.emit({
         appId,
         tables: payload.tables,
         ts: Date.now(),
-        source: 'agent',
+        source: "agent",
         ...(payload.toolCallId ? { toolCallId: payload.toolCallId } : {}),
         ...(payload.turnId ? { turnId: payload.turnId } : {}),
       });
@@ -426,7 +459,9 @@ export class Runtime {
     };
   }
 
-  private async resolveCodeDir(entry: RegistryEntry): Promise<string | undefined> {
+  private async resolveCodeDir(
+    entry: RegistryEntry
+  ): Promise<string | undefined> {
     // Mirrors `Dispatcher.resolveCodeDir`: the git-store override resolves
     // an app's live code dir (issue #137). No override → no servable code.
     return this.codeDirOverride ? this.codeDirOverride(entry.id) : undefined;
@@ -452,24 +487,24 @@ export class Runtime {
   private async handleAppRpc(
     req: IncomingMessage,
     res: ServerResponse,
-    kind: 'action' | 'query',
+    kind: "action" | "query",
     appId: string,
     handlerName: string,
-    draftSessionId?: string,
+    draftSessionId?: string
   ): Promise<void> {
     // A browser session is pinned to one app; the app id is now in the path,
     // so scope-check against it directly rather than a body field.
     if (!this.enforceWebAppScope(req, res, appId)) return;
 
     const companionProfile = req.headers[COMPANION_GRANTS_HEADER];
-    if (typeof companionProfile === 'string') {
-      const allowed = new Set(companionProfile.split(',').filter(Boolean));
+    if (typeof companionProfile === "string") {
+      const allowed = new Set(companionProfile.split(",").filter(Boolean));
       if (!companionHandlerAllowed(allowed, kind, appId, handlerName)) {
         sendError(
           res,
           403,
-          'app_session_scope',
-          'This Companion device has no grant for that module operation.',
+          "app_session_scope",
+          "This Companion device has no grant for that module operation."
         );
         return;
       }
@@ -477,11 +512,20 @@ export class Runtime {
 
     let body: Record<string, unknown> = {};
     try {
-      const raw = (await readBody(req)).toString('utf8');
+      const raw = (await readBody(req)).toString("utf8");
       if (raw.length > 0) {
         const parsed = JSON.parse(raw) as unknown;
-        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          sendError(res, 400, 'bad_request', 'Request body must be a JSON object.');
+        if (
+          parsed === null ||
+          typeof parsed !== "object" ||
+          Array.isArray(parsed)
+        ) {
+          sendError(
+            res,
+            400,
+            "bad_request",
+            "Request body must be a JSON object."
+          );
           return;
         }
         body = parsed as Record<string, unknown>;
@@ -490,27 +534,29 @@ export class Runtime {
       sendError(
         res,
         400,
-        'bad_request',
-        `request body is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+        "bad_request",
+        `request body is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
       );
       return;
     }
 
     const overrideCodeDir = await this.draftOverride(appId, draftSessionId);
     const result =
-      kind === 'action'
+      kind === "action"
         ? await this.dispatcher.write(
             {
               app: appId,
               action: handlerName,
               input: body.input,
-              ...(typeof body.intentId === 'string' ? { intentId: body.intentId } : {}),
+              ...(typeof body.intentId === "string"
+                ? { intentId: body.intentId }
+                : {}),
             },
-            overrideCodeDir,
+            overrideCodeDir
           )
         : await this.dispatcher.read(
             { app: appId, query: handlerName, input: body.input },
-            overrideCodeDir,
+            overrideCodeDir
           );
     await this.sendToolResult(req, res, result);
   }
@@ -525,17 +571,17 @@ export class Runtime {
     res: ServerResponse,
     appId: string,
     query: Record<string, string>,
-    draftSessionId?: string,
+    draftSessionId?: string
   ): Promise<void> {
     if (!this.enforceWebAppScope(req, res, appId)) return;
     const overrideCodeDir = await this.draftOverride(appId, draftSessionId);
     const result = await this.dispatcher.describe(
       {
         app: appId,
-        ...(typeof query.action === 'string' ? { action: query.action } : {}),
-        ...(typeof query.query === 'string' ? { query: query.query } : {}),
+        ...(typeof query.action === "string" ? { action: query.action } : {}),
+        ...(typeof query.query === "string" ? { query: query.query } : {}),
       },
-      overrideCodeDir,
+      overrideCodeDir
     );
     await this.sendToolResult(req, res, result);
   }
@@ -545,10 +591,19 @@ export class Runtime {
    * `x-centraid-web-app` addresses a different app. Returns `true` when the
    * caller may proceed.
    */
-  private enforceWebAppScope(req: IncomingMessage, res: ServerResponse, appId: string): boolean {
+  private enforceWebAppScope(
+    req: IncomingMessage,
+    res: ServerResponse,
+    appId: string
+  ): boolean {
     const webApp = req.headers[WEB_APP_HEADER];
-    if (typeof webApp === 'string' && webApp !== appId) {
-      sendError(res, 403, 'app_session_scope', 'This browser session is scoped to another app.');
+    if (typeof webApp === "string" && webApp !== appId) {
+      sendError(
+        res,
+        403,
+        "app_session_scope",
+        "This browser session is scoped to another app."
+      );
       return false;
     }
     return true;
@@ -559,7 +614,10 @@ export class Runtime {
    * `/centraid/_draft/<sessionId>/…` invocation runs against the app's live
    * data. Live requests (no draft session) resolve to `undefined`.
    */
-  private async draftOverride(appId: string, draftSessionId?: string): Promise<string | undefined> {
+  private async draftOverride(
+    appId: string,
+    draftSessionId?: string
+  ): Promise<string | undefined> {
     return draftSessionId && this.draftCodeDir && appId
       ? this.draftCodeDir(appId, draftSessionId)
       : undefined;
@@ -576,14 +634,14 @@ export class Runtime {
   private async sendToolResult(
     req: IncomingMessage,
     res: ServerResponse,
-    result: ToolResult,
+    result: ToolResult
   ): Promise<void> {
     if (result.isError) {
       await sendJsonNegotiated(
         req,
         res,
         statusForToolError(result.structuredContent.code),
-        result.structuredContent,
+        result.structuredContent
       );
       return;
     }
@@ -596,7 +654,10 @@ export class Runtime {
    * app-engine does not enforce its own auth.
    */
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const { route, draftSessionId } = parseWithDraft(req.method ?? 'GET', req.url ?? '/');
+    const { route, draftSessionId } = parseWithDraft(
+      req.method ?? "GET",
+      req.url ?? "/"
+    );
 
     // Draft preview (issue #141): a `/centraid/_draft/<sessionId>/…` request
     // serves the session worktree's code (static + handlers) against the
@@ -606,12 +667,16 @@ export class Runtime {
     // session/app) yields `undefined`, which those cases surface as
     // 503/404 — the live path is never affected when `draftSessionId` is
     // absent.
-    const draftCodeDirFor = async (appId: string): Promise<string | undefined> =>
-      draftSessionId && this.draftCodeDir ? this.draftCodeDir(appId, draftSessionId) : undefined;
+    const draftCodeDirFor = async (
+      appId: string
+    ): Promise<string | undefined> =>
+      draftSessionId && this.draftCodeDir
+        ? this.draftCodeDir(appId, draftSessionId)
+        : undefined;
 
     try {
       switch (route.kind) {
-        case 'registry-list': {
+        case "registry-list": {
           sendJson(
             res,
             200,
@@ -619,15 +684,15 @@ export class Runtime {
               id: e.id,
               path: e.path,
               registeredAt: e.registeredAt,
-            })),
+            }))
           );
           return;
         }
 
-        case 'registry-deregister': {
+        case "registry-deregister": {
           const removed = await this.registry.deregister(route.appId);
           if (!removed) {
-            sendError(res, 404, 'not_found', 'App not registered.');
+            sendError(res, 404, "not_found", "App not registered.");
             return;
           }
           await cleanupDeregisteredApp(this.appsDir, removed, this.logger);
@@ -635,57 +700,62 @@ export class Runtime {
           return;
         }
 
-        case 'app-settings-read': {
+        case "app-settings-read": {
           const entry = this.registry.get(route.appId);
           if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
+            sendError(res, 404, "not_found", "App not registered.");
             return;
           }
           sendJson(res, 200, { settings: readAppSettings(entry.path) });
           return;
         }
 
-        case 'app-settings-write': {
+        case "app-settings-write": {
           const entry = this.registry.get(route.appId);
           if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
+            sendError(res, 404, "not_found", "App not registered.");
             return;
           }
           await handleSettingsWrite(req, res, entry.path);
           return;
         }
 
-        case 'app-changes': {
+        case "app-changes": {
           await handleAppChanges(req, res, this.changeBus, route.appId);
           return;
         }
 
-        case 'app-logs': {
+        case "app-logs": {
           await handleLogsRoute(res, this.registry, route.appId, route.query);
           return;
         }
 
-        case 'app-query-bundle': {
+        case "app-query-bundle": {
           const webApp = req.headers[WEB_APP_HEADER];
-          if (typeof webApp === 'string' && webApp !== route.appId) {
+          if (typeof webApp === "string" && webApp !== route.appId) {
             sendError(
               res,
               403,
-              'app_session_scope',
-              'This browser session is scoped to another app.',
+              "app_session_scope",
+              "This browser session is scoped to another app."
             );
             return;
           }
           const entry = this.registry.get(route.appId);
           if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
+            sendError(res, 404, "not_found", "App not registered.");
             return;
           }
           const codeDir = draftSessionId
             ? await draftCodeDirFor(entry.id)
             : await this.resolveCodeDir(entry);
           if (!codeDir) {
-            sendError(res, 503, 'no_active_version', 'App has no active version yet.');
+            sendError(
+              res,
+              503,
+              "no_active_version",
+              "App has no active version yet."
+            );
             return;
           }
           await serveQueryBundle(req, res, {
@@ -696,18 +766,23 @@ export class Runtime {
           return;
         }
 
-        case 'app-index':
-        case 'app-static': {
+        case "app-index":
+        case "app-static": {
           const entry = this.registry.get(route.appId);
           if (!entry) {
-            sendError(res, 404, 'not_found', 'App not registered.');
+            sendError(res, 404, "not_found", "App not registered.");
             return;
           }
           const codeDir = draftSessionId
             ? await draftCodeDirFor(entry.id)
             : await this.resolveCodeDir(entry);
           if (!codeDir) {
-            sendError(res, 503, 'no_active_version', 'App has no active version yet.');
+            sendError(
+              res,
+              503,
+              "no_active_version",
+              "App has no active version yet."
+            );
             return;
           }
           // In draft mode the served HTML's bridge must pin the app id +
@@ -719,9 +794,11 @@ export class Runtime {
             : {};
           // Kit assets (kit.ts / kit.css) are served from the shared canonical
           // dir when the app folder doesn't ship its own copy.
-          const sharedServe = this.sharedAssetsDir ? { sharedAssetsDir: this.sharedAssetsDir } : {};
-          const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
-          if (route.kind === 'app-index') {
+          const sharedServe = this.sharedAssetsDir
+            ? { sharedAssetsDir: this.sharedAssetsDir }
+            : {};
+          const rel = route.kind === "app-index" ? "index.html" : route.rel;
+          if (route.kind === "app-index") {
             // Merge global prefs (gateway-side store) with this app's own
             // settings.json and any URL-query overrides, then bake the
             // result into the served HTML so the iframe paints in the
@@ -729,11 +806,17 @@ export class Runtime {
             const globalPrefs = this.userStore?.getAllPrefs();
             const appSettings = readAppSettings(entry.path);
             const queryOverrides = route.query as Record<string, unknown>;
-            const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
+            const settingsInject = buildSettingsInject([
+              globalPrefs,
+              appSettings,
+              queryOverrides,
+            ]);
             const shellOrigin = req.headers[WEB_SHELL_ORIGIN_HEADER];
             await serveStatic(req, res, codeDir, rel, {
               settingsInject,
-              ...(typeof shellOrigin === 'string' ? { frameAncestor: shellOrigin } : {}),
+              ...(typeof shellOrigin === "string"
+                ? { frameAncestor: shellOrigin }
+                : {}),
               ...draftServe,
               ...sharedServe,
             });
@@ -746,37 +829,61 @@ export class Runtime {
           return;
         }
 
-        case 'app-action': {
-          await this.handleAppRpc(req, res, 'action', route.appId, route.action, draftSessionId);
+        case "app-action": {
+          await this.handleAppRpc(
+            req,
+            res,
+            "action",
+            route.appId,
+            route.action,
+            draftSessionId
+          );
           return;
         }
 
-        case 'app-query': {
-          await this.handleAppRpc(req, res, 'query', route.appId, route.query, draftSessionId);
+        case "app-query": {
+          await this.handleAppRpc(
+            req,
+            res,
+            "query",
+            route.appId,
+            route.query,
+            draftSessionId
+          );
           return;
         }
 
-        case 'app-describe': {
-          await this.handleAppDescribe(req, res, route.appId, route.query, draftSessionId);
+        case "app-describe": {
+          await this.handleAppDescribe(
+            req,
+            res,
+            route.appId,
+            route.query,
+            draftSessionId
+          );
           return;
         }
 
-        case 'app-chat': {
-          const parsed = parseTurnSubRoute(route.appId, route.segments, req.method ?? 'GET');
+        case "app-chat": {
+          const parsed = parseTurnSubRoute(
+            route.appId,
+            route.segments,
+            req.method ?? "GET"
+          );
           if (!parsed) {
-            sendError(res, 404, 'not_found', 'Unknown chat sub-route.');
+            sendError(res, 404, "not_found", "Unknown chat sub-route.");
             return;
           }
           await handleTurnRoute(req, res, this.turnRouteContext(), parsed);
           return;
         }
 
-        case 'app-runner-status': {
+        case "app-runner-status": {
           if (!this.runnerStatus) {
             sendJson(res, 200, {
-              kind: 'none',
+              kind: "none",
               ok: false,
-              reason: 'no runner configured',
+              reason: "no runner configured",
             });
             return;
           }
@@ -785,23 +892,28 @@ export class Runtime {
           return;
         }
 
-        case 'not-found':
-          sendError(res, 404, 'not_found', 'Unknown centraid path.');
+        case "not-found":
+          sendError(res, 404, "not_found", "Unknown centraid path.");
       }
     } catch (err) {
       if (err instanceof RegistryError) {
         const status =
-          err.code === 'invalid_id'
+          err.code === "invalid_id"
             ? 400
-            : err.code === 'already_registered'
+            : err.code === "already_registered"
               ? 409
-              : err.code === 'not_a_directory'
+              : err.code === "not_a_directory"
                 ? 400
                 : 404;
         sendError(res, status, err.code, err.message);
         return;
       }
-      sendError(res, 500, 'internal_error', err instanceof Error ? err.message : String(err));
+      sendError(
+        res,
+        500,
+        "internal_error",
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
 }

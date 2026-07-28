@@ -5,7 +5,7 @@ import {
   type NewStoredIntent,
   type ReplicaIntent,
   type ReplicaSqliteDriver,
-} from '@centraid/client/replica/native';
+} from "@centraid/client/replica/native";
 
 const DDL = `
   CREATE TABLE IF NOT EXISTS replica_intent_outbox (
@@ -49,7 +49,7 @@ export class SqliteIntentStore implements IntentRecordStore {
       if (existing) {
         if (existing.payloadHash !== intent.payloadHash) {
           throw new ReplicaProtocolError(
-            `Intent id ${intent.intentId} was reused with another payload`,
+            `Intent id ${intent.intentId} was reused with another payload`
           );
         }
         return existing;
@@ -60,7 +60,7 @@ export class SqliteIntentStore implements IntentRecordStore {
       this.driver.run(
         `INSERT INTO replica_intent_meta(key, value) VALUES ('nextOrder', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        [createdOrder + 1],
+        [createdOrder + 1]
       );
       return clone(record);
     });
@@ -73,7 +73,9 @@ export class SqliteIntentStore implements IntentRecordStore {
   async list(states?: readonly IntentState[]): Promise<ReplicaIntent[]> {
     const selected = states ? new Set(states) : undefined;
     return this.driver
-      .all<StoredIntentRow>('SELECT record_json FROM replica_intent_outbox ORDER BY created_order')
+      .all<StoredIntentRow>(
+        "SELECT record_json FROM replica_intent_outbox ORDER BY created_order"
+      )
       .map((row) => parseIntent(row.record_json))
       .filter((intent) => !selected || selected.has(intent.state));
   }
@@ -82,13 +84,13 @@ export class SqliteIntentStore implements IntentRecordStore {
     return this.transaction(() => {
       const row = this.driver.all<StoredIntentRow>(
         `SELECT record_json FROM replica_intent_outbox
-          WHERE state = 'queued' ORDER BY created_order LIMIT 1`,
+          WHERE state = 'queued' ORDER BY created_order LIMIT 1`
       )[0];
       if (!row) return undefined;
       const queued = parseIntent(row.record_json);
       const claimed: ReplicaIntent = {
         ...queued,
-        state: 'sending',
+        state: "sending",
         attempts: queued.attempts + 1,
         reason: undefined,
       };
@@ -100,10 +102,10 @@ export class SqliteIntentStore implements IntentRecordStore {
   async transition(
     intentId: string,
     allowed: readonly IntentState[],
-    patch: Partial<ReplicaIntent>,
+    patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
     return this.transaction(() => {
-      const updated = this.applyPatch(intentId, allowed, patch, 'transition');
+      const updated = this.applyPatch(intentId, allowed, patch, "transition");
       this.insert(updated);
       return clone(updated);
     });
@@ -112,19 +114,21 @@ export class SqliteIntentStore implements IntentRecordStore {
   async settle(
     intentId: string,
     allowed: readonly IntentState[],
-    patch: Partial<ReplicaIntent>,
+    patch: Partial<ReplicaIntent>
   ): Promise<ReplicaIntent> {
     return this.transaction(() => {
-      const settled = this.applyPatch(intentId, allowed, patch, 'settle');
-      this.driver.run('DELETE FROM replica_intent_outbox WHERE intent_id = ?', [intentId]);
+      const settled = this.applyPatch(intentId, allowed, patch, "settle");
+      this.driver.run("DELETE FROM replica_intent_outbox WHERE intent_id = ?", [
+        intentId,
+      ]);
       return clone(settled);
     });
   }
 
   async clear(): Promise<void> {
     this.transaction(() => {
-      this.driver.run('DELETE FROM replica_intent_outbox', []);
-      this.driver.run('DELETE FROM replica_intent_meta', []);
+      this.driver.run("DELETE FROM replica_intent_outbox", []);
+      this.driver.run("DELETE FROM replica_intent_meta", []);
       return undefined;
     });
   }
@@ -142,12 +146,14 @@ export class SqliteIntentStore implements IntentRecordStore {
     intentId: string,
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>,
-    verb: 'transition' | 'settle',
+    verb: "transition" | "settle"
   ): ReplicaIntent {
     const existing = this.read(intentId);
     if (!existing) throw new ReplicaProtocolError(`Unknown intent ${intentId}`);
     if (!allowed.includes(existing.state)) {
-      throw new ReplicaProtocolError(`Intent ${intentId} cannot ${verb} from ${existing.state}`);
+      throw new ReplicaProtocolError(
+        `Intent ${intentId} cannot ${verb} from ${existing.state}`
+      );
     }
     // Spread the patch directly (not JSON-cloned) so an explicit `reason:
     // undefined` clears the field, matching the memory/IndexedDB stores.
@@ -161,8 +167,8 @@ export class SqliteIntentStore implements IntentRecordStore {
 
   private read(intentId: string): ReplicaIntent | undefined {
     const row = this.driver.all<StoredIntentRow>(
-      'SELECT record_json FROM replica_intent_outbox WHERE intent_id = ?',
-      [intentId],
+      "SELECT record_json FROM replica_intent_outbox WHERE intent_id = ?",
+      [intentId]
     )[0];
     return row ? parseIntent(row.record_json) : undefined;
   }
@@ -176,25 +182,31 @@ export class SqliteIntentStore implements IntentRecordStore {
          state = excluded.state,
          payload_hash = excluded.payload_hash,
          record_json = excluded.record_json`,
-      [record.intentId, record.createdOrder, record.state, record.payloadHash, stringify(record)],
+      [
+        record.intentId,
+        record.createdOrder,
+        record.state,
+        record.payloadHash,
+        stringify(record),
+      ]
     );
   }
 
   private nextOrder(): number {
     const row = this.driver.all<{ value: number }>(
-      "SELECT value FROM replica_intent_meta WHERE key = 'nextOrder'",
+      "SELECT value FROM replica_intent_meta WHERE key = 'nextOrder'"
     )[0];
     return row?.value ?? 1;
   }
 
   private transaction<T>(work: () => T): T {
-    this.driver.exec('BEGIN IMMEDIATE');
+    this.driver.exec("BEGIN IMMEDIATE");
     try {
       const result = work();
-      this.driver.exec('COMMIT');
+      this.driver.exec("COMMIT");
       return result;
     } catch (error) {
-      this.driver.exec('ROLLBACK');
+      this.driver.exec("ROLLBACK");
       throw error;
     }
   }

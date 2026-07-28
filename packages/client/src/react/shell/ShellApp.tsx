@@ -6,17 +6,17 @@ import {
   useMemo,
   useReducer,
   useState,
-} from 'react';
+} from "react";
 
-import type { ShellRoute } from '../../app-shell-context.js';
+import type { ShellRoute } from "../../app-shell-context.js";
 import {
   canGoBack as canBack,
   canGoForward as canFwd,
   currentRoute,
   INITIAL_ROUTER,
   routerReducer,
-} from './router.js';
-import ShellFrame from './ShellFrame.js';
+} from "./router.js";
+import ShellFrame from "./ShellFrame.js";
 
 // The navigation surface handed to the sidebar + outlet render-props. It
 // exposes the current route and the history verbs, so callers dispatch
@@ -53,7 +53,7 @@ export interface ShellAppProps {
 }
 
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
-  r.kind === 'app' || r.kind === 'builder' || r.kind === 'automation-builder';
+  r.kind === "app" || r.kind === "builder" || r.kind === "automation-builder";
 
 export default function ShellApp({
   initialRoute,
@@ -66,7 +66,7 @@ export default function ShellApp({
   onNavReady,
 }: ShellAppProps): JSX.Element {
   const [state, dispatch] = useReducer(routerReducer, INITIAL_ROUTER, (init) =>
-    routerReducer(init, { type: 'navigate', route: initialRoute }),
+    routerReducer(init, { type: "navigate", route: initialRoute })
   );
   // Sidebar open state is controllable — the eventual App root owns it in
   // prefs — but self-manages when the prop is omitted (tests, standalone).
@@ -78,14 +78,14 @@ export default function ShellApp({
   const nav = useMemo<ShellNav>(
     () => ({
       route,
-      navigate: (r) => dispatch({ type: 'navigate', route: r }),
-      replace: (r) => dispatch({ type: 'replace', route: r }),
-      back: () => dispatch({ type: 'back' }),
-      forward: () => dispatch({ type: 'forward' }),
+      navigate: (r) => dispatch({ type: "navigate", route: r }),
+      replace: (r) => dispatch({ type: "replace", route: r }),
+      back: () => dispatch({ type: "back" }),
+      forward: () => dispatch({ type: "forward" }),
       canGoBack: canBack(state),
       canGoForward: canFwd(state),
     }),
-    [route, state],
+    [route, state]
   );
 
   const toggleSidebar = useCallback(() => {

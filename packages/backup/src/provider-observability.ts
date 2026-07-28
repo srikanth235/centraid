@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { FsObjectStore } from './object-store.js';
+import { FsObjectStore } from "./object-store.js";
 import {
   BackupProviderError,
   type ProviderAuditEvent,
@@ -13,48 +13,55 @@ import {
   type ProviderInventoryQuery,
   type ProviderPolicyDeclaration,
   STORE_CLASSES,
-} from './provider.js';
+} from "./provider.js";
 
 export const MIN_POLICY_RPO_SECONDS = 30;
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 1000;
 
 function invalid(message: string): never {
-  throw BackupProviderError.of('invalid_request', message);
+  throw BackupProviderError.of("invalid_request", message);
 }
 
 function positiveNumber(value: unknown, field: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return invalid(`${field} must be a positive number`);
   }
   return value;
 }
 
 /** Runtime validation shared by reference and fake providers. */
-export function validateProviderPolicy(input: unknown): ProviderPolicyDeclaration {
-  if (!input || typeof input !== 'object') return invalid('policy must be an object');
+export function validateProviderPolicy(
+  input: unknown
+): ProviderPolicyDeclaration {
+  if (!input || typeof input !== "object")
+    return invalid("policy must be an object");
   const value = input as Record<string, unknown>;
-  const rpoSeconds = positiveNumber(value.rpoSeconds, 'rpoSeconds');
-  if (!Number.isInteger(rpoSeconds)) return invalid('rpoSeconds must be an integer');
+  const rpoSeconds = positiveNumber(value.rpoSeconds, "rpoSeconds");
+  if (!Number.isInteger(rpoSeconds))
+    return invalid("rpoSeconds must be an integer");
   if (rpoSeconds < MIN_POLICY_RPO_SECONDS) {
     throw BackupProviderError.of(
-      'policy_unmet',
+      "policy_unmet",
       `rpoSeconds cannot be lower than ${MIN_POLICY_RPO_SECONDS}`,
       {
-        field: 'rpoSeconds',
+        field: "rpoSeconds",
         minimum: MIN_POLICY_RPO_SECONDS,
         requested: rpoSeconds,
-      },
+      }
     );
   }
   const casAck = value.casAck;
-  if (casAck !== 'receipt' && casAck !== 'replicated') {
+  if (casAck !== "receipt" && casAck !== "replicated") {
     return invalid('casAck must be "receipt" or "replicated"');
   }
   return {
     rpoSeconds,
-    snapshotIntervalHours: positiveNumber(value.snapshotIntervalHours, 'snapshotIntervalHours'),
-    verifyEveryDays: positiveNumber(value.verifyEveryDays, 'verifyEveryDays'),
+    snapshotIntervalHours: positiveNumber(
+      value.snapshotIntervalHours,
+      "snapshotIntervalHours"
+    ),
+    verifyEveryDays: positiveNumber(value.verifyEveryDays, "verifyEveryDays"),
     casAck,
   };
 }
@@ -70,13 +77,13 @@ function pageLimit(value: number | undefined): number {
 function sinceValue(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
   if (!Number.isInteger(value) || value < 0)
-    return invalid('since must be an epoch-second integer');
+    return invalid("since must be an epoch-second integer");
   return value;
 }
 
 function decodeCursor(cursor: string, label: string): string {
   try {
-    const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+    const decoded = Buffer.from(cursor, "base64url").toString("utf8");
     if (!decoded) return invalid(`${label} cursor is invalid`);
     return decoded;
   } catch {
@@ -85,24 +92,28 @@ function decodeCursor(cursor: string, label: string): string {
 }
 
 function encodeCursor(value: string): string {
-  return Buffer.from(value, 'utf8').toString('base64url');
+  return Buffer.from(value, "utf8").toString("base64url");
 }
 
 export function paginateInventory(
   rows: ProviderInventoryObject[],
-  query: ProviderInventoryQuery,
+  query: ProviderInventoryQuery
 ): ProviderInventoryPage {
   if (!(STORE_CLASSES as readonly string[]).includes(query.store)) {
-    return invalid(`store must be one of ${STORE_CLASSES.map((s) => `"${s}"`).join(', ')}`);
+    return invalid(
+      `store must be one of ${STORE_CLASSES.map((s) => `"${s}"`).join(", ")}`
+    );
   }
   const since = sinceValue(query.since);
-  const afterKey = query.cursor ? decodeCursor(query.cursor, 'inventory') : undefined;
+  const afterKey = query.cursor
+    ? decodeCursor(query.cursor, "inventory")
+    : undefined;
   const eligible = [...rows]
     .sort((a, b) => a.key.localeCompare(b.key))
     .filter(
       (row) =>
         (afterKey === undefined || row.key > afterKey) &&
-        (since === undefined || row.storedAt >= since),
+        (since === undefined || row.storedAt >= since)
     );
   const limit = pageLimit(query.limit);
   const objects = eligible.slice(0, limit);
@@ -118,15 +129,19 @@ export function paginateInventory(
 
 export function paginateAuditEvents(
   rows: ProviderAuditEvent[],
-  query: ProviderAuditQuery = {},
+  query: ProviderAuditQuery = {}
 ): ProviderAuditPage {
   const since = sinceValue(query.since);
-  const offsetText = query.cursor ? decodeCursor(query.cursor, 'audit') : '0';
+  const offsetText = query.cursor ? decodeCursor(query.cursor, "audit") : "0";
   const offset = Number(offsetText);
-  if (!Number.isInteger(offset) || offset < 0) return invalid('audit cursor is invalid');
+  if (!Number.isInteger(offset) || offset < 0)
+    return invalid("audit cursor is invalid");
   const eligible = rows
     .map((event, index) => ({ event, index }))
-    .filter(({ event, index }) => index >= offset && (since === undefined || event.at >= since));
+    .filter(
+      ({ event, index }) =>
+        index >= offset && (since === undefined || event.at >= since)
+    );
   const selected = eligible.slice(0, pageLimit(query.limit));
   return {
     events: selected.map(({ event }) => event),
@@ -139,17 +154,17 @@ export function paginateAuditEvents(
 
 export async function inventoryFromFilesystem(
   root: string,
-  state: ProviderInventoryObject['state'],
-  query: ProviderInventoryQuery,
+  state: ProviderInventoryObject["state"],
+  query: ProviderInventoryQuery
 ): Promise<ProviderInventoryPage> {
   const store = new FsObjectStore(root);
   const rows: ProviderInventoryObject[] = [];
-  for await (const listed of store.list('')) {
-    const stat = await fs.stat(path.join(root, ...listed.key.split('/')));
+  for await (const listed of store.list("")) {
+    const stat = await fs.stat(path.join(root, ...listed.key.split("/")));
     rows.push({
       key: listed.key,
       sizeBytes: listed.size,
-      etagOrHash: '',
+      etagOrHash: "",
       storedAt: Math.floor(stat.mtimeMs / 1000),
       state,
     });
@@ -158,7 +173,7 @@ export async function inventoryFromFilesystem(
   const hashNextObject = async (index: number): Promise<void> => {
     const object = page.objects[index];
     if (!object) return;
-    const hash = createHash('sha256');
+    const hash = createHash("sha256");
     const iterator = store.getStream(object.key)[Symbol.asyncIterator]();
     const hashNextChunk = async (): Promise<void> => {
       const chunk = await iterator.next();
@@ -167,7 +182,7 @@ export async function inventoryFromFilesystem(
       return hashNextChunk();
     };
     await hashNextChunk();
-    object.etagOrHash = hash.digest('hex');
+    object.etagOrHash = hash.digest("hex");
     return hashNextObject(index + 1);
   };
   await hashNextObject(0);

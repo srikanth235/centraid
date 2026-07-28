@@ -12,11 +12,17 @@
  * `instanceId` is a per-process UUID, independent of the stable EndpointId.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AUTHED_PLANE_HEADER } from '@centraid/app-engine';
-import { ROUTES, buildGatewayInfoPayload, type GatewayCapabilities } from '@centraid/protocol';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import { sendJson } from './route-helpers.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import { AUTHED_PLANE_HEADER } from "@centraid/app-engine";
+import {
+  ROUTES,
+  buildGatewayInfoPayload,
+  type GatewayCapabilities,
+} from "@centraid/protocol";
+
+import type { RouteHandler } from "../serve/build-gateway.js";
+import { sendJson } from "./route-helpers.js";
 
 const INFO_PATH = ROUTES.gatewayInfo;
 
@@ -48,25 +54,35 @@ export interface GatewayInfoRouteOptions {
  * so a client cannot forge it.
  */
 function isAuthenticated(req: IncomingMessage): boolean {
-  return typeof req.headers[AUTHED_PLANE_HEADER] === 'string';
+  return typeof req.headers[AUTHED_PLANE_HEADER] === "string";
 }
 
-export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): RouteHandler {
+export function makeGatewayInfoRouteHandler(
+  options: GatewayInfoRouteOptions
+): RouteHandler {
   // The factory runs once inside buildGateway, so this IS process start
   // for the serving gateway.
   const startedAt = Date.now();
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
     if (url.pathname !== INFO_PATH) return false;
-    if ((req.method ?? 'GET') !== 'GET') {
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+    if ((req.method ?? "GET") !== "GET") {
+      return sendJson(res, 405, {
+        error: "method_not_allowed",
+        message: "GET only",
+      });
     }
     const endpointId = options.endpointId?.();
     // Reported on the payload (issue #603): an anonymous caller silently loses
     // `endpointTicket`, and without this flag a bearer mismatch is
     // indistinguishable from an endpoint that has not come up yet.
     const authenticated = isAuthenticated(req);
-    const endpointTicket = authenticated ? options.endpointTicket?.() : undefined;
+    const endpointTicket = authenticated
+      ? options.endpointTicket?.()
+      : undefined;
     return sendJson(
       res,
       200,
@@ -78,7 +94,7 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
         ...(endpointId === undefined ? {} : { endpointId }),
         ...(endpointTicket === undefined ? {} : { endpointTicket }),
         ...(options.capabilities ? { capabilities: options.capabilities } : {}),
-      }),
+      })
     );
   };
 }

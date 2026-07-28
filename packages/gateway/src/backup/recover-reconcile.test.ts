@@ -1,5 +1,5 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
 /*
  * Adopt-time inventory reconcile (issue #439 R5) — the four outcomes, in
  * isolation: a restored `blob_replica` index of beliefs, a provider inventory
@@ -9,31 +9,37 @@ import { promises as fs } from 'node:fs';
  * (c) no inventory ⇒ honest skip with the index untouched, (d) full agreement ⇒
  * a clean report.
  */
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
-import { afterEach, describe, expect, test } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { FsBlobStore, ReplicaIndex } from "@centraid/vault";
+import { afterEach, describe, expect, test } from "vitest";
 
-import { reconcileAdoptedInventory } from './recover-reconcile.js';
+import { reconcileAdoptedInventory } from "./recover-reconcile.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('recover-reconcile', () => {
+describe("recover-reconcile", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
 
-  const sha = (seed: string): string => crypto.createHash('sha256').update(seed).digest('hex');
-  const manifestPath = (s: string): string => `blobs/sha256/${s.slice(0, 2)}/${s}`;
+  const sha = (seed: string): string =>
+    crypto.createHash("sha256").update(seed).digest("hex");
+  const manifestPath = (s: string): string =>
+    `blobs/sha256/${s.slice(0, 2)}/${s}`;
 
   /** A minimal vault dir: a `vault.db` carrying just `blob_replica` (all the
    *  reconcile reads) with the given shas marked 'cas'-durable, plus a `blobs/` store. */
-  async function makeVault(believedCas: string[]): Promise<{ dir: string; blobs: FsBlobStore }> {
+  async function makeVault(
+    believedCas: string[]
+  ): Promise<{ dir: string; blobs: FsBlobStore }> {
     const dir = await tempDir(`reconcile-${crypto.randomUUID()}-`);
     cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-    const db = new DatabaseSync(path.join(dir, 'vault.db'));
+    const db = new DatabaseSync(path.join(dir, "vault.db"));
     db.exec(`CREATE TABLE blob_replica (
     sha256 TEXT PRIMARY KEY CHECK (length(sha256) = 64),
     replicated_at TEXT NOT NULL,
@@ -41,16 +47,16 @@ describe('recover-reconcile', () => {
     store TEXT NOT NULL DEFAULT 'cas' CHECK (store IN ('cas','derived'))
   ) STRICT;`);
     const index = new ReplicaIndex(db);
-    for (const s of believedCas) index.mark(s, 100, 'cas');
+    for (const s of believedCas) index.mark(s, 100, "cas");
     db.close();
-    return { dir, blobs: new FsBlobStore(path.join(dir, 'blobs')) };
+    return { dir, blobs: new FsBlobStore(path.join(dir, "blobs")) };
   }
 
   /** Read back which shas `blob_replica` still believes 'cas'-durable. */
   function believedAfter(dir: string): Set<string> {
-    const db = new DatabaseSync(path.join(dir, 'vault.db'), { readOnly: true });
+    const db = new DatabaseSync(path.join(dir, "vault.db"), { readOnly: true });
     try {
-      return new ReplicaIndex(db).all('cas');
+      return new ReplicaIndex(db).all("cas");
     } finally {
       db.close();
     }
@@ -77,9 +83,9 @@ describe('recover-reconcile', () => {
     };
   }
 
-  test('(a) a missing blob the snapshot carries is re-pinned, unmarked, and reported', async () => {
-    const kept = sha('kept'); // still on the provider
-    const dropped = sha('dropped'); // the provider lost it; the snapshot carries it
+  test("(a) a missing blob the snapshot carries is re-pinned, unmarked, and reported", async () => {
+    const kept = sha("kept"); // still on the provider
+    const dropped = sha("dropped"); // the provider lost it; the snapshot carries it
     const { dir, blobs } = await makeVault([kept, dropped]);
     const spy = spyLogger();
     let fetched: string[] = [];
@@ -87,7 +93,7 @@ describe('recover-reconcile', () => {
     const report = await reconcileAdoptedInventory({
       vaultDir: dir,
       remoteShas: new Set([kept]), // dropped is NOT held anymore
-      snapshotEntries: [manifestPath(kept), manifestPath(dropped), 'vault.db'],
+      snapshotEntries: [manifestPath(kept), manifestPath(dropped), "vault.db"],
       materialize: async (shas) => {
         fetched = shas;
         for (const s of shas) blobs.putSync(s, Buffer.from(`bytes-${s}`)); // the engine's re-pin
@@ -113,8 +119,8 @@ describe('recover-reconcile', () => {
     expect(spy.error).toHaveLength(0);
   });
 
-  test('(b) a missing blob the snapshot does NOT carry is LOST, unmarked, and CRITICAL', async () => {
-    const lost = sha('direct-cas-only'); // a direct-to-CAS original, not in the snapshot
+  test("(b) a missing blob the snapshot does NOT carry is LOST, unmarked, and CRITICAL", async () => {
+    const lost = sha("direct-cas-only"); // a direct-to-CAS original, not in the snapshot
     const { dir } = await makeVault([lost]);
     const spy = spyLogger();
     let materializeCalls = 0;
@@ -122,7 +128,7 @@ describe('recover-reconcile', () => {
     const report = await reconcileAdoptedInventory({
       vaultDir: dir,
       remoteShas: new Set(), // the provider holds nothing
-      snapshotEntries: ['vault.db', 'journal.db'], // snapshot carries NO blobs
+      snapshotEntries: ["vault.db", "journal.db"], // snapshot carries NO blobs
       materialize: async (shas) => {
         materializeCalls++;
         return shas;
@@ -138,11 +144,13 @@ describe('recover-reconcile', () => {
     });
     expect(materializeCalls).toBe(0); // nothing to re-pin — the snapshot can't help
     expect(believedAfter(dir).has(lost)).toBe(false); // still unmarked (stop trusting a dead remote)
-    expect(spy.error.some((m) => /CRITICAL/u.test(m) && /LOST/u.test(m))).toBe(true);
+    expect(spy.error.some((m) => /CRITICAL/u.test(m) && /LOST/u.test(m))).toBe(
+      true
+    );
   });
 
-  test('(c) a provider with no inventory capability skips honestly and touches nothing', async () => {
-    const believed = sha('believed');
+  test("(c) a provider with no inventory capability skips honestly and touches nothing", async () => {
+    const believed = sha("believed");
     const { dir } = await makeVault([believed]);
     const spy = spyLogger();
 
@@ -151,7 +159,9 @@ describe('recover-reconcile', () => {
       remoteShas: undefined, // no `inventory` capability
       snapshotEntries: [manifestPath(believed)],
       materialize: async () => {
-        throw new Error('materialize must not run when there is nothing to reconcile against');
+        throw new Error(
+          "materialize must not run when there is nothing to reconcile against"
+        );
       },
       log: spy.log,
     });
@@ -161,15 +171,15 @@ describe('recover-reconcile', () => {
       missing: 0,
       repinned: [],
       lost: [],
-      skipped: 'no-inventory-capability',
+      skipped: "no-inventory-capability",
     });
     expect(believedAfter(dir).has(believed)).toBe(true); // index left exactly as restored
     expect(spy.error).toHaveLength(0);
   });
 
-  test('(d) full agreement between the index and the inventory is a clean report', async () => {
-    const a = sha('a');
-    const b = sha('b');
+  test("(d) full agreement between the index and the inventory is a clean report", async () => {
+    const a = sha("a");
+    const b = sha("b");
     const { dir } = await makeVault([a, b]);
     const spy = spyLogger();
 
@@ -178,7 +188,7 @@ describe('recover-reconcile', () => {
       remoteShas: new Set([a, b]), // provider holds everything the index believes
       snapshotEntries: [manifestPath(a), manifestPath(b)],
       materialize: async () => {
-        throw new Error('materialize must not run when nothing is missing');
+        throw new Error("materialize must not run when nothing is missing");
       },
       log: spy.log,
     });

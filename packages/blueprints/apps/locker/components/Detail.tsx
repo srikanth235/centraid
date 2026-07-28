@@ -2,13 +2,17 @@
 // content. The React port of app.js's `LockerDetail` Lit component. The
 // item-view internals (field descriptors/rows, including the real-TOTP tick)
 // live in ItemFields.tsx to keep this file under the size cap.
-import { catOf, monoOf, subOf } from '../format.ts';
-import type { LockerDetail as DetailItem, LockerRow, WatchState } from '../types.ts';
-import { ItemPane } from './ItemFields.tsx';
-import { Icon } from './Shared.tsx';
+import { catOf, monoOf, subOf } from "../format.ts";
+import type {
+  LockerDetail as DetailItem,
+  LockerRow,
+  WatchState,
+} from "../types.ts";
+import { ItemPane } from "./ItemFields.tsx";
+import { Icon } from "./Shared.tsx";
 
-import styles from './Detail.module.css';
-import shared from './shared.module.css';
+import styles from "./Detail.module.css";
+import shared from "./shared.module.css";
 
 function EmptyPane() {
   return (
@@ -16,40 +20,52 @@ function EmptyPane() {
       <div className={styles.ic}>
         <Icon name="lock" sw={1.6} size={28} />
       </div>
-      <div style={{ font: 'var(--t-strong)', color: 'var(--ink-2)' }}>Select an item</div>
-      <div style={{ font: 'var(--t-small)', marginTop: '4px' }}>
+      <div style={{ font: "var(--t-strong)", color: "var(--ink-2)" }}>
+        Select an item
+      </div>
+      <div style={{ font: "var(--t-small)", marginTop: "4px" }}>
         Pick something from the list to see its details.
       </div>
     </div>
   );
 }
 
-function WatchItemRow({ item, onSelect }: { item: LockerRow; onSelect: (id: string) => void }) {
+function WatchItemRow({
+  item,
+  onSelect,
+}: {
+  item: LockerRow;
+  onSelect: (id: string) => void;
+}) {
   const badge = item.compromised
     ? {
-        t: 'Compromised',
-        bg: 'color-mix(in oklab, var(--danger) 14%, transparent)',
-        c: 'var(--danger)',
+        t: "Compromised",
+        bg: "color-mix(in oklab, var(--danger) 14%, transparent)",
+        c: "var(--danger)",
       }
     : item.weak
       ? {
-          t: 'Weak',
-          bg: 'color-mix(in oklab, var(--warn) 16%, transparent)',
-          c: 'var(--warn)',
+          t: "Weak",
+          bg: "color-mix(in oklab, var(--warn) 16%, transparent)",
+          c: "var(--warn)",
         }
       : {
-          t: 'Reused',
-          bg: 'color-mix(in oklab, var(--warn) 16%, transparent)',
-          c: 'var(--warn)',
+          t: "Reused",
+          bg: "color-mix(in oklab, var(--warn) 16%, transparent)",
+          c: "var(--warn)",
         };
   return (
-    <button type="button" className={styles.wtItem} onClick={() => onSelect(item.item_id)}>
+    <button
+      type="button"
+      className={styles.wtItem}
+      onClick={() => onSelect(item.item_id)}
+    >
       <span
         className={shared.itile}
         style={{
-          width: '32px',
-          height: '32px',
-          fontSize: '13px',
+          width: "32px",
+          height: "32px",
+          fontSize: "13px",
           background: catOf(item.type).color,
         }}
       >
@@ -57,9 +73,12 @@ function WatchItemRow({ item, onSelect }: { item: LockerRow; onSelect: (id: stri
       </span>
       <span className={shared.imain}>
         <span className={shared.ititle}>{item.title}</span>
-        <span className={shared.isub}>{subOf(item) || '—'}</span>
+        <span className={shared.isub}>{subOf(item) || "—"}</span>
       </span>
-      <span className={styles.wtBadge} style={{ background: badge.bg, color: badge.c }}>
+      <span
+        className={styles.wtBadge}
+        style={{ background: badge.bg, color: badge.c }}
+      >
         {badge.t}
       </span>
     </button>
@@ -76,7 +95,7 @@ function WatchtowerPane({
   return (
     <div className={shared.detailInner}>
       <div className={shared.dhead}>
-        <span className={shared.dtile} style={{ background: 'var(--accd)' }}>
+        <span className={shared.dtile} style={{ background: "var(--accd)" }}>
           <Icon name="shield" sw={1.8} size={26} stroke="#fff" />
         </span>
         <div>
@@ -87,19 +106,19 @@ function WatchtowerPane({
 
       <div className={styles.wtStats}>
         <div className={styles.wtStat}>
-          <div className={styles.n} style={{ color: 'var(--danger)' }}>
+          <div className={styles.n} style={{ color: "var(--danger)" }}>
             {watch.compromised}
           </div>
           <div className={styles.k}>Compromised</div>
         </div>
         <div className={styles.wtStat}>
-          <div className={styles.n} style={{ color: 'var(--warn)' }}>
+          <div className={styles.n} style={{ color: "var(--warn)" }}>
             {watch.weak}
           </div>
           <div className={styles.k}>Weak passwords</div>
         </div>
         <div className={styles.wtStat}>
-          <div className={styles.n} style={{ color: 'var(--warn)' }}>
+          <div className={styles.n} style={{ color: "var(--warn)" }}>
             {watch.reused}
           </div>
           <div className={styles.k}>Reused passwords</div>
@@ -109,7 +128,7 @@ function WatchtowerPane({
       <div className={shared.dlabel}>Needs attention</div>
       <div className={shared.fields}>
         {watch.items.length === 0 ? (
-          <div className={shared.listEmpty} style={{ padding: '26px' }}>
+          <div className={shared.listEmpty} style={{ padding: "26px" }}>
             Your locker looks healthy.
           </div>
         ) : (
@@ -136,7 +155,7 @@ export function LockerDetail({
   onRestore,
   onPurge,
 }: {
-  mode: 'watch' | 'item' | 'empty';
+  mode: "watch" | "item" | "empty";
   watch: WatchState;
   detail: DetailItem | null;
   reveal: Record<string, boolean>;
@@ -154,9 +173,9 @@ export function LockerDetail({
       <button type="button" className={styles.back} onClick={onBack}>
         <Icon name="back" sw={1.9} size={18} /> Back
       </button>
-      {mode === 'watch' ? (
+      {mode === "watch" ? (
         <WatchtowerPane watch={watch} onSelect={onSelect} />
-      ) : mode === 'item' ? (
+      ) : mode === "item" ? (
         <ItemPane
           sel={detail}
           reveal={reveal}

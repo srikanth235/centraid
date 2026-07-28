@@ -9,28 +9,32 @@
  * evidence, so it never removes a blob from a restorable snapshot.
  */
 
-import { createHash } from 'node:crypto';
-import { existsSync, promises as fs } from 'node:fs';
-import path from 'node:path';
+import { createHash } from "node:crypto";
+import { existsSync, promises as fs } from "node:fs";
+import path from "node:path";
 
-import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
+import {
+  WAL_DB_FILES,
+  type EngineLogger,
+  type SourceEntry,
+} from "@centraid/backup";
 import {
   archivedSegmentShas,
   conversationArchiveShas,
   liveBlobShas,
   readBlobStoreSettings,
   ReplicaIndex,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
-import type { VaultPlane } from '../serve/vault-plane.js';
-import { GitError, run } from '../worktree-store/git.js';
+import type { VaultPlane } from "../serve/vault-plane.js";
+import { GitError, run } from "../worktree-store/git.js";
 
 /** Every blob CAS file under `<vaultDir>/blobs/sha256/<fan>/<sha>` (`FsBlobStore`'s layout). */
 async function listBlobEntries(
   vaultDir: string,
-  only?: ReadonlySet<string>,
+  only?: ReadonlySet<string>
 ): Promise<SourceEntry[]> {
-  const base = path.join(vaultDir, 'blobs', 'sha256');
+  const base = path.join(vaultDir, "blobs", "sha256");
   if (!existsSync(base)) return [];
   const entries = (
     await Promise.all(
@@ -41,16 +45,19 @@ async function listBlobEntries(
         try {
           const names = await fs.readdir(fanDir);
           return names
-            .filter((name) => /^[0-9a-f]{64}$/u.test(name) && (!only || only.has(name)))
+            .filter(
+              (name) =>
+                /^[0-9a-f]{64}$/u.test(name) && (!only || only.has(name))
+            )
             .map((name) => ({
               path: `blobs/sha256/${fan}/${name}`,
-              kind: 'blob' as const,
+              kind: "blob" as const,
               absolutePath: path.join(fanDir, name),
             }));
         } catch {
           return [];
         }
-      }),
+      })
     )
   ).flat();
   // Deterministic order — dedup/reuse in `createSnapshot` doesn't care, but
@@ -67,11 +74,14 @@ async function listBlobEntries(
  * emits refs in a stable order (sorted by refname), so the digest is order-free.
  */
 async function codeRefsDigest(bareDir: string): Promise<string> {
-  const refs = await run(['for-each-ref', '--format=%(objectname) %(refname)'], { cwd: bareDir });
-  const head = await run(['symbolic-ref', '--quiet', 'HEAD'], {
+  const refs = await run(
+    ["for-each-ref", "--format=%(objectname) %(refname)"],
+    { cwd: bareDir }
+  );
+  const head = await run(["symbolic-ref", "--quiet", "HEAD"], {
     cwd: bareDir,
-  }).catch(() => '');
-  return createHash('sha256').update(`${head}\n${refs}`).digest('hex');
+  }).catch(() => "");
+  return createHash("sha256").update(`${head}\n${refs}`).digest("hex");
 }
 
 /**
@@ -100,27 +110,31 @@ async function codeRefsDigest(bareDir: string): Promise<string> {
 async function bundleCodeStore(
   plane: VaultPlane,
   bundleDir: string,
-  log: EngineLogger,
+  log: EngineLogger
 ): Promise<SourceEntry | undefined> {
-  const bareDir = path.join(plane.codeStoreRoot, 'apps.git');
-  if (!existsSync(path.join(bareDir, 'HEAD'))) {
-    log.info?.('backup: no code store bare repo yet — skipping git-bundle entry');
+  const bareDir = path.join(plane.codeStoreRoot, "apps.git");
+  if (!existsSync(path.join(bareDir, "HEAD"))) {
+    log.info?.(
+      "backup: no code store bare repo yet — skipping git-bundle entry"
+    );
     return undefined;
   }
   await fs.mkdir(bundleDir, { recursive: true });
-  const bundlePath = path.join(bundleDir, 'apps.bundle');
-  const digestPath = path.join(bundleDir, 'apps.bundle.refs');
+  const bundlePath = path.join(bundleDir, "apps.bundle");
+  const digestPath = path.join(bundleDir, "apps.bundle.refs");
   const digest = await codeRefsDigest(bareDir);
 
   // Reuse the standing bundle when the code store's refs have not moved: the
   // file stays byte-identical and untouched, so the engine skips it entirely.
   if (existsSync(bundlePath)) {
-    const priorDigest = await fs.readFile(digestPath, 'utf8').catch(() => '');
+    const priorDigest = await fs.readFile(digestPath, "utf8").catch(() => "");
     if (priorDigest === digest) {
-      log.info?.('backup: code store unchanged since last snapshot — reusing apps.bundle');
+      log.info?.(
+        "backup: code store unchanged since last snapshot — reusing apps.bundle"
+      );
       return {
-        path: 'apps.bundle',
-        kind: 'git-bundle',
+        path: "apps.bundle",
+        kind: "git-bundle",
         absolutePath: bundlePath,
       };
     }
@@ -130,11 +144,14 @@ async function bundleCodeStore(
     // `-c pack.threads=1`: single-threaded delta compression is byte-deterministic,
     // so an unchanged region of history produces identical parts run-to-run and
     // dedups against the previous snapshot's chunks instead of re-uploading.
-    await run(['-c', 'pack.threads=1', 'bundle', 'create', bundlePath, '--all'], { cwd: bareDir });
+    await run(
+      ["-c", "pack.threads=1", "bundle", "create", bundlePath, "--all"],
+      { cwd: bareDir }
+    );
     await fs.writeFile(digestPath, digest);
     return {
-      path: 'apps.bundle',
-      kind: 'git-bundle',
+      path: "apps.bundle",
+      kind: "git-bundle",
       absolutePath: bundlePath,
     };
   } catch (err) {
@@ -143,7 +160,9 @@ async function bundleCodeStore(
     // for a freshly created vault with no apps published yet, not a backup
     // failure; every other GitError still surfaces via the caught log line.
     const message = err instanceof GitError ? err.message : String(err);
-    log.warn?.(`backup: git bundle create failed (skipping git-bundle entry): ${message}`);
+    log.warn?.(
+      `backup: git bundle create failed (skipping git-bundle entry): ${message}`
+    );
     return undefined;
   }
 }
@@ -174,7 +193,9 @@ export interface AssembleOptions {
 }
 
 /** Build the full `SourceEntry[]` for one backup tick, in FORMAT.md's order. */
-export async function assembleSourceEntries(opts: AssembleOptions): Promise<SourceEntry[]> {
+export async function assembleSourceEntries(
+  opts: AssembleOptions
+): Promise<SourceEntry[]> {
   const { plane, bundleDir, log } = opts;
   const entries: SourceEntry[] = [];
 
@@ -186,7 +207,9 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
   // the hash is the capture-time marker restore + the G9 verifier check.
   const shipper = plane.walShipper;
   if (!shipper) {
-    throw new Error('backup: vault has no WAL shipper (in-memory vault?) — nothing to snapshot');
+    throw new Error(
+      "backup: vault has no WAL shipper (in-memory vault?) — nothing to snapshot"
+    );
   }
   // The capture tick that mints/refreshes bases runs in doRunBackup, NOT
   // here — this function's contract is "list the sources", and its
@@ -200,7 +223,7 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
   const bases = shipper.currentBases();
   if (bases.length < 2) {
     throw new Error(
-      `backup: only ${bases.length}/2 database base(s) are pinned (busy checkpoint on first run?) — retrying later instead of registering a partial snapshot`,
+      `backup: only ${bases.length}/2 database base(s) are pinned (busy checkpoint on first run?) — retrying later instead of registering a partial snapshot`
     );
   }
   // …and the two bases MUST be from ONE tick. The shipper breaks both
@@ -215,15 +238,15 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
   if (bases[0]!.createdAtMs !== bases[1]!.createdAtMs) {
     throw new Error(
       `backup: the two database bases are from different ticks (` +
-        bases.map((b) => `${b.db} @ ${b.createdAtMs}`).join(', ') +
-        ') — a coordinated generation break is still pending; retrying later instead of ' +
-        'registering an uncoordinated base pair',
+        bases.map((b) => `${b.db} @ ${b.createdAtMs}`).join(", ") +
+        ") — a coordinated generation break is still pending; retrying later instead of " +
+        "registering an uncoordinated base pair"
     );
   }
   for (const base of bases) {
     entries.push({
       path: WAL_DB_FILES[base.db],
-      kind: 'db',
+      kind: "db",
       absolutePath: base.file,
       sha256: base.sha256,
       walGeneration: base.generation,
@@ -235,7 +258,9 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
       // at a store that lost objects it acknowledged. Without it, deleting the
       // whole `wal/tick/` prefix is perfectly silent — every object the manifest
       // names is still there, and the restore just quietly returns the base pair.
-      ...(opts.walTipTickMs === undefined ? {} : { walTipTickMs: opts.walTipTickMs }),
+      ...(opts.walTipTickMs === undefined
+        ? {}
+        : { walTipTickMs: opts.walTipTickMs }),
     });
   }
 
@@ -245,7 +270,7 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
   // without replica evidence join the snapshot. The latter covers synchronous
   // archive/mint-spill ingress before the custody sweep has enqueued it.
   // Local-only mode still carries the complete resident CAS.
-  const remotePrimary = readBlobStoreSettings(plane.db.vault).kind === 's3';
+  const remotePrimary = readBlobStoreSettings(plane.db.vault).kind === "s3";
   let pending: Set<string> | undefined;
   if (remotePrimary) {
     pending = new Set(plane.db.blobTransfers.pendingSnapshotShas());

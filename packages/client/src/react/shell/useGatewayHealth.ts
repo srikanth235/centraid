@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import { getGatewayHealth } from '../../gateway-client.js';
-import type { GatewayHealthDTO } from '../screens/SettingsDiagnosticsScreen.js';
+import { getGatewayHealth } from "../../gateway-client.js";
+import type { GatewayHealthDTO } from "../screens/SettingsDiagnosticsScreen.js";
 
 const POLL_MS = 15_000;
 
@@ -30,10 +30,10 @@ export function useGatewayHealth(): {
   useEffect(() => {
     load();
     const timer = window.setInterval(load, POLL_MS);
-    window.addEventListener('focus', load);
+    window.addEventListener("focus", load);
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener('focus', load);
+      window.removeEventListener("focus", load);
     };
   }, [load]);
   return { health, refresh: load };

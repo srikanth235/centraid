@@ -9,21 +9,23 @@ export default async function createNote({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'knowledge.create_note',
+      command: "knowledge.create_note",
       input: {
-        title: String(input.title ?? ''),
-        body_text: String(input.body_text ?? ''),
+        title: String(input.title ?? ""),
+        body_text: String(input.body_text ?? ""),
         ...(input.format == null ? {} : { format: String(input.format) }),
-        ...(input.notebook_id == null ? {} : { notebook_id: String(input.notebook_id) }),
+        ...(input.notebook_id == null
+          ? {}
+          : { notebook_id: String(input.notebook_id) }),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

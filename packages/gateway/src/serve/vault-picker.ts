@@ -11,7 +11,7 @@
  * drives the gateway's own search / read / resolve with the owner credential.
  */
 
-import type { RuntimeLogger } from '@centraid/app-engine';
+import type { RuntimeLogger } from "@centraid/app-engine";
 import {
   CARD_PK,
   CARDED_ENTITIES,
@@ -19,13 +19,13 @@ import {
   type Credential,
   type Gateway as VaultGateway,
   type RefCard,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
 import {
   AUTOMATION_ANCHOR_ENTITY,
   AUTOMATION_ANCHOR_PURPOSE,
   resolveAutomationAnchors,
-} from '../lifecycle/automation-anchor-scopes.js';
+} from "../lifecycle/automation-anchor-scopes.js";
 
 /** What the shell's entity picker asks for. */
 export interface PickerRequest {
@@ -46,7 +46,7 @@ export interface PickerHit extends RefCard {
 export interface AnchorPickerHit {
   type: typeof AUTOMATION_ANCHOR_ENTITY;
   id: string;
-  status: 'live';
+  status: "live";
   title: string;
   subtitle: string;
   thumbnail_content_id: null;
@@ -63,14 +63,14 @@ const ANCHOR_SCAN_LIMIT = 500;
 
 /** The `$.exact` quote of a `core_link_anchor.selector_json` cell, or ''. */
 function anchorQuote(selectorJson: unknown): string {
-  if (typeof selectorJson !== 'string') return '';
+  if (typeof selectorJson !== "string") return "";
   try {
     const parsed = JSON.parse(selectorJson) as { exact?: unknown };
-    return typeof parsed.exact === 'string' ? parsed.exact : '';
+    return typeof parsed.exact === "string" ? parsed.exact : "";
   } catch {
     // A malformed selector cannot match a term; `resolveAutomationAnchors`
     // reports it properly when the anchor is actually picked.
-    return '';
+    return "";
   }
 }
 
@@ -79,32 +79,36 @@ export function pickAnchors(
   gateway: VaultGateway,
   cred: Credential,
   logger: RuntimeLogger,
-  request: Pick<PickerRequest, 'term' | 'limit'>,
+  request: Pick<PickerRequest, "term" | "limit">
 ): { anchors: AnchorPickerHit[] } {
-  const term = request.term?.trim().toLowerCase() ?? '';
+  const term = request.term?.trim().toLowerCase() ?? "";
   const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
   // Receipted owner read, like every other door this picker drives — the old
   // raw `db.vault` JOIN was a second, unaudited read path (issue #541 review).
   const rows = gateway.read(cred, {
     entity: AUTOMATION_ANCHOR_ENTITY,
-    orderBy: { column: 'created_at', dir: 'desc' },
+    orderBy: { column: "created_at", dir: "desc" },
     limit: ANCHOR_SCAN_LIMIT,
     purpose: AUTOMATION_ANCHOR_PURPOSE,
   }).rows;
   const anchors: AnchorPickerHit[] = [];
   for (const row of rows) {
     if (anchors.length >= limit) break;
-    if (term !== '' && !anchorQuote(row.selector_json).toLowerCase().includes(term)) continue;
+    if (
+      term !== "" &&
+      !anchorQuote(row.selector_json).toLowerCase().includes(term)
+    )
+      continue;
     try {
       const resolved = resolveAutomationAnchors(
         { gateway, credential: cred },
-        `@[${AUTOMATION_ANCHOR_ENTITY}/${String(row.anchor_id)}]`,
+        `@[${AUTOMATION_ANCHOR_ENTITY}/${String(row.anchor_id)}]`
       )[0];
       if (!resolved) continue;
       anchors.push({
         type: AUTOMATION_ANCHOR_ENTITY,
         id: resolved.anchorId,
-        status: 'live',
+        status: "live",
         title: resolved.selector.exact,
         subtitle: `${resolved.sourceType} · ${resolved.sourceField} · anchored span`,
         thumbnail_content_id: null,
@@ -116,7 +120,7 @@ export function pickAnchors(
       logger.warn(
         `vault plane: anchor picker skipped ${row.anchor_id}: ${
           error instanceof Error ? error.message : String(error)
-        }`,
+        }`
       );
     }
   }
@@ -133,27 +137,30 @@ export function pickEntities(
   gateway: VaultGateway,
   cred: Credential,
   logger: RuntimeLogger,
-  request: PickerRequest,
+  request: PickerRequest
 ): { cards: PickerHit[] } {
   const kinds = (
-    request.kinds && request.kinds.length > 0 ? request.kinds : [...CARDED_ENTITIES]
+    request.kinds && request.kinds.length > 0
+      ? request.kinds
+      : [...CARDED_ENTITIES]
   ).filter((k) => CARDED_ENTITIES.includes(k));
   const perKind = Math.min(Math.max(request.limit ?? 8, 1), 25);
-  const purpose = 'dpv:ServiceProvision';
-  const term = request.term?.trim() ?? '';
+  const purpose = "dpv:ServiceProvision";
+  const term = request.term?.trim() ?? "";
   const refs: { type: string; id: string; snippet?: string }[] = [];
   for (const kind of kinds) {
     try {
-      if (term === '') {
+      if (term === "") {
         const pk = CARD_PK[kind];
         if (!pk) continue;
         const result = gateway.read(cred, {
           entity: kind,
-          orderBy: { column: pk, dir: 'desc' },
+          orderBy: { column: pk, dir: "desc" },
           limit: perKind,
           purpose,
         });
-        for (const row of result.rows) refs.push({ type: kind, id: String(row[pk]) });
+        for (const row of result.rows)
+          refs.push({ type: kind, id: String(row[pk]) });
       } else {
         const searchable = SEARCHABLE[kind];
         if (!searchable) continue; // a term can only match text-indexed kinds
@@ -167,13 +174,15 @@ export function pickEntities(
           refs.push({
             type: kind,
             id: String(row[searchable.idColumn]),
-            ...(typeof row._snippet === 'string' ? { snippet: row._snippet } : {}),
+            ...(typeof row._snippet === "string"
+              ? { snippet: row._snippet }
+              : {}),
           });
         }
       }
     } catch (err) {
       logger.warn(
-        `vault plane: picker skipped ${kind}: ${err instanceof Error ? err.message : String(err)}`,
+        `vault plane: picker skipped ${kind}: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
@@ -183,9 +192,11 @@ export function pickEntities(
     refs: bounded.map(({ type, id }) => ({ type, id })),
     purpose,
   });
-  const snippets = new Map(bounded.map((r) => [`${r.type}/${r.id}`, r.snippet]));
+  const snippets = new Map(
+    bounded.map((r) => [`${r.type}/${r.id}`, r.snippet])
+  );
   const cards = resolved.cards
-    .filter((c) => c.status === 'live')
+    .filter((c) => c.status === "live")
     .map((c) => {
       const snippet = snippets.get(`${c.type}/${c.id}`);
       return snippet ? { ...c, snippet } : c;

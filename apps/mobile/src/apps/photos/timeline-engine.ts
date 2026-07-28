@@ -10,20 +10,20 @@
 // session exposes `read`/`subscribe` directly) so it needs no React tree of its
 // own and survives screen mount/unmount — the hook API is unchanged.
 
-import type { ReplicaRow } from '@centraid/client/replica/native';
-import * as MediaLibrary from 'expo-media-library';
+import type { ReplicaRow } from "@centraid/client/replica/native";
+import * as MediaLibrary from "expo-media-library";
 
-import { authHeader } from '../../lib/gateway';
-import type { NativeReplicaSession } from '../../lib/replica/native-session';
-import { UploadQueue } from '../../lib/upload/native-queue';
-import { capturedAtIso, durationSeconds } from './device-media';
+import { authHeader } from "../../lib/gateway";
+import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import { UploadQueue } from "../../lib/upload/native-queue";
+import { capturedAtIso, durationSeconds } from "./device-media";
 import {
   mergePhotoAssets,
   sectionPhotoAssets,
   type BackupState,
   type PhotoAsset,
   type PhotoSection,
-} from './timeline-model';
+} from "./timeline-model";
 
 export interface TimelineSnapshot {
   assets: PhotoAsset[];
@@ -37,7 +37,7 @@ const EMPTY: TimelineSnapshot = {
   assets: [],
   sections: [],
   loading: true,
-  permission: 'undetermined',
+  permission: "undetermined",
 };
 
 interface UploadEntry {
@@ -47,10 +47,10 @@ interface UploadEntry {
 }
 
 const REPLICA_ENTITIES = [
-  'media.media_asset',
-  'core.content_item',
-  'core.content_derivative',
-  'media.asset_phash',
+  "media.media_asset",
+  "core.content_item",
+  "core.content_derivative",
+  "media.asset_phash",
 ] as const;
 
 function value<T>(row: ReplicaRow, key: string): T | undefined {
@@ -81,8 +81,8 @@ class PhotoTimelineEngine {
   #phashRows: ReplicaRow[] = [];
   #deviceRows: PhotoAsset[] = [];
   #uploadByUri = new Map<string, UploadEntry>();
-  #uploadSignature = '';
-  #permission = 'undetermined';
+  #uploadSignature = "";
+  #permission = "undetermined";
   #deviceLoading = true;
   #replicaLoading = true;
   #deviceStarted = false;
@@ -115,7 +115,10 @@ class PhotoTimelineEngine {
     };
   }
 
-  setSession(session: NativeReplicaSession | undefined, gatewayBase: string | undefined): void {
+  setSession(
+    session: NativeReplicaSession | undefined,
+    gatewayBase: string | undefined
+  ): void {
     const sessionChanged = session !== this.#session;
     const baseChanged = gatewayBase !== this.#gatewayBase;
     this.#session = session;
@@ -125,7 +128,10 @@ class PhotoTimelineEngine {
       this.#generation += 1;
       this.#unsubscribe?.();
       this.#replicaLoading = true;
-      this.#unsubscribe = session.subscribe('photos', () => void this.readReplica());
+      this.#unsubscribe = session.subscribe(
+        "photos",
+        () => void this.readReplica()
+      );
       void this.readReplica();
     }
     if (sessionChanged || baseChanged) this.refreshUploads();
@@ -154,7 +160,7 @@ class PhotoTimelineEngine {
             .map((item) => [
               item.localUri,
               { sha256: item.sha256, state: item.state, receipt: item.receipt },
-            ]),
+            ])
         );
       } catch {
         return;
@@ -163,9 +169,11 @@ class PhotoTimelineEngine {
       }
     }
     const signature = [...next.entries()]
-      .map(([uri, entry]) => `${uri}:${entry.state}:${entry.receipt?.casAck ?? ''}`)
+      .map(
+        ([uri, entry]) => `${uri}:${entry.state}:${entry.receipt?.casAck ?? ""}`
+      )
       .sort()
-      .join('|');
+      .join("|");
     if (signature === this.#uploadSignature) return;
     this.#uploadSignature = signature;
     this.#uploadByUri = next;
@@ -178,7 +186,7 @@ class PhotoTimelineEngine {
     const generation = this.#generation;
     try {
       const [assets, content, derivatives, phashes] = await Promise.all(
-        REPLICA_ENTITIES.map((entity) => session.read('photos', { entity })),
+        REPLICA_ENTITIES.map((entity) => session.read("photos", { entity }))
       );
       if (generation !== this.#generation) return;
       this.#assetRows = assets!.rows.map((row) => row.values);
@@ -198,20 +206,29 @@ class PhotoTimelineEngine {
 
   private async walkDevice(generation: number): Promise<void> {
     try {
-      let permission = await MediaLibrary.getPermissionsAsync(false, ['photo', 'video']);
-      if (permission.status === 'undetermined') {
-        permission = await MediaLibrary.requestPermissionsAsync(false, ['photo', 'video']);
+      let permission = await MediaLibrary.getPermissionsAsync(false, [
+        "photo",
+        "video",
+      ]);
+      if (permission.status === "undetermined") {
+        permission = await MediaLibrary.requestPermissionsAsync(false, [
+          "photo",
+          "video",
+        ]);
       }
       if (generation !== this.#generation) return;
       this.#permission = permission.status;
-      if (permission.status !== 'granted') {
+      if (permission.status !== "granted") {
         this.#deviceLoading = false;
         this.recompute();
         return;
       }
       const rows: PhotoAsset[] = [];
       // A small first page paints the grid fast; the rest walk in bigger bites.
-      const loadPage = async (offset: number, pageSize: number): Promise<void> => {
+      const loadPage = async (
+        offset: number,
+        pageSize: number
+      ): Promise<void> => {
         const page = await new MediaLibrary.Query()
           .within(MediaLibrary.AssetField.MEDIA_TYPE, [
             MediaLibrary.MediaType.IMAGE,
@@ -243,7 +260,10 @@ class PhotoTimelineEngine {
             originalUri: metadata.id,
             ...(metadata.filename ? { filename: metadata.filename } : {}),
             capturedAt: capturedAtIso(metadata),
-            kind: metadata.mediaType === MediaLibrary.MediaType.VIDEO ? 'video' : 'photo',
+            kind:
+              metadata.mediaType === MediaLibrary.MediaType.VIDEO
+                ? "video"
+                : "photo",
             width: metadata.width ?? undefined,
             height: metadata.height ?? undefined,
             durationS: durationSeconds(metadata.duration),
@@ -254,8 +274,8 @@ class PhotoTimelineEngine {
             favorite: metadata.isFavorite,
             archived: false,
             deleted: false,
-            backupState: 'local-only',
-            source: 'device',
+            backupState: "local-only",
+            source: "device",
           });
         }
         this.#deviceRows = [...rows];
@@ -280,73 +300,89 @@ class PhotoTimelineEngine {
       const upload = this.#uploadByUri.get(asset.originalUri);
       if (!upload) return asset;
       const backupState: BackupState =
-        upload.state === 'settled'
-          ? 'backed-up'
-          : upload.state === 'uploading' || upload.state === 'completing'
-            ? 'uploading'
-            : 'queued';
+        upload.state === "settled"
+          ? "backed-up"
+          : upload.state === "uploading" || upload.state === "completing"
+            ? "uploading"
+            : "queued";
       return {
         ...asset,
         sha256: upload.sha256,
         backupState,
-        verifiedCasAck: upload.state === 'settled' && upload.receipt?.casAck === 'replicated',
+        verifiedCasAck:
+          upload.state === "settled" && upload.receipt?.casAck === "replicated",
       };
     });
 
     const contentById = new Map(
-      this.#contentRows.map((row) => [value<string>(row, 'content_id'), row]),
+      this.#contentRows.map((row) => [value<string>(row, "content_id"), row])
     );
     const derivativesByContent = new Map<string, ReplicaRow[]>();
     for (const row of this.#derivativeRows) {
-      const id = value<string>(row, 'content_id');
+      const id = value<string>(row, "content_id");
       if (!id) continue;
-      derivativesByContent.set(id, [...(derivativesByContent.get(id) ?? []), row]);
+      derivativesByContent.set(id, [
+        ...(derivativesByContent.get(id) ?? []),
+        row,
+      ]);
     }
     const phashByAsset = new Map(
-      this.#phashRows.map((row) => [value<string>(row, 'asset_id'), value<string>(row, 'phash')]),
+      this.#phashRows.map((row) => [
+        value<string>(row, "asset_id"),
+        value<string>(row, "phash"),
+      ])
     );
     const remote = this.#assetRows.flatMap<PhotoAsset>((asset) => {
-      const contentId = value<string>(asset, 'content_id');
-      const assetId = value<string>(asset, 'asset_id');
+      const contentId = value<string>(asset, "content_id");
+      const assetId = value<string>(asset, "asset_id");
       const item = contentId ? contentById.get(contentId) : undefined;
-      const sha = item ? value<string>(item, 'sha256') : undefined;
+      const sha = item ? value<string>(item, "sha256") : undefined;
       if (!contentId || !assetId || !sha) return [];
       const rungs = derivativesByContent.get(contentId) ?? [];
-      const thumbhash = rungs.find((row) => value(row, 'variant') === 'thumbhash');
-      const kind = (value<string>(asset, 'kind') ?? 'photo') as PhotoAsset['kind'];
-      const original = base ? `${base}/centraid/_vault/blobs/${encodeURIComponent(contentId)}` : '';
+      const thumbhash = rungs.find(
+        (row) => value(row, "variant") === "thumbhash"
+      );
+      const kind = (value<string>(asset, "kind") ??
+        "photo") as PhotoAsset["kind"];
+      const original = base
+        ? `${base}/centraid/_vault/blobs/${encodeURIComponent(contentId)}`
+        : "";
       const thumb = base
-        ? `${original}?variant=${kind === 'video' ? 'poster' : 'thumb'}`
+        ? `${original}?variant=${kind === "video" ? "poster" : "thumb"}`
         : original;
-      const capturedAt = value<string>(asset, 'captured_at') ?? value<string>(item!, 'created_at');
-      const exifJson = value<string>(asset, 'exif_json');
+      const capturedAt =
+        value<string>(asset, "captured_at") ??
+        value<string>(item!, "created_at");
+      const exifJson = value<string>(asset, "exif_json");
       return [
         {
           id: `replica:${assetId}`,
           assetId,
           contentId,
-          placeId: value<string>(asset, 'place_id'),
-          captureGroupId: value<string>(asset, 'capture_group_id'),
+          placeId: value<string>(asset, "place_id"),
+          captureGroupId: value<string>(asset, "capture_group_id"),
           uri: thumb,
           previewUri: base ? `${original}?variant=preview` : original,
           originalUri: original,
-          filename: value<string>(item!, 'title'),
+          filename: value<string>(item!, "title"),
           sha256: sha,
           phash: phashByAsset.get(assetId),
-          thumbhash: thumbhash ? value<string>(thumbhash, 'text_content') : undefined,
+          thumbhash: thumbhash
+            ? value<string>(thumbhash, "text_content")
+            : undefined,
           capturedAt: capturedAt ?? new Date(0).toISOString(),
-          tzOffsetMin: value<number>(asset, 'tz_offset_min'),
+          tzOffsetMin: value<number>(asset, "tz_offset_min"),
           kind,
-          width: value<number>(asset, 'width'),
-          height: value<number>(asset, 'height'),
-          durationS: value<number>(asset, 'duration_s'),
-          fileSize: value<number>(item!, 'byte_size'),
+          width: value<number>(asset, "width"),
+          height: value<number>(asset, "height"),
+          durationS: value<number>(asset, "duration_s"),
+          fileSize: value<number>(item!, "byte_size"),
           exif: parseExif(exifJson),
-          favorite: value<number>(asset, 'favorite') === 1,
-          archived: Boolean(value<string>(asset, 'archived_at')),
-          deleted: Boolean(value<string>(asset, 'deleted_at')),
-          backupState: 'remote-only',
-          source: 'replica',
+          favorite: value<number>(asset, "favorite") === 1,
+          archived: Boolean(value<string>(asset, "archived_at")),
+          deleted: Boolean(value<string>(asset, "deleted_at")),
+          backupState: "remote-only",
+          source: "replica",
         },
       ];
     });
@@ -380,7 +416,7 @@ class PhotoTimelineEngine {
     this.#phashRows = [];
     this.#deviceRows = [];
     this.#uploadByUri = new Map();
-    this.#uploadSignature = '';
+    this.#uploadSignature = "";
     this.#error = undefined;
     this.#snapshot = EMPTY;
   }

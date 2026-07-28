@@ -1,18 +1,24 @@
 // Toolbar region: the type filter chips (#typeChips root). The title/subtitle
 // and sort label are plain text nodes the orchestrator writes directly (never
 // React-owned), so this file only carries the one componentized piece.
-import shared from './shared.module.css';
+import shared from "./shared.module.css";
 
 const TYPE_CHIPS: ReadonlyArray<readonly [string, string]> = [
-  ['all', 'All'],
-  ['pdf', 'PDFs'],
-  ['image', 'Images'],
-  ['media', 'Media'],
-  ['doc', 'Docs'],
-  ['sheet', 'Sheets'],
+  ["all", "All"],
+  ["pdf", "PDFs"],
+  ["image", "Images"],
+  ["media", "Media"],
+  ["doc", "Docs"],
+  ["sheet", "Sheets"],
 ];
 
-export function TypeChips({ type, onSelect }: { type: string; onSelect: (key: string) => void }) {
+export function TypeChips({
+  type,
+  onSelect,
+}: {
+  type: string;
+  onSelect: (key: string) => void;
+}) {
   return (
     <>
       {TYPE_CHIPS.map(([key, label]) => (

@@ -1,20 +1,20 @@
-import type { JSX, ReactNode } from 'react';
+import type { JSX, ReactNode } from "react";
 
-import type { AgentCardDTO, AgentModelDTO } from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
+import type { AgentCardDTO, AgentModelDTO } from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
 
-import selectCss from '../styles/select.module.css';
-import styles from './SettingsProvidersScreen.module.css';
+import selectCss from "../styles/select.module.css";
+import styles from "./SettingsProvidersScreen.module.css";
 
 // The select primitives shared by Settings → Agents' two sections: the routing
 // lanes pick an agent and a model, the inventory picks each agent's default
 // model, and all three are the same control.
 
-const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
+const TIER_ORDER = ["smart", "balanced", "fast"] as const;
 const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
-  smart: 'Most capable',
-  balanced: 'Balanced',
-  fast: 'Fastest',
+  smart: "Most capable",
+  balanced: "Balanced",
+  fast: "Fastest",
 };
 
 export function Select({
@@ -34,11 +34,14 @@ export function Select({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <span className={selectCss.selectWrap} data-disabled={disabled ? 'true' : ''}>
+    <span
+      className={selectCss.selectWrap}
+      data-disabled={disabled ? "true" : ""}
+    >
       <select
         className={cx(selectCss.select, styles.selectInherited)}
         aria-label={ariaLabel}
-        data-inherited={inherited ? 'true' : ''}
+        data-inherited={inherited ? "true" : ""}
         disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -52,7 +55,7 @@ export function Select({
 function modelOptions(card: AgentCardDTO): JSX.Element[] {
   const opt = (m: AgentModelDTO): JSX.Element => (
     <option key={m.id} value={m.id}>
-      {(m.name ?? m.id) + (m.default ? ' · default' : '')}
+      {(m.name ?? m.id) + (m.default ? " · default" : "")}
     </option>
   );
   const tiered = card.models.some((m) => m.tier);
@@ -64,7 +67,7 @@ function modelOptions(card: AgentCardDTO): JSX.Element[] {
       out.push(
         <optgroup key={tier} label={TIER_LABEL[tier]}>
           {inTier.map(opt)}
-        </optgroup>,
+        </optgroup>
       );
     }
   }
@@ -73,7 +76,7 @@ function modelOptions(card: AgentCardDTO): JSX.Element[] {
     out.push(
       <optgroup key="other" label="Other">
         {untiered.map(opt)}
-      </optgroup>,
+      </optgroup>
     );
   }
   return out;
@@ -81,7 +84,7 @@ function modelOptions(card: AgentCardDTO): JSX.Element[] {
 
 /** Human label for a model id, for use inside an inherited-option label. */
 export function modelLabel(card: AgentCardDTO | undefined, id: string): string {
-  if (!id) return 'agent default';
+  if (!id) return "agent default";
   const m = card?.models.find((x) => x.id === id);
   return m?.name ?? id;
 }
@@ -136,7 +139,9 @@ export function ConfigSelect({
   emptyLabel: string;
   ariaLabel: string;
 }): JSX.Element | null {
-  const option = card.configOptions?.find((entry) => entry.category === category);
+  const option = card.configOptions?.find(
+    (entry) => entry.category === category
+  );
   if (!option || option.values.length === 0) return null;
   return (
     <Select

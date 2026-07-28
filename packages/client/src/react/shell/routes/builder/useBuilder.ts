@@ -1,9 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single state/reducer hook for the whole builder surface; the actions and the state they mutate need to stay next to each other to review safely
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { inferAppVisual } from '../../../../app-format.js';
-import { describeCron } from '../../../../cron.js';
-import { generateAppId, shortVersionTitle } from '../../../../format.js';
+import { inferAppVisual } from "../../../../app-format.js";
+import { describeCron } from "../../../../cron.js";
+import { generateAppId, shortVersionTitle } from "../../../../format.js";
 import {
   createApp,
   createConversation,
@@ -18,15 +18,21 @@ import {
   uploadConversationAttachment,
   type ConversationAttachmentRef,
   type TurnStreamEvent,
-} from '../../../../gateway-client.js';
-import { providerConsentWire, withProviderConsent } from '../../../providerConsent.js';
+} from "../../../../gateway-client.js";
+import {
+  providerConsentWire,
+  withProviderConsent,
+} from "../../../providerConsent.js";
 import type {
   AgentsStatusDTO,
   AsstModelPickerDTO,
   BuilderChatSnapshot,
-} from '../../../screen-contracts.js';
-import { openConfirm } from '../../confirm.js';
-import { loadProviders, resolveReportedRunnerKind } from '../settingsProvidersData.js';
+} from "../../../screen-contracts.js";
+import { openConfirm } from "../../confirm.js";
+import {
+  loadProviders,
+  resolveReportedRunnerKind,
+} from "../settingsProvidersData.js";
 import {
   BUILDER_SUGGESTIONS,
   type ChatView,
@@ -40,11 +46,11 @@ import {
   type ToolCall,
   toBuilderMsg,
   turnProgress,
-} from './builderModel.js';
+} from "./builderModel.js";
 
 export interface UseBuilderInput {
   initialAppId?: string;
-  appKind: 'app' | 'automation';
+  appKind: "app" | "automation";
   appContext?: AppMetaResolvedType;
   initialPrompt?: string;
   onAddToHome?: (input: {
@@ -53,7 +59,11 @@ export interface UseBuilderInput {
     name?: string;
     versionId?: string;
   }) => void;
-  onMetaChange?: (input: { appId: string; name?: string; description?: string }) => void;
+  onMetaChange?: (input: {
+    appId: string;
+    name?: string;
+    description?: string;
+  }) => void;
   showToast: (message: string) => void;
   /** The space a NEW app is created in (issue #599, Decision 14). Named by the
    *  route's target picker rather than inherited from an ambient pointer;
@@ -61,7 +71,7 @@ export interface UseBuilderInput {
   targetScopeId?: string;
 }
 
-type SyncState = 'editing' | 'publishing' | 'idle-live' | 'idle-draft';
+type SyncState = "editing" | "publishing" | "idle-live" | "idle-draft";
 
 /** The mutable facts the status chip + primary button are derived from. */
 interface StatusFacts {
@@ -77,46 +87,59 @@ interface StatusFacts {
 
 type StatusView = Pick<
   BuilderViewModel,
-  'statusState' | 'statusText' | 'primaryLabel' | 'primaryKind' | 'primaryDisabled'
+  | "statusState"
+  | "statusText"
+  | "primaryLabel"
+  | "primaryKind"
+  | "primaryDisabled"
 >;
 
 /** Pure so the initial snapshot and every repaint share one definition. */
 function deriveStatus(f: StatusFacts, now: number): StatusView {
   const statusState: SyncState = f.publishing
-    ? 'publishing'
+    ? "publishing"
     : f.generating
-      ? 'editing'
+      ? "editing"
       : f.lastPublishedVersionId || (f.isAutomation && f.automationEnabled)
-        ? 'idle-live'
-        : 'idle-draft';
+        ? "idle-live"
+        : "idle-draft";
 
   let statusText: string;
   if (f.isAutomation) {
     statusText = f.generating
-      ? 'Editing…'
+      ? "Editing…"
       : f.automationBusy
-        ? 'Working…'
+        ? "Working…"
         : f.automationEnabled
-          ? 'Enabled'
-          : 'Draft';
+          ? "Enabled"
+          : "Draft";
   } else if (f.publishing) {
-    statusText = 'Publishing…';
+    statusText = "Publishing…";
   } else if (f.generating) {
-    statusText = 'Editing…';
+    statusText = "Editing…";
   } else if (f.lastPublishedVersionId) {
-    const parts = ['Live'];
+    const parts = ["Live"];
     if (f.appVersionCount > 0) parts.push(`v${f.appVersionCount}`);
-    if (f.appLastEditedAt) parts.push(`edited ${relTime(f.appLastEditedAt, now)}`);
-    statusText = parts.join(' · ');
+    if (f.appLastEditedAt)
+      parts.push(`edited ${relTime(f.appLastEditedAt, now)}`);
+    statusText = parts.join(" · ");
   } else {
-    statusText = 'Draft';
+    statusText = "Draft";
   }
 
   return {
     statusState,
     statusText,
-    primaryLabel: f.isAutomation ? (f.automationEnabled ? 'Disable' : 'Enable') : 'Publish',
-    primaryKind: f.isAutomation ? (f.automationEnabled ? 'disable' : 'enable') : 'publish',
+    primaryLabel: f.isAutomation
+      ? f.automationEnabled
+        ? "Disable"
+        : "Enable"
+      : "Publish",
+    primaryKind: f.isAutomation
+      ? f.automationEnabled
+        ? "disable"
+        : "enable"
+      : "publish",
     primaryDisabled: f.publishing || f.automationBusy,
   };
 }
@@ -130,7 +153,7 @@ async function streamBuilderWithConsent(input: {
   signal: AbortSignal;
   onEvent: (event: TurnStreamEvent) => void;
   onDeclined: (provider: string) => void;
-  workspaceKind: 'vault-data' | 'app' | 'draft';
+  workspaceKind: "vault-data" | "app" | "draft";
   runnerKind?: string;
   model?: string;
   thinking?: string;
@@ -139,7 +162,9 @@ async function streamBuilderWithConsent(input: {
 }): Promise<void> {
   // Every provider approved during THIS send — a consent-gated failover asks
   // twice, and resending only the newest approval loops forever (#567).
-  const streamWithConsent = async (approvedProviders: string[]): Promise<void> => {
+  const streamWithConsent = async (
+    approvedProviders: string[]
+  ): Promise<void> => {
     let requiredProvider: string | undefined;
     const providerConsent = providerConsentWire(approvedProviders);
     await streamTurn(
@@ -154,17 +179,20 @@ async function streamBuilderWithConsent(input: {
         ...(input.model ? { model: input.model } : {}),
         ...(input.thinking ? { thinking: input.thinking } : {}),
         ...(providerConsent === undefined ? {} : { providerConsent }),
-        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+        ...(input.attachments?.length
+          ? { attachments: input.attachments }
+          : {}),
       },
       (event) => {
-        if (event.type === 'consent.required') requiredProvider = event.provider;
+        if (event.type === "consent.required")
+          requiredProvider = event.provider;
         else input.onEvent(event);
       },
-      input.signal,
+      input.signal
     );
     if (!requiredProvider) return;
     const approved = await openConfirm({
-      confirmLabel: 'Allow provider',
+      confirmLabel: "Allow provider",
       title: `Send to ${requiredProvider}?`,
       message: `Allow this builder conversation to be sent to ${requiredProvider}? This can include the prompt, attachments, handoff context, and vault tool results.`,
     });
@@ -172,7 +200,9 @@ async function streamBuilderWithConsent(input: {
       input.onDeclined(requiredProvider);
       return;
     }
-    return streamWithConsent(withProviderConsent(approvedProviders, requiredProvider));
+    return streamWithConsent(
+      withProviderConsent(approvedProviders, requiredProvider)
+    );
   };
   return streamWithConsent([]);
 }
@@ -182,16 +212,16 @@ async function streamBuilderWithConsent(input: {
 type BuilderSnapshot = StatusView &
   Pick<
     BuilderViewModel,
-    | 'appId'
-    | 'projName'
-    | 'tab'
-    | 'chatView'
-    | 'previewDevice'
-    | 'generating'
-    | 'automationRow'
-    | 'flashSections'
-    | 'historyToggleActive'
-    | 'chatSnapshot'
+    | "appId"
+    | "projName"
+    | "tab"
+    | "chatView"
+    | "previewDevice"
+    | "generating"
+    | "automationRow"
+    | "flashSections"
+    | "historyToggleActive"
+    | "chatSnapshot"
   >;
 
 const NO_FLASH_SECTIONS: ReadonlySet<string> = new Set();
@@ -199,9 +229,9 @@ const NO_FLASH_SECTIONS: ReadonlySet<string> = new Set();
 /** Per-section fingerprints of an automation manifest — a diff against the
  *  previous fetch is what flashes the changed config cards. */
 const configSectionSignatures = (
-  m: CentraidAutomationManifest,
-): Record<'what' | 'when' | 'behavior' | 'apps', string> => ({
-  what: m.prompt ?? '',
+  m: CentraidAutomationManifest
+): Record<"what" | "when" | "behavior" | "apps", string> => ({
+  what: m.prompt ?? "",
   when: JSON.stringify(m.triggers ?? []),
   behavior: JSON.stringify({
     model: m.requires.model ?? null,
@@ -211,18 +241,29 @@ const configSectionSignatures = (
   apps: JSON.stringify(m.apps ?? []),
 });
 
-function builderModelPicker(status: AgentsStatusDTO, requestedRunner?: string): AsstModelPickerDTO {
-  const runnerKind = resolveReportedRunnerKind(status, requestedRunner, 'builder');
+function builderModelPicker(
+  status: AgentsStatusDTO,
+  requestedRunner?: string
+): AsstModelPickerDTO {
+  const runnerKind = resolveReportedRunnerKind(
+    status,
+    requestedRunner,
+    "builder"
+  );
   const card = status.cards.find((entry) => entry.kind === runnerKind);
   const models = card?.modelConfigurable ? card.models : [];
-  const defaultId = status.savedModelByKind[runnerKind] ?? '';
+  const defaultId = status.savedModelByKind[runnerKind] ?? "";
   const defaultModel =
     models.find((model) => model.id === defaultId) ??
     models.find((model) => model.default) ??
     models[0];
-  const effortOption = card?.configOptions?.find((option) => option.category === 'thought_level');
+  const effortOption = card?.configOptions?.find(
+    (option) => option.category === "thought_level"
+  );
   const defaultEffort =
-    status.defaultConfigPinsByKind[runnerKind]?.thought_level ?? effortOption?.currentValue ?? '';
+    status.defaultConfigPinsByKind[runnerKind]?.thought_level ??
+    effortOption?.currentValue ??
+    "";
   return {
     runners: status.cards.map((runner) => ({
       kind: runner.kind,
@@ -231,23 +272,29 @@ function builderModelPicker(status: AgentsStatusDTO, requestedRunner?: string): 
       sessionReady: runner.sessionReady,
       hint: [
         runner.subtitle,
-        ...(runner.breakerStates ?? []).map((state) => `${state.failureClass} ${state.state}`),
-      ].join(' · '),
+        ...(runner.breakerStates ?? []).map(
+          (state) => `${state.failureClass} ${state.state}`
+        ),
+      ].join(" · "),
     })),
     selectedRunnerKind: runnerKind,
-    workspaceKinds: ['draft', 'app', 'vault-data'],
+    workspaceKinds: ["draft", "app", "vault-data"],
     connected: card?.connected ?? false,
     models: models.map((model) => ({
       id: model.id,
       ...(model.name ? { name: model.name } : {}),
       ...(model.default ? { default: true } : {}),
     })),
-    defaultModelName: defaultModel?.name ?? defaultModel?.id ?? 'gateway default',
-    selectedModelId: status.subsystemModelByKind[runnerKind]?.builder ?? '',
+    defaultModelName:
+      defaultModel?.name ?? defaultModel?.id ?? "gateway default",
+    selectedModelId: status.subsystemModelByKind[runnerKind]?.builder ?? "",
     efforts: effortOption?.values ?? [],
     defaultEffortName:
-      effortOption?.values.find((value) => value.value === defaultEffort)?.name ?? defaultEffort,
-    selectedEffortId: status.subsystemConfigPinsByKind[runnerKind]?.builder?.thought_level ?? '',
+      effortOption?.values.find((value) => value.value === defaultEffort)
+        ?.name ?? defaultEffort,
+    selectedEffortId:
+      status.subsystemConfigPinsByKind[runnerKind]?.builder?.thought_level ??
+      "",
     supportsAdditionalDirectories: card?.additionalDirectories === true,
     supportsAttachments: card?.supportsAttachments === true,
     supportsContext: card?.supportsContext === true,
@@ -262,9 +309,12 @@ function builderModelPicker(status: AgentsStatusDTO, requestedRunner?: string): 
 export function builderPickerForConversation(
   status: AgentsStatusDTO,
   conversationAdapterKind?: string,
-  selectedRunnerKind?: string,
+  selectedRunnerKind?: string
 ): AsstModelPickerDTO {
-  return builderModelPicker(status, conversationAdapterKind ?? selectedRunnerKind);
+  return builderModelPicker(
+    status,
+    conversationAdapterKind ?? selectedRunnerKind
+  );
 }
 
 export interface BuilderViewModel {
@@ -283,7 +333,7 @@ export interface BuilderViewModel {
   statusText: string;
   statusState: SyncState;
   primaryLabel: string;
-  primaryKind: 'publish' | 'enable' | 'disable';
+  primaryKind: "publish" | "enable" | "disable";
   primaryDisabled: boolean;
   historyToggleActive: boolean;
   reloadNonce: number;
@@ -291,13 +341,16 @@ export interface BuilderViewModel {
   chatSnapshot: BuilderChatSnapshot;
   registerChatUpdater: (u: (s: BuilderChatSnapshot) => void) => void;
   // actions
-  sendUserPrompt: (text: string, attachments?: ConversationAttachmentRef[]) => void;
+  sendUserPrompt: (
+    text: string,
+    attachments?: ConversationAttachmentRef[]
+  ) => void;
   /** Upload one file to the app's blob CAS ahead of a turn (issue #420). */
   uploadChatAttachment: (file: File) => Promise<ConversationAttachmentRef>;
   cancelTurn: () => void;
   toggleGroup: (id: string) => void;
   setChatView: (v: ChatView) => void;
-  setChatWorkspaceKind: (kind: 'vault-data' | 'app' | 'draft') => void;
+  setChatWorkspaceKind: (kind: "vault-data" | "app" | "draft") => void;
   setChatRunner: (runnerKind: string) => Promise<AsstModelPickerDTO>;
   setChatModel: (modelId: string) => void;
   setChatEffort: (effort: string) => void;
@@ -320,16 +373,19 @@ export interface BuilderViewModel {
  * pane — together they replace the vanilla `renderChat()` funnel.
  */
 export function useBuilder(input: UseBuilderInput): BuilderViewModel {
-  const { appContext, initialPrompt, onAddToHome, onMetaChange, showToast } = input;
+  const { appContext, initialPrompt, onAddToHome, onMetaChange, showToast } =
+    input;
   const isUpdateMode = !!input.initialAppId;
   const isNewBuild = !isUpdateMode && !!initialPrompt;
-  const isAutomation = input.appKind === 'automation';
+  const isAutomation = input.appKind === "automation";
 
-  const projColor = appContext?.color || (window.ICON_PALETTE?.rose ?? '#5847e0');
-  const projIcon: IconNameType = appContext?.iconKey || 'Sparkle';
+  const projColor =
+    appContext?.color || (window.ICON_PALETTE?.rose ?? "#5847e0");
+  const projIcon: IconNameType = appContext?.iconKey || "Sparkle";
 
-  const initialProjName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
-  const initialTab: Tab = isAutomation ? 'config' : 'preview';
+  const initialProjName =
+    appContext?.name || (isNewBuild ? "New app" : "Untitled");
+  const initialTab: Tab = isAutomation ? "config" : "preview";
 
   // ── Repaint plumbing ──────────────────────────────────────────────────────
   // `view` is the published snapshot of the ref-held model below (render may
@@ -338,22 +394,22 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     appId: input.initialAppId,
     projName: initialProjName,
     tab: initialTab,
-    chatView: 'chat',
-    previewDevice: 'mobile',
+    chatView: "chat",
+    previewDevice: "mobile",
     generating: false,
     automationRow: undefined,
     flashSections: NO_FLASH_SECTIONS,
     historyToggleActive: false,
     chatSnapshot: {
-      view: 'chat',
+      view: "chat",
       messages: [],
       generating: false,
       progress: null,
       suggestions: BUILDER_SUGGESTIONS,
       composerDisabled: !input.initialAppId,
       historyNonce: 0,
-      workspaceKind: 'draft',
-      workspaceKinds: ['draft', 'app', 'vault-data'],
+      workspaceKind: "draft",
+      workspaceKinds: ["draft", "app", "vault-data"],
     },
     ...deriveStatus(
       {
@@ -366,7 +422,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         appVersionCount: 0,
         appLastEditedAt: undefined,
       },
-      0,
+      0
     ),
   }));
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -377,8 +433,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const chat = useRef<ConversationMsg[]>([]);
   const projName = useRef(initialProjName);
   const tab = useRef<Tab>(initialTab);
-  const chatView = useRef<ChatView>('chat');
-  const previewDevice = useRef<DeviceKey>('mobile');
+  const chatView = useRef<ChatView>("chat");
+  const previewDevice = useRef<DeviceKey>("mobile");
   const generating = useRef(false);
   const publishing = useRef(false);
   const lastPublishedVersionId = useRef<string | undefined>(undefined);
@@ -398,20 +454,26 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const flashSections = useRef<Set<string>>(new Set());
   const automationBusy = useRef(false);
   const historyNonce = useRef(0);
-  const sessionContext = useRef<{ used: number; size: number } | undefined>(undefined);
+  const sessionContext = useRef<{ used: number; size: number } | undefined>(
+    undefined
+  );
   const sessionConfig = useRef<{ model?: string; effort?: string }>({});
   const runnerConfig = useRef<AsstModelPickerDTO | undefined>(undefined);
   const providersStatus = useRef<AgentsStatusDTO | undefined>(undefined);
   const conversationRunnerKind = useRef<string | undefined>(undefined);
-  const workspaceKind = useRef<'vault-data' | 'app' | 'draft'>('draft');
+  const workspaceKind = useRef<"vault-data" | "app" | "draft">("draft");
 
   // ── Snapshot funnel ───────────────────────────────────────────────────────
   const buildChatSnapshot = useCallback((): BuilderChatSnapshot => {
     return {
       view: chatView.current,
-      messages: chat.current.map((m) => toBuilderMsg(m, appVersionCount.current)),
+      messages: chat.current.map((m) =>
+        toBuilderMsg(m, appVersionCount.current)
+      ),
       generating: generating.current,
-      progress: generating.current ? turnProgress(chat.current, currentAiMsgIndex.current) : null,
+      progress: generating.current
+        ? turnProgress(chat.current, currentAiMsgIndex.current)
+        : null,
       suggestions: BUILDER_SUGGESTIONS,
       composerDisabled: generating.current || !appId.current,
       historyNonce: historyNonce.current,
@@ -419,7 +481,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       ...sessionConfig.current,
       ...(runnerConfig.current ? { runnerConfig: runnerConfig.current } : {}),
       workspaceKind: workspaceKind.current,
-      workspaceKinds: ['draft', 'app', 'vault-data'],
+      workspaceKinds: ["draft", "app", "vault-data"],
     };
   }, []);
 
@@ -433,7 +495,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       generating: generating.current,
       automationRow: automationRow.current,
       flashSections: flashSections.current,
-      historyToggleActive: chatView.current === 'history',
+      historyToggleActive: chatView.current === "history",
       chatSnapshot: buildChatSnapshot(),
       ...deriveStatus(
         {
@@ -446,10 +508,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           appVersionCount: appVersionCount.current,
           appLastEditedAt: appLastEditedAt.current,
         },
-        Date.now(),
+        Date.now()
       ),
     }),
-    [buildChatSnapshot, isAutomation],
+    [buildChatSnapshot, isAutomation]
   );
   // Held in a ref so `bump` keeps an empty dependency list — every action
   // below closes over it exactly as it did over the old reducer dispatch.
@@ -472,7 +534,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       runnerConfig.current = builderPickerForConversation(
         status,
         conversationRunnerKind.current,
-        runnerConfig.current?.selectedRunnerKind,
+        runnerConfig.current?.selectedRunnerKind
       );
       renderChat();
     });
@@ -487,7 +549,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       renderChat();
       return chat.current.length - 1;
     },
-    [renderChat],
+    [renderChat]
   );
 
   const updateMessage = useCallback(
@@ -495,11 +557,11 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       const at = chat.current[idx];
       if (!at) return;
       chat.current = chat.current.map((m, i) =>
-        i === idx ? ({ ...m, ...patch } as ConversationMsg) : m,
+        i === idx ? ({ ...m, ...patch } as ConversationMsg) : m
       );
       renderChat();
     },
-    [renderChat],
+    [renderChat]
   );
 
   const bumpPreview = useCallback((): void => setReloadNonce((n) => n + 1), []);
@@ -508,7 +570,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const closeThinking = useCallback((): void => {
     if (currentThinkingMsgIndex.current < 0) return;
     const cur = chat.current[currentThinkingMsgIndex.current];
-    if (cur && cur.kind === 'thinking')
+    if (cur && cur.kind === "thinking")
       updateMessage(currentThinkingMsgIndex.current, { streaming: false });
     currentThinkingMsgIndex.current = -1;
   }, [updateMessage]);
@@ -516,7 +578,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const closeAi = useCallback((): void => {
     if (currentAiMsgIndex.current < 0) return;
     const cur = chat.current[currentAiMsgIndex.current];
-    if (cur && cur.kind === 'ai') updateMessage(currentAiMsgIndex.current, { streaming: false });
+    if (cur && cur.kind === "ai")
+      updateMessage(currentAiMsgIndex.current, { streaming: false });
     currentAiMsgIndex.current = -1;
   }, [updateMessage]);
 
@@ -534,11 +597,12 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       /* keep last good */
     }
     if (automationRow.current) {
-      projName.current = automationRow.current.manifest.name || automationRow.current.id;
+      projName.current =
+        automationRow.current.manifest.name || automationRow.current.id;
       if (before) {
         const after = configSectionSignatures(automationRow.current.manifest);
         flashSections.current = new Set();
-        for (const k of ['what', 'when', 'behavior', 'apps'] as const) {
+        for (const k of ["what", "when", "behavior", "apps"] as const) {
           if (before[k] !== after[k]) flashSections.current.add(k);
         }
       }
@@ -553,48 +617,55 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     renderChat();
     if (isAutomation) {
       if (previewReloadPending.current) void refreshAutomationRow();
-    } else if (previewReloadPending.current && tab.current === 'preview') {
+    } else if (previewReloadPending.current && tab.current === "preview") {
       bumpPreview();
     }
     previewReloadPending.current = false;
-  }, [closeAi, closeThinking, renderChat, isAutomation, bumpPreview, refreshAutomationRow]);
+  }, [
+    closeAi,
+    closeThinking,
+    renderChat,
+    isAutomation,
+    bumpPreview,
+    refreshAutomationRow,
+  ]);
 
   const announceMintedWebhooks = useCallback(
     (minted: CentraidMintedWebhook[]): void => {
       for (const w of minted) {
         pushMessage({
-          kind: 'ai',
+          kind: "ai",
           text:
             `Webhook provisioned for “${w.automationId}”.\n\n` +
             `Endpoint (POST): ${w.url}\n` +
             `Secret (shown once — save it now): ${w.secret}\n\n` +
-            'Authenticate each request with the header ' +
-            '`Authorization: Bearer <secret>`. The secret is not stored — ' +
-            'only a hash is kept in automation.json.',
+            "Authenticate each request with the header " +
+            "`Authorization: Bearer <secret>`. The secret is not stored — " +
+            "only a hash is kept in automation.json.",
         });
       }
     },
-    [pushMessage],
+    [pushMessage]
   );
 
   const handleStreamEvent = useCallback(
     (event: TurnStreamEvent): void => {
       switch (event.type) {
-        case 'assistant.start':
+        case "assistant.start":
           generating.current = true;
           renderChat();
           return;
-        case 'assistant.delta':
+        case "assistant.delta":
           closeThinking();
           if (currentAiMsgIndex.current < 0) {
             currentAiMsgIndex.current = pushMessage({
-              kind: 'ai',
+              kind: "ai",
               text: event.delta,
               streaming: true,
             });
           } else {
             const cur = chat.current[currentAiMsgIndex.current];
-            if (cur && cur.kind === 'ai') {
+            if (cur && cur.kind === "ai") {
               updateMessage(currentAiMsgIndex.current, {
                 text: cur.text + event.delta,
                 streaming: true,
@@ -602,16 +673,16 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             }
           }
           return;
-        case 'reasoning.delta':
+        case "reasoning.delta":
           if (currentThinkingMsgIndex.current < 0) {
             currentThinkingMsgIndex.current = pushMessage({
-              kind: 'thinking',
+              kind: "thinking",
               text: event.delta,
               streaming: true,
             });
           } else {
             const cur = chat.current[currentThinkingMsgIndex.current];
-            if (cur && cur.kind === 'thinking') {
+            if (cur && cur.kind === "thinking") {
               updateMessage(currentThinkingMsgIndex.current, {
                 text: cur.text + event.delta,
                 streaming: true,
@@ -619,28 +690,30 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             }
           }
           return;
-        case 'tool.start': {
+        case "tool.start": {
           closeThinking();
           closeAi();
           const newCall: ToolCall = {
             id: event.toolCallId,
             tool: event.toolName,
             summary: summarizeToolArgs(event.toolName, event.args),
-            state: 'running',
+            state: "running",
           };
           const lastIdx = chat.current.length - 1;
           const last = chat.current[lastIdx];
-          if (last && last.kind === 'toolGroup') {
+          if (last && last.kind === "toolGroup") {
             const updated: ConversationMsg = {
               ...last,
               calls: [...last.calls, newCall],
             };
-            chat.current = chat.current.map((m, i) => (i === lastIdx ? updated : m));
+            chat.current = chat.current.map((m, i) =>
+              i === lastIdx ? updated : m
+            );
             renderChat();
             pendingToolStarts.current.set(event.toolCallId, lastIdx);
           } else {
             const idx = pushMessage({
-              kind: 'toolGroup',
+              kind: "toolGroup",
               id: event.toolCallId,
               calls: [newCall],
               open: true,
@@ -649,21 +722,23 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           }
           return;
         }
-        case 'tool.result': {
+        case "tool.result": {
           const groupIdx = pendingToolStarts.current.get(event.toolCallId);
           pendingToolStarts.current.delete(event.toolCallId);
           if (groupIdx !== undefined) {
             const grp = chat.current[groupIdx];
-            if (grp && grp.kind === 'toolGroup') {
+            if (grp && grp.kind === "toolGroup") {
               const calls = grp.calls.map((c) =>
                 c.id === event.toolCallId
                   ? {
                       ...c,
-                      state: event.ok ? ('ok' as const) : ('error' as const),
+                      state: event.ok ? ("ok" as const) : ("error" as const),
                     }
-                  : c,
+                  : c
               );
-              chat.current = chat.current.map((m, i) => (i === groupIdx ? { ...grp, calls } : m));
+              chat.current = chat.current.map((m, i) =>
+                i === groupIdx ? { ...grp, calls } : m
+              );
               renderChat();
             }
           }
@@ -673,38 +748,38 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           }
           return;
         }
-        case 'webhooks':
+        case "webhooks":
           announceMintedWebhooks(event.minted);
           return;
-        case 'context':
+        case "context":
           if (event.used !== undefined && event.size !== undefined) {
             sessionContext.current = { used: event.used, size: event.size };
             renderChat();
           }
           return;
-        case 'usage':
+        case "usage":
           sessionConfig.current = {
             ...(event.model ? { model: event.model } : {}),
             ...(event.effort ? { effort: event.effort } : {}),
           };
           renderChat();
           return;
-        case 'final':
-        case 'aborted':
+        case "final":
+        case "aborted":
           finishAgentTurn();
           return;
-        case 'error':
+        case "error":
           generating.current = false;
           closeAi();
           closeThinking();
           pushMessage({
-            kind: 'status',
+            kind: "status",
             text: `Agent error: ${event.message}`,
           });
           break;
-        case 'phase':
-        case 'consent.required':
-        case 'notice':
+        case "phase":
+        case "consent.required":
+        case "notice":
           break;
       }
     },
@@ -716,23 +791,25 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       pushMessage,
       renderChat,
       updateMessage,
-    ],
+    ]
   );
 
   const ensureConversation = useCallback(
-    async (id: string, sessionMode: 'fresh' | 'continue'): Promise<string> => {
+    async (id: string, sessionMode: "fresh" | "continue"): Promise<string> => {
       if (conversationId.current) return conversationId.current;
-      if (sessionMode === 'continue') {
+      if (sessionMode === "continue") {
         const sessions = await listConversations(id).catch(() => []);
         if (sessions[0]) {
           conversationId.current = sessions[0].id;
-          const transcript = await loadConversation(id, sessions[0].id).catch(() => undefined);
+          const transcript = await loadConversation(id, sessions[0].id).catch(
+            () => undefined
+          );
           if (transcript?.adapterKind) {
             conversationRunnerKind.current = transcript.adapterKind;
             if (providersStatus.current) {
               runnerConfig.current = builderPickerForConversation(
                 providersStatus.current,
-                transcript.adapterKind,
+                transcript.adapterKind
               );
               renderChat();
             }
@@ -748,7 +825,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       ).id;
       return conversationId.current;
     },
-    [renderChat],
+    [renderChat]
   );
 
   // Upload one file to the builder app's blob CAS ahead of a turn — the same
@@ -756,30 +833,31 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   // button). Requires the app to exist (its CAS is per-app).
   const uploadChatAttachment = useCallback(
     async (file: File): Promise<ConversationAttachmentRef> => {
-      if (!appId.current) throw new Error('Save the app before attaching files.');
+      if (!appId.current)
+        throw new Error("Save the app before attaching files.");
       const bytes = new Uint8Array(await file.arrayBuffer());
       return uploadConversationAttachment(
         appId.current,
         bytes,
-        file.type || 'application/octet-stream',
+        file.type || "application/octet-stream",
         file.name,
-        targetScope.current,
+        targetScope.current
       );
     },
-    [],
+    []
   );
 
   const sendUserPrompt = useCallback(
     (text: string, attachments?: ConversationAttachmentRef[]): void => {
       void (async () => {
         if (!appId.current) return;
-        pushMessage({ kind: 'user', text });
+        pushMessage({ kind: "user", text });
         generating.current = true;
         currentAiMsgIndex.current = -1;
         currentThinkingMsgIndex.current = -1;
         renderChat();
         try {
-          const sessionId = await ensureConversation(appId.current, 'continue');
+          const sessionId = await ensureConversation(appId.current, "continue");
           agentAbort.current = new AbortController();
           await streamBuilderWithConsent({
             appId: appId.current,
@@ -806,7 +884,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             onEvent: handleStreamEvent,
             onDeclined: (provider) =>
               pushMessage({
-                kind: 'status',
+                kind: "status",
                 text: `Nothing was sent to ${provider}.`,
               }),
           });
@@ -817,11 +895,17 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             return;
           }
           generating.current = false;
-          pushMessage({ kind: 'status', text: `Agent error: ${String(err)}` });
+          pushMessage({ kind: "status", text: `Agent error: ${String(err)}` });
         }
       })();
     },
-    [ensureConversation, finishAgentTurn, handleStreamEvent, pushMessage, renderChat],
+    [
+      ensureConversation,
+      finishAgentTurn,
+      handleStreamEvent,
+      pushMessage,
+      renderChat,
+    ]
   );
 
   const handleToggleEnabled = useCallback(async (): Promise<void> => {
@@ -833,11 +917,15 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     try {
       await setAutomationEnabled({ automationId: row.ref, enabled: next });
       const t0 = row.manifest.triggers[0];
-      const sched = t0 ? (t0.kind === 'cron' ? describeCron(t0.expr) : 'Webhook') : 'manual';
-      showToast(next ? `Enabled · ${sched}` : 'Disabled — schedule stopped');
+      const sched = t0
+        ? t0.kind === "cron"
+          ? describeCron(t0.expr)
+          : "Webhook"
+        : "manual";
+      showToast(next ? `Enabled · ${sched}` : "Disabled — schedule stopped");
       await refreshAutomationRow();
     } catch (err) {
-      showToast(`Could not ${next ? 'enable' : 'disable'}: ${String(err)}`);
+      showToast(`Could not ${next ? "enable" : "disable"}: ${String(err)}`);
     } finally {
       automationBusy.current = false;
       bump();
@@ -847,15 +935,15 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   // ── Publish ───────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async (): Promise<void> => {
     if (!appId.current) {
-      showToast('No app to publish');
+      showToast("No app to publish");
       return;
     }
     if (publishing.current) return;
     publishing.current = true;
     bump();
     const statusIdx = pushMessage({
-      kind: 'status',
-      text: 'Building & publishing…',
+      kind: "status",
+      text: "Building & publishing…",
       spinning: true,
     });
     try {
@@ -865,14 +953,16 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       appLastEditedAt.current = Date.now();
       const migCount = result.migrationsApplied?.length ?? 0;
       const migText =
-        migCount > 0 ? ` · ${migCount} migration${migCount === 1 ? '' : 's'} applied` : '';
+        migCount > 0
+          ? ` · ${migCount} migration${migCount === 1 ? "" : "s"} applied`
+          : "";
       updateMessage(statusIdx, {
-        kind: 'status',
+        kind: "status",
         text: `Published ${shortVersionTitle(result)} (${result.files} files, ${(result.bytes / 1024).toFixed(1)} KB)${migText}`,
       });
       showToast(`Published ${shortVersionTitle(result)}${migText}`);
-      if (tab.current === 'preview') bumpPreview();
-      if (chatView.current === 'history') historyNonce.current += 1;
+      if (tab.current === "preview") bumpPreview();
+      if (chatView.current === "history") historyNonce.current += 1;
       renderChat();
       onAddToHome?.({
         prompt: initialPrompt,
@@ -884,42 +974,47 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       const msg = String(err);
       if (/no_changes|no staged changes/iu.test(msg)) {
         updateMessage(statusIdx, {
-          kind: 'status',
-          text: 'Already up to date — added to Home.',
+          kind: "status",
+          text: "Already up to date — added to Home.",
         });
-        showToast('Already published — added to Home.');
+        showToast("Already published — added to Home.");
         onAddToHome?.({
           prompt: initialPrompt,
           appId: appId.current,
           name: projName.current,
         });
-      } else if (/HTTP 401|HTTP 403|gateway rejected|auth_required/iu.test(msg)) {
-        updateMessage(statusIdx, {
-          kind: 'status',
-          text: 'Gateway needs a token to accept uploads.',
-        });
-        showToast('Gateway requires a token. Configure it in Settings.');
       } else if (
-        /gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/iu.test(msg)
+        /HTTP 401|HTTP 403|gateway rejected|auth_required/iu.test(msg)
       ) {
         updateMessage(statusIdx, {
-          kind: 'status',
-          text: 'Gateway not reachable. Is it running?',
+          kind: "status",
+          text: "Gateway needs a token to accept uploads.",
         });
-        showToast('Gateway not reachable. Check the URL in Settings.');
+        showToast("Gateway requires a token. Configure it in Settings.");
+      } else if (
+        /gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/iu.test(
+          msg
+        )
+      ) {
+        updateMessage(statusIdx, {
+          kind: "status",
+          text: "Gateway not reachable. Is it running?",
+        });
+        showToast("Gateway not reachable. Check the URL in Settings.");
       } else if (/HTTP 422/iu.test(msg)) {
         const file = msg.match(/"file"\s*:\s*"(?<file>[^"]+)"/u)?.groups?.file;
-        const sqlError = msg.match(/"sqlError"\s*:\s*"(?<sqlError>[^"]+)"/u)?.groups?.sqlError;
+        const sqlError = msg.match(/"sqlError"\s*:\s*"(?<sqlError>[^"]+)"/u)
+          ?.groups?.sqlError;
         const detail = file
           ? sqlError
             ? `Migration ${file} failed: ${sqlError}`
             : `Migration ${file} failed`
           : `Migration failed: ${msg}`;
-        updateMessage(statusIdx, { kind: 'status', text: detail });
-        showToast(file ? `Migration ${file} failed` : 'Migration failed');
+        updateMessage(statusIdx, { kind: "status", text: detail });
+        showToast(file ? `Migration ${file} failed` : "Migration failed");
       } else {
         updateMessage(statusIdx, {
-          kind: 'status',
+          kind: "status",
           text: `Publish failed: ${msg}`,
         });
       }
@@ -947,10 +1042,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         await refreshAutomationRow();
         chat.current = chat.current.concat([
           {
-            kind: 'ai',
+            kind: "ai",
             text:
-              'Let’s build your automation. Describe what it should do and when it should run — for ' +
-              'example, “every weekday morning, summarize yesterday’s new GitHub issues.”',
+              "Let’s build your automation. Describe what it should do and when it should run — for " +
+              "example, “every weekday morning, summarize yesterday’s new GitHub issues.”",
           },
         ]);
         renderChat();
@@ -973,7 +1068,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         }
         chat.current = chat.current.concat([
           {
-            kind: 'ai',
+            kind: "ai",
             text: `Loaded "${projName.current}". Pick a direction below or describe the next change.`,
           },
         ]);
@@ -983,7 +1078,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       if (!isNewBuild || !initialPrompt) {
         chat.current = [
           {
-            kind: 'status',
+            kind: "status",
             text: 'No prompt provided. Open the builder from "New app" on home.',
           },
         ];
@@ -993,15 +1088,15 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       // Fresh build.
       const id = generateAppId(initialPrompt);
       const now = new Date();
-      const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      pushMessage({ kind: 'divider', text: `Today · ${hhmm}` });
-      pushMessage({ kind: 'status', text: 'Setting up app…', spinning: true });
+      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      pushMessage({ kind: "divider", text: `Today · ${hhmm}` });
+      pushMessage({ kind: "status", text: "Setting up app…", spinning: true });
       try {
         const visual = inferAppVisual(initialPrompt);
         await createApp({
           id,
           name: projName.current,
-          version: '0.1.0',
+          version: "0.1.0",
           iconKey: visual.iconKey,
           colorKey: visual.colorKey,
           ...(input.targetScopeId ? { scopeId: input.targetScopeId } : {}),
@@ -1010,7 +1105,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         bump();
       } catch (err) {
         pushMessage({
-          kind: 'status',
+          kind: "status",
           text: `Could not create app: ${String(err)}`,
         });
         return;
@@ -1021,7 +1116,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         ).id;
       } catch (err) {
         pushMessage({
-          kind: 'status',
+          kind: "status",
           text: `Could not start chat: ${String(err)}`,
         });
         return;
@@ -1048,20 +1143,21 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const toggleGroup = useCallback(
     (id: string): void => {
       chat.current = chat.current.map((x) =>
-        x.kind === 'toolGroup' && x.id === id ? { ...x, open: !x.open } : x,
+        x.kind === "toolGroup" && x.id === id ? { ...x, open: !x.open } : x
       );
       renderChat();
     },
-    [renderChat],
+    [renderChat]
   );
 
   const setChatViewCb = useCallback(
     (v: ChatView): void => {
-      if (v === 'history' && chatView.current === 'history') historyNonce.current += 1;
+      if (v === "history" && chatView.current === "history")
+        historyNonce.current += 1;
       chatView.current = v;
       renderChat();
     },
-    [renderChat],
+    [renderChat]
   );
 
   const setTabCb = useCallback(
@@ -1069,7 +1165,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       tab.current = t;
       bump();
     },
-    [bump],
+    [bump]
   );
 
   const setPreviewDeviceCb = useCallback(
@@ -1078,15 +1174,15 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       previewDevice.current = d;
       bump();
     },
-    [bump],
+    [bump]
   );
 
   const setChatWorkspaceKind = useCallback(
-    (kind: 'vault-data' | 'app' | 'draft'): void => {
+    (kind: "vault-data" | "app" | "draft"): void => {
       workspaceKind.current = kind;
       renderChat();
     },
-    [renderChat],
+    [renderChat]
   );
 
   const setChatRunner = useCallback(
@@ -1095,7 +1191,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       const status = await loadProviders({ refresh: true });
       const target = status.cards.find((card) => card.kind === runnerKind);
       if (!target?.sessionReady) {
-        showToast(target?.subtitle ?? `${runnerKind} did not complete its session preflight.`);
+        showToast(
+          target?.subtitle ??
+            `${runnerKind} did not complete its session preflight.`
+        );
         const unchanged = builderModelPicker(status, previous);
         runnerConfig.current = unchanged;
         renderChat();
@@ -1110,7 +1209,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       renderChat();
       return next;
     },
-    [renderChat, showToast],
+    [renderChat, showToast]
   );
 
   const setChatModel = useCallback(
@@ -1122,7 +1221,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       };
       renderChat();
     },
-    [renderChat],
+    [renderChat]
   );
 
   const setChatEffort = useCallback(
@@ -1134,7 +1233,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       };
       renderChat();
     },
-    [renderChat],
+    [renderChat]
   );
 
   const commitRename = useCallback(
@@ -1145,24 +1244,28 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       projName.current = next;
       bump();
       if (appId.current) {
-        void updateAppMeta({ id: appId.current, name: next }).catch((err: unknown) => {
-          projName.current = previous;
-          bump();
-          showToast(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
-        });
+        void updateAppMeta({ id: appId.current, name: next }).catch(
+          (err: unknown) => {
+            projName.current = previous;
+            bump();
+            showToast(
+              `Rename failed: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        );
         onMetaChange?.({ appId: appId.current, name: next });
       }
     },
-    [bump, isAutomation, onMetaChange, showToast],
+    [bump, isAutomation, onMetaChange, showToast]
   );
 
   const onRestored = useCallback(
     (versionId: string): void => {
       lastPublishedVersionId.current = versionId;
-      if (tab.current === 'preview') bumpPreview();
+      if (tab.current === "preview") bumpPreview();
       bump();
     },
-    [bump, bumpPreview],
+    [bump, bumpPreview]
   );
 
   const registerChatUpdater = useCallback(
@@ -1170,7 +1273,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       chatUpdater.current = u;
       u(buildChatSnapshot());
     },
-    [buildChatSnapshot],
+    [buildChatSnapshot]
   );
 
   return {
@@ -1193,7 +1296,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     setTab: setTabCb,
     setPreviewDevice: setPreviewDeviceCb,
     commitRename,
-    handlePrimary: () => void (isAutomation ? handleToggleEnabled() : handlePublish()),
+    handlePrimary: () =>
+      void (isAutomation ? handleToggleEnabled() : handlePublish()),
     onRestored,
   };
 }

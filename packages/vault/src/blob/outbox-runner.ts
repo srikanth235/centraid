@@ -1,14 +1,14 @@
-import { rmSync } from 'node:fs';
-import type { DatabaseSync } from 'node:sqlite';
+import { rmSync } from "node:fs";
+import type { DatabaseSync } from "node:sqlite";
 
-import { jitterDelayMs } from '../timer-jitter.js';
-import type { BlobCache } from './cache.js';
-import type { RemoteTier } from './custody-types.js';
-import type { LocalBlobStore } from './local.js';
-import { cleanupOrphanedMultipartUploads } from './orphan-multipart.js';
-import { drainOutboxRow } from './outbox-drain.js';
-import { desiredStoreForSha } from './store-routing.js';
-import type { BlobTransferState, OutboxRow } from './transfer-state.js';
+import { jitterDelayMs } from "../timer-jitter.js";
+import type { BlobCache } from "./cache.js";
+import type { RemoteTier } from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import { cleanupOrphanedMultipartUploads } from "./orphan-multipart.js";
+import { drainOutboxRow } from "./outbox-drain.js";
+import { desiredStoreForSha } from "./store-routing.js";
+import type { BlobTransferState, OutboxRow } from "./transfer-state.js";
 
 const ORPHAN_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const ORPHAN_SWEEP_RETRY_MS = 60 * 1000;
@@ -97,7 +97,8 @@ export class BlobOutboxRunner {
       settlementAllowed: () => !this.closed,
       // Route derivatives to the derived store class at drain time (issue #425
       // Wave 2); the enqueue side stays sha+size only.
-      desiredStore: (sha: string) => desiredStoreForSha(this.options.vault, sha),
+      desiredStore: (sha: string) =>
+        desiredStoreForSha(this.options.vault, sha),
     };
   }
 
@@ -113,7 +114,10 @@ export class BlobOutboxRunner {
       await this.drainRow(row);
       return drainNext();
     };
-    const workers = Math.min(rows.length, Math.max(1, this.options.cache.replicationConcurrency));
+    const workers = Math.min(
+      rows.length,
+      Math.max(1, this.options.cache.replicationConcurrency)
+    );
     await Promise.all(Array.from({ length: workers }, () => drainNext()));
   }
 
@@ -122,11 +126,14 @@ export class BlobOutboxRunner {
       await drainOutboxRow(this.deps(), row);
     } catch (error) {
       if (this.closed) return;
-      const backoffMs = Math.min(60_000, 1_000 * 2 ** Math.min(row.attempt_count, 6));
+      const backoffMs = Math.min(
+        60_000,
+        1_000 * 2 ** Math.min(row.attempt_count, 6)
+      );
       this.options.state.failOutbox(
         row.sha256,
         error instanceof Error ? error.message : String(error),
-        new Date(Date.now() + backoffMs).toISOString(),
+        new Date(Date.now() + backoffMs).toISOString()
       );
       this.options.onStatus();
     }
@@ -142,7 +149,7 @@ export class BlobOutboxRunner {
       this.options.state.failOutbox(
         sha256,
         error instanceof Error ? error.message : String(error),
-        new Date(Date.now() + 1_000).toISOString(),
+        new Date(Date.now() + 1_000).toISOString()
       );
       throw error;
     }
@@ -162,7 +169,9 @@ export class BlobOutboxRunner {
           .catch(() => undefined);
       }
       if (row.remote_temp_id) {
-        await transfer?.deleteTemporary(row.remote_temp_id).catch(() => undefined);
+        await transfer
+          ?.deleteTemporary(row.remote_temp_id)
+          .catch(() => undefined);
       }
       this.options.state.deleteSession(row.session_id);
       return cleanupNext(index + 1);

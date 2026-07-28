@@ -1,15 +1,19 @@
 /** Cache policy, replication evidence, QoS, and bounded-parallel I/O acceptance tests. */
 
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { openVaultDb, type VaultDb } from '../db.js';
-import { VaultBlobBackpressureError } from '../errors.js';
-import { nowIso, uuidv7 } from '../ids.js';
-import { BlobCache, CACHE_BUDGET_CEILING_BYTES, CACHE_BUDGET_FLOOR_BYTES } from './cache.js';
-import { BlobCustody } from './custody.js';
-import { MemoryBlobStore } from './local.js';
-import type { BlobRange, BlobStat, BlobStore } from './store.js';
-import { blobUriFor, sha256OfBytes } from './store.js';
+import { openVaultDb, type VaultDb } from "../db.js";
+import { VaultBlobBackpressureError } from "../errors.js";
+import { nowIso, uuidv7 } from "../ids.js";
+import {
+  BlobCache,
+  CACHE_BUDGET_CEILING_BYTES,
+  CACHE_BUDGET_FLOOR_BYTES,
+} from "./cache.js";
+import { BlobCustody } from "./custody.js";
+import { MemoryBlobStore } from "./local.js";
+import type { BlobRange, BlobStat, BlobStore } from "./store.js";
+import { blobUriFor, sha256OfBytes } from "./store.js";
 
 // ---------- an instrumented in-memory remote ----------
 
@@ -29,7 +33,7 @@ function makeRemote(): FakeRemote {
   let getGate: { promise: Promise<void>; resolve: () => void } | null = null;
   let getPending = 0;
   const store: FakeRemote = {
-    kind: 'fake-remote',
+    kind: "fake-remote",
     objects,
     calls,
     async put(sha, bytes) {
@@ -105,7 +109,7 @@ interface Harness {
 }
 
 let harnesses: VaultDb[] = [];
-describe('cache', () => {
+describe("cache", () => {
   afterEach(() => {
     for (const db of harnesses) db.close();
     harnesses = [];
@@ -127,7 +131,9 @@ describe('cache', () => {
         ? { replicationConcurrency: opts.replicationConcurrency }
         : {}),
       // Fast deterministic QoS timing for tests (no real waits).
-      ...(opts.qos ? { qosCooldownMs: 0, qosPollMs: 1 } : { qosCooldownMs: 0, qosPollMs: 1 }),
+      ...(opts.qos
+        ? { qosCooldownMs: 0, qosPollMs: 1 }
+        : { qosCooldownMs: 0, qosPollMs: 1 }),
     });
     const custody = new BlobCustody(local, () => ({ store: remote }), cache);
     return { db, local, remote, cache, custody, budget };
@@ -138,13 +144,13 @@ describe('cache', () => {
     db: VaultDb,
     sha: string,
     size: number,
-    mediaType = 'image/jpeg',
+    mediaType = "image/jpeg"
   ): string {
     const contentId = uuidv7();
     db.vault
       .prepare(
         `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?)`
       )
       .run(contentId, mediaType, blobUriFor(sha), sha, size, nowIso());
     return contentId;
@@ -154,15 +160,15 @@ describe('cache', () => {
   function insertDerivative(
     db: VaultDb,
     contentId: string,
-    variant: 'thumb' | 'preview',
+    variant: "thumb" | "preview",
     sha: string,
-    size: number,
+    size: number
   ): void {
     db.vault
       .prepare(
         `INSERT INTO core_content_derivative
          (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-       VALUES (?, ?, ?, ?, 'image/jpeg', ?, NULL, ?)`,
+       VALUES (?, ?, ?, ?, 'image/jpeg', ?, NULL, ?)`
       )
       .run(uuidv7(), contentId, variant, sha, size, nowIso());
   }
@@ -174,7 +180,7 @@ describe('cache', () => {
 
   // ---------- §3: budget derivation ----------
 
-  test('derived budget = clamp(1 GiB, 0.5*(free+spool), 100 GiB); explicit wins; memory = unlimited', () => {
+  test("derived budget = clamp(1 GiB, 0.5*(free+spool), 100 GiB); explicit wins; memory = unlimited", () => {
     const db = openVaultDb();
     harnesses.push(db);
     const local = new MemoryBlobStore();
@@ -214,9 +220,9 @@ describe('cache', () => {
     expect(explicit.budgetBytes()).toBe(777);
   });
 
-  test('metrics() reports hits, read-throughs, bytes served, evictions and spool/budget', async () => {
+  test("metrics() reports hits, read-throughs, bytes served, evictions and spool/budget", async () => {
     const h = makeHarness({ budgetBytes: 1000 });
-    const x = blobOf('metrics-blob');
+    const x = blobOf("metrics-blob");
     h.custody.ingestSync(x.bytes);
     await h.custody.replicate();
     h.custody.getSync(x.sha); // one local hit
@@ -232,12 +238,16 @@ describe('cache', () => {
     expect(m.spoolBytes).toBe(x.bytes.length); // promoted back
   });
 
-  test('a thumb (tiny) is pinned — never evicted under any cache pressure', async () => {
+  test("a thumb (tiny) is pinned — never evicted under any cache pressure", async () => {
     const h = makeHarness({ budgetBytes: 1_000_000 }); // room to ingest first
-    const thumb = blobOf('tiny-thumbnail-bytes');
+    const thumb = blobOf("tiny-thumbnail-bytes");
     h.custody.ingestSync(thumb.bytes);
-    const parent = insertContentItem(h.db, sha256OfBytes(Buffer.from('parent-original')), 999);
-    insertDerivative(h.db, parent, 'thumb', thumb.sha, thumb.bytes.length);
+    const parent = insertContentItem(
+      h.db,
+      sha256OfBytes(Buffer.from("parent-original")),
+      999
+    );
+    insertDerivative(h.db, parent, "thumb", thumb.sha, thumb.bytes.length);
     await h.custody.replicate(); // thumb is now replicated (evictable IF it weren't pinned)
     await h.custody.reconcile(new Set([thumb.sha]));
     expect(h.cache.isReplicated(thumb.sha)).toBe(true);
@@ -251,43 +261,49 @@ describe('cache', () => {
 
   // ---------- §3: evict-only-if-replicated — never delete the last local copy ----------
 
-  test('stale replica evidence cannot let admission delete the last local original', () => {
+  test("stale replica evidence cannot let admission delete the last local original", () => {
     const h = makeHarness({ budgetBytes: 20 });
-    const a = blobOf('0123456789');
+    const a = blobOf("0123456789");
     h.custody.ingestSync(a.bytes);
     h.cache.replica.mark(a.sha, a.bytes.length); // stale: the remote is actually absent
     expect(h.remote.objects.has(a.sha)).toBe(false);
     expect(h.cache.spoolBytes()).toBe(10);
 
-    const b = Buffer.from('abcdefghijklmno'); // 15 bytes → 10 + 15 = 25 > 20
+    const b = Buffer.from("abcdefghijklmno"); // 15 bytes → 10 + 15 = 25 > 20
     expect(() => h.custody.ingestSync(b)).toThrow(VaultBlobBackpressureError);
     expect(h.local.hasSync(a.sha)).toBe(true);
     expect(h.custody.metrics().backpressureEvents).toBe(1);
 
     // Deep-list healing removes the stale evidence and pins the local copy even
     // against an explicitly reconciled sweep.
-    h.cache.replica.heal('cas', new Set(), () => 0);
+    h.cache.replica.heal("cas", new Set(), () => 0);
     expect(h.cache.isReplicated(a.sha)).toBe(false);
-    expect(h.cache.runEviction(15, 0, 0, 'reconciled-sweep').evicted).toStrictEqual([]);
+    expect(
+      h.cache.runEviction(15, 0, 0, "reconciled-sweep").evicted
+    ).toStrictEqual([]);
     expect(h.local.hasSync(a.sha)).toBe(true);
   });
 
-  test('the pressure primitive refuses an original even with stale replica evidence', () => {
+  test("the pressure primitive refuses an original even with stale replica evidence", () => {
     const h = makeHarness({ budgetBytes: 1000 });
-    const a = blobOf('unreplicated');
+    const a = blobOf("unreplicated");
     h.custody.ingestSync(a.bytes);
     h.cache.replica.mark(a.sha, a.bytes.length);
     expect(h.local.hasSync(a.sha)).toBe(true);
   });
 
-  test('eviction sheds previews before originals', async () => {
+  test("eviction sheds previews before originals", async () => {
     const h = makeHarness({ budgetBytes: 1000 });
-    const preview = blobOf('preview-medium-bytes-................'); // larger
-    const original = blobOf('original-bytes');
+    const preview = blobOf("preview-medium-bytes-................"); // larger
+    const original = blobOf("original-bytes");
     h.custody.ingestSync(preview.bytes);
     h.custody.ingestSync(original.bytes);
-    const p = insertContentItem(h.db, sha256OfBytes(Buffer.from('p-parent')), 5000);
-    insertDerivative(h.db, p, 'preview', preview.sha, preview.bytes.length);
+    const p = insertContentItem(
+      h.db,
+      sha256OfBytes(Buffer.from("p-parent")),
+      5000
+    );
+    insertDerivative(h.db, p, "preview", preview.sha, preview.bytes.length);
     await h.custody.replicate(); // both replicated
 
     // Budget now only allows one of them — force eviction of exactly one.
@@ -297,10 +313,10 @@ describe('cache', () => {
     expect(h.local.hasSync(original.sha)).toBe(true);
   });
 
-  test('among originals, an accessed one outlives an untouched (older) one', async () => {
+  test("among originals, an accessed one outlives an untouched (older) one", async () => {
     const h = makeHarness({ budgetBytes: 1000 });
-    const stale = blobOf('stale-original-never-read');
-    const fresh = blobOf('fresh-original-read-recently');
+    const stale = blobOf("stale-original-never-read");
+    const fresh = blobOf("fresh-original-read-recently");
     h.custody.ingestSync(stale.bytes);
     h.custody.ingestSync(fresh.bytes);
     await h.custody.replicate();
@@ -315,9 +331,9 @@ describe('cache', () => {
     expect(h.local.hasSync(fresh.sha)).toBe(true);
   });
 
-  test('a remote-only blob reads through into local (promote), and is evictable later', async () => {
+  test("a remote-only blob reads through into local (promote), and is evictable later", async () => {
     const h = makeHarness({ budgetBytes: 1000 });
-    const x = blobOf('cloud-resident-photo');
+    const x = blobOf("cloud-resident-photo");
     h.custody.ingestSync(x.bytes);
     await h.custody.replicate();
     // Drop the local copy — now remote-only.
@@ -337,7 +353,7 @@ describe('cache', () => {
     expect(h.remote.objects.has(x.sha)).toBe(true); // the durable copy remains
   });
 
-  test('paced import: 16 MiB through a 4 MiB spool completes, spool never exceeds budget, nothing lost', async () => {
+  test("paced import: 16 MiB through a 4 MiB spool completes, spool never exceeds budget, nothing lost", async () => {
     const BUDGET = 4 * 1024 * 1024;
     const BLOB = 1 * 1024 * 1024; // 1 MiB blobs
     const COUNT = 16; // 16 MiB total, 4x the spool
@@ -355,8 +371,8 @@ describe('cache', () => {
       // Replicate, heal against the remote listing, then let the authorized sweep
       // reserve room for the next original; admission itself never sheds one.
       await h.custody.replicate();
-      h.cache.replica.heal('cas', new Set(h.remote.objects.keys()), () => BLOB);
-      h.cache.runEviction(BLOB, 0, 0, 'reconciled-sweep');
+      h.cache.replica.heal("cas", new Set(h.remote.objects.keys()), () => BLOB);
+      h.cache.runEviction(BLOB, 0, 0, "reconciled-sweep");
       return importNext(i + 1);
     };
     await importNext(0);
@@ -370,10 +386,10 @@ describe('cache', () => {
 
   // ---------- §4: statusFor/replicate perform ZERO remote list() calls ----------
 
-  test('statusFor and replicate never list() the remote; reconcile lists once', async () => {
+  test("statusFor and replicate never list() the remote; reconcile lists once", async () => {
     const h = makeHarness({ budgetBytes: 1_000_000 });
-    const a = blobOf('sha-a');
-    const b = blobOf('sha-b');
+    const a = blobOf("sha-a");
+    const b = blobOf("sha-b");
     h.custody.ingestSync(a.bytes);
     h.custody.ingestSync(b.bytes);
 
@@ -388,12 +404,12 @@ describe('cache', () => {
     expect(h.remote.calls.list).toBe(1); // the deep pass lists exactly once
   });
 
-  test('reconcile heals the replication index from the real remote listing', async () => {
+  test("reconcile heals the replication index from the real remote listing", async () => {
     const h = makeHarness({ budgetBytes: 1_000_000 });
-    const a = blobOf('index-heal-a');
+    const a = blobOf("index-heal-a");
     h.custody.ingestSync(a.bytes);
     // Forge a stale index row for a sha the remote never had.
-    const ghost = sha256OfBytes(Buffer.from('ghost'));
+    const ghost = sha256OfBytes(Buffer.from("ghost"));
     h.cache.replica.mark(ghost, 5);
     expect(h.cache.isReplicated(ghost)).toBe(true);
 
@@ -404,7 +420,7 @@ describe('cache', () => {
 
   // ---------- §2/§3: grid-scroll over a remote-only library — zero remote reads ----------
 
-  test('serving tinies for N items performs zero remote GETs (originals remote-only)', async () => {
+  test("serving tinies for N items performs zero remote GETs (originals remote-only)", async () => {
     const h = makeHarness({ budgetBytes: 1_000_000 });
     const N = 8;
     const thumbShas: string[] = [];
@@ -415,8 +431,12 @@ describe('cache', () => {
       h.custody.ingestSync(original.bytes);
       // Tiny: stays local (pinned), registered as a derivative.
       h.custody.ingestSync(thumb.bytes);
-      const parent = insertContentItem(h.db, original.sha, original.bytes.length);
-      insertDerivative(h.db, parent, 'thumb', thumb.sha, thumb.bytes.length);
+      const parent = insertContentItem(
+        h.db,
+        original.sha,
+        original.bytes.length
+      );
+      insertDerivative(h.db, parent, "thumb", thumb.sha, thumb.bytes.length);
       thumbShas.push(thumb.sha);
     }
     await h.custody.replicate();
@@ -431,12 +451,13 @@ describe('cache', () => {
     expect(h.custody.metrics().localHits).toBe(N);
   });
 
-  test('replicate pushes at most `concurrency` blobs in flight at once', async () => {
+  test("replicate pushes at most `concurrency` blobs in flight at once", async () => {
     const h = makeHarness({
       budgetBytes: 100_000_000,
       replicationConcurrency: 3,
     });
-    for (let i = 0; i < 9; i++) h.custody.ingestSync(Buffer.from(`bounded-parallel-${i}`));
+    for (let i = 0; i < 9; i++)
+      h.custody.ingestSync(Buffer.from(`bounded-parallel-${i}`));
     const gate = h.remote.gatePuts(); // every put() parks until released
 
     const pending = h.custody.replicate();
@@ -453,17 +474,18 @@ describe('cache', () => {
 
   // ---------- §7: QoS — interactive read-through preempts bulk replication ----------
 
-  test('bulk replication parks while an interactive read-through is in flight', async () => {
+  test("bulk replication parks while an interactive read-through is in flight", async () => {
     const h = makeHarness({ budgetBytes: 100_000_000, qos: true });
     // One blob already replicated + dropped locally → an interactive read must
     // fetch it from remote (that fetch is the "interactive read in flight").
-    const hot = blobOf('the-photo-the-user-is-looking-at');
+    const hot = blobOf("the-photo-the-user-is-looking-at");
     h.custody.ingestSync(hot.bytes);
     await h.custody.replicate();
     h.custody.deleteLocalSync(hot.sha);
 
     // A backlog to replicate.
-    for (let i = 0; i < 5; i++) h.custody.ingestSync(Buffer.from(`backlog-${i}`));
+    for (let i = 0; i < 5; i++)
+      h.custody.ingestSync(Buffer.from(`backlog-${i}`));
 
     const getGate = h.remote.gateGets(); // the interactive GET will hang here
     const reading = h.custody.open(hot.sha); // interactive read starts, parks in get()

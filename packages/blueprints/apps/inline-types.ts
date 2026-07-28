@@ -12,7 +12,7 @@
 // (`import type { InlineAppModule } from '@centraid/blueprints/apps/inline-types'`)
 // depend on it, and blueprints must never import `@centraid/client`. It carries
 // types only, so it type-checks under both the blueprints and client tsconfigs.
-import type { ComponentType } from 'react';
+import type { ComponentType } from "react";
 
 /** The `window.KIT_ASK` config each app seeds — mirrors index.html's inline block. */
 export interface InlineKitAsk {

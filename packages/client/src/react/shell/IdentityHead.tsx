@@ -1,11 +1,11 @@
-import { tileFinish } from '@centraid/design-tokens';
-import type { IconName } from '@centraid/design-tokens';
-import type { JSX } from 'react';
+import { tileFinish } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design-tokens";
+import type { JSX } from "react";
 
-import Icon from '../ui/Icon.js';
-import { DEFAULT_SPACE_ICON, PROFILE_COLORS } from './routes/SpaceModal.js';
+import Icon from "../ui/Icon.js";
+import { DEFAULT_SPACE_ICON, PROFILE_COLORS } from "./routes/SpaceModal.js";
 
-import styles from './IdentityHead.module.css';
+import styles from "./IdentityHead.module.css";
 
 // The sidebar's identity row (issue #599, Decision 14). It stands where the
 // space switcher used to, but it is not a switcher: a member is not "in" one
@@ -34,8 +34,14 @@ export interface IdentityHeadProps {
   switcherOpen?: boolean;
 }
 
-function Avatar({ icon, color }: { icon: IconName; color: string }): JSX.Element {
-  const finish = tileFinish(color, 'gradient');
+function Avatar({
+  icon,
+  color,
+}: {
+  icon: IconName;
+  color: string;
+}): JSX.Element {
+  const finish = tileFinish(color, "gradient");
   return (
     <span
       className={styles.avatar}
@@ -58,7 +64,7 @@ export default function IdentityHead({
   onSwitchGateway,
   switcherOpen,
 }: IdentityHeadProps): JSX.Element {
-  const name = space?.name ?? 'Loading…';
+  const name = space?.name ?? "Loading…";
   return (
     <div className={styles.row}>
       <button
@@ -84,11 +90,13 @@ export default function IdentityHead({
           type="button"
           className={styles.switch}
           aria-haspopup="menu"
-          aria-expanded={switcherOpen ? 'true' : 'false'}
-          data-open={switcherOpen ? 'true' : undefined}
+          aria-expanded={switcherOpen ? "true" : "false"}
+          data-open={switcherOpen ? "true" : undefined}
           aria-label="Switch gateway"
           title="Switch gateway"
-          onClick={(e) => onSwitchGateway(e.currentTarget.getBoundingClientRect())}
+          onClick={(e) =>
+            onSwitchGateway(e.currentTarget.getBoundingClientRect())
+          }
         >
           <Icon name="SwitchVert" size={14} />
         </button>

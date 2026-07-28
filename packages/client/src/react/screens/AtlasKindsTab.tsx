@@ -1,18 +1,18 @@
-import { Fragment, useState, type JSX } from 'react';
+import { Fragment, useState, type JSX } from "react";
 
-import { formatBytes, relativeWhen } from '../../format.js';
+import { formatBytes, relativeWhen } from "../../format.js";
 import type {
   AtlasCensusPack,
   AtlasCensusPayload,
   AtlasCensusTable,
   AtlasPulsePayload,
   AtlasPulseSeries,
-} from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
+} from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
 
-import a11y from '../styles/a11y.module.css';
-import styles from './AtlasKindsTab.module.css';
+import a11y from "../styles/a11y.module.css";
+import styles from "./AtlasKindsTab.module.css";
 
 // Kinds tab — the periodic table of the ontology (issue #441 B1). Every kind
 // the schema defines gets a permanent cell, grouped by pack; populated cells
@@ -35,7 +35,7 @@ export interface AtlasKindsTabProps {
   onOpenBrowse: (logical: string) => void;
 }
 
-type Metric = 'rows' | 'bytes';
+type Metric = "rows" | "bytes";
 
 /** Naive lower-case pluralization for the census sentence's ontology vocabulary
  *  (kind labels are singular, e.g. "Party" → "parties"). */
@@ -51,14 +51,16 @@ function pluralize(label: string): string {
 function denseDays(
   series: AtlasPulseSeries | undefined,
   since: string,
-  windowDays: number,
+  windowDays: number
 ): number[] {
   const byDay = new Map<string, number>();
   for (const d of series?.days ?? []) byDay.set(d.day, d.count);
   const base = new Date(since);
   const out: number[] = [];
   for (let i = 0; i < windowDays; i += 1) {
-    const day = new Date(base.getTime() + i * 86_400_000).toISOString().slice(0, 10);
+    const day = new Date(base.getTime() + i * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     out.push(byDay.get(day) ?? 0);
   }
   return out;
@@ -115,9 +117,9 @@ function KindCard({
 }): JSX.Element {
   const empty = table.rows === 0;
   const value =
-    metric === 'bytes'
+    metric === "bytes"
       ? table.bytes === null
-        ? '—'
+        ? "—"
         : formatBytes(table.bytes)
       : table.rows.toLocaleString();
 
@@ -129,7 +131,7 @@ function KindCard({
       title={table.logical}
       data-testid="atlas-kind-card"
       data-logical={table.logical}
-      data-empty={empty ? 'true' : undefined}
+      data-empty={empty ? "true" : undefined}
     >
       <span className={styles.cardLabel}>{table.label}</span>
       {empty ? (
@@ -173,7 +175,7 @@ function OntologyPack({
         <h2 className={styles.packLabel}>{pack.packLabel}</h2>
         <span className={styles.packMeta}>
           {pack.rows.toLocaleString()} rows
-          {pack.bytes === null ? '' : ` · ${formatBytes(pack.bytes)}`}
+          {pack.bytes === null ? "" : ` · ${formatBytes(pack.bytes)}`}
         </span>
       </header>
       <div className={styles.grid}>
@@ -221,14 +223,17 @@ function MachineryShelf({
         onClick={() => setOpen((o) => !o)}
         data-testid="atlas-machinery-toggle"
       >
-        <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={14} />
+        <Icon name={open ? "ChevronDown" : "ChevronRight"} size={14} />
         <span className={styles.machineryTitle}>Machinery</span>
         <span className={styles.machineryMeta}>
           {kindCount} kinds · {rowCount.toLocaleString()} rows
         </span>
       </button>
       {open ? (
-        <table className={styles.machineryTable} data-testid="atlas-machinery-table">
+        <table
+          className={styles.machineryTable}
+          data-testid="atlas-machinery-table"
+        >
           <thead>
             <tr>
               <th>Kind</th>
@@ -247,12 +252,14 @@ function MachineryShelf({
                 >
                   <td>{table.label}</td>
                   <td className={styles.machineryPack}>{pack.packLabel}</td>
-                  <td className={styles.numCol}>{table.rows.toLocaleString()}</td>
                   <td className={styles.numCol}>
-                    {table.bytes === null ? '—' : formatBytes(table.bytes)}
+                    {table.rows.toLocaleString()}
+                  </td>
+                  <td className={styles.numCol}>
+                    {table.bytes === null ? "—" : formatBytes(table.bytes)}
                   </td>
                 </tr>
-              )),
+              ))
             )}
           </tbody>
         </table>
@@ -268,16 +275,18 @@ export default function AtlasKindsTab({
   onRefresh,
   onOpenBrowse,
 }: AtlasKindsTabProps): JSX.Element {
-  const [metric, setMetric] = useState<Metric>('rows');
+  const [metric, setMetric] = useState<Metric>("rows");
 
-  const ontologyPacks = stats.packs.filter((p) => p.packKind === 'ontology');
-  const machineryPacks = stats.packs.filter((p) => p.packKind === 'machinery');
+  const ontologyPacks = stats.packs.filter((p) => p.packKind === "ontology");
+  const machineryPacks = stats.packs.filter((p) => p.packKind === "machinery");
   const bytesUnknown = stats.totals.bytes === null;
 
   // Pulse indexed by logical `schema.table` (matches census `table.logical`).
   // `null` (not an empty map) when the pulse is unknown, so cards can tell
   // "no writes" apart from "we didn't measure" — only the former is "quiet".
-  const pulseBy = pulse ? new Map(pulse.series.map((s) => [s.entityType, s])) : null;
+  const pulseBy = pulse
+    ? new Map(pulse.series.map((s) => [s.entityType, s]))
+    : null;
 
   // Lead the census sentence with the fullest kinds, in ontology vocabulary.
   const leadKinds = ontologyPacks
@@ -299,48 +308,59 @@ export default function AtlasKindsTab({
         <p className={styles.censusSentence}>
           {leadKinds.length === 0 ? (
             <>
-              Your vault is empty — {num('0', 'z')} of {num(String(stats.totals.kinds), 'k')} kinds
-              written.
+              Your vault is empty — {num("0", "z")} of{" "}
+              {num(String(stats.totals.kinds), "k")} kinds written.
             </>
           ) : (
             <>
-              Your vault knows{' '}
+              Your vault knows{" "}
               {leadKinds.map((t, i) => (
                 <Fragment key={t.logical}>
-                  {i > 0 ? (i === leadKinds.length - 1 ? ', and ' : ', ') : ''}
-                  {num(t.rows.toLocaleString(), `n-${t.logical}`)} {pluralize(t.label)}
+                  {i > 0 ? (i === leadKinds.length - 1 ? ", and " : ", ") : ""}
+                  {num(t.rows.toLocaleString(), `n-${t.logical}`)}{" "}
+                  {pluralize(t.label)}
                 </Fragment>
               ))}
-              {' · '}
-              {num(sizeLabel, 'sz')} across {num(String(stats.totals.populatedKinds), 'pk')} of{' '}
-              {num(String(stats.totals.kinds), 'tk')} kinds.
+              {" · "}
+              {num(sizeLabel, "sz")} across{" "}
+              {num(String(stats.totals.populatedKinds), "pk")} of{" "}
+              {num(String(stats.totals.kinds), "tk")} kinds.
             </>
           )}
         </p>
         <div className={styles.censusControls}>
-          <div className={styles.metricToggle} role="radiogroup" aria-label="Show rows or bytes">
-            <label className={styles.metricOption} data-active={String(metric === 'rows')}>
-              <input
-                type="radio"
-                className={a11y.srControl}
-                name="atlas-census-metric"
-                checked={metric === 'rows'}
-                onChange={() => setMetric('rows')}
-              />
-              Rows
-            </label>
+          <div
+            className={styles.metricToggle}
+            role="radiogroup"
+            aria-label="Show rows or bytes"
+          >
             <label
               className={styles.metricOption}
-              data-active={String(metric === 'bytes')}
-              title={bytesUnknown ? 'Byte sizes need the dbstat measure' : undefined}
+              data-active={String(metric === "rows")}
             >
               <input
                 type="radio"
                 className={a11y.srControl}
                 name="atlas-census-metric"
-                checked={metric === 'bytes'}
+                checked={metric === "rows"}
+                onChange={() => setMetric("rows")}
+              />
+              Rows
+            </label>
+            <label
+              className={styles.metricOption}
+              data-active={String(metric === "bytes")}
+              title={
+                bytesUnknown ? "Byte sizes need the dbstat measure" : undefined
+              }
+            >
+              <input
+                type="radio"
+                className={a11y.srControl}
+                name="atlas-census-metric"
+                checked={metric === "bytes"}
                 disabled={bytesUnknown}
-                onChange={() => setMetric('bytes')}
+                onChange={() => setMetric("bytes")}
               />
               Bytes
             </label>
@@ -353,7 +373,9 @@ export default function AtlasKindsTab({
             aria-label="Refresh census"
           >
             <Icon name="Refresh" size={13} />
-            <span className={styles.refreshStamp}>{relativeWhen(stats.generatedAt)}</span>
+            <span className={styles.refreshStamp}>
+              {relativeWhen(stats.generatedAt)}
+            </span>
           </button>
         </div>
       </header>

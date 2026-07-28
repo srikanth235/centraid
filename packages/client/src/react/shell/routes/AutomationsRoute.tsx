@@ -1,10 +1,13 @@
-import { useCallback, type JSX } from 'react';
+import { useCallback, type JSX } from "react";
 
-import AutomationsOverviewScreen from '../../screens/AutomationsOverviewScreen.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
-import { adoptOverviewSuggestion, loadAutomationsOverviewData } from './automationsOverviewLoad.js';
-import { loadOverviewSuggestions } from './templatesData.js';
+import AutomationsOverviewScreen from "../../screens/AutomationsOverviewScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import {
+  adoptOverviewSuggestion,
+  loadAutomationsOverviewData,
+} from "./automationsOverviewLoad.js";
+import { loadOverviewSuggestions } from "./templatesData.js";
 
 // React-owned Automations overview — the fleet (Automations UI revamp, see
 // receipts/issue-387-automations-ui-revamp.md). loadData fetches the rows, the run feed, and the
@@ -27,7 +30,7 @@ export default function AutomationsRoute(): JSX.Element {
     (templateId: string): void => {
       void adoptOverviewSuggestion(templateId, { navigate, showToast });
     },
-    [navigate, showToast],
+    [navigate, showToast]
   );
 
   return (
@@ -35,10 +38,14 @@ export default function AutomationsRoute(): JSX.Element {
       <AutomationsOverviewScreen
         loadData={loadData}
         loadSuggestions={loadOverviewSuggestions}
-        onBrowseTemplates={() => navigate({ kind: 'templates' })}
-        onNewAutomation={() => navigate({ kind: 'automation-editor' })}
-        onOpenAutomation={(ref) => navigate({ kind: 'automation-view', automationId: ref })}
-        onOpenRun={(automationId, runId) => navigate({ kind: 'run-view', automationId, runId })}
+        onBrowseTemplates={() => navigate({ kind: "templates" })}
+        onNewAutomation={() => navigate({ kind: "automation-editor" })}
+        onOpenAutomation={(ref) =>
+          navigate({ kind: "automation-view", automationId: ref })
+        }
+        onOpenRun={(automationId, runId) =>
+          navigate({ kind: "run-view", automationId, runId })
+        }
         onUseSuggestion={useSuggestion}
       />
     </PageScroll>

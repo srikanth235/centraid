@@ -22,8 +22,8 @@
  * bucket," not a security boundary.
  */
 
-import { createHash } from 'node:crypto';
-import http from 'node:http';
+import { createHash } from "node:crypto";
+import http from "node:http";
 
 export interface S3TestServerRequest {
   method: string;
@@ -69,7 +69,10 @@ export class S3TestServer {
   private readonly server: http.Server;
   private readonly listPageSize: number;
   /** In-flight multipart uploads (issue #367 §C8), keyed by uploadId. */
-  private readonly multipart = new Map<string, { key: string; parts: Map<number, Buffer> }>();
+  private readonly multipart = new Map<
+    string,
+    { key: string; parts: Map<number, Buffer> }
+  >();
   private nextUploadId = 1;
 
   private constructor(server: http.Server, port: number, listPageSize: number) {
@@ -81,7 +84,7 @@ export class S3TestServer {
 
   static async start(options: S3TestServerOptions = {}): Promise<S3TestServer> {
     const listPageSize = options.listPageSize ?? 1000;
-    const host = options.host ?? '127.0.0.1';
+    const host = options.host ?? "127.0.0.1";
     // The request handler needs `self` to call instance methods, but `self`
     // doesn't exist until after the constructor runs (which needs the
     // already-listening server's assigned port) — tie the knot with a
@@ -89,17 +92,18 @@ export class S3TestServer {
     let self: S3TestServer;
     const server = http.createServer((req, res) => {
       self.handle(req, res).catch((err: unknown) => {
-        if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' });
+        if (!res.headersSent)
+          res.writeHead(500, { "content-type": "text/plain" });
         res.end(err instanceof Error ? err.message : String(err));
       });
     });
     await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
+      server.once("error", reject);
       server.listen(options.port ?? 0, host, () => resolve());
     });
     const address = server.address();
-    if (address === null || typeof address === 'string') {
-      throw new Error('S3TestServer: failed to bind a TCP port');
+    if (address === null || typeof address === "string") {
+      throw new Error("S3TestServer: failed to bind a TCP port");
     }
     self = new S3TestServer(server, address.port, listPageSize);
     return self;
@@ -144,7 +148,7 @@ export class S3TestServer {
 
   getObjectMetadataDirect(
     bucket: string,
-    key: string,
+    key: string
   ):
     | {
         size: number;
@@ -168,7 +172,7 @@ export class S3TestServer {
   }
 
   /** Every stored key under `bucket/prefix`, with the `bucket/` stripped. */
-  listDirect(bucket: string, prefix = ''): string[] {
+  listDirect(bucket: string, prefix = ""): string[] {
     const bucketPrefix = `${bucket}/`;
     const fullPrefix = `${bucketPrefix}${prefix}`;
     return [...this.objects.keys()]
@@ -180,18 +184,21 @@ export class S3TestServer {
   private putStoredObject(key: string, body: Buffer): void {
     this.objects.set(key, {
       body,
-      etagOrHash: createHash('sha256').update(body).digest('hex'),
+      etagOrHash: createHash("sha256").update(body).digest("hex"),
       storedAt: Math.floor(Date.now() / 1000),
-      storageClass: 'STANDARD',
+      storageClass: "STANDARD",
     });
   }
 
   // --- HTTP handling ---
 
-  private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+  private async handle(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    const url = new URL(req.url ?? "/", "http://localhost");
     this.requests.push({
-      method: req.method ?? '',
+      method: req.method ?? "",
       path: url.pathname + url.search,
       headers: req.headers,
     });
@@ -199,7 +206,7 @@ export class S3TestServer {
     // "{bucket}/{key...}" or bare "{bucket}" (listing/bucket-root requests).
     const key = decodeURIComponent(url.pathname.slice(1));
 
-    if (req.method === 'GET' && url.searchParams.get('list-type') === '2') {
+    if (req.method === "GET" && url.searchParams.get("list-type") === "2") {
       this.handleList(res, url, key);
       return;
     }
@@ -209,25 +216,25 @@ export class S3TestServer {
     // on a POST = complete; `uploadId` + `partNumber` on a PUT = one part;
     // `uploadId` alone on a DELETE = abort. Real S3 disambiguates the same
     // way — these query params never appear on a plain object PUT/DELETE.
-    if (req.method === 'POST' && url.searchParams.has('uploads')) {
+    if (req.method === "POST" && url.searchParams.has("uploads")) {
       const uploadId = String(this.nextUploadId++);
       this.multipart.set(uploadId, { key, parts: new Map() });
-      res.writeHead(200, { 'content-type': 'application/xml' });
+      res.writeHead(200, { "content-type": "application/xml" });
       res.end(
         `<?xml version="1.0" encoding="UTF-8"?><InitiateMultipartUploadResult>` +
           `<Bucket></Bucket><Key>${escapeXml(key)}</Key><UploadId>${uploadId}</UploadId>` +
-          `</InitiateMultipartUploadResult>`,
+          `</InitiateMultipartUploadResult>`
       );
       return;
     }
 
     if (
-      req.method === 'PUT' &&
-      url.searchParams.has('uploadId') &&
-      url.searchParams.has('partNumber')
+      req.method === "PUT" &&
+      url.searchParams.has("uploadId") &&
+      url.searchParams.has("partNumber")
     ) {
-      const uploadId = url.searchParams.get('uploadId') ?? '';
-      const partNumber = Number(url.searchParams.get('partNumber'));
+      const uploadId = url.searchParams.get("uploadId") ?? "";
+      const partNumber = Number(url.searchParams.get("partNumber"));
       const upload = this.multipart.get(uploadId);
       if (!upload) {
         res.writeHead(404, {});
@@ -241,8 +248,8 @@ export class S3TestServer {
       return;
     }
 
-    if (req.method === 'POST' && url.searchParams.has('uploadId')) {
-      const uploadId = url.searchParams.get('uploadId') ?? '';
+    if (req.method === "POST" && url.searchParams.has("uploadId")) {
+      const uploadId = url.searchParams.get("uploadId") ?? "";
       const upload = this.multipart.get(uploadId);
       if (!upload) {
         res.writeHead(404, {});
@@ -250,26 +257,28 @@ export class S3TestServer {
         return;
       }
       await readBody(req); // the complete-request XML body — parts already came in via PUT
-      const ordered = [...upload.parts.entries()].sort((a, b) => a[0] - b[0]).map(([, buf]) => buf);
+      const ordered = [...upload.parts.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, buf]) => buf);
       this.putStoredObject(upload.key, Buffer.concat(ordered));
       this.multipart.delete(uploadId);
-      res.writeHead(200, { 'content-type': 'application/xml' });
+      res.writeHead(200, { "content-type": "application/xml" });
       res.end(
         `<?xml version="1.0" encoding="UTF-8"?><CompleteMultipartUploadResult>` +
-          `<Bucket></Bucket><Key>${escapeXml(upload.key)}</Key></CompleteMultipartUploadResult>`,
+          `<Bucket></Bucket><Key>${escapeXml(upload.key)}</Key></CompleteMultipartUploadResult>`
       );
       return;
     }
 
-    if (req.method === 'DELETE' && url.searchParams.has('uploadId')) {
-      const uploadId = url.searchParams.get('uploadId') ?? '';
+    if (req.method === "DELETE" && url.searchParams.has("uploadId")) {
+      const uploadId = url.searchParams.get("uploadId") ?? "";
       this.multipart.delete(uploadId);
       res.writeHead(204, {});
       res.end();
       return;
     }
 
-    if (req.method === 'PUT') {
+    if (req.method === "PUT") {
       const body = await readBody(req);
       this.putStoredObject(key, body);
       res.writeHead(200, {});
@@ -277,31 +286,31 @@ export class S3TestServer {
       return;
     }
 
-    if (req.method === 'GET') {
+    if (req.method === "GET") {
       const obj = this.objects.get(key)?.body;
       if (!obj) {
         res.writeHead(404, {});
         res.end();
         return;
       }
-      res.writeHead(200, { 'content-length': String(obj.length) });
+      res.writeHead(200, { "content-length": String(obj.length) });
       res.end(obj);
       return;
     }
 
-    if (req.method === 'HEAD') {
+    if (req.method === "HEAD") {
       const obj = this.objects.get(key)?.body;
       if (!obj) {
         res.writeHead(404, {});
         res.end();
         return;
       }
-      res.writeHead(200, { 'content-length': String(obj.length) });
+      res.writeHead(200, { "content-length": String(obj.length) });
       res.end();
       return;
     }
 
-    if (req.method === 'DELETE') {
+    if (req.method === "DELETE") {
       this.objects.delete(key);
       res.writeHead(204, {});
       res.end();
@@ -313,13 +322,17 @@ export class S3TestServer {
   }
 
   private handleList(res: http.ServerResponse, url: URL, bucket: string): void {
-    const prefix = url.searchParams.get('prefix') ?? '';
+    const prefix = url.searchParams.get("prefix") ?? "";
     const bucketPrefix = `${bucket}/`;
     const allMatching = [...this.objects.keys()]
-      .filter((k) => k.startsWith(bucketPrefix) && k.slice(bucketPrefix.length).startsWith(prefix))
+      .filter(
+        (k) =>
+          k.startsWith(bucketPrefix) &&
+          k.slice(bucketPrefix.length).startsWith(prefix)
+      )
       .sort();
     const pageSize = this.listPageSize;
-    const token = url.searchParams.get('continuation-token');
+    const token = url.searchParams.get("continuation-token");
     const startIndex = token ? Math.trunc(Number(token)) : 0;
     const page = allMatching.slice(startIndex, startIndex + pageSize);
     const isTruncated = startIndex + pageSize < allMatching.length;
@@ -328,37 +341,42 @@ export class S3TestServer {
         const objKey = k.slice(bucketPrefix.length);
         const object = this.objects.get(k);
         const size = object?.body.length ?? 0;
-        const etag = object?.etagOrHash ?? '';
-        const lastModified = new Date((object?.storedAt ?? 0) * 1000).toISOString();
-        const storageClass = object?.storageClass ?? 'STANDARD';
+        const etag = object?.etagOrHash ?? "";
+        const lastModified = new Date(
+          (object?.storedAt ?? 0) * 1000
+        ).toISOString();
+        const storageClass = object?.storageClass ?? "STANDARD";
         return (
           `<Contents><Key>${escapeXml(objKey)}</Key><Size>${size}</Size>` +
           `<ETag>&quot;${etag}&quot;</ETag><LastModified>${lastModified}</LastModified>` +
           `<StorageClass>${storageClass}</StorageClass></Contents>`
         );
       })
-      .join('');
+      .join("");
     const xml =
       `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult>${contents}` +
       `<IsTruncated>${isTruncated}</IsTruncated>` +
       (isTruncated
         ? `<NextContinuationToken>${startIndex + pageSize}</NextContinuationToken>`
-        : '') +
+        : "") +
       `</ListBucketResult>`;
-    res.writeHead(200, { 'content-type': 'application/xml' });
+    res.writeHead(200, { "content-type": "application/xml" });
     res.end(xml);
   }
 }
 
 function escapeXml(s: string): string {
-  return s.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;');
+  return s
+    .replace(/&/gu, "&amp;")
+    .replace(/</gu, "&lt;")
+    .replace(/>/gu, "&gt;");
 }
 
 function readBody(req: http.IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
+    req.on("data", (c: Buffer) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
   });
 }

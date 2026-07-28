@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import type { CentraidChangelogResult } from '../../centraid-api.js';
+import type { CentraidChangelogResult } from "../../centraid-api.js";
 
 export type ChangelogState =
-  | { status: 'loading' }
-  | { status: 'ready'; result: CentraidChangelogResult }
-  | { status: 'error'; message: string };
+  | { status: "loading" }
+  | { status: "ready"; result: CentraidChangelogResult }
+  | { status: "error"; message: string };
 
 /**
  * Fetch the "What's new" changelog (GitHub release notes, fetched + cached in
@@ -19,20 +19,20 @@ async function loadChangelog(): Promise<ChangelogState> {
   const get = window.CentraidApi.getChangelog;
   if (!get)
     return {
-      status: 'error',
-      message: 'Changelog is unavailable in this build.',
+      status: "error",
+      message: "Changelog is unavailable in this build.",
     };
   try {
-    return { status: 'ready', result: await get() };
+    return { status: "ready", result: await get() };
   } catch (err: unknown) {
     return {
-      status: 'error',
-      message: err instanceof Error ? err.message : 'Failed to load changelog.',
+      status: "error",
+      message: err instanceof Error ? err.message : "Failed to load changelog.",
     };
   }
 }
 
-const LOADING: ChangelogState = { status: 'loading' };
+const LOADING: ChangelogState = { status: "loading" };
 
 export function useChangelog(): { state: ChangelogState; reload: () => void } {
   // `attempt` is the retry counter; the settled state is stamped with the
@@ -43,7 +43,8 @@ export function useChangelog(): { state: ChangelogState; reload: () => void } {
     attempt: number;
     state: ChangelogState;
   } | null>(null);
-  const state = settled !== null && settled.attempt === attempt ? settled.state : LOADING;
+  const state =
+    settled !== null && settled.attempt === attempt ? settled.state : LOADING;
 
   useEffect(() => {
     let alive = true;

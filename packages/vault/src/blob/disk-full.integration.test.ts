@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync } from "node:child_process";
 /*
  * REAL disk-full round-trip (issue #351 wave 4). The rest of this package's
  * disk-full coverage (../errors.test.ts) induces failures via `PRAGMA
@@ -15,14 +15,14 @@ import { execFileSync } from 'node:child_process';
  * files under `os.tmpdir()`, always cleaned up (detach + rm) in a `finally`
  * even when an assertion throws.
  */
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import path from "node:path";
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { describe, expect, test, vi } from 'vitest';
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { describe, expect, test, vi } from "vitest";
 
-import { VaultDiskFullError } from '../errors.js';
-import { FsBlobStore } from './local.js';
+import { VaultDiskFullError } from "../errors.js";
+import { FsBlobStore } from "./local.js";
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -37,36 +37,44 @@ function listFilesRecursive(dir: string): string[] {
   return out;
 }
 
-describe('disk-full', () => {
-  test('FsBlobStore.putSync against a REAL full filesystem: ENOSPC, no leftover tmp file, VaultDiskFullError', (t) => {
-    if (process.platform !== 'darwin') {
-      t.skip('disk-full e2e only runs on darwin (hdiutil)');
+describe("disk-full", () => {
+  test("FsBlobStore.putSync against a REAL full filesystem: ENOSPC, no leftover tmp file, VaultDiskFullError", (t) => {
+    if (process.platform !== "darwin") {
+      t.skip("disk-full e2e only runs on darwin (hdiutil)");
       return;
     }
-    if (process.env.CENTRAID_DISKFULL_E2E !== '1') {
-      t.skip('set CENTRAID_DISKFULL_E2E=1 (on darwin) to run the real hdiutil disk-full e2e');
+    if (process.env.CENTRAID_DISKFULL_E2E !== "1") {
+      t.skip(
+        "set CENTRAID_DISKFULL_E2E=1 (on darwin) to run the real hdiutil disk-full e2e"
+      );
       return;
     }
 
-    const work = tempDirSync('centraid-diskfull-e2e-');
-    const image = path.join(work, 'diskfull.dmg');
-    const mount = path.join(work, 'mnt');
+    const work = tempDirSync("centraid-diskfull-e2e-");
+    const image = path.join(work, "diskfull.dmg");
+    const mount = path.join(work, "mnt");
     mkdirSync(mount, { recursive: true });
     let attached = false;
 
     try {
-      execFileSync('hdiutil', [
-        'create',
-        '-size',
-        '5m',
-        '-fs',
-        'APFS',
-        '-volname',
-        'CentraidDiskFullE2E',
-        '-quiet',
+      execFileSync("hdiutil", [
+        "create",
+        "-size",
+        "5m",
+        "-fs",
+        "APFS",
+        "-volname",
+        "CentraidDiskFullE2E",
+        "-quiet",
         image,
       ]);
-      execFileSync('hdiutil', ['attach', image, '-mountpoint', mount, '-nobrowse']);
+      execFileSync("hdiutil", [
+        "attach",
+        image,
+        "-mountpoint",
+        mount,
+        "-nobrowse",
+      ]);
       attached = true;
 
       const store = new FsBlobStore(mount);
@@ -75,7 +83,7 @@ describe('disk-full', () => {
       // before 64 writes).
       let failure: unknown;
       for (let i = 0; i < 64 && failure === undefined; i++) {
-        const sha = i.toString(16).padStart(64, '0');
+        const sha = i.toString(16).padStart(64, "0");
         const bytes = Buffer.alloc(1024 * 1024, i);
         try {
           store.putSync(sha, bytes);
@@ -86,16 +94,18 @@ describe('disk-full', () => {
 
       expect(failure).toBeDefined();
       expect(failure).toBeInstanceOf(VaultDiskFullError);
-      expect((failure as VaultDiskFullError).context).toBe('blob CAS write');
+      expect((failure as VaultDiskFullError).context).toBe("blob CAS write");
 
       // No stray `.tmp` file anywhere under the fan-out tree — the failed
       // write's temp file was cleaned up before the error propagated.
-      const strayTmp = listFilesRecursive(mount).filter((f) => f.endsWith('.tmp'));
+      const strayTmp = listFilesRecursive(mount).filter((f) =>
+        f.endsWith(".tmp")
+      );
       expect(strayTmp).toStrictEqual([]);
     } finally {
       if (attached) {
         try {
-          execFileSync('hdiutil', ['detach', mount, '-force']);
+          execFileSync("hdiutil", ["detach", mount, "-force"]);
         } catch {
           /* best-effort — a leaked test volume from a killed run is a known cost */
         }

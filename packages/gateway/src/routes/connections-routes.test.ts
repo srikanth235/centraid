@@ -1,15 +1,15 @@
-import crypto from 'node:crypto';
-import http from 'node:http';
+import crypto from "node:crypto";
+import http from "node:http";
 /** BYO OAuth PKCE ceremony over HTTP, including sealed tokens and safe health output. */
 
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from '../serve/assist-oauth.js';
-import { ConnectionBroker } from '../serve/connection-broker.js';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import { makeConnectionsRouteHandler } from './connections-routes.js';
+import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from "../serve/assist-oauth.js";
+import { ConnectionBroker } from "../serve/connection-broker.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import { makeConnectionsRouteHandler } from "./connections-routes.js";
 
 const silentLogger = {
   info: () => undefined,
@@ -18,22 +18,29 @@ const silentLogger = {
 };
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('connections-routes', () => {
+describe("connections-routes", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
   async function startHandlerServer(
-    handler: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>,
+    handler: (
+      req: http.IncomingMessage,
+      res: http.ServerResponse
+    ) => Promise<boolean>
   ): Promise<string> {
     const server = http.createServer((req, res) => {
       void handler(req, res).then((owned) => {
         if (!owned) {
           res.statusCode = 404;
-          res.end('{}');
+          res.end("{}");
         }
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve)
+    );
     cleanups.push(() => {
       server.closeAllConnections();
       server.close();
@@ -48,24 +55,27 @@ describe('connections-routes', () => {
     requests: Array<Record<string, string>>;
     respond: (status: number, body: Record<string, unknown>) => void;
   }> {
-    const responses: Array<{ status: number; body: Record<string, unknown> }> = [];
+    const responses: Array<{ status: number; body: Record<string, unknown> }> =
+      [];
     const requests: Array<Record<string, string>> = [];
     const server = http.createServer((req, res) => {
-      let raw = '';
-      req.on('data', (c: Buffer) => {
+      let raw = "";
+      req.on("data", (c: Buffer) => {
         raw += c.toString();
       });
-      req.on('end', () => {
+      req.on("end", () => {
         requests.push(Object.fromEntries(new URLSearchParams(raw)));
         const next = responses.shift() ?? {
           status: 500,
-          body: { error: 'unscripted' },
+          body: { error: "unscripted" },
         };
-        res.writeHead(next.status, { 'content-type': 'application/json' });
+        res.writeHead(next.status, { "content-type": "application/json" });
         res.end(JSON.stringify(next.body));
       });
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve)
+    );
     cleanups.push(() => {
       server.closeAllConnections();
       server.close();
@@ -78,168 +88,192 @@ describe('connections-routes', () => {
     };
   }
 
-  test('the whole ceremony: configure → authorize → callback → active with sealed tokens', async () => {
+  test("the whole ceremony: configure → authorize → callback → active with sealed tokens", async () => {
     const dir = await tempDir();
     const registry = openVaultRegistry({
       rootDir: dir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
-    registry.create('Personal');
+    registry.create("Personal");
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
-    const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
+    const base = await startHandlerServer(
+      makeConnectionsRouteHandler(registry, broker)
+    );
     const tokens = await startTokenServer();
 
     // 1. Configure the BYO client.
     const configured = (await (
       await fetch(`${base}/centraid/_vault/connections`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
-          kind: 'pull.gmail',
-          label: 'personal',
-          cred_kind: 'oauth2',
+          kind: "pull.gmail",
+          label: "personal",
+          cred_kind: "oauth2",
           // A custom provider keeps this test on the free-form BYO lane.
-          provider: 'test-oauth',
-          auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+          provider: "test-oauth",
+          auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
           token_url: tokens.url,
-          scopes: 'https://www.googleapis.com/auth/gmail.readonly',
-          client_id: 'cid.apps.googleusercontent.com',
-          client_secret: 'GOCSPX-route-test',
-          allowed_hosts: ['gmail.googleapis.com'],
+          scopes: "https://www.googleapis.com/auth/gmail.readonly",
+          client_id: "cid.apps.googleusercontent.com",
+          client_secret: "GOCSPX-route-test",
+          allowed_hosts: ["gmail.googleapis.com"],
         }),
       })
     ).json()) as Record<string, unknown>;
-    expect(configured).toMatchObject({ ok: true, status: 'needs-auth' });
+    expect(configured).toMatchObject({ ok: true, status: "needs-auth" });
     const connectionId = configured.connection_id as string;
 
-    const listing = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    const listing = (await (
+      await fetch(`${base}/centraid/_vault/connections`)
+    ).json()) as {
       connections: Array<Record<string, unknown>>;
     };
     expect(listing.connections).toHaveLength(1);
     expect(listing.connections[0]).toMatchObject({
-      kind: 'pull.gmail',
-      status: 'needs-auth',
-      cred_kind: 'oauth2',
-      auth_note: expect.stringContaining('authorization pending'),
+      kind: "pull.gmail",
+      status: "needs-auth",
+      cred_kind: "oauth2",
+      auth_note: expect.stringContaining("authorization pending"),
       has_refresh_token: false,
-      allowed_hosts: ['gmail.googleapis.com'],
+      allowed_hosts: ["gmail.googleapis.com"],
     });
-    expect(JSON.stringify(listing)).not.toContain('GOCSPX');
-    expect(JSON.stringify(listing)).not.toContain('sealed:v1:');
+    expect(JSON.stringify(listing)).not.toContain("GOCSPX");
+    expect(JSON.stringify(listing)).not.toContain("sealed:v1:");
 
     const authorize = (await (
-      await fetch(`${base}/centraid/_vault/connections/${connectionId}/authorize`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      })
+      await fetch(
+        `${base}/centraid/_vault/connections/${connectionId}/authorize`,
+        {
+          method: "POST",
+          body: JSON.stringify({}),
+        }
+      )
     ).json()) as Record<string, unknown>;
     const authUrl = new URL(authorize.auth_url as string);
-    expect(authUrl.origin + authUrl.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
-    expect(authUrl.searchParams.get('client_id')).toBe('cid.apps.googleusercontent.com');
-    expect(authUrl.searchParams.get('code_challenge_method')).toBe('S256');
-    expect(authUrl.searchParams.get('code_challenge')).toBeTruthy();
-    expect(authUrl.searchParams.get('access_type')).toBe('offline');
-    const state = authUrl.searchParams.get('state')!;
-    expect(authorize.redirect_uri).toContain('/centraid/_vault/oauth/callback');
+    expect(authUrl.origin + authUrl.pathname).toBe(
+      "https://accounts.google.com/o/oauth2/v2/auth"
+    );
+    expect(authUrl.searchParams.get("client_id")).toBe(
+      "cid.apps.googleusercontent.com"
+    );
+    expect(authUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(authUrl.searchParams.get("code_challenge")).toBeTruthy();
+    expect(authUrl.searchParams.get("access_type")).toBe("offline");
+    const state = authUrl.searchParams.get("state")!;
+    expect(authorize.redirect_uri).toContain("/centraid/_vault/oauth/callback");
 
     tokens.respond(200, {
-      access_token: 'ya29.ceremony',
-      refresh_token: '1//ceremony',
+      access_token: "ya29.ceremony",
+      refresh_token: "1//ceremony",
       expires_in: 3600,
-      token_type: 'Bearer',
+      token_type: "Bearer",
     });
     const callback = await fetch(
-      `${base}/centraid/_vault/oauth/callback?state=${state}&code=auth-code-1`,
+      `${base}/centraid/_vault/oauth/callback?state=${state}&code=auth-code-1`
     );
     expect(callback.status).toBe(200);
-    await expect(callback.text()).resolves.toContain('Connected');
+    await expect(callback.text()).resolves.toContain("Connected");
 
     expect(tokens.requests).toHaveLength(1);
     expect(tokens.requests[0]).toMatchObject({
-      grant_type: 'authorization_code',
-      code: 'auth-code-1',
-      client_id: 'cid.apps.googleusercontent.com',
-      client_secret: 'GOCSPX-route-test',
+      grant_type: "authorization_code",
+      code: "auth-code-1",
+      client_id: "cid.apps.googleusercontent.com",
+      client_secret: "GOCSPX-route-test",
     });
     const verifier = tokens.requests[0]!.code_verifier!;
-    expect(crypto.createHash('sha256').update(verifier).digest('base64url')).toBe(
-      authUrl.searchParams.get('code_challenge'),
-    );
+    expect(
+      crypto.createHash("sha256").update(verifier).digest("base64url")
+    ).toBe(authUrl.searchParams.get("code_challenge"));
 
-    const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    const after = (await (
+      await fetch(`${base}/centraid/_vault/connections`)
+    ).json()) as {
       connections: Array<Record<string, unknown>>;
     };
     expect(after.connections[0]).toMatchObject({
-      status: 'active',
+      status: "active",
       auth_note: null,
       has_refresh_token: true,
     });
     const plane = registry.current();
     const cred = plane.db.vault
-      .prepare('SELECT access_token, refresh_token FROM sync_connection_credential')
+      .prepare(
+        "SELECT access_token, refresh_token FROM sync_connection_credential"
+      )
       .get() as { access_token: string; refresh_token: string };
     expect(cred.access_token).toMatch(/^sealed:v1:/u);
     expect(cred.refresh_token).toMatch(/^sealed:v1:/u);
 
     const replay = await fetch(
-      `${base}/centraid/_vault/oauth/callback?state=${state}&code=auth-code-1`,
+      `${base}/centraid/_vault/oauth/callback?state=${state}&code=auth-code-1`
     );
     expect(replay.status).toBe(400);
-    await expect(replay.text()).resolves.toContain('unknown or expired');
+    await expect(replay.text()).resolves.toContain("unknown or expired");
   });
 
-  test('a declined consent screen lands a readable page and consumes the state', async () => {
+  test("a declined consent screen lands a readable page and consumes the state", async () => {
     const dir = await tempDir();
     const registry = openVaultRegistry({
       rootDir: dir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
-    registry.create('Personal');
+    registry.create("Personal");
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
-    const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
+    const base = await startHandlerServer(
+      makeConnectionsRouteHandler(registry, broker)
+    );
     const tokens = await startTokenServer();
 
     const configured = (await (
       await fetch(`${base}/centraid/_vault/connections`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
-          kind: 'pull.gcal',
-          label: 'personal',
-          cred_kind: 'oauth2',
-          auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+          kind: "pull.gcal",
+          label: "personal",
+          cred_kind: "oauth2",
+          auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
           token_url: tokens.url,
-          client_id: 'cid',
-          allowed_hosts: ['www.googleapis.com'],
+          client_id: "cid",
+          allowed_hosts: ["www.googleapis.com"],
         }),
       })
     ).json()) as Record<string, unknown>;
     const authorize = (await (
-      await fetch(`${base}/centraid/_vault/connections/${configured.connection_id}/authorize`, {
-        method: 'POST',
-        body: JSON.stringify({ redirect_uri: 'http://127.0.0.1:9/cb' }),
-      })
+      await fetch(
+        `${base}/centraid/_vault/connections/${configured.connection_id}/authorize`,
+        {
+          method: "POST",
+          body: JSON.stringify({ redirect_uri: "http://127.0.0.1:9/cb" }),
+        }
+      )
     ).json()) as Record<string, unknown>;
-    const state = new URL(authorize.auth_url as string).searchParams.get('state')!;
+    const state = new URL(authorize.auth_url as string).searchParams.get(
+      "state"
+    )!;
     const denied = await fetch(
-      `${base}/centraid/_vault/oauth/callback?state=${state}&error=access_denied`,
+      `${base}/centraid/_vault/oauth/callback?state=${state}&error=access_denied`
     );
     expect(denied.status).toBe(400);
-    await expect(denied.text()).resolves.toContain('declined');
-    const replay = await fetch(`${base}/centraid/_vault/oauth/callback?state=${state}&code=x`);
-    await expect(replay.text()).resolves.toContain('unknown or expired');
+    await expect(denied.text()).resolves.toContain("declined");
+    const replay = await fetch(
+      `${base}/centraid/_vault/oauth/callback?state=${state}&code=x`
+    );
+    await expect(replay.text()).resolves.toContain("unknown or expired");
   });
 
-  test('Assist config → bound courier handoff → Worker exchange stores tokens without a public gateway callback', async () => {
+  test("Assist config → bound courier handoff → Worker exchange stores tokens without a public gateway callback", async () => {
     const dir = await tempDir();
     const registry = openVaultRegistry({
       rootDir: dir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
-    registry.create('Personal');
+    registry.create("Personal");
     cleanups.push(() => registry.stop());
     const workerRequests: Array<{
       path: string;
@@ -252,92 +286,106 @@ describe('connections-routes', () => {
           body: JSON.parse(String(init?.body)) as Record<string, unknown>,
         });
         return Response.json({
-          access_token: 'ya29.assist-route',
-          refresh_token: '1//assist-route',
+          access_token: "ya29.assist-route",
+          refresh_token: "1//assist-route",
           expires_in: 3600,
         });
-      },
+      }
     );
     const assist = {
       workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
-      googleClientId: 'centraid-shared.apps.googleusercontent.com',
+      googleClientId: "centraid-shared.apps.googleusercontent.com",
       restrictedScopesEnabled: false,
     };
     const broker = new ConnectionBroker(
       () => registry.current(),
       500,
       assist,
-      workerFetch as typeof fetch,
+      workerFetch as typeof fetch
     );
-    const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker, assist));
+    const base = await startHandlerServer(
+      makeConnectionsRouteHandler(registry, broker, assist)
+    );
     const gated = await fetch(`${base}/centraid/_vault/connections/assist`, {
-      method: 'POST',
+      method: "POST",
       signal: AbortSignal.timeout(2_000),
-      headers: { 'content-type': 'application/json' },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        kind: 'pull.gmail',
-        label: 'Gmail · Assist',
-        scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+        kind: "pull.gmail",
+        label: "Gmail · Assist",
+        scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
       }),
     });
     expect(gated.status).toBe(400);
     await expect(gated.json()).resolves.toMatchObject({
-      error: 'invalid_assist_scopes',
+      error: "invalid_assist_scopes",
     });
 
     const configured = (await (
       await fetch(`${base}/centraid/_vault/connections/assist`, {
-        method: 'POST',
+        method: "POST",
         signal: AbortSignal.timeout(2_000),
-        headers: { 'content-type': 'application/json' },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          kind: 'pull.gcal',
-          label: 'Google Calendar · Assist',
-          scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+          kind: "pull.gcal",
+          label: "Google Calendar · Assist",
+          scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
         }),
       })
     ).json()) as Record<string, unknown>;
-    expect(configured).toMatchObject({ ok: true, status: 'needs-auth' });
+    expect(configured).toMatchObject({ ok: true, status: "needs-auth" });
     const connectionId = configured.connection_id as string;
-    const clientSession = 's'.repeat(64);
+    const clientSession = "s".repeat(64);
     const authorize = (await (
-      await fetch(`${base}/centraid/_vault/connections/${connectionId}/authorize`, {
-        method: 'POST',
-        signal: AbortSignal.timeout(2_000),
-        headers: {
-          'content-type': 'application/json',
-          'x-centraid-client-session': clientSession,
-        },
-        body: JSON.stringify({ surface: 'web' }),
-      })
+      await fetch(
+        `${base}/centraid/_vault/connections/${connectionId}/authorize`,
+        {
+          method: "POST",
+          signal: AbortSignal.timeout(2_000),
+          headers: {
+            "content-type": "application/json",
+            "x-centraid-client-session": clientSession,
+          },
+          body: JSON.stringify({ surface: "web" }),
+        }
+      )
     ).json()) as Record<string, unknown>;
     const startUrl = new URL(authorize.auth_url as string);
-    expect(startUrl.origin + startUrl.pathname).toBe(`${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/start`);
+    expect(startUrl.origin + startUrl.pathname).toBe(
+      `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/start`
+    );
     const startFragment = new URLSearchParams(startUrl.hash.slice(1));
-    expect(startFragment.get('browser_binding')).toMatch(/^[A-Za-z0-9_-]{43}$/u);
-    const authUrl = new URL(startFragment.get('authorization_url')!);
-    expect(authUrl.searchParams.get('client_id')).toBe(
-      'centraid-shared.apps.googleusercontent.com',
+    expect(startFragment.get("browser_binding")).toMatch(
+      /^[A-Za-z0-9_-]{43}$/u
     );
-    expect(authUrl.searchParams.get('redirect_uri')).toBe(
-      `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`,
+    const authUrl = new URL(startFragment.get("authorization_url")!);
+    expect(authUrl.searchParams.get("client_id")).toBe(
+      "centraid-shared.apps.googleusercontent.com"
     );
-    expect(authorize.redirect_uri).toBe(`${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`);
-    expect(authUrl.searchParams.get('state')).toBe(authorize.state);
+    expect(authUrl.searchParams.get("redirect_uri")).toBe(
+      `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`
+    );
+    expect(authorize.redirect_uri).toBe(
+      `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`
+    );
+    expect(authUrl.searchParams.get("state")).toBe(authorize.state);
 
-    const completed = await fetch(`${base}/centraid/_vault/connections/assist/complete`, {
-      method: 'POST',
-      signal: AbortSignal.timeout(2_000),
-      headers: {
-        'content-type': 'application/json',
-        'x-centraid-client-session': clientSession,
-      },
-      body: JSON.stringify({
-        state: authorize.state,
-        code: 'google-code',
-        receipt: 'v1.callback-receipt',
-      }),
-    });
+    const completed = await fetch(
+      `${base}/centraid/_vault/connections/assist/complete`,
+      {
+        method: "POST",
+        signal: AbortSignal.timeout(2_000),
+        headers: {
+          "content-type": "application/json",
+          "x-centraid-client-session": clientSession,
+        },
+        body: JSON.stringify({
+          state: authorize.state,
+          code: "google-code",
+          receipt: "v1.callback-receipt",
+        }),
+      }
+    );
     expect(completed.status).toBe(200);
     await expect(completed.json()).resolves.toMatchObject({
       ok: true,
@@ -345,114 +393,134 @@ describe('connections-routes', () => {
     });
     expect(workerRequests).toHaveLength(1);
     expect(workerRequests[0]).toMatchObject({
-      path: '/exchange',
+      path: "/exchange",
       body: {
-        provider: 'google',
-        code: 'google-code',
-        receipt: 'v1.callback-receipt',
+        provider: "google",
+        code: "google-code",
+        receipt: "v1.callback-receipt",
         state: authorize.state,
-        browser_binding: startFragment.get('browser_binding'),
-        scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+        browser_binding: startFragment.get("browser_binding"),
+        scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
       },
     });
-    expect(JSON.stringify(workerRequests)).not.toContain('client_secret');
+    expect(JSON.stringify(workerRequests)).not.toContain("client_secret");
     const row = registry
       .current()
       .db.vault.prepare(
         `SELECT c.status, cc.oauth_mode, cc.client_secret, cc.access_token, cc.refresh_token
          FROM sync_connection c
          JOIN sync_connection_credential cc ON cc.connection_id = c.connection_id
-        WHERE c.connection_id = ?`,
+        WHERE c.connection_id = ?`
       )
       .get(connectionId) as Record<string, unknown>;
     expect(row).toMatchObject({
-      status: 'active',
-      oauth_mode: 'assist',
+      status: "active",
+      oauth_mode: "assist",
       client_secret: null,
     });
     expect(String(row.access_token)).toMatch(/^sealed:v1:/u);
     expect(String(row.refresh_token)).toMatch(/^sealed:v1:/u);
   });
 
-  test('pause and resume ride PATCH; providers expose the BYO wizard with the Google traps', async () => {
+  test("pause and resume ride PATCH; providers expose the BYO wizard with the Google traps", async () => {
     const dir = await tempDir();
     const registry = openVaultRegistry({
       rootDir: dir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
-    registry.create('Personal');
+    registry.create("Personal");
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
-    const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
+    const base = await startHandlerServer(
+      makeConnectionsRouteHandler(registry, broker)
+    );
 
     const configured = (await (
       await fetch(`${base}/centraid/_vault/connections`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
-          kind: 'pull.github',
-          label: 'personal',
-          cred_kind: 'api_key',
-          api_key: 'ghp_x',
-          allowed_hosts: ['api.github.com'],
+          kind: "pull.github",
+          label: "personal",
+          cred_kind: "api_key",
+          api_key: "ghp_x",
+          allowed_hosts: ["api.github.com"],
         }),
       })
     ).json()) as Record<string, unknown>;
     const paused = (await (
-      await fetch(`${base}/centraid/_vault/connections/${configured.connection_id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'paused' }),
-      })
+      await fetch(
+        `${base}/centraid/_vault/connections/${configured.connection_id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "paused" }),
+        }
+      )
     ).json()) as Record<string, unknown>;
-    expect(paused).toMatchObject({ ok: true, status: 'paused' });
+    expect(paused).toMatchObject({ ok: true, status: "paused" });
 
     const providers = (await (
       await fetch(`${base}/centraid/_vault/connections/providers`)
     ).json()) as Record<string, unknown>;
-    const google = (providers.providers as { id: string; setup: string[] }[]).find(
-      (p) => p.id === 'google',
-    )!;
-    expect(google.setup.join('\n')).toMatch(/In production.*not Testing|Testing status/u);
-    expect(google.setup.join('\n')).toMatch(/Photos/u);
-    const github = (providers.providers as { id: string; credKind: string }[]).find(
-      (p) => p.id === 'github',
-    )!;
-    expect(github.credKind).toBe('api_key');
+    const google = (
+      providers.providers as { id: string; setup: string[] }[]
+    ).find((p) => p.id === "google")!;
+    expect(google.setup.join("\n")).toMatch(
+      /In production.*not Testing|Testing status/u
+    );
+    expect(google.setup.join("\n")).toMatch(/Photos/u);
+    const github = (
+      providers.providers as { id: string; credKind: string }[]
+    ).find((p) => p.id === "github")!;
+    expect(github.credKind).toBe("api_key");
     const ids = (providers.providers as { id: string }[]).map((p) => p.id);
-    for (const id of ['microsoft', 'gitlab', 'linear', 'notion', 'todoist', 'slack', 'dropbox']) {
+    for (const id of [
+      "microsoft",
+      "gitlab",
+      "linear",
+      "notion",
+      "todoist",
+      "slack",
+      "dropbox",
+    ]) {
       expect(ids).toContain(id);
     }
   });
 
-  test('DELETE removes a connection with no history, 409s on a real refusal, 404s an unknown id', async () => {
+  test("DELETE removes a connection with no history, 409s on a real refusal, 404s an unknown id", async () => {
     const dir = await tempDir();
     const registry = openVaultRegistry({
       rootDir: dir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
-    registry.create('Personal');
+    registry.create("Personal");
     cleanups.push(() => registry.stop());
     const broker = new ConnectionBroker(() => registry.current());
-    const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
+    const base = await startHandlerServer(
+      makeConnectionsRouteHandler(registry, broker)
+    );
 
     const configured = (await (
       await fetch(`${base}/centraid/_vault/connections`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
-          kind: 'pull.github',
-          label: 'personal',
-          cred_kind: 'api_key',
-          api_key: 'ghp_x',
-          allowed_hosts: ['api.github.com'],
+          kind: "pull.github",
+          label: "personal",
+          cred_kind: "api_key",
+          api_key: "ghp_x",
+          allowed_hosts: ["api.github.com"],
         }),
       })
     ).json()) as Record<string, unknown>;
     const connectionId = configured.connection_id as string;
 
-    const unknown = await fetch(`${base}/centraid/_vault/connections/no-such-connection`, {
-      method: 'DELETE',
-    });
+    const unknown = await fetch(
+      `${base}/centraid/_vault/connections/no-such-connection`,
+      {
+        method: "DELETE",
+      }
+    );
     expect(unknown.status).toBe(404);
 
     const plane = registry.current();
@@ -463,12 +531,15 @@ describe('connections-routes', () => {
          (item_id, connection_id, actor_id, actor_kind, verb, target, artifact_json,
           request_json, status, staged_at)
        VALUES ('item-1', ?, 'owner-1', 'owner', 'gmail.send', 'someone@example.com', '{}',
-               '{"method":"POST","url":"https://x"}', 'pending', ?)`,
+               '{"method":"POST","url":"https://x"}', 'pending', ?)`
       )
       .run(connectionId, now);
-    const blocked = await fetch(`${base}/centraid/_vault/connections/${connectionId}`, {
-      method: 'DELETE',
-    });
+    const blocked = await fetch(
+      `${base}/centraid/_vault/connections/${connectionId}`,
+      {
+        method: "DELETE",
+      }
+    );
     expect(blocked.status).toBe(409);
     const blockedBody = (await blocked.json()) as {
       ok: boolean;
@@ -476,23 +547,32 @@ describe('connections-routes', () => {
     };
     expect(blockedBody.ok).toBe(false);
     expect(blockedBody.error).toMatch(/awaiting a decision/u);
-    const stillListed = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    const stillListed = (await (
+      await fetch(`${base}/centraid/_vault/connections`)
+    ).json()) as {
       connections: unknown[];
     };
     expect(stillListed.connections).toHaveLength(1);
 
     // Clear the block, then the real delete succeeds.
-    plane.db.vault.prepare(`DELETE FROM outbox_item WHERE item_id = 'item-1'`).run();
-    const removed = await fetch(`${base}/centraid/_vault/connections/${connectionId}`, {
-      method: 'DELETE',
-    });
+    plane.db.vault
+      .prepare(`DELETE FROM outbox_item WHERE item_id = 'item-1'`)
+      .run();
+    const removed = await fetch(
+      `${base}/centraid/_vault/connections/${connectionId}`,
+      {
+        method: "DELETE",
+      }
+    );
     expect(removed.status).toBe(200);
     const removedBody = (await removed.json()) as Record<string, unknown>;
     expect(removedBody).toMatchObject({
       ok: true,
       connection_id: connectionId,
     });
-    const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    const after = (await (
+      await fetch(`${base}/centraid/_vault/connections`)
+    ).json()) as {
       connections: unknown[];
     };
     expect(after.connections).toHaveLength(0);

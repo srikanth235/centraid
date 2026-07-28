@@ -185,7 +185,7 @@
     opacity: 1;
   }
 }
-.tileHeart[aria-pressed='true'] {
+.tileHeart[aria-pressed="true"] {
   opacity: 1;
 }
 .tileRemove {

@@ -1,16 +1,16 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { openVaultDb } from '../db.js';
-import { BlobCache } from './cache.js';
-import { MemoryBlobStore } from './local.js';
-import { BlobOutboxRunner } from './outbox-runner.js';
-import { sha256OfBytes } from './store.js';
-import { BlobTransferState } from './transfer-state.js';
+import { openVaultDb } from "../db.js";
+import { BlobCache } from "./cache.js";
+import { MemoryBlobStore } from "./local.js";
+import { BlobOutboxRunner } from "./outbox-runner.js";
+import { sha256OfBytes } from "./store.js";
+import { BlobTransferState } from "./transfer-state.js";
 
-describe('outbox-runner', () => {
+describe("outbox-runner", () => {
   afterEach(() => vi.useRealTimers());
 
-  test('custody drain never exceeds the configured replication concurrency', async () => {
+  test("custody drain never exceeds the configured replication concurrency", async () => {
     const db = openVaultDb();
     await db.blobTransfers.close();
     const local = new MemoryBlobStore();
@@ -66,12 +66,12 @@ describe('outbox-runner', () => {
     }
   });
 
-  test('an unconfigured remote tier performs no fast polling (#456 I1)', async () => {
+  test("an unconfigured remote tier performs no fast polling (#456 I1)", async () => {
     vi.useFakeTimers();
     const db = openVaultDb();
     await db.blobTransfers.close();
     const state = new BlobTransferState(db.vault);
-    const due = vi.spyOn(state, 'dueOutbox');
+    const due = vi.spyOn(state, "dueOutbox");
     const runner = new BlobOutboxRunner({
       vault: db.vault,
       state,
@@ -92,15 +92,15 @@ describe('outbox-runner', () => {
     }
   });
 
-  test('an unconfigured remote still reaps expired local sessions and resources', async () => {
+  test("an unconfigured remote still reaps expired local sessions and resources", async () => {
     vi.useFakeTimers();
     const db = openVaultDb();
     await db.blobTransfers.close();
     const state = new BlobTransferState(db.vault);
     state.createSession({
-      sessionId: 'expired-local',
-      kind: 'fallback',
-      tempPath: '/tmp/centraid-expired-local-does-not-exist',
+      sessionId: "expired-local",
+      kind: "fallback",
+      tempPath: "/tmp/centraid-expired-local-does-not-exist",
       expiresAt: new Date(0).toISOString(),
     });
     const expired: string[] = [];
@@ -119,22 +119,22 @@ describe('outbox-runner', () => {
       // The backstop is jittered ±10%, so the latest possible fire is 66s —
       // advance past it (65s used to lose the draw ~8% of the time).
       await vi.advanceTimersByTimeAsync(70_000);
-      expect(expired).toStrictEqual(['expired-local']);
-      expect(state.session('expired-local')).toBeNull();
+      expect(expired).toStrictEqual(["expired-local"]);
+      expect(state.session("expired-local")).toBeNull();
     } finally {
       await runner.close();
       db.close();
     }
   });
 
-  test('a pressured host defers timer-driven replication but keeps its durable row', async () => {
+  test("a pressured host defers timer-driven replication but keeps its durable row", async () => {
     vi.useFakeTimers();
     const db = openVaultDb();
     await db.blobTransfers.close();
     const local = new MemoryBlobStore();
     const remote = new MemoryBlobStore();
     const state = new BlobTransferState(db.vault);
-    const bytes = Buffer.from('defer-me');
+    const bytes = Buffer.from("defer-me");
     const sha = sha256OfBytes(bytes);
     local.putSync(sha, bytes);
     state.enqueue(sha, bytes.length);

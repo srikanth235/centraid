@@ -45,11 +45,16 @@
  * exactly as the claude backend did.
  */
 
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
+import type { AddressInfo } from "node:net";
 
-import type { ToolContext } from '@centraid/app-engine';
+import type { ToolContext } from "@centraid/app-engine";
 
 import {
   VAULT_CONTENT_TOOL,
@@ -58,22 +63,27 @@ import {
   runVaultContentTool,
   runVaultInvokeTool,
   runVaultSqlTool,
-} from '../../vault-sql-tool.js';
+} from "../../vault-sql-tool.js";
 
 /** The single route; anything else 404s. */
-const MCP_PATH = '/mcp';
+const MCP_PATH = "/mcp";
 /** MCP server name — kept from the retired claude MCP server for prompt parity. */
-export const VAULT_MCP_SERVER_NAME = 'centraid';
+export const VAULT_MCP_SERVER_NAME = "centraid";
 /** Answered when the client asks for a version we don't recognise. */
-const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
+const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 /** A tools-only surface is identical across these, so we echo the client's pick. */
-const KNOWN_PROTOCOL_VERSIONS = new Set(['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25']);
+const KNOWN_PROTOCOL_VERSIONS = new Set([
+  "2024-11-05",
+  "2025-03-26",
+  "2025-06-18",
+  "2025-11-25",
+]);
 /** Request bodies are three small JSON args; anything larger is not ours. */
 const MAX_BODY_BYTES = 1024 * 1024;
 
 /** The `mcpServers` entry shape from ACP's `McpServerHttp` (schema-verified). */
 export interface AcpHttpMcpServer {
-  type: 'http';
+  type: "http";
   name: string;
   url: string;
   headers: Array<{ name: string; value: string }>;
@@ -126,7 +136,7 @@ function toolsFor(ctx: ToolContext): Array<{
 async function callTool(
   ctx: ToolContext,
   name: string,
-  args: Record<string, unknown>,
+  args: Record<string, unknown>
 ): Promise<{ ok: true; result: unknown } | { ok: false; errorText: string }> {
   if (name === VAULT_SQL_TOOL.name) return runVaultSqlTool(ctx, args.sql);
   if (name === VAULT_INVOKE_TOOL.name) return runVaultInvokeTool(ctx, args);
@@ -140,8 +150,8 @@ function bearerOk(header: string | undefined, token: string): boolean {
   const match = /^Bearer[ \t]+(?<token>\S+)$/iu.exec(header.trim());
   const presented = match?.groups?.token;
   if (!presented) return false;
-  const given = Buffer.from(presented, 'utf8');
-  const want = Buffer.from(token, 'utf8');
+  const given = Buffer.from(presented, "utf8");
+  const want = Buffer.from(token, "utf8");
   // timingSafeEqual throws on a length mismatch, so gate on length first.
   // Token length is not secret (it is a fixed 64 hex chars).
   return given.length === want.length && timingSafeEqual(given, want);
@@ -149,28 +159,28 @@ function bearerOk(header: string | undefined, token: string): boolean {
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
-    let body = '';
+    let body = "";
     let size = 0;
-    req.setEncoding('utf8');
-    req.on('data', (chunk: string) => {
+    req.setEncoding("utf8");
+    req.on("data", (chunk: string) => {
       size += Buffer.byteLength(chunk);
       if (size > MAX_BODY_BYTES) {
-        reject(new Error('request body too large'));
+        reject(new Error("request body too large"));
         req.destroy();
         return;
       }
       body += chunk;
     });
-    req.on('end', () => resolve(body));
-    req.on('error', reject);
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
   });
 }
 
 function sendJson(res: ServerResponse, status: number, payload: unknown): void {
   const text = JSON.stringify(payload);
   res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': String(Buffer.byteLength(text)),
+    "content-type": "application/json",
+    "content-length": String(Buffer.byteLength(text)),
   });
   res.end(text);
 }
@@ -190,26 +200,28 @@ interface JsonRpcRequest {
  */
 export async function startVaultMcpServer(
   ctx: ToolContext,
-  hooks: VaultMcpHooks = {},
+  hooks: VaultMcpHooks = {}
 ): Promise<VaultMcpHandle> {
-  const token = randomBytes(32).toString('hex');
+  const token = randomBytes(32).toString("hex");
   let nextCallSeq = 0;
 
-  const dispatch = async (body: JsonRpcRequest): Promise<unknown | undefined> => {
+  const dispatch = async (
+    body: JsonRpcRequest
+  ): Promise<unknown | undefined> => {
     const { id, method } = body;
     // A notification (no id) gets no response body — 202 is the reply.
     const isNotification = id === undefined || id === null;
-    const ok = (result: unknown): unknown => ({ jsonrpc: '2.0', id, result });
+    const ok = (result: unknown): unknown => ({ jsonrpc: "2.0", id, result });
     const fail = (code: number, message: string): unknown => ({
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       error: { code, message },
     });
 
-    if (method === 'initialize') {
+    if (method === "initialize") {
       const asked = body.params?.protocolVersion;
       const version =
-        typeof asked === 'string' && KNOWN_PROTOCOL_VERSIONS.has(asked)
+        typeof asked === "string" && KNOWN_PROTOCOL_VERSIONS.has(asked)
           ? asked
           : DEFAULT_PROTOCOL_VERSION;
       return ok({
@@ -217,16 +229,17 @@ export async function startVaultMcpServer(
         // Tools only: advertising nothing else keeps well-behaved clients
         // from calling resources/* or prompts/* at all.
         capabilities: { tools: {} },
-        serverInfo: { name: VAULT_MCP_SERVER_NAME, version: '1.0.0' },
+        serverInfo: { name: VAULT_MCP_SERVER_NAME, version: "1.0.0" },
       });
     }
-    if (method === 'ping') return ok({});
-    if (method === 'tools/list') return ok({ tools: toolsFor(ctx) });
-    if (method === 'tools/call') {
-      const name = typeof body.params?.name === 'string' ? body.params.name : '';
+    if (method === "ping") return ok({});
+    if (method === "tools/list") return ok({ tools: toolsFor(ctx) });
+    if (method === "tools/call") {
+      const name =
+        typeof body.params?.name === "string" ? body.params.name : "";
       const raw = body.params?.arguments;
       const args =
-        raw && typeof raw === 'object' && !Array.isArray(raw)
+        raw && typeof raw === "object" && !Array.isArray(raw)
           ? (raw as Record<string, unknown>)
           : {};
       const toolCallId = `vault-${++nextCallSeq}`;
@@ -240,7 +253,7 @@ export async function startVaultMcpServer(
           result: out.result,
         });
         return ok({
-          content: [{ type: 'text', text: JSON.stringify(out.result) }],
+          content: [{ type: "text", text: JSON.stringify(out.result) }],
           isError: false,
         });
       }
@@ -254,7 +267,7 @@ export async function startVaultMcpServer(
       // A tool that failed is a successful RPC carrying an error result —
       // that is what lets the model read the message and correct itself.
       return ok({
-        content: [{ type: 'text', text: out.errorText }],
+        content: [{ type: "text", text: out.errorText }],
         isError: true,
       });
     }
@@ -262,21 +275,24 @@ export async function startVaultMcpServer(
     return fail(-32601, `method not found: ${String(method)}`);
   };
 
-  const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const path = (req.url ?? '').split('?')[0];
+  const handle = async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> => {
+    const path = (req.url ?? "").split("?")[0];
     if (path !== MCP_PATH) {
-      sendJson(res, 404, { error: 'not found' });
+      sendJson(res, 404, { error: "not found" });
       return;
     }
     if (!bearerOk(req.headers.authorization, token)) {
-      res.setHeader('www-authenticate', 'Bearer');
-      sendJson(res, 401, { error: 'unauthorized' });
+      res.setHeader("www-authenticate", "Bearer");
+      sendJson(res, 401, { error: "unauthorized" });
       return;
     }
-    if (req.method !== 'POST') {
+    if (req.method !== "POST") {
       // Spec-legal way to decline a standalone SSE stream / session delete.
-      res.setHeader('allow', 'POST');
-      sendJson(res, 405, { error: 'method not allowed' });
+      res.setHeader("allow", "POST");
+      sendJson(res, 405, { error: "method not allowed" });
       return;
     }
 
@@ -284,21 +300,21 @@ export async function startVaultMcpServer(
     try {
       const text = await readBody(req);
       const parsed: unknown = JSON.parse(text);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         // Batching was removed in the 2025-06-18 revision; one message per POST.
         sendJson(res, 400, {
-          jsonrpc: '2.0',
+          jsonrpc: "2.0",
           id: null,
-          error: { code: -32600, message: 'expected a single JSON-RPC object' },
+          error: { code: -32600, message: "expected a single JSON-RPC object" },
         });
         return;
       }
       body = parsed as JsonRpcRequest;
     } catch {
       sendJson(res, 400, {
-        jsonrpc: '2.0',
+        jsonrpc: "2.0",
         id: null,
-        error: { code: -32700, message: 'parse error' },
+        error: { code: -32700, message: "parse error" },
       });
       return;
     }
@@ -309,7 +325,7 @@ export async function startVaultMcpServer(
     } catch (err) {
       // A throwing tool runner must not take the listener (or the turn) down.
       sendJson(res, 200, {
-        jsonrpc: '2.0',
+        jsonrpc: "2.0",
         id: body.id ?? null,
         error: {
           code: -32603,
@@ -330,16 +346,16 @@ export async function startVaultMcpServer(
       if (res.headersSent) {
         res.end();
       } else {
-        sendJson(res, 500, { error: 'internal error' });
+        sendJson(res, 500, { error: "internal error" });
       }
     });
   });
 
   await new Promise<void>((resolve, reject) => {
-    http.once('error', reject);
+    http.once("error", reject);
     // Loopback only. An ephemeral port keeps concurrent turns from colliding.
-    http.listen(0, '127.0.0.1', () => {
-      http.removeListener('error', reject);
+    http.listen(0, "127.0.0.1", () => {
+      http.removeListener("error", reject);
       resolve();
     });
   });
@@ -347,16 +363,16 @@ export async function startVaultMcpServer(
   const address = http.address() as AddressInfo | null;
   if (!address) {
     http.close();
-    throw new Error('vault MCP server did not bind a port');
+    throw new Error("vault MCP server did not bind a port");
   }
 
   let closed = false;
   return {
     server: {
-      type: 'http',
+      type: "http",
       name: VAULT_MCP_SERVER_NAME,
       url: `http://127.0.0.1:${address.port}${MCP_PATH}`,
-      headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
+      headers: [{ name: "Authorization", value: `Bearer ${token}` }],
     },
     close: async (): Promise<void> => {
       if (closed) return;

@@ -14,11 +14,11 @@
 //   - authoredLinks — user/agent-authored `core_link` rows, typed by a SKOS
 //                   concept, free to join any two kinds.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { countRows } from './atlas-graph.js';
-import { atlasTables, type AtlasPackKind } from './atlas.js';
-import { dbSizeBreakdown, type TableStatsMethod } from './table-stats.js';
+import { countRows } from "./atlas-graph.js";
+import { atlasTables, type AtlasPackKind } from "./atlas.js";
+import { dbSizeBreakdown, type TableStatsMethod } from "./table-stats.js";
 
 export {
   ATLAS_GRAPH_CENTER,
@@ -32,7 +32,7 @@ export {
   type AtlasPulseDay,
   type AtlasPulsePayload,
   type AtlasPulseSeries,
-} from './atlas-graph.js';
+} from "./atlas-graph.js";
 
 // ---------------------------------------------------------------------------
 // Census (GET /_vault/atlas/stats)
@@ -55,7 +55,7 @@ export interface AtlasCensusPack {
   pack: string;
   packLabel: string;
   packKind: AtlasPackKind;
-  file: 'vault' | 'journal';
+  file: "vault" | "journal";
   tables: AtlasCensusTable[];
   /** Pack totals — rows always; bytes null when any member is byte-less. */
   rows: number;
@@ -85,16 +85,23 @@ export interface AtlasCensusPayload {
  * documented `estimate` fallback); rows are a COUNT(*) per table (the dbstat
  * method omits rows by design, and the census header wants "214 people").
  */
-export function atlasCensus(vault: DatabaseSync, journal: DatabaseSync): AtlasCensusPayload {
+export function atlasCensus(
+  vault: DatabaseSync,
+  journal: DatabaseSync
+): AtlasCensusPayload {
   const vaultBreak = dbSizeBreakdown(vault);
   const journalBreak = dbSizeBreakdown(journal);
   const bytesOf = new Map<string, { bytes?: number; pages?: number }>();
-  for (const t of vaultBreak.tables) bytesOf.set(t.table, { bytes: t.bytes, pages: t.pages });
-  for (const t of journalBreak.tables) bytesOf.set(t.table, { bytes: t.bytes, pages: t.pages });
+  for (const t of vaultBreak.tables)
+    bytesOf.set(t.table, { bytes: t.bytes, pages: t.pages });
+  for (const t of journalBreak.tables)
+    bytesOf.set(t.table, { bytes: t.bytes, pages: t.pages });
   // A single method label for the payload: `estimate` if EITHER file fell back
   // (bytes are then null everywhere — no faked breakdown).
   const method: TableStatsMethod =
-    vaultBreak.method === 'dbstat' && journalBreak.method === 'dbstat' ? 'dbstat' : 'estimate';
+    vaultBreak.method === "dbstat" && journalBreak.method === "dbstat"
+      ? "dbstat"
+      : "estimate";
 
   const byPack = new Map<string, AtlasCensusPack>();
   let totalRows = 0;
@@ -103,9 +110,9 @@ export function atlasCensus(vault: DatabaseSync, journal: DatabaseSync): AtlasCe
   let populatedKinds = 0;
 
   for (const entry of atlasTables()) {
-    const db = entry.file === 'vault' ? vault : journal;
+    const db = entry.file === "vault" ? vault : journal;
     const rows = countRows(db, entry.physical);
-    const size = method === 'dbstat' ? bytesOf.get(entry.physical) : undefined;
+    const size = method === "dbstat" ? bytesOf.get(entry.physical) : undefined;
     const bytes = size?.bytes ?? null;
     const pages = size?.pages ?? null;
 
@@ -129,7 +136,7 @@ export function atlasCensus(vault: DatabaseSync, journal: DatabaseSync): AtlasCe
         file: entry.file,
         tables: [],
         rows: 0,
-        bytes: method === 'dbstat' ? 0 : null,
+        bytes: method === "dbstat" ? 0 : null,
       };
       byPack.set(key, pack);
     }
@@ -139,16 +146,16 @@ export function atlasCensus(vault: DatabaseSync, journal: DatabaseSync): AtlasCe
 
     totalRows += rows;
     if (totalBytes !== null && bytes !== null) totalBytes += bytes;
-    if (entry.packKind === 'ontology') {
+    if (entry.packKind === "ontology") {
       kinds += 1;
       if (rows > 0) populatedKinds += 1;
     }
   }
-  if (method === 'estimate') totalBytes = null;
+  if (method === "estimate") totalBytes = null;
 
   const packs = [...byPack.values()].sort((a, b) => {
     // Ontology packs first (life data before plumbing), then by row count.
-    if (a.packKind !== b.packKind) return a.packKind === 'ontology' ? -1 : 1;
+    if (a.packKind !== b.packKind) return a.packKind === "ontology" ? -1 : 1;
     return b.rows - a.rows;
   });
 

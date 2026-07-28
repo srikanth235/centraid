@@ -1,15 +1,15 @@
-import { type JSX, useEffect, useState } from 'react';
+import { type JSX, useEffect, useState } from "react";
 
-import { cx } from '../../ui/cx.js';
-import { iconSvg } from '../iconSvg.js';
-import type { ConnectivityReport } from './connectFlow-core.js';
-import { runConnectivityTest } from './connectFlowIO.js';
-import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
+import { cx } from "../../ui/cx.js";
+import { iconSvg } from "../iconSvg.js";
+import type { ConnectivityReport } from "./connectFlow-core.js";
+import { runConnectivityTest } from "./connectFlowIO.js";
+import HandshakeLadder, { reportSummaryText } from "./HandshakeLadder.js";
 
-import controlsCss from '../../styles/controls.module.css';
-import buttonCss from '../../ui/Button.module.css';
-import connectFlowStyles from './ConnectFlow.module.css';
-import spaceModalStyles from './SpaceModal.module.css';
+import controlsCss from "../../styles/controls.module.css";
+import buttonCss from "../../ui/Button.module.css";
+import connectFlowStyles from "./ConnectFlow.module.css";
+import spaceModalStyles from "./SpaceModal.module.css";
 
 export interface TestConnectionModalProps {
   gatewayId: string;
@@ -34,12 +34,13 @@ export default function TestConnectionModal({
     report: ConnectivityReport;
   } | null>(null);
   const key = `${gatewayId} ${attempt}`;
-  const report = settled !== null && settled.key === key ? settled.report : null;
+  const report =
+    settled !== null && settled.key === key ? settled.report : null;
   const pending = report === null;
 
   useEffect(() => {
     let alive = true;
-    void runConnectivityTest({ gatewayId, kind: 'gateway' }).then((r) => {
+    void runConnectivityTest({ gatewayId, kind: "gateway" }).then((r) => {
       if (alive) setSettled({ key, report: r });
     });
     return () => {
@@ -49,13 +50,13 @@ export default function TestConnectionModal({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   return (
@@ -71,16 +72,18 @@ export default function TestConnectionModal({
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
-            dangerouslySetInnerHTML={{ __html: iconSvg('Wifi', 14) }}
+            dangerouslySetInnerHTML={{ __html: iconSvg("Wifi", 14) }}
           />
-          <h2 className={spaceModalStyles.profModalTitle}>Test connection · {gatewayLabel}</h2>
+          <h2 className={spaceModalStyles.profModalTitle}>
+            Test connection · {gatewayLabel}
+          </h2>
           <button
             type="button"
             className={cx(controlsCss.iconBtn, spaceModalStyles.profModalClose)}
             title="Close"
             aria-label="Close"
             onClick={onClose}
-            dangerouslySetInnerHTML={{ __html: iconSvg('X', 14) }}
+            dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>
         <div className={spaceModalStyles.profModalBody}>

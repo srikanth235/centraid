@@ -1,8 +1,8 @@
 // The "+ New" menu popover contents (#newMenu root).
-import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
+import { I } from "../icons.ts";
+import { Icon } from "./Shared.tsx";
 
-import styles from './NewMenu.module.css';
+import styles from "./NewMenu.module.css";
 
 export function NewMenu({
   onAddPerson,
@@ -13,12 +13,22 @@ export function NewMenu({
 }) {
   return (
     <>
-      <button type="button" className={styles.menuItem} role="menuitem" onClick={onAddPerson}>
+      <button
+        type="button"
+        className={styles.menuItem}
+        role="menuitem"
+        onClick={onAddPerson}
+      >
         <Icon svg={I.addPerson} />
         Add person
       </button>
       <div className={styles.menuSep} />
-      <button type="button" className={styles.menuItem} role="menuitem" onClick={onNewList}>
+      <button
+        type="button"
+        className={styles.menuItem}
+        role="menuitem"
+        onClick={onNewList}
+      >
         <Icon svg={I.circlePlus} />
         New list
       </button>

@@ -1,44 +1,51 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from "vitest";
 
-import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
+import {
+  listAutomationTurns,
+  listAutomations,
+} from "../../../gateway-client.js";
 import {
   buildOverviewData,
   collectAutomationRuns,
   deriveAutomationHero,
   triggerOriginLabel,
   type AutomationFeedEntry,
-} from './automationsData.js';
+} from "./automationsData.js";
 
 // buildOverviewData is pure; stub the gateway module so importing it doesn't
 // run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`
 // is hoisted above these imports by vitest, so the stub is in place first.
-vi.mock(import('../../../gateway-client.js'), () => ({
+vi.mock(import("../../../gateway-client.js"), () => ({
   listAutomations: vi.fn<typeof listAutomations>(),
   listAutomationTurns: vi.fn<typeof listAutomationTurns>(),
 }));
 
-const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
+const row = (
+  over: Partial<CentraidAutomationRow> = {}
+): CentraidAutomationRow =>
   ({
-    id: 'digest',
-    ref: 'digest/main',
-    name: 'Daily Digest',
+    id: "digest",
+    ref: "digest/main",
+    name: "Daily Digest",
     enabled: true,
-    triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
+    triggers: [{ kind: "cron", expr: "0 9 * * *" }],
     manifest: { requires: { mcps: [] } },
     ...over,
   }) as unknown as CentraidAutomationRow;
 
-const entry = (over: Partial<AutomationFeedEntry['run']> = {}): AutomationFeedEntry => ({
-  automationId: 'digest/main',
-  automationName: 'Daily Digest',
+const entry = (
+  over: Partial<AutomationFeedEntry["run"]> = {}
+): AutomationFeedEntry => ({
+  automationId: "digest/main",
+  automationName: "Daily Digest",
   run: {
-    turnId: 'r1',
-    automationId: 'digest/main',
+    turnId: "r1",
+    automationId: "digest/main",
     startedAt: 1000,
     endedAt: 2000,
     ok: true,
-    summary: 'ok',
-    triggerKind: 'cron',
+    summary: "ok",
+    triggerKind: "cron",
     totalInputTokens: 10,
     totalOutputTokens: 5,
     ...over,
@@ -46,10 +53,10 @@ const entry = (over: Partial<AutomationFeedEntry['run']> = {}): AutomationFeedEn
 });
 
 describe(buildOverviewData, () => {
-  it('counts health buckets across rows', () => {
+  it("counts health buckets across rows", () => {
     const data = buildOverviewData(
-      [row(), row({ id: 'x', ref: 'x/main', enabled: false })],
-      [entry()],
+      [row(), row({ id: "x", ref: "x/main", enabled: false })],
+      [entry()]
     );
     expect(data.health.active).toBe(1);
     expect(data.health.paused).toBe(0); // the disabled row has no runs → draft
@@ -57,244 +64,257 @@ describe(buildOverviewData, () => {
     expect(data.health.attention).toBe(0);
   });
 
-  it('flags attention when the last run failed', () => {
-    const data = buildOverviewData([row()], [entry({ ok: false, error: 'boom' })]);
+  it("flags attention when the last run failed", () => {
+    const data = buildOverviewData(
+      [row()],
+      [entry({ ok: false, error: "boom" })]
+    );
     expect(data.health.attention).toBe(1);
-    expect(data.runs[0]?.summary).toBe('boom');
+    expect(data.runs[0]?.summary).toBe("boom");
     expect(data.runs[0]?.ok).toBe(false);
   });
 
-  it('derives row status + labels from the identity helpers', () => {
+  it("derives row status + labels from the identity helpers", () => {
     const data = buildOverviewData([row()], [entry()]);
-    expect(data.rows[0]?.name).toBe('Daily Digest');
+    expect(data.rows[0]?.name).toBe("Daily Digest");
     expect(data.rows[0]?.statusLabel).toBeTruthy();
-    expect(data.rows[0]?.lastRunLabel).toContain('Last run');
+    expect(data.rows[0]?.lastRunLabel).toContain("Last run");
   });
 
-  it('marks a latest fallback attempt for the overview card', () => {
+  it("marks a latest fallback attempt for the overview card", () => {
     const data = buildOverviewData(
       [row()],
-      [entry({ turnId: 'digest/main:123:aaaa:failover:1:claude-code' })],
+      [entry({ turnId: "digest/main:123:aaaa:failover:1:claude-code" })]
     );
     expect(data.rows[0]?.recentFailover).toBe(true);
   });
 
-  it('projects compile lifecycle labels into the fleet row', () => {
+  it("projects compile lifecycle labels into the fleet row", () => {
     const compiling = buildOverviewData(
       [row({ enabled: false })],
       [
         entry({
           endedAt: undefined,
           ok: false,
-          triggerKind: 'compile',
+          triggerKind: "compile",
         } as never),
-      ],
+      ]
     );
     expect(compiling.rows[0]).toMatchObject({
-      statusKind: 'running',
-      statusLabel: 'Compiling…',
+      statusKind: "running",
+      statusLabel: "Compiling…",
     });
     expect(compiling.rows[0]?.lastRunOk).toBeNull();
 
-    const ready = buildOverviewData([row()], [entry({ triggerKind: 'compile' } as never)]);
+    const ready = buildOverviewData(
+      [row()],
+      [entry({ triggerKind: "compile" } as never)]
+    );
     expect(ready.rows[0]).toMatchObject({
-      statusKind: 'success',
-      statusLabel: 'Plan ready',
+      statusKind: "success",
+      statusLabel: "Plan ready",
     });
 
     const failed = buildOverviewData(
       [row({ enabled: false })],
-      [entry({ error: 'no plan', ok: false, triggerKind: 'compile' } as never)],
+      [entry({ error: "no plan", ok: false, triggerKind: "compile" } as never)]
     );
     expect(failed.rows[0]).toMatchObject({
-      statusKind: 'failed',
-      statusLabel: 'Compile failed',
+      statusKind: "failed",
+      statusLabel: "Compile failed",
     });
   });
 
-  it('uses the empty-state subtitle when there are no rows', () => {
+  it("uses the empty-state subtitle when there are no rows", () => {
     const data = buildOverviewData([], []);
-    expect(data.subtitle).toBe('Conversations that run on their own.');
+    expect(data.subtitle).toBe("Conversations that run on their own.");
   });
 
   it('keeps the subtitle consistent with the health tiles — drafts are not "paused"', () => {
     const data = buildOverviewData(
-      [row(), row({ id: 'x', ref: 'x/main', enabled: false })],
-      [entry()],
+      [row(), row({ id: "x", ref: "x/main", enabled: false })],
+      [entry()]
     );
-    expect(data.subtitle).toContain('1 active');
-    expect(data.subtitle).toContain('0 paused');
-    expect(data.subtitle).toContain('1 drafts');
+    expect(data.subtitle).toContain("1 active");
+    expect(data.subtitle).toContain("0 paused");
+    expect(data.subtitle).toContain("1 drafts");
   });
 
   it("Title-Cases the trigger origin in a run's metaLabel instead of the raw enum", () => {
     const dataRun = buildOverviewData(
       [row()],
-      [entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never)],
+      [entry({ triggerKind: "scheduled", triggerOrigin: "data" } as never)]
     );
     expect(dataRun.runs[0]?.metaLabel).toMatch(/^Data · /u);
-    expect(dataRun.runs[0]?.metaLabel).not.toContain('data ·');
+    expect(dataRun.runs[0]?.metaLabel).not.toContain("data ·");
 
     const webhookRun = buildOverviewData(
       [row()],
-      [entry({ triggerKind: 'scheduled', triggerOrigin: 'webhook' } as never)],
+      [entry({ triggerKind: "scheduled", triggerOrigin: "webhook" } as never)]
     );
     expect(webhookRun.runs[0]?.metaLabel).toMatch(/^Webhook · /u);
 
     const manualRun = buildOverviewData(
       [row()],
-      [entry({ triggerKind: 'manual', triggerOrigin: undefined } as never)],
+      [entry({ triggerKind: "manual", triggerOrigin: undefined } as never)]
     );
     expect(manualRun.runs[0]?.metaLabel).toMatch(/^Manual · /u);
 
     const cronRun = buildOverviewData(
       [row()],
-      [entry({ triggerKind: 'scheduled', triggerOrigin: undefined } as never)],
+      [entry({ triggerKind: "scheduled", triggerOrigin: undefined } as never)]
     );
     expect(cronRun.runs[0]?.metaLabel).toMatch(/^Cron · /u);
   });
 });
 
-const viewRow = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
+const viewRow = (
+  over: Partial<CentraidAutomationRow> = {}
+): CentraidAutomationRow =>
   ({
-    id: 'digest',
-    ref: 'digest/main',
-    name: 'Daily Digest',
+    id: "digest",
+    ref: "digest/main",
+    name: "Daily Digest",
     enabled: true,
-    triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
-    manifest: { requires: { mcps: [] }, history: { keep: 'forever' } },
+    triggers: [{ kind: "cron", expr: "0 9 * * *" }],
+    manifest: { requires: { mcps: [] }, history: { keep: "forever" } },
     ...over,
   }) as unknown as CentraidAutomationRow;
 
-const GATEWAY_ORIGIN = 'http://127.0.0.1:5173';
+const GATEWAY_ORIGIN = "http://127.0.0.1:5173";
 
 describe(deriveAutomationHero, () => {
-  it('derives the cron hero (eyebrow, icon, next runs off the expr)', () => {
+  it("derives the cron hero (eyebrow, icon, next runs off the expr)", () => {
     const hero = deriveAutomationHero(viewRow(), GATEWAY_ORIGIN);
-    expect(hero.kindEyebrow).toBe('Cron schedule');
-    expect(hero.heroIcon).toBe('Clock');
-    expect(hero.cronExprs).toStrictEqual(['0 9 * * *']);
+    expect(hero.kindEyebrow).toBe("Cron schedule");
+    expect(hero.heroIcon).toBe("Clock");
+    expect(hero.cronExprs).toStrictEqual(["0 9 * * *"]);
     expect(hero.nextRuns).toHaveLength(3);
   });
 
-  it('marks a webhook automation and derives a pending webhook when unbound', () => {
+  it("marks a webhook automation and derives a pending webhook when unbound", () => {
     const hero = deriveAutomationHero(
-      viewRow({ triggers: [{ kind: 'webhook', pending: true } as never] }),
-      GATEWAY_ORIGIN,
+      viewRow({ triggers: [{ kind: "webhook", pending: true } as never] }),
+      GATEWAY_ORIGIN
     );
-    expect(hero.kindEyebrow).toBe('Webhook');
+    expect(hero.kindEyebrow).toBe("Webhook");
     expect(hero.webhook).toStrictEqual({ pending: true, url: null });
   });
 
-  it('derives an absolute webhook URL off the gateway origin once provisioned', () => {
+  it("derives an absolute webhook URL off the gateway origin once provisioned", () => {
     const hero = deriveAutomationHero(
-      viewRow({ triggers: [{ kind: 'webhook', id: 'abc123' } as never] }),
-      GATEWAY_ORIGIN,
+      viewRow({ triggers: [{ kind: "webhook", id: "abc123" } as never] }),
+      GATEWAY_ORIGIN
     );
     expect(hero.webhook).toStrictEqual({
       pending: false,
-      url: 'http://127.0.0.1:5173/_centraid-hook/abc123',
+      url: "http://127.0.0.1:5173/_centraid-hook/abc123",
     });
   });
 
   it('labels data/condition triggers honestly instead of "Cron schedule"/"Manual only"', () => {
     const dataTrig = deriveAutomationHero(
       viewRow({
-        triggers: [{ kind: 'data', entities: ['core.content_derivative'] } as never],
+        triggers: [
+          { kind: "data", entities: ["core.content_derivative"] } as never,
+        ],
       }),
-      GATEWAY_ORIGIN,
+      GATEWAY_ORIGIN
     );
-    expect(dataTrig.kindEyebrow).toBe('Data trigger');
-    expect(dataTrig.when).toBe('On data changes');
+    expect(dataTrig.kindEyebrow).toBe("Data trigger");
+    expect(dataTrig.when).toBe("On data changes");
 
     const condTrig = deriveAutomationHero(
       viewRow({
-        triggers: [{ kind: 'condition', entity: 'core.event' } as never],
+        triggers: [{ kind: "condition", entity: "core.event" } as never],
       }),
-      GATEWAY_ORIGIN,
+      GATEWAY_ORIGIN
     );
-    expect(condTrig.kindEyebrow).toBe('Condition');
-    expect(condTrig.when).toBe('On condition');
+    expect(condTrig.kindEyebrow).toBe("Condition");
+    expect(condTrig.when).toBe("On condition");
 
-    const manual = deriveAutomationHero(viewRow({ triggers: [] }), GATEWAY_ORIGIN);
-    expect(manual.kindEyebrow).toBe('Manual');
-    expect(manual.when).toBe('Manual only');
+    const manual = deriveAutomationHero(
+      viewRow({ triggers: [] }),
+      GATEWAY_ORIGIN
+    );
+    expect(manual.kindEyebrow).toBe("Manual");
+    expect(manual.when).toBe("Manual only");
   });
 
   it('labels a data-origin run "Data"', () => {
     const trig = triggerOriginLabel(
-      entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never).run,
+      entry({ triggerKind: "scheduled", triggerOrigin: "data" } as never).run
     );
-    expect(trig.label).toBe('Data');
+    expect(trig.label).toBe("Data");
   });
 
-  it('derives dataDetail (entities + cadence) for a data trigger', () => {
+  it("derives dataDetail (entities + cadence) for a data trigger", () => {
     const withEvery = deriveAutomationHero(
       viewRow({
         triggers: [
           {
-            kind: 'data',
-            entities: ['core.content_derivative', 'core.event'],
-            every: '5m',
+            kind: "data",
+            entities: ["core.content_derivative", "core.event"],
+            every: "5m",
           } as never,
         ],
       }),
-      GATEWAY_ORIGIN,
+      GATEWAY_ORIGIN
     );
     expect(withEvery.dataDetail).toStrictEqual({
-      entities: ['core.content_derivative', 'core.event'],
-      everyLabel: 'Every 5m',
+      entities: ["core.content_derivative", "core.event"],
+      everyLabel: "Every 5m",
     });
     expect(withEvery.conditionDetail).toBeNull();
 
     const withoutEvery = deriveAutomationHero(
       viewRow({
-        triggers: [{ kind: 'data', entities: ['core.event'] } as never],
+        triggers: [{ kind: "data", entities: ["core.event"] } as never],
       }),
-      GATEWAY_ORIGIN,
+      GATEWAY_ORIGIN
     );
     expect(withoutEvery.dataDetail).toStrictEqual({
-      entities: ['core.event'],
+      entities: ["core.event"],
       everyLabel: null,
     });
   });
 
-  it('derives conditionDetail with a readable where clause for a structured condition', () => {
+  it("derives conditionDetail with a readable where clause for a structured condition", () => {
     const hero = deriveAutomationHero(
       viewRow({
         triggers: [
           {
-            kind: 'condition',
-            entity: 'core.event',
-            where: { status: 'overdue' },
-            every: '1h',
+            kind: "condition",
+            entity: "core.event",
+            where: { status: "overdue" },
+            every: "1h",
           } as never,
         ],
       }),
-      GATEWAY_ORIGIN,
+      GATEWAY_ORIGIN
     );
     expect(hero.conditionDetail).toStrictEqual({
-      entity: 'core.event',
-      whereText: JSON.stringify({ status: 'overdue' }, null, 2),
-      everyLabel: 'Every 1h',
+      entity: "core.event",
+      whereText: JSON.stringify({ status: "overdue" }, null, 2),
+      everyLabel: "Every 1h",
     });
     expect(hero.dataDetail).toBeNull();
   });
 
-  it('passes a plain-string where clause through unchanged', () => {
+  it("passes a plain-string where clause through unchanged", () => {
     const hero = deriveAutomationHero(
       viewRow({
         triggers: [
           {
-            kind: 'condition',
-            entity: 'core.event',
-            where: 'status = overdue',
+            kind: "condition",
+            entity: "core.event",
+            where: "status = overdue",
           } as never,
         ],
       }),
-      GATEWAY_ORIGIN,
+      GATEWAY_ORIGIN
     );
-    expect(hero.conditionDetail?.whereText).toBe('status = overdue');
+    expect(hero.conditionDetail?.whereText).toBe("status = overdue");
   });
 
   it('renders a structured where clause array as compact "column op value" lines, matching the builder', () => {
@@ -302,21 +322,23 @@ describe(deriveAutomationHero, () => {
       viewRow({
         triggers: [
           {
-            kind: 'condition',
-            entity: 'core.event',
+            kind: "condition",
+            entity: "core.event",
             where: [
-              { column: 'status', op: 'eq', value: 'open' },
-              { column: 'days_left', op: 'within-days', value: 3 },
+              { column: "status", op: "eq", value: "open" },
+              { column: "days_left", op: "within-days", value: 3 },
             ],
           } as never,
         ],
       }),
-      GATEWAY_ORIGIN,
+      GATEWAY_ORIGIN
     );
-    expect(hero.conditionDetail?.whereText).toBe('status eq "open"\ndays_left within-days 3');
+    expect(hero.conditionDetail?.whereText).toBe(
+      'status eq "open"\ndays_left within-days 3'
+    );
   });
 
-  it('is null for both dataDetail and conditionDetail on a cron automation', () => {
+  it("is null for both dataDetail and conditionDetail on a cron automation", () => {
     const hero = deriveAutomationHero(viewRow(), GATEWAY_ORIGIN);
     expect(hero.dataDetail).toBeNull();
     expect(hero.conditionDetail).toBeNull();
@@ -324,44 +346,50 @@ describe(deriveAutomationHero, () => {
 });
 
 describe(collectAutomationRuns, () => {
-  it('prefers the live automation name over the run-recorded name over the raw ref', async () => {
-    vi.mocked(listAutomations).mockResolvedValue([row()] as unknown as CentraidAutomationRow[]);
+  it("prefers the live automation name over the run-recorded name over the raw ref", async () => {
+    vi.mocked(listAutomations).mockResolvedValue([
+      row(),
+    ] as unknown as CentraidAutomationRow[]);
     vi.mocked(listAutomationTurns).mockResolvedValue([
-      entry({ automationId: 'digest/main' }).run,
+      entry({ automationId: "digest/main" }).run,
     ] as unknown as CentraidAutomationTurnRecord[]);
     const { entries } = await collectAutomationRuns();
-    expect(entries[0]?.automationName).toBe('Daily Digest');
+    expect(entries[0]?.automationName).toBe("Daily Digest");
   });
 
-  it('falls back to the run-recorded name when the automation was deleted', async () => {
-    vi.mocked(listAutomations).mockResolvedValue([] as unknown as CentraidAutomationRow[]);
+  it("falls back to the run-recorded name when the automation was deleted", async () => {
+    vi.mocked(listAutomations).mockResolvedValue(
+      [] as unknown as CentraidAutomationRow[]
+    );
     vi.mocked(listAutomationTurns).mockResolvedValue([
       {
-        runId: 'r1',
-        automationId: 'gone-app/gone-auto',
-        automationName: 'Gone Automation',
+        runId: "r1",
+        automationId: "gone-app/gone-auto",
+        automationName: "Gone Automation",
         startedAt: 1000,
         ok: true,
-        triggerKind: 'cron',
+        triggerKind: "cron",
       },
     ] as unknown as CentraidAutomationTurnRecord[]);
     const { entries } = await collectAutomationRuns();
-    expect(entries[0]?.automationName).toBe('Gone Automation');
+    expect(entries[0]?.automationName).toBe("Gone Automation");
   });
 
-  it('falls back to the raw ref when neither the automation nor a recorded name exists', async () => {
-    vi.mocked(listAutomations).mockResolvedValue([] as unknown as CentraidAutomationRow[]);
+  it("falls back to the raw ref when neither the automation nor a recorded name exists", async () => {
+    vi.mocked(listAutomations).mockResolvedValue(
+      [] as unknown as CentraidAutomationRow[]
+    );
     vi.mocked(listAutomationTurns).mockResolvedValue([
       {
-        runId: 'r1',
-        automationId: 'gone-app/gone-auto',
+        runId: "r1",
+        automationId: "gone-app/gone-auto",
         startedAt: 1000,
         ok: true,
-        triggerKind: 'cron',
+        triggerKind: "cron",
       },
     ] as unknown as CentraidAutomationTurnRecord[]);
     const { entries } = await collectAutomationRuns();
-    expect(entries[0]?.automationName).toBe('gone-app/gone-auto');
+    expect(entries[0]?.automationName).toBe("gone-app/gone-auto");
   });
 
   // The two calls fail differently, and the difference is load-bearing.
@@ -369,17 +397,19 @@ describe(collectAutomationRuns, () => {
   // fetched the list itself — and became a silent regression the moment the
   // overview started sourcing rows from here: a 500 painted the empty state
   // over a broken gateway, with no error card and no Retry (desktop e2e 8.2).
-  it('propagates a list failure — an empty list must not stand in for a broken gateway', async () => {
-    vi.mocked(listAutomations).mockRejectedValue(new Error('500'));
+  it("propagates a list failure — an empty list must not stand in for a broken gateway", async () => {
+    vi.mocked(listAutomations).mockRejectedValue(new Error("500"));
     vi.mocked(listAutomationTurns).mockResolvedValue(
-      [] as unknown as CentraidAutomationTurnRecord[],
+      [] as unknown as CentraidAutomationTurnRecord[]
     );
-    await expect(collectAutomationRuns()).rejects.toThrow('500');
+    await expect(collectAutomationRuns()).rejects.toThrow("500");
   });
 
-  it('degrades a run-feed failure to empty rather than losing the page', async () => {
-    vi.mocked(listAutomations).mockResolvedValue([row()] as unknown as CentraidAutomationRow[]);
-    vi.mocked(listAutomationTurns).mockRejectedValue(new Error('500'));
+  it("degrades a run-feed failure to empty rather than losing the page", async () => {
+    vi.mocked(listAutomations).mockResolvedValue([
+      row(),
+    ] as unknown as CentraidAutomationRow[]);
+    vi.mocked(listAutomationTurns).mockRejectedValue(new Error("500"));
     const { rows, entries } = await collectAutomationRuns();
     expect(rows).toHaveLength(1);
     expect(entries).toStrictEqual([]);

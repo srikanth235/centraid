@@ -1,9 +1,9 @@
 /* Boot-time storage characterization for issue #456 M3. */
 
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { performance } from 'node:perf_hooks';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 export interface StorageLatencySample {
   /** Time spent in the durability barrier for one freshly-written 4 KiB file. */
@@ -16,11 +16,13 @@ export interface StorageLatencySample {
  * Measure the filesystem the vault will actually use. The temporary file is
  * created in `dir`, synced once, closed, and always removed.
  */
-export async function measureStorageLatency(dir: string): Promise<StorageLatencySample> {
+export async function measureStorageLatency(
+  dir: string
+): Promise<StorageLatencySample> {
   await fs.mkdir(dir, { recursive: true });
   const file = path.join(dir, `.centraid-storage-probe-${crypto.randomUUID()}`);
   const started = performance.now();
-  const handle = await fs.open(file, 'wx', 0o600);
+  const handle = await fs.open(file, "wx", 0o600);
   let fsyncMs = 0;
   try {
     await handle.write(Buffer.alloc(4 * 1024, 0xa5), 0, 4 * 1024, 0);

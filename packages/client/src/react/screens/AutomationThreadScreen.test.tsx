@@ -4,8 +4,8 @@
 // AutomationThreadScreenTurnWatch.test.tsx; shared fixtures in
 // AutomationThreadScreen.test-fixtures.tsx.
 
-import { act } from 'react';
-import { describe, expect, it } from 'vitest';
+import { act } from "react";
+import { describe, expect, it } from "vitest";
 
 import {
   byText,
@@ -14,221 +14,295 @@ import {
   makeProps,
   mount,
   NOW,
-} from './AutomationThreadScreen.test-fixtures.js';
+} from "./AutomationThreadScreen.test-fixtures.js";
 
 installThreadHarness();
 
-describe('AutomationThreadScreen', () => {
-  it('renders the header — name, status, primary Run now, collapsed overflow menu', async () => {
+describe("AutomationThreadScreen", () => {
+  it("renders the header — name, status, primary Run now, collapsed overflow menu", async () => {
     const el = await mount(makeProps());
-    expect(el.querySelector('h1')?.textContent).toBe('Daily Digest');
+    expect(el.querySelector("h1")?.textContent).toBe("Daily Digest");
     // The header stays quiet in the happy path — no "Active"/"Plan ready"
     // status badge. Compile state shows as a turn in the thread instead.
-    expect(el.querySelector('[data-au-status]')).toBeNull();
+    expect(el.querySelector("[data-au-status]")).toBeNull();
     expect(el.querySelector('[data-hue="indigo"]')).not.toBeNull();
-    expect(byText(el, 'button', 'Run now')).not.toBeNull();
+    expect(byText(el, "button", "Run now")).not.toBeNull();
     // The enable switch, Edit, and Delete moved into a single overflow menu —
     // nothing but the trigger is in the DOM until it's opened.
     const trigger = el.querySelector<HTMLButtonElement>(
-      '[data-testid="automation-menu-trigger"]',
+      '[data-testid="automation-menu-trigger"]'
     ) as HTMLButtonElement;
     expect(trigger).not.toBeNull();
-    expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
-    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
     expect(el.querySelector('[role="menu"]')).toBeNull();
     expect(el.querySelector('input[role="switch"]')).toBeNull();
   });
 
-  it('shows a Paused badge only when the automation is paused', async () => {
+  it("shows a Paused badge only when the automation is paused", async () => {
     const data = makeData();
-    data.header.statusKind = 'paused';
-    data.header.statusLabel = 'Paused';
+    data.header.statusKind = "paused";
+    data.header.statusLabel = "Paused";
     data.header.enabled = false;
     const el = await mount(makeProps({}, data));
-    const pill = el.querySelector<HTMLElement>('[data-au-status]');
-    expect(pill?.dataset.auStatus).toBe('paused');
-    expect(el.textContent).toContain('Paused');
+    const pill = el.querySelector<HTMLElement>("[data-au-status]");
+    expect(pill?.dataset.auStatus).toBe("paused");
+    expect(el.textContent).toContain("Paused");
   });
 
-  it('opens the overflow menu and edits setup from it', async () => {
+  it("opens the overflow menu and edits setup from it", async () => {
     const props = makeProps();
     const el = await mount(props);
-    const trigger = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-trigger"]')!;
-    await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const trigger = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-trigger"]'
+    )!;
+    await act(async () =>
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     const menu = el.querySelector('[role="menu"]') as HTMLElement;
     expect(menu).not.toBeNull();
-    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
     // Pause (enabled), Edit & compile, and Delete all live in the menu.
-    expect(menu.textContent).toContain('Edit & compile');
-    expect(menu.textContent).toContain('Pause');
-    expect(menu.textContent).toContain('Delete');
-    const edit = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-edit"]')!;
-    await act(async () => edit.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(menu.textContent).toContain("Edit & compile");
+    expect(menu.textContent).toContain("Pause");
+    expect(menu.textContent).toContain("Delete");
+    const edit = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-edit"]'
+    )!;
+    await act(async () =>
+      edit.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     expect(props.onOpenCompiler).toHaveBeenCalledWith();
     // Choosing an item closes the menu.
     expect(el.querySelector('[role="menu"]')).toBeNull();
   });
 
-  it('toggles enablement from the overflow menu (Pause when enabled)', async () => {
+  it("toggles enablement from the overflow menu (Pause when enabled)", async () => {
     const props = makeProps();
     const el = await mount(props);
-    const trigger = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-trigger"]')!;
-    await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const toggle = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-toggle"]')!;
-    expect(toggle.textContent).toContain('Pause');
-    await act(async () => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const trigger = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-trigger"]'
+    )!;
+    await act(async () =>
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    const toggle = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-toggle"]'
+    )!;
+    expect(toggle.textContent).toContain("Pause");
+    await act(async () =>
+      toggle.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     expect(props.onToggleEnabled).toHaveBeenCalledWith(false);
   });
 
-  it('offers Resume in the menu when the automation is disabled', async () => {
+  it("offers Resume in the menu when the automation is disabled", async () => {
     const el = await mount(
-      makeProps({}, makeData({ header: { ...makeData().header, enabled: false } })),
+      makeProps(
+        {},
+        makeData({ header: { ...makeData().header, enabled: false } })
+      )
     );
-    const trigger = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-trigger"]')!;
-    await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const trigger = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-trigger"]'
+    )!;
+    await act(async () =>
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     expect(
-      el.querySelector<HTMLElement>('[data-testid="automation-menu-toggle"]')?.textContent,
-    ).toContain('Resume');
+      el.querySelector<HTMLElement>('[data-testid="automation-menu-toggle"]')
+        ?.textContent
+    ).toContain("Resume");
   });
 
-  it('deletes from the overflow menu', async () => {
+  it("deletes from the overflow menu", async () => {
     const props = makeProps();
     const el = await mount(props);
-    const trigger = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-trigger"]')!;
-    await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const del = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-delete"]')!;
-    await act(async () => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const trigger = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-trigger"]'
+    )!;
+    await act(async () =>
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    const del = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-delete"]'
+    )!;
+    await act(async () =>
+      del.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     expect(props.onDelete).toHaveBeenCalledWith();
   });
 
-  it('closes the overflow menu on Escape', async () => {
+  it("closes the overflow menu on Escape", async () => {
     const el = await mount(makeProps());
-    const trigger = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-trigger"]')!;
-    await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const trigger = el.querySelector<HTMLButtonElement>(
+      '[data-testid="automation-menu-trigger"]'
+    )!;
+    await act(async () =>
+      trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     expect(el.querySelector('[role="menu"]')).not.toBeNull();
     await act(async () =>
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      )
     );
     expect(el.querySelector('[role="menu"]')).toBeNull();
   });
 
-  it('renders trigger chips — mono cron expr + next run, plain-word summaries', async () => {
+  it("renders trigger chips — mono cron expr + next run, plain-word summaries", async () => {
     const el = await mount(makeProps());
     expect(el.querySelector('[data-trigger-kind="cron"]')).not.toBeNull();
-    expect(el.querySelector('code')?.textContent).toBe('0 8 * * *');
-    expect(el.textContent).toContain('next Tomorrow, 8:00 AM');
+    expect(el.querySelector("code")?.textContent).toBe("0 8 * * *");
+    expect(el.textContent).toContain("next Tomorrow, 8:00 AM");
   });
 
-  it('renders consent cards and approves outbox with alwaysAllow when checked', async () => {
+  it("renders consent cards and approves outbox with alwaysAllow when checked", async () => {
     const props = makeProps();
     const el = await mount(props);
     const outboxCard = el.querySelector('[data-kind="outbox"]') as HTMLElement;
     expect(outboxCard).not.toBeNull();
-    expect(outboxCard.textContent).toContain('Staged');
+    expect(outboxCard.textContent).toContain("Staged");
     const parkedCard = el.querySelector('[data-kind="parked"]') as HTMLElement;
     expect(parkedCard).not.toBeNull();
-    expect(parkedCard.textContent).toContain('Parked');
+    expect(parkedCard.textContent).toContain("Parked");
 
-    const checkbox = outboxCard.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    const checkbox = outboxCard.querySelector(
+      'input[type="checkbox"]'
+    ) as HTMLInputElement;
     await act(async () => {
       checkbox.click();
     });
-    const approveBtn = byText(outboxCard, 'button', 'Approve') as HTMLButtonElement;
-    await act(async () => approveBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onDecideConsent).toHaveBeenCalledWith('outbox', 'o1', 'approve', true);
+    const approveBtn = byText(
+      outboxCard,
+      "button",
+      "Approve"
+    ) as HTMLButtonElement;
+    await act(async () =>
+      approveBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    expect(props.onDecideConsent).toHaveBeenCalledWith(
+      "outbox",
+      "o1",
+      "approve",
+      true
+    );
   });
 
-  it('renders the standing grants line and revokes a grant', async () => {
+  it("renders the standing grants line and revokes a grant", async () => {
     const props = makeProps();
     const el = await mount(props);
-    expect(el.textContent).toContain('1 standing grant');
-    const revokeBtn = byText(el, 'button', 'Revoke') as HTMLButtonElement;
+    expect(el.textContent).toContain("1 standing grant");
+    const revokeBtn = byText(el, "button", "Revoke") as HTMLButtonElement;
     expect(revokeBtn).not.toBeNull();
-    await act(async () => revokeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onDecideConsent).toHaveBeenCalledWith('grant', 'g1', 'revoke', undefined);
+    await act(async () =>
+      revokeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    expect(props.onDecideConsent).toHaveBeenCalledWith(
+      "grant",
+      "g1",
+      "revoke",
+      undefined
+    );
   });
 
-  it('renders each run as a chat turn, oldest to newest, with the run summary as the body', async () => {
+  it("renders each run as a chat turn, oldest to newest, with the run summary as the body", async () => {
     const el = await mount(makeProps());
-    const seps = [...el.querySelectorAll('.dateSep')].map((n) => n.textContent);
-    expect(seps).toStrictEqual(['Yesterday', 'Today']);
-    const turns = [...el.querySelectorAll<HTMLElement>('.turn')];
+    const seps = [...el.querySelectorAll(".dateSep")].map((n) => n.textContent);
+    expect(seps).toStrictEqual(["Yesterday", "Today"]);
+    const turns = [...el.querySelectorAll<HTMLElement>(".turn")];
     expect(turns).toHaveLength(3);
-    expect(turns.map((e) => e.dataset.runStatus)).toStrictEqual(['ok', 'fail', 'running']);
+    expect(turns.map((e) => e.dataset.runStatus)).toStrictEqual([
+      "ok",
+      "fail",
+      "running",
+    ]);
     // ok run speaks its summary as a message; failed run speaks its error.
-    expect(turns[0]!.textContent).toContain('ok run');
-    expect(turns[1]!.textContent).toContain('failed run');
+    expect(turns[0]!.textContent).toContain("ok run");
+    expect(turns[1]!.textContent).toContain("failed run");
     // telemetry footer carries the derived duration / token count.
-    expect(turns[0]!.textContent).toContain('3.2s');
-    expect(turns[0]!.textContent).toContain('1.2k tok');
+    expect(turns[0]!.textContent).toContain("3.2s");
+    expect(turns[0]!.textContent).toContain("1.2k tok");
   });
 
-  it('opens the full run detail from a turn', async () => {
+  it("opens the full run detail from a turn", async () => {
     const props = makeProps();
     const el = await mount(props);
     // Details affordances appear in DOM order (r1 ok, then r2 fail's "View details").
     const details = [...el.querySelectorAll('[data-testid="run-details"]')];
-    await act(async () => details[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onOpenRun).toHaveBeenCalledWith('r2');
+    await act(async () =>
+      details[1]!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    expect(props.onOpenRun).toHaveBeenCalledWith("r2");
   });
 
-  it('steers the automation from the composer, framing one-off vs standing intent', async () => {
+  it("steers the automation from the composer, framing one-off vs standing intent", async () => {
     const props = makeProps();
     const el = await mount(props);
     const input = el.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Ask about this automation\'s runs"]',
+      'textarea[aria-label="Ask about this automation\'s runs"]'
     );
-    const send = el.querySelector<HTMLButtonElement>('button[aria-label="Send"]');
+    const send = el.querySelector<HTMLButtonElement>(
+      'button[aria-label="Send"]'
+    );
     expect(input).not.toBeNull();
     expect(send).not.toBeNull();
     // Drive the controlled input through React's value tracker (native setter).
-    const nativeSet = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
-      ?.set as (v: string) => void;
+    const nativeSet = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value"
+    )?.set as (v: string) => void;
     await act(async () => {
-      nativeSet.call(input, 'only flag movers over 5%');
-      input!.dispatchEvent(new Event('input', { bubbles: true }));
+      nativeSet.call(input, "only flag movers over 5%");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await act(async () => send!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () =>
+      send!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
     expect(props.onAskAboutRuns).toHaveBeenCalledWith(
-      'only flag movers over 5%',
+      "only flag movers over 5%",
       expect.objectContaining({ onContext: expect.any(Function) }),
       expect.any(Function),
-      expect.any(AbortSignal),
+      expect.any(AbortSignal)
     );
   });
 
-  it('hides the composer for gateways without the automationTurns capability', async () => {
+  it("hides the composer for gateways without the automationTurns capability", async () => {
     const el = await mount(makeProps({}, makeData({ automationTurns: false })));
     expect(
       el.querySelector<HTMLTextAreaElement>(
-        'textarea[aria-label="Ask about this automation\'s runs"]',
-      ),
+        'textarea[aria-label="Ask about this automation\'s runs"]'
+      )
     ).toBeNull();
   });
 
-  it('offers no way to change the automation from the composer', async () => {
+  it("offers no way to change the automation from the composer", async () => {
     // The run screen READS. The old "Apply to future runs" switch rewrote the
     // standing instructions and kicked a compile from here; its replacement is
     // a link to the compiler, which is the only surface that may do that.
     const props = makeProps();
     const el = await mount(props);
-    expect(el.querySelector('button[aria-pressed]')).toBeNull();
-    const link = [...el.querySelectorAll('button')].find(
-      (b) => b.textContent === 'Open the compiler',
+    expect(el.querySelector("button[aria-pressed]")).toBeNull();
+    const link = [...el.querySelectorAll("button")].find(
+      (b) => b.textContent === "Open the compiler"
     );
     expect(link).toBeDefined();
-    await act(async () => link!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onOpenCompiler).toHaveBeenCalledWith(expect.objectContaining({ type: 'click' }));
+    await act(async () =>
+      link!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    expect(props.onOpenCompiler).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "click" })
+    );
   });
 
-  it('marks each turn with a trigger-origin node across origins', async () => {
+  it("marks each turn with a trigger-origin node across origins", async () => {
     // One ok run per origin exercises the origin-aware spine node.
     const base = {
       costUsd: null,
-      dateGroup: 'Today',
+      dateGroup: "Today",
       durationMs: 500,
-      entryKind: 'run' as const,
-      status: 'ok' as const,
+      entryKind: "run" as const,
+      status: "ok" as const,
     };
     const el = await mount(
       makeProps(
@@ -238,97 +312,101 @@ describe('AutomationThreadScreen', () => {
             {
               ...base,
               endedAt: NOW,
-              originLabel: 'Manual',
-              runId: 'm',
+              originLabel: "Manual",
+              runId: "m",
               startedAt: NOW - 4,
-              summary: 'manual',
+              summary: "manual",
             },
             {
               ...base,
               endedAt: NOW,
-              originLabel: 'Webhook',
-              runId: 'w',
+              originLabel: "Webhook",
+              runId: "w",
               startedAt: NOW - 3,
-              summary: 'hook',
+              summary: "hook",
             },
             {
               ...base,
               endedAt: NOW,
-              originLabel: 'Data change',
-              runId: 'd',
+              originLabel: "Data change",
+              runId: "d",
               startedAt: NOW - 2,
-              summary: 'data',
+              summary: "data",
             },
             {
               ...base,
               endedAt: NOW,
-              originLabel: 'Replay',
-              runId: 'p',
+              originLabel: "Replay",
+              runId: "p",
               startedAt: NOW - 1,
-              summary: 'replay',
+              summary: "replay",
             },
           ],
-        }),
-      ),
+        })
+      )
     );
-    const turns = [...el.querySelectorAll<HTMLElement>('.turn')];
+    const turns = [...el.querySelectorAll<HTMLElement>(".turn")];
     expect(turns).toHaveLength(4);
-    expect(turns.every((t) => t.querySelector('.node'))).toBe(true);
+    expect(turns.every((t) => t.querySelector(".node"))).toBe(true);
   });
 
-  it('shows the empty-thread state when there are no runs', async () => {
+  it("shows the empty-thread state when there are no runs", async () => {
     const el = await mount(makeProps({}, makeData({ runs: [] })));
-    expect(el.textContent).toContain('No runs yet');
-    expect(el.textContent).toContain('Run now, or wait for the trigger.');
+    expect(el.textContent).toContain("No runs yet");
+    expect(el.textContent).toContain("Run now, or wait for the trigger.");
   });
 
   // ── The run screen reports on the plan; it never acts on it ──────────────
-  it('stays silent about a healthy plan', async () => {
+  it("stays silent about a healthy plan", async () => {
     const el = await mount(makeProps());
     expect(el.querySelector('[data-testid="plan-banner"]')).toBeNull();
   });
 
-  it('reports a failed compile and hands off instead of offering to retry it', async () => {
+  it("reports a failed compile and hands off instead of offering to retry it", async () => {
     const props = makeProps(
       {},
       makeData({
         plan: {
-          detail: 'handler.js: unexpected token',
-          label: 'Compile failed',
-          state: 'failed',
+          detail: "handler.js: unexpected token",
+          label: "Compile failed",
+          state: "failed",
         },
-      }),
+      })
     );
     const el = await mount(props);
     const banner = el.querySelector('[data-testid="plan-banner"]');
-    expect(banner?.textContent).toContain('Compile failed');
-    expect(banner?.textContent).toContain('handler.js: unexpected token');
+    expect(banner?.textContent).toContain("Compile failed");
+    expect(banner?.textContent).toContain("handler.js: unexpected token");
     // No "Retry compile" anywhere — compiling belongs to the compiler.
-    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).not.toContain(
-      'Retry compile',
-    );
+    expect(
+      [...el.querySelectorAll("button")].map((b) => b.textContent)
+    ).not.toContain("Retry compile");
     await act(async () =>
       el
         .querySelector('[data-testid="plan-open-compiler"]')!
-        .dispatchEvent(new MouseEvent('click', { bubbles: true })),
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
-    expect(props.onOpenCompiler).toHaveBeenCalledWith(expect.objectContaining({ type: 'click' }));
+    expect(props.onOpenCompiler).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "click" })
+    );
   });
 
-  it('offers no remedy while a compile is in flight', async () => {
+  it("offers no remedy while a compile is in flight", async () => {
     const el = await mount(
       makeProps(
         {},
         makeData({
-          plan: { detail: null, label: 'Compiling…', state: 'compiling' },
-        }),
-      ),
+          plan: { detail: null, label: "Compiling…", state: "compiling" },
+        })
+      )
     );
-    expect(el.querySelector('[data-testid="plan-banner"]')?.textContent).toContain('Compiling…');
+    expect(
+      el.querySelector('[data-testid="plan-banner"]')?.textContent
+    ).toContain("Compiling…");
     expect(el.querySelector('[data-testid="plan-open-compiler"]')).toBeNull();
   });
 
-  it('renders an ask as the reader’s own turn, with no way to re-fire it', async () => {
+  it("renders an ask as the reader’s own turn, with no way to re-fire it", async () => {
     const el = await mount(
       makeProps(
         {},
@@ -336,32 +414,38 @@ describe('AutomationThreadScreen', () => {
           runs: [
             {
               costUsd: null,
-              dateGroup: 'Today',
+              dateGroup: "Today",
               durationMs: 400,
               endedAt: NOW,
-              entryKind: 'ask',
-              originLabel: 'You asked',
-              runId: 'ask-1',
+              entryKind: "ask",
+              originLabel: "You asked",
+              runId: "ask-1",
               startedAt: NOW - 400,
-              status: 'ok',
-              summary: 'It failed because the token expired.',
+              status: "ok",
+              summary: "It failed because the token expired.",
             },
           ],
-        }),
-      ),
+        })
+      )
     );
     const entry = el.querySelector<HTMLElement>('[data-testid="ask-entry"]');
     expect(entry).not.toBeNull();
-    expect(entry?.dataset.entryKind).toBe('ask');
-    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Run again');
+    expect(entry?.dataset.entryKind).toBe("ask");
+    expect(
+      [...el.querySelectorAll("button")].map((b) => b.textContent)
+    ).not.toContain("Run again");
   });
 
-  it('renders the not-found state with a working breadcrumb back', async () => {
+  it("renders the not-found state with a working breadcrumb back", async () => {
     const props = makeProps({}, null);
     const el = await mount(props);
-    expect(el.textContent).toContain('Automation not found.');
-    const back = el.querySelector('.auCrumb button') as HTMLButtonElement;
-    await act(async () => back.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onBack).toHaveBeenCalledWith(expect.objectContaining({ type: 'click' }));
+    expect(el.textContent).toContain("Automation not found.");
+    const back = el.querySelector(".auCrumb button") as HTMLButtonElement;
+    await act(async () =>
+      back.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    );
+    expect(props.onBack).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "click" })
+    );
   });
 });

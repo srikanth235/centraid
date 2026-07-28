@@ -18,27 +18,31 @@
  * positively rather than by absence of an error.
  */
 
-import { promises as fs, readFileSync, readdirSync } from 'node:fs';
-import path from 'node:path';
+import { promises as fs, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   KEY_STORE_ENVELOPE_MAGIC,
   listReplicaIntentOutcomes,
   recordReplicaIntentOutcome,
-} from '@centraid/vault';
-import { describe, afterEach, expect, test } from 'vitest';
+} from "@centraid/vault";
+import { describe, afterEach, expect, test } from "vitest";
 
-import { openVaultRegistry } from '../serve/vault-registry.ts';
-import { commandDevices } from './device-admin.ts';
-import { daemonKeyStore } from './key-store.ts';
-import { daemonLayoutFor } from './paths.ts';
-import { commandVault } from './vault-admin.ts';
+import { openVaultRegistry } from "../serve/vault-registry.ts";
+import { commandDevices } from "./device-admin.ts";
+import { daemonKeyStore } from "./key-store.ts";
+import { daemonLayoutFor } from "./paths.ts";
+import { commandVault } from "./vault-admin.ts";
 
 const roots: string[] = [];
-describe('admin-custody suite', () => {
+describe("admin-custody suite", () => {
   afterEach(async () => {
-    await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
+    await Promise.all(
+      roots
+        .splice(0)
+        .map((root) => fs.rm(root, { recursive: true, force: true }))
+    );
   });
 
   const quiet = {
@@ -63,7 +67,7 @@ describe('admin-custody suite', () => {
     } finally {
       process.stdout.write = original;
     }
-    return chunks.join('');
+    return chunks.join("");
   }
 
   /** A data dir whose vault was created the way the DAEMON creates one. */
@@ -72,7 +76,7 @@ describe('admin-custody suite', () => {
     vaultId: string;
     layout: ReturnType<typeof daemonLayoutFor>;
   }> {
-    const dataDir = await tempDir('admin-custody-');
+    const dataDir = await tempDir("admin-custody-");
     roots.push(dataDir);
     const layout = daemonLayoutFor(dataDir);
     const registry = openVaultRegistry({
@@ -91,12 +95,17 @@ describe('admin-custody suite', () => {
     return { dataDir, vaultId: created.vaultId, layout };
   }
 
-  test('a daemon-created vault really does carry a protected sealing key', async () => {
-    const { layout, vaultId } = await daemonDataDir('Family');
-    const raw = readFileSync(path.join(layout.keysDir, `${vaultId}.sealkey`), 'utf8');
+  test("a daemon-created vault really does carry a protected sealing key", async () => {
+    const { layout, vaultId } = await daemonDataDir("Family");
+    const raw = readFileSync(
+      path.join(layout.keysDir, `${vaultId}.sealkey`),
+      "utf8"
+    );
     expect(raw.startsWith(KEY_STORE_ENVELOPE_MAGIC)).toBe(true);
-    expect(JSON.parse(raw.slice(KEY_STORE_ENVELOPE_MAGIC.length))).toMatchObject({
-      scheme: 'aes-256-gcm-v1',
+    expect(
+      JSON.parse(raw.slice(KEY_STORE_ENVELOPE_MAGIC.length))
+    ).toMatchObject({
+      scheme: "aes-256-gcm-v1",
     });
     // The precondition these tests exist for: a protector-less reader sees
     // NOTHING, silently.
@@ -110,41 +119,62 @@ describe('admin-custody suite', () => {
     blind.stop();
   });
 
-  test('vault list sees a daemon-created vault', async () => {
-    const { dataDir, vaultId } = await daemonDataDir('Family');
+  test("vault list sees a daemon-created vault", async () => {
+    const { dataDir, vaultId } = await daemonDataDir("Family");
     const output = await capture(() =>
-      commandVault(['list', '--data-dir', dataDir, '--json'], fail),
+      commandVault(["list", "--data-dir", dataDir, "--json"], fail)
     );
     expect(JSON.parse(output.trim())).toMatchObject({
       ok: true,
-      vaults: [expect.objectContaining({ vaultId, name: 'Family' })],
+      vaults: [expect.objectContaining({ vaultId, name: "Family" })],
     });
   });
 
-  test('devices add --vault resolves a daemon-created vault by name', async () => {
-    const { dataDir, vaultId } = await daemonDataDir('Family');
+  test("devices add --vault resolves a daemon-created vault by name", async () => {
+    const { dataDir, vaultId } = await daemonDataDir("Family");
     const output = await capture(() =>
       commandDevices(
-        ['add', '--data-dir', dataDir, 'ep-laptop', '--vault', 'Family', '--role', 'admin'],
-        fail,
-      ),
+        [
+          "add",
+          "--data-dir",
+          dataDir,
+          "ep-laptop",
+          "--vault",
+          "Family",
+          "--role",
+          "admin",
+        ],
+        fail
+      )
     );
     expect(JSON.parse(output.trim())).toMatchObject({
-      endpointId: 'ep-laptop',
+      endpointId: "ep-laptop",
       vaultId,
     });
   });
 
-  test('devices revoke performs the vault-local data erasure, not a silent skip', async () => {
-    const { dataDir, vaultId, layout } = await daemonDataDir('Family');
+  test("devices revoke performs the vault-local data erasure, not a silent skip", async () => {
+    const { dataDir, vaultId, layout } = await daemonDataDir("Family");
     await capture(() =>
       commandDevices(
-        ['add', '--data-dir', dataDir, 'ep-owner', '--vault', 'Family', '--role', 'admin'],
-        fail,
-      ),
+        [
+          "add",
+          "--data-dir",
+          dataDir,
+          "ep-owner",
+          "--vault",
+          "Family",
+          "--role",
+          "admin",
+        ],
+        fail
+      )
     );
     await capture(() =>
-      commandDevices(['add', '--data-dir', dataDir, 'ep-phone', '--vault', 'Family'], fail),
+      commandDevices(
+        ["add", "--data-dir", dataDir, "ep-phone", "--vault", "Family"],
+        fail
+      )
     );
 
     // Give the phone something vault-local to lose. `forgetReplicaDevice` — the
@@ -159,23 +189,28 @@ describe('admin-custody suite', () => {
       enableWalShipper: false,
     });
     const seedPlane = seed.get(vaultId)!;
-    expect(seedPlane, 'the CLI-visible registry must mount the vault').toBeTruthy();
+    expect(
+      seedPlane,
+      "the CLI-visible registry must mount the vault"
+    ).toBeTruthy();
     recordReplicaIntentOutcome(seedPlane.db.vault, {
-      intentId: 'intent-1',
-      deviceId: 'ep-phone',
-      appId: 'notes',
-      action: 'create',
-      payloadHash: 'hash-1',
-      status: 'parked',
+      intentId: "intent-1",
+      deviceId: "ep-phone",
+      appId: "notes",
+      action: "create",
+      payloadHash: "hash-1",
+      status: "parked",
     });
-    expect(listReplicaIntentOutcomes(seedPlane.db.vault, 'ep-phone')).toHaveLength(1);
+    expect(
+      listReplicaIntentOutcomes(seedPlane.db.vault, "ep-phone")
+    ).toHaveLength(1);
     seed.stop();
 
     const output = await capture(() =>
-      commandDevices(['revoke', '--data-dir', dataDir, 'ep-phone'], fail),
+      commandDevices(["revoke", "--data-dir", dataDir, "ep-phone"], fail)
     );
     expect(JSON.parse(output.trim())).toMatchObject({
-      revoked: { endpointId: 'ep-phone' },
+      revoked: { endpointId: "ep-phone" },
     });
 
     const after = openVaultRegistry({
@@ -187,27 +222,38 @@ describe('admin-custody suite', () => {
     });
     try {
       // Positively asserted, not inferred from the absence of an error.
-      expect(listReplicaIntentOutcomes(after.get(vaultId)!.db.vault, 'ep-phone')).toStrictEqual([]);
+      expect(
+        listReplicaIntentOutcomes(after.get(vaultId)!.db.vault, "ep-phone")
+      ).toStrictEqual([]);
     } finally {
       after.stop();
     }
   });
 
-  test('the CLI leaves no unprotected key material behind', async () => {
-    const { dataDir, layout } = await daemonDataDir('Family');
+  test("the CLI leaves no unprotected key material behind", async () => {
+    const { dataDir, layout } = await daemonDataDir("Family");
     await capture(() =>
       commandDevices(
-        ['add', '--data-dir', dataDir, 'ep-laptop', '--vault', 'Family', '--role', 'admin'],
-        fail,
-      ),
+        [
+          "add",
+          "--data-dir",
+          dataDir,
+          "ep-laptop",
+          "--vault",
+          "Family",
+          "--role",
+          "admin",
+        ],
+        fail
+      )
     );
     for (const entry of readdirSync(layout.keysDir)) {
-      if (entry.includes('.tmp')) continue;
-      const raw = readFileSync(path.join(layout.keysDir, entry), 'utf8');
+      if (entry.includes(".tmp")) continue;
+      const raw = readFileSync(path.join(layout.keysDir, entry), "utf8");
       expect(
         JSON.parse(raw.slice(KEY_STORE_ENVELOPE_MAGIC.length)),
-        `${entry} was rewritten without the daemon's protector`,
-      ).toMatchObject({ scheme: 'aes-256-gcm-v1' });
+        `${entry} was rewritten without the daemon's protector`
+      ).toMatchObject({ scheme: "aes-256-gcm-v1" });
     }
   });
 });

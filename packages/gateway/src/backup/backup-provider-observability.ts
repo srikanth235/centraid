@@ -14,16 +14,16 @@ import {
   type ProviderPolicy,
   type ProviderPolicyDeclaration,
   type StoreClass,
-} from '@centraid/backup';
-import type { BackupPolicy } from '@centraid/vault';
+} from "@centraid/backup";
+import type { BackupPolicy } from "@centraid/vault";
 
 export type ProviderPolicySyncStatus =
-  | 'pending'
-  | 'synced'
-  | 'drift'
-  | 'rejected'
-  | 'unsupported'
-  | 'error';
+  | "pending"
+  | "synced"
+  | "drift"
+  | "rejected"
+  | "unsupported"
+  | "error";
 
 /** Sticky provider-policy state persisted beside the target. */
 export interface ProviderPolicySyncState {
@@ -36,7 +36,7 @@ export interface ProviderPolicySyncState {
   details?: Record<string, unknown>;
 }
 
-export type InventorySource = 'provider' | 'bucket';
+export type InventorySource = "provider" | "bucket";
 
 export interface CollectedInventory {
   source: InventorySource;
@@ -54,13 +54,15 @@ export interface CollectedInventory {
 }
 
 export interface CollectedAudit {
-  source: 'provider' | 'unavailable';
+  source: "provider" | "unavailable";
   eventCount: number;
   recent: ProviderAuditEvent[];
   error?: string;
 }
 
-export function providerPolicyFor(policy: BackupPolicy): ProviderPolicyDeclaration {
+export function providerPolicyFor(
+  policy: BackupPolicy
+): ProviderPolicyDeclaration {
   return {
     rpoSeconds: policy.rpoSeconds,
     snapshotIntervalHours: policy.snapshotIntervalHours,
@@ -71,7 +73,7 @@ export function providerPolicyFor(policy: BackupPolicy): ProviderPolicyDeclarati
 
 export function providerPolicyMatches(
   desired: ProviderPolicyDeclaration,
-  echo: ProviderPolicyDeclaration,
+  echo: ProviderPolicyDeclaration
 ): boolean {
   return (
     desired.rpoSeconds === echo.rpoSeconds &&
@@ -82,8 +84,8 @@ export function providerPolicyMatches(
 }
 
 function errorFields(
-  err: unknown,
-): Pick<ProviderPolicySyncState, 'error' | 'errorCode' | 'details'> {
+  err: unknown
+): Pick<ProviderPolicySyncState, "error" | "errorCode" | "details"> {
   const error = err instanceof Error ? err.message : String(err);
   if (!(err instanceof BackupProviderError)) return { error };
   return {
@@ -93,7 +95,9 @@ function errorFields(
   };
 }
 
-async function capabilities(provider: BackupProvider): Promise<ProviderCapabilities> {
+async function capabilities(
+  provider: BackupProvider
+): Promise<ProviderCapabilities> {
   return provider.capabilities();
 }
 
@@ -107,20 +111,22 @@ export async function pushProviderPolicy(opts: {
   const base = { desired: opts.desired, checkedAt: opts.checkedAt };
   try {
     const caps = await capabilities(opts.provider);
-    if (!caps.capabilities.includes('policy') || !opts.provider.putPolicy) {
-      return { ...base, status: 'unsupported' };
+    if (!caps.capabilities.includes("policy") || !opts.provider.putPolicy) {
+      return { ...base, status: "unsupported" };
     }
     const echo = await opts.provider.putPolicy(opts.targetId, opts.desired);
     return {
       ...base,
-      status: providerPolicyMatches(opts.desired, echo) ? 'synced' : 'drift',
+      status: providerPolicyMatches(opts.desired, echo) ? "synced" : "drift",
       echo,
     };
   } catch (err) {
     return {
       ...base,
       status:
-        err instanceof BackupProviderError && err.code === 'policy_unmet' ? 'rejected' : 'error',
+        err instanceof BackupProviderError && err.code === "policy_unmet"
+          ? "rejected"
+          : "error",
       ...errorFields(err),
     };
   }
@@ -136,27 +142,27 @@ export async function inspectProviderPolicy(opts: {
   const base = { desired: opts.desired, checkedAt: opts.checkedAt };
   try {
     const caps = await capabilities(opts.provider);
-    if (!caps.capabilities.includes('policy') || !opts.provider.getPolicy) {
-      return { ...base, status: 'unsupported' };
+    if (!caps.capabilities.includes("policy") || !opts.provider.getPolicy) {
+      return { ...base, status: "unsupported" };
     }
     const echo = await opts.provider.getPolicy(opts.targetId);
     return {
       ...base,
-      status: providerPolicyMatches(opts.desired, echo) ? 'synced' : 'drift',
+      status: providerPolicyMatches(opts.desired, echo) ? "synced" : "drift",
       echo,
     };
   } catch (err) {
-    return { ...base, status: 'error', ...errorFields(err) };
+    return { ...base, status: "error", ...errorFields(err) };
   }
 }
 
 async function providerInventory(
   provider: BackupProvider,
   targetId: string,
-  store: StoreClass,
+  store: StoreClass
 ): Promise<ProviderInventoryObject[]> {
   const listInventory = provider.listInventory;
-  if (!listInventory) throw new Error('provider does not implement inventory');
+  if (!listInventory) throw new Error("provider does not implement inventory");
   const objects: ProviderInventoryObject[] = [];
   const seen = new Set<string>();
   const readPage = async (cursor?: string): Promise<void> => {
@@ -170,7 +176,8 @@ async function providerInventory(
     }
     objects.push(...page.objects);
     if (!page.nextCursor) return;
-    if (seen.has(page.nextCursor)) throw new Error('provider repeated an inventory cursor');
+    if (seen.has(page.nextCursor))
+      throw new Error("provider repeated an inventory cursor");
     seen.add(page.nextCursor);
     return readPage(page.nextCursor);
   };
@@ -181,27 +188,29 @@ async function providerInventory(
 async function bucketInventory(
   provider: BackupProvider,
   targetId: string,
-  store: StoreClass,
+  store: StoreClass
 ): Promise<ProviderInventoryObject[]> {
-  const data = await provider.openDataPlane(targetId, store, 'read');
+  const data = await provider.openDataPlane(targetId, store, "read");
   const objects: ProviderInventoryObject[] = [];
-  for await (const row of data.list('')) {
+  for await (const row of data.list("")) {
     objects.push({
       key: row.key,
       sizeBytes: row.size,
-      etagOrHash: row.etagOrHash ?? '',
+      etagOrHash: row.etagOrHash ?? "",
       storedAt: row.storedAt ?? 0,
       ...(row.storageClass ? { storageClass: row.storageClass } : {}),
-      state: 'live',
+      state: "live",
     });
   }
   return objects;
 }
 
 function liveObjects(
-  objects: readonly ProviderInventoryObject[],
+  objects: readonly ProviderInventoryObject[]
 ): Map<string, ProviderInventoryObject> {
-  return new Map(objects.filter((row) => row.state === 'live').map((row) => [row.key, row]));
+  return new Map(
+    objects.filter((row) => row.state === "live").map((row) => [row.key, row])
+  );
 }
 
 function difference(left: Set<string>, right: Set<string>): string[] {
@@ -209,7 +218,7 @@ function difference(left: Set<string>, right: Set<string>): string[] {
 }
 
 function normalizedObjectHash(value: string): string {
-  return value.trim().replace(/^"|"$/gu, '').toLowerCase();
+  return value.trim().replace(/^"|"$/gu, "").toLowerCase();
 }
 
 /**
@@ -221,7 +230,7 @@ function normalizedObjectHash(value: string): string {
  */
 function metadataMismatches(
   reported: Map<string, ProviderInventoryObject>,
-  raw: Map<string, ProviderInventoryObject>,
+  raw: Map<string, ProviderInventoryObject>
 ): string[] {
   const mismatches: string[] = [];
   for (const [key, attested] of reported) {
@@ -231,7 +240,9 @@ function metadataMismatches(
     const listedHash = normalizedObjectHash(listed.etagOrHash);
     if (
       attested.sizeBytes !== listed.sizeBytes ||
-      (attestedHash.length > 0 && listedHash.length > 0 && attestedHash !== listedHash)
+      (attestedHash.length > 0 &&
+        listedHash.length > 0 &&
+        attestedHash !== listedHash)
     ) {
       mismatches.push(key);
     }
@@ -251,18 +262,24 @@ export async function collectInventory(opts: {
   verifyBucket: boolean;
 }): Promise<CollectedInventory> {
   const caps = await capabilities(opts.provider);
-  const attested = caps.capabilities.includes('inventory') && !!opts.provider.listInventory;
+  const attested =
+    caps.capabilities.includes("inventory") && !!opts.provider.listInventory;
   if (opts.verifyBucket) {
     const raw = await bucketInventory(opts.provider, opts.targetId, opts.store);
-    if (!attested) return { source: 'bucket', providerAttested: false, objects: raw };
+    if (!attested)
+      return { source: "bucket", providerAttested: false, objects: raw };
     try {
-      const reported = await providerInventory(opts.provider, opts.targetId, opts.store);
+      const reported = await providerInventory(
+        opts.provider,
+        opts.targetId,
+        opts.store
+      );
       const providerObjects = liveObjects(reported);
       const bucketObjects = liveObjects(raw);
       const providerKeys = new Set(providerObjects.keys());
       const bucketKeys = new Set(bucketObjects.keys());
       return {
-        source: 'bucket',
+        source: "bucket",
         providerAttested: false,
         objects: raw,
         crossCheck: {
@@ -273,7 +290,7 @@ export async function collectInventory(opts: {
       };
     } catch (err) {
       return {
-        source: 'bucket',
+        source: "bucket",
         providerAttested: false,
         objects: raw,
         attestationError: err instanceof Error ? err.message : String(err),
@@ -283,21 +300,29 @@ export async function collectInventory(opts: {
   if (attested) {
     try {
       return {
-        source: 'provider',
+        source: "provider",
         providerAttested: true,
-        objects: await providerInventory(opts.provider, opts.targetId, opts.store),
+        objects: await providerInventory(
+          opts.provider,
+          opts.targetId,
+          opts.store
+        ),
       };
     } catch (err) {
       return {
-        source: 'bucket',
+        source: "bucket",
         providerAttested: false,
-        objects: await bucketInventory(opts.provider, opts.targetId, opts.store),
+        objects: await bucketInventory(
+          opts.provider,
+          opts.targetId,
+          opts.store
+        ),
         attestationError: err instanceof Error ? err.message : String(err),
       };
     }
   }
   return {
-    source: 'bucket',
+    source: "bucket",
     providerAttested: false,
     objects: await bucketInventory(opts.provider, opts.targetId, opts.store),
   };
@@ -306,13 +331,13 @@ export async function collectInventory(opts: {
 /** Collect the append-only audit feed, retaining only a bounded UI tail. */
 export async function collectAudit(
   provider: BackupProvider,
-  targetId: string,
+  targetId: string
 ): Promise<CollectedAudit> {
   try {
     const caps = await capabilities(provider);
     const listEvents = provider.listEvents;
-    if (!caps.capabilities.includes('audit') || !listEvents) {
-      return { source: 'unavailable', eventCount: 0, recent: [] };
+    if (!caps.capabilities.includes("audit") || !listEvents) {
+      return { source: "unavailable", eventCount: 0, recent: [] };
     }
     let eventCount = 0;
     let recent: ProviderAuditEvent[] = [];
@@ -325,15 +350,16 @@ export async function collectAudit(
       eventCount += page.events.length;
       recent = [...recent, ...page.events].slice(-50);
       if (!page.nextCursor) return;
-      if (seen.has(page.nextCursor)) throw new Error('provider repeated an audit cursor');
+      if (seen.has(page.nextCursor))
+        throw new Error("provider repeated an audit cursor");
       seen.add(page.nextCursor);
       return readPage(page.nextCursor);
     };
     await readPage();
-    return { source: 'provider', eventCount, recent };
+    return { source: "provider", eventCount, recent };
   } catch (err) {
     return {
-      source: 'unavailable',
+      source: "unavailable",
       eventCount: 0,
       recent: [],
       error: err instanceof Error ? err.message : String(err),

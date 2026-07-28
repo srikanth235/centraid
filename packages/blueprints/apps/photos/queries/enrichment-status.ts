@@ -16,18 +16,18 @@ interface RawPolicy {
 }
 
 export default async function enrichmentStatus({ ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   try {
     const result = await ctx.vault.read({
-      entity: 'enrich.policy',
-      where: [{ column: 'domain', op: 'eq', value: 'photos' }],
+      entity: "enrich.policy",
+      where: [{ column: "domain", op: "eq", value: "photos" }],
       purpose,
     });
     const row = ((result.rows ?? []) as unknown as RawPolicy[])[0];
-    return { tier: row?.tier ?? 'off' };
+    return { tier: row?.tier ?? "off" };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    if (e.code === 'VAULT_CONSENT') {
+    if (e.code === "VAULT_CONSENT") {
       return { tier: null, vaultDenied: { code: e.code, message: e.message } };
     }
     return { tier: null, error: String(e.message ?? err) };

@@ -1,24 +1,31 @@
-import { OnlineOnlyError } from '@centraid/client/replica/native';
-import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { OnlineOnlyError } from "@centraid/client/replica/native";
+import { Feather } from "@expo/vector-icons";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { family, useTheme } from '../../kit/theme';
-import type { PhotosScreenProps } from '../../navigation';
-import PhotoTimeline from './PhotoTimeline';
-import { sectionPhotoAssets } from './timeline-model';
-import { usePhotoTimeline } from './timeline-source';
+import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { family, useTheme } from "../../kit/theme";
+import type { PhotosScreenProps } from "../../navigation";
+import PhotoTimeline from "./PhotoTimeline";
+import { sectionPhotoAssets } from "./timeline-model";
+import { usePhotoTimeline } from "./timeline-source";
 
 export default function PhotosSearch({
   navigation,
-}: PhotosScreenProps<'PhotosSearch'>): React.JSX.Element {
+}: PhotosScreenProps<"PhotosSearch">): React.JSX.Element {
   const { colors } = useTheme();
   const { session, online } = useReplica();
   const { assets } = usePhotoTimeline();
-  const [term, setTerm] = useState('');
+  const [term, setTerm] = useState("");
   const [contentIds, setContentIds] = useState<Set<string>>();
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [videoOnly, setVideoOnly] = useState(false);
@@ -26,29 +33,31 @@ export default function PhotosSearch({
   const [albumId, setAlbumId] = useState<string>();
   const [personId, setPersonId] = useState<string>();
   const [placeId, setPlaceId] = useState<string>();
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const collections = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.collection' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.collection" }), [])
   );
   const entries = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.collection_entry' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.collection_entry" }), [])
   );
   const faces = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'media.face_region' }), []),
+    "photos",
+    useMemo(() => ({ entity: "media.face_region" }), [])
   );
   const parties = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.party' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.party" }), [])
   );
   const places = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.place' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.place" }), [])
   );
-  const [notice, setNotice] = useState('Search runs against the local FTS5 replica.');
+  const [notice, setNotice] = useState(
+    "Search runs against the local FTS5 replica."
+  );
   const [onlineOnly, setOnlineOnly] = useState(false);
 
   useEffect(() => {
@@ -60,14 +69,16 @@ export default function PhotosSearch({
         return;
       }
       void session
-        .search('photos', {
-          entity: 'core.content_item',
+        .search("photos", {
+          entity: "core.content_item",
           query: term.trim(),
           limit: 300,
         })
         .then((result) => {
           if (!cancelled) {
-            setContentIds(new Set(result.rows.map((row) => String(row.values.content_id))));
+            setContentIds(
+              new Set(result.rows.map((row) => String(row.values.content_id)))
+            );
             setOnlineOnly(false);
           }
         })
@@ -94,10 +105,12 @@ export default function PhotosSearch({
     const albumAssets = new Set(
       entries.rows
         .filter((row) => row.collection_id === albumId)
-        .map((row) => String(row.target_id)),
+        .map((row) => String(row.target_id))
     );
     const personAssets = new Set(
-      faces.rows.filter((row) => row.party_id === personId).map((row) => String(row.asset_id)),
+      faces.rows
+        .filter((row) => row.party_id === personId)
+        .map((row) => String(row.asset_id))
     );
     const from = validDate(dateFrom) ? dateFrom : undefined;
     const to = validDate(dateTo) ? dateTo : undefined;
@@ -106,12 +119,16 @@ export default function PhotosSearch({
       return (
         (!contentIds || (asset.contentId && contentIds.has(asset.contentId))) &&
         (!favoriteOnly || asset.favorite) &&
-        (!videoOnly || asset.kind === 'video') &&
-        (!thisYear || new Date(asset.capturedAt).getFullYear() === new Date().getFullYear()) &&
+        (!videoOnly || asset.kind === "video") &&
+        (!thisYear ||
+          new Date(asset.capturedAt).getFullYear() ===
+            new Date().getFullYear()) &&
         (!from || capturedDay >= from) &&
         (!to || capturedDay <= to) &&
-        (!albumId || Boolean(asset.assetId && albumAssets.has(asset.assetId))) &&
-        (!personId || Boolean(asset.assetId && personAssets.has(asset.assetId))) &&
+        (!albumId ||
+          Boolean(asset.assetId && albumAssets.has(asset.assetId))) &&
+        (!personId ||
+          Boolean(asset.assetId && personAssets.has(asset.assetId))) &&
         (!placeId || asset.placeId === placeId)
       );
     });
@@ -131,7 +148,10 @@ export default function PhotosSearch({
   ]);
   const sections = useMemo(() => sectionPhotoAssets(matches), [matches]);
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={["top"]}
+    >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
           <Feather name="chevron-left" size={26} color={colors.ink} />
@@ -154,18 +174,34 @@ export default function PhotosSearch({
         contentContainerStyle={styles.filters}
       >
         <Pressable
-          style={[styles.chip, { backgroundColor: favoriteOnly ? colors.accent : colors.bgSunken }]}
+          style={[
+            styles.chip,
+            { backgroundColor: favoriteOnly ? colors.accent : colors.bgSunken },
+          ]}
           onPress={() => setFavoriteOnly((value) => !value)}
         >
-          <Text style={[styles.chipText, { color: favoriteOnly ? colors.onAccent : colors.ink2 }]}>
+          <Text
+            style={[
+              styles.chipText,
+              { color: favoriteOnly ? colors.onAccent : colors.ink2 },
+            ]}
+          >
             Favorites
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.chip, { backgroundColor: videoOnly ? colors.accent : colors.bgSunken }]}
+          style={[
+            styles.chip,
+            { backgroundColor: videoOnly ? colors.accent : colors.bgSunken },
+          ]}
           onPress={() => setVideoOnly((value) => !value)}
         >
-          <Text style={[styles.chipText, { color: videoOnly ? colors.onAccent : colors.ink2 }]}>
+          <Text
+            style={[
+              styles.chipText,
+              { color: videoOnly ? colors.onAccent : colors.ink2 },
+            ]}
+          >
             Videos
           </Text>
         </Pressable>
@@ -180,13 +216,16 @@ export default function PhotosSearch({
             label={
               albumId
                 ? String(
-                    collections.rows.find((row) => String(row.collection_id) === albumId)?.name ??
-                      'Album',
+                    collections.rows.find(
+                      (row) => String(row.collection_id) === albumId
+                    )?.name ?? "Album"
                   )
-                : 'Album'
+                : "Album"
             }
             active={Boolean(albumId)}
-            onPress={() => setAlbumId(cycleId(collections.rows, 'collection_id', albumId))}
+            onPress={() =>
+              setAlbumId(cycleId(collections.rows, "collection_id", albumId))
+            }
             colors={colors}
           />
         ) : null}
@@ -195,13 +234,16 @@ export default function PhotosSearch({
             label={
               personId
                 ? String(
-                    parties.rows.find((row) => String(row.party_id) === personId)?.display_name ??
-                      'Person',
+                    parties.rows.find(
+                      (row) => String(row.party_id) === personId
+                    )?.display_name ?? "Person"
                   )
-                : 'Person'
+                : "Person"
             }
             active={Boolean(personId)}
-            onPress={() => setPersonId(cycleId(parties.rows, 'party_id', personId))}
+            onPress={() =>
+              setPersonId(cycleId(parties.rows, "party_id", personId))
+            }
             colors={colors}
           />
         ) : null}
@@ -210,12 +252,15 @@ export default function PhotosSearch({
             label={
               placeId
                 ? String(
-                    places.rows.find((row) => String(row.place_id) === placeId)?.name ?? 'Place',
+                    places.rows.find((row) => String(row.place_id) === placeId)
+                      ?.name ?? "Place"
                   )
-                : 'Place'
+                : "Place"
             }
             active={Boolean(placeId)}
-            onPress={() => setPlaceId(cycleId(places.rows, 'place_id', placeId))}
+            onPress={() =>
+              setPlaceId(cycleId(places.rows, "place_id", placeId))
+            }
             colors={colors}
           />
         ) : null}
@@ -227,7 +272,10 @@ export default function PhotosSearch({
           onChangeText={setDateFrom}
           placeholder="From YYYY-MM-DD"
           placeholderTextColor={colors.ink3}
-          style={[styles.dateInput, { backgroundColor: colors.bgSunken, color: colors.ink }]}
+          style={[
+            styles.dateInput,
+            { backgroundColor: colors.bgSunken, color: colors.ink },
+          ]}
         />
         <TextInput
           accessibilityLabel="Photos captured through date"
@@ -235,18 +283,30 @@ export default function PhotosSearch({
           onChangeText={setDateTo}
           placeholder="To YYYY-MM-DD"
           placeholderTextColor={colors.ink3}
-          style={[styles.dateInput, { backgroundColor: colors.bgSunken, color: colors.ink }]}
+          style={[
+            styles.dateInput,
+            { backgroundColor: colors.bgSunken, color: colors.ink },
+          ]}
         />
       </View>
       {onlineOnly ? (
         <View style={[styles.fallback, { backgroundColor: colors.bgSunken }]}>
-          <Text style={[styles.fallbackText, { color: colors.ink2 }]}>{notice}</Text>
+          <Text style={[styles.fallbackText, { color: colors.ink2 }]}>
+            {notice}
+          </Text>
           <Pressable
             disabled={!online}
-            onPress={() => navigation.navigate('AppDetail', { appId: 'photos' })}
+            onPress={() =>
+              navigation.navigate("AppDetail", { appId: "photos" })
+            }
           >
-            <Text style={[styles.fallbackAction, { color: online ? colors.accent : colors.ink3 }]}>
-              {online ? 'Search online' : 'Reconnect for online search'}
+            <Text
+              style={[
+                styles.fallbackAction,
+                { color: online ? colors.accent : colors.ink3 },
+              ]}
+            >
+              {online ? "Search online" : "Reconnect for online search"}
             </Text>
           </Pressable>
         </View>
@@ -266,7 +326,9 @@ export default function PhotosSearch({
           sections={sections}
           selection={new Set()}
           onSelectionChange={() => undefined}
-          onOpen={(asset) => navigation.navigate('PhotoLightbox', { assetId: asset.id })}
+          onOpen={(asset) =>
+            navigation.navigate("PhotoLightbox", { assetId: asset.id })
+          }
         />
       ) : (
         <View style={styles.empty}>
@@ -280,15 +342,18 @@ export default function PhotosSearch({
 }
 
 function validDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/u.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+  return (
+    /^\d{4}-\d{2}-\d{2}$/u.test(value) &&
+    !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+  );
 }
 
 function cycleId(
   rows: Array<Record<string, unknown>>,
   key: string,
-  current?: string,
+  current?: string
 ): string | undefined {
-  const ids = rows.map((row) => String(row[key] ?? '')).filter(Boolean);
+  const ids = rows.map((row) => String(row[key] ?? "")).filter(Boolean);
   if (!ids.length) return undefined;
   if (!current) return ids[0];
   const next = ids.indexOf(current) + 1;
@@ -304,14 +369,22 @@ function FilterChip({
   label: string;
   active: boolean;
   onPress: () => void;
-  colors: ReturnType<typeof useTheme>['colors'];
+  colors: ReturnType<typeof useTheme>["colors"];
 }): React.JSX.Element {
   return (
     <Pressable
-      style={[styles.chip, { backgroundColor: active ? colors.accent : colors.bgSunken }]}
+      style={[
+        styles.chip,
+        { backgroundColor: active ? colors.accent : colors.bgSunken },
+      ]}
       onPress={onPress}
     >
-      <Text style={[styles.chipText, { color: active ? colors.onAccent : colors.ink2 }]}>
+      <Text
+        style={[
+          styles.chipText,
+          { color: active ? colors.onAccent : colors.ink2 },
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -329,14 +402,14 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   dateRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     paddingBottom: 12,
     paddingHorizontal: 18,
   },
-  empty: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  empty: { alignItems: "center", flex: 1, justifyContent: "center" },
   filters: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     paddingBottom: 12,
     paddingHorizontal: 18,
@@ -353,7 +426,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
-  header: { alignItems: 'center', flexDirection: 'row', gap: 10, padding: 12 },
+  header: { alignItems: "center", flexDirection: "row", gap: 10, padding: 12 },
   input: {
     flex: 1,
     fontFamily: family.sansRegular,
@@ -365,14 +438,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     padding: 24,
-    textAlign: 'center',
+    textAlign: "center",
   },
   safe: { flex: 1 },
   search: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 12,
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     paddingHorizontal: 12,
   },

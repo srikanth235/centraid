@@ -25,13 +25,13 @@ export function replicaIntentInvalidations(intents) {
     for (const dependency of intent.dependencies ?? []) {
       const invalidation = {
         ...dependency,
-        source: 'overlay',
+        source: "overlay",
         intentId: intent.intentId,
         intentState: intent.state,
       };
       values.set(
         `${intent.intentId}\u0000${invalidation.shapeId}\u0000${invalidation.entity}\u0000`,
-        invalidation,
+        invalidation
       );
     }
     for (const mutation of intent.optimistic) {
@@ -39,13 +39,13 @@ export function replicaIntentInvalidations(intents) {
         shapeId: mutation.shapeId,
         entity: mutation.entity,
         rowId: mutation.rowId,
-        source: 'overlay',
+        source: "overlay",
         intentId: intent.intentId,
         intentState: intent.state,
       };
       values.set(
         `${intent.intentId}\u0000${invalidation.shapeId}\u0000${invalidation.entity}\u0000${invalidation.rowId}`,
-        invalidation,
+        invalidation
       );
     }
   }

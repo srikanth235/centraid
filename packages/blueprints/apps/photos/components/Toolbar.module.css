@@ -41,7 +41,7 @@
 :global(.kit-btn).pillBtn {
   border-radius: var(--r-pill);
 }
-:global(.kit-btn).pillBtn[data-active='true'] {
+:global(.kit-btn).pillBtn[data-active="true"] {
   border-color: color-mix(in oklab, var(--_accent) 40%, var(--line));
   color: var(--accent-deep-fg);
   background: var(--accent-soft);

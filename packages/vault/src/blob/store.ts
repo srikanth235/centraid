@@ -14,16 +14,16 @@
 // bucket can both do cheaply. Keys are flat shas; any fan-out layout is a
 // driver-internal detail.
 
-import { createHash } from 'node:crypto';
+import { createHash } from "node:crypto";
 
 /** `content_uri` scheme for CAS-backed bytes. */
-export const BLOB_URI_PREFIX = 'blob:sha256-';
+export const BLOB_URI_PREFIX = "blob:sha256-";
 
 /** 64 lowercase hex chars — the only accepted blob key shape. */
 const SHA_HEX = /^[0-9a-f]{64}$/u;
 
 export function isBlobUri(uri: unknown): uri is string {
-  return typeof uri === 'string' && uri.startsWith(BLOB_URI_PREFIX);
+  return typeof uri === "string" && uri.startsWith(BLOB_URI_PREFIX);
 }
 
 export function blobUriFor(sha256: string): string {
@@ -45,7 +45,7 @@ export function assertSha(sha: string): string {
 
 /** sha256 of raw bytes — blob identity (issue #296: never hash the data: URI). */
 export function sha256OfBytes(bytes: Buffer): string {
-  return createHash('sha256').update(bytes).digest('hex');
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 export interface BlobRange {
@@ -94,14 +94,14 @@ export interface BlobStore {
     sha256: string,
     source: NodeJS.ReadableStream,
     approxSize: number,
-    storageClass?: string,
+    storageClass?: string
   ) => Promise<void>;
 }
 
 /** Clamp a requested range against a known size; null = unsatisfiable. */
 export function resolveRange(
   size: number,
-  range?: BlobRange,
+  range?: BlobRange
 ): { start: number; end: number } | null {
   if (!range) return { start: 0, end: size - 1 };
   const start = range.start;

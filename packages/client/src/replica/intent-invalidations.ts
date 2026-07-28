@@ -4,11 +4,11 @@
 // the client-typed seam: it re-exports the kit function under the client's own
 // richer `ReplicaIntent` / `ReplicaInvalidation` types (which are structurally
 // assignable to the kit's mirrored shapes).
-import { replicaIntentInvalidations as kitReplicaIntentInvalidations } from '@centraid/blueprints/kit/intent-invalidations.js';
+import { replicaIntentInvalidations as kitReplicaIntentInvalidations } from "@centraid/blueprints/kit/intent-invalidations.js";
 
-import type { ReplicaIntent, ReplicaInvalidation } from './types.js';
+import type { ReplicaIntent, ReplicaInvalidation } from "./types.js";
 
 /** Derive app-visible overlay events for every durable intent transition. */
 export const replicaIntentInvalidations: (
-  intents: readonly ReplicaIntent[],
+  intents: readonly ReplicaIntent[]
 ) => ReplicaInvalidation[] = kitReplicaIntentInvalidations;

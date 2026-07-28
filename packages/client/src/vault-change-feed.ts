@@ -1,4 +1,9 @@
-import { auth, authHeaders, doFetch, type GatewayAuth } from './gateway-client-core.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  type GatewayAuth,
+} from "./gateway-client-core.js";
 import {
   consumeVaultChangeSse,
   INITIAL_VAULT_CURSOR,
@@ -7,7 +12,7 @@ import {
   type SseFrame,
   type VaultChangeCursor,
   type VaultChangeMessage,
-} from './vault-change-sse.js';
+} from "./vault-change-sse.js";
 
 export {
   consumeVaultChangeSse,
@@ -17,7 +22,7 @@ export {
   type VaultChangeCursor,
   type VaultChangeEntry,
   type VaultChangeMessage,
-} from './vault-change-sse.js';
+} from "./vault-change-sse.js";
 
 type Subscriber = {
   active: boolean;
@@ -41,7 +46,7 @@ const shapeIdsByScope = new Map<string, string[]>();
 const subscribers = new Set<Subscriber>();
 
 function scopeKey(gatewayAuth: GatewayAuth): string {
-  return `${gatewayAuth.gatewayId ?? gatewayAuth.baseUrl}\u0000${gatewayAuth.vaultId ?? '<default>'}`;
+  return `${gatewayAuth.gatewayId ?? gatewayAuth.baseUrl}\u0000${gatewayAuth.vaultId ?? "<default>"}`;
 }
 
 function cursorStorageKey(key: string): string {
@@ -60,7 +65,10 @@ function readStoredCursor(key: string): VaultChangeCursor {
 
 function storeCursor(key: string, cursor: VaultChangeCursor): void {
   try {
-    window.sessionStorage.setItem(cursorStorageKey(key), JSON.stringify(cursor));
+    window.sessionStorage.setItem(
+      cursorStorageKey(key),
+      JSON.stringify(cursor)
+    );
   } catch {
     /* The in-memory cursor still keeps this stream resumable until teardown. */
   }
@@ -83,7 +91,10 @@ function normalizeShapeIds(shapeIds: readonly string[]): string[] {
   return [...new Set(shapeIds.filter((shapeId) => shapeId.length > 0))].sort();
 }
 
-function sameShapeIds(left: readonly string[] | undefined, right: readonly string[] | undefined) {
+function sameShapeIds(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined
+) {
   return (
     left === right ||
     (left !== undefined &&
@@ -95,14 +106,14 @@ function sameShapeIds(left: readonly string[] | undefined, right: readonly strin
 
 function changeStreamPath(
   cursor: VaultChangeCursor,
-  shapeIds: readonly string[] | undefined,
+  shapeIds: readonly string[] | undefined
 ): string {
   const params = new URLSearchParams({
     since: `${cursor.epoch}:${cursor.seq}`,
-    stream: '1',
+    stream: "1",
   });
   // Presence is significant: `shapeIds=` attests a persisted empty catalog.
-  if (shapeIds) params.set('shapeIds', shapeIds.join(','));
+  if (shapeIds) params.set("shapeIds", shapeIds.join(","));
   return `/centraid/_vault/changes?${params}`;
 }
 
@@ -120,7 +131,7 @@ class VaultFeed {
   constructor(
     readonly key: string,
     private readonly gatewayAuth: GatewayAuth,
-    private shapeIds: string[] | undefined,
+    private shapeIds: string[] | undefined
   ) {
     this.cursor = readStoredCursor(key);
   }
@@ -153,7 +164,8 @@ class VaultFeed {
   }
 
   setShapeIds(shapeIds: readonly string[] | undefined): void {
-    const next = shapeIds === undefined ? undefined : normalizeShapeIds(shapeIds);
+    const next =
+      shapeIds === undefined ? undefined : normalizeShapeIds(shapeIds);
     if (sameShapeIds(this.shapeIds, next)) return;
     this.generation += 1;
     this.shapeIds = next;
@@ -173,7 +185,8 @@ class VaultFeed {
   }
 
   private acceptCursor(cursor: VaultChangeCursor): void {
-    if (cursor.epoch === this.cursor.epoch && cursor.seq < this.cursor.seq) return;
+    if (cursor.epoch === this.cursor.epoch && cursor.seq < this.cursor.seq)
+      return;
     this.cursor = cursor;
     storeCursor(this.key, cursor);
   }
@@ -185,20 +198,20 @@ class VaultFeed {
     } catch {
       return;
     }
-    if (frame.event === 'rebootstrap') {
+    if (frame.event === "rebootstrap") {
       this.rebootstrapRequired = true;
-      this.emit({ type: 'centraid:vault-rebootstrap', detail: payload });
+      this.emit({ type: "centraid:vault-rebootstrap", detail: payload });
       this.abortController?.abort();
       return;
     }
-    if (frame.event === 'cursor') {
+    if (frame.event === "cursor") {
       const cursor = parseCursor(payload);
       if (!cursor) return;
       this.acceptCursor(cursor);
-      this.emit({ type: 'centraid:vault-cursor', cursor });
+      this.emit({ type: "centraid:vault-cursor", cursor });
       return;
     }
-    if (frame.event !== 'change' && frame.event !== 'message') return;
+    if (frame.event !== "change" && frame.event !== "message") return;
     const page = payload as
       | {
           changes?: unknown;
@@ -207,7 +220,9 @@ class VaultFeed {
           watermark?: unknown;
         }
       | undefined;
-    const pageCursor = parseCursor(page?.cursor ?? page?.next ?? page?.watermark);
+    const pageCursor = parseCursor(
+      page?.cursor ?? page?.next ?? page?.watermark
+    );
     const values = Array.isArray(payload)
       ? payload
       : Array.isArray(page?.changes)
@@ -217,7 +232,7 @@ class VaultFeed {
       const change = parseChange(value, pageCursor ?? this.cursor);
       if (!change) continue;
       this.acceptCursor(change.cursor);
-      this.emit({ type: 'centraid:vault-change', detail: change });
+      this.emit({ type: "centraid:vault-change", detail: change });
     }
     if (pageCursor) this.acceptCursor(pageCursor);
   }
@@ -236,12 +251,12 @@ class VaultFeed {
     this.abortController = controller;
     const path = changeStreamPath(this.cursor, this.shapeIds);
     void doFetch(this.gatewayAuth.baseUrl, path, {
-      method: 'GET',
+      method: "GET",
       headers: {
         ...authHeaders(this.gatewayAuth.token),
-        Accept: 'text/event-stream',
+        Accept: "text/event-stream",
       },
-      cache: 'no-store',
+      cache: "no-store",
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -255,8 +270,8 @@ class VaultFeed {
           let detail: unknown = {
             code:
               response.status === 401 || response.status === 403
-                ? 'replica_device_not_enrolled'
-                : 'rebootstrap_required',
+                ? "replica_device_not_enrolled"
+                : "rebootstrap_required",
             status: response.status,
           };
           try {
@@ -266,11 +281,13 @@ class VaultFeed {
           }
           if (!this.isCurrent(controller, generation)) return;
           this.rebootstrapRequired = true;
-          this.emit({ type: 'centraid:vault-rebootstrap', detail });
+          this.emit({ type: "centraid:vault-rebootstrap", detail });
           return;
         }
         if (!response.ok || !response.body) {
-          throw new Error(`vault change stream failed (HTTP ${response.status})`);
+          throw new Error(
+            `vault change stream failed (HTTP ${response.status})`
+          );
         }
         this.reconnectDelay = MIN_RECONNECT_MS;
         await consumeVaultChangeSse(
@@ -278,15 +295,17 @@ class VaultFeed {
           (frame) => {
             if (this.isCurrent(controller, generation)) this.handleFrame(frame);
           },
-          controller.signal,
+          controller.signal
         );
       })
       .catch(() => {
         /* Reconnect below; individual app frames remain mounted and subscribed. */
       })
       .finally(() => {
-        if (this.abortController === controller) this.abortController = undefined;
-        if (generation === this.generation && !controller.signal.aborted) this.scheduleReconnect();
+        if (this.abortController === controller)
+          this.abortController = undefined;
+        if (generation === this.generation && !controller.signal.aborted)
+          this.scheduleReconnect();
       });
   }
 
@@ -377,7 +396,7 @@ function rescopeSubscribers(): void {
  */
 export function subscribeVaultChanges(
   listener: (message: VaultChangeMessage) => void,
-  scope?: GatewayAuth,
+  scope?: GatewayAuth
 ): () => void {
   const subscriber: Subscriber = {
     active: true,
@@ -398,7 +417,7 @@ export function subscribeVaultChanges(
 /** Resume a feed after bootstrap commits its stable snapshot cursor. */
 export async function resumeVaultChanges(
   cursor: VaultChangeCursor,
-  scope?: GatewayAuth,
+  scope?: GatewayAuth
 ): Promise<void> {
   const gatewayAuth = scope ?? (await auth());
   const key = scopeKey(gatewayAuth);
@@ -413,7 +432,7 @@ export async function resumeVaultChanges(
  */
 export async function setVaultChangeShapeIds(
   shapeIds?: readonly string[],
-  scope?: GatewayAuth,
+  scope?: GatewayAuth
 ): Promise<void> {
   const gatewayAuth = scope ?? (await auth());
   const key = scopeKey(gatewayAuth);

@@ -132,7 +132,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
         with:
-          turbo-cache: 'true'
+          turbo-cache: "true"
           cargo-cache: data-plane
       # E5 — https-only / integrity markers on the lockfile (supply-chain gate).
       - run: bun run lockfile:lint
@@ -213,7 +213,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
-          turbo-cache: 'true'
+          turbo-cache: "true"
           cargo-cache: verify
       - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
@@ -248,7 +248,7 @@ jobs:
       # instead of being absorbed.
       - name: Per-PR perf gate (gateway low-end budgets)
         env:
-          CENTRAID_BENCH_REQUIRE_FSYNC: '1'
+          CENTRAID_BENCH_REQUIRE_FSYNC: "1"
           CENTRAID_HARDWARE_PROFILE: constrained
         run: |
           set -uo pipefail

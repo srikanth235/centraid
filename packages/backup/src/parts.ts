@@ -24,7 +24,7 @@ export const PART_BYTES = 16 * 1024 * 1024;
  */
 export async function* partStream(
   source: AsyncIterable<Uint8Array>,
-  partBytes: number = PART_BYTES,
+  partBytes: number = PART_BYTES
 ): AsyncIterable<Uint8Array> {
   if (!Number.isInteger(partBytes) || partBytes <= 0) {
     throw new Error(`partStream: invalid part size ${partBytes}`);
@@ -70,7 +70,7 @@ function concat(pieces: Uint8Array[], total: number): Uint8Array {
 /** Split an in-memory buffer (small inputs / tests). */
 export async function partBuffer(
   data: Uint8Array,
-  partBytes: number = PART_BYTES,
+  partBytes: number = PART_BYTES
 ): Promise<Uint8Array[]> {
   const out: Uint8Array[] = [];
   for await (const part of partStream(single(data), partBytes)) out.push(part);

@@ -30,8 +30,11 @@
  * and `isHostCustody` refuses anything carrying it.
  */
 
-import crypto from 'node:crypto';
-import os from 'node:os';
+import crypto from "node:crypto";
+import type { IncomingMessage } from "node:http";
+import os from "node:os";
+
+import type { RuntimeLogger } from "@centraid/app-engine";
 import {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER as TUNNEL_DEVICE_PROOF_HEADER,
@@ -41,24 +44,26 @@ import {
   type GatewayEndpointHandle,
   type GatewayPairRequest,
   type GatewayPairResponse,
-} from '@centraid/tunnel';
-import type { IncomingMessage } from 'node:http';
-import type { DeviceAccess } from '../serve/vault-context.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import { EnrollmentStore } from '../serve/enrollment-store.js';
-import { PairingTicketStore } from '../serve/pairing-store.js';
+} from "@centraid/tunnel";
+import { KeyStore } from "@centraid/vault";
+
+import type { DataPlaneControlOptions } from "../routes/data-plane-control.js";
+import {
+  isDirectHostRequest,
+  isLoopbackRequest,
+} from "../routes/route-helpers.js";
+import { EnrollmentStore } from "../serve/enrollment-store.js";
+import type { GatewayDatabase } from "../serve/gateway-db.js";
+import { PairingTicketStore } from "../serve/pairing-store.js";
+import type { DeviceAccess } from "../serve/vault-context.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
-} from '../version.js';
-import type { DataPlaneControlOptions } from '../routes/data-plane-control.js';
-import { isDirectHostRequest, isLoopbackRequest } from '../routes/route-helpers.js';
-import type { DaemonLayout } from './paths.js';
-import type { GatewayDatabase } from '../serve/gateway-db.js';
-import { KeyStore } from '@centraid/vault';
+} from "../version.js";
+import type { DaemonLayout } from "./paths.js";
 
 /**
  * The transport owns these names (`@centraid/tunnel`'s protocol module) —
@@ -67,12 +72,23 @@ import { KeyStore } from '@centraid/vault';
  */
 export const DEVICE_HEADER = DEVICE_IDENTITY_HEADER;
 export const DEVICE_PROOF_HEADER = TUNNEL_DEVICE_PROOF_HEADER;
-const COMPANION_MODULES = new Set(['locker', 'tasks', 'notes', 'docs', 'agenda', 'people']);
+const COMPANION_MODULES = new Set([
+  "locker",
+  "tasks",
+  "notes",
+  "docs",
+  "agenda",
+  "people",
+]);
 
 function companionGrantProfile(value: unknown): string[] | undefined | null {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) return null;
-  if (!value.every((module) => typeof module === 'string' && COMPANION_MODULES.has(module))) {
+  if (
+    !value.every(
+      (module) => typeof module === "string" && COMPANION_MODULES.has(module)
+    )
+  ) {
     return null;
   }
   return [...new Set(value as string[])];
@@ -118,7 +134,7 @@ export function makeDaemonDevicePlane(input: {
    * iroh relay mode. Defaults to the production n0 relays + discovery;
    * `disabled` keeps the endpoint offline (tests bind on loopback only).
    */
-  relays?: 'n0' | 'disabled';
+  relays?: "n0" | "disabled";
   /**
    * OS-protected identity of the desktop that spawned this daemon. Direct
    * loopback requests still resolve to a real EndpointId and are authorized
@@ -130,80 +146,104 @@ export function makeDaemonDevicePlane(input: {
 }): DaemonDevicePlane {
   const { layout, logger } = input;
   const keyStore =
-    input.keyStore ?? new KeyStore(layout.keysDir, { warn: (message) => logger.warn(message) });
-  const enrollments = EnrollmentStore.open(input.gatewayDatabase ?? layout.gatewayDbFile);
-  const tickets = PairingTicketStore.open(input.gatewayDatabase ?? layout.gatewayDbFile);
-  const knownEndpointIds = new Set(enrollments.listFresh().map((row) => row.endpointId));
+    input.keyStore ??
+    new KeyStore(layout.keysDir, { warn: (message) => logger.warn(message) });
+  const enrollments = EnrollmentStore.open(
+    input.gatewayDatabase ?? layout.gatewayDbFile
+  );
+  const tickets = PairingTicketStore.open(
+    input.gatewayDatabase ?? layout.gatewayDbFile
+  );
+  const knownEndpointIds = new Set(
+    enrollments.listFresh().map((row) => row.endpointId)
+  );
   // Per-boot proof shared only between the endpoint's forwarder and the
   // HTTP layer's device resolution — never persisted, never on the wire
   // outside this process.
-  const deviceProof = crypto.randomBytes(32).toString('hex');
+  const deviceProof = crypto.randomBytes(32).toString("hex");
   /** What every forwarder stamps: the proved identity + the forwarded mark. */
-  const forwardedIdentityHeaders = (endpointId: string): Record<string, string> => ({
+  const forwardedIdentityHeaders = (
+    endpointId: string
+  ): Record<string, string> => ({
     [DEVICE_HEADER]: endpointId,
     [DEVICE_PROOF_HEADER]: deviceProof,
-    [TUNNEL_FORWARDED_HEADER]: '1',
+    [TUNNEL_FORWARDED_HEADER]: "1",
   });
-  const controlSecret = input.controlSecret ?? crypto.randomBytes(32).toString('hex');
+  const controlSecret =
+    input.controlSecret ?? crypto.randomBytes(32).toString("hex");
   let liveEndpointId: string | undefined;
   // An enrollment is the ONLY admission (issue #603 retired the admit-anyone
   // founding window): a gateway founds itself locally, so no unknown
   // EndpointId ever needs to reach it before it holds a ticket-issued row.
-  const authorizeEndpoint = (endpointId: string): boolean => enrollments.isEnrolled(endpointId);
+  const authorizeEndpoint = (endpointId: string): boolean =>
+    enrollments.isEnrolled(endpointId);
 
   const deviceAccess: DeviceAccess = {
     deviceKeyFor: (req: IncomingMessage): string | undefined => {
       const device = req.headers[DEVICE_HEADER];
       const proof = req.headers[DEVICE_PROOF_HEADER];
       if (
-        (typeof device !== 'string' || device.length === 0) &&
+        (typeof device !== "string" || device.length === 0) &&
         input.loopbackEndpointId &&
         isLoopbackRequest(req)
       ) {
         return input.loopbackEndpointId;
       }
-      if (typeof device !== 'string' || device.length === 0) return undefined;
-      if (typeof proof !== 'string' || proof.length !== deviceProof.length) return undefined;
-      const a = Buffer.from(proof, 'utf8');
-      const b = Buffer.from(deviceProof, 'utf8');
-      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return undefined;
+      if (typeof device !== "string" || device.length === 0) return undefined;
+      if (typeof proof !== "string" || proof.length !== deviceProof.length)
+        return undefined;
+      const a = Buffer.from(proof, "utf8");
+      const b = Buffer.from(deviceProof, "utf8");
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b))
+        return undefined;
       return device;
     },
-    vaultsFor: (deviceKey: string): string[] => enrollments.vaultsFor(deviceKey),
+    vaultsFor: (deviceKey: string): string[] =>
+      enrollments.vaultsFor(deviceKey),
   };
   const isHostCustody = isDirectHostRequest;
 
-  const pairDevice = (candidate: unknown, endpointId: string): GatewayPairResponse => {
+  const pairDevice = (
+    candidate: unknown,
+    endpointId: string
+  ): GatewayPairResponse => {
     const request = candidate as Partial<GatewayPairRequest> | null;
     if (
       !request ||
-      typeof request.ticketId !== 'string' ||
-      typeof request.secret !== 'string' ||
-      typeof request.deviceName !== 'string' ||
-      typeof request.platform !== 'string'
+      typeof request.ticketId !== "string" ||
+      typeof request.secret !== "string" ||
+      typeof request.deviceName !== "string" ||
+      typeof request.platform !== "string"
     ) {
-      return { ok: false, error: 'bad_request' };
+      return { ok: false, error: "bad_request" };
     }
     const grantProfile = companionGrantProfile(request.grantProfile);
-    if (request.platform === 'extension' && grantProfile === undefined) {
-      return { ok: false, error: 'missing_grant_profile' };
+    if (request.platform === "extension" && grantProfile === undefined) {
+      return { ok: false, error: "missing_grant_profile" };
     }
     if (grantProfile === null) {
-      return { ok: false, error: 'bad_grant_profile' };
+      return { ok: false, error: "bad_grant_profile" };
     }
     const registry = input.vaults();
-    if (!registry) return { ok: false, error: 'gateway_not_ready' };
-    const enrolled = tickets.redeemAndEnroll(request.ticketId, request.secret, enrollments, {
-      endpointId,
-      label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
-      platform: request.platform,
-      ...(request.rememberDevice === undefined ? {} : { rememberDevice: request.rememberDevice }),
-      ...(grantProfile === undefined ? {} : { grantProfile }),
-    });
+    if (!registry) return { ok: false, error: "gateway_not_ready" };
+    const enrolled = tickets.redeemAndEnroll(
+      request.ticketId,
+      request.secret,
+      enrollments,
+      {
+        endpointId,
+        label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
+        platform: request.platform,
+        ...(request.rememberDevice === undefined
+          ? {}
+          : { rememberDevice: request.rememberDevice }),
+        ...(grantProfile === undefined ? {} : { grantProfile }),
+      }
+    );
     const primary = enrolled?.[0];
-    if (!enrolled || !primary) return { ok: false, error: 'invalid_ticket' };
+    if (!enrolled || !primary) return { ok: false, error: "invalid_ticket" };
     const plane = registry.get(primary.vaultId);
-    if (!plane) return { ok: false, error: 'vault_gone' };
+    if (!plane) return { ok: false, error: "vault_gone" };
     knownEndpointIds.add(endpointId);
     // One scan can enrol a device into several vaults, so mirror the device
     // into EVERY granted vault's capability table — not just the first.
@@ -220,12 +260,12 @@ export function makeDaemonDevicePlane(input: {
         // which only asks "may this device act". Admin's extra powers — minting
         // tickets, revoking peers — are gateway-plane concerns the vault has no
         // opinion about, so `admin` and `write` both land on `full`.
-        trust: enrollment.role === 'read' ? 'readonly' : 'full',
+        trust: enrollment.role === "read" ? "readonly" : "full",
       });
     }
     logger.info(
       `device plane: enrolled ${endpointId.slice(0, 10)}… as member ${primary.memberLabel} into ` +
-        `vault${enrolled.length === 1 ? '' : 's'} ${enrolled.map((row) => row.vaultId).join(', ')}`,
+        `vault${enrolled.length === 1 ? "" : "s"} ${enrolled.map((row) => row.vaultId).join(", ")}`
     );
     return {
       ok: true,
@@ -233,7 +273,7 @@ export function makeDaemonDevicePlane(input: {
       memberId: primary.memberId,
       memberLabel: primary.memberLabel,
       gatewayId: liveEndpointId,
-      gatewayName: os.hostname().replace(/\.local$/u, ''),
+      gatewayName: os.hostname().replace(/\.local$/u, ""),
       vaultId: primary.vaultId,
       vaultName: plane.name,
       vaultIds: enrolled.map((row) => row.vaultId),
@@ -267,11 +307,12 @@ export function makeDaemonDevicePlane(input: {
     // a gateway whose paired devices can never reach it.
     const secretKey = loadEndpointSecret({
       persistence: {
-        load: () => keyStore.load('endpoint-key.bin'),
-        store: (secret) => keyStore.store('endpoint-key.bin', Buffer.from(secret)),
+        load: () => keyStore.load("endpoint-key.bin"),
+        store: (secret) =>
+          keyStore.store("endpoint-key.bin", Buffer.from(secret)),
       },
-      onCorrupt: 'refuse',
-      label: 'gateway endpoint key',
+      onCorrupt: "refuse",
+      label: "gateway endpoint key",
     });
     let handle: GatewayEndpointHandle;
     try {
@@ -286,9 +327,9 @@ export function makeDaemonDevicePlane(input: {
       });
     } catch (err) {
       logger.warn(
-        'gateway endpoint failed to start (remote iroh transport unavailable; ' +
-          'HTTP keeps serving): ' +
-          (err instanceof Error ? err.message : String(err)),
+        "gateway endpoint failed to start (remote iroh transport unavailable; " +
+          "HTTP keeps serving): " +
+          (err instanceof Error ? err.message : String(err))
       );
       return undefined;
     }

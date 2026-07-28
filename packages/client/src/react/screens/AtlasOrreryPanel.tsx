@@ -1,13 +1,13 @@
-import type { CSSProperties, JSX } from 'react';
+import type { CSSProperties, JSX } from "react";
 
-import type { AtlasFkEdge, AtlasGraphNode } from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import type { Readout } from './AtlasOrreryChart.js';
-import { packHueVar, type RelationChip } from './atlasOrreryGeometry.js';
-import { pickSampleDisplay, type SampleResult } from './atlasSampleRows.js';
+import type { AtlasFkEdge, AtlasGraphNode } from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import type { Readout } from "./AtlasOrreryChart.js";
+import { packHueVar, type RelationChip } from "./atlasOrreryGeometry.js";
+import { pickSampleDisplay, type SampleResult } from "./atlasSampleRows.js";
 
-import styles from './AtlasRelationsTab.module.css';
+import styles from "./AtlasRelationsTab.module.css";
 
 // The orrery's fixed side panel (issue #441 B2) — a presentational leaf of
 // AtlasRelationsTab. It holds the centred-on breadcrumb, the hover/focus readout
@@ -18,12 +18,15 @@ import styles from './AtlasRelationsTab.module.css';
 // readout resolves its display name through `nodeByPhysical`. Stateless: all
 // interaction is prop-drilled up to the parent.
 
-const fmt = (n: number): string => n.toLocaleString('en-US');
+const fmt = (n: number): string => n.toLocaleString("en-US");
 
 /** The human display name for a physical table — its curated `friendly` name,
  *  falling back to the humanized `label`, then the physical name itself. Never
  *  fabricated: the friendly name is server-emitted, the label is derived. */
-function friendlyOf(nodeByPhysical: ReadonlyMap<string, AtlasGraphNode>, physical: string): string {
+function friendlyOf(
+  nodeByPhysical: ReadonlyMap<string, AtlasGraphNode>,
+  physical: string
+): string {
   const n = nodeByPhysical.get(physical);
   return n?.friendly ?? n?.label ?? physical;
 }
@@ -83,8 +86,11 @@ export default function AtlasOrreryPanel({
               {i > 0 ? <span className={styles.crumbSep}>›</span> : null}
               <button
                 type="button"
-                className={cx(styles.crumb, t === center && styles.crumbCurrent)}
-                aria-current={t === center ? 'true' : undefined}
+                className={cx(
+                  styles.crumb,
+                  t === center && styles.crumbCurrent
+                )}
+                aria-current={t === center ? "true" : undefined}
                 data-physical={t}
                 disabled={t === center}
                 onClick={() => onRecenter(t)}
@@ -109,7 +115,7 @@ export default function AtlasOrreryPanel({
       {/* A few of yours — up to three REAL rows of the current centre, each
           reduced to one display string. Only appears once the fetch settles
           (never a spinner); an errored fetch omits the section entirely. */}
-      {sample?.status === 'ready' ? (
+      {sample?.status === "ready" ? (
         <SampleSection rows={sample.rows} centerRows={centerRows} />
       ) : null}
 
@@ -117,9 +123,9 @@ export default function AtlasOrreryPanel({
       <section className={styles.roSec}>
         <p className={styles.roLabel}>Readout</p>
         <div className={styles.detail} data-testid="atlas-readout">
-          {readout.kind === 'edge' ? (
+          {readout.kind === "edge" ? (
             <EdgeReadout edge={readout.edge} nodeByPhysical={nodeByPhysical} />
-          ) : readout.kind === 'node' ? (
+          ) : readout.kind === "node" ? (
             <NodeReadout
               node={readout.node}
               hop={readout.hop}
@@ -130,8 +136,9 @@ export default function AtlasOrreryPanel({
             />
           ) : (
             <p className={styles.dEmpty}>
-              Hover an arc to read the reference it carries. Click any kind — or focus it and press
-              Enter — to re-centre; the rings recompute by hop distance from wherever you stand.
+              Hover an arc to read the reference it carries. Click any kind — or
+              focus it and press Enter — to re-centre; the rings recompute by
+              hop distance from wherever you stand.
             </p>
           )}
         </div>
@@ -165,9 +172,10 @@ export default function AtlasOrreryPanel({
           </div>
         )}
         <p className={styles.roFoot}>
-          These <b>authored links</b> (<b>core_link</b>) are a separate mechanism from the
-          structural foreign keys above: user- and agent-created relations between rows, typed by a
-          vocabulary that is itself ordinary data. An FK is never “unused” merely because no
+          These <b>authored links</b> (<b>core_link</b>) are a separate
+          mechanism from the structural foreign keys above: user- and
+          agent-created relations between rows, typed by a vocabulary that is
+          itself ordinary data. An FK is never “unused” merely because no
           authored link names that pair.
         </p>
       </section>
@@ -179,27 +187,29 @@ export default function AtlasOrreryPanel({
           <li className={styles.lgRow}>
             <span className={cx(styles.lgSwatch, styles.lgLive)} />
             <span className={styles.lgText}>
-              <b>Structural reference</b> a built-in connection; thicker = more filled in
+              <b>Structural reference</b> a built-in connection; thicker = more
+              filled in
             </span>
           </li>
           <li className={styles.lgRow}>
             <span className={cx(styles.lgSwatch, styles.lgGhost)} />
             <span className={styles.lgText}>
-              <b>Ghost edge</b> a connection nothing fills yet — an empty kind, or a field left
-              blank
+              <b>Ghost edge</b> a connection nothing fills yet — an empty kind,
+              or a field left blank
             </span>
           </li>
           <li className={styles.lgRow}>
             <span className={cx(styles.lgSwatch, styles.lgAuthored)} />
             <span className={styles.lgText}>
-              <b>Authored link</b> a link you or an agent made by hand — a separate thing, toggled
-              by chip
+              <b>Authored link</b> a link you or an agent made by hand — a
+              separate thing, toggled by chip
             </span>
           </li>
           <li className={styles.lgRow}>
             <span className={cx(styles.lgSwatch, styles.lgSelf)} />
             <span className={styles.lgText}>
-              <b>Self-reference</b> points back at its own kind — a hierarchy, drawn as a curl
+              <b>Self-reference</b> points back at its own kind — a hierarchy,
+              drawn as a curl
             </span>
           </li>
           <li className={styles.lgRow}>
@@ -223,7 +233,8 @@ function EdgeReadout({
 }): JSX.Element {
   const fromName = friendlyOf(nodeByPhysical, edge.fromTable);
   const toName = friendlyOf(nodeByPhysical, edge.toTable);
-  const pct = edge.childRows > 0 ? Math.round((edge.fill / edge.childRows) * 100) : 0;
+  const pct =
+    edge.childRows > 0 ? Math.round((edge.fill / edge.childRows) * 100) : 0;
 
   // The plain-language headline — real numbers, friendly names, leading the
   // readout. A ghost leads with what's missing; a live edge states how many rows
@@ -235,13 +246,14 @@ function EdgeReadout({
       </>
     ) : (
       <>
-        An optional link nothing uses yet — all {fmt(edge.childRows)} <b>{fromName}</b> rows leave
-        it blank.
+        An optional link nothing uses yet — all {fmt(edge.childRows)}{" "}
+        <b>{fromName}</b> rows leave it blank.
       </>
     )
   ) : (
     <>
-      <b>{fmt(edge.fill)}</b> of {fmt(edge.childRows)} <b>{fromName}</b> point to <b>{toName}</b>.
+      <b>{fmt(edge.fill)}</b> of {fmt(edge.childRows)} <b>{fromName}</b> point
+      to <b>{toName}</b>.
     </>
   );
 
@@ -256,22 +268,24 @@ function EdgeReadout({
         {edge.fromTable}
         <span className={styles.dKindCol}>.{edge.col}</span>
         <span className={styles.dArrow}>→</span>
-        {edge.toTable} · <b>{edge.notnull ? 'NOT NULL' : 'nullable'}</b>
+        {edge.toTable} · <b>{edge.notnull ? "NOT NULL" : "nullable"}</b>
       </p>
       <div className={styles.dFigs}>
         <span className={styles.dFig}>
           <span className={cx(styles.dFigN, edge.ghost && styles.dFigNGhost)}>
             {fmt(edge.fill)}
           </span>
-          <span className={styles.dFigK}>of {fmt(edge.childRows)} rows fill this</span>
+          <span className={styles.dFigK}>
+            of {fmt(edge.childRows)} rows fill this
+          </span>
         </span>
       </div>
       {edge.ghost ? null : (
         <p className={styles.dNote}>
           {edge.notnull ? (
             <>
-              <b>Always filled in:</b> the schema guarantees every row sets it — it could only fall
-              empty if {fromName} had no rows.
+              <b>Always filled in:</b> the schema guarantees every row sets it —
+              it could only fall empty if {fromName} had no rows.
             </>
           ) : (
             <>
@@ -300,17 +314,21 @@ function NodeReadout({
   packs: readonly string[];
 }): JSX.Element {
   const incident = edges.filter(
-    (e) => !e.selfRef && (e.fromTable === node.physical || e.toTable === node.physical),
+    (e) =>
+      !e.selfRef &&
+      (e.fromTable === node.physical || e.toTable === node.physical)
   );
-  const inDeg = edges.filter((e) => e.toTable === node.physical && !e.selfRef).length;
+  const inDeg = edges.filter(
+    (e) => e.toTable === node.physical && !e.selfRef
+  ).length;
   const carrying = incident.filter((e) => !e.ghost).length;
   const friendly = node.friendly ?? node.label;
   const hopTxt =
     hop === 0
-      ? 'the centre'
+      ? "the centre"
       : hop === null
-        ? 'not reachable from here'
-        : `${hop} step${hop > 1 ? 's' : ''} from ${centerFriendly}`;
+        ? "not reachable from here"
+        : `${hop} step${hop > 1 ? "s" : ""} from ${centerFriendly}`;
   return (
     <>
       <h3 className={styles.dKind}>{friendly}</h3>
@@ -318,7 +336,7 @@ function NodeReadout({
       <p className={styles.dSig}>
         <span
           className={styles.dPackDot}
-          style={{ '--pack-c': packHueVar(node.pack, packs) } as CSSProperties}
+          style={{ "--pack-c": packHueVar(node.pack, packs) } as CSSProperties}
         />
         {node.physical} · {node.packLabel} · {hopTxt}
       </p>
@@ -329,7 +347,9 @@ function NodeReadout({
       ) : null}
       <div className={styles.dFigs}>
         <span className={styles.dFig}>
-          <span className={styles.dFigN}>{rows === undefined ? '—' : fmt(rows)}</span>
+          <span className={styles.dFigN}>
+            {rows === undefined ? "—" : fmt(rows)}
+          </span>
           <span className={styles.dFigK}>rows</span>
         </span>
         <span className={styles.dFig}>
@@ -338,9 +358,12 @@ function NodeReadout({
         </span>
       </div>
       <p className={styles.dNote}>
-        <b>{carrying}</b> of <b>{incident.length}</b>{' '}
-        {incident.length === 1 ? 'connection carries' : 'connections carry'} rows.
-        {node.selfRef ? ` Self-referencing: ${friendly} is a hierarchy, not a loop.` : ''}
+        <b>{carrying}</b> of <b>{incident.length}</b>{" "}
+        {incident.length === 1 ? "connection carries" : "connections carry"}{" "}
+        rows.
+        {node.selfRef
+          ? ` Self-referencing: ${friendly} is a hierarchy, not a loop.`
+          : ""}
       </p>
     </>
   );
@@ -356,7 +379,8 @@ function SampleSection({
   // Reduce each real row to one display string, then note how many rows the
   // centre holds beyond the handful shown (only when that total is known).
   const shown = rows.map(pickSampleDisplay);
-  const more = centerRows === undefined ? 0 : Math.max(0, centerRows - shown.length);
+  const more =
+    centerRows === undefined ? 0 : Math.max(0, centerRows - shown.length);
   return (
     <section className={styles.roSec}>
       <p className={styles.roLabel}>A few of yours</p>

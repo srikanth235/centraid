@@ -22,13 +22,13 @@
 // can render text. `app.json` is excluded on purpose: its descriptions are the
 // machine-readable contract read by handlers and agents, and the gallery copy
 // users actually see comes from the blueprint index, not from there.
-import fs from 'node:fs';
-import path from 'node:path';
+import fs from "node:fs";
+import path from "node:path";
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "vitest";
 
-const PHOTOS_DIR = path.resolve(import.meta.dirname, '../apps/photos');
-const SCANNED = new Set(['.ts', '.tsx', '.html']);
+const PHOTOS_DIR = path.resolve(import.meta.dirname, "../apps/photos");
+const SCANNED = new Set([".ts", ".tsx", ".html"]);
 
 /** Every scannable source file under the Photos app, repo-relative. */
 function sourceFiles(dir: string, acc: string[] = []): string[] {
@@ -42,15 +42,15 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
 
 /** Drop `<!-- -->`, `/* *\/` and `//` comments; keep string contents intact. */
 function stripComments(source: string): string {
-  const withoutHtml = source.replace(/<!--[\s\S]*?-->/gu, ' ');
-  let out = '';
+  const withoutHtml = source.replace(/<!--[\s\S]*?-->/gu, " ");
+  let out = "";
   let quote: string | null = null;
   for (let i = 0; i < withoutHtml.length; i += 1) {
     const ch = withoutHtml[i]!;
     const next = withoutHtml[i + 1];
     if (quote) {
-      if (ch === '\\') {
-        out += ch + (next ?? '');
+      if (ch === "\\") {
+        out += ch + (next ?? "");
         i += 1;
         continue;
       }
@@ -58,23 +58,26 @@ function stripComments(source: string): string {
       out += ch;
       continue;
     }
-    if (ch === "'" || ch === '"' || ch === '`') {
+    if (ch === "'" || ch === '"' || ch === "`") {
       quote = ch;
       out += ch;
       continue;
     }
-    if (ch === '/' && next === '/') {
-      while (i < withoutHtml.length && withoutHtml[i] !== '\n') i += 1;
-      out += '\n';
+    if (ch === "/" && next === "/") {
+      while (i < withoutHtml.length && withoutHtml[i] !== "\n") i += 1;
+      out += "\n";
       continue;
     }
-    if (ch === '/' && next === '*') {
+    if (ch === "/" && next === "*") {
       i += 2;
-      while (i < withoutHtml.length && !(withoutHtml[i] === '*' && withoutHtml[i + 1] === '/')) {
+      while (
+        i < withoutHtml.length &&
+        !(withoutHtml[i] === "*" && withoutHtml[i + 1] === "/")
+      ) {
         i += 1;
       }
       i += 1;
-      out += ' ';
+      out += " ";
       continue;
     }
     out += ch;
@@ -88,43 +91,53 @@ const OFFENCE = /(?:^|[\s>({[])vault(?=[\s.,!;:?'’"”)\]}<-]|$)/gimu;
 function offences(source: string): string[] {
   const stripped = stripComments(source);
   const hits: string[] = [];
-  for (const line of stripped.split('\n')) {
+  for (const line of stripped.split("\n")) {
     OFFENCE.lastIndex = 0;
     if (OFFENCE.test(line)) hits.push(line.trim());
   }
   return hits;
 }
 
-describe('Photos app vocabulary (#599)', () => {
-  it('scans a non-trivial number of Photos sources', () => {
+describe("Photos app vocabulary (#599)", () => {
+  it("scans a non-trivial number of Photos sources", () => {
     expect(sourceFiles(PHOTOS_DIR).length).toBeGreaterThan(20);
   });
 
-  it('never shows the storage noun in user-visible copy', () => {
+  it("never shows the storage noun in user-visible copy", () => {
     const found: string[] = [];
     for (const file of sourceFiles(PHOTOS_DIR)) {
-      for (const line of offences(fs.readFileSync(file, 'utf8'))) {
+      for (const line of offences(fs.readFileSync(file, "utf8"))) {
         found.push(`${path.relative(PHOTOS_DIR, file)}: ${line}`);
       }
     }
     expect(found).toStrictEqual([]);
   });
 
-  it('distinguishes code and comments from prose', () => {
+  it("distinguishes code and comments from prose", () => {
     // Code: the read API is a dotted member expression, never prose.
-    expect(offences("await ctx.vault.read({ entity: 'media.media_asset' })")).toStrictEqual([]);
-    expect(offences('const denied = data?.vaultDenied;')).toStrictEqual([]);
-    expect(offences("if (e.code === 'VAULT_CONSENT') return;")).toStrictEqual([]);
+    expect(
+      offences("await ctx.vault.read({ entity: 'media.media_asset' })")
+    ).toStrictEqual([]);
+    expect(offences("const denied = data?.vaultDenied;")).toStrictEqual([]);
+    expect(offences("if (e.code === 'VAULT_CONSENT') return;")).toStrictEqual(
+      []
+    );
     // Comments: stripped before the scan, in both comment forms.
-    expect(offences('// the vault owns the meaning here')).toStrictEqual([]);
-    expect(offences('/* a projection of your vault */')).toStrictEqual([]);
-    expect(offences('<!-- your vault, rendered -->')).toStrictEqual([]);
+    expect(offences("// the vault owns the meaning here")).toStrictEqual([]);
+    expect(offences("/* a projection of your vault */")).toStrictEqual([]);
+    expect(offences("<!-- your vault, rendered -->")).toStrictEqual([]);
     // A `//` inside a string is not a comment, so the prose after it is scanned.
-    expect(offences("const help = 'https://x/y — see your vault';")).toHaveLength(1);
+    expect(
+      offences("const help = 'https://x/y — see your vault';")
+    ).toHaveLength(1);
     // Prose: string literal and JSX text alike.
-    expect(offences("const tag = 'a projection of your vault';")).toHaveLength(1);
-    expect(offences('<div>Uploaded to your vault</div>')).toHaveLength(1);
-    expect(offences('<p>Turned off for this vault. Turn it on.</p>')).toHaveLength(1);
-    expect(offences('<strong>Vault</strong>')).toHaveLength(1);
+    expect(offences("const tag = 'a projection of your vault';")).toHaveLength(
+      1
+    );
+    expect(offences("<div>Uploaded to your vault</div>")).toHaveLength(1);
+    expect(
+      offences("<p>Turned off for this vault. Turn it on.</p>")
+    ).toHaveLength(1);
+    expect(offences("<strong>Vault</strong>")).toHaveLength(1);
   });
 });

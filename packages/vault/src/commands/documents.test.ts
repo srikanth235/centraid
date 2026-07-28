@@ -1,30 +1,30 @@
-import { assert, beforeEach, describe, expect, test } from 'vitest';
+import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { createGateway, Gateway } from '../gateway/gateway.js';
-import type { Credential } from '../gateway/types.js';
-import { registerAttachmentCommands } from './attachments.js';
-import { FOLDER_SCHEME_URI, registerDocumentCommands } from './documents.js';
+import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { createGateway, Gateway } from "../gateway/gateway.js";
+import type { Credential } from "../gateway/types.js";
+import { registerAttachmentCommands } from "./attachments.js";
+import { FOLDER_SCHEME_URI, registerDocumentCommands } from "./documents.js";
 
-const PDF = 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCg==';
+const PDF = "data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCg==";
 const SCAN =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
-describe('documents', () => {
+describe("documents", () => {
   beforeEach(() => {
     db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: 'Priya' });
+    boot = bootstrapVault(db, { ownerName: "Priya" });
     gw = createGateway(db);
     registerDocumentCommands(gw);
     registerAttachmentCommands(gw);
     owner = {
-      kind: 'device',
+      kind: "device",
       deviceId: boot.deviceId,
       deviceKey: boot.deviceKey,
     };
@@ -34,7 +34,7 @@ describe('documents', () => {
     return gw.invoke(owner, {
       command,
       input,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
   }
 
@@ -42,31 +42,37 @@ describe('documents', () => {
     documentId: string;
     contentId: string;
   } {
-    const outcome = invoke('core.add_document', input);
-    expect(outcome.status).toBe('executed');
-    const output = (outcome as { output: { document_id: string; content_id: string } }).output;
+    const outcome = invoke("core.add_document", input);
+    expect(outcome.status).toBe("executed");
+    const output = (
+      outcome as { output: { document_id: string; content_id: string } }
+    ).output;
     return { documentId: output.document_id, contentId: output.content_id };
   }
 
   function createFolder(name: string, parent?: string): string {
-    const outcome = invoke('core.create_folder', {
+    const outcome = invoke("core.create_folder", {
       name,
       ...(parent ? { parent_folder_id: parent } : {}),
     });
-    expect(outcome.status).toBe('executed');
+    expect(outcome.status).toBe("executed");
     return (outcome as { output: { folder_id: string } }).output.folder_id;
   }
 
   /** The folders-scheme concept a document is currently filed under. */
-  function filedUnder(documentId: string): { concept_id: string; notation: string } | undefined {
+  function filedUnder(
+    documentId: string
+  ): { concept_id: string; notation: string } | undefined {
     return db.vault
       .prepare(
         `SELECT c.concept_id, c.notation FROM core_tag t
          JOIN core_concept c ON c.concept_id = t.concept_id
          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-        WHERE t.target_type = 'core.document' AND t.target_id = ? AND s.uri = ?`,
+        WHERE t.target_type = 'core.document' AND t.target_id = ? AND s.uri = ?`
       )
-      .get(documentId, FOLDER_SCHEME_URI) as { concept_id: string; notation: string } | undefined;
+      .get(documentId, FOLDER_SCHEME_URI) as
+      | { concept_id: string; notation: string }
+      | undefined;
   }
 
   /**
@@ -79,7 +85,9 @@ describe('documents', () => {
    */
   function versionChain(documentId: string): string[] {
     const head = db.vault
-      .prepare('SELECT current_content_id FROM core_document WHERE document_id = ?')
+      .prepare(
+        "SELECT current_content_id FROM core_document WHERE document_id = ?"
+      )
       .get(documentId) as { current_content_id: string };
     const chain: string[] = [head.current_content_id];
     const seen = new Set<string>([head.current_content_id]);
@@ -91,7 +99,7 @@ describe('documents', () => {
            JOIN core_concept c ON c.concept_id = l.relation_concept_id
           WHERE l.from_type = 'core.content_item' AND l.from_id = ?
             AND l.to_type = 'core.content_item' AND l.valid_to IS NULL AND c.notation = 'revises'
-          ORDER BY l.valid_from DESC LIMIT 1`,
+          ORDER BY l.valid_from DESC LIMIT 1`
         )
         .get(cur) as { to_id: string } | undefined;
       if (!next || seen.has(next.to_id)) break;
@@ -102,14 +110,14 @@ describe('documents', () => {
     return chain.toReversed();
   }
 
-  test('add_document mints a document wrapping a canonical content item', () => {
+  test("add_document mints a document wrapping a canonical content item", () => {
     const { documentId, contentId } = addDocument({
       data_uri: PDF,
-      title: 'Rental agreement.pdf',
+      title: "Rental agreement.pdf",
     });
     const doc = db.vault
       .prepare(
-        'SELECT title, current_content_id, deleted_at FROM core_document WHERE document_id = ?',
+        "SELECT title, current_content_id, deleted_at FROM core_document WHERE document_id = ?"
       )
       .get(documentId) as {
       title: string;
@@ -117,99 +125,108 @@ describe('documents', () => {
       deleted_at: string | null;
     };
     expect(doc).toMatchObject({
-      title: 'Rental agreement.pdf',
+      title: "Rental agreement.pdf",
       current_content_id: contentId,
       deleted_at: null,
     });
     const content = db.vault
-      .prepare('SELECT media_type, deleted_at FROM core_content_item WHERE content_id = ?')
+      .prepare(
+        "SELECT media_type, deleted_at FROM core_content_item WHERE content_id = ?"
+      )
       .get(contentId);
     expect(content).toMatchObject({
-      media_type: 'application/pdf',
+      media_type: "application/pdf",
       deleted_at: null,
     });
-    expect(filedUnder(documentId)?.notation).toBe('root');
+    expect(filedUnder(documentId)?.notation).toBe("root");
   });
 
-  test('two documents may share identical bytes (dedup is on content, not identity)', () => {
-    const a = addDocument({ data_uri: PDF, title: 'Original.pdf' });
-    const b = addDocument({ data_uri: PDF, title: 'Copy.pdf' });
+  test("two documents may share identical bytes (dedup is on content, not identity)", () => {
+    const a = addDocument({ data_uri: PDF, title: "Original.pdf" });
+    const b = addDocument({ data_uri: PDF, title: "Copy.pdf" });
     expect(b.documentId).not.toBe(a.documentId);
     expect(b.contentId).toBe(a.contentId); // same bytes, deduped content item
     const docs = db.vault
-      .prepare('SELECT count(*) AS n FROM core_document WHERE current_content_id = ?')
+      .prepare(
+        "SELECT count(*) AS n FROM core_document WHERE current_content_id = ?"
+      )
       .get(a.contentId) as { n: number };
     expect(docs.n).toBe(2);
   });
 
-  test('folders nest under root, refuse sibling name twins, and file documents', () => {
-    const taxes = createFolder('Taxes');
-    const y2026 = createFolder('2026', taxes);
-    const twin = invoke('core.create_folder', { name: 'Taxes' });
-    expect(twin.status).toBe('failed');
-    assert(twin.status === 'failed');
-    expect(twin.predicate).toContain('name_unused_among_siblings');
+  test("folders nest under root, refuse sibling name twins, and file documents", () => {
+    const taxes = createFolder("Taxes");
+    const y2026 = createFolder("2026", taxes);
+    const twin = invoke("core.create_folder", { name: "Taxes" });
+    expect(twin.status).toBe("failed");
+    assert(twin.status === "failed");
+    expect(twin.predicate).toContain("name_unused_among_siblings");
     // Same name under a different parent is fine.
-    expect(invoke('core.create_folder', { name: 'Taxes', parent_folder_id: y2026 }).status).toBe(
-      'executed',
-    );
+    expect(
+      invoke("core.create_folder", { name: "Taxes", parent_folder_id: y2026 })
+        .status
+    ).toBe("executed");
     const { documentId } = addDocument({
       data_uri: PDF,
-      title: 'Form 16.pdf',
+      title: "Form 16.pdf",
       folder_id: y2026,
     });
     expect(filedUnder(documentId)?.concept_id).toBe(y2026);
   });
 
-  test('move_document re-files exactly once; omitting the folder returns to root', () => {
-    const folder = createFolder('Receipts');
-    const { documentId } = addDocument({ data_uri: PDF, title: 'Invoice.pdf' });
+  test("move_document re-files exactly once; omitting the folder returns to root", () => {
+    const folder = createFolder("Receipts");
+    const { documentId } = addDocument({ data_uri: PDF, title: "Invoice.pdf" });
     expect(
-      invoke('core.move_document', {
+      invoke("core.move_document", {
         document_id: documentId,
         folder_id: folder,
-      }).status,
-    ).toBe('executed');
+      }).status
+    ).toBe("executed");
     expect(filedUnder(documentId)?.concept_id).toBe(folder);
-    expect(invoke('core.move_document', { document_id: documentId }).status).toBe('executed');
-    expect(filedUnder(documentId)?.notation).toBe('root');
+    expect(
+      invoke("core.move_document", { document_id: documentId }).status
+    ).toBe("executed");
+    expect(filedUnder(documentId)?.notation).toBe("root");
     const tags = db.vault
       .prepare(`SELECT count(*) AS n FROM core_tag WHERE target_id = ?`)
       .get(documentId) as { n: number };
     expect(tags.n).toBe(1);
   });
 
-  test('rename_document updates the document title, not the raw content item', () => {
+  test("rename_document updates the document title, not the raw content item", () => {
     const { documentId, contentId } = addDocument({
       data_uri: PDF,
-      title: 'Untitled.pdf',
+      title: "Untitled.pdf",
     });
     expect(
-      invoke('core.rename_document', {
+      invoke("core.rename_document", {
         document_id: documentId,
-        title: 'Lease 2026.pdf',
-      }).status,
-    ).toBe('executed');
+        title: "Lease 2026.pdf",
+      }).status
+    ).toBe("executed");
     const doc = db.vault
-      .prepare('SELECT title FROM core_document WHERE document_id = ?')
+      .prepare("SELECT title FROM core_document WHERE document_id = ?")
       .get(documentId) as { title: string };
-    expect(doc.title).toBe('Lease 2026.pdf');
+    expect(doc.title).toBe("Lease 2026.pdf");
     // The underlying content item never carried the document's title.
     const content = db.vault
-      .prepare('SELECT title FROM core_content_item WHERE content_id = ?')
+      .prepare("SELECT title FROM core_content_item WHERE content_id = ?")
       .get(contentId) as { title: string | null };
-    expect(content.title).toBe('Untitled.pdf');
+    expect(content.title).toBe("Untitled.pdf");
   });
 
-  test('trash then restore round-trips; content is untouched while the document lives', () => {
+  test("trash then restore round-trips; content is untouched while the document lives", () => {
     const { documentId, contentId } = addDocument({
       data_uri: PDF,
-      title: 'Draft.pdf',
+      title: "Draft.pdf",
     });
-    const trashed = invoke('core.trash_document', { document_id: documentId });
-    expect(trashed.status).toBe('executed');
+    const trashed = invoke("core.trash_document", { document_id: documentId });
+    expect(trashed.status).toBe("executed");
     let doc = db.vault
-      .prepare('SELECT deleted_at, purge_at FROM core_document WHERE document_id = ?')
+      .prepare(
+        "SELECT deleted_at, purge_at FROM core_document WHERE document_id = ?"
+      )
       .get(documentId) as {
       deleted_at: string | null;
       purge_at: string | null;
@@ -218,16 +235,21 @@ describe('documents', () => {
     expect(doc.purge_at).not.toBeNull();
     // Retention stance (issue #352): the wrapper trashes, the bytes stay live.
     const content = db.vault
-      .prepare('SELECT deleted_at FROM core_content_item WHERE content_id = ?')
+      .prepare("SELECT deleted_at FROM core_content_item WHERE content_id = ?")
       .get(contentId) as { deleted_at: string | null };
     expect(content.deleted_at).toBeNull();
     // A trashed document no longer renames or moves.
-    expect(invoke('core.rename_document', { document_id: documentId, title: 'x' }).status).toBe(
-      'failed',
-    );
-    expect(invoke('core.restore_document', { document_id: documentId }).status).toBe('executed');
+    expect(
+      invoke("core.rename_document", { document_id: documentId, title: "x" })
+        .status
+    ).toBe("failed");
+    expect(
+      invoke("core.restore_document", { document_id: documentId }).status
+    ).toBe("executed");
     doc = db.vault
-      .prepare('SELECT deleted_at, purge_at FROM core_document WHERE document_id = ?')
+      .prepare(
+        "SELECT deleted_at, purge_at FROM core_document WHERE document_id = ?"
+      )
       .get(documentId) as {
       deleted_at: string | null;
       purge_at: string | null;
@@ -236,43 +258,43 @@ describe('documents', () => {
     expect(doc.purge_at).toBeNull();
   });
 
-  test('re-uploading identical bytes mints a brand-new document; the trashed one stays trashed', () => {
-    const first = addDocument({ data_uri: PDF, title: 'Draft.pdf' });
-    invoke('core.trash_document', { document_id: first.documentId });
-    const second = addDocument({ data_uri: PDF, title: 'Final.pdf' });
+  test("re-uploading identical bytes mints a brand-new document; the trashed one stays trashed", () => {
+    const first = addDocument({ data_uri: PDF, title: "Draft.pdf" });
+    invoke("core.trash_document", { document_id: first.documentId });
+    const second = addDocument({ data_uri: PDF, title: "Final.pdf" });
     expect(second.documentId).not.toBe(first.documentId);
     expect(second.contentId).toBe(first.contentId); // bytes still dedup
     const firstRow = db.vault
-      .prepare('SELECT deleted_at FROM core_document WHERE document_id = ?')
+      .prepare("SELECT deleted_at FROM core_document WHERE document_id = ?")
       .get(first.documentId) as { deleted_at: string | null };
     expect(firstRow.deleted_at).not.toBeNull(); // untouched by the re-upload
   });
 
-  test('delete_folder refuses non-empty folders (documents or subfolders), root is untouchable', () => {
-    const folder = createFolder('Keep');
+  test("delete_folder refuses non-empty folders (documents or subfolders), root is untouchable", () => {
+    const folder = createFolder("Keep");
     const { documentId } = addDocument({
       data_uri: PDF,
-      title: 'Kept.pdf',
+      title: "Kept.pdf",
       folder_id: folder,
     });
-    let outcome = invoke('core.delete_folder', { folder_id: folder });
-    expect(outcome.status).toBe('failed');
-    assert(outcome.status === 'failed');
-    expect(outcome.predicate).toContain('folder_is_empty');
-    invoke('core.move_document', { document_id: documentId });
-    outcome = invoke('core.delete_folder', { folder_id: folder });
-    expect(outcome.status).toBe('executed');
+    let outcome = invoke("core.delete_folder", { folder_id: folder });
+    expect(outcome.status).toBe("failed");
+    assert(outcome.status === "failed");
+    expect(outcome.predicate).toContain("folder_is_empty");
+    invoke("core.move_document", { document_id: documentId });
+    outcome = invoke("core.delete_folder", { folder_id: folder });
+    expect(outcome.status).toBe("executed");
     const root = filedUnder(documentId);
-    expect(root?.notation).toBe('root');
-    expect(invoke('core.delete_folder', { folder_id: root?.concept_id ?? '' }).status).toBe(
-      'failed',
-    );
+    expect(root?.notation).toBe("root");
     expect(
-      invoke('core.rename_folder', {
-        folder_id: root?.concept_id ?? '',
-        name: 'x',
-      }).status,
-    ).toBe('failed');
+      invoke("core.delete_folder", { folder_id: root?.concept_id ?? "" }).status
+    ).toBe("failed");
+    expect(
+      invoke("core.rename_folder", {
+        folder_id: root?.concept_id ?? "",
+        name: "x",
+      }).status
+    ).toBe("failed");
   });
 
   /** Count of starred flags-scheme tags on a document (issue #274/#352). */
@@ -283,152 +305,175 @@ describe('documents', () => {
          JOIN core_concept c ON c.concept_id = t.concept_id
          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
         WHERE t.target_type = 'core.document' AND t.target_id = ?
-          AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+          AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`
       )
       .get(documentId) as { n: number };
     return row.n;
   }
 
-  test('star/unstar are idempotent single tags; the concept carries the Favorite altLabel', () => {
-    const { documentId } = addDocument({ data_uri: PDF, title: 'Lease.pdf' });
-    expect(invoke('core.star_document', { document_id: documentId }).status).toBe('executed');
-    expect(invoke('core.star_document', { document_id: documentId }).status).toBe('executed');
+  test("star/unstar are idempotent single tags; the concept carries the Favorite altLabel", () => {
+    const { documentId } = addDocument({ data_uri: PDF, title: "Lease.pdf" });
+    expect(
+      invoke("core.star_document", { document_id: documentId }).status
+    ).toBe("executed");
+    expect(
+      invoke("core.star_document", { document_id: documentId }).status
+    ).toBe("executed");
     expect(starCount(documentId)).toBe(1);
     const concept = db.vault
       .prepare(
         `SELECT c.pref_label, c.alt_labels_json FROM core_concept c
          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-        WHERE s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+        WHERE s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`
       )
       .get() as { pref_label: string; alt_labels_json: string };
-    expect(concept.pref_label).toBe('Starred');
-    expect(JSON.parse(concept.alt_labels_json)).toContain('Favorite');
-    expect(invoke('core.unstar_document', { document_id: documentId }).status).toBe('executed');
-    expect(invoke('core.unstar_document', { document_id: documentId }).status).toBe('executed');
+    expect(concept.pref_label).toBe("Starred");
+    expect(JSON.parse(concept.alt_labels_json)).toContain("Favorite");
+    expect(
+      invoke("core.unstar_document", { document_id: documentId }).status
+    ).toBe("executed");
+    expect(
+      invoke("core.unstar_document", { document_id: documentId }).status
+    ).toBe("executed");
     expect(starCount(documentId)).toBe(0);
   });
 
-  test('a trashed document refuses star changes but keeps its star through restore', () => {
-    const { documentId } = addDocument({ data_uri: PDF, title: 'Taxes.pdf' });
-    expect(invoke('core.star_document', { document_id: documentId }).status).toBe('executed');
-    expect(invoke('core.trash_document', { document_id: documentId }).status).toBe('executed');
-    const whileTrashed = invoke('core.unstar_document', {
+  test("a trashed document refuses star changes but keeps its star through restore", () => {
+    const { documentId } = addDocument({ data_uri: PDF, title: "Taxes.pdf" });
+    expect(
+      invoke("core.star_document", { document_id: documentId }).status
+    ).toBe("executed");
+    expect(
+      invoke("core.trash_document", { document_id: documentId }).status
+    ).toBe("executed");
+    const whileTrashed = invoke("core.unstar_document", {
       document_id: documentId,
     });
-    expect(whileTrashed.status).toBe('failed');
-    assert(whileTrashed.status === 'failed');
-    expect(whileTrashed.predicate).toContain('document_exists');
+    expect(whileTrashed.status).toBe("failed");
+    assert(whileTrashed.status === "failed");
+    expect(whileTrashed.predicate).toContain("document_exists");
     expect(starCount(documentId)).toBe(1);
-    expect(invoke('core.restore_document', { document_id: documentId }).status).toBe('executed');
+    expect(
+      invoke("core.restore_document", { document_id: documentId }).status
+    ).toBe("executed");
     expect(starCount(documentId)).toBe(1);
   });
 
-  test('edit_document mints a new revision, records the revises link, and the chain is walkable', () => {
+  test("edit_document mints a new revision, records the revises link, and the chain is walkable", () => {
     const { documentId, contentId: v1 } = addDocument({
-      data_uri: 'data:text/plain;charset=utf-8,version%20one',
-      title: 'Notes.txt',
+      data_uri: "data:text/plain;charset=utf-8,version%20one",
+      title: "Notes.txt",
     });
-    const e1 = invoke('core.edit_document', {
+    const e1 = invoke("core.edit_document", {
       document_id: documentId,
-      body_text: 'version two',
+      body_text: "version two",
     });
-    expect(e1.status).toBe('executed');
+    expect(e1.status).toBe("executed");
     const v2 = (e1 as { output: { content_id: string } }).output.content_id;
     expect(v2).not.toBe(v1);
-    const e2 = invoke('core.edit_document', {
+    const e2 = invoke("core.edit_document", {
       document_id: documentId,
-      body_text: 'version three',
-      title: 'Notes (renamed).txt',
+      body_text: "version three",
+      title: "Notes (renamed).txt",
     });
-    expect(e2.status).toBe('executed');
+    expect(e2.status).toBe("executed");
     const v3 = (e2 as { output: { content_id: string } }).output.content_id;
     expect(v3).not.toBe(v2);
     const doc = db.vault
-      .prepare('SELECT title, current_content_id FROM core_document WHERE document_id = ?')
+      .prepare(
+        "SELECT title, current_content_id FROM core_document WHERE document_id = ?"
+      )
       .get(documentId) as { title: string; current_content_id: string };
     expect(doc).toMatchObject({
-      title: 'Notes (renamed).txt',
+      title: "Notes (renamed).txt",
       current_content_id: v3,
     });
     expect(versionChain(documentId)).toStrictEqual([v1, v2, v3]);
   });
 
-  test('edit_document is refused for non-text-editable current content', () => {
-    const { documentId } = addDocument({ data_uri: SCAN, title: 'Scan.png' });
-    const outcome = invoke('core.edit_document', {
+  test("edit_document is refused for non-text-editable current content", () => {
+    const { documentId } = addDocument({ data_uri: SCAN, title: "Scan.png" });
+    const outcome = invoke("core.edit_document", {
       document_id: documentId,
-      body_text: 'nope',
+      body_text: "nope",
     });
-    expect(outcome.status).toBe('failed');
-    assert(outcome.status === 'failed');
-    expect(outcome.predicate).toContain('current_content_is_text');
+    expect(outcome.status).toBe("failed");
+    assert(outcome.status === "failed");
+    expect(outcome.predicate).toContain("current_content_is_text");
   });
 
-  test('edit_document with identical bytes (dedup) is a no-op on the chain', () => {
+  test("edit_document with identical bytes (dedup) is a no-op on the chain", () => {
     const { documentId, contentId } = addDocument({
-      data_uri: 'data:text/plain;charset=utf-8,same%20text',
-      title: 'Same.txt',
+      data_uri: "data:text/plain;charset=utf-8,same%20text",
+      title: "Same.txt",
     });
-    const outcome = invoke('core.edit_document', {
+    const outcome = invoke("core.edit_document", {
       document_id: documentId,
-      body_text: 'same text',
+      body_text: "same text",
     });
-    expect(outcome.status).toBe('executed');
-    expect((outcome as { output: { content_id: string } }).output.content_id).toBe(contentId);
+    expect(outcome.status).toBe("executed");
+    expect(
+      (outcome as { output: { content_id: string } }).output.content_id
+    ).toBe(contentId);
     expect(versionChain(documentId)).toStrictEqual([contentId]);
   });
 
-  test('replace_document_content swaps in new binary bytes and records the revision', () => {
+  test("replace_document_content swaps in new binary bytes and records the revision", () => {
     const { documentId, contentId: v1 } = addDocument({
       data_uri: PDF,
-      title: 'Scan.pdf',
+      title: "Scan.pdf",
     });
-    const outcome = invoke('core.replace_document_content', {
+    const outcome = invoke("core.replace_document_content", {
       document_id: documentId,
       data_uri: SCAN,
-      title: 'Scan (rescanned).pdf',
+      title: "Scan (rescanned).pdf",
     });
-    expect(outcome.status).toBe('executed');
-    const v2 = (outcome as { output: { content_id: string } }).output.content_id;
+    expect(outcome.status).toBe("executed");
+    const v2 = (outcome as { output: { content_id: string } }).output
+      .content_id;
     expect(v2).not.toBe(v1);
     const doc = db.vault
-      .prepare('SELECT title, current_content_id FROM core_document WHERE document_id = ?')
+      .prepare(
+        "SELECT title, current_content_id FROM core_document WHERE document_id = ?"
+      )
       .get(documentId) as { title: string; current_content_id: string };
     expect(doc).toMatchObject({
-      title: 'Scan (rescanned).pdf',
+      title: "Scan (rescanned).pdf",
       current_content_id: v2,
     });
     expect(versionChain(documentId)).toStrictEqual([v1, v2]);
   });
 
-  test('restore_document_version repoints current_content_id and appends forward, never rewriting history', () => {
+  test("restore_document_version repoints current_content_id and appends forward, never rewriting history", () => {
     const { documentId, contentId: v1 } = addDocument({
-      data_uri: 'data:text/plain;charset=utf-8,v1',
-      title: 'Doc.txt',
+      data_uri: "data:text/plain;charset=utf-8,v1",
+      title: "Doc.txt",
     });
     const v2 = (
-      invoke('core.edit_document', {
+      invoke("core.edit_document", {
         document_id: documentId,
-        body_text: 'v2',
+        body_text: "v2",
       }) as {
         output: { content_id: string };
       }
     ).output.content_id;
     const v3 = (
-      invoke('core.edit_document', {
+      invoke("core.edit_document", {
         document_id: documentId,
-        body_text: 'v3',
+        body_text: "v3",
       }) as {
         output: { content_id: string };
       }
     ).output.content_id;
-    const restore = invoke('core.restore_document_version', {
+    const restore = invoke("core.restore_document_version", {
       document_id: documentId,
       content_id: v1,
     });
-    expect(restore.status).toBe('executed');
+    expect(restore.status).toBe("executed");
     const doc = db.vault
-      .prepare('SELECT current_content_id FROM core_document WHERE document_id = ?')
+      .prepare(
+        "SELECT current_content_id FROM core_document WHERE document_id = ?"
+      )
       .get(documentId) as { current_content_id: string };
     expect(doc.current_content_id).toBe(v1);
     // History never rewrites: the ORIGINAL v2->v1 and v3->v2 links are still
@@ -440,7 +485,7 @@ describe('documents', () => {
         `SELECT l.from_id, l.to_id FROM core_link l
          JOIN core_concept c ON c.concept_id = l.relation_concept_id
         WHERE c.notation = 'revises' AND l.valid_to IS NULL
-        ORDER BY l.valid_from ASC`,
+        ORDER BY l.valid_from ASC`
       )
       .all() as { from_id: string; to_id: string }[];
     // node:sqlite hands back null-prototype rows; spreading compares the column
@@ -459,28 +504,28 @@ describe('documents', () => {
     expect(versionChain(documentId)).toStrictEqual([v2, v3, v1]);
   });
 
-  test('restore_document_version refuses a content id outside the chain, or the current one', () => {
+  test("restore_document_version refuses a content id outside the chain, or the current one", () => {
     const { documentId, contentId } = addDocument({
-      data_uri: 'data:text/plain;charset=utf-8,v1',
-      title: 'Doc.txt',
+      data_uri: "data:text/plain;charset=utf-8,v1",
+      title: "Doc.txt",
     });
     const other = addDocument({
-      data_uri: 'data:text/plain;charset=utf-8,unrelated',
-      title: 'Other',
+      data_uri: "data:text/plain;charset=utf-8,unrelated",
+      title: "Other",
     });
-    const outsider = invoke('core.restore_document_version', {
+    const outsider = invoke("core.restore_document_version", {
       document_id: documentId,
       content_id: other.contentId,
     });
-    expect(outsider.status).toBe('failed');
-    assert(outsider.status === 'failed');
-    expect(outsider.predicate).toContain('target_in_chain');
-    const self = invoke('core.restore_document_version', {
+    expect(outsider.status).toBe("failed");
+    assert(outsider.status === "failed");
+    expect(outsider.predicate).toContain("target_in_chain");
+    const self = invoke("core.restore_document_version", {
       document_id: documentId,
       content_id: contentId,
     });
-    expect(self.status).toBe('failed');
-    assert(self.status === 'failed');
-    expect(self.predicate).toContain('not_already_current');
+    expect(self.status).toBe("failed");
+    assert(self.status === "failed");
+    expect(self.predicate).toContain("not_already_current");
   });
 });

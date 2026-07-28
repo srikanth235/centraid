@@ -14,9 +14,9 @@
  * Pure YAML touch: only rewrites `releaseDate` (ISO). Never renames latest → beta.
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * Rewrite releaseDate in an electron-updater latest*.yml body.
@@ -32,7 +32,7 @@ export function restampReleaseDate(yml, hours, nowMs = Date.now()) {
   if (!/releaseDate:/mu.test(yml)) {
     const withDate = yml.replace(
       /^(?<versionLine>version:\s*.+)$/mu,
-      `$<versionLine>\nreleaseDate: '${target}'`,
+      `$<versionLine>\nreleaseDate: '${target}'`
     );
     if (withDate === yml) {
       return {
@@ -58,16 +58,16 @@ function isMain() {
 
 if (isMain()) {
   const args = process.argv.slice(2);
-  if (args.includes('--self-test')) {
+  if (args.includes("--self-test")) {
     const sample =
       "version: 0.1.0\npath: Centraid-0.1.0-arm64.dmg\nreleaseDate: '2020-01-01T00:00:00.000Z'\n";
     const { text, releaseDate } = restampReleaseDate(
       sample,
       72,
-      Date.parse('2026-01-10T12:00:00.000Z'),
+      Date.parse("2026-01-10T12:00:00.000Z")
     );
     if (!text.includes(releaseDate)) {
-      console.error('self-test failed');
+      console.error("self-test failed");
       process.exit(1);
     }
     console.log(JSON.stringify({ ok: true, releaseDate }));
@@ -79,14 +79,16 @@ if (isMain()) {
   let outPath = null;
   let dryRun = false;
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--hours') hours = Number(args[++i]);
-    else if (args[i] === '--yml') ymlPath = args[++i];
-    else if (args[i] === '--out') outPath = args[++i];
-    else if (args[i] === '--dry-run') dryRun = true;
+    if (args[i] === "--hours") hours = Number(args[++i]);
+    else if (args[i] === "--yml") ymlPath = args[++i];
+    else if (args[i] === "--out") outPath = args[++i];
+    else if (args[i] === "--dry-run") dryRun = true;
   }
 
   if (hours == null || !ymlPath) {
-    console.error('usage: restamp-rollout.mjs --hours N --yml <file> [--out <file>] [--dry-run]');
+    console.error(
+      "usage: restamp-rollout.mjs --hours N --yml <file> [--out <file>] [--dry-run]"
+    );
     process.exit(2);
   }
   if (!existsSync(ymlPath)) {
@@ -94,9 +96,15 @@ if (isMain()) {
     process.exit(1);
   }
 
-  const src = readFileSync(ymlPath, 'utf8');
+  const src = readFileSync(ymlPath, "utf8");
   const { text, releaseDate } = restampReleaseDate(src, hours);
   const dest = outPath || ymlPath;
   if (!dryRun) writeFileSync(dest, text);
-  console.log(JSON.stringify({ yml: ymlPath, out: dest, hours, releaseDate, dryRun }, null, 2));
+  console.log(
+    JSON.stringify(
+      { yml: ymlPath, out: dest, hours, releaseDate, dryRun },
+      null,
+      2
+    )
+  );
 }

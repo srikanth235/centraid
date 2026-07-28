@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   loadAssistantConfig,
@@ -8,17 +8,17 @@ import {
   streamAssistantTurn,
   type AssistantAttachment,
   type AssistantConfig,
-} from '../../lib/assistant';
+} from "../../lib/assistant";
 
 export interface Bubble {
   key: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   text: string;
   pending?: boolean;
   error?: boolean;
 }
 
-export type AssistantPhase = 'connecting' | 'offline' | 'ready';
+export type AssistantPhase = "connecting" | "offline" | "ready";
 
 export interface PendingProviderConsent {
   provider: string;
@@ -61,7 +61,10 @@ interface PendingTurn {
  * and need consent for B too — resending only B drops A's approval and the
  * gateway asks for A again, forever.
  */
-export function nextProviderConsent(current: string[] | undefined, provider: string): string[] {
+export function nextProviderConsent(
+  current: string[] | undefined,
+  provider: string
+): string[] {
   const approved = current ?? [];
   return approved.includes(provider) ? approved : [...approved, provider];
 }
@@ -72,7 +75,10 @@ function nextKey(): string {
   return `b${counter}`;
 }
 
-function withRunner(config: AssistantConfig, runnerKind: string): AssistantConfig {
+function withRunner(
+  config: AssistantConfig,
+  runnerKind: string
+): AssistantConfig {
   const runner = config.runners.find((entry) => entry.kind === runnerKind);
   if (!runner) return config;
   return {
@@ -91,13 +97,14 @@ function withRunner(config: AssistantConfig, runnerKind: string): AssistantConfi
 export function preflightedRunnerSelection(
   current: AssistantConfig,
   fresh: AssistantConfig,
-  runnerKind: string,
+  runnerKind: string
 ): { config: AssistantConfig; error?: string } {
   const target = fresh.runners.find((runner) => runner.kind === runnerKind);
   if (!target?.sessionReady) {
     return {
       config: current,
-      error: target?.hint ?? `${runnerKind} did not complete its session preflight.`,
+      error:
+        target?.hint ?? `${runnerKind} did not complete its session preflight.`,
     };
   }
   return { config: withRunner(fresh, runnerKind) };
@@ -106,8 +113,8 @@ export function preflightedRunnerSelection(
 /** Convert a fallible prefs write into an explicit UI result. */
 export async function persistAssistantSelection(
   runnerKind: string,
-  kind: 'model' | 'effort',
-  value: string,
+  kind: "model" | "effort",
+  value: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await saveAssistantSelection(runnerKind, kind, value);
@@ -121,14 +128,15 @@ export async function persistAssistantSelection(
 }
 
 export function useAssistant(): AssistantController {
-  const [phase, setPhase] = useState<AssistantPhase>('connecting');
+  const [phase, setPhase] = useState<AssistantPhase>("connecting");
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [sending, setSending] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const [selectionError, setSelectionError] = useState<string>();
   const [config, setConfig] = useState<AssistantConfig>();
   const [context, setContext] = useState<{ used?: number; size?: number }>({});
-  const [pendingConsent, setPendingConsent] = useState<PendingProviderConsent>();
+  const [pendingConsent, setPendingConsent] =
+    useState<PendingProviderConsent>();
   const [attachments, setAttachments] = useState<AssistantAttachment[]>([]);
   const [attaching, setAttaching] = useState(false);
   const mounted = useRef(true);
@@ -148,14 +156,14 @@ export function useAssistant(): AssistantController {
         setConfig(
           conversation.runnerKind
             ? withRunner(loadedConfig, conversation.runnerKind)
-            : loadedConfig,
+            : loadedConfig
         );
-        setPhase('ready');
+        setPhase("ready");
       })
       .catch((error: unknown) => {
         if (!mounted.current) return;
         setLoadError(error instanceof Error ? error.message : String(error));
-        setPhase('offline');
+        setPhase("offline");
       });
     return () => {
       mounted.current = false;
@@ -172,7 +180,7 @@ export function useAssistant(): AssistantController {
       setPendingConsent(undefined);
       const controller = new AbortController();
       abort.current = controller;
-      let finalText = '';
+      let finalText = "";
       // The turn is not over when it parks on consent — the send guard has to
       // stay closed until the owner answers the prompt.
       let awaitingConsent = false;
@@ -183,9 +191,13 @@ export function useAssistant(): AssistantController {
             message: turn.text,
             idempotencyKey: turn.idempotencyKey,
             ...(config?.selectedModel ? { model: config.selectedModel } : {}),
-            ...(config?.selectedEffort ? { effort: config.selectedEffort } : {}),
+            ...(config?.selectedEffort
+              ? { effort: config.selectedEffort }
+              : {}),
             ...(config?.runnerKind ? { runnerKind: config.runnerKind } : {}),
-            ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
+            ...(turn.attachments.length
+              ? { attachments: turn.attachments }
+              : {}),
             ...(turn.providerConsent?.length
               ? {
                   providerConsent:
@@ -196,20 +208,20 @@ export function useAssistant(): AssistantController {
               : {}),
           },
           (event) => {
-            if (event.type === 'assistant.delta') {
+            if (event.type === "assistant.delta") {
               finalText += event.delta;
               setBubbles((current) =>
                 current.map((bubble) =>
                   bubble.key === turn.assistantKey
                     ? { ...bubble, pending: false, text: finalText }
-                    : bubble,
-                ),
+                    : bubble
+                )
               );
-            } else if (event.type === 'final') {
+            } else if (event.type === "final") {
               finalText ||= event.text;
-            } else if (event.type === 'context') {
+            } else if (event.type === "context") {
               setContext({ used: event.used, size: event.size });
-            } else if (event.type === 'usage') {
+            } else if (event.type === "usage") {
               setConfig((current) =>
                 current
                   ? {
@@ -217,11 +229,11 @@ export function useAssistant(): AssistantController {
                       selectedModel: event.model ?? current.selectedModel,
                       selectedEffort: event.effort ?? current.selectedEffort,
                     }
-                  : current,
+                  : current
               );
             }
           },
-          controller.signal,
+          controller.signal
         );
         if (outcome.error) throw new Error(outcome.error);
         if (outcome.consent) {
@@ -235,10 +247,11 @@ export function useAssistant(): AssistantController {
               ? {
                   ...bubble,
                   pending: false,
-                  text: finalText || 'The agent completed without a text response.',
+                  text:
+                    finalText || "The agent completed without a text response.",
                 }
-              : bubble,
-          ),
+              : bubble
+          )
         );
         pendingTurn.current = undefined;
       } catch (error) {
@@ -252,8 +265,8 @@ export function useAssistant(): AssistantController {
                   error: true,
                   text: error instanceof Error ? error.message : String(error),
                 }
-              : bubble,
-          ),
+              : bubble
+          )
         );
         pendingTurn.current = undefined;
       } finally {
@@ -262,7 +275,7 @@ export function useAssistant(): AssistantController {
         if (abort.current === controller) abort.current = undefined;
       }
     },
-    [config],
+    [config]
   );
 
   const send = useCallback(
@@ -270,7 +283,8 @@ export function useAssistant(): AssistantController {
       const trimmed = text.trim();
       // `sending` is React state — it only flips a render later, so two taps in
       // the same frame both got past it. The ref closes synchronously.
-      if (!trimmed || sending || inFlight.current || !conversationId.current) return;
+      if (!trimmed || sending || inFlight.current || !conversationId.current)
+        return;
       inFlight.current = true;
       const assistantKey = nextKey();
       const turn: PendingTurn = {
@@ -281,13 +295,13 @@ export function useAssistant(): AssistantController {
       };
       setBubbles((current) => [
         ...current,
-        { key: nextKey(), role: 'user', text: trimmed },
-        { key: assistantKey, role: 'assistant', text: '', pending: true },
+        { key: nextKey(), role: "user", text: trimmed },
+        { key: assistantKey, role: "assistant", text: "", pending: true },
       ]);
       void run(turn);
       setAttachments([]);
     },
-    [attachments, run, sending],
+    [attachments, run, sending]
   );
 
   const stop = useCallback((): void => {
@@ -297,9 +311,9 @@ export function useAssistant(): AssistantController {
     setBubbles((current) =>
       current.map((bubble) =>
         bubble.key === pendingTurn.current?.assistantKey && bubble.pending
-          ? { ...bubble, pending: false, error: true, text: 'Stopped.' }
-          : bubble,
-      ),
+          ? { ...bubble, pending: false, error: true, text: "Stopped." }
+          : bubble
+      )
     );
     pendingTurn.current = undefined;
   }, []);
@@ -310,7 +324,10 @@ export function useAssistant(): AssistantController {
     if (!turn || !requested) return;
     void run({
       ...turn,
-      providerConsent: nextProviderConsent(turn.providerConsent, requested.provider),
+      providerConsent: nextProviderConsent(
+        turn.providerConsent,
+        requested.provider
+      ),
     });
   }, [pendingConsent, run]);
 
@@ -325,10 +342,10 @@ export function useAssistant(): AssistantController {
               ...bubble,
               pending: false,
               error: true,
-              text: 'Not sent to the provider.',
+              text: "Not sent to the provider.",
             }
-          : bubble,
-      ),
+          : bubble
+      )
     );
     pendingTurn.current = undefined;
   }, []);
@@ -338,25 +355,29 @@ export function useAssistant(): AssistantController {
       if (!config) return;
       const runnerKind = config.runnerKind;
       setSelectionError(undefined);
-      void persistAssistantSelection(runnerKind, 'model', model).then((result) => {
-        if (!result.ok) {
-          setSelectionError(result.error);
-          return;
+      void persistAssistantSelection(runnerKind, "model", model).then(
+        (result) => {
+          if (!result.ok) {
+            setSelectionError(result.error);
+            return;
+          }
+          setConfig((current) =>
+            current?.runnerKind === runnerKind
+              ? {
+                  ...current,
+                  selectedModel: model,
+                  runners: current.runners.map((runner) =>
+                    runner.kind === runnerKind
+                      ? { ...runner, selectedModel: model }
+                      : runner
+                  ),
+                }
+              : current
+          );
         }
-        setConfig((current) =>
-          current?.runnerKind === runnerKind
-            ? {
-                ...current,
-                selectedModel: model,
-                runners: current.runners.map((runner) =>
-                  runner.kind === runnerKind ? { ...runner, selectedModel: model } : runner,
-                ),
-              }
-            : current,
-        );
-      });
+      );
     },
-    [config],
+    [config]
   );
 
   const selectEffort = useCallback(
@@ -364,25 +385,29 @@ export function useAssistant(): AssistantController {
       if (!config) return;
       const runnerKind = config.runnerKind;
       setSelectionError(undefined);
-      void persistAssistantSelection(runnerKind, 'effort', effort).then((result) => {
-        if (!result.ok) {
-          setSelectionError(result.error);
-          return;
+      void persistAssistantSelection(runnerKind, "effort", effort).then(
+        (result) => {
+          if (!result.ok) {
+            setSelectionError(result.error);
+            return;
+          }
+          setConfig((current) =>
+            current?.runnerKind === runnerKind
+              ? {
+                  ...current,
+                  selectedEffort: effort,
+                  runners: current.runners.map((runner) =>
+                    runner.kind === runnerKind
+                      ? { ...runner, selectedEffort: effort }
+                      : runner
+                  ),
+                }
+              : current
+          );
         }
-        setConfig((current) =>
-          current?.runnerKind === runnerKind
-            ? {
-                ...current,
-                selectedEffort: effort,
-                runners: current.runners.map((runner) =>
-                  runner.kind === runnerKind ? { ...runner, selectedEffort: effort } : runner,
-                ),
-              }
-            : current,
-        );
-      });
+      );
     },
-    [config],
+    [config]
   );
 
   const selectRunner = useCallback(
@@ -392,7 +417,11 @@ export function useAssistant(): AssistantController {
       void loadAssistantConfig({ refresh: true })
         .then((fresh) => {
           if (!mounted.current) return;
-          const selection = preflightedRunnerSelection(config, fresh, runnerKind);
+          const selection = preflightedRunnerSelection(
+            config,
+            fresh,
+            runnerKind
+          );
           if (selection.error) {
             setSelectionError(selection.error);
             return;
@@ -403,10 +432,12 @@ export function useAssistant(): AssistantController {
         })
         .catch((error: unknown) => {
           if (!mounted.current) return;
-          setSelectionError(error instanceof Error ? error.message : String(error));
+          setSelectionError(
+            error instanceof Error ? error.message : String(error)
+          );
         });
     },
-    [config],
+    [config]
   );
 
   const attach = useCallback((): void => {
@@ -418,7 +449,7 @@ export function useAssistant(): AssistantController {
           setAttachments((current) =>
             current.some((item) => item.hash === attachment.hash)
               ? current
-              : [...current, attachment],
+              : [...current, attachment]
           );
         }
       })
@@ -429,7 +460,9 @@ export function useAssistant(): AssistantController {
   }, [attaching, config?.supportsAttachments]);
 
   const removeAttachment = useCallback((hash: string): void => {
-    setAttachments((current) => current.filter((attachment) => attachment.hash !== hash));
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.hash !== hash)
+    );
   }, []);
 
   return {

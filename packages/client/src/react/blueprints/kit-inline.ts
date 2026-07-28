@@ -26,7 +26,7 @@
 // The `./suppress-served-ask` import MUST stay first: kit.ts auto-mounts its Ask
 // panel at module-eval time, and the sentinel it sets suppresses that before the
 // kit module below is evaluated (see suppress-served-ask.ts).
-import './suppress-served-ask.js';
+import "./suppress-served-ask.js";
 import {
   fileToDataUri,
   INLINE_ATTACH_BYTES,
@@ -35,18 +35,18 @@ import {
   sha256File,
   type Attachment,
   type VaultOutcome,
-} from '@centraid/blueprints/kit/kit.js';
+} from "@centraid/blueprints/kit/kit.js";
 
-import { auth, authHeaders, doFetch } from '../../gateway-client-core.js';
-import { authorizeBlobUrl, blobAuthHeaders, BLOB_PREFIX } from './blob-auth.js';
+import { auth, authHeaders, doFetch } from "../../gateway-client-core.js";
+import { authorizeBlobUrl, blobAuthHeaders, BLOB_PREFIX } from "./blob-auth.js";
 
-export * from '@centraid/blueprints/kit/kit.js';
+export * from "@centraid/blueprints/kit/kit.js";
 // `authorizeBlobUrl` moved to the leaf `blob-auth.js` module so importing it
 // no longer pulls the full kit barrel into a caller's chunk (boot-size fix).
 // Re-exported here so served-kit consumers that reach it through the `./kit.ts`
 // → kit-inline alias are unchanged.
 
-const LINKS_ROUTE = '/centraid/_vault/links';
+const LINKS_ROUTE = "/centraid/_vault/links";
 const SUN_SVG =
   '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
 const MOON_SVG =
@@ -54,9 +54,12 @@ const MOON_SVG =
 
 function shellIsDark(): boolean {
   const theme = document.documentElement.dataset.theme;
-  if (theme === 'dark') return true;
-  if (theme === 'light') return false;
-  return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+  if (theme === "dark") return true;
+  if (theme === "light") return false;
+  return (
+    typeof matchMedia === "function" &&
+    matchMedia("(prefers-color-scheme: dark)").matches
+  );
 }
 
 /**
@@ -68,18 +71,18 @@ function shellIsDark(): boolean {
  */
 export function wireThemeToggle(
   btn: HTMLElement,
-  { onChange }: { onChange?: (dark: boolean) => void } = {},
+  { onChange }: { onChange?: (dark: boolean) => void } = {}
 ): () => void {
   const setIcon = (): void => {
     btn.innerHTML = shellIsDark() ? SUN_SVG : MOON_SVG;
   };
-  btn.addEventListener('click', () => {
+  btn.addEventListener("click", () => {
     const dark = !shellIsDark();
     // Flip the shell document's theme for an instant, synchronous repaint of the
     // inline app + the rest of the shell. Durable theme persistence is owned by
     // the shell's own Settings appearance control (a single source of truth);
     // this in-app toggle is the app-local affordance the served chrome shipped.
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
     setIcon();
     onChange?.(dark);
   });
@@ -104,8 +107,10 @@ const stripObjectUrls = new WeakMap<HTMLElement, string[]>();
 export function renderAttachments(
   stripEl: HTMLElement,
   list: AttachmentLike[] | undefined,
-  onRemove: ((attachmentId: string) => Promise<VaultOutcome | undefined>) | null,
-  options: { onZoom?: (attachment: unknown) => void } = {},
+  onRemove:
+    | ((attachmentId: string) => Promise<VaultOutcome | undefined>)
+    | null,
+  options: { onZoom?: (attachment: unknown) => void } = {}
 ): void {
   for (const url of stripObjectUrls.get(stripEl) ?? []) {
     try {
@@ -118,11 +123,11 @@ export function renderAttachments(
   baseRenderAttachments(stripEl, list, onRemove, options);
   const created: string[] = [];
   const targets = [
-    ...stripEl.querySelectorAll<HTMLImageElement>('img'),
-    ...stripEl.querySelectorAll<HTMLAnchorElement>('a'),
+    ...stripEl.querySelectorAll<HTMLImageElement>("img"),
+    ...stripEl.querySelectorAll<HTMLAnchorElement>("a"),
   ];
   for (const el of targets) {
-    const attr = el instanceof HTMLImageElement ? 'src' : 'href';
+    const attr = el instanceof HTMLImageElement ? "src" : "href";
     const raw = el.getAttribute(attr);
     if (!raw || !raw.startsWith(BLOB_PREFIX)) continue;
     void authorizeBlobUrl(raw).then((objectUrl) => {
@@ -169,16 +174,16 @@ interface StagedBlob {
  */
 export async function stageFileBytes(
   file: File,
-  extra = '',
-  { hash = true, scope }: { hash?: boolean; scope?: string } = {},
+  extra = "",
+  { hash = true, scope }: { hash?: boolean; scope?: string } = {}
 ): Promise<StagedBlob> {
   const { baseUrl, token } = await auth();
   // Bytes land in the scope the caller named, not the focused one (issue #599):
   // an upload aimed at an audience must be staged into THAT vault's CAS.
   const headers = blobAuthHeaders(token, scope);
   const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
+  if (file.name) q.set("filename", file.name);
+  if (file.type) q.set("media_type", file.type);
   let declaredSha: string | null = null;
   if (hash) {
     try {
@@ -188,23 +193,29 @@ export async function stageFileBytes(
     }
   }
   if (declaredSha) {
-    q.set('sha256', declaredSha);
+    q.set("sha256", declaredSha);
     try {
       const preflight = new URLSearchParams({ byte_size: String(file.size) });
-      if (file.type) preflight.set('media_type', file.type);
-      if (file.name) preflight.set('filename', file.name);
-      const have = await doFetch(baseUrl, `${BLOB_PREFIX}/_sha/${declaredSha}?${preflight}`, {
-        method: 'HEAD',
-        headers,
-      });
+      if (file.type) preflight.set("media_type", file.type);
+      if (file.name) preflight.set("filename", file.name);
+      const have = await doFetch(
+        baseUrl,
+        `${BLOB_PREFIX}/_sha/${declaredSha}?${preflight}`,
+        {
+          method: "HEAD",
+          headers,
+        }
+      );
       if (have.ok) {
         return {
           sha256: declaredSha,
-          mediaType: have.headers.get('x-centraid-media-type') ?? file.type ?? null,
-          byteSize: Number(have.headers.get('content-length')) || file.size || 0,
-          existingContentId: have.headers.get('x-centraid-content-id'),
-          casAck: have.headers.get('x-centraid-cas-ack'),
-          custody: have.headers.get('x-centraid-custody'),
+          mediaType:
+            have.headers.get("x-centraid-media-type") ?? file.type ?? null,
+          byteSize:
+            Number(have.headers.get("content-length")) || file.size || 0,
+          existingContentId: have.headers.get("x-centraid-content-id"),
+          casAck: have.headers.get("x-centraid-cas-ack"),
+          custody: have.headers.get("x-centraid-custody"),
           alreadyPresent: true,
         };
       }
@@ -213,11 +224,11 @@ export async function stageFileBytes(
     }
   }
   const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}${extra}`, {
-    method: 'POST',
+    method: "POST",
     headers: {
       ...headers,
-      'content-type': file.type || 'application/octet-stream',
-      ...(declaredSha ? { 'x-content-sha256': declaredSha } : {}),
+      "content-type": file.type || "application/octet-stream",
+      ...(declaredSha ? { "x-content-sha256": declaredSha } : {}),
     },
     body: file,
   });
@@ -234,7 +245,7 @@ export async function stageDerivative(
   parentSha: string,
   variant: string,
   body: BodyInit,
-  mediaType = 'application/octet-stream',
+  mediaType = "application/octet-stream"
 ): Promise<StagedBlob> {
   const { baseUrl, token } = await auth();
   const q = new URLSearchParams({
@@ -243,11 +254,12 @@ export async function stageDerivative(
     media_type: mediaType,
   });
   const res = await doFetch(baseUrl, `${BLOB_PREFIX}?${q}`, {
-    method: 'POST',
-    headers: { ...authHeaders(token), 'content-type': mediaType },
+    method: "POST",
+    headers: { ...authHeaders(token), "content-type": mediaType },
     body,
   });
-  if (!res.ok) throw new Error(`${variant} contribution refused (${res.status})`);
+  if (!res.ok)
+    throw new Error(`${variant} contribution refused (${res.status})`);
   return (await res.json()) as StagedBlob;
 }
 
@@ -257,7 +269,10 @@ interface AttachOutcome {
 }
 
 interface AttachHandlers {
-  act: (action: string, input: Record<string, unknown>) => Promise<AttachOutcome | undefined>;
+  act: (
+    action: string,
+    input: Record<string, unknown>
+  ) => Promise<AttachOutcome | undefined>;
   narrate: (outcome: AttachOutcome | undefined) => boolean;
   notice?: (text: string) => void;
   refresh?: () => void | Promise<void>;
@@ -274,9 +289,9 @@ interface AttachHandlers {
 export function wireAttachInput(
   inputEl: HTMLInputElement,
   getSubjectId: () => string | null | undefined,
-  { act, narrate, notice, refresh }: AttachHandlers,
+  { act, narrate, notice, refresh }: AttachHandlers
 ): void {
-  inputEl.addEventListener('change', async () => {
+  inputEl.addEventListener("change", async () => {
     const subjectId = getSubjectId();
     if (!subjectId) return;
     const files = Array.from(inputEl.files ?? []);
@@ -305,17 +320,17 @@ export function wireAttachInput(
           };
         }
       } catch {
-        notice?.('Could not read that file.');
+        notice?.("Could not read that file.");
         return attachNext(index + 1);
       }
-      const outcome = await act('attach', input);
-      if (outcome?.status === 'executed' && isPendingOffsite(custodyReceipt)) {
-        notice?.('Attached locally · waiting for offsite custody.');
+      const outcome = await act("attach", input);
+      if (outcome?.status === "executed" && isPendingOffsite(custodyReceipt)) {
+        notice?.("Attached locally · waiting for offsite custody.");
       }
       if (narrate(outcome)) return attachNext(index + 1);
     };
     await attachNext(0);
-    inputEl.value = '';
+    inputEl.value = "";
     await refresh?.();
   });
 }
@@ -337,18 +352,18 @@ export async function createReference(
   from: { type: string; id: string },
   to: { type: string; id: string },
   relation: string,
-  selector?: unknown,
+  selector?: unknown
 ): Promise<unknown> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, LINKS_ROUTE, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({
       from_type: from.type,
       from_id: from.id,
       to_type: to.type,
       to_id: to.id,
-      relation: relation || 'references',
+      relation: relation || "references",
       ...(selector ? { selector } : {}),
     }),
   });
@@ -358,10 +373,14 @@ export async function createReference(
 /** End a link (temporal — the row survives with valid_to set). Drop-in. @public */
 export async function removeReference(linkId: string): Promise<unknown> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${LINKS_ROUTE}/${encodeURIComponent(linkId)}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
+  const res = await doFetch(
+    baseUrl,
+    `${LINKS_ROUTE}/${encodeURIComponent(linkId)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    }
+  );
   return res.json();
 }
 
@@ -370,13 +389,20 @@ export async function removeReference(linkId: string): Promise<unknown> {
  * anchor. Drop-in for kit.ts `reanchorReference`.
  * @public
  */
-export async function reanchorReference(linkId: string, selector: unknown): Promise<unknown> {
+export async function reanchorReference(
+  linkId: string,
+  selector: unknown
+): Promise<unknown> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${LINKS_ROUTE}/${encodeURIComponent(linkId)}`, {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ selector: selector ?? null }),
-  });
+  const res = await doFetch(
+    baseUrl,
+    `${LINKS_ROUTE}/${encodeURIComponent(linkId)}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ selector: selector ?? null }),
+    }
+  );
   return res.json();
 }
 

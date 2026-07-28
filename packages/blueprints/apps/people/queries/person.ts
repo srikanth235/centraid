@@ -97,24 +97,24 @@ interface ContactEntry {
   value: string;
 }
 
-const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
-const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
-const RELATIONS_SCHEME_URI = 'urn:duaility:relations';
+const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
+const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
+const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
 export default async function personHandler({ input, ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
-  const partyId = String(input?.party_id ?? '');
+  const purpose = "dpv:ServiceProvision";
+  const partyId = String(input?.party_id ?? "");
   if (!partyId) return { person: null };
   try {
     const [profiles, parties] = await Promise.all([
       ctx.vault.read({
-        entity: 'people.profile',
-        where: [{ column: 'party_id', op: 'eq', value: partyId }],
+        entity: "people.profile",
+        where: [{ column: "party_id", op: "eq", value: partyId }],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.party',
-        where: [{ column: 'party_id', op: 'eq', value: partyId }],
+        entity: "core.party",
+        where: [{ column: "party_id", op: "eq", value: partyId }],
         purpose,
       }),
     ]);
@@ -136,72 +136,72 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       vault,
     ] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.party_identifier',
-        where: [{ column: 'party_id', op: 'eq', value: partyId }],
+        entity: "core.party_identifier",
+        where: [{ column: "party_id", op: "eq", value: partyId }],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.link',
+        entity: "core.link",
         where: [
-          { column: 'from_type', op: 'eq', value: 'core.party' },
-          { column: 'from_id', op: 'eq', value: partyId },
-          { column: 'valid_to', op: 'is-null' },
+          { column: "from_type", op: "eq", value: "core.party" },
+          { column: "from_id", op: "eq", value: partyId },
+          { column: "valid_to", op: "is-null" },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.link',
+        entity: "core.link",
         where: [
-          { column: 'to_type', op: 'eq', value: 'core.party' },
-          { column: 'to_id', op: 'eq', value: partyId },
-          { column: 'valid_to', op: 'is-null' },
+          { column: "to_type", op: "eq", value: "core.party" },
+          { column: "to_id", op: "eq", value: partyId },
+          { column: "valid_to", op: "is-null" },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'people.important_date',
+        entity: "people.important_date",
         where: [
-          { column: 'party_id', op: 'eq', value: partyId },
-          { column: 'deleted_at', op: 'is-null' },
+          { column: "party_id", op: "eq", value: partyId },
+          { column: "deleted_at", op: "is-null" },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'knowledge.annotation',
+        entity: "knowledge.annotation",
         where: [
-          { column: 'target_type', op: 'eq', value: 'core.party' },
-          { column: 'target_id', op: 'eq', value: partyId },
+          { column: "target_type", op: "eq", value: "core.party" },
+          { column: "target_id", op: "eq", value: partyId },
         ],
-        orderBy: { column: 'created_at', dir: 'desc' },
+        orderBy: { column: "created_at", dir: "desc" },
         purpose,
       }),
       ctx.vault.read({
-        entity: 'tally.obligation',
+        entity: "tally.obligation",
         where: [
-          { column: 'from_party', op: 'eq', value: partyId },
-          { column: 'deleted_at', op: 'is-null' },
-        ],
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: 'tally.obligation',
-        where: [
-          { column: 'to_party', op: 'eq', value: partyId },
-          { column: 'deleted_at', op: 'is-null' },
+          { column: "from_party", op: "eq", value: partyId },
+          { column: "deleted_at", op: "is-null" },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.tag',
+        entity: "tally.obligation",
         where: [
-          { column: 'target_type', op: 'eq', value: 'core.party' },
-          { column: 'target_id', op: 'eq', value: partyId },
+          { column: "to_party", op: "eq", value: partyId },
+          { column: "deleted_at", op: "is-null" },
         ],
         purpose,
       }),
-      ctx.vault.read({ entity: 'core.concept', purpose }),
-      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
-      ctx.vault.read({ entity: 'core.vault', purpose }),
+      ctx.vault.read({
+        entity: "core.tag",
+        where: [
+          { column: "target_type", op: "eq", value: "core.party" },
+          { column: "target_id", op: "eq", value: partyId },
+        ],
+        purpose,
+      }),
+      ctx.vault.read({ entity: "core.concept", purpose }),
+      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+      ctx.vault.read({ entity: "core.vault", purpose }),
     ]);
 
     const identifierRows = (ids.rows ?? []) as unknown as RawIdentifier[];
@@ -213,143 +213,159 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       ...((debtsFrom.rows ?? []) as unknown as RawDebt[]),
       ...((debtsTo.rows ?? []) as unknown as RawDebt[]),
     ].filter(
-      (row, index, all) => all.findIndex((x) => x.obligation_id === row.obligation_id) === index,
+      (row, index, all) =>
+        all.findIndex((x) => x.obligation_id === row.obligation_id) === index
     );
     const tagRows = (tags.rows ?? []) as unknown as RawTag[];
     const conceptRows = (concepts.rows ?? []) as unknown as RawConcept[];
     const schemeRows = (schemes.rows ?? []) as unknown as RawScheme[];
-    const ownerPartyId = String((vault.rows ?? [])[0]?.owner_party_id ?? '');
+    const ownerPartyId = String((vault.rows ?? [])[0]?.owner_party_id ?? "");
 
     const relationLinks = outgoing.filter(
       (link) =>
-        link.to_type === 'core.party' &&
+        link.to_type === "core.party" &&
         conceptRows.some(
           (concept) =>
             concept.concept_id === link.relation_concept_id &&
-            concept.notation?.startsWith('people-'),
-        ),
+            concept.notation?.startsWith("people-")
+        )
     );
     const relationSchemeId = schemeRows.find(
-      (scheme) => scheme.uri === RELATIONS_SCHEME_URI,
+      (scheme) => scheme.uri === RELATIONS_SCHEME_URI
     )?.scheme_id;
     const giftTaskIds = new Set(
       incoming
         .filter(
           (link) =>
-            link.from_type === 'schedule.task' &&
+            link.from_type === "schedule.task" &&
             conceptRows.some(
               (concept) =>
                 concept.concept_id === link.relation_concept_id &&
                 concept.scheme_id === relationSchemeId &&
-                concept.notation === 'gift-for',
-            ),
+                concept.notation === "gift-for"
+            )
         )
-        .map((link) => link.from_id),
+        .map((link) => link.from_id)
     );
     const taskIds = incoming
-      .filter((link) => link.from_type === 'schedule.task')
+      .filter((link) => link.from_type === "schedule.task")
       .map((link) => link.from_id);
     const activityIds = incoming
-      .filter((link) => link.from_type === 'core.activity')
+      .filter((link) => link.from_type === "core.activity")
       .map((link) => link.from_id);
-    const [relatedParties, tasks, interactions, interactionNotes] = await Promise.all([
-      relationLinks.length > 0
-        ? ctx.vault.read({
-            entity: 'core.party',
-            where: [
-              {
-                column: 'party_id',
-                op: 'in',
-                value: relationLinks.map((l) => l.to_id),
-              },
-            ],
-            purpose,
-          })
-        : Promise.resolve({ rows: [] }),
-      taskIds.length > 0
-        ? ctx.vault.read({
-            entity: 'schedule.task',
-            where: [{ column: 'task_id', op: 'in', value: taskIds }],
-            purpose,
-          })
-        : Promise.resolve({ rows: [] }),
-      activityIds.length > 0
-        ? ctx.vault.read({
-            entity: 'core.activity',
-            where: [{ column: 'activity_id', op: 'in', value: activityIds }],
-            orderBy: { column: 'started_at', dir: 'desc' },
-            purpose,
-          })
-        : Promise.resolve({ rows: [] }),
-      activityIds.length > 0
-        ? ctx.vault.read({
-            entity: 'knowledge.annotation',
-            where: [
-              { column: 'target_type', op: 'eq', value: 'core.activity' },
-              { column: 'target_id', op: 'in', value: activityIds },
-            ],
-            purpose,
-          })
-        : Promise.resolve({ rows: [] }),
-    ]);
-    const relatedPartyRows = (relatedParties.rows ?? []) as unknown as RawParty[];
+    const [relatedParties, tasks, interactions, interactionNotes] =
+      await Promise.all([
+        relationLinks.length > 0
+          ? ctx.vault.read({
+              entity: "core.party",
+              where: [
+                {
+                  column: "party_id",
+                  op: "in",
+                  value: relationLinks.map((l) => l.to_id),
+                },
+              ],
+              purpose,
+            })
+          : Promise.resolve({ rows: [] }),
+        taskIds.length > 0
+          ? ctx.vault.read({
+              entity: "schedule.task",
+              where: [{ column: "task_id", op: "in", value: taskIds }],
+              purpose,
+            })
+          : Promise.resolve({ rows: [] }),
+        activityIds.length > 0
+          ? ctx.vault.read({
+              entity: "core.activity",
+              where: [{ column: "activity_id", op: "in", value: activityIds }],
+              orderBy: { column: "started_at", dir: "desc" },
+              purpose,
+            })
+          : Promise.resolve({ rows: [] }),
+        activityIds.length > 0
+          ? ctx.vault.read({
+              entity: "knowledge.annotation",
+              where: [
+                { column: "target_type", op: "eq", value: "core.activity" },
+                { column: "target_id", op: "in", value: activityIds },
+              ],
+              purpose,
+            })
+          : Promise.resolve({ rows: [] }),
+      ]);
+    const relatedPartyRows = (relatedParties.rows ??
+      []) as unknown as RawParty[];
     const taskRows = (tasks.rows ?? []) as unknown as RawTask[];
-    const interactionRows = (interactions.rows ?? []) as unknown as RawInteraction[];
-    const interactionNoteRows = (interactionNotes.rows ?? []) as unknown as Array<
-      RawNote & { target_id: string }
-    >;
+    const interactionRows = (interactions.rows ??
+      []) as unknown as RawInteraction[];
+    const interactionNoteRows = (interactionNotes.rows ??
+      []) as unknown as Array<RawNote & { target_id: string }>;
 
     const listScheme = schemeRows.find((s) => s.uri === LIST_SCHEME_URI);
     const listConceptIds = new Set<string>(
       conceptRows
         .filter((c) => listScheme && c.scheme_id === listScheme.scheme_id)
-        .map((c) => c.concept_id),
+        .map((c) => c.concept_id)
     );
     const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
     const starredConceptId = flagsScheme
-      ? (conceptRows.find((c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred')
-          ?.concept_id ?? null)
+      ? (conceptRows.find(
+          (c) =>
+            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
+        )?.concept_id ?? null)
       : null;
     let listId: string | null = null;
     let starred = false;
     for (const t of tagRows) {
       if (listConceptIds.has(t.concept_id)) listId = t.concept_id;
-      if (starredConceptId != null && t.concept_id === starredConceptId) starred = true;
+      if (starredConceptId != null && t.concept_id === starredConceptId)
+        starred = true;
     }
-    const conceptById = new Map(conceptRows.map((concept) => [concept.concept_id, concept]));
-    const relatedById = new Map(relatedPartyRows.map((related) => [related.party_id, related]));
+    const conceptById = new Map(
+      conceptRows.map((concept) => [concept.concept_id, concept])
+    );
+    const relatedById = new Map(
+      relatedPartyRows.map((related) => [related.party_id, related])
+    );
     const interactionText = new Map(
-      interactionNoteRows.map((annotation) => [annotation.target_id, annotation.body_text]),
+      interactionNoteRows.map((annotation) => [
+        annotation.target_id,
+        annotation.body_text,
+      ])
     );
 
     const contact: ContactEntry[] = [];
     for (const i of identifierRows) {
-      if (i.scheme === 'tel') contact.push({ kind: 'phone', value: i.value });
-      else if (i.scheme === 'email') contact.push({ kind: 'email', value: i.value });
+      if (i.scheme === "tel") contact.push({ kind: "phone", value: i.value });
+      else if (i.scheme === "email")
+        contact.push({ kind: "email", value: i.value });
     }
 
     const person = {
       party_id: partyId,
       name: party.display_name,
-      role: profile.role ?? '',
+      role: profile.role ?? "",
       avatar_color: profile.avatar_color ?? null,
       cadence_days: profile.cadence_days,
       last_contacted_at: profile.last_contacted_at ?? null,
       created_at: profile.created_at,
-      met: profile.met ?? '',
+      met: profile.met ?? "",
       list_id: listId,
       starred,
       contact,
       relationships: relationLinks.map((link) => {
         const related = relatedById.get(link.to_id);
-        const notation = conceptById.get(link.relation_concept_id)?.notation ?? 'people-related';
-        const tokens = notation.replace(/^people-/u, '').split('-');
-        const pet = related?.kind === 'animal' ? (tokens.pop() ?? null) : null;
+        const notation =
+          conceptById.get(link.relation_concept_id)?.notation ??
+          "people-related";
+        const tokens = notation.replace(/^people-/u, "").split("-");
+        const pet = related?.kind === "animal" ? (tokens.pop() ?? null) : null;
         return {
           relationship_id: link.link_id,
           related_party_id: link.to_id,
-          name: related?.display_name ?? '—',
-          kind: tokens.join(' ') || 'related',
+          name: related?.display_name ?? "—",
+          kind: tokens.join(" ") || "related",
           pet,
         };
       }),
@@ -369,28 +385,28 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         .map((t) => ({
           task_id: t.task_id,
           text: t.title,
-          done: t.status === 'completed',
+          done: t.status === "completed",
         })),
       gifts: taskRows
         .filter((t) => giftTaskIds.has(t.task_id))
         .map((t) => ({
           gift_id: t.task_id,
           text: t.title,
-          state: t.status === 'completed' ? 'given' : 'idea',
+          state: t.status === "completed" ? "given" : "idea",
         })),
       debts: debtRows
         .filter((d) => d.settled_at == null)
         .map((d) => ({
           debt_id: d.obligation_id,
-          direction: d.from_party === ownerPartyId ? 'owe' : 'owed',
+          direction: d.from_party === ownerPartyId ? "owe" : "owed",
           amount_minor: d.amount_minor,
           currency: d.currency,
-          reason: d.reason ?? '',
+          reason: d.reason ?? "",
         })),
       interactions: interactionRows.map((i) => ({
         interaction_id: i.activity_id,
-        kind: conceptById.get(i.kind_concept_id)?.notation ?? 'interaction',
-        text: interactionText.get(i.activity_id) ?? '',
+        kind: conceptById.get(i.kind_concept_id)?.notation ?? "interaction",
+        text: interactionText.get(i.activity_id) ?? "",
         occurred_at: i.started_at,
       })),
     };

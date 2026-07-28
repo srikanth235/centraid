@@ -12,14 +12,14 @@
  * `ctx.tool` rail — issue #484.)
  */
 
-import { composeSkills } from './compose.js';
-import { buildUiGroundingBlocks } from './ui-grounding.js';
+import { composeSkills } from "./compose.js";
+import { buildUiGroundingBlocks } from "./ui-grounding.js";
 
 export interface AuthoringExtraPromptInput {
   /** The route's app-context preamble — kept first; carries the app's identity, declared handler catalog, and vault/ext declaration. */
   baseExtra: string;
   /** App kind from the worktree `app.json`; an automation has no front end. */
-  appKind: 'app' | 'automation';
+  appKind: "app" | "automation";
 }
 
 /**
@@ -27,12 +27,17 @@ export interface AuthoringExtraPromptInput {
  * then the authoring blocks for the app `kind`. Returns the blocks joined by
  * blank lines.
  */
-export function buildAuthoringExtraPrompt(input: AuthoringExtraPromptInput): string {
+export function buildAuthoringExtraPrompt(
+  input: AuthoringExtraPromptInput
+): string {
   const blocks: string[] = input.baseExtra ? [input.baseExtra] : [];
-  if (input.appKind === 'automation') {
-    blocks.push(composeSkills(['automation-authoring']));
+  if (input.appKind === "automation") {
+    blocks.push(composeSkills(["automation-authoring"]));
   } else {
-    blocks.push(composeSkills(['authoring-centraid-apps']), ...buildUiGroundingBlocks());
+    blocks.push(
+      composeSkills(["authoring-centraid-apps"]),
+      ...buildUiGroundingBlocks()
+    );
   }
-  return blocks.join('\n\n');
+  return blocks.join("\n\n");
 }

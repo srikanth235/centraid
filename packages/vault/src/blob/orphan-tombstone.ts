@@ -15,7 +15,7 @@
 // dereference time, the rule can only ever OVER-retain — never delete a byte a
 // recovery-to-N still needs.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 /**
  * The orphan-grace tombstone index (issue #439 R4): durable evidence of WHEN a
@@ -37,7 +37,7 @@ export class OrphanTombstoneIndex {
     this.db
       .prepare(
         `INSERT INTO blob_orphan (sha256, first_orphaned_at) VALUES (?, ?)
-         ON CONFLICT (sha256) DO NOTHING`,
+         ON CONFLICT (sha256) DO NOTHING`
       )
       .run(sha, nowMs);
     // Read back rather than trust `nowMs`: a pre-existing row wins the conflict,
@@ -48,18 +48,18 @@ export class OrphanTombstoneIndex {
   /** The instant `sha` was first observed orphaned, or undefined when untombstoned. */
   read(sha: string): number | undefined {
     const row = this.db
-      .prepare('SELECT first_orphaned_at FROM blob_orphan WHERE sha256 = ?')
+      .prepare("SELECT first_orphaned_at FROM blob_orphan WHERE sha256 = ?")
       .get(sha) as { first_orphaned_at: number } | undefined;
     return row?.first_orphaned_at;
   }
 
   /** Forget the tombstone — the sha is live/pinned again, or has been deleted. */
   clear(sha: string): void {
-    this.db.prepare('DELETE FROM blob_orphan WHERE sha256 = ?').run(sha);
+    this.db.prepare("DELETE FROM blob_orphan WHERE sha256 = ?").run(sha);
   }
 
   /** Drop every tombstone (e.g. when the configured remote identity changes). */
   clearAll(): void {
-    this.db.exec('DELETE FROM blob_orphan');
+    this.db.exec("DELETE FROM blob_orphan");
   }
 }

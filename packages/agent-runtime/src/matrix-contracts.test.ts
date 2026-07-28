@@ -1,14 +1,14 @@
-import { RUNNER_KINDS } from '@centraid/app-engine';
+import { RUNNER_KINDS } from "@centraid/app-engine";
 /**
  * Matrix cell agent-runtime.contracts (#535 coverable-today).
  * Registry shape is the public contract every runner kind must satisfy.
  */
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { RUNNER_BACKENDS, getRunnerBackend } from './registry.ts';
+import { RUNNER_BACKENDS, getRunnerBackend } from "./registry.ts";
 
-describe('matrix-contracts', () => {
-  test('every RunnerKind has a backend with kind/label/minVersion/runTurn contract', () => {
+describe("matrix-contracts", () => {
+  test("every RunnerKind has a backend with kind/label/minVersion/runTurn contract", () => {
     for (const kind of RUNNER_KINDS) {
       const backend = getRunnerBackend(kind);
       expect(backend).toBe(RUNNER_BACKENDS[kind]);
@@ -19,15 +19,17 @@ describe('matrix-contracts', () => {
           major: expect.any(Number),
           minor: expect.any(Number),
           patch: expect.any(Number),
-        }),
+        })
       );
-      expect(backend.runTurn).toBeTypeOf('function');
-      expect(backend.enumerateModels).toBeTypeOf('function');
+      expect(backend.runTurn).toBeTypeOf("function");
+      expect(backend.enumerateModels).toBeTypeOf("function");
       expect(backend.installHint.length).toBeGreaterThan(0);
     }
   });
 
-  test('unknown kind is not silently present in the registry table', () => {
-    expect(Object.keys(RUNNER_BACKENDS).sort()).toStrictEqual([...RUNNER_KINDS].sort());
+  test("unknown kind is not silently present in the registry table", () => {
+    expect(Object.keys(RUNNER_BACKENDS).sort()).toStrictEqual(
+      [...RUNNER_KINDS].sort()
+    );
   });
 });

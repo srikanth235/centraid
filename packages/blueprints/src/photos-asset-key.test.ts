@@ -15,12 +15,18 @@
 // stubs (`kit.ts`, `outcomes.ts`) and imported from there. The modules UNDER
 // TEST are byte-identical copies, so this is still testing the real code — only
 // the two effect boundaries are replaced.
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 interface ActCall {
   action: string;
@@ -68,40 +74,44 @@ interface SelectionActionsModule {
   runBatchDelete: (
     keys: string[],
     progressEl: HTMLElement | null,
-    callbacks: BatchCallbacks,
+    callbacks: BatchCallbacks
   ) => Promise<void>;
-  runBatchRestore: (keys: string[], callbacks: Pick<BatchCallbacks, 'refresh'>) => Promise<void>;
+  runBatchRestore: (
+    keys: string[],
+    callbacks: Pick<BatchCallbacks, "refresh">
+  ) => Promise<void>;
 }
 
-const PHOTOS = path.resolve(import.meta.dirname, '../apps/photos');
+const PHOTOS = path.resolve(import.meta.dirname, "../apps/photos");
 const COPIED = [
-  'asset-key.ts',
-  'constants.ts',
-  'format.ts',
-  'types.ts',
-  'visibility.ts',
-  'selection-actions.ts',
+  "asset-key.ts",
+  "constants.ts",
+  "format.ts",
+  "types.ts",
+  "visibility.ts",
+  "selection-actions.ts",
 ];
 
-const dir = mkdtempSync(path.join(os.tmpdir(), 'photos-asset-key-'));
+const dir = mkdtempSync(path.join(os.tmpdir(), "photos-asset-key-"));
 mkdirSync(dir, { recursive: true });
-for (const file of COPIED) copyFileSync(path.join(PHOTOS, file), path.join(dir, file));
+for (const file of COPIED)
+  copyFileSync(path.join(PHOTOS, file), path.join(dir, file));
 
 // The kit surface these two modules actually touch. `format.ts` wants three
 // formatting helpers; `selection-actions.ts` wants `toast`.
 writeFileSync(
-  path.join(dir, 'kit.ts'),
+  path.join(dir, "kit.ts"),
   `export const BLOB_ROUTE = '/centraid/_vault/blobs';
 export const fmtBytes = (n: number): string => String(n);
 export const localDayKey = (at: string | Date): string =>
   (at instanceof Date ? at.toISOString() : String(at)).slice(0, 10);
 export const toast = (): void => undefined;
-`,
+`
 );
 // The command boundary, recording instead of dispatching. Every assertion below
 // is about WHAT the real batch code asked for and IN WHICH SCOPE.
 writeFileSync(
-  path.join(dir, 'outcomes.ts'),
+  path.join(dir, "outcomes.ts"),
   `const sink = globalThis as unknown as { __photosActs: unknown[] };
 sink.__photosActs = sink.__photosActs ?? [];
 export const act = (action: string, input: unknown, scope?: string | null) => {
@@ -110,35 +120,37 @@ export const act = (action: string, input: unknown, scope?: string | null) => {
 };
 export const narrate = (): boolean => false;
 export const writeTarget = () => ({ disabled: false, scopeId: 'vault-own', label: 'Library' });
-`,
+`
 );
 
 const load = <T>(file: string): Promise<T> =>
   import(pathToFileURL(path.join(dir, file)).href) as Promise<T>;
 
 const { assetKey, assetRefKey, parseAssetKey, scopeOfKey } =
-  await load<AssetKeyModule>('asset-key.ts');
-const { createVisibility } = await load<VisibilityModule>('visibility.ts');
-const { runBatchDelete, runBatchRestore } =
-  await load<SelectionActionsModule>('selection-actions.ts');
+  await load<AssetKeyModule>("asset-key.ts");
+const { createVisibility } = await load<VisibilityModule>("visibility.ts");
+const { runBatchDelete, runBatchRestore } = await load<SelectionActionsModule>(
+  "selection-actions.ts"
+);
 
-const acts = (globalThis as unknown as { __photosActs: ActCall[] }).__photosActs;
-describe('photos-asset-key suite', () => {
+const acts = (globalThis as unknown as { __photosActs: ActCall[] })
+  .__photosActs;
+describe("photos-asset-key suite", () => {
   /** THE collision: one id, two scopes, two entirely different photos. */
-  const COLLIDING = 'asset-1';
+  const COLLIDING = "asset-1";
   const ownRow: PhotosAsset = {
     asset_id: COLLIDING,
-    content_id: 'c-own',
-    scope_id: 'vault-own',
-    title: 'My birthday',
-    taken_at: '2026-05-01T10:00:00Z',
+    content_id: "c-own",
+    scope_id: "vault-own",
+    title: "My birthday",
+    taken_at: "2026-05-01T10:00:00Z",
   };
   const familyRow: PhotosAsset = {
     asset_id: COLLIDING,
-    content_id: 'c-family',
-    scope_id: 'vault-family',
-    title: 'Reunion',
-    taken_at: '2026-04-01T10:00:00Z',
+    content_id: "c-family",
+    scope_id: "vault-family",
+    title: "Reunion",
+    taken_at: "2026-04-01T10:00:00Z",
   };
   const rows = [ownRow, familyRow];
 
@@ -148,7 +160,7 @@ describe('photos-asset-key suite', () => {
       getTrash: () => [],
       getAlbumAssets: () => rows,
       getSearchResults: () => null,
-      getSearchQuery: () => '',
+      getSearchQuery: () => "",
       getSelectedAlbum: () => null,
     });
   }
@@ -158,7 +170,7 @@ describe('photos-asset-key suite', () => {
     setBarBusy: () => undefined,
     exitSelectMode: () => undefined,
   };
-  const progress = { textContent: '' } as unknown as HTMLElement;
+  const progress = { textContent: "" } as unknown as HTMLElement;
 
   beforeEach(() => {
     acts.length = 0;
@@ -166,94 +178,108 @@ describe('photos-asset-key suite', () => {
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  describe('assetKey', () => {
-    it('separates two scopes carrying the same asset id', () => {
+  describe("assetKey", () => {
+    it("separates two scopes carrying the same asset id", () => {
       expect(assetKey(ownRow)).not.toBe(assetKey(familyRow));
     });
 
-    it('round-trips through parseAssetKey', () => {
+    it("round-trips through parseAssetKey", () => {
       expect(parseAssetKey(assetKey(familyRow))).toStrictEqual({
-        scopeId: 'vault-family',
+        scopeId: "vault-family",
         assetId: COLLIDING,
       });
     });
 
-    it('treats the solo scope as ambient, so a single-scope mount is unchanged', () => {
-      const solo = assetRefKey('', 'asset-9');
+    it("treats the solo scope as ambient, so a single-scope mount is unchanged", () => {
+      const solo = assetRefKey("", "asset-9");
       expect(parseAssetKey(solo)).toStrictEqual({
-        scopeId: '',
-        assetId: 'asset-9',
+        scopeId: "",
+        assetId: "asset-9",
       });
       expect(scopeOfKey(solo)).toBeNull();
-      expect(scopeOfKey(assetKey(familyRow))).toBe('vault-family');
+      expect(scopeOfKey(assetKey(familyRow))).toBe("vault-family");
     });
 
-    it('reads a bare asset id as the ambient scope rather than throwing', () => {
-      expect(parseAssetKey('asset-9')).toStrictEqual({
-        scopeId: '',
-        assetId: 'asset-9',
+    it("reads a bare asset id as the ambient scope rather than throwing", () => {
+      expect(parseAssetKey("asset-9")).toStrictEqual({
+        scopeId: "",
+        assetId: "asset-9",
       });
     });
   });
 
-  describe('findAsset', () => {
-    it('resolves a colliding id to the scope that was asked for', () => {
+  describe("findAsset", () => {
+    it("resolves a colliding id to the scope that was asked for", () => {
       const { findAsset } = visibility();
-      expect(findAsset(assetKey(familyRow))?.content_id).toBe('c-family');
-      expect(findAsset(assetKey(ownRow))?.content_id).toBe('c-own');
+      expect(findAsset(assetKey(familyRow))?.content_id).toBe("c-family");
+      expect(findAsset(assetKey(ownRow))?.content_id).toBe("c-own");
     });
 
-    it('does not match a row from another scope with the same id', () => {
+    it("does not match a row from another scope with the same id", () => {
       const { findAsset } = visibility();
-      expect(findAsset(assetRefKey('vault-grandma', COLLIDING))).toBeUndefined();
+      expect(
+        findAsset(assetRefKey("vault-grandma", COLLIDING))
+      ).toBeUndefined();
     });
   });
 
-  describe('visibleAssets', () => {
-    it('keeps both colliding rows instead of collapsing them into one tile', () => {
+  describe("visibleAssets", () => {
+    it("keeps both colliding rows instead of collapsing them into one tile", () => {
       const shown = visibility().visibleAssets();
       expect(shown).toHaveLength(2);
-      expect(shown.map((a) => a.content_id).sort()).toStrictEqual(['c-family', 'c-own']);
+      expect(shown.map((a) => a.content_id).sort()).toStrictEqual([
+        "c-family",
+        "c-own",
+      ]);
     });
   });
 
-  describe('batch commands', () => {
-    it('deletes only the scope named in the key, never its colliding twin', async () => {
+  describe("batch commands", () => {
+    it("deletes only the scope named in the key, never its colliding twin", async () => {
       await runBatchDelete([assetKey(familyRow)], progress, noopBatch);
       expect(acts).toStrictEqual([
         {
-          action: 'delete-asset',
+          action: "delete-asset",
           input: { asset_id: COLLIDING },
-          scope: 'vault-family',
+          scope: "vault-family",
         },
       ]);
     });
 
-    it('addresses each key at its own scope across a mixed selection', async () => {
-      await runBatchDelete([assetKey(ownRow), assetKey(familyRow)], progress, noopBatch);
-      expect(acts.map((call) => call.scope)).toStrictEqual(['vault-own', 'vault-family']);
+    it("addresses each key at its own scope across a mixed selection", async () => {
+      await runBatchDelete(
+        [assetKey(ownRow), assetKey(familyRow)],
+        progress,
+        noopBatch
+      );
+      expect(acts.map((call) => call.scope)).toStrictEqual([
+        "vault-own",
+        "vault-family",
+      ]);
       // The payload still carries the BARE id: a vault only ever sees ids from
       // its own scope, so the pairing is a client-side identity, not wire shape.
-      expect(new Set(acts.map((call) => call.input.asset_id))).toStrictEqual(new Set([COLLIDING]));
+      expect(new Set(acts.map((call) => call.input.asset_id))).toStrictEqual(
+        new Set([COLLIDING])
+      );
     });
 
-    it('restores into the scope the row was trashed from', async () => {
+    it("restores into the scope the row was trashed from", async () => {
       await runBatchRestore([assetKey(familyRow)], {
         refresh: () => Promise.resolve(),
       });
       expect(acts).toStrictEqual([
         {
-          action: 'restore',
+          action: "restore",
           input: { asset_id: COLLIDING },
-          scope: 'vault-family',
+          scope: "vault-family",
         },
       ]);
     });
 
-    it('addresses a solo-scope key at the ambient scope', async () => {
-      await runBatchDelete([assetRefKey('', COLLIDING)], progress, noopBatch);
+    it("addresses a solo-scope key at the ambient scope", async () => {
+      await runBatchDelete([assetRefKey("", COLLIDING)], progress, noopBatch);
       expect(acts).toStrictEqual([
-        { action: 'delete-asset', input: { asset_id: COLLIDING }, scope: null },
+        { action: "delete-asset", input: { asset_id: COLLIDING }, scope: null },
       ]);
     });
   });

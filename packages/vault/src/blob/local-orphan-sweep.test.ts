@@ -2,33 +2,38 @@
 // real disk — the load-bearing claims are filesystem facts (which directory
 // entry goes, which inode survives), so nothing here is mocked.
 
-import { statSync } from 'node:fs';
+import { statSync } from "node:fs";
 
-import { describe, afterEach, expect, test } from 'vitest';
+import { describe, afterEach, expect, test } from "vitest";
 
-import { casPath, closeOpenVaults, household, seedPhoto } from '../share/placement-fixture.js';
-import { shareToVault, unshareFromVault } from '../share/placement.js';
-import { sweepLocalOrphans } from './local-orphan-sweep.js';
+import {
+  casPath,
+  closeOpenVaults,
+  household,
+  seedPhoto,
+} from "../share/placement-fixture.js";
+import { shareToVault, unshareFromVault } from "../share/placement.js";
+import { sweepLocalOrphans } from "./local-orphan-sweep.js";
 
-describe('local-orphan-sweep suite', () => {
+describe("local-orphan-sweep suite", () => {
   afterEach(closeOpenVaults);
 
   const DAY = 24 * 60 * 60 * 1000;
 
-  test('an unshared blob is held for the grace window, then reclaimed', () => {
+  test("an unshared blob is held for the grace window, then reclaimed", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, 'sweep-a');
+    const photo = seedPhoto(origin, originBoot, "sweep-a");
     const shared = shareToVault({
       origin,
-      originVaultId: 'vault-priya',
+      originVaultId: "vault-priya",
       audience,
-      itemType: 'media.media_asset',
+      itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: 'member-priya',
+      sharedByMember: "member-priya",
     });
     unshareFromVault({
       audience,
-      itemType: 'media.media_asset',
+      itemType: "media.media_asset",
       itemId: shared.itemId,
     });
 
@@ -38,7 +43,9 @@ describe('local-orphan-sweep suite', () => {
       now: 1_000,
     });
     expect(first.deleted).toStrictEqual([]);
-    expect(first.graceHeld.sort()).toStrictEqual([photo.sha256, photo.thumbSha].sort());
+    expect(first.graceHeld.sort()).toStrictEqual(
+      [photo.sha256, photo.thumbSha].sort()
+    );
     expect(audience.blobs.hasSync(photo.sha256)).toBe(true);
 
     // Inside the window it is still held, and the clock does NOT reset.
@@ -46,20 +53,22 @@ describe('local-orphan-sweep suite', () => {
       sweepLocalOrphans(audience, {
         graceWindowMs: 3 * DAY,
         now: 1_000 + 2 * DAY,
-      }).deleted,
+      }).deleted
     ).toStrictEqual([]);
 
     const reclaimed = sweepLocalOrphans(audience, {
       graceWindowMs: 3 * DAY,
       now: 1_000 + 4 * DAY,
     });
-    expect(reclaimed.deleted.sort()).toStrictEqual([photo.sha256, photo.thumbSha].sort());
+    expect(reclaimed.deleted.sort()).toStrictEqual(
+      [photo.sha256, photo.thumbSha].sort()
+    );
     expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
   });
 
-  test('a live blob is never reclaimed, however long the sweep runs', () => {
+  test("a live blob is never reclaimed, however long the sweep runs", () => {
     const { origin, originBoot } = household();
-    const photo = seedPhoto(origin, originBoot, 'sweep-b');
+    const photo = seedPhoto(origin, originBoot, "sweep-b");
 
     for (const now of [1_000, 1_000 + 400 * DAY]) {
       const pass = sweepLocalOrphans(origin, { graceWindowMs: 0, now });
@@ -69,14 +78,18 @@ describe('local-orphan-sweep suite', () => {
     expect(origin.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
   });
 
-  test('a caller-supplied extra root pins bytes the live model has already dropped', () => {
+  test("a caller-supplied extra root pins bytes the live model has already dropped", () => {
     const { origin, originBoot } = household();
-    const photo = seedPhoto(origin, originBoot, 'sweep-c');
-    origin.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(photo.assetId);
+    const photo = seedPhoto(origin, originBoot, "sweep-c");
     origin.vault
-      .prepare('DELETE FROM core_content_derivative WHERE content_id = ?')
+      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .run(photo.assetId);
+    origin.vault
+      .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
       .run(photo.contentId);
-    origin.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(photo.contentId);
+    origin.vault
+      .prepare("DELETE FROM core_content_item WHERE content_id = ?")
+      .run(photo.contentId);
 
     const pinned = new Set([photo.sha256]);
     sweepLocalOrphans(origin, {
@@ -94,37 +107,45 @@ describe('local-orphan-sweep suite', () => {
     expect(origin.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
   });
 
-  test('reclaiming one vault never takes bytes another vault still links', () => {
+  test("reclaiming one vault never takes bytes another vault still links", () => {
     const { origin, originBoot, audience } = household();
-    const photo = seedPhoto(origin, originBoot, 'sweep-d');
+    const photo = seedPhoto(origin, originBoot, "sweep-d");
     shareToVault({
       origin,
-      originVaultId: 'vault-priya',
+      originVaultId: "vault-priya",
       audience,
-      itemType: 'media.media_asset',
+      itemType: "media.media_asset",
       itemId: photo.assetId,
-      sharedByMember: 'member-priya',
+      sharedByMember: "member-priya",
     });
     const sharedIno = statSync(casPath(audience, photo.sha256)).ino;
 
     // The owner deletes the photo from their own library; their sweep now sees
     // the bytes as orphaned HERE and unlinks their own directory entry.
-    origin.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(photo.assetId);
     origin.vault
-      .prepare('DELETE FROM core_content_derivative WHERE content_id = ?')
+      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .run(photo.assetId);
+    origin.vault
+      .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
       .run(photo.contentId);
-    origin.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(photo.contentId);
+    origin.vault
+      .prepare("DELETE FROM core_content_item WHERE content_id = ?")
+      .run(photo.contentId);
     sweepLocalOrphans(origin, { graceWindowMs: 0, now: 1_000 });
     const reclaimed = sweepLocalOrphans(origin, {
       graceWindowMs: 0,
       now: 2_000,
     });
 
-    expect(reclaimed.deleted.sort()).toStrictEqual([photo.sha256, photo.thumbSha].sort());
+    expect(reclaimed.deleted.sort()).toStrictEqual(
+      [photo.sha256, photo.thumbSha].sort()
+    );
     expect(origin.blobs.hasSync(photo.sha256)).toBe(false);
     // The family's copy reads exactly as before — same inode, still one link.
     expect(audience.blobs.getSync(photo.sha256)).toStrictEqual(photo.bytes);
     expect(statSync(casPath(audience, photo.sha256)).ino).toBe(sharedIno);
-    expect(sweepLocalOrphans(audience, { graceWindowMs: 0, now: 2_000 }).deleted).toStrictEqual([]);
+    expect(
+      sweepLocalOrphans(audience, { graceWindowMs: 0, now: 2_000 }).deleted
+    ).toStrictEqual([]);
   });
 });

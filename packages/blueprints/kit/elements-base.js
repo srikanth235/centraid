@@ -1,33 +1,33 @@
 /** Human labels for the entity kinds the picker / references surface. */
 export const PICK_KIND_LABELS = {
-  'core.party': 'Person',
-  'core.place': 'Place',
-  'core.event': 'Event',
-  'core.transaction': 'Transaction',
-  'core.content_item': 'File',
-  'schedule.task': 'Task',
-  'knowledge.note': 'Note',
-  'core.collection': 'Collection',
-  'social.thread': 'Thread',
-  'media.media_asset': 'Photo',
-  'home.asset_item': 'Belonging',
-  'business.client': 'Client',
-  'business.project': 'Project',
-  'business.invoice': 'Invoice',
+  "core.party": "Person",
+  "core.place": "Place",
+  "core.event": "Event",
+  "core.transaction": "Transaction",
+  "core.content_item": "File",
+  "schedule.task": "Task",
+  "knowledge.note": "Note",
+  "core.collection": "Collection",
+  "social.thread": "Thread",
+  "media.media_asset": "Photo",
+  "home.asset_item": "Belonging",
+  "business.client": "Client",
+  "business.project": "Project",
+  "business.invoice": "Invoice",
 };
 
 /** Human label for an entity kind — falls back to the table name. */
 export function entityKindLabel(type) {
   if (PICK_KIND_LABELS[type]) return PICK_KIND_LABELS[type];
-  const table = String(type).split('.')[1] ?? String(type);
-  return table.replace(/_/gu, ' ');
+  const table = String(type).split(".")[1] ?? String(type);
+  return table.replace(/_/gu, " ");
 }
 
 const propertiesInstalled = new WeakSet();
 
 function attributeNameFor(propName, cfg) {
   if (cfg?.attribute === false) return null;
-  if (typeof cfg?.attribute === 'string') return cfg.attribute;
+  if (typeof cfg?.attribute === "string") return cfg.attribute;
   return propName.toLowerCase();
 }
 
@@ -63,7 +63,8 @@ function installProperty(proto, name) {
 function ensurePropertiesInstalled(ctor) {
   if (propertiesInstalled.has(ctor)) return;
   propertiesInstalled.add(ctor);
-  for (const name of Object.keys(ctor.properties ?? {})) installProperty(ctor.prototype, name);
+  for (const name of Object.keys(ctor.properties ?? {}))
+    installProperty(ctor.prototype, name);
 }
 
 /** Shared light-DOM reactivity base for every kit custom element. */
@@ -82,14 +83,14 @@ export class KitElement extends HTMLElement {
   }
 
   connectedCallback() {
-    this.dataset.kitHost = '';
+    this.dataset.kitHost = "";
     this.requestUpdate();
   }
 
   attributeChangedCallback(attrName, oldValue, newValue) {
     if (oldValue === newValue) return;
     const entry = Object.entries(this.constructor.properties ?? {}).find(
-      ([name, cfg]) => attributeNameFor(name, cfg) === attrName,
+      ([name, cfg]) => attributeNameFor(name, cfg) === attrName
     );
     if (!entry) return;
     const [name, cfg] = entry;
@@ -99,6 +100,8 @@ export class KitElement extends HTMLElement {
   requestUpdate() {
     if (!this.isConnected) return;
     const result = this.render();
-    this.replaceChildren(...(result == null ? [] : Array.isArray(result) ? result : [result]));
+    this.replaceChildren(
+      ...(result == null ? [] : Array.isArray(result) ? result : [result])
+    );
   }
 }

@@ -1,16 +1,20 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from "react";
 
-import type { VaultBlockDTO, VaultScopeDTO } from '../../screen-contracts.js';
-import VaultScreen from '../../screens/VaultScreen.js';
-import { cx } from '../../ui/cx.js';
-import { iconSvg } from '../iconSvg.js';
-import { buildVaultProps, fetchAppManifestRaw, manifestVaultBlock } from './appSettingsData.js';
+import type { VaultBlockDTO, VaultScopeDTO } from "../../screen-contracts.js";
+import VaultScreen from "../../screens/VaultScreen.js";
+import { cx } from "../../ui/cx.js";
+import { iconSvg } from "../iconSvg.js";
+import {
+  buildVaultProps,
+  fetchAppManifestRaw,
+  manifestVaultBlock,
+} from "./appSettingsData.js";
 
-import appSettingsCss from '../../styles/appSettings.module.css';
-import modalCss from '../../styles/modal.module.css';
-import vaultCss from '../../styles/vault.module.css';
-import buttonCss from '../../ui/Button.module.css';
-import styles from './AppInfoModal.module.css';
+import appSettingsCss from "../../styles/appSettings.module.css";
+import modalCss from "../../styles/modal.module.css";
+import vaultCss from "../../styles/vault.module.css";
+import buttonCss from "../../ui/Button.module.css";
+import styles from "./AppInfoModal.module.css";
 
 // App info (issue #434) — the installed-app "what can this touch" surface,
 // reached from the Home / sidebar context menu. It reuses the existing per-app
@@ -39,9 +43,9 @@ export interface AppInfoModalProps {
 }
 
 type BlockState =
-  | { phase: 'loading' }
-  | { phase: 'none' }
-  | { phase: 'ready'; block: VaultBlockDTO };
+  | { phase: "loading" }
+  | { phase: "none" }
+  | { phase: "ready"; block: VaultBlockDTO };
 
 /** "Automate on this data" — one deep-link button per distinct entity KIND the
  *  app requests, landing in the automation editor with that kind pre-watched.
@@ -59,7 +63,8 @@ function AutomateSection({
     <div className={appSettingsCss.appSettingsSection}>
       <div className={vaultCss.label}>Automate on this data</div>
       <div className={appSettingsCss.appSettingsNote}>
-        Start an automation that runs whenever this kind of data changes in your vault.
+        Start an automation that runs whenever this kind of data changes in your
+        vault.
       </div>
       <div className={styles.automateRow}>
         {kinds.map((kind) => (
@@ -85,14 +90,14 @@ export default function AppInfoModal({
   onAutomate,
   showToast,
 }: AppInfoModalProps): JSX.Element {
-  const [state, setState] = useState<BlockState>({ phase: 'loading' });
+  const [state, setState] = useState<BlockState>({ phase: "loading" });
 
   useEffect(() => {
     let alive = true;
     void fetchAppManifestRaw(appId).then((raw) => {
       if (!alive) return;
       const block = manifestVaultBlock(raw);
-      setState(block ? { phase: 'ready', block } : { phase: 'none' });
+      setState(block ? { phase: "ready", block } : { phase: "none" });
     });
     return () => {
       alive = false;
@@ -101,27 +106,35 @@ export default function AppInfoModal({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
 
   return (
     <>
-      <div className={modalCss.backdrop} role="presentation" onClick={onClose} />
-      <dialog open className={cx(modalCss.card, styles.card)} aria-label={`${app.name} info`}>
+      <div
+        className={modalCss.backdrop}
+        role="presentation"
+        onClick={onClose}
+      />
+      <dialog
+        open
+        className={cx(modalCss.card, styles.card)}
+        aria-label={`${app.name} info`}
+      >
         <button
           type="button"
           className={cx(buttonCss.icon, modalCss.close)}
           aria-label="Close"
           onClick={onClose}
-          dangerouslySetInnerHTML={{ __html: iconSvg('X', 16, 1.7) }}
+          dangerouslySetInnerHTML={{ __html: iconSvg("X", 16, 1.7) }}
         />
         <div className={styles.head}>
           <span
@@ -132,7 +145,7 @@ export default function AppInfoModal({
               boxShadow: finish.boxShadow || undefined,
             }}
             dangerouslySetInnerHTML={{
-              __html: iconSvg(app.iconKey || 'Sparkle', 20, 1.85),
+              __html: iconSvg(app.iconKey || "Sparkle", 20, 1.85),
             }}
           />
           <div style={{ minWidth: 0 }}>
@@ -142,15 +155,19 @@ export default function AppInfoModal({
         </div>
 
         <div className={styles.body}>
-          {state.phase === 'loading' ? (
-            <div className={appSettingsCss.appSettingsNote}>Loading access…</div>
-          ) : state.phase === 'none' ? (
+          {state.phase === "loading" ? (
+            <div className={appSettingsCss.appSettingsNote}>
+              Loading access…
+            </div>
+          ) : state.phase === "none" ? (
             <div className={appSettingsCss.appSettingsNote}>
               This app requests no access to your vault.
             </div>
           ) : (
             <>
-              <VaultScreen {...buildVaultProps(appId, state.block, { showToast })} />
+              <VaultScreen
+                {...buildVaultProps(appId, state.block, { showToast })}
+              />
               <AutomateSection block={state.block} onAutomate={onAutomate} />
             </>
           )}
@@ -164,7 +181,11 @@ export default function AppInfoModal({
           >
             Uninstall…
           </button>
-          <button type="button" className={cx(buttonCss.btn, buttonCss.ghost)} onClick={onClose}>
+          <button
+            type="button"
+            className={cx(buttonCss.btn, buttonCss.ghost)}
+            onClick={onClose}
+          >
             Done
           </button>
         </div>

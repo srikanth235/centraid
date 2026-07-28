@@ -1,21 +1,31 @@
-import { flushMacrotasks } from '@centraid/test-kit/flush';
+import { flushMacrotasks } from "@centraid/test-kit/flush";
 // governance: allow-repo-hygiene file-size-limit cohesive coordinator regression suite; splitting would obscure issue #417 review
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from "vitest";
 
-import type { VaultChangeMessage } from '../vault-change-feed.js';
-import { createReplicaCoordinator } from './coordinator-web.js';
+import type { VaultChangeMessage } from "../vault-change-feed.js";
+import { createReplicaCoordinator } from "./coordinator-web.js";
 import {
   ReplicaCoordinator,
   type ReplicaChangeFeedAdapter,
   type ReplicaChangePuller,
   type ReplicaCoordinatorOptions,
-} from './coordinator.js';
-import { ReplicaRebootstrapRequiredError } from './errors.js';
-import { MemoryIntentStore } from './intent-store.js';
-import { IntentQueue } from './intents.js';
-import type { ReplicaChangeBatch, ReplicaCursor, ReplicaSnapshot } from './types.js';
-import { ReplicaWorkerClient, type ReplicaWorkerLike } from './worker-client.js';
-import type { ReplicaWorkerRequest, ReplicaWorkerResponse } from './worker-protocol.js';
+} from "./coordinator.js";
+import { ReplicaRebootstrapRequiredError } from "./errors.js";
+import { MemoryIntentStore } from "./intent-store.js";
+import { IntentQueue } from "./intents.js";
+import type {
+  ReplicaChangeBatch,
+  ReplicaCursor,
+  ReplicaSnapshot,
+} from "./types.js";
+import {
+  ReplicaWorkerClient,
+  type ReplicaWorkerLike,
+} from "./worker-client.js";
+import type {
+  ReplicaWorkerRequest,
+  ReplicaWorkerResponse,
+} from "./worker-protocol.js";
 
 interface TestFeed extends ReplicaChangeFeedAdapter {
   readonly listener: ((message: VaultChangeMessage) => void) | undefined;
@@ -54,24 +64,26 @@ class StateWorker implements ReplicaWorkerLike {
   terminated = false;
   onApply: (() => void) | undefined;
   readonly requests: ReplicaWorkerRequest[] = [];
-  readonly #messages = new Set<(event: MessageEvent<ReplicaWorkerResponse>) => void>();
+  readonly #messages = new Set<
+    (event: MessageEvent<ReplicaWorkerResponse>) => void
+  >();
   readonly #errors = new Set<(event: ErrorEvent) => void>();
 
   postMessage(request: ReplicaWorkerRequest): void {
     this.requests.push(request);
     let result: unknown;
-    if (request.op === 'open' || request.op === 'status') {
+    if (request.op === "open" || request.op === "status") {
       result = {
-        mode: 'memory',
+        mode: "memory",
         cursor: this.cursor,
-        schemaEpoch: this.cursor ? 'schema' : null,
+        schemaEpoch: this.cursor ? "schema" : null,
       };
-    } else if (request.op === 'catalog') {
+    } else if (request.op === "catalog") {
       result = [];
-    } else if (request.op === 'bootstrap') {
+    } else if (request.op === "bootstrap") {
       this.cursor = request.payload.cursor;
       result = this.cursor;
-    } else if (request.op === 'apply-changes') {
+    } else if (request.op === "apply-changes") {
       this.cursor = request.payload.to;
       this.onApply?.();
       result = {
@@ -80,13 +92,13 @@ class StateWorker implements ReplicaWorkerLike {
           shapeId: change.shapeId,
           entity: change.entity,
           rowId: change.rowId,
-          source: 'canonical',
+          source: "canonical",
         })),
         outcomes: request.payload.outcomes ?? [],
       };
-    } else if (request.op === 'wipe') {
+    } else if (request.op === "wipe") {
       this.cursor = null;
-    } else if (request.op === 'search') {
+    } else if (request.op === "search") {
       result = {
         cursor: this.cursor,
         dependency: {
@@ -102,7 +114,7 @@ class StateWorker implements ReplicaWorkerLike {
       result,
     };
     queueMicrotask(() => {
-      const event = new MessageEvent<ReplicaWorkerResponse>('message', {
+      const event = new MessageEvent<ReplicaWorkerResponse>("message", {
         data: response,
       });
       for (const listener of this.#messages) listener(event);
@@ -110,26 +122,30 @@ class StateWorker implements ReplicaWorkerLike {
   }
 
   addEventListener(
-    type: 'message' | 'error',
+    type: "message" | "error",
     listener:
       | ((event: MessageEvent<ReplicaWorkerResponse>) => void)
-      | ((event: ErrorEvent) => void),
+      | ((event: ErrorEvent) => void)
   ): void {
-    if (type === 'message') {
-      this.#messages.add(listener as (event: MessageEvent<ReplicaWorkerResponse>) => void);
+    if (type === "message") {
+      this.#messages.add(
+        listener as (event: MessageEvent<ReplicaWorkerResponse>) => void
+      );
     } else {
       this.#errors.add(listener as (event: ErrorEvent) => void);
     }
   }
 
   removeEventListener(
-    type: 'message' | 'error',
+    type: "message" | "error",
     listener:
       | ((event: MessageEvent<ReplicaWorkerResponse>) => void)
-      | ((event: ErrorEvent) => void),
+      | ((event: ErrorEvent) => void)
   ): void {
-    if (type === 'message') {
-      this.#messages.delete(listener as (event: MessageEvent<ReplicaWorkerResponse>) => void);
+    if (type === "message") {
+      this.#messages.delete(
+        listener as (event: MessageEvent<ReplicaWorkerResponse>) => void
+      );
     } else {
       this.#errors.delete(listener as (event: ErrorEvent) => void);
     }
@@ -142,94 +158,94 @@ class StateWorker implements ReplicaWorkerLike {
 
 const snapshot: ReplicaSnapshot = {
   protocolVersion: 1,
-  vaultId: 'vault',
-  schemaEpoch: 'schema',
-  cursor: { epoch: 'epoch', seq: 0 },
+  vaultId: "vault",
+  schemaEpoch: "schema",
+  cursor: { epoch: "epoch", seq: 0 },
   shapes: [],
   rows: [],
 };
 
 describe(ReplicaCoordinator, () => {
-  test('uses an in-memory outbox when requested persistence falls back to memory', async () => {
+  test("uses an in-memory outbox when requested persistence falls back to memory", async () => {
     const worker = new StateWorker();
     const indexedDbFactory = {
-      open: vi.fn<IDBFactory['open']>(() => {
-        throw new Error('memory fallback must not open IndexedDB');
+      open: vi.fn<IDBFactory["open"]>(() => {
+        throw new Error("memory fallback must not open IndexedDB");
       }),
     } as unknown as IDBFactory;
     const { replica, status } = await createReplicaCoordinator(
-      { gatewayId: 'gateway', vaultId: 'vault' },
+      { gatewayId: "gateway", vaultId: "vault" },
       true,
       {
         workerFactory: () => worker,
         indexedDbFactory,
-        idFactory: () => 'memory-intent',
-      },
+        idFactory: () => "memory-intent",
+      }
     );
 
-    expect(status.mode).toBe('memory');
+    expect(status.mode).toBe("memory");
     await replica.enqueue({
-      appId: 'agenda',
-      action: 'create',
-      input: { title: 'Local' },
+      appId: "agenda",
+      action: "create",
+      input: { title: "Local" },
     });
     expect(indexedDbFactory.open).not.toHaveBeenCalled();
     await replica.purge();
   });
 
-  test('applies the pending intent overlay to local searches', async () => {
+  test("applies the pending intent overlay to local searches", async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-search.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-search.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
     const replica = new ReplicaCoordinator(
       client,
       new IntentQueue(new MemoryIntentStore(), {
-        idFactory: () => 'search-intent',
-      }),
+        idFactory: () => "search-intent",
+      })
     );
     await replica.bootstrap(snapshot);
     await replica.enqueue({
-      appId: 'agenda',
-      action: 'rename',
-      input: { eventId: 'event-1' },
+      appId: "agenda",
+      action: "rename",
+      input: { eventId: "event-1" },
       optimistic: [
         {
-          op: 'upsert',
-          shapeId: 'shape-agenda',
-          entity: 'core.event',
-          rowId: 'event-1',
-          values: { summary: 'Offline planning' },
+          op: "upsert",
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          values: { summary: "Offline planning" },
         },
       ],
     });
 
     await replica.searchWire({
-      shapeId: 'shape-agenda',
-      entity: 'core.event',
-      query: 'offline',
+      shapeId: "shape-agenda",
+      entity: "core.event",
+      query: "offline",
     });
 
     expect(worker.requests.at(-1)).toMatchObject({
-      op: 'search',
+      op: "search",
       payload: {
         request: {
-          shapeId: 'shape-agenda',
-          entity: 'core.event',
-          query: 'offline',
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          query: "offline",
         },
         mutations: [
           {
-            op: 'upsert',
-            shapeId: 'shape-agenda',
-            entity: 'core.event',
-            rowId: 'event-1',
-            values: { summary: 'Offline planning' },
+            op: "upsert",
+            shapeId: "shape-agenda",
+            entity: "core.event",
+            rowId: "event-1",
+            values: { summary: "Offline planning" },
           },
         ],
       },
@@ -237,52 +253,52 @@ describe(ReplicaCoordinator, () => {
     await replica.close();
   });
 
-  test('resumes a warm OPFS cursor before attaching the shared feed', async () => {
+  test("resumes a warm OPFS cursor before attaching the shared feed", async () => {
     const worker = new StateWorker();
-    worker.cursor = { epoch: 'warm', seq: 42 };
+    worker.cursor = { epoch: "warm", seq: 42 };
     const events: string[] = [];
     const feed: ReplicaChangeFeedAdapter = {
       async setShapeIds(shapeIds) {
-        events.push(`shapes:${shapeIds.join(',')}`);
+        events.push(`shapes:${shapeIds.join(",")}`);
       },
       async resume(cursor) {
         events.push(`resume:${cursor.epoch}:${cursor.seq}`);
       },
       subscribe() {
-        events.push('subscribe');
+        events.push("subscribe");
         return () => undefined;
       },
     };
     const { replica, status } = await createReplicaCoordinator(
-      { gatewayId: 'gateway', vaultId: 'vault' },
+      { gatewayId: "gateway", vaultId: "vault" },
       true,
       {
         workerFactory: () => worker,
         intentStore: new MemoryIntentStore(),
         changeFeed: feed,
         pullChanges: async () => undefined,
-      },
+      }
     );
-    expect(status.cursor).toStrictEqual({ epoch: 'warm', seq: 42 });
-    expect(events).toStrictEqual(['shapes:', 'resume:warm:42', 'subscribe']);
+    expect(status.cursor).toStrictEqual({ epoch: "warm", seq: 42 });
+    expect(events).toStrictEqual(["shapes:", "resume:warm:42", "subscribe"]);
     await replica.close();
   });
 
-  test('uses the shared feed as a pull trigger and resolves overlays before cursor advance', async () => {
+  test("uses the shared feed as a pull trigger and resolves overlays before cursor advance", async () => {
     const worker = new StateWorker();
     let applied!: () => void;
     const batchApplied = new Promise<void>((resolve) => (applied = resolve));
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-deadbeef.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-deadbeef.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
     const store = new MemoryIntentStore();
-    const intents = new IntentQueue(store, { idFactory: () => 'intent-1' });
+    const intents = new IntentQueue(store, { idFactory: () => "intent-1" });
     const feed = createFeed();
     const pulledFrom: ReplicaCursor[] = [];
     const invalidations: unknown[] = [];
@@ -292,67 +308,67 @@ describe(ReplicaCoordinator, () => {
         pulledFrom.push(cursor);
         return {
           protocolVersion: 1,
-          schemaEpoch: 'schema',
+          schemaEpoch: "schema",
           from: cursor,
-          to: { epoch: 'epoch', seq: 1 },
+          to: { epoch: "epoch", seq: 1 },
           changes: [
             {
-              op: 'upsert',
-              shapeId: 'shape',
-              entity: 'core.task',
-              rowId: 'task-1',
-              values: { task_id: 'task-1', status: 'done' },
+              op: "upsert",
+              shapeId: "shape",
+              entity: "core.task",
+              rowId: "task-1",
+              values: { task_id: "task-1", status: "done" },
             },
           ],
-          outcomes: [{ intentId: 'intent-1', status: 'executed' }],
+          outcomes: [{ intentId: "intent-1", status: "executed" }],
         };
       },
     });
     replica.subscribeInvalidations((items) => invalidations.push(...items));
     await replica.bootstrap(snapshot);
-    expect(feed.resumed).toStrictEqual({ epoch: 'epoch', seq: 0 });
+    expect(feed.resumed).toStrictEqual({ epoch: "epoch", seq: 0 });
 
     await replica.enqueue({
-      appId: 'agenda',
-      action: 'complete',
-      input: { taskId: 'task-1' },
+      appId: "agenda",
+      action: "complete",
+      input: { taskId: "task-1" },
       optimistic: [
         {
-          op: 'upsert',
-          shapeId: 'shape',
-          entity: 'core.task',
-          rowId: 'task-1',
-          values: { status: 'done' },
+          op: "upsert",
+          shapeId: "shape",
+          entity: "core.task",
+          rowId: "task-1",
+          values: { status: "done" },
         },
       ],
     });
     await replica.claimNextIntent();
-    await replica.markIntentAwaitingChange('intent-1');
+    await replica.markIntentAwaitingChange("intent-1");
     feed.emit({
-      type: 'centraid:vault-change',
+      type: "centraid:vault-change",
       detail: {
-        cursor: { epoch: 'epoch', seq: 1 },
-        entity: 'core.task',
-        rowId: 'task-1',
-        op: 'update',
-        changedAt: '2026-07-15T00:00:00.000Z',
+        cursor: { epoch: "epoch", seq: 1 },
+        entity: "core.task",
+        rowId: "task-1",
+        op: "update",
+        changedAt: "2026-07-15T00:00:00.000Z",
       },
     });
     await batchApplied;
     expect((await client.status()).cursor).toStrictEqual({
-      epoch: 'epoch',
+      epoch: "epoch",
       seq: 1,
     });
-    expect(pulledFrom).toStrictEqual([{ epoch: 'epoch', seq: 0 }]);
+    expect(pulledFrom).toStrictEqual([{ epoch: "epoch", seq: 0 }]);
     await expect(intents.list()).resolves.toStrictEqual([]);
     await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
     expect(invalidations).toContainEqual({
-      shapeId: 'shape',
-      entity: 'core.task',
-      rowId: 'task-1',
-      source: 'overlay',
-      intentId: 'intent-1',
-      intentState: 'executed',
+      shapeId: "shape",
+      entity: "core.task",
+      rowId: "task-1",
+      source: "overlay",
+      intentId: "intent-1",
+      intentState: "executed",
     });
 
     await replica.purge();
@@ -361,264 +377,295 @@ describe(ReplicaCoordinator, () => {
     await expect(intents.list()).resolves.toStrictEqual([]);
   });
 
-  test('retries a failed pull without requiring another feed cursor event', async () => {
+  test("retries a failed pull without requiring another feed cursor event", async () => {
     const worker = new StateWorker();
     let applied!: () => void;
     const batchApplied = new Promise<void>((resolve) => (applied = resolve));
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-retry.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-retry.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
     const feed = createFeed();
     let attempts = 0;
-    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()), {
-      changeFeed: feed,
-      feedRetryDelayMs: 0,
-      pullChanges: async (cursor) => {
-        attempts += 1;
-        if (attempts === 1) throw new Error('temporary network failure');
-        return {
-          protocolVersion: 1,
-          schemaEpoch: 'schema',
-          from: cursor,
-          to: { epoch: 'epoch', seq: 1 },
-          changes: [],
-        };
-      },
-    });
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        feedRetryDelayMs: 0,
+        pullChanges: async (cursor) => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("temporary network failure");
+          return {
+            protocolVersion: 1,
+            schemaEpoch: "schema",
+            from: cursor,
+            to: { epoch: "epoch", seq: 1 },
+            changes: [],
+          };
+        },
+      }
+    );
     await replica.bootstrap(snapshot);
 
     feed.emit({
-      type: 'centraid:vault-cursor',
-      cursor: { epoch: 'epoch', seq: 1 },
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 1 },
     });
 
     await batchApplied;
     expect(attempts).toBe(2);
     expect((await client.status()).cursor).toStrictEqual({
-      epoch: 'epoch',
+      epoch: "epoch",
       seq: 1,
     });
     await replica.close();
   });
 
-  test('turns pull rebootstrap errors into one clean feed generation reset', async () => {
+  test("turns pull rebootstrap errors into one clean feed generation reset", async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-generation.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-generation.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
     const feed = createFeed();
     let required!: () => void;
-    const rebootstrapRequired = new Promise<void>((resolve) => (required = resolve));
+    const rebootstrapRequired = new Promise<void>(
+      (resolve) => (required = resolve)
+    );
     let pulls = 0;
-    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()), {
-      changeFeed: feed,
-      feedRetryDelayMs: 0,
-      pullChanges: async () => {
-        pulls += 1;
-        throw new ReplicaRebootstrapRequiredError('cursor-gap');
-      },
-      onRebootstrapRequired: required,
-    });
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        feedRetryDelayMs: 0,
+        pullChanges: async () => {
+          pulls += 1;
+          throw new ReplicaRebootstrapRequiredError("cursor-gap");
+        },
+        onRebootstrapRequired: required,
+      }
+    );
     await replica.bootstrap(snapshot);
     feed.emit({
-      type: 'centraid:vault-cursor',
-      cursor: { epoch: 'epoch', seq: 1 },
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 1 },
     });
     await rebootstrapRequired;
     expect((await client.status()).cursor).toBeNull();
 
     await replica.bootstrap({
       ...snapshot,
-      cursor: { epoch: 'new-epoch', seq: 0 },
+      cursor: { epoch: "new-epoch", seq: 0 },
     });
     await vi.waitFor(() => {
       expect(pulls).toBe(1);
     });
     expect((await client.status()).cursor).toStrictEqual({
-      epoch: 'new-epoch',
+      epoch: "new-epoch",
       seq: 0,
     });
     await replica.close();
   });
 
-  test('reconciles durable bootstrap outcomes before exposing the snapshot cursor', async () => {
+  test("reconciles durable bootstrap outcomes before exposing the snapshot cursor", async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-deadbeef.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-deadbeef.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
     const intents = new IntentQueue(new MemoryIntentStore(), {
-      idFactory: () => 'persisted',
+      idFactory: () => "persisted",
     });
     const replica = new ReplicaCoordinator(client, intents);
     await replica.enqueue({
-      appId: 'agenda',
-      action: 'create',
-      input: { title: 'Offline' },
+      appId: "agenda",
+      action: "create",
+      input: { title: "Offline" },
       optimistic: [
         {
-          op: 'upsert',
-          shapeId: 'shape',
-          entity: 'core.task',
-          rowId: 'task-1',
-          values: { task_id: 'task-1', title: 'Offline' },
+          op: "upsert",
+          shapeId: "shape",
+          entity: "core.task",
+          rowId: "task-1",
+          values: { task_id: "task-1", title: "Offline" },
         },
       ],
     });
     await replica.bootstrap({
       ...snapshot,
-      outcomes: [{ intentId: 'persisted', status: 'denied', reason: 'grant expired' }],
+      outcomes: [
+        { intentId: "persisted", status: "denied", reason: "grant expired" },
+      ],
     });
     await expect(intents.list()).resolves.toStrictEqual([]);
     await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
     await replica.close();
   });
 
-  test('settles dependency-only intents individually without optimistic rows', async () => {
+  test("settles dependency-only intents individually without optimistic rows", async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-settlement.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-settlement.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
-    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()));
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore())
+    );
     const invalidations: unknown[] = [];
     replica.subscribeInvalidations((items) => invalidations.push(...items));
     const enqueueNext = async (index: number): Promise<void> => {
-      const intentId = ['first', 'second'][index];
+      const intentId = ["first", "second"][index];
       if (!intentId) return;
       await replica.enqueue({
         intentId,
-        appId: 'agenda',
-        action: 'cancel',
-        input: { eventId: 'event-1' },
-        dependencies: [{ shapeId: 'shape', entity: 'core.event' }],
+        appId: "agenda",
+        action: "cancel",
+        input: { eventId: "event-1" },
+        dependencies: [{ shapeId: "shape", entity: "core.event" }],
       });
       return enqueueNext(index + 1);
     };
     await enqueueNext(0);
-    await replica.applyIntentOutcome({ intentId: 'first', status: 'denied' });
+    await replica.applyIntentOutcome({ intentId: "first", status: "denied" });
     await replica.applyIntentOutcome({
-      intentId: 'second',
-      status: 'executed',
+      intentId: "second",
+      status: "executed",
     });
 
     expect(invalidations).toContainEqual({
-      shapeId: 'shape',
-      entity: 'core.event',
-      source: 'overlay',
-      intentId: 'first',
-      intentState: 'denied',
+      shapeId: "shape",
+      entity: "core.event",
+      source: "overlay",
+      intentId: "first",
+      intentState: "denied",
     });
     expect(invalidations).toContainEqual({
-      shapeId: 'shape',
-      entity: 'core.event',
-      source: 'overlay',
-      intentId: 'second',
-      intentState: 'executed',
+      shapeId: "shape",
+      entity: "core.event",
+      source: "overlay",
+      intentId: "second",
+      intentState: "executed",
     });
     await replica.close();
   });
 
-  test('drops an in-flight stale feed batch after a bootstrap generation reset', async () => {
+  test("drops an in-flight stale feed batch after a bootstrap generation reset", async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-feed-race.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-feed-race.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
     const feed = createFeed();
     let release!: (batch: ReplicaChangeBatch) => void;
-    const pending = new Promise<ReplicaChangeBatch>((resolve) => (release = resolve));
-    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()), {
-      changeFeed: feed,
-      pullChanges: () => pending,
-    });
+    const pending = new Promise<ReplicaChangeBatch>(
+      (resolve) => (release = resolve)
+    );
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        pullChanges: () => pending,
+      }
+    );
     await replica.bootstrap(snapshot);
     feed.emit({
-      type: 'centraid:vault-cursor',
-      cursor: { epoch: 'epoch', seq: 1 },
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 1 },
     });
     await vi.waitFor(() =>
-      expect(worker.requests.some((request) => request.op === 'status')).toBe(true),
+      expect(worker.requests.some((request) => request.op === "status")).toBe(
+        true
+      )
     );
     await replica.bootstrap({
       ...snapshot,
-      cursor: { epoch: 'new-epoch', seq: 0 },
+      cursor: { epoch: "new-epoch", seq: 0 },
     });
     release({
       protocolVersion: 1,
-      schemaEpoch: 'schema',
-      from: { epoch: 'epoch', seq: 0 },
-      to: { epoch: 'epoch', seq: 1 },
+      schemaEpoch: "schema",
+      from: { epoch: "epoch", seq: 0 },
+      to: { epoch: "epoch", seq: 1 },
       changes: [],
     });
     await flushMacrotasks();
 
     expect((await client.status()).cursor).toStrictEqual({
-      epoch: 'new-epoch',
+      epoch: "new-epoch",
       seq: 0,
     });
-    expect(worker.requests.filter((request) => request.op === 'apply-changes')).toHaveLength(0);
+    expect(
+      worker.requests.filter((request) => request.op === "apply-changes")
+    ).toHaveLength(0);
     await replica.close();
   });
 
-  test('breaks a repeated non-progressing feed loop with one rebootstrap', async () => {
+  test("breaks a repeated non-progressing feed loop with one rebootstrap", async () => {
     const worker = new StateWorker();
     const { client } = await ReplicaWorkerClient.connect(
       {
-        dbName: '/centraid-replica-feed-stuck.sqlite3',
-        vaultId: 'vault',
+        dbName: "/centraid-replica-feed-stuck.sqlite3",
+        vaultId: "vault",
         remember: false,
       },
-      () => worker,
+      () => worker
     );
     const feed = createFeed();
     const onRebootstrapRequired =
-      vi.fn<NonNullable<ReplicaCoordinatorOptions['onRebootstrapRequired']>>();
+      vi.fn<NonNullable<ReplicaCoordinatorOptions["onRebootstrapRequired"]>>();
     const pullChanges = vi.fn<ReplicaChangePuller>(
       async (cursor): Promise<ReplicaChangeBatch> => ({
         protocolVersion: 1,
-        schemaEpoch: 'schema',
+        schemaEpoch: "schema",
         from: cursor,
         to: cursor,
         changes: [],
-      }),
+      })
     );
-    const replica = new ReplicaCoordinator(client, new IntentQueue(new MemoryIntentStore()), {
-      changeFeed: feed,
-      pullChanges,
-      feedRetryDelayMs: 1,
-      onRebootstrapRequired,
-    });
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        pullChanges,
+        feedRetryDelayMs: 1,
+        onRebootstrapRequired,
+      }
+    );
     await replica.bootstrap(snapshot);
 
     feed.emit({
-      type: 'centraid:vault-cursor',
-      cursor: { epoch: 'epoch', seq: 1 },
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 1 },
     });
-    await vi.waitFor(() => expect(onRebootstrapRequired).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(onRebootstrapRequired).toHaveBeenCalledOnce()
+    );
 
     expect(pullChanges).toHaveBeenCalledTimes(3);
     expect((await client.status()).cursor).toBeNull();

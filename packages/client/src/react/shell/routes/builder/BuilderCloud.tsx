@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (cloud/publish surface); splitting would fragment one visual unit
-import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 
-import { relativeWhen } from '../../../../format.js';
+import { relativeWhen } from "../../../../format.js";
 import {
   appLiveUrl,
   appLogs,
@@ -11,13 +11,13 @@ import {
   readAutomationTurn,
   runAutomationNow,
   setAutomationEnabled,
-} from '../../../../gateway-client.js';
-import { cx } from '../../../ui/cx.js';
-import { iconSvg } from '../../iconSvg.js';
+} from "../../../../gateway-client.js";
+import { cx } from "../../../ui/cx.js";
+import { iconSvg } from "../../iconSvg.js";
 
-import toastCss from '../../../styles/toast.module.css';
-import buttonCss from '../../../ui/Button.module.css';
-import styles from './BuilderCloud.module.css';
+import toastCss from "../../../styles/toast.module.css";
+import buttonCss from "../../../ui/Button.module.css";
+import styles from "./BuilderCloud.module.css";
 
 // React port of the vanilla builder's Cloud tab (builder.ts `renderCloud`,
 // ~lines 1722–2463). Renders the same global `.cloud-*` class names — the
@@ -54,39 +54,43 @@ const AutomationsIcon = (size = 14): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>`;
 
 type CloudSection =
-  | 'overview'
-  | 'automations'
-  | 'users'
-  | 'storage'
-  | 'secrets'
-  | 'functions'
-  | 'logs';
+  | "overview"
+  | "automations"
+  | "users"
+  | "storage"
+  | "secrets"
+  | "functions"
+  | "logs";
 
 const SECTIONS: [CloudSection, string, (n?: number) => string, boolean][] = [
-  ['overview', 'Overview', CloudOverviewIcon, true],
-  ['automations', 'Automations', AutomationsIcon, true],
-  ['logs', 'Logs', LogsIcon, true],
-  ['users', 'Users', UsersIcon, false],
-  ['storage', 'Storage', StorageIcon, false],
-  ['secrets', 'Secrets', SecretsIcon, false],
-  ['functions', 'Edge functions', FunctionsIcon, false],
+  ["overview", "Overview", CloudOverviewIcon, true],
+  ["automations", "Automations", AutomationsIcon, true],
+  ["logs", "Logs", LogsIcon, true],
+  ["users", "Users", UsersIcon, false],
+  ["storage", "Storage", StorageIcon, false],
+  ["secrets", "Secrets", SecretsIcon, false],
+  ["functions", "Edge functions", FunctionsIcon, false],
 ];
 
 type VersionsCache =
   | { activeVersion?: string; versions: CentraidVersionRecord[] }
   | undefined
-  | 'pending'
-  | 'error';
-type LogsCache = CentraidLogEntry[] | undefined | 'pending' | 'error';
-type AutomationsCache = CentraidAutomationRow[] | undefined | 'pending' | 'error';
+  | "pending"
+  | "error";
+type LogsCache = CentraidLogEntry[] | undefined | "pending" | "error";
+type AutomationsCache =
+  | CentraidAutomationRow[]
+  | undefined
+  | "pending"
+  | "error";
 
 // Per-row run state so the spinner + last-result chip survive a re-render.
 // Keyed by automation name. Mirrors the vanilla `automationRunState` Map.
 type RunState =
-  | { kind: 'idle' }
-  | { kind: 'running' }
+  | { kind: "idle" }
+  | { kind: "running" }
   | {
-      kind: 'done';
+      kind: "done";
       ok: boolean;
       durationMs: number;
       error?: string;
@@ -103,8 +107,8 @@ function pad2(n: number): string {
 function formatPreviewUrl(src: string): string {
   try {
     const u = new URL(src);
-    if (u.pathname.includes('/_draft/')) return 'Draft preview';
-    return u.host + (u.pathname === '/' ? '' : u.pathname);
+    if (u.pathname.includes("/_draft/")) return "Draft preview";
+    return u.host + (u.pathname === "/" ? "" : u.pathname);
   } catch {
     return src;
   }
@@ -113,12 +117,14 @@ function formatPreviewUrl(src: string): string {
 // Ephemeral confirmation toast — mirrors the vanilla builder's `showToast`
 // (a `toastCss.toast` appended to <body>, auto-removed after 2.4s).
 function showToast(text: string): void {
-  const existing = toastCss.toast ? document.body.querySelector(`.${toastCss.toast}`) : null;
+  const existing = toastCss.toast
+    ? document.body.querySelector(`.${toastCss.toast}`)
+    : null;
   if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.className = toastCss.toast ?? '';
-  toast.innerHTML = `${iconSvg('Check', 13, 2.5)} <span></span>`;
-  const span = toast.querySelector('span');
+  const toast = document.createElement("div");
+  toast.className = toastCss.toast ?? "";
+  toast.innerHTML = `${iconSvg("Check", 13, 2.5)} <span></span>`;
+  const span = toast.querySelector("span");
   if (span) span.textContent = text;
   document.body.append(toast);
   setTimeout(() => toast.remove(), 2400);
@@ -127,12 +133,15 @@ function showToast(text: string): void {
 // Poll the turn ledger until a turn finishes — turn-now fires in the background,
 // so a caller reporting an outcome must wait for it (vanilla
 // `waitForAutomationRun`).
-async function waitForAutomationRun(runId: string): Promise<CentraidAutomationTurnRecord> {
+async function waitForAutomationRun(
+  runId: string
+): Promise<CentraidAutomationTurnRecord> {
   const deadline = Date.now() + 6 * 60 * 1000;
   const poll = async (): Promise<CentraidAutomationTurnRecord> => {
     const rec = await readAutomationTurn({ turnId: runId });
     if (rec && rec.endedAt !== undefined) return rec;
-    if (Date.now() >= deadline) throw new Error('run did not finish within 6 minutes');
+    if (Date.now() >= deadline)
+      throw new Error("run did not finish within 6 minutes");
     await new Promise((resolve) => setTimeout(resolve, 1500));
     return poll();
   };
@@ -143,8 +152,10 @@ export interface BuilderCloudProps {
   appId: string;
 }
 
-export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element {
-  const [active, setActive] = useState<CloudSection>('overview');
+export default function BuilderCloud({
+  appId,
+}: BuilderCloudProps): JSX.Element {
+  const [active, setActive] = useState<CloudSection>("overview");
 
   // Overview — active version + count, plus the derived live URL. The settled
   // listing is stamped with the app it was fetched for, so "still pending for
@@ -157,19 +168,24 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
   const versionsCache: VersionsCache = appId
     ? versionsFor !== null && versionsFor.appId === appId
       ? versionsFor.result
-      : 'pending'
+      : "pending"
     : undefined;
 
   // Logs — newest-first, polled every 3s while the Logs section is visible.
   const [logsCache, setLogsCache] = useState<LogsCache>(undefined);
   const [logsError, setLogsError] = useState<string | undefined>(undefined);
-  const [logsLevelFilter, setLogsLevelFilter] = useState<CentraidLogLevel | 'all'>('all');
-  const [logsSearch, setLogsSearch] = useState('');
+  const [logsLevelFilter, setLogsLevelFilter] = useState<
+    CentraidLogLevel | "all"
+  >("all");
+  const [logsSearch, setLogsSearch] = useState("");
   const logsCacheRef = useRef<LogsCache>(undefined);
 
   // Automations (issue #70) — the per-gateway mirror, filtered to this app.
-  const [automationsCache, setAutomationsCache] = useState<AutomationsCache>(undefined);
-  const [automationsError, setAutomationsError] = useState<string | undefined>(undefined);
+  const [automationsCache, setAutomationsCache] =
+    useState<AutomationsCache>(undefined);
+  const [automationsError, setAutomationsError] = useState<string | undefined>(
+    undefined
+  );
   const [runStates, setRunStates] = useState<Record<string, RunState>>({});
   const automationsCacheRef = useRef<AutomationsCache>(undefined);
 
@@ -205,22 +221,22 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
   // ---- Logs data + 3s poll (only while the Logs section is active). ----
   const refreshLogs = useCallback(async (): Promise<void> => {
     if (!appId) return;
-    if (logsCacheRef.current === 'pending') return;
-    logsCacheRef.current = 'pending';
+    if (logsCacheRef.current === "pending") return;
+    logsCacheRef.current = "pending";
     try {
       const r = await appLogs({ id: appId, limit: 200 });
       logsCacheRef.current = r.entries;
       setLogsCache(r.entries);
       setLogsError(undefined);
     } catch (err) {
-      logsCacheRef.current = 'error';
-      setLogsCache('error');
+      logsCacheRef.current = "error";
+      setLogsCache("error");
       setLogsError(err instanceof Error ? err.message : String(err));
     }
   }, [appId]);
 
   useEffect(() => {
-    if (active !== 'logs' || !appId) return;
+    if (active !== "logs" || !appId) return;
     // Mirror the vanilla `cloudLogsPoll` / `stopCloudLogsPoll`: one tick on
     // entry, then a 3s interval, cleared on section-switch / unmount.
     const tick = (): void => {
@@ -234,9 +250,9 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
   // ---- Automations data + mutations. ----
   const refreshAutomations = useCallback(async (): Promise<void> => {
     if (!appId) return;
-    if (automationsCacheRef.current === 'pending') return;
-    automationsCacheRef.current = 'pending';
-    setAutomationsCache('pending');
+    if (automationsCacheRef.current === "pending") return;
+    automationsCacheRef.current = "pending";
+    setAutomationsCache("pending");
     try {
       const all = await listAutomations();
       // Automations are user-owned apps; show the ones associated with the
@@ -246,14 +262,14 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
       setAutomationsCache(filtered);
       setAutomationsError(undefined);
     } catch (err) {
-      automationsCacheRef.current = 'error';
-      setAutomationsCache('error');
+      automationsCacheRef.current = "error";
+      setAutomationsCache("error");
       setAutomationsError(err instanceof Error ? err.message : String(err));
     }
   }, [appId]);
 
   useEffect(() => {
-    if (active === 'automations' && automationsCacheRef.current === undefined) {
+    if (active === "automations" && automationsCacheRef.current === undefined) {
       void refreshAutomations();
     }
   }, [active, refreshAutomations]);
@@ -265,18 +281,18 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
         await setAutomationEnabled({ automationId: row.ref, enabled: next });
         await refreshAutomations();
       } catch (err) {
-        automationsCacheRef.current = 'error';
-        setAutomationsCache('error');
+        automationsCacheRef.current = "error";
+        setAutomationsCache("error");
         setAutomationsError(err instanceof Error ? err.message : String(err));
       }
     },
-    [appId, refreshAutomations],
+    [appId, refreshAutomations]
   );
 
   const onRunAutomation = useCallback(
     async (row: CentraidAutomationRow): Promise<void> => {
       if (!appId) return;
-      setRunStates((s) => ({ ...s, [row.name]: { kind: 'running' } }));
+      setRunStates((s) => ({ ...s, [row.name]: { kind: "running" } }));
       try {
         // turn-now fires in the background and returns the turn id; poll the
         // ledger for the finished record to report the outcome.
@@ -285,7 +301,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
         setRunStates((s) => ({
           ...s,
           [row.name]: {
-            kind: 'done',
+            kind: "done",
             ok: rec.ok,
             durationMs: (rec.endedAt ?? Date.now()) - rec.startedAt,
             ...(rec.error ? { error: rec.error } : {}),
@@ -296,7 +312,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
         setRunStates((s) => ({
           ...s,
           [row.name]: {
-            kind: 'done',
+            kind: "done",
             ok: false,
             durationMs: 0,
             error: err instanceof Error ? err.message : String(err),
@@ -305,14 +321,14 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
         }));
       }
     },
-    [appId],
+    [appId]
   );
 
   const onDeleteAutomation = useCallback(
     async (row: CentraidAutomationRow): Promise<void> => {
       if (!appId) return;
       const ok = confirm(
-        `Delete automation "${row.name}"?\n\nThis permanently removes the automation app directory and its run history.`,
+        `Delete automation "${row.name}"?\n\nThis permanently removes the automation app directory and its run history.`
       );
       if (!ok) return;
       try {
@@ -324,12 +340,12 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
         });
         await refreshAutomations();
       } catch (err) {
-        automationsCacheRef.current = 'error';
-        setAutomationsCache('error');
+        automationsCacheRef.current = "error";
+        setAutomationsCache("error");
         setAutomationsError(err instanceof Error ? err.message : String(err));
       }
     },
-    [appId, refreshAutomations],
+    [appId, refreshAutomations]
   );
 
   // ---- Rail. Ready items first, then a "Coming soon" group. ----
@@ -342,7 +358,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
     key: CloudSection,
     label: string,
     renderIcon: (n?: number) => string,
-    ready: boolean,
+    ready: boolean
   ): JSX.Element => (
     <button
       key={key}
@@ -364,44 +380,55 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
   const soon = SECTIONS.filter((s) => !s[3]);
 
   const def = SECTIONS.find(([k]) => k === active);
-  const title = def?.[1] ?? '';
+  const title = def?.[1] ?? "";
   const subtitle =
-    active === 'overview'
-      ? 'Status of your app on the gateway.'
-      : active === 'logs'
-        ? 'Recent log lines from query and action handlers.'
-        : active === 'automations'
-          ? 'Cron-scheduled actions registered for this app. Toggle, run now, or remove them.'
-          : 'View and manage the data stored in your app.';
+    active === "overview"
+      ? "Status of your app on the gateway."
+      : active === "logs"
+        ? "Recent log lines from query and action handlers."
+        : active === "automations"
+          ? "Cron-scheduled actions registered for this app. Toggle, run now, or remove them."
+          : "View and manage the data stored in your app.";
 
   return (
     <div className={styles.pane}>
       <div className={styles.rail}>
         {SECTIONS.filter((s) => s[3]).map(([key, label, renderIcon, ready]) =>
-          railBtn(key, label, renderIcon, ready),
+          railBtn(key, label, renderIcon, ready)
         )}
         {soon.length > 0 && (
           <>
             <div className={styles.railGroupHead}>Coming soon</div>
-            {soon.map(([key, label, renderIcon, ready]) => railBtn(key, label, renderIcon, ready))}
+            {soon.map(([key, label, renderIcon, ready]) =>
+              railBtn(key, label, renderIcon, ready)
+            )}
           </>
         )}
       </div>
 
-      <div className={cx(styles.stage, active === 'overview' && styles.stageAtmospheric)}>
+      <div
+        className={cx(
+          styles.stage,
+          active === "overview" && styles.stageAtmospheric
+        )}
+      >
         {/* The Overview surface opens straight into its hero strip, so the
             stage head is rendered for every section except Overview. */}
-        {active !== 'overview' && (
+        {active !== "overview" && (
           <div className={styles.stageHead}>
             <div>
               <h2>{title}</h2>
               <p>{subtitle}</p>
             </div>
-            {active === 'logs' && (
+            {active === "logs" && (
               <button
                 type="button"
                 aria-label="Refresh logs"
-                className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
+                className={cx(
+                  buttonCss.btn,
+                  buttonCss.ghost,
+                  styles.refreshBtn
+                )}
                 title="Refresh logs"
                 onClick={() => void refreshLogs()}
                 dangerouslySetInnerHTML={{
@@ -409,11 +436,15 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
                 }}
               />
             )}
-            {active === 'automations' && (
+            {active === "automations" && (
               <button
                 type="button"
                 aria-label="Refresh automations"
-                className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
+                className={cx(
+                  buttonCss.btn,
+                  buttonCss.ghost,
+                  styles.refreshBtn
+                )}
                 title="Refresh automations"
                 onClick={() => void refreshAutomations()}
                 dangerouslySetInnerHTML={{
@@ -424,9 +455,13 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
           </div>
         )}
 
-        {active === 'overview' ? (
-          <Overview appId={appId} versionsCache={versionsCache} liveUrl={liveUrl} />
-        ) : active === 'logs' ? (
+        {active === "overview" ? (
+          <Overview
+            appId={appId}
+            versionsCache={versionsCache}
+            liveUrl={liveUrl}
+          />
+        ) : active === "logs" ? (
           <Logs
             appId={appId}
             logsCache={logsCache}
@@ -436,7 +471,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
             onLevel={setLogsLevelFilter}
             onSearch={setLogsSearch}
           />
-        ) : active === 'automations' ? (
+        ) : active === "automations" ? (
           <Automations
             appId={appId}
             automationsCache={automationsCache}
@@ -454,7 +489,8 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
           />
         ) : (
           <div className={styles.empty}>
-            Not yet available. The backend for this section will land in a future release.
+            Not yet available. The backend for this section will land in a
+            future release.
           </div>
         )}
       </div>
@@ -476,20 +512,27 @@ function Overview({
   if (!appId) return <div className={styles.empty}>No app yet.</div>;
 
   const ready =
-    versionsCache !== undefined && versionsCache !== 'pending' && versionsCache !== 'error';
+    versionsCache !== undefined &&
+    versionsCache !== "pending" &&
+    versionsCache !== "error";
   const versionList = ready ? versionsCache.versions : [];
   const activeVersionId = ready ? versionsCache.activeVersion : undefined;
   const activeVersion =
-    versionList.find((v) => v.current || v.versionId === activeVersionId) ?? versionList[0];
+    versionList.find((v) => v.current || v.versionId === activeVersionId) ??
+    versionList[0];
 
   const copyUrl = (url: string, msg: string): void => {
     void navigator.clipboard
       .writeText(url)
       .then(() => showToast(msg))
-      .catch(() => showToast('Copy failed'));
+      .catch(() => showToast("Copy failed"));
   };
 
-  const heroBtn = (glyph: string, label: string, onClick: () => void): JSX.Element => (
+  const heroBtn = (
+    glyph: string,
+    label: string,
+    onClick: () => void
+  ): JSX.Element => (
     <button
       className={styles.heroBtn}
       type="button"
@@ -500,17 +543,22 @@ function Overview({
     />
   );
 
-  const verLabel = activeVersion?.declaredVersion ? ` · V${activeVersion.declaredVersion}` : '';
+  const verLabel = activeVersion?.declaredVersion
+    ? ` · V${activeVersion.declaredVersion}`
+    : "";
   const whenLabel = activeVersion
     ? ` · PUBLISHED ${relativeWhen(activeVersion.uploadedAt).toUpperCase()}`
-    : '';
+    : "";
 
   // Gateway reachability is derived from whether the versions fetch resolved.
   const anyOk = ready;
-  const stillLoading = versionsCache === 'pending' || versionsCache === undefined;
+  const stillLoading =
+    versionsCache === "pending" || versionsCache === undefined;
 
   const ordered = ready
-    ? [...versionsCache.versions].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+    ? [...versionsCache.versions].sort((a, b) =>
+        b.uploadedAt.localeCompare(a.uploadedAt)
+      )
     : [];
 
   return (
@@ -519,8 +567,8 @@ function Overview({
       <div className={styles.hero} data-live={String(!!liveUrl)}>
         <div
           className={styles.heroTile}
-          data-status={liveUrl ? 'live' : 'off'}
-          dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 21) }}
+          data-status={liveUrl ? "live" : "off"}
+          dangerouslySetInnerHTML={{ __html: iconSvg("Eye", 21) }}
         />
         {liveUrl ? (
           <>
@@ -529,14 +577,20 @@ function Overview({
                 <span className={styles.heroDot} data-status="live" />
                 <span>{`LIVE${verLabel}${whenLabel}`}</span>
               </div>
-              <span className={styles.heroUrl}>{formatPreviewUrl(liveUrl)}</span>
+              <span className={styles.heroUrl}>
+                {formatPreviewUrl(liveUrl)}
+              </span>
             </div>
             <div className={styles.heroActions}>
-              {heroBtn(iconSvg('Eye', 13), 'Open', () => {
-                window.open(liveUrl, '_blank');
+              {heroBtn(iconSvg("Eye", 13), "Open", () => {
+                window.open(liveUrl, "_blank");
               })}
-              {heroBtn(iconSvg('Copy', 13), 'Copy', () => copyUrl(liveUrl, 'Copied URL'))}
-              {heroBtn(iconSvg('Share', 13), 'Share', () => copyUrl(liveUrl, 'Share link copied'))}
+              {heroBtn(iconSvg("Copy", 13), "Copy", () =>
+                copyUrl(liveUrl, "Copied URL")
+              )}
+              {heroBtn(iconSvg("Share", 13), "Share", () =>
+                copyUrl(liveUrl, "Share link copied")
+              )}
             </div>
           </>
         ) : (
@@ -560,8 +614,10 @@ function Overview({
             <span>Versions</span>
           </div>
           {stillLoading ? (
-            <div className={cx(styles.statValue, styles.statMuted)}>Loading…</div>
-          ) : versionsCache === 'error' ? (
+            <div className={cx(styles.statValue, styles.statMuted)}>
+              Loading…
+            </div>
+          ) : versionsCache === "error" ? (
             <div className={cx(styles.statValue, styles.statMuted)}>—</div>
           ) : (
             <>
@@ -569,7 +625,7 @@ function Overview({
               <div className={styles.statSub}>
                 {activeVersion
                   ? `active · ${activeVersion.uploadedAt.slice(0, 10)}`
-                  : 'No active version'}
+                  : "No active version"}
               </div>
             </>
           )}
@@ -580,17 +636,31 @@ function Overview({
             <span>Gateway</span>
           </div>
           {stillLoading && !anyOk ? (
-            <div className={cx(styles.statValue, styles.statMuted)}>Checking…</div>
+            <div className={cx(styles.statValue, styles.statMuted)}>
+              Checking…
+            </div>
           ) : anyOk ? (
             <>
-              <div className={cx(styles.statValue, styles.statMid, styles.statInline)}>
+              <div
+                className={cx(
+                  styles.statValue,
+                  styles.statMid,
+                  styles.statInline
+                )}
+              >
                 <span className={styles.statusDot} data-status="live" />
                 Reachable
               </div>
             </>
           ) : (
             <>
-              <div className={cx(styles.statValue, styles.statMid, styles.statInline)}>
+              <div
+                className={cx(
+                  styles.statValue,
+                  styles.statMid,
+                  styles.statInline
+                )}
+              >
                 <span className={styles.statusDot} data-status="off" />
                 Unreachable
               </div>
@@ -605,8 +675,10 @@ function Overview({
       <div className={styles.feed}>
         {stillLoading ? (
           <div className={styles.feedEmpty}>Loading activity…</div>
-        ) : versionsCache === 'error' || versionList.length === 0 ? (
-          <div className={styles.feedEmpty}>No activity yet — publish your app to deploy it.</div>
+        ) : versionsCache === "error" || versionList.length === 0 ? (
+          <div className={styles.feedEmpty}>
+            No activity yet — publish your app to deploy it.
+          </div>
         ) : (
           ordered.map((v) => {
             const isActive = v.current || v.versionId === activeVersionId;
@@ -614,15 +686,19 @@ function Overview({
               <div className={styles.feedRow} key={v.versionId}>
                 <div
                   className={styles.feedTile}
-                  dangerouslySetInnerHTML={{ __html: iconSvg('Save', 14) }}
+                  dangerouslySetInnerHTML={{ __html: iconSvg("Save", 14) }}
                 />
                 <div className={styles.feedTitleRow}>
                   <span className={styles.feedTitle}>
-                    {v.declaredVersion ? `Published v${v.declaredVersion}` : 'Published'}
+                    {v.declaredVersion
+                      ? `Published v${v.declaredVersion}`
+                      : "Published"}
                   </span>
                   {isActive && <span className={styles.feedLive}>Active</span>}
                 </div>
-                <span className={styles.feedWhen}>{`Builder · ${relativeWhen(v.uploadedAt)}`}</span>
+                <span
+                  className={styles.feedWhen}
+                >{`Builder · ${relativeWhen(v.uploadedAt)}`}</span>
               </div>
             );
           })
@@ -647,30 +723,38 @@ function Logs({
   appId: string;
   logsCache: LogsCache;
   logsError: string | undefined;
-  logsLevelFilter: CentraidLogLevel | 'all';
+  logsLevelFilter: CentraidLogLevel | "all";
   logsSearch: string;
-  onLevel: (lvl: CentraidLogLevel | 'all') => void;
+  onLevel: (lvl: CentraidLogLevel | "all") => void;
   onSearch: (v: string) => void;
 }): JSX.Element {
   if (!appId) return <div className={styles.empty}>No app yet.</div>;
 
-  const levels: Array<CentraidLogLevel | 'all'> = ['all', 'info', 'warn', 'error'];
+  const levels: Array<CentraidLogLevel | "all"> = [
+    "all",
+    "info",
+    "warn",
+    "error",
+  ];
 
   let body: JSX.Element;
-  if (logsCache === 'pending' || logsCache === undefined) {
-    body = <div className={cx(styles.empty, styles.emptyQuiet)}>Loading logs…</div>;
-  } else if (logsCache === 'error') {
+  if (logsCache === "pending" || logsCache === undefined) {
+    body = (
+      <div className={cx(styles.empty, styles.emptyQuiet)}>Loading logs…</div>
+    );
+  } else if (logsCache === "error") {
     body = (
       <div className={styles.empty}>
         Could not load logs.
         <br />
-        <span className={styles.statSub}>{logsError ?? 'unknown error'}</span>
+        <span className={styles.statSub}>{logsError ?? "unknown error"}</span>
       </div>
     );
   } else {
     const needle = logsSearch.trim().toLowerCase();
     const filtered = logsCache.filter((entry) => {
-      if (logsLevelFilter !== 'all' && entry.level !== logsLevelFilter) return false;
+      if (logsLevelFilter !== "all" && entry.level !== logsLevelFilter)
+        return false;
       if (!needle) return true;
       return (
         entry.msg.toLowerCase().includes(needle) ||
@@ -682,8 +766,8 @@ function Logs({
       body = (
         <div className={cx(styles.empty, styles.emptyQuiet)}>
           {logsCache.length === 0
-            ? 'No logs yet. Run a query or action to produce log lines.'
-            : 'No logs match the current filter.'}
+            ? "No logs yet. Run a query or action to produce log lines."
+            : "No logs match the current filter."}
         </div>
       );
     } else {
@@ -700,8 +784,12 @@ function Logs({
                 key={`${entry.ts}-${i}`}
               >
                 <span className={styles.logsTs}>{ts}</span>
-                <span className={styles.logsLevel}>{entry.level.toUpperCase()}</span>
-                <span className={styles.logsSource}>{`${entry.source}/${entry.handler}`}</span>
+                <span className={styles.logsLevel}>
+                  {entry.level.toUpperCase()}
+                </span>
+                <span
+                  className={styles.logsSource}
+                >{`${entry.source}/${entry.handler}`}</span>
                 <span className={styles.logsMsg}>{entry.msg}</span>
               </div>
             );
@@ -726,7 +814,7 @@ function Logs({
               if (logsLevelFilter !== lvl) onLevel(lvl);
             }}
           >
-            {lvl === 'all' ? 'All' : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+            {lvl === "all" ? "All" : lvl.charAt(0).toUpperCase() + lvl.slice(1)}
           </button>
         ))}
         <input
@@ -765,21 +853,25 @@ function Automations({
 }): JSX.Element {
   if (!appId) return <div className={styles.empty}>No app yet.</div>;
 
-  if (automationsCache === undefined || automationsCache === 'pending') {
+  if (automationsCache === undefined || automationsCache === "pending") {
     return (
       <div className={styles.automations}>
-        <div className={cx(styles.empty, styles.emptyQuiet)}>Loading automations…</div>
+        <div className={cx(styles.empty, styles.emptyQuiet)}>
+          Loading automations…
+        </div>
       </div>
     );
   }
 
-  if (automationsCache === 'error') {
+  if (automationsCache === "error") {
     return (
       <div className={styles.automations}>
         <div className={styles.empty}>
           Could not load automations.
           <br />
-          <span className={styles.statSub}>{automationsError ?? 'unknown error'}</span>
+          <span className={styles.statSub}>
+            {automationsError ?? "unknown error"}
+          </span>
         </div>
       </div>
     );
@@ -792,8 +884,9 @@ function Automations({
           No automations yet.
           <br />
           <span className={styles.statSub}>
-            Ask the builder to "set up an automation that runs every…" or drop a manifest into the
-            app's <code>automations/</code> folder, then republish to deploy.
+            Ask the builder to "set up an automation that runs every…" or drop a
+            manifest into the app's <code>automations/</code> folder, then
+            republish to deploy.
           </span>
         </div>
       </div>
@@ -806,7 +899,7 @@ function Automations({
         <AutomationRow
           key={row.ref}
           row={row}
-          runState={runStates[row.name] ?? { kind: 'idle' }}
+          runState={runStates[row.name] ?? { kind: "idle" }}
           onToggle={onToggle}
           onRun={onRun}
           onDelete={onDelete}
@@ -830,7 +923,9 @@ function AutomationRow({
   onDelete: (row: CentraidAutomationRow) => void;
 }): JSX.Element {
   const cron =
-    row.triggers.map((t) => (t.kind === 'cron' ? t.expr : 'webhook')).join(' · ') || 'manual';
+    row.triggers
+      .map((t) => (t.kind === "cron" ? t.expr : "webhook"))
+      .join(" · ") || "manual";
 
   return (
     <div className={styles.automationRow} data-enabled={String(row.enabled)}>
@@ -848,7 +943,9 @@ function AutomationRow({
             checked={row.enabled}
             onChange={(e) => onToggle(row, e.target.checked)}
           />
-          <span className={styles.automationToggleText}>{row.enabled ? 'On' : 'Off'}</span>
+          <span className={styles.automationToggleText}>
+            {row.enabled ? "On" : "Off"}
+          </span>
         </label>
       </div>
 
@@ -861,11 +958,16 @@ function AutomationRow({
           {row.id}
         </span>
         {row.manifest.requires.model && (
-          <span className={styles.automationMetaItem} title="Model used by ctx.agent calls">
+          <span
+            className={styles.automationMetaItem}
+            title="Model used by ctx.agent calls"
+          >
             {row.manifest.requires.model}
           </span>
         )}
-        <span className={cx(styles.automationMetaItem, styles.automationMetaFaint)}>
+        <span
+          className={cx(styles.automationMetaItem, styles.automationMetaFaint)}
+        >
           {`by ${row.manifest.generated.by}`}
         </span>
       </div>
@@ -875,10 +977,10 @@ function AutomationRow({
         <button
           type="button"
           className={cx(buttonCss.btn, buttonCss.ghost)}
-          disabled={runState.kind === 'running'}
+          disabled={runState.kind === "running"}
           onClick={() => onRun(row)}
         >
-          {runState.kind === 'running' ? 'Running…' : 'Run now'}
+          {runState.kind === "running" ? "Running…" : "Run now"}
         </button>
         <button
           type="button"
@@ -887,11 +989,14 @@ function AutomationRow({
         >
           Delete
         </button>
-        {runState.kind === 'done' && (
-          <span className={styles.automationResult} data-ok={String(runState.ok)}>
+        {runState.kind === "done" && (
+          <span
+            className={styles.automationResult}
+            data-ok={String(runState.ok)}
+          >
             {runState.ok
               ? `OK in ${runState.durationMs}ms`
-              : `FAILED in ${runState.durationMs}ms — ${runState.error ?? 'unknown error'}`}
+              : `FAILED in ${runState.durationMs}ms — ${runState.error ?? "unknown error"}`}
           </span>
         )}
       </div>

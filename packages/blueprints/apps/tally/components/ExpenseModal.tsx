@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode } from "react";
 
 // The add/edit expense form: description, amount, category, group/paid-by
 // selects, the equal/exact/percent split method and one row per member with
@@ -17,13 +17,13 @@ import {
   resolveSplits,
   splitSumInfo,
   toCents,
-} from '../format.ts';
-import { I } from '../icons.ts';
-import type { ExpenseModel, Group, Member } from '../types.ts';
-import { ArmedButton, Icon, KitAvatar, ModalBackdrop } from './Shared.tsx';
+} from "../format.ts";
+import { I } from "../icons.ts";
+import type { ExpenseModel, Group, Member } from "../types.ts";
+import { ArmedButton, Icon, KitAvatar, ModalBackdrop } from "./Shared.tsx";
 
-import styles from './ExpenseModal.module.css';
-import shared from './shared.module.css';
+import styles from "./ExpenseModal.module.css";
+import shared from "./shared.module.css";
 
 function SplitRow({
   m,
@@ -41,19 +41,25 @@ function SplitRow({
   onPatch: (patch: Partial<ExpenseModel>) => void;
 }) {
   const inc = exp.include.has(m.party_id);
-  const name = m.is_me || m.party_id === me ? 'You' : m.name;
+  const name = m.is_me || m.party_id === me ? "You" : m.name;
 
   let right: ReactNode;
-  if (exp.method === 'equal') {
-    right = <span className={styles.splitshare}>{inc ? money(eqShare, currency) : '—'}</span>;
-  } else if (exp.method === 'exact') {
+  if (exp.method === "equal") {
+    right = (
+      <span className={styles.splitshare}>
+        {inc ? money(eqShare, currency) : "—"}
+      </span>
+    );
+  } else if (exp.method === "exact") {
     right = inc ? (
       <input
         className={styles.splitin}
-        value={exp.exact[m.party_id] || ''}
+        value={exp.exact[m.party_id] || ""}
         inputMode="decimal"
         placeholder="0.00"
-        onChange={(e) => onPatch({ exact: { ...exp.exact, [m.party_id]: e.target.value } })}
+        onChange={(e) =>
+          onPatch({ exact: { ...exp.exact, [m.party_id]: e.target.value } })
+        }
       />
     ) : (
       <span className={styles.splitshare}>—</span>
@@ -62,10 +68,12 @@ function SplitRow({
     right = inc ? (
       <input
         className={styles.splitin}
-        value={exp.percent[m.party_id] || ''}
+        value={exp.percent[m.party_id] || ""}
         inputMode="decimal"
         placeholder="0%"
-        onChange={(e) => onPatch({ percent: { ...exp.percent, [m.party_id]: e.target.value } })}
+        onChange={(e) =>
+          onPatch({ percent: { ...exp.percent, [m.party_id]: e.target.value } })
+        }
       />
     ) : (
       <span className={styles.splitshare}>—</span>
@@ -76,7 +84,7 @@ function SplitRow({
     <div className={styles.splitrow}>
       <button
         type="button"
-        className={`${styles.splitbox} ${inc ? styles.on : ''}`}
+        className={`${styles.splitbox} ${inc ? styles.on : ""}`}
         aria-label="Include"
         onClick={() => {
           const next = new Set(exp.include);
@@ -87,7 +95,12 @@ function SplitRow({
       >
         {inc ? <Icon svg={I.check!} /> : null}
       </button>
-      <KitAvatar name={m.name} size="26px" color={m.color} initials={m.initials} />
+      <KitAvatar
+        name={m.name}
+        size="26px"
+        color={m.color}
+        initials={m.initials}
+      />
       <span className={styles.splitname}>{name}</span>
       {right}
     </div>
@@ -119,19 +132,22 @@ export function ExpenseModal({
 }) {
   const amountCents = toCents(exp.amount);
   const parts = members.filter((m) => exp.include.has(m.party_id));
-  const eqShare = parts.length && amountCents > 0 ? amountCents / parts.length : 0;
+  const eqShare =
+    parts.length && amountCents > 0 ? amountCents / parts.length : 0;
   const sumInfo = splitSumInfo(exp, members, currency);
   const valid = Boolean(
-    exp.desc.trim() && amountCents > 0 && resolveSplits(exp, amountCents, members),
+    exp.desc.trim() &&
+    amountCents > 0 &&
+    resolveSplits(exp, amountCents, members)
   );
 
   return (
     <ModalBackdrop onClose={onClose}>
       <div className={`kit-modal ${styles.wide}`}>
-        <h2>{exp.mode === 'edit' ? 'Edit expense' : 'Add an expense'}</h2>
+        <h2>{exp.mode === "edit" ? "Edit expense" : "Add an expense"}</h2>
         <input
           className={shared.in}
-          style={{ fontSize: '15px' }}
+          style={{ fontSize: "15px" }}
           value={exp.desc}
           placeholder="What was it for?"
           onChange={(e) => onPatch({ desc: e.target.value })}
@@ -188,7 +204,7 @@ export function ExpenseModal({
             >
               {members.map((m) => (
                 <option key={m.party_id} value={m.party_id}>
-                  {m.is_me || m.party_id === me ? 'You' : m.name}
+                  {m.is_me || m.party_id === me ? "You" : m.name}
                 </option>
               ))}
             </select>
@@ -199,27 +215,27 @@ export function ExpenseModal({
           <div className="kit-seg stretch">
             <button
               type="button"
-              aria-pressed={exp.method === 'equal'}
-              onClick={() => onPatch({ method: 'equal' })}
+              aria-pressed={exp.method === "equal"}
+              onClick={() => onPatch({ method: "equal" })}
             >
               Equally
             </button>
             <button
               type="button"
-              aria-pressed={exp.method === 'exact'}
-              onClick={() => onPatch({ method: 'exact' })}
+              aria-pressed={exp.method === "exact"}
+              onClick={() => onPatch({ method: "exact" })}
             >
               Exact
             </button>
             <button
               type="button"
-              aria-pressed={exp.method === 'percent'}
-              onClick={() => onPatch({ method: 'percent' })}
+              aria-pressed={exp.method === "percent"}
+              onClick={() => onPatch({ method: "percent" })}
             >
               Percent
             </button>
           </div>
-          <div style={{ marginTop: '10px' }}>
+          <div style={{ marginTop: "10px" }}>
             {members.map((m) => (
               <SplitRow
                 key={m.party_id}
@@ -231,13 +247,15 @@ export function ExpenseModal({
                 onPatch={onPatch}
               />
             ))}
-            <div className={`${styles.splitsum}${sumInfo.bad ? ' ' + styles.bad : ''}`}>
+            <div
+              className={`${styles.splitsum}${sumInfo.bad ? " " + styles.bad : ""}`}
+            >
               {sumInfo.text}
             </div>
           </div>
         </div>
         <div className="kit-modal-foot">
-          {exp.mode === 'edit' ? (
+          {exp.mode === "edit" ? (
             <ArmedButton
               className={`kit-btn danger ${shared.del}`}
               label="Delete"
@@ -248,7 +266,12 @@ export function ExpenseModal({
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="kit-btn primary" disabled={!valid} onClick={onSave}>
+          <button
+            type="button"
+            className="kit-btn primary"
+            disabled={!valid}
+            onClick={onSave}
+          >
             Save
           </button>
         </div>

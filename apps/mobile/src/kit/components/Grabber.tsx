@@ -1,7 +1,7 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React from "react";
+import { StyleSheet, View } from "react-native";
 
-import { useTheme } from '../theme';
+import { useTheme } from "../theme";
 
 // The sheet "grabber": a small rounded bar centered at the very top of an app
 // cover. In the springboard model each app presents as a full-screen modal that
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   wrap: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingBottom: 4,
     paddingTop: 6,
   },

@@ -1,7 +1,18 @@
-export const COMPANION_MODULES = ['locker', 'tasks', 'notes', 'docs', 'agenda', 'people'] as const;
+export const COMPANION_MODULES = [
+  "locker",
+  "tasks",
+  "notes",
+  "docs",
+  "agenda",
+  "people",
+] as const;
 
 export type CompanionModule = (typeof COMPANION_MODULES)[number];
-export type CompanionModuleState = 'granted' | 'parked' | 'revoked' | 'unavailable';
+export type CompanionModuleState =
+  | "granted"
+  | "parked"
+  | "revoked"
+  | "unavailable";
 
 interface GrantLike {
   readonly scopes: readonly {
@@ -22,12 +33,12 @@ interface RequiredScope {
 }
 
 const REQUIRED_SCOPE: Readonly<Record<CompanionModule, RequiredScope>> = {
-  locker: { schema: 'locker', table: 'item', verb: 'reveal' },
-  tasks: { schema: 'schedule', table: 'add_task', verb: 'act' },
-  notes: { schema: 'knowledge', table: 'create_note', verb: 'act' },
-  docs: { schema: 'core', table: 'add_document', verb: 'act' },
-  agenda: { schema: 'schedule', verb: 'act' },
-  people: { schema: 'people', verb: 'act' },
+  locker: { schema: "locker", table: "item", verb: "reveal" },
+  tasks: { schema: "schedule", table: "add_task", verb: "act" },
+  notes: { schema: "knowledge", table: "create_note", verb: "act" },
+  docs: { schema: "core", table: "add_document", verb: "act" },
+  agenda: { schema: "schedule", verb: "act" },
+  people: { schema: "people", verb: "act" },
 };
 
 function grantsScope(app: AppLike, required: RequiredScope): boolean {
@@ -35,9 +46,11 @@ function grantsScope(app: AppLike, required: RequiredScope): boolean {
     grant.scopes.some(
       (scope) =>
         scope.schema === required.schema &&
-        (scope.table === null || required.table === undefined || scope.table === required.table) &&
-        scope.verbs.split('+').includes(required.verb),
-    ),
+        (scope.table === null ||
+          required.table === undefined ||
+          scope.table === required.table) &&
+        scope.verbs.split("+").includes(required.verb)
+    )
   );
 }
 
@@ -45,9 +58,9 @@ function grantsScope(app: AppLike, required: RequiredScope): boolean {
 export function companionModuleState(
   selected: ReadonlySet<string>,
   module: CompanionModule,
-  app: AppLike | undefined,
+  app: AppLike | undefined
 ): CompanionModuleState {
-  if (!selected.has(module)) return 'revoked';
-  if (!app) return 'unavailable';
-  return grantsScope(app, REQUIRED_SCOPE[module]) ? 'granted' : 'parked';
+  if (!selected.has(module)) return "revoked";
+  if (!app) return "unavailable";
+  return grantsScope(app, REQUIRED_SCOPE[module]) ? "granted" : "parked";
 }

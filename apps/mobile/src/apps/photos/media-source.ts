@@ -3,13 +3,13 @@
 // every replica fetch already send. Device `file://` URIs need none. Keeping
 // this in one place stops thumbnails from silently 401ing while downloads work.
 
-import type { ImageSource } from 'expo-image';
-import type { VideoSource } from 'expo-video';
+import type { ImageSource } from "expo-image";
+import type { VideoSource } from "expo-video";
 
-import { authHeader } from '../../lib/gateway';
+import { authHeader } from "../../lib/gateway";
 
 function isRemote(uri: string): boolean {
-  return uri.startsWith('http:') || uri.startsWith('https:');
+  return uri.startsWith("http:") || uri.startsWith("https:");
 }
 
 export function imageSource(uri: string): ImageSource | string {

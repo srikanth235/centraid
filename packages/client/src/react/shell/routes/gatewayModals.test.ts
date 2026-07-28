@@ -1,11 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { connectGateway, friendlyGatewayError } from './gatewayModals.js';
+import { connectGateway, friendlyGatewayError } from "./gatewayModals.js";
 
-const redeemGatewayPairing = vi.fn<typeof window.CentraidApi.redeemGatewayPairing>();
+const redeemGatewayPairing =
+  vi.fn<typeof window.CentraidApi.redeemGatewayPairing>();
 const setActiveGateway = vi.fn<() => Promise<void>>(() => Promise.resolve());
 
-describe('gatewayModals', () => {
+describe("gatewayModals", () => {
   beforeEach(() => {
     redeemGatewayPairing.mockReset();
     setActiveGateway.mockClear();
@@ -16,64 +17,68 @@ describe('gatewayModals', () => {
   });
 
   describe(friendlyGatewayError, () => {
-    it('maps known stable codes to friendly copy', () => {
-      expect(friendlyGatewayError('ticket_expired', 'raw')).toBe(
-        'This ticket has expired — ask for a new one.',
+    it("maps known stable codes to friendly copy", () => {
+      expect(friendlyGatewayError("ticket_expired", "raw")).toBe(
+        "This ticket has expired — ask for a new one."
       );
-      expect(friendlyGatewayError('unreachable', 'raw')).toMatch(/Couldn't reach/u);
+      expect(friendlyGatewayError("unreachable", "raw")).toMatch(
+        /Couldn't reach/u
+      );
     });
 
-    it('falls back to the raw message for an unrecognized code', () => {
-      expect(friendlyGatewayError('some_new_code', 'raw server text')).toBe('raw server text');
+    it("falls back to the raw message for an unrecognized code", () => {
+      expect(friendlyGatewayError("some_new_code", "raw server text")).toBe(
+        "raw server text"
+      );
     });
   });
 
   describe(connectGateway, () => {
-    it('ticket: redeems with just the ticket + label, mode omitted', async () => {
+    it("ticket: redeems with just the ticket + label, mode omitted", async () => {
       redeemGatewayPairing.mockResolvedValue({
-        gatewayId: 'gw1',
+        gatewayId: "gw1",
         ok: true,
-        vaultId: 'v1',
-        vaultName: 'Home',
+        vaultId: "v1",
+        vaultName: "Home",
       });
       const result = await connectGateway({
-        kind: 'ticket',
-        label: 'Mine',
-        ticket: 't.icket',
+        kind: "ticket",
+        label: "Mine",
+        ticket: "t.icket",
       });
       expect(redeemGatewayPairing).toHaveBeenCalledWith({
-        label: 'Mine',
+        label: "Mine",
         rememberDevice: false,
-        ticket: 't.icket',
+        ticket: "t.icket",
       });
       expect(result).toStrictEqual({
-        gatewayId: 'gw1',
-        label: 'Home',
+        gatewayId: "gw1",
+        label: "Home",
         ok: true,
-        vaultId: 'v1',
+        vaultId: "v1",
       });
     });
 
-    it('ticket: falls back to a generic label when vaultName is empty', async () => {
+    it("ticket: falls back to a generic label when vaultName is empty", async () => {
       redeemGatewayPairing.mockResolvedValue({
-        gatewayId: 'gw1',
+        gatewayId: "gw1",
         ok: true,
-        vaultId: 'v1',
-        vaultName: '',
+        vaultId: "v1",
+        vaultName: "",
       });
-      const result = await connectGateway({ kind: 'ticket', ticket: 't' });
-      expect(result).toMatchObject({ label: 'your vault', ok: true });
+      const result = await connectGateway({ kind: "ticket", ticket: "t" });
+      expect(result).toMatchObject({ label: "your vault", ok: true });
     });
 
-    it('ticket flows map a stable error code through friendlyGatewayError', async () => {
+    it("ticket flows map a stable error code through friendlyGatewayError", async () => {
       redeemGatewayPairing.mockResolvedValue({
-        error: 'ticket_expired',
-        message: 'server said expired',
+        error: "ticket_expired",
+        message: "server said expired",
         ok: false,
       });
-      const result = await connectGateway({ kind: 'ticket', ticket: 't' });
+      const result = await connectGateway({ kind: "ticket", ticket: "t" });
       expect(result).toStrictEqual({
-        message: 'This ticket has expired — ask for a new one.',
+        message: "This ticket has expired — ask for a new one.",
         ok: false,
       });
     });

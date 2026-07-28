@@ -3,35 +3,35 @@ import {
   walPairMarkerKey,
   walSegmentKey,
   type SnapshotRow,
-} from '@centraid/backup';
-import { describe, expect, test, vi } from 'vitest';
+} from "@centraid/backup";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   reconcileCasInventory,
   snapshotInventorySummary,
   walCoverageFromInventory,
   walInventoryGaps,
-} from './backup-reconciliation.js';
+} from "./backup-reconciliation.js";
 
-const GEN = 'a'.repeat(32);
-const JOURNAL_GEN = 'b'.repeat(32);
-const PRESENT = '1'.repeat(64);
-const MISSING = '2'.repeat(64);
-const ORPHAN = '3'.repeat(64);
+const GEN = "a".repeat(32);
+const JOURNAL_GEN = "b".repeat(32);
+const PRESENT = "1".repeat(64);
+const MISSING = "2".repeat(64);
+const ORPHAN = "3".repeat(64);
 
-describe('backup-reconciliation', () => {
-  test('missing remote CAS evidence is demoted synchronously and orphans are report-only', () => {
+describe("backup-reconciliation", () => {
+  test("missing remote CAS evidence is demoted synchronously and orphans are report-only", () => {
     const unmark = vi.fn<(sha: string) => void>();
     const state = reconcileCasInventory({
       collection: {
-        source: 'provider',
+        source: "provider",
         providerAttested: true,
         objects: [PRESENT, ORPHAN].map((sha) => ({
           key: `blobs/sha256/${sha}`,
           sizeBytes: 10,
           etagOrHash: sha,
           storedAt: 1,
-          state: 'live' as const,
+          state: "live" as const,
         })),
       },
       live: new Set([PRESENT, MISSING]),
@@ -43,20 +43,20 @@ describe('backup-reconciliation', () => {
     expect(state.orphans).toStrictEqual({ count: 1, sample: [ORPHAN] });
   });
 
-  test('a retained-snapshot-referenced blob present remotely is live, not an orphan (issue #436 §6)', () => {
+  test("a retained-snapshot-referenced blob present remotely is live, not an orphan (issue #436 §6)", () => {
     const unmark = vi.fn<(sha: string) => void>();
     // ORPHAN here is referenced ONLY by a retained snapshot — absent from the live
     // vault model and the replica index — yet present in the remote CAS listing.
     const state = reconcileCasInventory({
       collection: {
-        source: 'provider',
+        source: "provider",
         providerAttested: true,
         objects: [ORPHAN].map((sha) => ({
           key: `blobs/sha256/${sha}`,
           sizeBytes: 10,
           etagOrHash: sha,
           storedAt: 1,
-          state: 'live' as const,
+          state: "live" as const,
         })),
       },
       live: new Set<string>(),
@@ -69,12 +69,12 @@ describe('backup-reconciliation', () => {
     expect(unmark).not.toHaveBeenCalled();
   });
 
-  test('a retained-snapshot-referenced blob ABSENT remotely is a critical missing finding (issue #436 §6)', () => {
+  test("a retained-snapshot-referenced blob ABSENT remotely is a critical missing finding (issue #436 §6)", () => {
     const unmark = vi.fn<(sha: string) => void>();
     // MISSING is named by a retained snapshot but the remote CAS no longer holds
     // it: the recovery window is broken for that attachment ⇒ critical `missing`.
     const state = reconcileCasInventory({
-      collection: { source: 'provider', providerAttested: true, objects: [] },
+      collection: { source: "provider", providerAttested: true, objects: [] },
       live: new Set<string>(),
       indexed: new Set<string>(),
       unmark,
@@ -85,10 +85,10 @@ describe('backup-reconciliation', () => {
     expect(unmark).not.toHaveBeenCalled();
   });
 
-  test('WAL inventory detects a gap before a provider closer', () => {
+  test("WAL inventory detects a gap before a provider closer", () => {
     const keys = [
       walSegmentKey({
-        db: 'vault',
+        db: "vault",
         generation: GEN,
         group: 0,
         startOffset: 0,
@@ -96,7 +96,7 @@ describe('backup-reconciliation', () => {
         tickMs: 1,
       }),
       walSegmentKey({
-        db: 'vault',
+        db: "vault",
         generation: GEN,
         group: 0,
         startOffset: 120,
@@ -104,19 +104,21 @@ describe('backup-reconciliation', () => {
         tickMs: 2,
       }),
       walGroupCloserKey({
-        db: 'vault',
+        db: "vault",
         generation: GEN,
         group: 0,
         endOffset: 200,
       }),
     ];
-    expect(walInventoryGaps(keys, new Set([GEN]))).toContain(`vault/${GEN}/group-0: 100-120`);
+    expect(walInventoryGaps(keys, new Set([GEN]))).toContain(
+      `vault/${GEN}/group-0: 100-120`
+    );
   });
 
-  test('a contiguous WAL inventory through its closer is clean', () => {
+  test("a contiguous WAL inventory through its closer is clean", () => {
     const keys = [
       walSegmentKey({
-        db: 'journal',
+        db: "journal",
         generation: GEN,
         group: 0,
         startOffset: 0,
@@ -124,7 +126,7 @@ describe('backup-reconciliation', () => {
         tickMs: 1,
       }),
       walGroupCloserKey({
-        db: 'journal',
+        db: "journal",
         generation: GEN,
         group: 0,
         endOffset: 100,
@@ -133,11 +135,11 @@ describe('backup-reconciliation', () => {
     expect(walInventoryGaps(keys, new Set([GEN]))).toStrictEqual([]);
   });
 
-  test('WAL coverage reports the bounded PITR span from anchored objects only', () => {
+  test("WAL coverage reports the bounded PITR span from anchored objects only", () => {
     const day = 24 * 60 * 60 * 1000;
     const keys = [
       walSegmentKey({
-        db: 'vault',
+        db: "vault",
         generation: GEN,
         group: 0,
         startOffset: 0,
@@ -150,15 +152,17 @@ describe('backup-reconciliation', () => {
         tickMs: 3 * day,
       }),
       walSegmentKey({
-        db: 'vault',
-        generation: 'c'.repeat(32),
+        db: "vault",
+        generation: "c".repeat(32),
         group: 0,
         startOffset: 0,
         endOffset: 100,
         tickMs: 10 * day,
       }),
     ];
-    expect(walCoverageFromInventory(keys, new Set([GEN, JOURNAL_GEN]))).toStrictEqual({
+    expect(
+      walCoverageFromInventory(keys, new Set([GEN, JOURNAL_GEN]))
+    ).toStrictEqual({
       earliestTickMs: day,
       latestTickMs: 3 * day,
       spanDays: 2,
@@ -167,18 +171,18 @@ describe('backup-reconciliation', () => {
     });
   });
 
-  test('snapshot transparency is newest-first, bounded, and retains prune/size/format facts', () => {
+  test("snapshot transparency is newest-first, bounded, and retains prune/size/format facts", () => {
     const rows: SnapshotRow[] = Array.from({ length: 55 }, (_, index) => {
       const seq = index + 1;
       return {
         seq,
         manifestKey: `manifests/${seq}.json`,
-        manifestHash: String(seq).padStart(64, '0'),
+        manifestHash: String(seq).padStart(64, "0"),
         prevManifestHash: null,
         totalBytes: seq * 100,
         objectCount: seq,
         generation: 1,
-        format: 'centraid-snapshot/2',
+        format: "centraid-snapshot/2",
         appMeta: {},
         createdAt: seq,
         prunedAt: seq % 2 === 0 ? seq + 100 : null,
@@ -193,7 +197,7 @@ describe('backup-reconciliation', () => {
       objectCount: 55,
       createdAt: 55,
       prunedAt: null,
-      format: 'centraid-snapshot/2',
+      format: "centraid-snapshot/2",
     });
     expect(summary.recent.at(-1)?.seq).toBe(6);
   });

@@ -1,14 +1,16 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
-import { inlineBlueprintAliases } from '../../packages/client/src/react/blueprints/inline-vite-aliases.ts';
+import { inlineBlueprintAliases } from "../../packages/client/src/react/blueprints/inline-vite-aliases.ts";
 
-const fromHere = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
+const fromHere = (path: string): string =>
+  fileURLToPath(new URL(path, import.meta.url));
 
-const appVersion = JSON.parse(readFileSync(fromHere('./package.json'), 'utf8')).version as string;
+const appVersion = JSON.parse(readFileSync(fromHere("./package.json"), "utf8"))
+  .version as string;
 
 export default defineConfig({
   resolve: {
@@ -17,12 +19,12 @@ export default defineConfig({
     alias: [
       ...inlineBlueprintAliases(),
       {
-        find: '@centraid/client',
-        replacement: fromHere('../../packages/client/src'),
+        find: "@centraid/client",
+        replacement: fromHere("../../packages/client/src"),
       },
       {
-        find: '@centraid/design-tokens',
-        replacement: fromHere('../../packages/design-tokens/src/index.ts'),
+        find: "@centraid/design-tokens",
+        replacement: fromHere("../../packages/design-tokens/src/index.ts"),
       },
     ],
   },
@@ -31,7 +33,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(appVersion),
   },
   build: {
-    outDir: 'dist',
+    outDir: "dist",
     sourcemap: true,
     rolldownOptions: {
       output: {
@@ -57,7 +59,7 @@ export default defineConfig({
           // gameable: the blank-page builds above "improved" to 6 requests.
           groups: [
             {
-              name: 'shell-common',
+              name: "shell-common",
               test: /packages\/(?:client\/src\/(?:video-frame|gateway-auth|gateway-client-core|device-blob-source|gateway-client-devices|replica\/shell-session)|blob-format\/dist\/index)\.(?:ts|js)$/u,
             },
           ],

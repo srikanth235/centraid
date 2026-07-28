@@ -1,4 +1,4 @@
-import { type JSX, useState } from 'react';
+import { type JSX, useState } from "react";
 
 import {
   decideOutboxItem,
@@ -7,13 +7,13 @@ import {
   getReview,
   listOutboxGrants,
   revokeOutboxGrant,
-} from '../../../gateway-client-outbox.js';
-import { confirmVaultParked } from '../../../gateway-client-vault.js';
-import ApprovalsScreen from '../../screens/ApprovalsScreen.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
-import { PageEmpty, PageLoading } from '../status.js';
-import { useAsyncData } from '../useAsyncData.js';
+} from "../../../gateway-client-outbox.js";
+import { confirmVaultParked } from "../../../gateway-client-vault.js";
+import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import { PageEmpty, PageLoading } from "../status.js";
+import { useAsyncData } from "../useAsyncData.js";
 import {
   buildGrantRow,
   buildActivityRow,
@@ -22,7 +22,7 @@ import {
   buildOutboxRow,
   buildParkedRow,
   buildScopeRequestRow,
-} from './approvalsData.js';
+} from "./approvalsData.js";
 
 /** Initial review-feed page size; "See all" raises the in-place cap (issue #552). */
 const REVIEW_LIMIT_DEFAULT = 20;
@@ -54,30 +54,40 @@ export default function ApprovalsRoute(): JSX.Element {
 
   const reload = (): void => setRefreshTick((t) => t + 1);
 
-  const runDecision = async (id: string, action: () => Promise<void>): Promise<void> => {
+  const runDecision = async (
+    id: string,
+    action: () => Promise<void>
+  ): Promise<void> => {
     setBusyId(id);
     try {
       await action();
       reload();
     } catch (err) {
-      showToast(`That didn’t go through: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(
+        `That didn’t go through: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       setBusyId(null);
     }
   };
 
-  const reasonFor = (outcome: { status: string; reason?: string }): string | undefined =>
-    outcome.status === 'executed' || outcome.status === 'replayed' ? undefined : outcome.reason;
+  const reasonFor = (outcome: {
+    status: string;
+    reason?: string;
+  }): string | undefined =>
+    outcome.status === "executed" || outcome.status === "replayed"
+      ? undefined
+      : outcome.reason;
 
   const handleApproveOutbox = (
     itemId: string,
     alwaysAllow: boolean,
-    artifact?: Record<string, unknown>,
+    artifact?: Record<string, unknown>
   ): void => {
     void runDecision(itemId, async () => {
       const outcome = await decideOutboxItem({
         itemId,
-        decision: 'approve',
+        decision: "approve",
         alwaysAllow,
         ...(artifact ? { artifact } : {}),
       });
@@ -85,36 +95,39 @@ export default function ApprovalsRoute(): JSX.Element {
       if (reason) throw new Error(reason);
       showToast(
         artifact
-          ? 'Approved with your edits.'
+          ? "Approved with your edits."
           : alwaysAllow
-            ? 'Approved — future sends like this go through automatically.'
-            : 'Approved.',
+            ? "Approved — future sends like this go through automatically."
+            : "Approved."
       );
     });
   };
 
   const handleDenyOutbox = (itemId: string): void => {
     void confirm({
-      title: 'Discard this outbox item?',
-      message: 'Nothing will be sent. This can’t be undone.',
-      confirmLabel: 'Discard',
+      title: "Discard this outbox item?",
+      message: "Nothing will be sent. This can’t be undone.",
+      confirmLabel: "Discard",
       danger: true,
     }).then((ok) => {
       if (!ok) return;
       void runDecision(itemId, async () => {
-        const outcome = await decideOutboxItem({ itemId, decision: 'discard' });
+        const outcome = await decideOutboxItem({ itemId, decision: "discard" });
         const reason = reasonFor(outcome);
         if (reason) throw new Error(reason);
-        showToast('Discarded — nothing was sent.');
+        showToast("Discarded — nothing was sent.");
       });
     });
   };
 
-  const handleConfirmParked = (invocationId: string, approve: boolean): void => {
+  const handleConfirmParked = (
+    invocationId: string,
+    approve: boolean
+  ): void => {
     const proceed = (): void => {
       void runDecision(invocationId, async () => {
         await confirmVaultParked({ invocationId, approve });
-        showToast(approve ? 'Approved.' : 'Denied.');
+        showToast(approve ? "Approved." : "Denied.");
       });
     };
     if (approve) {
@@ -122,18 +135,21 @@ export default function ApprovalsRoute(): JSX.Element {
       return;
     }
     void confirm({
-      title: 'Deny this request?',
-      message: 'The parked invocation will be denied and can’t be replayed.',
-      confirmLabel: 'Deny',
+      title: "Deny this request?",
+      message: "The parked invocation will be denied and can’t be replayed.",
+      confirmLabel: "Deny",
       danger: true,
     }).then((ok) => ok && proceed());
   };
 
-  const handleDecideScopeRequest = (requestId: string, approve: boolean): void => {
+  const handleDecideScopeRequest = (
+    requestId: string,
+    approve: boolean
+  ): void => {
     const proceed = (): void => {
       void runDecision(requestId, async () => {
         await decideScopeRequest({ requestId, approve });
-        showToast(approve ? 'Scope approved.' : 'Scope request denied.');
+        showToast(approve ? "Scope approved." : "Scope request denied.");
       });
     };
     if (approve) {
@@ -141,19 +157,20 @@ export default function ApprovalsRoute(): JSX.Element {
       return;
     }
     void confirm({
-      title: 'Deny this scope request?',
-      message: 'The app keeps its current access; it won’t be re-asked for this widening.',
-      confirmLabel: 'Deny',
+      title: "Deny this scope request?",
+      message:
+        "The app keeps its current access; it won’t be re-asked for this widening.",
+      confirmLabel: "Deny",
       danger: true,
     }).then((ok) => ok && proceed());
   };
 
   const handleRevokeGrant = (grantId: string): void => {
     void confirm({
-      title: 'Revoke this standing grant?',
+      title: "Revoke this standing grant?",
       message:
-        'Future items like this park for your review again; anything already approved but undrained reparks too.',
-      confirmLabel: 'Revoke',
+        "Future items like this park for your review again; anything already approved but undrained reparks too.",
+      confirmLabel: "Revoke",
       danger: true,
     }).then((ok) => {
       if (!ok) return;
@@ -161,19 +178,19 @@ export default function ApprovalsRoute(): JSX.Element {
         const outcome = await revokeOutboxGrant(grantId);
         const reason = reasonFor(outcome);
         if (reason) throw new Error(reason);
-        showToast('Grant revoked.');
+        showToast("Grant revoked.");
       });
     });
   };
 
-  if (state.status === 'loading') {
+  if (state.status === "loading") {
     return (
       <PageScroll>
         <PageLoading label="Loading approvals…" />
       </PageScroll>
     );
   }
-  if (state.status === 'error') {
+  if (state.status === "error") {
     return (
       <PageScroll>
         <PageEmpty message={`Couldn’t load approvals: ${state.error}`} />
@@ -185,7 +202,8 @@ export default function ApprovalsRoute(): JSX.Element {
   const activity = collapseAdjacentActivity(review.map(buildActivityRow));
   // Truncated when the wire returned a full page at the current limit —
   // "See all" raises the cap in place (no separate audit-log screen).
-  const activityTruncated = review.length >= reviewLimit && reviewLimit < REVIEW_LIMIT_SEE_ALL;
+  const activityTruncated =
+    review.length >= reviewLimit && reviewLimit < REVIEW_LIMIT_SEE_ALL;
   return (
     <PageScroll>
       <ApprovalsScreen
@@ -199,7 +217,7 @@ export default function ApprovalsRoute(): JSX.Element {
         busyId={busyId}
         onApproveOutbox={handleApproveOutbox}
         onDenyOutbox={handleDenyOutbox}
-        onOpenSettings={() => navigate({ kind: 'settings' })}
+        onOpenSettings={() => navigate({ kind: "settings" })}
         onConfirmParked={handleConfirmParked}
         onDecideScopeRequest={handleDecideScopeRequest}
         onRevokeGrant={handleRevokeGrant}

@@ -20,7 +20,7 @@
 /** The pasteable one-line pairing token, decoded. */
 export interface PairingTicketPayload {
   v: 1;
-  kind: 'centraid-gw-pair';
+  kind: "centraid-gw-pair";
   /** The gateway's iroh EndpointTicket string — identity pin + relay hint. */
   gw: string;
   /** Ticket id (public half of the one-time ticket). */
@@ -34,17 +34,20 @@ export interface PairingTicketPayload {
 }
 
 /** Decode + shape-validate a pasted pairing token. `undefined` on anything malformed. */
-export function decodePairingTicket(raw: string): PairingTicketPayload | undefined {
+export function decodePairingTicket(
+  raw: string
+): PairingTicketPayload | undefined {
   try {
     const obj = JSON.parse(
-      Buffer.from(raw.trim(), 'base64url').toString('utf8'),
+      Buffer.from(raw.trim(), "base64url").toString("utf8")
     ) as Partial<PairingTicketPayload>;
-    if (obj.v !== 1 || obj.kind !== 'centraid-gw-pair') return undefined;
-    if (typeof obj.gw !== 'string' || obj.gw.length === 0) return undefined;
-    if (typeof obj.t !== 'string' || obj.t.length === 0) return undefined;
-    if (typeof obj.s !== 'string' || obj.s.length === 0) return undefined;
-    if (typeof obj.vaultName !== 'string') return undefined;
-    if (typeof obj.exp !== 'number' || !Number.isFinite(obj.exp)) return undefined;
+    if (obj.v !== 1 || obj.kind !== "centraid-gw-pair") return undefined;
+    if (typeof obj.gw !== "string" || obj.gw.length === 0) return undefined;
+    if (typeof obj.t !== "string" || obj.t.length === 0) return undefined;
+    if (typeof obj.s !== "string" || obj.s.length === 0) return undefined;
+    if (typeof obj.vaultName !== "string") return undefined;
+    if (typeof obj.exp !== "number" || !Number.isFinite(obj.exp))
+      return undefined;
     return obj as PairingTicketPayload;
   } catch {
     return undefined;
@@ -57,19 +60,19 @@ export function decodePairingTicket(raw: string): PairingTicketPayload | undefin
  * before ever dialing.
  */
 export function isTicketExpired(
-  payload: Pick<PairingTicketPayload, 'exp'>,
-  now = Date.now(),
+  payload: Pick<PairingTicketPayload, "exp">,
+  now = Date.now()
 ): boolean {
   return payload.exp <= now;
 }
 
 /** Stable error codes `redeemGatewayPairing` can return — never a raw throw. */
 export type RedeemPairingErrorCode =
-  | 'invalid_ticket'
-  | 'ticket_expired'
-  | 'invalid_input'
-  | 'unreachable'
-  | 'bad_response';
+  | "invalid_ticket"
+  | "ticket_expired"
+  | "invalid_input"
+  | "unreachable"
+  | "bad_response";
 
 export type RedeemGatewayPairingResult =
   | { ok: true; gatewayId: string; vaultId: string; vaultName: string }
@@ -100,42 +103,43 @@ export function foldIrohPairResponse(response: {
   vaultName?: string;
 }): FoldedPairing {
   if (!response.ok) {
-    if (response.error === 'ticket_expired') {
+    if (response.error === "ticket_expired") {
       return {
-        error: 'ticket_expired',
-        message: 'This pairing code has expired.',
+        error: "ticket_expired",
+        message: "This pairing code has expired.",
       };
     }
     return {
-      error: 'invalid_ticket',
-      message: response.error ?? 'That pairing code was rejected by the gateway.',
+      error: "invalid_ticket",
+      message:
+        response.error ?? "That pairing code was rejected by the gateway.",
     };
   }
   if (!response.vaultId) {
     return {
-      error: 'bad_response',
-      message: 'Gateway did not return a vault id.',
+      error: "bad_response",
+      message: "Gateway did not return a vault id.",
     };
   }
   if (!response.gatewayId) {
     return {
-      error: 'bad_response',
-      message: 'Gateway did not return its EndpointId.',
+      error: "bad_response",
+      message: "Gateway did not return its EndpointId.",
     };
   }
   return {
     gatewayId: response.gatewayId,
     vaultId: response.vaultId,
-    vaultName: response.vaultName ?? '',
+    vaultName: response.vaultName ?? "",
     ...(response.gatewayName ? { gatewayName: response.gatewayName } : {}),
   };
 }
 
 /** True when `err` (as returned by the fold functions above) is the error arm. */
 export function isFoldError(
-  folded: FoldedPairing,
+  folded: FoldedPairing
 ): folded is { error: RedeemPairingErrorCode; message: string } {
-  return 'error' in folded;
+  return "error" in folded;
 }
 
 /**
@@ -145,7 +149,7 @@ export function isFoldError(
  */
 export function findReusableProfile<P extends { endpointId?: string }>(
   profiles: readonly P[],
-  endpointId: string,
+  endpointId: string
 ): P | undefined {
   return profiles.find((profile) => profile.endpointId === endpointId);
 }

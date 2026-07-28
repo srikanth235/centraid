@@ -1,20 +1,26 @@
-import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+} from "react";
 
 import type {
   AppKnobDTO,
   AppSettingsBridgeProps,
   AppSettingsSnapshot,
-} from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { Icon, IconButton } from '../ui/index.js';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon, IconButton } from "../ui/index.js";
 
-import a11y from '../styles/a11y.module.css';
-import appSettingsCss from '../styles/appSettings.module.css';
-import segCss from '../styles/seg.module.css';
-import swatchCss from '../styles/swatch.module.css';
-import styles from './AppSettingsPanel.module.css';
+import a11y from "../styles/a11y.module.css";
+import appSettingsCss from "../styles/appSettings.module.css";
+import segCss from "../styles/seg.module.css";
+import swatchCss from "../styles/swatch.module.css";
+import styles from "./AppSettingsPanel.module.css";
 
-type Tab = 'appearance' | 'automations' | 'vault' | 'manage';
+type Tab = "appearance" | "automations" | "vault" | "manage";
 
 // The shared icon set lacks palette/wrench glyphs, so the tab strip carries
 // small inline SVGs — identical markup to the vanilla popover.
@@ -30,10 +36,10 @@ const TAB_GLYPH: Record<Tab, string> = {
 };
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'automations', label: 'Automations' },
-  { id: 'vault', label: 'Vault' },
-  { id: 'manage', label: 'Manage' },
+  { id: "appearance", label: "Appearance" },
+  { id: "automations", label: "Automations" },
+  { id: "vault", label: "Vault" },
+  { id: "manage", label: "Manage" },
 ];
 
 function KnobControl({
@@ -48,7 +54,7 @@ function KnobControl({
     setValue(v);
     onCommit(knob.key, v);
   };
-  if (knob.type === 'swatch') {
+  if (knob.type === "swatch") {
     return (
       <div
         className={cx(swatchCss.swatches, styles.paneSwatches)}
@@ -78,7 +84,11 @@ function KnobControl({
     );
   }
   return (
-    <div className={cx(segCss.seg, styles.paneSeg)} role="tablist" aria-label={knob.label}>
+    <div
+      className={cx(segCss.seg, styles.paneSeg)}
+      role="tablist"
+      aria-label={knob.label}
+    >
       {knob.options.map((o) => (
         <button
           key={o.value}
@@ -101,7 +111,7 @@ function ManageItem({
   sub,
   onClick,
 }: {
-  icon: 'Pencil' | 'Share' | 'Folder';
+  icon: "Pencil" | "Share" | "Folder";
   label: string;
   sub: string;
   onClick: () => void;
@@ -127,7 +137,7 @@ function OrderCard({
   onOpen,
   onMountRuns,
 }: {
-  order: AppSettingsSnapshot['orders'][number];
+  order: AppSettingsSnapshot["orders"][number];
   onRun: (ref: string) => void;
   onToggle: (ref: string, enabled: boolean) => void;
   onOpen: (ref: string) => void;
@@ -135,7 +145,7 @@ function OrderCard({
 }): JSX.Element {
   const [runsOpen, setRunsOpen] = useState(false);
   const loadedRef = useRef(false);
-  const running = order.run.kind === 'running';
+  const running = order.run.kind === "running";
   return (
     <article
       className={styles.order}
@@ -160,13 +170,13 @@ function OrderCard({
             disabled={running}
             onClick={() => onRun(order.ref)}
           >
-            {running ? 'Running…' : 'Run now'}
+            {running ? "Running…" : "Run now"}
           </button>
         </div>
         <blockquote className={styles.orderPrompt}>{order.prompt}</blockquote>
         <div className={styles.orderFoot}>
           <span className={styles.orderHandler}>{order.appsLabel}</span>
-          {order.run.kind === 'done' && (
+          {order.run.kind === "done" && (
             <span className={styles.orderResult} data-ok={String(order.run.ok)}>
               {order.run.label}
             </span>
@@ -193,7 +203,7 @@ function OrderCard({
       </div>
       <label
         className={styles.orderToggle}
-        aria-label={`${order.enabled ? 'Disable' : 'Enable'} ${order.name}`}
+        aria-label={`${order.enabled ? "Disable" : "Enable"} ${order.name}`}
       >
         <input
           type="checkbox"
@@ -213,7 +223,9 @@ function OrderCard({
  * each change; the two deep sub-trees (per-order run history, the vault consent
  * pane) stay vanilla and are injected into host divs this component provides.
  */
-export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Element {
+export default function AppSettingsPanel(
+  props: AppSettingsBridgeProps
+): JSX.Element {
   const {
     onReady,
     onClose,
@@ -231,7 +243,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
     onMountVault,
   } = props;
   const [snap, setSnap] = useState<AppSettingsSnapshot | null>(null);
-  const [tab, setTab] = useState<Tab>('appearance');
+  const [tab, setTab] = useState<Tab>("appearance");
   const [deleteArmed, setDeleteArmed] = useState(false);
   const vaultMounted = useRef(false);
 
@@ -241,19 +253,25 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   if (!snap)
-    return <div className={styles.settingsBackdrop} role="presentation" onClick={onClose} />;
+    return (
+      <div
+        className={styles.settingsBackdrop}
+        role="presentation"
+        onClick={onClose}
+      />
+    );
 
-  const panelStyle = { '--accent-color': snap.accent } as CSSProperties;
+  const panelStyle = { "--accent-color": snap.accent } as CSSProperties;
   const iconStyle: CSSProperties = {
     background: snap.iconBg,
     color: snap.iconColor,
@@ -262,8 +280,17 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
 
   return (
     <>
-      <div className={styles.settingsBackdrop} role="presentation" onClick={onClose} />
-      <dialog open className={styles.settingsPanel} aria-label="App settings" style={panelStyle}>
+      <div
+        className={styles.settingsBackdrop}
+        role="presentation"
+        onClick={onClose}
+      />
+      <dialog
+        open
+        className={styles.settingsPanel}
+        aria-label="App settings"
+        style={panelStyle}
+      >
         <div className={styles.settingsHeader}>
           <span
             className={styles.settingsIcon}
@@ -275,7 +302,11 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
             <div className={styles.settingsName}>{snap.appName}</div>
             <div className={styles.settingsEyebrow}>App settings</div>
           </div>
-          <IconButton ariaLabel="Close" className={styles.settingsClose} onClick={onClose}>
+          <IconButton
+            ariaLabel="Close"
+            className={styles.settingsClose}
+            onClick={onClose}
+          >
             <Icon name="X" size={12} />
           </IconButton>
         </div>
@@ -283,11 +314,11 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
         <div className={styles.settingsTabsWrap}>
           <div className={cx(segCss.seg, styles.settingsTabs)}>
             {TABS.map((t) => {
-              if (t.id === 'vault' && !snap.vaultVisible) return null;
+              if (t.id === "vault" && !snap.vaultVisible) return null;
               const badge =
-                t.id === 'automations'
+                t.id === "automations"
                   ? snap.automationsBadge
-                  : t.id === 'vault'
+                  : t.id === "vault"
                     ? snap.vaultBadge
                     : null;
               return (
@@ -312,14 +343,21 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
           </div>
         </div>
 
-        <div className={styles.settingsPane} hidden={tab !== 'appearance'}>
+        <div className={styles.settingsPane} hidden={tab !== "appearance"}>
           <div>
             {snap.knobs && snap.knobs.length > 0 ? (
-              <div className={cx(appSettingsCss.appSettingsSection, styles.paneSection)}>
+              <div
+                className={cx(
+                  appSettingsCss.appSettingsSection,
+                  styles.paneSection
+                )}
+              >
                 <div className={styles.settingsSectionLabel}>Preferences</div>
                 {snap.knobs.map((knob) => (
                   <div key={knob.key} className={styles.settingsRow}>
-                    <span className={styles.settingsRowLabel}>{knob.label}</span>
+                    <span className={styles.settingsRowLabel}>
+                      {knob.label}
+                    </span>
                     <KnobControl knob={knob} onCommit={onKnobCommit} />
                   </div>
                 ))}
@@ -332,7 +370,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
           </div>
         </div>
 
-        <div className={styles.settingsPane} hidden={tab !== 'automations'}>
+        <div className={styles.settingsPane} hidden={tab !== "automations"}>
           <div>
             {snap.orders.length === 0 ? (
               <div className={appSettingsCss.appSettingsNote}>
@@ -340,9 +378,18 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
               </div>
             ) : (
               <div
-                className={cx(appSettingsCss.appSettingsSection, styles.paneSection, styles.orders)}
+                className={cx(
+                  appSettingsCss.appSettingsSection,
+                  styles.paneSection,
+                  styles.orders
+                )}
               >
-                <div className={cx(styles.settingsSectionLabel, styles.ordersLabel)}>
+                <div
+                  className={cx(
+                    styles.settingsSectionLabel,
+                    styles.ordersLabel
+                  )}
+                >
                   Standing orders
                 </div>
                 <div className={styles.ordersList}>
@@ -360,12 +407,16 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
               </div>
             )}
           </div>
-          <button type="button" className={styles.settingsPaneLink} onClick={onOpenAutomations}>
+          <button
+            type="button"
+            className={styles.settingsPaneLink}
+            onClick={onOpenAutomations}
+          >
             Open Automations →
           </button>
         </div>
 
-        <div className={styles.settingsPane} hidden={tab !== 'vault'}>
+        <div className={styles.settingsPane} hidden={tab !== "vault"}>
           <div
             ref={(node) => {
               if (node && snap.vaultVisible && !vaultMounted.current) {
@@ -376,7 +427,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
           />
         </div>
 
-        <div className={styles.settingsPane} hidden={tab !== 'manage'}>
+        <div className={styles.settingsPane} hidden={tab !== "manage"}>
           <div className={styles.settingsManage}>
             <ManageItem
               icon="Pencil"
@@ -403,7 +454,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
               type="button"
               className={cx(styles.settingsMenuItem, styles.settingsDangerItem)}
               data-danger="true"
-              data-armed={deleteArmed ? 'true' : undefined}
+              data-armed={deleteArmed ? "true" : undefined}
               onClick={() => (deleteArmed ? onDelete() : setDeleteArmed(true))}
             >
               <span className={styles.settingsMenuIcon}>
@@ -411,15 +462,18 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
               </span>
               <span className={styles.settingsMenuText}>
                 <span className={styles.settingsMenuLabel}>
-                  {bundled ? 'Uninstall app' : 'Delete app'}
+                  {bundled ? "Uninstall app" : "Delete app"}
                 </span>
                 <span className={styles.settingsMenuSub}>
                   {bundled
-                    ? 'Revokes its access. Your data stays in your vault.'
-                    : 'Removes the app, its data, and its scheduled automations.'}
+                    ? "Revokes its access. Your data stays in your vault."
+                    : "Removes the app, its data, and its scheduled automations."}
                 </span>
               </span>
-              <span className={styles.settingsConfirmPill} hidden={!deleteArmed}>
+              <span
+                className={styles.settingsConfirmPill}
+                hidden={!deleteArmed}
+              >
                 click to confirm
               </span>
             </button>

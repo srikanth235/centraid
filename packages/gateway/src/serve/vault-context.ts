@@ -15,9 +15,9 @@
  * `runWithVaultContext` with the vault it belongs to.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from "node:async_hooks";
 
-import type { DeviceRole } from './enrollment-store.js';
+import type { DeviceRole } from "./enrollment-store.js";
 
 export interface VaultRequestContext {
   /** The vault this request (or background fire) is addressed to. */
@@ -60,7 +60,9 @@ export interface DeviceAccess {
    * transport — the composed handler (`build-gateway.ts`) then refuses the
    * request unless its host supplied another proved enrollment identity.
    */
-  deviceKeyFor: (req: import('node:http').IncomingMessage) => string | undefined;
+  deviceKeyFor: (
+    req: import("node:http").IncomingMessage
+  ) => string | undefined;
   /** The vault ids this device key is enrolled in, oldest enrollment first. */
   vaultsFor: (deviceKey: string) => string[];
 }
@@ -68,7 +70,10 @@ export interface DeviceAccess {
 const storage = new AsyncLocalStorage<VaultRequestContext>();
 
 /** Run `fn` with `ctx` as the ambient vault context. */
-export function runWithVaultContext<T>(ctx: VaultRequestContext, fn: () => T): T {
+export function runWithVaultContext<T>(
+  ctx: VaultRequestContext,
+  fn: () => T
+): T {
   return storage.run(ctx, fn);
 }
 
@@ -78,4 +83,4 @@ export function vaultContext(): VaultRequestContext | undefined {
 }
 
 /** Canonical header a client names its vault with. */
-export const VAULT_HEADER = 'x-centraid-vault';
+export const VAULT_HEADER = "x-centraid-vault";

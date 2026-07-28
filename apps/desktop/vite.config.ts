@@ -1,9 +1,9 @@
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath } from "node:url";
 
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
-import { inlineBlueprintAliases } from '../../packages/client/src/react/blueprints/inline-vite-aliases.ts';
+import { inlineBlueprintAliases } from "../../packages/client/src/react/blueprints/inline-vite-aliases.ts";
 
 // Builds the React coexistence island (issue #325, Phase 0) into the same
 // dist/renderer directory the vanilla tsc output lands in, as a single ES
@@ -12,14 +12,15 @@ import { inlineBlueprintAliases } from '../../packages/client/src/react/blueprin
 // bundled statically and the strict `script-src 'self'` CSP in index.html
 // holds. `emptyOutDir: false` because the vanilla `build:ts` / `build:assets`
 // steps also write into dist/renderer and must not be wiped.
-const fromHere = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
+const fromHere = (p: string): string =>
+  fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
   // The desktop shell document loads over file://, so every emitted asset URL
   // must be relative. The default base '/' made the replica's sqlite worker
   // resolve to file:///assets/… — a path that exists nowhere — so the worker
   // request was canceled and the offline replica never started.
-  base: './',
+  base: "./",
   // Bundle @centraid/design-tokens from its TS source, not its built dist: it
   // emits CommonJS (it's also consumed by the Electron preload), and Rollup
   // can't statically read named exports from a CJS file reached through a
@@ -32,8 +33,8 @@ export default defineConfig({
     alias: [
       ...inlineBlueprintAliases(),
       {
-        find: '@centraid/design-tokens',
-        replacement: fromHere('../../packages/design-tokens/src/index.ts'),
+        find: "@centraid/design-tokens",
+        replacement: fromHere("../../packages/design-tokens/src/index.ts"),
       },
     ],
   },
@@ -48,19 +49,19 @@ export default defineConfig({
     // old opaque global `cd-*` soup. Vitest returns identity keys (its `css` is
     // off) so class-based render tests are unaffected.
     modules: {
-      localsConvention: 'camelCaseOnly',
-      generateScopedName: '[name]__[local]__[hash:base64:5]',
+      localsConvention: "camelCaseOnly",
+      generateScopedName: "[name]__[local]__[hash:base64:5]",
     },
   },
   build: {
     emptyOutDir: false,
-    outDir: 'dist/renderer',
+    outDir: "dist/renderer",
     rollupOptions: {
-      input: fromHere('../../packages/client/src/react/boot.tsx'),
+      input: fromHere("../../packages/client/src/react/boot.tsx"),
       output: {
-        assetFileNames: 'react-[name][extname]',
-        chunkFileNames: 'react-[name]-[hash].js',
-        entryFileNames: 'react-boot.js',
+        assetFileNames: "react-[name][extname]",
+        chunkFileNames: "react-[name]-[hash].js",
+        entryFileNames: "react-boot.js",
       },
     },
     sourcemap: true,

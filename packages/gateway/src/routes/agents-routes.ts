@@ -33,17 +33,21 @@
 // bearer check. A remote gateway reports its own host's CLIs, not the
 // desktop's.
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { RUNNER_BACKENDS, minVersionString, probeCliAvailability } from '@centraid/agent-runtime';
+import {
+  RUNNER_BACKENDS,
+  minVersionString,
+  probeCliAvailability,
+} from "@centraid/agent-runtime";
 import type {
   RunnerHealthEntry,
   RunnerKind,
   RunnerModel,
   SurfaceStatus,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
 
-import { sendJson } from './route-helpers.js';
+import { sendJson } from "./route-helpers.js";
 
 /**
  * A resolved catalog surface: the cached list plus its load tri-state
@@ -64,7 +68,7 @@ export interface ResolvedSurface<T> {
  */
 export type ResolveAgentModels = (
   kind: RunnerKind,
-  refresh: boolean,
+  refresh: boolean
 ) => Promise<ResolvedSurface<RunnerModel>>;
 
 /**
@@ -82,7 +86,7 @@ export type BinPathForKind = (kind: RunnerKind) => string | undefined;
  */
 export type ResolveAgentCapabilities = (
   kind: RunnerKind,
-  refresh: boolean,
+  refresh: boolean
 ) => Promise<AgentAcpCapabilities | undefined>;
 
 export type ResolveAgentHealth = (kind: RunnerKind) => RunnerHealthEntry[];
@@ -181,40 +185,44 @@ export async function readAgentsStatus(opts?: {
   const refresh = opts?.refresh ?? false;
   const emptyModels: ResolvedSurface<RunnerModel> = {
     list: [],
-    status: 'empty',
+    status: "empty",
   };
 
   const agents = await Promise.all(
-    Object.values(RUNNER_BACKENDS).map(async (backend): Promise<AgentStatusEntry> => {
-      const binPath = binPathFor?.(backend.kind);
-      const [availability, models] = await Promise.all([
-        probeCliAvailability(backend.kind, binPath),
-        resolveModels
-          ? resolveModels(backend.kind, refresh).catch(() => emptyModels)
-          : Promise.resolve(emptyModels),
-      ]);
-      const defaultModel = models.list.find((m) => m.default)?.id;
-      const capabilities =
-        availability.available && resolveCapabilities
-          ? await resolveCapabilities(backend.kind, refresh).catch(() => undefined)
-          : undefined;
-      const health = opts?.resolveHealth?.(backend.kind) ?? [];
-      return {
-        kind: backend.kind,
-        label: backend.label,
-        available: availability.available,
-        ...(availability.version ? { version: availability.version } : {}),
-        minVersion: minVersionString(backend.kind),
-        // The hint is the "what do I do about it" half of an unavailable
-        // agent; on an available one it would just be noise in the payload.
-        ...(availability.available ? {} : { hint: backend.installHint }),
-        models: models.list,
-        modelsStatus: models.status,
-        ...(defaultModel ? { defaultModel } : {}),
-        ...(capabilities ? { capabilities } : {}),
-        ...(health.length > 0 ? { health } : {}),
-      };
-    }),
+    Object.values(RUNNER_BACKENDS).map(
+      async (backend): Promise<AgentStatusEntry> => {
+        const binPath = binPathFor?.(backend.kind);
+        const [availability, models] = await Promise.all([
+          probeCliAvailability(backend.kind, binPath),
+          resolveModels
+            ? resolveModels(backend.kind, refresh).catch(() => emptyModels)
+            : Promise.resolve(emptyModels),
+        ]);
+        const defaultModel = models.list.find((m) => m.default)?.id;
+        const capabilities =
+          availability.available && resolveCapabilities
+            ? await resolveCapabilities(backend.kind, refresh).catch(
+                () => undefined
+              )
+            : undefined;
+        const health = opts?.resolveHealth?.(backend.kind) ?? [];
+        return {
+          kind: backend.kind,
+          label: backend.label,
+          available: availability.available,
+          ...(availability.version ? { version: availability.version } : {}),
+          minVersion: minVersionString(backend.kind),
+          // The hint is the "what do I do about it" half of an unavailable
+          // agent; on an available one it would just be noise in the payload.
+          ...(availability.available ? {} : { hint: backend.installHint }),
+          models: models.list,
+          modelsStatus: models.status,
+          ...(defaultModel ? { defaultModel } : {}),
+          ...(capabilities ? { capabilities } : {}),
+          ...(health.length > 0 ? { health } : {}),
+        };
+      }
+    )
   );
 
   return { agents };
@@ -234,21 +242,23 @@ export function makeAgentsRouteHandler(opts?: {
   resolveHealth?: ResolveAgentHealth;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    if (url.pathname !== '/centraid/_agents/status') return false;
-    if ((req.method ?? 'GET').toUpperCase() !== 'GET') return false;
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname !== "/centraid/_agents/status") return false;
+    if ((req.method ?? "GET").toUpperCase() !== "GET") return false;
 
-    const refresh = url.searchParams.get('refresh') === '1';
+    const refresh = url.searchParams.get("refresh") === "1";
     sendJson(
       res,
       200,
       await readAgentsStatus({
         ...(opts?.resolveModels ? { resolveModels: opts.resolveModels } : {}),
-        ...(opts?.resolveCapabilities ? { resolveCapabilities: opts.resolveCapabilities } : {}),
+        ...(opts?.resolveCapabilities
+          ? { resolveCapabilities: opts.resolveCapabilities }
+          : {}),
         ...(opts?.binPathFor ? { binPathFor: opts.binPathFor } : {}),
         ...(opts?.resolveHealth ? { resolveHealth: opts.resolveHealth } : {}),
         refresh,
-      }),
+      })
     );
     return true;
   };

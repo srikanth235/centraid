@@ -10,15 +10,15 @@
 // bar gave; the Assistant spine — the primary action — fires a heavier `Medium`
 // impact so it reads as the more consequential tap.
 
-import type { IconName } from '@centraid/design-tokens';
-import * as Haptics from 'expo-haptics';
-import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { IconName } from "@centraid/design-tokens";
+import * as Haptics from "expo-haptics";
+import React, { useMemo } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import GlassBar from '../../kit/components/GlassBar';
-import Icon from '../../kit/components/Icon';
-import { family, useTheme, type ThemeColors } from '../../kit/theme';
+import GlassBar from "../../kit/components/GlassBar";
+import Icon from "../../kit/components/Icon";
+import { family, useTheme, type ThemeColors } from "../../kit/theme";
 
 export interface GlassDockProps {
   onSearch: () => void;
@@ -120,13 +120,13 @@ const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     centerGap: { width: 76 },
     fab: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.accent,
       borderRadius: 30,
       elevation: 8,
       height: 60,
-      justifyContent: 'center',
-      overflow: 'hidden',
+      justifyContent: "center",
+      overflow: "hidden",
       shadowColor: colors.accent,
       shadowOffset: { height: 8, width: 0 },
       shadowOpacity: 0.45,
@@ -134,25 +134,25 @@ const makeStyles = (colors: ThemeColors) =>
       width: 60,
     },
     fabHighlight: {
-      backgroundColor: 'rgba(255,255,255,0.22)',
+      backgroundColor: "rgba(255,255,255,0.22)",
       borderTopLeftRadius: 30,
       borderTopRightRadius: 30,
-      height: '52%',
+      height: "52%",
       left: 0,
-      position: 'absolute',
+      position: "absolute",
       right: 0,
       top: 0,
     },
     fabLayer: {
-      alignItems: 'center',
+      alignItems: "center",
       left: 0,
-      position: 'absolute',
+      position: "absolute",
       right: 0,
       // Raise the spine so it straddles the pill's top edge.
       top: -22,
     },
     slot: {
-      alignItems: 'center',
+      alignItems: "center",
       gap: 3,
       paddingHorizontal: 18,
       paddingVertical: 4,
@@ -163,18 +163,18 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: 10,
     },
     slots: {
-      alignItems: 'center',
-      flexDirection: 'row',
+      alignItems: "center",
+      flexDirection: "row",
       height: 60,
-      justifyContent: 'space-between',
+      justifyContent: "space-between",
       paddingHorizontal: 14,
     },
     wrap: {
-      alignItems: 'center',
+      alignItems: "center",
       bottom: 0,
       left: 0,
       paddingHorizontal: 24,
-      position: 'absolute',
+      position: "absolute",
       right: 0,
     },
   });

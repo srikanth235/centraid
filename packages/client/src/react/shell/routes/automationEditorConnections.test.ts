@@ -1,49 +1,48 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from "vitest";
 
-import type { ConnectionRowDTO } from '../../screens/SettingsConnectionsScreen.js';
-import { matchEditorConnection } from './AutomationEditorRoute.js';
+import type { ConnectionRowDTO } from "../../screens/SettingsConnectionsScreen.js";
+import { matchEditorConnection } from "./AutomationEditorRoute.js";
 
-vi.mock(import('../../../gateway-client.js'), () => ({}));
-vi.mock(import('../../../assist-oauth-handoff.js'), () => ({}));
+vi.mock(import("../../../gateway-client.js"), () => ({}));
+vi.mock(import("../../../assist-oauth-handoff.js"), () => ({}));
 
 function row(over: Partial<ConnectionRowDTO>): ConnectionRowDTO {
   return {
     authNote: null,
-    connectionId: 'connection-1',
-    credKind: 'api_key',
-    health: 'ok',
-    kind: 'pull.github',
-    label: 'GitHub · personal',
+    connectionId: "connection-1",
+    credKind: "api_key",
+    health: "ok",
+    kind: "pull.github",
+    label: "GitHub · personal",
     lastRunAt: null,
-    principal: 'octocat',
-    provider: 'github',
+    principal: "octocat",
+    provider: "github",
     ...over,
   };
 }
 
 describe(matchEditorConnection, () => {
-  it('requires an exact provider as well as connector kind', () => {
+  it("requires an exact provider as well as connector kind", () => {
     const result = matchEditorConnection(
-      [row({ provider: 'attacker-provider' })],
-      'github',
-      'pull.github',
+      [row({ provider: "attacker-provider" })],
+      "github",
+      "pull.github"
     );
     expect(result).toStrictEqual({ match: null, matches: [] });
   });
 
-  it('refuses to guess between multiple accounts', () => {
+  it("refuses to guess between multiple accounts", () => {
     const result = matchEditorConnection(
       [
-        row({ connectionId: 'personal', label: 'GitHub · personal' }),
-        row({ connectionId: 'work', label: 'GitHub · work' }),
+        row({ connectionId: "personal", label: "GitHub · personal" }),
+        row({ connectionId: "work", label: "GitHub · work" }),
       ],
-      'github',
-      'pull.github',
+      "github",
+      "pull.github"
     );
     expect(result.match).toBeNull();
-    expect(result.matches.map((candidate) => candidate.connectionId)).toStrictEqual([
-      'personal',
-      'work',
-    ]);
+    expect(
+      result.matches.map((candidate) => candidate.connectionId)
+    ).toStrictEqual(["personal", "work"]);
   });
 });

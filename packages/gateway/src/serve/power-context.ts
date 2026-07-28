@@ -29,19 +29,19 @@
  * and refreshes cached reads at most every 60s.
  */
 
-import { execFile } from 'node:child_process';
-import { readFileSync, promises as fs } from 'node:fs';
+import { execFile } from "node:child_process";
+import { readFileSync, promises as fs } from "node:fs";
 
-export type PowerContextKind = 'battery' | 'mains' | 'server';
-export type ThermalPressure = 'nominal' | 'fair' | 'serious' | 'critical';
+export type PowerContextKind = "battery" | "mains" | "server";
+export type ThermalPressure = "nominal" | "fair" | "serious" | "critical";
 
 export interface PowerContextState {
   kind: PowerContextKind;
   /** null when the host has no battery — this null gates ALL battery chrome in the UI */
   battery: { percent: number | null; charging: boolean | null } | null;
   deferringBackgroundWork: boolean;
-  reason: 'on-battery' | 'low-battery' | 'thermal' | null;
-  source: 'os-probe' | 'client-push' | 'none';
+  reason: "on-battery" | "low-battery" | "thermal" | null;
+  source: "os-probe" | "client-push" | "none";
   /** CPU steal percent measured between snapshot reads on Linux, null elsewhere/unknown */
   stealPercent: number | null;
   updatedAt: number | null;
@@ -90,31 +90,37 @@ export function evaluatePosture(input: {
   discharging: boolean | null;
   thermalPressure: ThermalPressure | null;
   stealPercent: number | null;
-  source: PowerContextState['source'];
+  source: PowerContextState["source"];
   updatedAt: number | null;
 }): PowerContextState {
   const kind: PowerContextKind = input.hasBattery
     ? input.discharging === true
-      ? 'battery'
-      : 'mains'
-    : input.platform === 'linux'
-      ? 'server'
-      : 'mains';
+      ? "battery"
+      : "mains"
+    : input.platform === "linux"
+      ? "server"
+      : "mains";
 
   const thermalStressed =
-    input.thermalPressure === 'serious' || input.thermalPressure === 'critical';
-  let reason: PowerContextState['reason'] = null;
-  if (input.discharging === true && input.percent !== null && input.percent < PERCENT_LOW_FLOOR) {
-    reason = 'low-battery';
+    input.thermalPressure === "serious" || input.thermalPressure === "critical";
+  let reason: PowerContextState["reason"] = null;
+  if (
+    input.discharging === true &&
+    input.percent !== null &&
+    input.percent < PERCENT_LOW_FLOOR
+  ) {
+    reason = "low-battery";
   } else if (thermalStressed) {
-    reason = 'thermal';
+    reason = "thermal";
   } else if (input.discharging === true) {
-    reason = 'on-battery';
+    reason = "on-battery";
   }
 
   return {
     kind,
-    battery: input.hasBattery ? { percent: input.percent, charging: input.charging } : null,
+    battery: input.hasBattery
+      ? { percent: input.percent, charging: input.charging }
+      : null,
     deferringBackgroundWork: reason !== null,
     reason,
     source: input.source,
@@ -125,11 +131,11 @@ export function evaluatePosture(input: {
 
 /** Default host battery probe. Failure-tolerant: resolves `null` on any error/unknown platform. */
 export async function defaultBatteryProbe(
-  platform: NodeJS.Platform,
+  platform: NodeJS.Platform
 ): Promise<BatteryProbeResult | null> {
   try {
-    if (platform === 'darwin') return parsePmset(await runPmset());
-    if (platform === 'linux') return await readLinuxBattery();
+    if (platform === "darwin") return parsePmset(await runPmset());
+    if (platform === "linux") return await readLinuxBattery();
   } catch {
     return null;
   }
@@ -138,7 +144,7 @@ export async function defaultBatteryProbe(
 
 function runPmset(): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('pmset', ['-g', 'batt'], { timeout: 2_000 }, (err, stdout) => {
+    execFile("pmset", ["-g", "batt"], { timeout: 2_000 }, (err, stdout) => {
       if (err) reject(err);
       else resolve(stdout);
     });
@@ -152,8 +158,10 @@ export function parsePmset(out: string): BatteryProbeResult {
   }
   const percentMatch = out.match(/(?<percent>\d+)%/u);
   const percent = percentMatch ? Number(percentMatch.groups?.percent) : null;
-  const onBattery = /'Battery Power'/u.test(out) || /;\s*discharging/u.test(out);
-  const charging = /'AC Power'/u.test(out) || /;\s*(?:charging|charged)/u.test(out);
+  const onBattery =
+    /'Battery Power'/u.test(out) || /;\s*discharging/u.test(out);
+  const charging =
+    /'AC Power'/u.test(out) || /;\s*(?:charging|charged)/u.test(out);
   return {
     present: true,
     percent,
@@ -163,7 +171,7 @@ export function parsePmset(out: string): BatteryProbeResult {
 }
 
 async function readLinuxBattery(): Promise<BatteryProbeResult | null> {
-  const base = '/sys/class/power_supply';
+  const base = "/sys/class/power_supply";
   let names: string[];
   try {
     names = await fs.readdir(base);
@@ -182,18 +190,19 @@ async function readLinuxBattery(): Promise<BatteryProbeResult | null> {
     }
     let type: string;
     try {
-      type = (await fs.readFile(`${base}/${name}/type`, 'utf8')).trim();
+      type = (await fs.readFile(`${base}/${name}/type`, "utf8")).trim();
     } catch {
       return findBattery(index + 1);
     }
-    if (type !== 'Battery') return findBattery(index + 1);
+    if (type !== "Battery") return findBattery(index + 1);
     const capacity = await readNumberFile(`${base}/${name}/capacity`);
     const status = (await readTextFile(`${base}/${name}/status`))?.trim();
     return {
       present: true,
       percent: capacity,
-      charging: status === null ? null : status === 'Charging' || status === 'Full',
-      discharging: status === null ? null : status === 'Discharging',
+      charging:
+        status === null ? null : status === "Charging" || status === "Full",
+      discharging: status === null ? null : status === "Discharging",
     };
   };
   return findBattery(0);
@@ -206,17 +215,19 @@ async function readNumberFile(path: string): Promise<number | null> {
 }
 
 async function readTextFile(path: string): Promise<string | null> {
-  return fs.readFile(path, 'utf8').catch(() => null);
+  return fs.readFile(path, "utf8").catch(() => null);
 }
 
 /** Default linux steal sampler — the `cpu ` aggregate line of `/proc/stat`. */
-export function defaultStealSampler(platform: NodeJS.Platform): () => CpuStealSample | null {
-  if (platform !== 'linux') return () => null;
+export function defaultStealSampler(
+  platform: NodeJS.Platform
+): () => CpuStealSample | null {
+  if (platform !== "linux") return () => null;
   return () => {
     try {
-      const line = readFileSync('/proc/stat', 'utf8')
-        .split('\n')
-        .find((l) => l.startsWith('cpu '));
+      const line = readFileSync("/proc/stat", "utf8")
+        .split("\n")
+        .find((l) => l.startsWith("cpu "));
       if (!line) return null;
       const cols = line.trim().split(/\s+/u).slice(1).map(Number);
       if (cols.length < 8 || cols.some((n) => !Number.isFinite(n))) return null;
@@ -231,7 +242,9 @@ export function defaultStealSampler(platform: NodeJS.Platform): () => CpuStealSa
 export interface PowerContextMonitorOptions {
   platform?: NodeJS.Platform;
   now?: () => number;
-  probeBattery?: (platform: NodeJS.Platform) => Promise<BatteryProbeResult | null>;
+  probeBattery?: (
+    platform: NodeJS.Platform
+  ) => Promise<BatteryProbeResult | null>;
   readStealSample?: () => CpuStealSample | null;
   /** Fired when the deferring bit toggles (or first becomes true) — never on the boring boot false. */
   onDeferringChange?: (state: PowerContextState) => void;
@@ -246,7 +259,9 @@ export interface PowerContextMonitorOptions {
 export class PowerContextMonitor {
   private readonly platform: NodeJS.Platform;
   private readonly now: () => number;
-  private readonly probeBattery: (p: NodeJS.Platform) => Promise<BatteryProbeResult | null>;
+  private readonly probeBattery: (
+    p: NodeJS.Platform
+  ) => Promise<BatteryProbeResult | null>;
   private readonly readStealSample: () => CpuStealSample | null;
   private readonly onDeferringChange?: (state: PowerContextState) => void;
 
@@ -273,8 +288,10 @@ export class PowerContextMonitor {
     this.platform = options.platform ?? process.platform;
     this.now = options.now ?? Date.now;
     this.probeBattery = options.probeBattery ?? defaultBatteryProbe;
-    this.readStealSample = options.readStealSample ?? defaultStealSampler(this.platform);
-    if (options.onDeferringChange) this.onDeferringChange = options.onDeferringChange;
+    this.readStealSample =
+      options.readStealSample ?? defaultStealSampler(this.platform);
+    if (options.onDeferringChange)
+      this.onDeferringChange = options.onDeferringChange;
     this.ready = this.refreshBattery(this.now());
   }
 
@@ -302,7 +319,8 @@ export class PowerContextMonitor {
   snapshot(): PowerContextState {
     const now = this.now();
     const stale =
-      this.batteryReadAtMs === undefined || now - this.batteryReadAtMs >= READ_REFRESH_MS;
+      this.batteryReadAtMs === undefined ||
+      now - this.batteryReadAtMs >= READ_REFRESH_MS;
     if (!this.refreshing && stale) void this.refreshBattery(now);
     this.refreshSteal(now);
 
@@ -341,14 +359,14 @@ export class PowerContextMonitor {
       thermalPressure = null;
     }
 
-    const source: PowerContextState['source'] = push
-      ? 'client-push'
+    const source: PowerContextState["source"] = push
+      ? "client-push"
       : this.bootProbeDone && this.bootProbeOk
-        ? 'os-probe'
-        : 'none';
+        ? "os-probe"
+        : "none";
     const updatedAt = push
       ? push.atMs
-      : source === 'os-probe'
+      : source === "os-probe"
         ? (this.batteryReadAtMs ?? null)
         : null;
 
@@ -365,7 +383,12 @@ export class PowerContextMonitor {
     });
 
     if (this.lastDeferring !== state.deferringBackgroundWork) {
-      if (!(this.lastDeferring === undefined && state.deferringBackgroundWork === false)) {
+      if (
+        !(
+          this.lastDeferring === undefined &&
+          state.deferringBackgroundWork === false
+        )
+      ) {
         this.onDeferringChange?.(state);
       }
       this.lastDeferring = state.deferringBackgroundWork;
@@ -389,11 +412,15 @@ export class PowerContextMonitor {
   }
 
   private refreshSteal(now: number): void {
-    if (this.platform !== 'linux') {
+    if (this.platform !== "linux") {
       this.stealPercent = null;
       return;
     }
-    if (this.stealReadAtMs !== undefined && now - this.stealReadAtMs < READ_REFRESH_MS) return;
+    if (
+      this.stealReadAtMs !== undefined &&
+      now - this.stealReadAtMs < READ_REFRESH_MS
+    )
+      return;
     const sample = this.readStealSample();
     this.stealReadAtMs = now;
     if (!sample) return;

@@ -9,7 +9,7 @@
  * item:null, never an error.
  */
 
-import { readTags, readStarred } from './items.ts';
+import { readTags, readStarred } from "./items.ts";
 
 interface FullRow {
   item_id: string;
@@ -18,7 +18,7 @@ interface FullRow {
   username?: string | null;
   password?: string | null;
   url?: string | null;
-  url_match_policy?: 'registrable-domain' | 'exact-host' | null;
+  url_match_policy?: "registrable-domain" | "exact-host" | null;
   otp_seed?: string | null;
   notes?: string | null;
   cardholder?: string | null;
@@ -38,8 +38,14 @@ interface FullRow {
   updated_at?: string;
 }
 
-type SealedField = 'password' | 'otp_seed' | 'card_number' | 'cvv' | 'content';
-const SEALED_FIELDS: SealedField[] = ['password', 'otp_seed', 'card_number', 'cvv', 'content'];
+type SealedField = "password" | "otp_seed" | "card_number" | "cvv" | "content";
+const SEALED_FIELDS: SealedField[] = [
+  "password",
+  "otp_seed",
+  "card_number",
+  "cvv",
+  "content",
+];
 
 export default async function itemHandler({
   input,
@@ -48,13 +54,13 @@ export default async function itemHandler({
   input?: Record<string, unknown>;
   ctx: HandlerCtx;
 }) {
-  const purpose = 'dpv:ServiceProvision';
-  const itemId = String(input?.item_id ?? '');
+  const purpose = "dpv:ServiceProvision";
+  const itemId = String(input?.item_id ?? "");
   if (!itemId) return { item: null };
   try {
     const res = await ctx.vault.read({
-      entity: 'locker.item',
-      where: [{ column: 'item_id', op: 'eq', value: itemId }],
+      entity: "locker.item",
+      where: [{ column: "item_id", op: "eq", value: itemId }],
       purpose,
     });
     const row = ((res.rows ?? []) as unknown as FullRow[])[0];
@@ -63,12 +69,13 @@ export default async function itemHandler({
     // consent-checked under the app's `reveal` scope, receipted per open.
     try {
       const revealed = (await ctx.vault.reveal({
-        entity: 'locker.item',
+        entity: "locker.item",
         entityId: itemId,
         columns: SEALED_FIELDS,
         purpose,
       })) as { values?: Partial<Record<SealedField, string | null>> };
-      for (const field of SEALED_FIELDS) row[field] = revealed.values?.[field] ?? null;
+      for (const field of SEALED_FIELDS)
+        row[field] = revealed.values?.[field] ?? null;
     } catch {
       // No reveal grant: the pane still renders, secrets stay placeholders.
     }
@@ -83,7 +90,7 @@ export default async function itemHandler({
       username: row.username ?? null,
       password: row.password ?? null,
       url: row.url ?? null,
-      url_match_policy: row.url_match_policy ?? 'registrable-domain',
+      url_match_policy: row.url_match_policy ?? "registrable-domain",
       otp_seed: row.otp_seed ?? null,
       notes: row.notes ?? null,
       cardholder: row.cardholder ?? null,

@@ -1,9 +1,9 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { sealedColumnsOf } from '../schema/sealed.js';
-import { resolveEntity } from '../schema/tables.js';
-import { currentReplicaLogState, type ReplicaLogState } from './change-log.js';
-import { replicaUnavailableColumnsOf } from './unavailable-columns.js';
+import { sealedColumnsOf } from "../schema/sealed.js";
+import { resolveEntity } from "../schema/tables.js";
+import { currentReplicaLogState, type ReplicaLogState } from "./change-log.js";
+import { replicaUnavailableColumnsOf } from "./unavailable-columns.js";
 
 export const DEFAULT_REPLICA_MAX_VALUE_BYTES = 64 * 1_024;
 
@@ -48,7 +48,8 @@ function quoteIdentifier(value: string): string {
 
 function shapeOf(vault: DatabaseSync, entity: string): EntityShape {
   const ref = resolveEntity(entity, vault);
-  if (!ref || ref.file !== 'vault') throw new Error(`unknown replica entity "${entity}"`);
+  if (!ref || ref.file !== "vault")
+    throw new Error(`unknown replica entity "${entity}"`);
   const info = vault
     .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
     .all() as unknown as ColumnInfo[];
@@ -57,7 +58,9 @@ function shapeOf(vault: DatabaseSync, entity: string): EntityShape {
   return {
     entity,
     physical: ref.physical,
-    columns: info.map((column) => column.name).filter((column) => !unavailable.has(column)),
+    columns: info
+      .map((column) => column.name)
+      .filter((column) => !unavailable.has(column)),
     sealedColumns: sealed,
     primaryKey: info
       .filter((column) => column.pk > 0)
@@ -67,8 +70,9 @@ function shapeOf(vault: DatabaseSync, entity: string): EntityShape {
 }
 
 function rowIdOf(row: Record<string, unknown>, primaryKey: string[]): string {
-  if (primaryKey.length === 0) throw new Error('replica entities must have a primary key');
-  if (primaryKey.length === 1) return String(row[primaryKey[0] ?? '']);
+  if (primaryKey.length === 0)
+    throw new Error("replica entities must have a primary key");
+  if (primaryKey.length === 1) return String(row[primaryKey[0] ?? ""]);
   return JSON.stringify(primaryKey.map((column) => row[column]));
 }
 
@@ -78,17 +82,19 @@ function keyValues(rowId: string, primaryKey: string[]): unknown[] {
   try {
     parsed = JSON.parse(rowId) as unknown;
   } catch {
-    throw new Error('composite replica row id must be a JSON array');
+    throw new Error("composite replica row id must be a JSON array");
   }
   if (!Array.isArray(parsed) || parsed.length !== primaryKey.length) {
-    throw new Error(`composite replica row id must contain ${primaryKey.length} values`);
+    throw new Error(
+      `composite replica row id must contain ${primaryKey.length} values`
+    );
   }
   return parsed;
 }
 
 function valueBytes(value: unknown): number {
   if (value === null || value === undefined) return 0;
-  if (typeof value === 'string') return Buffer.byteLength(value);
+  if (typeof value === "string") return Buffer.byteLength(value);
   if (value instanceof Uint8Array) return value.byteLength;
   return Buffer.byteLength(String(value));
 }
@@ -96,7 +102,7 @@ function valueBytes(value: unknown): number {
 function publicRow(
   raw: Record<string, unknown>,
   shape: EntityShape,
-  maxValueBytes: number,
+  maxValueBytes: number
 ): ReplicaRow {
   const values: Record<string, unknown> = {};
   const deferredColumns: string[] = [];
@@ -119,12 +125,17 @@ function validateOptions(options: ReadReplicaRowsOptions): {
   maxValueBytes: number;
 } {
   const limit = options.limit ?? 1_000;
-  const maxValueBytes = options.maxValueBytes ?? DEFAULT_REPLICA_MAX_VALUE_BYTES;
+  const maxValueBytes =
+    options.maxValueBytes ?? DEFAULT_REPLICA_MAX_VALUE_BYTES;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
-    throw new RangeError('replica row page limit must be an integer between 1 and 10000');
+    throw new RangeError(
+      "replica row page limit must be an integer between 1 and 10000"
+    );
   }
   if (!Number.isSafeInteger(maxValueBytes) || maxValueBytes < 0) {
-    throw new RangeError('replica maxValueBytes must be a non-negative safe integer');
+    throw new RangeError(
+      "replica maxValueBytes must be a non-negative safe integer"
+    );
   }
   return { limit, maxValueBytes };
 }
@@ -136,35 +147,38 @@ function validateOptions(options: ReadReplicaRowsOptions): {
 export function readReplicaRows(
   vault: DatabaseSync,
   entity: string,
-  options: ReadReplicaRowsOptions = {},
+  options: ReadReplicaRowsOptions = {}
 ): ReplicaRowsPage {
   const shape = shapeOf(vault, entity);
   if (shape.primaryKey.length === 0) {
     throw new Error(`replica entity "${entity}" has no primary key`);
   }
   const { limit, maxValueBytes } = validateOptions(options);
-  const selected = shape.columns.map(quoteIdentifier).join(', ');
-  const order = shape.primaryKey.map(quoteIdentifier).join(', ');
-  let where = '';
+  const selected = shape.columns.map(quoteIdentifier).join(", ");
+  const order = shape.primaryKey.map(quoteIdentifier).join(", ");
+  let where = "";
   let params: unknown[] = [];
   if (options.after !== undefined) {
     const values = keyValues(options.after, shape.primaryKey);
     const lhs =
       shape.primaryKey.length === 1
-        ? quoteIdentifier(shape.primaryKey[0] ?? '')
-        : `(${shape.primaryKey.map(quoteIdentifier).join(', ')})`;
-    const rhs = shape.primaryKey.length === 1 ? '?' : `(${values.map(() => '?').join(', ')})`;
+        ? quoteIdentifier(shape.primaryKey[0] ?? "")
+        : `(${shape.primaryKey.map(quoteIdentifier).join(", ")})`;
+    const rhs =
+      shape.primaryKey.length === 1
+        ? "?"
+        : `(${values.map(() => "?").join(", ")})`;
     where = ` WHERE ${lhs} > ${rhs}`;
     params = values;
   }
   const rawRows = vault
     .prepare(
       `SELECT ${selected} FROM ${quoteIdentifier(shape.physical)}${where}
-        ORDER BY ${order} LIMIT ?`,
+        ORDER BY ${order} LIMIT ?`
     )
     .all(
       ...(params as (string | number | bigint | Uint8Array | null)[]),
-      limit + 1,
+      limit + 1
     ) as unknown as Record<string, unknown>[];
   const hasMore = rawRows.length > limit;
   const pageRows = hasMore ? rawRows.slice(0, limit) : rawRows;
@@ -184,7 +198,7 @@ export function readReplicaRow(
   vault: DatabaseSync,
   entity: string,
   rowId: string,
-  options: Pick<ReadReplicaRowsOptions, 'maxValueBytes'> = {},
+  options: Pick<ReadReplicaRowsOptions, "maxValueBytes"> = {}
 ): ReplicaRow | undefined {
   const shape = shapeOf(vault, entity);
   if (shape.primaryKey.length === 0) {
@@ -192,10 +206,14 @@ export function readReplicaRow(
   }
   const { maxValueBytes } = validateOptions({ ...options, limit: 1 });
   const values = keyValues(rowId, shape.primaryKey);
-  const where = shape.primaryKey.map((column) => `${quoteIdentifier(column)} = ?`).join(' AND ');
-  const selected = shape.columns.map(quoteIdentifier).join(', ');
+  const where = shape.primaryKey
+    .map((column) => `${quoteIdentifier(column)} = ?`)
+    .join(" AND ");
+  const selected = shape.columns.map(quoteIdentifier).join(", ");
   const raw = vault
-    .prepare(`SELECT ${selected} FROM ${quoteIdentifier(shape.physical)} WHERE ${where}`)
+    .prepare(
+      `SELECT ${selected} FROM ${quoteIdentifier(shape.physical)} WHERE ${where}`
+    )
     .get(...(values as (string | number | bigint | Uint8Array | null)[])) as
     | Record<string, unknown>
     | undefined;
@@ -204,11 +222,14 @@ export function readReplicaRow(
 
 export interface ReplicaSnapshotReader {
   state: ReplicaLogState;
-  readRows: (entity: string, options?: ReadReplicaRowsOptions) => ReplicaRowsPage;
+  readRows: (
+    entity: string,
+    options?: ReadReplicaRowsOptions
+  ) => ReplicaRowsPage;
   readRow: (
     entity: string,
     rowId: string,
-    options?: Pick<ReadReplicaRowsOptions, 'maxValueBytes'>,
+    options?: Pick<ReadReplicaRowsOptions, "maxValueBytes">
   ) => ReplicaRow | undefined;
 }
 
@@ -224,21 +245,22 @@ export interface ReplicaSnapshotResult<T> {
  */
 export function withReplicaSnapshot<T>(
   vault: DatabaseSync,
-  read: (reader: ReplicaSnapshotReader) => T,
+  read: (reader: ReplicaSnapshotReader) => T
 ): ReplicaSnapshotResult<T> {
-  vault.exec('BEGIN');
+  vault.exec("BEGIN");
   try {
     const state = currentReplicaLogState(vault);
     const reader: ReplicaSnapshotReader = {
       state,
       readRows: (entity, options) => readReplicaRows(vault, entity, options),
-      readRow: (entity, rowId, options) => readReplicaRow(vault, entity, rowId, options),
+      readRow: (entity, rowId, options) =>
+        readReplicaRow(vault, entity, rowId, options),
     };
     const value = read(reader);
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     return { state, value };
   } catch (error) {
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     throw error;
   }
 }

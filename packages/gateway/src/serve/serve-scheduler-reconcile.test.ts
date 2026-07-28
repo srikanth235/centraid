@@ -1,5 +1,5 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
 /*
  * Scheduler-on-publish reconcile (issue #149). A publish over HTTP must
  * resync the in-process cron scheduler — `serve()` reconciles in onAppLive
@@ -7,14 +7,15 @@ import { forEachSequentially } from '@centraid/test-kit/sequential';
  * git-store gateway with an injected spy scheduler and asserts a publish
  * triggers a reconcile carrying the scanned automation rows.
  */
+import path from "node:path";
 
-import { describe, afterEach, beforeEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import type * as automation from '@centraid/automation';
-import { serve, type GatewayServeHandle } from './serve.ts';
-import type { GatewayPaths } from '../paths.ts';
+import type * as automation from "@centraid/automation";
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
+import type { GatewayPaths } from "../paths.ts";
+import { serve, type GatewayServeHandle } from "./serve.ts";
 
 let dataDir: string;
 let handle: GatewayServeHandle;
@@ -23,7 +24,7 @@ let started: number;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    vaultDir: path.join(dir, 'vault'),
+    vaultDir: path.join(dir, "vault"),
   };
 }
 
@@ -56,7 +57,7 @@ function bootstrapRejectingScheduler(): automation.LocalScheduler {
       return [];
     },
     async reconcile(desired) {
-      if (desired.length > 0) throw new Error('cursor bootstrap failed');
+      if (desired.length > 0) throw new Error("cursor bootstrap failed");
       return { added: [], updated: [], removed: [] };
     },
     nudge() {},
@@ -71,41 +72,41 @@ function auth(): Record<string, string> {
 
 const APP_JSON = JSON.stringify({
   manifestVersion: 1,
-  id: 'brief',
-  name: 'Brief',
-  version: '0.1.0',
-  kind: 'automation',
+  id: "brief",
+  name: "Brief",
+  version: "0.1.0",
+  kind: "automation",
   actions: [],
   queries: [],
 });
 
 const AUTOMATION_JSON = JSON.stringify({
-  name: 'Brief',
-  version: '0.1.0',
+  name: "Brief",
+  version: "0.1.0",
   enabled: true,
-  prompt: 'do the thing',
-  triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
+  prompt: "do the thing",
+  triggers: [{ kind: "cron", expr: "0 9 * * *" }],
   requires: {},
   history: { keep: { count: 100 } },
-  generated: { by: 'centraid-builder', at: '2026-01-01T00:00:00.000Z' },
+  generated: { by: "centraid-builder", at: "2026-01-01T00:00:00.000Z" },
 });
 
 const DATA_AUTOMATION_JSON = JSON.stringify({
-  name: 'Brief',
-  version: '0.1.0',
+  name: "Brief",
+  version: "0.1.0",
   enabled: true,
-  prompt: 'record that a party changed',
-  triggers: [{ kind: 'data', entities: ['core.party'] }],
+  prompt: "record that a party changed",
+  triggers: [{ kind: "data", entities: ["core.party"] }],
   requires: {},
   vault: {
-    purpose: 'dpv:ServiceProvision',
-    scopes: [{ schema: 'core', table: 'party', verbs: 'read' }],
+    purpose: "dpv:ServiceProvision",
+    scopes: [{ schema: "core", table: "party", verbs: "read" }],
   },
   history: { keep: { count: 100 } },
-  generated: { by: 'centraid-builder', at: '2026-01-01T00:00:00.000Z' },
+  generated: { by: "centraid-builder", at: "2026-01-01T00:00:00.000Z" },
 });
 
-describe('serve-scheduler-reconcile scenarios', () => {
+describe("serve-scheduler-reconcile scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-sched-${crypto.randomUUID()}-`);
     reconcileCalls = [];
@@ -121,51 +122,61 @@ describe('serve-scheduler-reconcile scenarios', () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  async function waitFor(pred: () => boolean | Promise<boolean>, ms = 3000): Promise<void> {
+  async function waitFor(
+    pred: () => boolean | Promise<boolean>,
+    ms = 3000
+  ): Promise<void> {
     const start = Date.now();
     const waitForNext = async (): Promise<void> => {
       if (await pred()) return;
-      if (Date.now() - start > ms) throw new Error('timeout waiting for condition');
+      if (Date.now() - start > ms)
+        throw new Error("timeout waiting for condition");
       await new Promise((resolve) => setTimeout(resolve, 25));
       return waitForNext();
     };
     return waitForNext();
   }
 
-  async function publishBrief(manifest = AUTOMATION_JSON, expectedStatus = 201): Promise<Response> {
+  async function publishBrief(
+    manifest = AUTOMATION_JSON,
+    expectedStatus = 201
+  ): Promise<Response> {
     await fetch(`${handle.url}/centraid/_apps/_sessions`, {
-      method: 'POST',
-      headers: { ...auth(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: 's1' }),
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "s1" }),
     });
     await forEachSequentially(
       [
-        ['app.json', APP_JSON],
-        ['automations/brief/automation.json', manifest],
+        ["app.json", APP_JSON],
+        ["automations/brief/automation.json", manifest],
         [
-          'automations/brief/handler.js',
+          "automations/brief/handler.js",
           'export default async () => ({ summary: "party change observed" });\n',
         ],
       ] as const,
       async ([rel, content]) => {
-        const res = await fetch(`${handle.url}/centraid/_apps/brief/files/${rel}?sessionId=s1`, {
-          method: 'PUT',
-          headers: auth(),
-          body: content,
-        });
+        const res = await fetch(
+          `${handle.url}/centraid/_apps/brief/files/${rel}?sessionId=s1`,
+          {
+            method: "PUT",
+            headers: auth(),
+            body: content,
+          }
+        );
         expect(res.status).toBe(200);
-      },
+      }
     );
     const pub = await fetch(`${handle.url}/centraid/_apps/brief/publish`, {
-      method: 'POST',
-      headers: { ...auth(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: 's1', message: 'add brief' }),
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "s1", message: "add brief" }),
     });
     expect(pub.status).toBe(expectedStatus);
     return pub;
   }
 
-  test('publishing an automation triggers a scheduler reconcile with the new rows', async () => {
+  test("publishing an automation triggers a scheduler reconcile with the new rows", async () => {
     // Startup reconcile already ran (empty store). Record the baseline.
     await waitFor(() => reconcileCalls.length >= 1);
     const baseline = reconcileCalls.length;
@@ -176,12 +187,12 @@ describe('serve-scheduler-reconcile scenarios', () => {
     // The publish's onAppLive reconciled the scheduler with the new row.
     await waitFor(() => reconcileCalls.length > baseline);
     const last = reconcileCalls.at(-1)!;
-    expect(last.rows.map((r) => r.ref)).toStrictEqual(['brief/brief']);
+    expect(last.rows.map((r) => r.ref)).toStrictEqual(["brief/brief"]);
     // The gateway started its scheduler exactly once, on boot.
     expect(started).toBe(1);
   });
 
-  test('publish does not report ready when a data cursor bootstrap fails', async () => {
+  test("publish does not report ready when a data cursor bootstrap fails", async () => {
     await handle.close();
     handle = await serve({
       paths: pathsUnder(dataDir),
@@ -189,10 +200,10 @@ describe('serve-scheduler-reconcile scenarios', () => {
     });
 
     const response = await publishBrief(DATA_AUTOMATION_JSON, 500);
-    await expect(response.text()).resolves.toContain('cursor bootstrap failed');
+    await expect(response.text()).resolves.toContain("cursor bootstrap failed");
   });
 
-  test('a committed watched entity fires a data automation in well under a second', async () => {
+  test("a committed watched entity fires a data automation in well under a second", async () => {
     // Exercise the real scheduler behind a live HTTP gateway, not the spy used
     // by the reconcile test above.
     await handle.close();
@@ -205,28 +216,30 @@ describe('serve-scheduler-reconcile scenarios', () => {
     const cursor = plane.db.journal
       .prepare(
         `SELECT position_json FROM automation_trigger_cursor
-        WHERE automation_id = 'brief/brief' AND trigger_index = 0`,
+        WHERE automation_id = 'brief/brief' AND trigger_index = 0`
       )
       .get();
     expect(cursor).toBeTruthy();
     const startedAt = Date.now();
     const outcome = plane.gateway.invoke(plane.ownerCredential, {
-      command: 'core.add_party',
-      input: { display_name: 'Doorbell Test' },
-      purpose: 'dpv:ServiceProvision',
+      command: "core.add_party",
+      input: { display_name: "Doorbell Test" },
+      purpose: "dpv:ServiceProvision",
     });
-    expect(outcome.status).toBe('executed');
+    expect(outcome.status).toBe("executed");
     expect(
       plane.db.journal
-        .prepare(`SELECT count(*) AS n FROM consent_provenance WHERE entity_type = 'core.party'`)
-        .get(),
+        .prepare(
+          `SELECT count(*) AS n FROM consent_provenance WHERE entity_type = 'core.party'`
+        )
+        .get()
     ).toMatchObject({ n: 1 });
 
     let runs: Array<{ turnId: string; endedAt?: number; ok: boolean }> = [];
     const refreshRuns = async (): Promise<boolean> => {
       const response = await fetch(
-        `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent('brief/brief')}`,
-        { headers: auth() },
+        `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent("brief/brief")}`,
+        { headers: auth() }
       );
       expect(response.status).toBe(200);
       runs = (
@@ -253,15 +266,17 @@ describe('serve-scheduler-reconcile scenarios', () => {
     // one distinct native turn per source element.
     for (let i = 0; i < 8; i++) {
       const burst = plane.gateway.invoke(plane.ownerCredential, {
-        command: 'core.add_party',
+        command: "core.add_party",
         input: { display_name: `Doorbell Burst ${i}` },
-        purpose: 'dpv:ServiceProvision',
+        purpose: "dpv:ServiceProvision",
       });
-      expect(burst.status).toBe('executed');
+      expect(burst.status).toBe("executed");
     }
     await waitFor(async () => {
       await refreshRuns();
-      return runs.length === 9 && runs.every((run) => run.endedAt !== undefined);
+      return (
+        runs.length === 9 && runs.every((run) => run.endedAt !== undefined)
+      );
     });
     expect(runs).toHaveLength(9);
 
@@ -278,15 +293,15 @@ describe('serve-scheduler-reconcile scenarios', () => {
     });
     const droppedPlane = handle.vaults.current();
     const missed = droppedPlane.gateway.invoke(droppedPlane.ownerCredential, {
-      command: 'core.add_party',
-      input: { display_name: 'Restart Backstop Test' },
-      purpose: 'dpv:ServiceProvision',
+      command: "core.add_party",
+      input: { display_name: "Restart Backstop Test" },
+      purpose: "dpv:ServiceProvision",
     });
-    expect(missed.status).toBe('executed');
+    expect(missed.status).toBe("executed");
     const missedProv = droppedPlane.db.journal
       .prepare(
         `SELECT prov_id FROM consent_provenance
-        WHERE entity_type = 'core.party' ORDER BY prov_id DESC LIMIT 1`,
+        WHERE entity_type = 'core.party' ORDER BY prov_id DESC LIMIT 1`
       )
       .get() as { prov_id: string };
     await handle.close();
@@ -294,14 +309,16 @@ describe('serve-scheduler-reconcile scenarios', () => {
     handle = await serve({ paths: pathsUnder(dataDir) });
     await waitFor(async () => {
       await refreshRuns();
-      return runs.length === 10 && runs.every((run) => run.endedAt !== undefined);
+      return (
+        runs.length === 10 && runs.every((run) => run.endedAt !== undefined)
+      );
     });
     expect(runs).toHaveLength(10);
     const recoveredCursor = handle.vaults
       .current()
       .db.journal.prepare(
         `SELECT position_json FROM automation_trigger_cursor
-        WHERE automation_id = 'brief/brief' AND trigger_index = 0`,
+        WHERE automation_id = 'brief/brief' AND trigger_index = 0`
       )
       .get() as { position_json: string };
     expect(JSON.parse(recoveredCursor.position_json)).toBe(missedProv.prov_id);

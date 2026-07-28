@@ -34,7 +34,9 @@ export interface ReplicateDriverOptions {
  * awaiting the QoS gate before claiming its next sha. Returns the shas that
  * actually moved (order is not significant — the caller reports a set).
  */
-export async function driveReplication(options: ReplicateDriverOptions): Promise<string[]> {
+export async function driveReplication(
+  options: ReplicateDriverOptions
+): Promise<string[]> {
   const queue = options.want.filter((sha) => !options.alreadyThere.has(sha));
   const moved: string[] = [];
   let next = 0;

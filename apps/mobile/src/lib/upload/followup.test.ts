@@ -1,24 +1,25 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from "vitest";
 
-import type { NativeReplicaSession } from '../replica/native-session';
-import { replaySettledUploadFollowups } from './followup';
-import type { UploadQueue } from './native-queue';
-import type { UploadFollowup } from './store';
+import type { NativeReplicaSession } from "../replica/native-session";
+import { replaySettledUploadFollowups } from "./followup";
+import type { UploadQueue } from "./native-queue";
+import type { UploadFollowup } from "./store";
 
-vi.mock(import('./derivatives-native'), () => ({
+vi.mock(import("./derivatives-native"), () => ({
   contributeDeviceDerivatives:
-    vi.fn<typeof import('./derivatives-native').contributeDeviceDerivatives>(),
-  cleanupDeviceDerivatives: vi.fn<typeof import('./derivatives-native').cleanupDeviceDerivatives>(),
+    vi.fn<typeof import("./derivatives-native").contributeDeviceDerivatives>(),
+  cleanupDeviceDerivatives:
+    vi.fn<typeof import("./derivatives-native").cleanupDeviceDerivatives>(),
 }));
 
 function followupOf(overrides: Partial<UploadFollowup> = {}): UploadFollowup {
   return {
     followupId: 7,
-    intentId: 'upload-followup-item-1-stable',
-    itemId: 'item-1',
-    shape: 'docs',
-    action: 'upload',
-    input: { staged_sha: 'a'.repeat(64), title: 'Field notes' },
+    intentId: "upload-followup-item-1-stable",
+    itemId: "item-1",
+    shape: "docs",
+    action: "upload",
+    input: { staged_sha: "a".repeat(64), title: "Field notes" },
     attempts: 0,
     ...overrides,
   };
@@ -30,7 +31,8 @@ function fakeQueue(pending: UploadFollowup[]) {
   const poisoned: { id: number; reason: string }[] = [];
   const attempts = new Map<number, number>();
   const queue = {
-    pendingFollowups: () => pending.filter((f) => !poisoned.some((p) => p.id === f.followupId)),
+    pendingFollowups: () =>
+      pending.filter((f) => !poisoned.some((p) => p.id === f.followupId)),
     clearFollowup: (id: number) => {
       cleared.push(id);
       const index = pending.findIndex((f) => f.followupId === id);
@@ -41,7 +43,8 @@ function fakeQueue(pending: UploadFollowup[]) {
       attempts.set(id, next);
       return next;
     },
-    poisonFollowup: (id: number, reason: string) => poisoned.push({ id, reason }),
+    poisonFollowup: (id: number, reason: string) =>
+      poisoned.push({ id, reason }),
   } as unknown as UploadQueue;
   return { queue, cleared, poisoned, attempts };
 }
@@ -49,16 +52,16 @@ function fakeQueue(pending: UploadFollowup[]) {
 function okSession(): { session: NativeReplicaSession; writes: string[] } {
   const writes: string[] = [];
   const session = {
-    write: vi.fn<NativeReplicaSession['write']>(async (_shape, input) => {
+    write: vi.fn<NativeReplicaSession["write"]>(async (_shape, input) => {
       writes.push(input.intentId!);
-      return { intentId: input.intentId!, status: 'executed' as const };
+      return { intentId: input.intentId!, status: "executed" as const };
     }),
   } as unknown as NativeReplicaSession;
   return { session, writes };
 }
 
-describe('settled upload follow-ups', () => {
-  it('replays the same intent id after a kill between execution and ledger clearing', async () => {
+describe("settled upload follow-ups", () => {
+  it("replays the same intent id after a kill between execution and ledger clearing", async () => {
     const followup = followupOf();
     let pending = [followup];
     let killBeforeFirstClear = true;
@@ -67,7 +70,7 @@ describe('settled upload follow-ups', () => {
       clearFollowup: () => {
         if (killBeforeFirstClear) {
           killBeforeFirstClear = false;
-          throw new Error('simulated process death after execution');
+          throw new Error("simulated process death after execution");
         }
         pending = [];
       },
@@ -77,38 +80,41 @@ describe('settled upload follow-ups', () => {
     const writes: string[] = [];
     const createdDocuments = new Set<string>();
     const session = {
-      write: vi.fn<NativeReplicaSession['write']>(async (_shape, input) => {
+      write: vi.fn<NativeReplicaSession["write"]>(async (_shape, input) => {
         writes.push(input.intentId!);
         createdDocuments.add(input.intentId!);
-        return { intentId: input.intentId!, status: 'executed' as const };
+        return { intentId: input.intentId!, status: "executed" as const };
       }),
     } as unknown as NativeReplicaSession;
 
     // The kill lands on the FIRST clear; the record is not cleared, so the next
     // pass replays the same intent (idempotent) rather than losing the work.
-    await replaySettledUploadFollowups(queue, session, 'http://gateway');
+    await replaySettledUploadFollowups(queue, session, "http://gateway");
     await expect(
-      replaySettledUploadFollowups(queue, session, 'http://gateway'),
+      replaySettledUploadFollowups(queue, session, "http://gateway")
     ).resolves.toStrictEqual({
       replayed: 1,
       poisoned: 0,
     });
 
     expect(writes).toStrictEqual([followup.intentId, followup.intentId]);
-    expect(createdDocuments.size, 'the canonical document is created once').toBe(1);
+    expect(
+      createdDocuments.size,
+      "the canonical document is created once"
+    ).toBe(1);
     expect(pending).toStrictEqual([]);
   });
 
-  it('isolates a poison-payload follow-up so the rest still replay (F4)', async () => {
+  it("isolates a poison-payload follow-up so the rest still replay (F4)", async () => {
     const poison = followupOf({
       followupId: 1,
-      intentId: 'poison',
-      input: { title: 'no sha' },
+      intentId: "poison",
+      input: { title: "no sha" },
     });
     const good = followupOf({
       followupId: 2,
-      intentId: 'good',
-      input: { staged_sha: 'b'.repeat(64), title: 'ok' },
+      intentId: "good",
+      input: { staged_sha: "b".repeat(64), title: "ok" },
     });
     const { queue, poisoned } = fakeQueue([poison, good]);
     const { session, writes } = okSession();
@@ -118,31 +124,41 @@ describe('settled upload follow-ups', () => {
     let last = { replayed: 0, poisoned: 0 };
     const replayNextPass = async (pass: number): Promise<void> => {
       if (pass >= 5) return;
-      last = await replaySettledUploadFollowups(queue, session, 'http://gateway');
+      last = await replaySettledUploadFollowups(
+        queue,
+        session,
+        "http://gateway"
+      );
       return replayNextPass(pass + 1);
     };
     await replayNextPass(0);
 
-    expect(writes, 'the healthy record replayed exactly once').toStrictEqual(['good']);
-    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/staged_sha/u) }]);
+    expect(writes, "the healthy record replayed exactly once").toStrictEqual([
+      "good",
+    ]);
+    expect(poisoned).toStrictEqual([
+      { id: 1, reason: expect.stringMatching(/staged_sha/u) },
+    ]);
     expect(last.poisoned).toBe(1);
   });
 
-  it('poisons a follow-up whose canonical write keeps failing, without blocking others', async () => {
-    const flaky = followupOf({ followupId: 1, intentId: 'flaky' });
+  it("poisons a follow-up whose canonical write keeps failing, without blocking others", async () => {
+    const flaky = followupOf({ followupId: 1, intentId: "flaky" });
     const { queue, poisoned } = fakeQueue([flaky]);
     const session = {
-      write: vi.fn<NativeReplicaSession['write']>(async () => {
-        throw new Error('replica rejected the write');
+      write: vi.fn<NativeReplicaSession["write"]>(async () => {
+        throw new Error("replica rejected the write");
       }),
     } as unknown as NativeReplicaSession;
 
     const replayNextPass = async (pass: number): Promise<void> => {
       if (pass >= 5) return;
-      await replaySettledUploadFollowups(queue, session, 'http://gateway');
+      await replaySettledUploadFollowups(queue, session, "http://gateway");
       return replayNextPass(pass + 1);
     };
     await replayNextPass(0);
-    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/replica rejected/u) }]);
+    expect(poisoned).toStrictEqual([
+      { id: 1, reason: expect.stringMatching(/replica rejected/u) },
+    ]);
   });
 });

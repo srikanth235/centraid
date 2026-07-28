@@ -1,54 +1,55 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ShellActions } from '../actions.js';
+import type { ShellActions } from "../actions.js";
 
-type OutboxModule = typeof import('../../../gateway-client-outbox.js');
-type VaultModule = typeof import('../../../gateway-client-vault.js');
+type OutboxModule = typeof import("../../../gateway-client-outbox.js");
+type VaultModule = typeof import("../../../gateway-client-vault.js");
 
-const getBlocking = vi.fn<OutboxModule['getBlocking']>();
-const listOutboxGrants = vi.fn<OutboxModule['listOutboxGrants']>();
-const getReview = vi.fn<OutboxModule['getReview']>();
-const decideOutboxItem = vi.fn<(input: unknown) => ReturnType<OutboxModule['decideOutboxItem']>>();
-vi.mock(import('../../../gateway-client-outbox.js'), () => ({
+const getBlocking = vi.fn<OutboxModule["getBlocking"]>();
+const listOutboxGrants = vi.fn<OutboxModule["listOutboxGrants"]>();
+const getReview = vi.fn<OutboxModule["getReview"]>();
+const decideOutboxItem =
+  vi.fn<(input: unknown) => ReturnType<OutboxModule["decideOutboxItem"]>>();
+vi.mock(import("../../../gateway-client-outbox.js"), () => ({
   getBlocking: () => getBlocking(),
   listOutboxGrants: () => listOutboxGrants(),
   getReview: () => getReview(),
   decideOutboxItem: (input: unknown) => decideOutboxItem(input),
-  decideScopeRequest: vi.fn<OutboxModule['decideScopeRequest']>(),
-  revokeOutboxGrant: vi.fn<OutboxModule['revokeOutboxGrant']>(),
+  decideScopeRequest: vi.fn<OutboxModule["decideScopeRequest"]>(),
+  revokeOutboxGrant: vi.fn<OutboxModule["revokeOutboxGrant"]>(),
 }));
-vi.mock(import('../../../gateway-client-vault.js'), () => ({
-  confirmVaultParked: vi.fn<VaultModule['confirmVaultParked']>(),
+vi.mock(import("../../../gateway-client-vault.js"), () => ({
+  confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
 }));
 
-let ApprovalsRoute: typeof import('./ApprovalsRoute.js').default;
-let ShellActionsProvider: typeof import('../actions.js').ShellActionsProvider;
+let ApprovalsRoute: typeof import("./ApprovalsRoute.js").default;
+let ShellActionsProvider: typeof import("../actions.js").ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-const confirm = vi.fn<ShellActions['confirm']>().mockResolvedValue(true);
-const showToast = vi.fn<ShellActions['showToast']>();
-const navigate = vi.fn<ShellActions['navigate']>();
+const confirm = vi.fn<ShellActions["confirm"]>().mockResolvedValue(true);
+const showToast = vi.fn<ShellActions["showToast"]>();
+const navigate = vi.fn<ShellActions["navigate"]>();
 
 function makeActions(): ShellActions {
   return {
     showToast,
     builderEnabled: false,
-    enterBuilder: vi.fn<ShellActions['enterBuilder']>(),
-    openNewAppSheet: vi.fn<ShellActions['openNewAppSheet']>(),
-    openCommandPalette: vi.fn<ShellActions['openCommandPalette']>(),
-    openContextMenu: vi.fn<ShellActions['openContextMenu']>(),
+    enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
+    openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
+    openCommandPalette: vi.fn<ShellActions["openCommandPalette"]>(),
+    openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
     confirm,
     navigate,
   };
 }
 
-describe('ApprovalsRoute', () => {
+describe("ApprovalsRoute", () => {
   beforeEach(async () => {
-    ({ default: ApprovalsRoute } = await import('./ApprovalsRoute.js'));
-    ({ ShellActionsProvider } = await import('../actions.js'));
+    ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
+    ({ ShellActionsProvider } = await import("../actions.js"));
     getBlocking.mockReset().mockResolvedValue({
       outbox: [],
       needsAuth: [],
@@ -64,14 +65,14 @@ describe('ApprovalsRoute', () => {
   });
 
   async function render(): Promise<HTMLElement> {
-    host = document.createElement('div');
+    host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
     await act(async () => {
       root!.render(
         <ShellActionsProvider value={makeActions()}>
           <ApprovalsRoute />
-        </ShellActionsProvider>,
+        </ShellActionsProvider>
       );
     });
     return host;
@@ -84,35 +85,35 @@ describe('ApprovalsRoute', () => {
     host = null;
   });
 
-  describe('ApprovalsRoute', () => {
-    it('shows a loading state, then the empty state once the blocking inbox resolves empty', async () => {
+  describe("ApprovalsRoute", () => {
+    it("shows a loading state, then the empty state once the blocking inbox resolves empty", async () => {
       const el = await render();
-      expect(el.textContent).toContain('Nothing waiting on you.');
+      expect(el.textContent).toContain("Nothing waiting on you.");
     });
 
-    it('surfaces a fetch error', async () => {
-      getBlocking.mockRejectedValue(new Error('offline'));
+    it("surfaces a fetch error", async () => {
+      getBlocking.mockRejectedValue(new Error("offline"));
       const el = await render();
-      expect(el.querySelector('.pageEmpty')?.textContent).toContain('offline');
+      expect(el.querySelector(".pageEmpty")?.textContent).toContain("offline");
     });
 
-    it('approves an outbox item and reloads the inbox', async () => {
+    it("approves an outbox item and reloads the inbox", async () => {
       getBlocking.mockResolvedValueOnce({
         outbox: [
           {
-            itemId: 'item1',
-            connection: { kind: 'pull.gmail', label: 'personal' },
-            actor: 'gmail-send',
-            actorId: 'agent-1',
-            actorKind: 'ai_agent',
-            verb: 'gmail.send',
-            target: 'ravi@example.com',
+            itemId: "item1",
+            connection: { kind: "pull.gmail", label: "personal" },
+            actor: "gmail-send",
+            actorId: "agent-1",
+            actorKind: "ai_agent",
+            verb: "gmail.send",
+            target: "ravi@example.com",
             artifact: {
-              to: 'ravi@example.com',
-              subject: 'Hi',
-              body: 'See you at 6.',
+              to: "ravi@example.com",
+              subject: "Hi",
+              body: "See you at 6.",
             },
-            status: 'pending',
+            status: "pending",
             grantId: null,
             stagedAt: new Date().toISOString(),
             decidedAt: null,
@@ -133,48 +134,48 @@ describe('ApprovalsRoute', () => {
         scopeRequests: [],
       });
       decideOutboxItem.mockResolvedValue({
-        status: 'executed',
-        invocationId: 'inv1',
-        receiptId: 'rec1',
-        output: { item_id: 'item1', status: 'approved' },
+        status: "executed",
+        invocationId: "inv1",
+        receiptId: "rec1",
+        output: { item_id: "item1", status: "approved" },
       });
       const el = await render();
-      const subjectBtn = [...el.querySelectorAll('button')].find((b) =>
-        b.textContent?.includes('Hi'),
+      const subjectBtn = [...el.querySelectorAll("button")].find((b) =>
+        b.textContent?.includes("Hi")
       ) as HTMLButtonElement;
       await act(async () => subjectBtn.click());
-      const approveBtn = [...el.querySelectorAll('button')].find(
-        (b) => b.textContent === 'Approve',
+      const approveBtn = [...el.querySelectorAll("button")].find(
+        (b) => b.textContent === "Approve"
       ) as HTMLButtonElement;
       await act(async () => {
         approveBtn.click();
         await Promise.resolve();
       });
       expect(decideOutboxItem).toHaveBeenCalledWith({
-        itemId: 'item1',
-        decision: 'approve',
+        itemId: "item1",
+        decision: "approve",
         alwaysAllow: false,
       });
       expect(getBlocking).toHaveBeenCalledTimes(2);
     });
 
-    it('edits an editable outbox item and approves with the revised artifact', async () => {
+    it("edits an editable outbox item and approves with the revised artifact", async () => {
       getBlocking.mockResolvedValueOnce({
         outbox: [
           {
-            itemId: 'item1',
-            connection: { kind: 'pull.gmail', label: 'personal' },
-            actor: 'gmail-send',
-            actorId: 'agent-1',
-            actorKind: 'ai_agent',
-            verb: 'gmail.send',
-            target: 'ravi@example.com',
+            itemId: "item1",
+            connection: { kind: "pull.gmail", label: "personal" },
+            actor: "gmail-send",
+            actorId: "agent-1",
+            actorKind: "ai_agent",
+            verb: "gmail.send",
+            target: "ravi@example.com",
             artifact: {
-              to: 'ravi@example.com',
-              subject: 'Hi',
-              body: 'See you at 6.',
+              to: "ravi@example.com",
+              subject: "Hi",
+              body: "See you at 6.",
             },
-            status: 'pending',
+            status: "pending",
             grantId: null,
             stagedAt: new Date().toISOString(),
             decidedAt: null,
@@ -195,41 +196,50 @@ describe('ApprovalsRoute', () => {
         scopeRequests: [],
       });
       decideOutboxItem.mockResolvedValue({
-        status: 'executed',
-        invocationId: 'inv1',
-        receiptId: 'rec1',
-        output: { item_id: 'item1', status: 'approved' },
+        status: "executed",
+        invocationId: "inv1",
+        receiptId: "rec1",
+        output: { item_id: "item1", status: "approved" },
       });
       const el = await render();
       const findButton = (text: string): HTMLButtonElement =>
-        [...el.querySelectorAll('button')].find((b) => b.textContent === text) as HTMLButtonElement;
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === text
+        ) as HTMLButtonElement;
       await act(async () => {
-        [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Hi'))!.click();
+        [...el.querySelectorAll("button")]
+          .find((b) => b.textContent?.includes("Hi"))!
+          .click();
       });
       await act(async () => {
-        findButton('Edit').click();
+        findButton("Edit").click();
       });
-      const subjectInput = el.querySelector('input[aria-label="Subject"]') as HTMLInputElement;
+      const subjectInput = el.querySelector(
+        'input[aria-label="Subject"]'
+      ) as HTMLInputElement;
       const setNativeValue = (input: HTMLInputElement, value: string): void => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value"
+        )?.set;
         setter?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
       };
       await act(async () => {
-        setNativeValue(subjectInput, 'Edited subject');
+        setNativeValue(subjectInput, "Edited subject");
       });
       await act(async () => {
-        findButton('Approve with edits').click();
+        findButton("Approve with edits").click();
         await Promise.resolve();
       });
       expect(decideOutboxItem).toHaveBeenCalledWith({
-        itemId: 'item1',
-        decision: 'approve',
+        itemId: "item1",
+        decision: "approve",
         alwaysAllow: false,
         artifact: {
-          to: 'ravi@example.com',
-          subject: 'Edited subject',
-          body: 'See you at 6.',
+          to: "ravi@example.com",
+          subject: "Edited subject",
+          body: "See you at 6.",
         },
       });
       expect(getBlocking).toHaveBeenCalledTimes(2);

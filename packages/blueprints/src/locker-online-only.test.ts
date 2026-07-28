@@ -2,44 +2,49 @@
    browser blueprint under jsdom while the package's TypeScript config is
    intentionally Node-only. */
 // @ts-nocheck
-import { cpSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 // @vitest-environment jsdom
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const PKG = path.resolve(import.meta.dirname, '..');
-const SCRATCH = path.resolve(PKG, '.locker-online-only');
+const PKG = path.resolve(import.meta.dirname, "..");
+const SCRATCH = path.resolve(PKG, ".locker-online-only");
 
 type LockerWriteTestSeam = (input: {
   action: string;
   input?: Record<string, unknown>;
   onlineOnly?: boolean;
-}) => Promise<{ status: 'failed'; error: string }>;
+}) => Promise<{ status: "failed"; error: string }>;
 type LockerRenderTestSeam = () => void;
 type LockerRefreshTestSeam = () => void;
 
-describe('locker-online-only', () => {
+describe("locker-online-only", () => {
   beforeAll(() => {
     rmSync(SCRATCH, { recursive: true, force: true });
     mkdirSync(SCRATCH, { recursive: true });
-    for (const file of ['logic.ts', 'format.ts', 'totp.ts', 'types.ts']) {
-      cpSync(path.resolve(PKG, 'apps/locker', file), path.resolve(SCRATCH, file));
+    for (const file of ["logic.ts", "format.ts", "totp.ts", "types.ts"]) {
+      cpSync(
+        path.resolve(PKG, "apps/locker", file),
+        path.resolve(SCRATCH, file)
+      );
     }
-    for (const file of ['kit.ts', 'elements.js']) {
-      symlinkSync(path.resolve(PKG, 'kit', file), path.resolve(SCRATCH, file));
+    for (const file of ["kit.ts", "elements.js"]) {
+      symlinkSync(path.resolve(PKG, "kit", file), path.resolve(SCRATCH, file));
     }
   });
 
   afterAll(() => rmSync(SCRATCH, { recursive: true, force: true }));
 
-  describe('Locker sealed writes', () => {
-    it('marks add and edit payloads online-only while leaving non-secret actions queueable', async () => {
-      const { createLogic } = await import(pathToFileURL(path.resolve(SCRATCH, 'logic.ts')).href);
+  describe("Locker sealed writes", () => {
+    it("marks add and edit payloads online-only while leaving non-secret actions queueable", async () => {
+      const { createLogic } = await import(
+        pathToFileURL(path.resolve(SCRATCH, "logic.ts")).href
+      );
       const write = vi.fn<LockerWriteTestSeam>(async () => ({
-        status: 'failed',
-        error: 'expected test stop',
+        status: "failed",
+        error: "expected test stop",
       }));
       window.centraid = { write };
       const logic = createLogic({
@@ -49,43 +54,43 @@ describe('locker-online-only', () => {
         refresh: vi.fn<LockerRefreshTestSeam>(),
       });
       const common = {
-        type: 'login',
-        title: 'Email',
-        tags: 'personal',
-        alias: '',
-        fields: { username: 'me@example.test', password: 'do-not-persist' },
-        allowedKeys: ['username', 'password'],
+        type: "login",
+        title: "Email",
+        tags: "personal",
+        alias: "",
+        fields: { username: "me@example.test", password: "do-not-persist" },
+        allowedKeys: ["username", "password"],
       };
 
-      await logic.saveItem({ mode: 'new', ...common });
-      await logic.saveItem({ mode: 'edit', id: 'item-1', ...common });
-      await logic.act('star-item', { item_id: 'item-1' });
+      await logic.saveItem({ mode: "new", ...common });
+      await logic.saveItem({ mode: "edit", id: "item-1", ...common });
+      await logic.act("star-item", { item_id: "item-1" });
 
       expect(write).toHaveBeenNthCalledWith(1, {
-        action: 'add-item',
+        action: "add-item",
         input: {
-          type: 'login',
-          title: 'Email',
-          tags: ['personal'],
-          username: 'me@example.test',
-          password: 'do-not-persist',
+          type: "login",
+          title: "Email",
+          tags: ["personal"],
+          username: "me@example.test",
+          password: "do-not-persist",
         },
         onlineOnly: true,
       });
       expect(write).toHaveBeenNthCalledWith(2, {
-        action: 'edit-item',
+        action: "edit-item",
         input: {
-          item_id: 'item-1',
-          title: 'Email',
-          tags: ['personal'],
-          username: 'me@example.test',
-          password: 'do-not-persist',
+          item_id: "item-1",
+          title: "Email",
+          tags: ["personal"],
+          username: "me@example.test",
+          password: "do-not-persist",
         },
         onlineOnly: true,
       });
       expect(write).toHaveBeenNthCalledWith(3, {
-        action: 'star-item',
-        input: { item_id: 'item-1' },
+        action: "star-item",
+        input: { item_id: "item-1" },
       });
     });
   });

@@ -22,9 +22,9 @@
  * was true a moment ago.
  */
 
-import { openRemoteBackupProvider, type UsageByStore } from '@centraid/backup';
+import { openRemoteBackupProvider, type UsageByStore } from "@centraid/backup";
 
-import type { StorageConnectionStore } from './storage-connections.js';
+import type { StorageConnectionStore } from "./storage-connections.js";
 
 /** Refresh a cached report once it's older than this. Real network traffic
  *  against the provider's account, so this stays coarse by design. */
@@ -114,7 +114,7 @@ export class StorageUsagePoller {
 
   private async fetchOne(connectionId: string): Promise<ProviderUsageResult> {
     const connection = await this.storageConnections.get(connectionId);
-    if (!connection || connection.kind !== 'provider') {
+    if (!connection || connection.kind !== "provider") {
       return { providerReported: null, fetchedAt: null };
     }
     // No CAS target minted yet (the connection has never been attached to a
@@ -122,7 +122,8 @@ export class StorageUsagePoller {
     if (!connection.targetId || !connection.baseUrl) {
       return { providerReported: null, fetchedAt: null };
     }
-    const apiKey = await this.storageConnections.resolveProviderApiKey(connectionId);
+    const apiKey =
+      await this.storageConnections.resolveProviderApiKey(connectionId);
     const provider = openRemoteBackupProvider({
       baseUrl: connection.baseUrl,
       apiKey,

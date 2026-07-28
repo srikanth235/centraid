@@ -11,39 +11,45 @@
  * genuinely nothing to watch.
  */
 
-import type { UsageByStore } from '@centraid/backup';
+import type { UsageByStore } from "@centraid/backup";
 
-import { formatBytes } from './disk-health.js';
-import type { HealthProbe } from './health-registry.js';
+import { formatBytes } from "./disk-health.js";
+import type { HealthProbe } from "./health-registry.js";
 
 /** Fraction of `quotaBytes` at which a store's usage flips to `degraded`. */
 export const QUOTA_DEGRADED_AT = 0.8;
 /** Fraction of `quotaBytes` at which a store's usage flips to `error`. */
 export const QUOTA_ERROR_AT = 0.95;
 
-const STORE_CLASSES = ['backup', 'cas'] as const;
+const STORE_CLASSES = ["backup", "cas"] as const;
 
 export interface StorageQuotaConnectionEntry {
   readonly connectionId: string;
   readonly name: string;
-  readonly kind: 'provider';
+  readonly kind: "provider";
 }
 
 export interface StorageQuotaHealthOptions {
   /** Every configured storage connection (all `kind: 'provider'`). */
   readonly connections: () => Promise<readonly StorageQuotaConnectionEntry[]>;
   /** The cached provider-reported usage for one connection (issue #367 §D1's poller). */
-  readonly usageFor: (connectionId: string) => Promise<{ providerReported: UsageByStore | null }>;
+  readonly usageFor: (
+    connectionId: string
+  ) => Promise<{ providerReported: UsageByStore | null }>;
 }
 
 /** Builds the `storage-quota` component's `HealthProbe` (registered in `build-gateway.ts`). */
-export function createStorageQuotaHealthProbe(options: StorageQuotaHealthOptions): HealthProbe {
+export function createStorageQuotaHealthProbe(
+  options: StorageQuotaHealthOptions
+): HealthProbe {
   return async () => {
-    const connections = (await options.connections()).filter((c) => c.kind === 'provider');
+    const connections = (await options.connections()).filter(
+      (c) => c.kind === "provider"
+    );
     if (connections.length === 0) {
       return {
-        status: 'ok',
-        detail: 'no provider-kind storage connections configured',
+        status: "ok",
+        detail: "no provider-kind storage connections configured",
       };
     }
 
@@ -54,16 +60,23 @@ export function createStorageQuotaHealthProbe(options: StorageQuotaHealthOptions
     const usage = await Promise.all(
       connections.map(async (conn) => ({
         conn,
-        providerReported: (await options.usageFor(conn.connectionId)).providerReported,
-      })),
+        providerReported: (await options.usageFor(conn.connectionId))
+          .providerReported,
+      }))
     );
     for (const { conn, providerReported } of usage) {
       if (!providerReported) continue;
       for (const storeClass of STORE_CLASSES) {
         const report = providerReported[storeClass];
-        if (!report || report.quotaBytes === null || report.quotaBytes === undefined) continue;
+        if (
+          !report ||
+          report.quotaBytes === null ||
+          report.quotaBytes === undefined
+        )
+          continue;
         meteredCount += 1;
-        const pct = report.quotaBytes > 0 ? report.bytesStored / report.quotaBytes : 1;
+        const pct =
+          report.quotaBytes > 0 ? report.bytesStored / report.quotaBytes : 1;
         const note =
           `${conn.name}/${storeClass}: ${formatBytes(report.bytesStored)} of ` +
           `${formatBytes(report.quotaBytes)} (${Math.round(pct * 100)}%)`;
@@ -72,16 +85,18 @@ export function createStorageQuotaHealthProbe(options: StorageQuotaHealthOptions
       }
     }
 
-    if (errors.length > 0) return { status: 'error', detail: errors.join('; ') };
-    if (degraded.length > 0) return { status: 'degraded', detail: degraded.join('; ') };
+    if (errors.length > 0)
+      return { status: "error", detail: errors.join("; ") };
+    if (degraded.length > 0)
+      return { status: "degraded", detail: degraded.join("; ") };
     if (meteredCount === 0) {
       return {
-        status: 'ok',
-        detail: 'unmetered — no provider-reported quota yet',
+        status: "ok",
+        detail: "unmetered — no provider-reported quota yet",
       };
     }
     return {
-      status: 'ok',
+      status: "ok",
       detail: `${meteredCount} metered store(s) within quota`,
     };
   };

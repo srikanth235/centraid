@@ -5,21 +5,28 @@
 // descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
 // wiring; there is deliberately no parallel served-system-app entry.
 
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
-import type { KeyboardEvent, ReactElement, ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 
-import type { InlineAppProps } from '../inline-types.ts';
-import { Chrome } from './Chrome.tsx';
-import { BulkBar } from './components/BulkBar.tsx';
-import { Details } from './components/Details.tsx';
-import { Editor } from './components/Editor.tsx';
-import { GridCard } from './components/Grid.tsx';
-import { ListHead, ListRow, WindowFoot } from './components/List.tsx';
-import { NewMenu } from './components/NewMenu.tsx';
-import { QuickLook } from './components/QuickLook.tsx';
-import { FolderList, SmartNav, Storage } from './components/Sidebar.tsx';
-import { TagChips, TypeChips } from './components/Toolbar.tsx';
-import { emptyStateFor } from './format.ts';
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome } from "./Chrome.tsx";
+import { BulkBar } from "./components/BulkBar.tsx";
+import { Details } from "./components/Details.tsx";
+import { Editor } from "./components/Editor.tsx";
+import { GridCard } from "./components/Grid.tsx";
+import { ListHead, ListRow, WindowFoot } from "./components/List.tsx";
+import { NewMenu } from "./components/NewMenu.tsx";
+import { QuickLook } from "./components/QuickLook.tsx";
+import { FolderList, SmartNav, Storage } from "./components/Sidebar.tsx";
+import { TagChips, TypeChips } from "./components/Toolbar.tsx";
+import { emptyStateFor } from "./format.ts";
 import {
   closePopover,
   debounce,
@@ -31,24 +38,24 @@ import {
   readFailed,
   showSkeleton,
   wireThemeToggle,
-} from './kit.ts';
-import { createLogic } from './logic.ts';
-import { createNav } from './nav.ts';
-import type { AppData, AppState, DriveDoc, Folder } from './types.ts';
+} from "./kit.ts";
+import { createLogic } from "./logic.ts";
+import { createNav } from "./nav.ts";
+import type { AppData, AppState, DriveDoc, Folder } from "./types.ts";
 
-import styles from './Chrome.module.css';
+import styles from "./Chrome.module.css";
 
 // Vault entities this app's queries read — the doorbell filter re-derives only
 // when a change names one of these (or names none, i.e. "this app acted").
 export const CHANGE_TABLES = [
-  'core.document',
-  'core.content_item',
-  'core.tag',
-  'core.concept',
-  'core.concept_scheme',
-  'core.link',
-  'blob.custody_state',
-  'consent.provenance',
+  "core.document",
+  "core.content_item",
+  "core.tag",
+  "core.concept",
+  "core.concept_scheme",
+  "core.link",
+  "blob.custody_state",
+  "consent.provenance",
 ];
 
 interface DriveResult {
@@ -62,22 +69,24 @@ interface SearchResult {
   documents?: DriveDoc[];
 }
 
-const VALID_VIEWS = new Set<AppState['view']>(['grid', 'list']);
+const VALID_VIEWS = new Set<AppState["view"]>(["grid", "list"]);
 
-function initialView(rootEl: HTMLElement | null): AppState['view'] {
+function initialView(rootEl: HTMLElement | null): AppState["view"] {
   const knob = rootEl?.dataset.appView;
-  return knob && VALID_VIEWS.has(knob as AppState['view']) ? (knob as AppState['view']) : 'grid';
+  return knob && VALID_VIEWS.has(knob as AppState["view"])
+    ? (knob as AppState["view"])
+    : "grid";
 }
 
-function makeState(view: AppState['view']): AppState {
+function makeState(view: AppState["view"]): AppState {
   return {
     view,
-    nav: { kind: 'all' },
-    sortKey: 'added',
+    nav: { kind: "all" },
+    sortKey: "added",
     sortDir: -1,
-    type: 'all',
-    tag: 'all',
-    search: '',
+    type: "all",
+    tag: "all",
+    search: "",
     searchResults: null,
     searchSeq: 0,
     selected: new Set(),
@@ -115,7 +124,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [loaded, setLoaded] = useState(false);
   const [consent, setConsent] = useState<{ message: string } | null>(null);
   const [dropVisible, setDropVisible] = useState(false);
-  const [dropTarget, setDropTarget] = useState('');
+  const [dropTarget, setDropTarget] = useState("");
 
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -150,21 +159,21 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       let next: DriveResult;
       try {
         next = await window.centraid.read<DriveResult>({
-          query: 'drive',
+          query: "drive",
           input: { limit: state.driveWindow },
         });
       } catch {
-        readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
+        readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
         readFailedRef.current = true;
         setLoaded(true);
         return;
       }
       if (readFailedRef.current) {
         readFailedRef.current = false;
-        core.logic.notice('');
+        core.logic.notice("");
       }
       const denied = next?.vaultDenied;
-      setConsent(denied ? { message: denied.message ?? '' } : null);
+      setConsent(denied ? { message: denied.message ?? "" } : null);
       setLoaded(true);
       if (denied) {
         bump();
@@ -178,11 +187,19 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       data.root_folder_id = incoming.root_folder_id ?? data.root_folder_id;
       state.driveTruncated = Boolean(next?.truncated);
       state.selected = new Set(
-        [...state.selected].filter((id) => data.documents.some((d) => d.document_id === id)),
+        [...state.selected].filter((id) =>
+          data.documents.some((d) => d.document_id === id)
+        )
       );
-      if (state.detailsId && !data.documents.some((d) => d.document_id === state.detailsId))
+      if (
+        state.detailsId &&
+        !data.documents.some((d) => d.document_id === state.detailsId)
+      )
         state.detailsId = null;
-      if (state.quickId && !data.documents.some((d) => d.document_id === state.quickId))
+      if (
+        state.quickId &&
+        !data.documents.some((d) => d.document_id === state.quickId)
+      )
         state.quickId = null;
       // The editor overlay manages its own body state after its initial fetch —
       // a background refresh never closes it out from under a typing user.
@@ -190,7 +207,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     };
 
     core.applySearch = debounce(async () => {
-      const q = (document.querySelector('#searchInput') as HTMLInputElement).value.trim();
+      const q = (
+        document.querySelector("#searchInput") as HTMLInputElement
+      ).value.trim();
       if (q === state.search) return;
       state.search = q;
       core.logic.clearSelection();
@@ -203,7 +222,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       let rows: DriveDoc[] = [];
       try {
         const res = await window.centraid.read<SearchResult>({
-          query: 'search',
+          query: "search",
           input: { term: q },
         });
         rows = res?.documents ?? [];
@@ -290,17 +309,17 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         }
       }
     },
-    [rootRef],
+    [rootRef]
   );
 
   // Wrap nav.selectNav so a nav click also closes the React drawer (its own
   // `$('root')` class toggle is a no-op on the host's mount div).
   const selectNav = useCallback(
-    (navArg: AppState['nav']) => {
+    (navArg: AppState["nav"]) => {
       nav.selectNav(navArg);
       setSideOpen(false);
     },
-    [nav],
+    [nav]
   );
 
   const closeEditorSafely = useCallback(async () => {
@@ -316,20 +335,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       state.newMenuOpen = !state.newMenuOpen;
       bump();
     },
-    [state],
+    [state]
   );
 
   const selectView = useCallback(
-    (view: AppState['view']) => {
+    (view: AppState["view"]) => {
       state.view = view;
       bump();
     },
-    [state],
+    [state]
   );
 
   const onSort = useCallback(() => {
-    const order = ['added', 'name', 'size'] as const;
-    if (state.sortDir === -1 && state.sortKey !== 'name') {
+    const order = ["added", "name", "size"] as const;
+    if (state.sortDir === -1 && state.sortKey !== "name") {
       state.sortDir = 1;
     } else if (state.sortDir === 1) {
       state.sortDir = -1;
@@ -337,33 +356,33 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       const i = order.indexOf(state.sortKey);
       const nextKey = order[(i + 1) % order.length]!;
       state.sortKey = nextKey;
-      state.sortDir = nextKey === 'name' ? 1 : -1;
+      state.sortDir = nextKey === "name" ? 1 : -1;
     }
     bump();
   }, [state]);
 
   const onSearchKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       e.preventDefault();
       const input = searchInputRef.current;
       if (!input?.value && !state.search) return;
-      if (input) input.value = '';
+      if (input) input.value = "";
       state.searchSeq += 1;
-      state.search = '';
+      state.search = "";
       state.searchResults = null;
       state.selected.clear();
       state.anchorIndex = null;
       bump();
     },
-    [state],
+    [state]
   );
 
   const onUploadChange = useCallback(() => {
     const input = uploadRef.current;
     if (!input) return;
     const files = [...(input.files ?? [])];
-    input.value = '';
+    input.value = "";
     void logic.uploadFiles(files);
   }, [logic]);
 
@@ -375,7 +394,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   useLayoutEffect(() => {
     const el = rootElRef.current;
     if (!el) return;
-    const forced = el.dataset.appWidth === 'narrow';
+    const forced = el.dataset.appWidth === "narrow";
     const isNarrow = forced || el.clientWidth < 860;
     if (isNarrow !== stateRef.current.narrow) {
       stateRef.current.narrow = isNarrow;
@@ -398,21 +417,21 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
     const onKey = (e: globalThis.KeyboardEvent): void => {
       if (state.editingId) {
-        if (e.key === 'Escape') {
+        if (e.key === "Escape") {
           e.preventDefault();
           void closeEditorSafely();
         }
         return;
       }
       if (state.quickId) {
-        if (e.key === 'Escape') {
+        if (e.key === "Escape") {
           e.preventDefault();
           handleCloseQuick();
-        } else if (e.key === 'ArrowLeft') handleQuickStep(-1);
-        else if (e.key === 'ArrowRight') handleQuickStep(1);
+        } else if (e.key === "ArrowLeft") handleQuickStep(-1);
+        else if (e.key === "ArrowRight") handleQuickStep(1);
         return;
       }
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       if (state.detailsId) {
         handleCloseDetails();
         return;
@@ -424,28 +443,33 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       }
       setSideOpen(false);
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
 
     // Close the "+ New" menu on any outside click (matches chrome.ts's
     // `.closest('.d-new-wrap')` guard via the data-new-wrap hook Chrome stamps).
     const onDocClick = (e: MouseEvent): void => {
-      if (state.newMenuOpen && !(e.target as Element | null)?.closest('[data-new-wrap]')) {
+      if (
+        state.newMenuOpen &&
+        !(e.target as Element | null)?.closest("[data-new-wrap]")
+      ) {
         state.newMenuOpen = false;
         bump();
       }
     };
-    document.addEventListener('click', onDocClick);
+    document.addEventListener("click", onDocClick);
 
     // Drag-and-drop onto the current folder.
     let dragDepth = 0;
     const dragHasFiles = (e: DragEvent): boolean =>
-      [...(e.dataTransfer?.types ?? [])].includes('Files');
+      [...(e.dataTransfer?.types ?? [])].includes("Files");
     const onDragEnter = (e: DragEvent): void => {
       if (!dragHasFiles(e)) return;
       e.preventDefault();
       dragDepth += 1;
       const target =
-        state.nav.kind === 'folder' ? logic.folderName(state.nav.folderId) : 'Documents';
+        state.nav.kind === "folder"
+          ? logic.folderName(state.nav.folderId)
+          : "Documents";
       setDropTarget(`Drop to upload to ${target}`);
       setDropVisible(true);
     };
@@ -464,10 +488,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       const files = e.dataTransfer?.files;
       if (files?.length) void logic.uploadFiles(files);
     };
-    window.addEventListener('dragenter', onDragEnter);
-    window.addEventListener('dragover', onDragOver);
-    window.addEventListener('dragleave', onDragLeave);
-    window.addEventListener('drop', onDrop);
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
 
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
@@ -479,12 +503,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
     void core.refresh();
     return () => {
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('click', onDocClick);
-      window.removeEventListener('dragenter', onDragEnter);
-      window.removeEventListener('dragover', onDragOver);
-      window.removeEventListener('dragleave', onDragLeave);
-      window.removeEventListener('drop', onDrop);
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("click", onDocClick);
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
       stopDoorbell();
       stopFocus();
       stopWidth();
@@ -502,8 +526,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   // ---- derive the render (app.tsx's render()/renderSidebar/renderToolbar/… ) ----
 
   // A folder can vanish under us (deleted elsewhere) — fall back to the top.
-  if (state.nav.kind === 'folder' && !logic.folderById(state.nav.folderId))
-    state.nav = { kind: 'all' };
+  if (state.nav.kind === "folder" && !logic.folderById(state.nav.folderId))
+    state.nav = { kind: "all" };
   state.visibleRows = logic.currentRows();
   const rows = state.visibleRows;
 
@@ -515,38 +539,48 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   };
 
   const titles = {
-    all: 'All documents',
-    recent: 'Recent',
-    starred: 'Starred',
-    trash: 'Trash',
+    all: "All documents",
+    recent: "Recent",
+    starred: "Starred",
+    trash: "Trash",
   };
   let activeTitle =
-    state.nav.kind === 'folder' ? logic.folderName(state.nav.folderId) : titles[state.nav.kind];
+    state.nav.kind === "folder"
+      ? logic.folderName(state.nav.folderId)
+      : titles[state.nav.kind];
   if (state.search.trim()) activeTitle = `Results for “${state.search.trim()}”`;
   const n = rows.length;
   let activeSub: string;
-  if (state.search.trim()) activeSub = `${n} match${n === 1 ? '' : 'es'} “${state.search.trim()}”`;
-  else if (state.nav.kind === 'trash') activeSub = `${n} in trash · auto-purge after 30 days`;
-  else if (state.nav.kind === 'recent') activeSub = 'Newest across every folder';
-  else if (state.nav.kind === 'starred')
-    activeSub = `${n} starred document${n === 1 ? '' : 's'} · one star across your vault`;
-  else activeSub = `${n} document${n === 1 ? '' : 's'}`;
+  if (state.search.trim())
+    activeSub = `${n} match${n === 1 ? "" : "es"} “${state.search.trim()}”`;
+  else if (state.nav.kind === "trash")
+    activeSub = `${n} in trash · auto-purge after 30 days`;
+  else if (state.nav.kind === "recent")
+    activeSub = "Newest across every folder";
+  else if (state.nav.kind === "starred")
+    activeSub = `${n} starred document${n === 1 ? "" : "s"} · one star across your vault`;
+  else activeSub = `${n} document${n === 1 ? "" : "s"}`;
 
-  const sortNames = { added: 'Date', name: 'Name', size: 'Size' };
-  const sortLabel = `${sortNames[state.sortKey]} ${state.sortDir === 1 ? '↑' : '↓'}`;
+  const sortNames = { added: "Date", name: "Name", size: "Size" };
+  const sortLabel = `${sortNames[state.sortKey]} ${state.sortDir === 1 ? "↑" : "↓"}`;
 
-  const tagOptions = [...new Set(active.flatMap((f) => (f.tags ?? []).map((t) => t.label)))].sort();
+  const tagOptions = [
+    ...new Set(active.flatMap((f) => (f.tags ?? []).map((t) => t.label))),
+  ].sort();
 
   // Empty-state config for the current view; filled imperatively (below) into
   // the #empty container's kit-empty structure exactly as served.
-  const emptyCfg = loaded && rows.length === 0 ? emptyStateFor(state, active.length > 0) : null;
+  const emptyCfg =
+    loaded && rows.length === 0
+      ? emptyStateFor(state, active.length > 0)
+      : null;
   useEffect(() => {
     if (!emptyCfg || !emptyRef.current) return;
     const action = emptyCfg.needsUpload
       ? h(
-          'button',
-          { type: 'button', onclick: () => uploadRef.current?.click() },
-          emptyCfg.needsUpload,
+          "button",
+          { type: "button", onclick: () => uploadRef.current?.click() },
+          emptyCfg.needsUpload
         )
       : undefined;
     emptyState(emptyRef.current, {
@@ -561,13 +595,22 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // it a no-op otherwise). Matches app.tsx re-running emptyState() per render.
   });
 
-  const inTrash = state.nav.kind === 'trash' && !state.search.trim();
-  const trashed = state.nav.kind === 'trash' && !state.search.trim();
-  const showFoot = state.driveTruncated && !state.search.trim() && state.nav.kind !== 'starred';
+  const inTrash = state.nav.kind === "trash" && !state.search.trim();
+  const trashed = state.nav.kind === "trash" && !state.search.trim();
+  const showFoot =
+    state.driveTruncated &&
+    !state.search.trim() &&
+    state.nav.kind !== "starred";
 
   // ---- slots ----
 
-  const sidebarNav = <SmartNav navKind={state.nav.kind} counts={counts} onSelectNav={selectNav} />;
+  const sidebarNav = (
+    <SmartNav
+      navKind={state.nav.kind}
+      counts={counts}
+      onSelectNav={selectNav}
+    />
+  );
   const folderList = (
     <FolderList
       folders={data.folders}
@@ -588,10 +631,15 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   );
   const storage = <Storage docs={active} truncated={state.driveTruncated} />;
   const newMenu = state.newMenuOpen ? (
-    <NewMenu onUpload={handleTriggerUpload} onNewFolder={handleStartCreateFolder} />
+    <NewMenu
+      onUpload={handleTriggerUpload}
+      onNewFolder={handleStartCreateFolder}
+    />
   ) : null;
   const typeChips = <TypeChips type={state.type} onSelect={handleSelectType} />;
-  const tagChips = <TagChips tags={tagOptions} active={state.tag} onSelect={handleSelectTag} />;
+  const tagChips = (
+    <TagChips tags={tagOptions} active={state.tag} onSelect={handleSelectTag} />
+  );
   const bulkBar =
     state.selected.size > 0 ? (
       <BulkBar
@@ -613,7 +661,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     );
   } else if (rows.length === 0) {
     scroll = <div className="kit-empty" ref={emptyRef} />;
-  } else if (state.view === 'grid') {
+  } else if (state.view === "grid") {
     scroll = (
       <>
         <div className={styles.grid}>
@@ -630,7 +678,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           ))}
         </div>
         {showFoot ? (
-          <WindowFoot driveWindow={state.driveWindow} onShowMore={handleShowMoreDocs} />
+          <WindowFoot
+            driveWindow={state.driveWindow}
+            onShowMore={handleShowMoreDocs}
+          />
         ) : null}
       </>
     );
@@ -668,7 +719,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           </div>
         </div>
         {showFoot ? (
-          <WindowFoot driveWindow={state.driveWindow} onShowMore={handleShowMoreDocs} />
+          <WindowFoot
+            driveWindow={state.driveWindow}
+            onShowMore={handleShowMoreDocs}
+          />
         ) : null}
       </>
     );
@@ -735,8 +789,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div
       ref={setRoot}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
         minWidth: 0,
         minHeight: 0,

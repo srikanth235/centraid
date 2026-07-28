@@ -1,15 +1,15 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { ensureConversationLedger } from '@centraid/app-engine';
+import { ensureConversationLedger } from "@centraid/app-engine";
 // Sweep wiring for the conversation-ledger archival engine (issue #438
 // decision 7): the daily archival block in `runSweep` must invoke conversation
 // archival alongside journal archival and roll ONE shared journal generation
 // when either engine wrote or pruned rows.
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, describe, expect, test } from "vitest";
 
-import { openVaultPlane } from './vault-plane.js';
+import { openVaultPlane } from "./vault-plane.js";
 
 const silentLogger = {
   info: () => undefined,
@@ -19,16 +19,18 @@ const silentLogger = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('vault-plane-conversation-archival', () => {
+describe("vault-plane-conversation-archival", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
   function seedAgedAutomation(journal: DatabaseSync, now: number): void {
     const daysAgo = (d: number): number => now - d * DAY_MS;
     journal
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, app_id, automation_id, title, created_at, updated_at)
-       VALUES ('app/digest','automation','u1','app','app/digest','Digest',?,?)`,
+       VALUES ('app/digest','automation','u1','app','app/digest','Digest',?,?)`
       )
       .run(daysAgo(200), now);
     const seedTurn = (id: string, seq: number, startedAt: number): void => {
@@ -36,28 +38,28 @@ describe('vault-plane-conversation-archival', () => {
         .prepare(
           `INSERT INTO turns (id, conversation_id, seq, trigger, ok, started_at, ended_at,
            total_input_tokens, total_output_tokens, total_cost_usd, step_count, tool_count)
-         VALUES (?, 'app/digest', ?, 'scheduled', 1, ?, ?, 10, 5, 0.01, 1, 0)`,
+         VALUES (?, 'app/digest', ?, 'scheduled', 1, ?, ?, 10, 5, 0.01, 1, 0)`
         )
         .run(id, seq, startedAt, startedAt + 1000);
       journal
         .prepare(
           `INSERT INTO items (id, turn_id, ordinal, kind, model, input_tokens, output_tokens, ok, started_at)
-         VALUES (?, ?, 0, 'step', 'm', 10, 5, 1, ?)`,
+         VALUES (?, ?, 0, 'step', 'm', 10, 5, 1, ?)`
         )
         .run(`${id}-s`, id, startedAt);
     };
-    seedTurn('t0', 0, daysAgo(150));
-    seedTurn('t1', 1, daysAgo(140));
-    seedTurn('t2', 2, daysAgo(1)); // live head — stays
+    seedTurn("t0", 0, daysAgo(150));
+    seedTurn("t1", 1, daysAgo(140));
+    seedTurn("t2", 2, daysAgo(1)); // live head — stays
   }
 
-  test('the daily sweep block archives + prunes conversations and rolls one generation', async () => {
+  test("the daily sweep block archives + prunes conversations and rolls one generation", async () => {
     const dir = await tempDir();
     const plane = openVaultPlane({
       bootstrap: true,
       dir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
     cleanups.push(() => plane.stop());
     expect(plane.walShipper).toBeDefined();
@@ -94,13 +96,17 @@ describe('vault-plane-conversation-archival', () => {
     expect(archiveRows[0]!.pruned_at).not.toBeNull();
 
     const remaining = plane.db.journal
-      .prepare(`SELECT id FROM turns WHERE conversation_id = 'app/digest' ORDER BY seq`)
+      .prepare(
+        `SELECT id FROM turns WHERE conversation_id = 'app/digest' ORDER BY seq`
+      )
       .all() as { id: string }[];
-    expect(remaining.map((r) => r.id)).toStrictEqual(['t2']);
+    expect(remaining.map((r) => r.id)).toStrictEqual(["t2"]);
 
     // A digest row now backs Insights for the pruned range.
     const digest = plane.db.journal
-      .prepare(`SELECT run_count FROM conversation_digest WHERE conversation_id = 'app/digest'`)
+      .prepare(
+        `SELECT run_count FROM conversation_digest WHERE conversation_id = 'app/digest'`
+      )
       .get() as { run_count: number } | undefined;
     expect(digest?.run_count).toBe(2);
 

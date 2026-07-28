@@ -16,11 +16,16 @@
 // Source of truth: packages/gateway/src/serve/health-registry.ts (HealthSnapshot)
 // and packages/client/src/react/screen-contracts.ts (InsightsSummary).
 
-import { apiHeaders, authHeader, fetchJson, requireGatewayBase } from './gateway';
+import {
+  apiHeaders,
+  authHeader,
+  fetchJson,
+  requireGatewayBase,
+} from "./gateway";
 
 // --- Gateway health (mirrors HealthSnapshot / ComponentHealth / HealthMetrics) ---
 
-export type ComponentStatus = 'ok' | 'degraded' | 'error';
+export type ComponentStatus = "ok" | "degraded" | "error";
 
 export interface ComponentHealth {
   component: string;
@@ -35,7 +40,7 @@ export interface ComponentHealth {
 export interface HealthEvent {
   at: string;
   component: string;
-  level: 'warn' | 'error';
+  level: "warn" | "error";
   message: string;
 }
 
@@ -122,16 +127,18 @@ export async function fetchGatewayHealth(): Promise<GatewayHealth> {
   const base = await requireGatewayBase();
   return fetchJson<GatewayHealth>(`${base}/centraid/_gateway/health`, {
     headers: authHeader(),
-    method: 'GET',
+    method: "GET",
   });
 }
 
 /** Usage analytics for the active vault over the last `windowDays` (default 30). */
-export async function fetchInsightsSummary(windowDays = 30): Promise<InsightsSummary> {
+export async function fetchInsightsSummary(
+  windowDays = 30
+): Promise<InsightsSummary> {
   const base = await requireGatewayBase();
   return fetchJson<InsightsSummary>(
     `${base}/centraid/_insights/summary?windowDays=${encodeURIComponent(String(windowDays))}`,
-    { headers: apiHeaders(), method: 'GET' },
+    { headers: apiHeaders(), method: "GET" }
   );
 }
 
@@ -139,7 +146,7 @@ export async function fetchInsightsSummary(windowDays = 30): Promise<InsightsSum
 
 /** Compact token/count: 1.2k, 3.4M, 987. */
 export function formatCount(n: number): string {
-  if (!Number.isFinite(n)) return '0';
+  if (!Number.isFinite(n)) return "0";
   const abs = Math.abs(n);
   if (abs >= 1_000_000) return `${trim(n / 1_000_000)}M`;
   if (abs >= 1_000) return `${trim(n / 1_000)}k`;
@@ -148,14 +155,14 @@ export function formatCount(n: number): string {
 
 /** USD to at most cents, with a leading $. Sub-cent nonzero shows "<$0.01". */
 export function formatUsd(n: number): string {
-  if (!Number.isFinite(n) || n === 0) return '$0.00';
-  if (n > 0 && n < 0.01) return '<$0.01';
+  if (!Number.isFinite(n) || n === 0) return "$0.00";
+  if (n > 0 && n < 0.01) return "<$0.01";
   return `$${n.toFixed(2)}`;
 }
 
 /** RSS/byte size in the largest sensible unit. */
 export function formatBytes(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return '0 MB';
+  if (!Number.isFinite(n) || n <= 0) return "0 MB";
   const mb = n / (1024 * 1024);
   if (mb >= 1024) return `${trim(mb / 1024)} GB`;
   return `${Math.round(mb)} MB`;
@@ -163,7 +170,7 @@ export function formatBytes(n: number): string {
 
 /** Coarse uptime: "3d 4h", "5h 12m", or "12m". */
 export function formatUptime(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  if (!Number.isFinite(ms) || ms <= 0) return "—";
   const mins = Math.floor(ms / 60_000);
   const days = Math.floor(mins / 1440);
   const hours = Math.floor((mins % 1440) / 60);
@@ -175,16 +182,16 @@ export function formatUptime(ms: number): string {
 
 /** Milliseconds rounded for display: "0.8 ms" / "42 ms". */
 export function formatMs(ms: number): string {
-  if (!Number.isFinite(ms)) return '—';
+  if (!Number.isFinite(ms)) return "—";
   return ms < 10 ? `${ms.toFixed(1)} ms` : `${Math.round(ms)} ms`;
 }
 
 /** "just now" / "5m ago" / "3h ago" / "2d ago" from an epoch-ms or ISO time. */
 export function relativeTime(when: number | string): string {
-  const then = typeof when === 'number' ? when : Date.parse(when);
-  if (!Number.isFinite(then)) return '';
+  const then = typeof when === "number" ? when : Date.parse(when);
+  if (!Number.isFinite(then)) return "";
   const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (secs < 45) return 'just now';
+  if (secs < 45) return "just now";
   const mins = Math.floor(secs / 60);
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
@@ -194,5 +201,5 @@ export function relativeTime(when: number | string): string {
 
 function trim(n: number): string {
   // One decimal, but drop a trailing ".0" so 3.0k reads as 3k.
-  return n.toFixed(1).replace(/\.0$/u, '');
+  return n.toFixed(1).replace(/\.0$/u, "");
 }

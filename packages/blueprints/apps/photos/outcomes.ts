@@ -1,5 +1,5 @@
-import type { WriteTarget } from '../_shared/write-target.ts';
-import { $ } from './dom.ts';
+import type { WriteTarget } from "../_shared/write-target.ts";
+import { $ } from "./dom.ts";
 // Outcome narration + the write trampoline (shared pattern across apps). No
 // domain (asset/album) state lives here — it's generic plumbing, which is
 // exactly why every action module and every component that needs to fire a
@@ -22,7 +22,7 @@ import { $ } from './dom.ts';
 // selection); before then, and on any single-scope host, it answers with the
 // ambient scope — the empty id every scope-addressed transport reads as "the
 // one scope there is".
-import { outcomeMessage } from './kit.ts';
+import { outcomeMessage } from "./kit.ts";
 
 /**
  * Which write is being placed. `new` follows the chip selection (an upload
@@ -30,40 +30,43 @@ import { outcomeMessage } from './kit.ts';
  * that are the member's own by construction — albums, tags and places are
  * per-scope collections this app only ever authors in the member's own space.
  */
-export type WriteTargetKind = 'new' | 'own';
+export type WriteTargetKind = "new" | "own";
 
 /** Where new things land while nothing better is known: the ambient scope. */
 const AMBIENT_TARGET: WriteTarget = {
   disabled: false,
-  scopeId: '',
-  label: 'Library',
+  scopeId: "",
+  label: "Library",
 };
 
-let resolveTarget: (kind: WriteTargetKind) => WriteTarget = () => AMBIENT_TARGET;
+let resolveTarget: (kind: WriteTargetKind) => WriteTarget = () =>
+  AMBIENT_TARGET;
 
 /** app-root.tsx installs the chip-aware resolver once, at mount. */
-export function setWriteTargetResolver(fn: (kind: WriteTargetKind) => WriteTarget): void {
+export function setWriteTargetResolver(
+  fn: (kind: WriteTargetKind) => WriteTarget
+): void {
   resolveTarget = fn;
 }
 
 /** Where a creating write would land right now, or why it cannot land at all. */
-export function writeTarget(kind: WriteTargetKind = 'new'): WriteTarget {
+export function writeTarget(kind: WriteTargetKind = "new"): WriteTarget {
   return resolveTarget(kind);
 }
 
 export function notice(text: string): void {
-  const el = $('noticeBanner');
+  const el = $("noticeBanner");
   el.textContent = text;
   el.hidden = !text;
 }
 
 export function narrate(
   outcome: VaultOutcome | null | undefined,
-  noteEl?: HTMLElement | null,
+  noteEl?: HTMLElement | null
 ): boolean {
-  if (outcome?.status === 'executed') {
-    notice('');
-    if (noteEl) noteEl.textContent = '';
+  if (outcome?.status === "executed") {
+    notice("");
+    if (noteEl) noteEl.textContent = "";
     return true;
   }
   const msg = outcomeMessage(outcome);
@@ -82,7 +85,7 @@ export function narrate(
 export async function act(
   action: string,
   input?: Record<string, unknown>,
-  scope?: string | null,
+  scope?: string | null
 ): Promise<VaultOutcome | undefined> {
   try {
     return await window.centraid.write({

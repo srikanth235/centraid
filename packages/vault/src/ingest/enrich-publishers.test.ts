@@ -1,51 +1,53 @@
 // Enrichment publisher unit tests (issue #545 B6) — tagNotation + ATTRIBUTED contract.
 
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { uuidv7 } from '../ids.js';
-import { ENRICH_PUBLISHERS, tagNotation } from './enrich-publishers.js';
+import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { uuidv7 } from "../ids.js";
+import { ENRICH_PUBLISHERS, tagNotation } from "./enrich-publishers.js";
 
 let db: VaultDb;
 let boot: BootstrapResult;
 
-describe('enrich-publishers', () => {
+describe("enrich-publishers", () => {
   beforeEach(() => {
     db = openVaultDb();
-    boot = bootstrapVault(db, { ownerName: 'Priya' });
+    boot = bootstrapVault(db, { ownerName: "Priya" });
   });
 
   afterEach(() => {
     db.close();
   });
 
-  test('tagNotation lowercases, slugifies, and caps length', () => {
-    expect(tagNotation('Beach Sunset')).toBe('beach-sunset');
-    expect(tagNotation('  Hello___World!! ')).toBe('hello-world');
-    expect(tagNotation('!!!')).toBe('untitled');
-    expect(tagNotation('a'.repeat(100))).toHaveLength(64);
+  test("tagNotation lowercases, slugifies, and caps length", () => {
+    expect(tagNotation("Beach Sunset")).toBe("beach-sunset");
+    expect(tagNotation("  Hello___World!! ")).toBe("hello-world");
+    expect(tagNotation("!!!")).toBe("untitled");
+    expect(tagNotation("a".repeat(100))).toHaveLength(64);
   });
 
-  test('ENRICH_PUBLISHERS covers the five derived-data entity types', () => {
+  test("ENRICH_PUBLISHERS covers the five derived-data entity types", () => {
     expect(ENRICH_PUBLISHERS.map((p) => p.entityType).sort()).toStrictEqual([
-      'core.collection',
-      'core.content_item',
-      'core.tag',
-      'knowledge.annotation',
-      'media.face_region',
+      "core.collection",
+      "core.content_item",
+      "core.tag",
+      "knowledge.annotation",
+      "media.face_region",
     ]);
   });
 
-  test('annotation publisher attributes the enricher party and re-derives in place', () => {
-    const publisher = ENRICH_PUBLISHERS.find((p) => p.entityType === 'knowledge.annotation')!;
+  test("annotation publisher attributes the enricher party and re-derives in place", () => {
+    const publisher = ENRICH_PUBLISHERS.find(
+      (p) => p.entityType === "knowledge.annotation"
+    )!;
     const targetId = boot.ownerPartyId;
     const agentParty = uuidv7();
     const now = new Date().toISOString();
     db.vault
       .prepare(
         `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
-       VALUES (?, 'org', 'vision-agent', ?, ?, '1.4')`,
+       VALUES (?, 'org', 'vision-agent', ?, ?, '1.4')`
       )
       .run(agentParty, now, now);
 
@@ -53,66 +55,72 @@ describe('enrich-publishers', () => {
       db.vault,
       boot.ownerPartyId,
       {
-        target_type: 'core.party',
+        target_type: "core.party",
         target_id: targetId,
-        body: 'A warm outdoor portrait',
+        body: "A warm outdoor portrait",
         author_party_id: agentParty,
       },
-      now,
+      now
     );
     expect(created.entityId.length).toBeGreaterThan(10);
     const row = db.vault
       .prepare(
-        `SELECT body_text, author_party_id FROM knowledge_annotation WHERE annotation_id = ?`,
+        `SELECT body_text, author_party_id FROM knowledge_annotation WHERE annotation_id = ?`
       )
       .get(created.entityId) as { body_text: string; author_party_id: string };
-    expect(row.body_text).toBe('A warm outdoor portrait');
+    expect(row.body_text).toBe("A warm outdoor portrait");
     expect(row.author_party_id).toBe(agentParty);
 
     const probed = publisher.probe(db.vault, {
-      target_type: 'core.party',
+      target_type: "core.party",
       target_id: targetId,
-      body: 'Updated caption',
+      body: "Updated caption",
       author_party_id: agentParty,
     });
     expect(probed).toMatchObject({
       entityId: created.entityId,
-      disposition: 'update',
+      disposition: "update",
     });
     publisher.update(
       db.vault,
       created.entityId,
       {
-        target_type: 'core.party',
+        target_type: "core.party",
         target_id: targetId,
-        body: 'Updated caption',
+        body: "Updated caption",
         author_party_id: agentParty,
       },
       now,
-      boot.ownerPartyId,
+      boot.ownerPartyId
     );
     const updated = db.vault
-      .prepare(`SELECT body_text FROM knowledge_annotation WHERE annotation_id = ?`)
+      .prepare(
+        `SELECT body_text FROM knowledge_annotation WHERE annotation_id = ?`
+      )
       .get(created.entityId) as { body_text: string };
-    expect(updated.body_text).toBe('Updated caption');
+    expect(updated.body_text).toBe("Updated caption");
   });
 
-  test('tag publisher mints a machine concept and stamps confidence without tagged_by', () => {
-    const publisher = ENRICH_PUBLISHERS.find((p) => p.entityType === 'core.tag')!;
+  test("tag publisher mints a machine concept and stamps confidence without tagged_by", () => {
+    const publisher = ENRICH_PUBLISHERS.find(
+      (p) => p.entityType === "core.tag"
+    )!;
     const now = new Date().toISOString();
     const created = publisher.create(
       db.vault,
       boot.ownerPartyId,
       {
-        target_type: 'core.party',
+        target_type: "core.party",
         target_id: boot.ownerPartyId,
-        label: 'Beach Sunset',
+        label: "Beach Sunset",
         confidence: 0.91,
       },
-      now,
+      now
     );
     const tag = db.vault
-      .prepare(`SELECT concept_id, confidence, tagged_by_party_id FROM core_tag WHERE tag_id = ?`)
+      .prepare(
+        `SELECT concept_id, confidence, tagged_by_party_id FROM core_tag WHERE tag_id = ?`
+      )
       .get(created.entityId) as {
       concept_id: string;
       confidence: number | null;
@@ -121,9 +129,11 @@ describe('enrich-publishers', () => {
     expect(tag.confidence).toBeCloseTo(0.91);
     expect(tag.tagged_by_party_id).toBeNull();
     const concept = db.vault
-      .prepare(`SELECT notation, pref_label FROM core_concept WHERE concept_id = ?`)
+      .prepare(
+        `SELECT notation, pref_label FROM core_concept WHERE concept_id = ?`
+      )
       .get(tag.concept_id) as { notation: string; pref_label: string };
-    expect(concept.notation).toBe('beach-sunset');
-    expect(concept.pref_label).toBe('Beach Sunset');
+    expect(concept.notation).toBe("beach-sunset");
+    expect(concept.pref_label).toBe("Beach Sunset");
   });
 });

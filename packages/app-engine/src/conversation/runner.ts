@@ -16,18 +16,22 @@
  * frames and pipes them back to the harness client.
  */
 
-import type { ConversationWorkspaceKind, RunKind } from './schema.js';
-import type { AdapterUsageSnapshot, RunnerKind, TurnAttachment } from './turn.js';
+import type { ConversationWorkspaceKind, RunKind } from "./schema.js";
+import type {
+  AdapterUsageSnapshot,
+  RunnerKind,
+  TurnAttachment,
+} from "./turn.js";
 
 export type AgentFailureClass =
-  | 'spawn'
-  | 'auth'
-  | 'init'
-  | 'timeout'
-  | 'quota'
-  | 'wedge'
-  | 'exit'
-  | 'unknown';
+  | "spawn"
+  | "auth"
+  | "init"
+  | "timeout"
+  | "quota"
+  | "wedge"
+  | "exit"
+  | "unknown";
 
 /**
  * Normalized stream events both adapters emit. The route handler translates
@@ -37,16 +41,16 @@ export type AgentFailureClass =
  * harness handles unknown event types gracefully and ignores them.
  */
 export type TurnStreamEvent =
-  | { type: 'assistant.start' }
-  | { type: 'assistant.delta'; delta: string }
-  | { type: 'reasoning.delta'; delta: string }
+  | { type: "assistant.start" }
+  | { type: "assistant.delta"; delta: string }
+  | { type: "reasoning.delta"; delta: string }
   /**
    * Latest per-ACP-session context-window snapshot. `used` may decrease after
    * agent-side compaction; clients must render the latest value, not a max.
    */
-  | { type: 'context'; used?: number; size?: number }
+  | { type: "context"; used?: number; size?: number }
   | {
-      type: 'tool.start';
+      type: "tool.start";
       toolCallId: string;
       toolName: string;
       args?: unknown;
@@ -58,7 +62,7 @@ export type TurnStreamEvent =
       rawJson?: string;
     }
   | {
-      type: 'tool.result';
+      type: "tool.result";
       toolCallId: string;
       toolName: string;
       ok: boolean;
@@ -82,14 +86,14 @@ export type TurnStreamEvent =
       rawJson?: string;
     }
   | {
-      type: 'phase';
+      type: "phase";
       phase: string;
       detail?: unknown;
       /** Normalized plan entries when `phase === 'plan'`. */
       plan?: Array<{ content: string; status?: string; priority?: string }>;
     }
   | {
-      type: 'final';
+      type: "final";
       text: string;
       /** Runner-native completion reason, preserved verbatim. */
       stopReason?: string;
@@ -97,7 +101,7 @@ export type TurnStreamEvent =
       rawJson?: string;
     }
   | {
-      type: 'error';
+      type: "error";
       message: string;
       /** Stable agent failure class used by breakers and turn-boundary failover. */
       failureClass?: AgentFailureClass;
@@ -106,12 +110,12 @@ export type TurnStreamEvent =
       /** Lossless runner completion envelope. */
       rawJson?: string;
     }
-  | { type: 'aborted' }
+  | { type: "aborted" }
   | {
-      type: 'consent.required';
-      consentKind: 'provider-egress';
+      type: "consent.required";
+      consentKind: "provider-egress";
       provider: RunnerKind;
-      reason: 'direct' | 'ladder';
+      reason: "direct" | "ladder";
       message: string;
     }
   /**
@@ -122,7 +126,7 @@ export type TurnStreamEvent =
    * sees "this runner can't read PDF attachments" instead of nothing. Both
    * chat surfaces render it via the shared parser.
    */
-  | { type: 'notice'; level: 'warn' | 'info'; code?: string; message: string }
+  | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
   /**
    * Webhook secrets minted as a post-turn step (issue #141, Phase 3). When
    * a unified-chat turn authors an automation with a pending webhook
@@ -133,7 +137,7 @@ export type TurnStreamEvent =
    * that don't author code (data-only chat) never emit it.
    */
   | {
-      type: 'webhooks';
+      type: "webhooks";
       minted: Array<{
         automationId: string;
         ownerApp: string;
@@ -150,7 +154,7 @@ export type TurnStreamEvent =
    * Adapters that can't surface usage simply never emit it.
    */
   | {
-      type: 'usage';
+      type: "usage";
       model?: string;
       /** Confirmed live `thought_level`; requested-but-rejected values are omitted. */
       effort?: string;
@@ -165,7 +169,7 @@ export type TurnStreamEvent =
        */
       costUsd?: number;
       /** Where `costUsd` came from — agent report vs catalog estimate. */
-      costSource?: 'agent' | 'estimated';
+      costSource?: "agent" | "estimated";
     };
 
 export interface ConversationTurnInput {
@@ -205,7 +209,7 @@ export interface ConversationTurnInput {
    * (vault_sql/vault_invoke with an app lens). Absent/`'build'` keeps the
    * builder-capable unified runner. Threaded from the `_turn` POST body.
    */
-  register?: 'ask' | 'build';
+  register?: "ask" | "build";
   /**
    * Files attached to this turn's inbound message — already landed in the
    * per-app blob CAS; `path` is the absolute blob path (issue #190). The
@@ -243,7 +247,7 @@ export interface ConversationTurnInput {
    * and vault grants the host already exposed, and can never widen that set
    * through an agent-rendered permission prompt.
    */
-  permissionPolicy?: 'auto-allow' | 'deny';
+  permissionPolicy?: "auto-allow" | "deny";
   abortSignal: AbortSignal;
   /**
    * Idempotency key supplied by the harness — same turn re-tried with the
@@ -279,7 +283,7 @@ export interface ConversationTurnInput {
     estimatedTokens: number;
   };
   /** Historical files re-attached only if the target advertises their block type. */
-  hydrationAttachments?: import('./turn.js').TurnAttachment[];
+  hydrationAttachments?: import("./turn.js").TurnAttachment[];
   /** Full-ledger recovery plan used only if this runner's own resume handle expired. */
   recoveryHydrationContext?: {
     prompt: string;
@@ -289,7 +293,7 @@ export interface ConversationTurnInput {
     estimatedTokens: number;
   };
   /** Full-ledger counterpart to `hydrationAttachments`. */
-  recoveryHydrationAttachments?: import('./turn.js').TurnAttachment[];
+  recoveryHydrationAttachments?: import("./turn.js").TurnAttachment[];
   /**
    * Per-rung resume + hydration planner, injected by the turn driver (which
    * owns the conversation store). The failover ladder can land on a provider
@@ -316,11 +320,11 @@ export interface TurnResumePlan {
   /** Cumulative counters stored with `sessionId`. */
   usageSnapshot?: AdapterUsageSnapshot;
   /** Ledger delta past THIS binding's watermark (the full ledger when cold). */
-  hydrationContext?: ConversationTurnInput['hydrationContext'];
-  hydrationAttachments?: import('./turn.js').TurnAttachment[];
+  hydrationContext?: ConversationTurnInput["hydrationContext"];
+  hydrationAttachments?: import("./turn.js").TurnAttachment[];
   /** Full-ledger plan used only if `sessionId` turns out to be expired. */
-  recoveryHydrationContext?: ConversationTurnInput['recoveryHydrationContext'];
-  recoveryHydrationAttachments?: import('./turn.js').TurnAttachment[];
+  recoveryHydrationContext?: ConversationTurnInput["recoveryHydrationContext"];
+  recoveryHydrationAttachments?: import("./turn.js").TurnAttachment[];
 }
 
 export interface ConversationTurnResult {
@@ -342,7 +346,7 @@ export interface ConversationTurnResult {
    * resume handle we supplied was rejected and the adapter self-healed onto a
    * fresh session — the signal the driver uses to retire the dead binding.
    */
-  hydrationKind?: 'handoff' | 'recovery';
+  hydrationKind?: "handoff" | "recovery";
   /**
    * Estimated tokens of the hydration prompt actually consumed. Present only
    * when `hydrated` is true; persisted separately from ordinary ACP usage.

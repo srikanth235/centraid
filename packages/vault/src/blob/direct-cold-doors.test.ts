@@ -1,5 +1,5 @@
-import { randomBytes } from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { randomBytes } from "node:crypto";
+import { rmSync } from "node:fs";
 // Direct-to-IA storage class for large media originals (issue #425 Wave 3
 // Part B) — the remote-primary ingress doors, where the CAS object is minted
 // BEFORE the staging row exists, so the class is resolved from a media hint the
@@ -10,39 +10,46 @@ import { rmSync } from 'node:fs';
 // The pure eligibility resolver and the local-first outbox-drain doors that
 // resolve the class from an already-written `blob_staging` row live alongside in
 // direct-cold-originals.test.ts.
-import http from 'node:http';
-import path from 'node:path';
+import http from "node:http";
+import path from "node:path";
 
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test } from 'vitest';
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { afterEach, describe, expect, test } from "vitest";
 
-import { resolveBackupPolicy, type BackupPolicy } from '../backup-policy.js';
-import { bootstrapVault } from '../bootstrap.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { BlobCache } from './cache.js';
-import { BlobContentKeyRegistry } from './content-keys.js';
-import type { RemoteTier } from './custody-types.js';
-import { FsBlobStore } from './local.js';
-import type { RemoteBlobTransfer } from './remote-transfer.js';
-import { S3TransferStore } from './s3-transfer.js';
-import { unsealBlob } from './seal.js';
-import { COLD_ORIGINAL_STORAGE_CLASS, storageClassForShaWrite } from './store-routing.js';
-import type { BlobRange, BlobStat, BlobStore } from './store.js';
-import { sha256OfBytes } from './store.js';
-import { BlobTransferCoordinator } from './transfers.js';
+import { resolveBackupPolicy, type BackupPolicy } from "../backup-policy.js";
+import { bootstrapVault } from "../bootstrap.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { BlobCache } from "./cache.js";
+import { BlobContentKeyRegistry } from "./content-keys.js";
+import type { RemoteTier } from "./custody-types.js";
+import { FsBlobStore } from "./local.js";
+import type { RemoteBlobTransfer } from "./remote-transfer.js";
+import { S3TransferStore } from "./s3-transfer.js";
+import { unsealBlob } from "./seal.js";
+import {
+  COLD_ORIGINAL_STORAGE_CLASS,
+  storageClassForShaWrite,
+} from "./store-routing.js";
+import type { BlobRange, BlobStat, BlobStore } from "./store.js";
+import { sha256OfBytes } from "./store.js";
+import { BlobTransferCoordinator } from "./transfers.js";
 
 const cleanups: (() => void | Promise<void>)[] = [];
-describe('direct-cold-doors', () => {
+describe("direct-cold-doors", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
 
-  const SUPPORTED = ['STANDARD', 'STANDARD_IA'];
+  const SUPPORTED = ["STANDARD", "STANDARD_IA"];
 
   function rangeOf(bytes: Buffer, range?: BlobRange): Buffer {
     if (!range) return Buffer.from(bytes);
-    return Buffer.from(bytes.subarray(range.start, (range.end ?? bytes.length - 1) + 1));
+    return Buffer.from(
+      bytes.subarray(range.start, (range.end ?? bytes.length - 1) + 1)
+    );
   }
 
   // ---------- the CopyObject (direct-upload promotion) door ----------
@@ -65,48 +72,54 @@ describe('direct-cold-doors', () => {
     }[] = [];
     const server = http.createServer((req, res) => {
       requests.push({
-        method: req.method ?? '',
+        method: req.method ?? "",
         storageClass:
-          typeof req.headers['x-amz-storage-class'] === 'string'
-            ? (req.headers['x-amz-storage-class'] as string)
+          typeof req.headers["x-amz-storage-class"] === "string"
+            ? (req.headers["x-amz-storage-class"] as string)
             : null,
         copySource:
-          typeof req.headers['x-amz-copy-source'] === 'string'
-            ? (req.headers['x-amz-copy-source'] as string)
+          typeof req.headers["x-amz-copy-source"] === "string"
+            ? (req.headers["x-amz-copy-source"] as string)
             : null,
       });
-      req.on('data', () => undefined);
-      req.on('end', () => void res.writeHead(200).end());
+      req.on("data", () => undefined);
+      req.on("end", () => void res.writeHead(200).end());
     });
     return new Promise((resolve) => {
-      server.listen(0, '127.0.0.1', () => {
+      server.listen(0, "127.0.0.1", () => {
         const addr = server.address() as { port: number };
         resolve({
           url: `http://127.0.0.1:${addr.port}`,
           requests,
-          close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+          close: () =>
+            new Promise<void>((resolve) => server.close(() => resolve())),
         });
       });
     });
   }
 
-  test('CopyObject door: copyTemporaryToSha rides the override onto the object-creating copy', async () => {
+  test("CopyObject door: copyTemporaryToSha rides the override onto the object-creating copy", async () => {
     const fake = await startFakeS3();
     cleanups.push(() => fake.close());
     const transfer = new S3TransferStore({
       endpoint: fake.url,
-      bucket: 'test-bucket',
-      prefix: 'v/acct',
-      credentials: () => Promise.resolve({ accessKeyId: 'AK', secretAccessKey: 'SK' }),
+      bucket: "test-bucket",
+      prefix: "v/acct",
+      credentials: () =>
+        Promise.resolve({ accessKeyId: "AK", secretAccessKey: "SK" }),
     });
-    const sha = 'd'.repeat(64);
-    await transfer.copyTemporaryToSha('direct-1', sha, COLD_ORIGINAL_STORAGE_CLASS);
+    const sha = "d".repeat(64);
+    await transfer.copyTemporaryToSha(
+      "direct-1",
+      sha,
+      COLD_ORIGINAL_STORAGE_CLASS
+    );
     const copy = fake.requests.find((r) => r.copySource !== null);
-    expect(copy?.method).toBe('PUT');
-    expect(copy?.storageClass).toBe('STANDARD_IA');
+    expect(copy?.method).toBe("PUT");
+    expect(copy?.storageClass).toBe("STANDARD_IA");
 
     // No override + no instance class ⇒ a class-less copy.
-    await transfer.copyTemporaryToSha('direct-2', sha);
+    await transfer.copyTemporaryToSha("direct-2", sha);
     const bare = fake.requests.findLast((r) => r.copySource !== null);
     expect(bare?.storageClass).toBeNull();
   });
@@ -136,15 +149,15 @@ describe('direct-cold-doors', () => {
 
   function openStreamHarness(
     policy: BackupPolicy,
-    supported: readonly string[] | undefined,
+    supported: readonly string[] | undefined
   ): StreamHarness {
-    const dir = tempDirSync('blob-cold-stream-');
+    const dir = tempDirSync("blob-cold-stream-");
     cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
     const db = openVaultDb({ dir });
     cleanups.push(() => db.close());
     db.blobTransfers.abandon();
-    bootstrapVault(db, { ownerName: 'Ravi' });
-    const local = new FsBlobStore(path.join(dir, 'blobs'));
+    bootstrapVault(db, { ownerName: "Ravi" });
+    const local = new FsBlobStore(path.join(dir, "blobs"));
     const merged: BackupPolicy = {
       ...policy,
       cacheBudgetBytes: 1,
@@ -157,7 +170,7 @@ describe('direct-cold-doors', () => {
     const uploads = new Map<string, Map<number, Buffer>>();
     const classOf = new Map<string, string | undefined>();
     const store: BlobStore = {
-      kind: 'fake-cold-stream',
+      kind: "fake-cold-stream",
       put: async (sha, bytes) => void objects.set(sha, Buffer.from(bytes)),
       get: async (sha, range) => {
         const b = objects.get(sha);
@@ -182,10 +195,14 @@ describe('direct-cold-doors', () => {
       },
       completeTemporaryUpload: async (tempId, _u, parts) => {
         const saved = uploads.get(tempId)!;
-        temporary.set(tempId, Buffer.concat(parts.map((p) => saved.get(p.partNumber)!)));
+        temporary.set(
+          tempId,
+          Buffer.concat(parts.map((p) => saved.get(p.partNumber)!))
+        );
       },
       abortTemporaryUpload: async (tempId) => void uploads.delete(tempId),
-      putTemporary: async (tempId, bytes) => void temporary.set(tempId, Buffer.from(bytes)),
+      putTemporary: async (tempId, bytes) =>
+        void temporary.set(tempId, Buffer.from(bytes)),
       putTemporaryStream: async (tempId, source) =>
         void temporary.set(tempId, await collectStream(source)),
       statTemporary: async (tempId) => {
@@ -206,9 +223,9 @@ describe('direct-cold-doors', () => {
         temporary.delete(tempId);
         uploads.delete(tempId);
       },
-      presignTemporaryPut: async () => new URL('https://s3.invalid/put'),
-      presignTemporaryPart: async () => new URL('https://s3.invalid/part'),
-      presignShaGet: async () => new URL('https://s3.invalid/get'),
+      presignTemporaryPut: async () => new URL("https://s3.invalid/put"),
+      presignTemporaryPart: async () => new URL("https://s3.invalid/part"),
+      presignShaGet: async () => new URL("https://s3.invalid/get"),
     };
     const remote: RemoteTier = {
       store,
@@ -216,7 +233,14 @@ describe('direct-cold-doors', () => {
       keyFor: (sha) => keys.getOrCreate(sha),
       frameSize: 1024 * 1024,
       storageClassFor: (sha, storeClass, hint) =>
-        storageClassForShaWrite(db.vault, sha, storeClass, supported, merged, hint),
+        storageClassForShaWrite(
+          db.vault,
+          sha,
+          storeClass,
+          supported,
+          merged,
+          hint
+        ),
     };
     const coordinator = () => {
       const value = new BlobTransferCoordinator({
@@ -240,17 +264,17 @@ describe('direct-cold-doors', () => {
   async function streamThroughIngress(
     coordinator: BlobTransferCoordinator,
     plain: Buffer,
-    mediaType: string,
+    mediaType: string
   ): Promise<string> {
     const sha = sha256OfBytes(plain);
     const begun = await coordinator.beginIngress({
       expectedSha256: sha,
       expectedSize: plain.length,
       mediaType,
-      stagedBy: 'device-a',
+      stagedBy: "device-a",
       resumable: true,
     });
-    if (begun.mode !== 'stream-through')
+    if (begun.mode !== "stream-through")
       throw new Error(`expected stream-through, got ${begun.mode}`);
     await coordinator.appendIngress(begun.sessionId, 0, plain);
     const committed = await coordinator.commitIngress(begun.sessionId);
@@ -258,25 +282,31 @@ describe('direct-cold-doors', () => {
     return sha;
   }
 
-  test('stream-through door: an eligible large video original promotes with STANDARD_IA', async () => {
+  test("stream-through door: an eligible large video original promotes with STANDARD_IA", async () => {
     const policy = resolveBackupPolicy({
       directToColdOriginals: { minBytes: 1024 },
     });
     const h = openStreamHarness(policy, SUPPORTED);
     const plain = randomBytes(4096);
-    const sha = await streamThroughIngress(h.coordinator(), plain, 'video/mp4');
-    expect(h.classOf.get(sha)).toBe('STANDARD_IA');
+    const sha = await streamThroughIngress(h.coordinator(), plain, "video/mp4");
+    expect(h.classOf.get(sha)).toBe("STANDARD_IA");
     // The final CAS object still round-trips: the class rides alongside the bytes.
-    expect(unsealBlob(h.keys.getOrCreate(sha), sha, h.objects.get(sha)!)).toStrictEqual(plain);
+    expect(
+      unsealBlob(h.keys.getOrCreate(sha), sha, h.objects.get(sha)!)
+    ).toStrictEqual(plain);
   });
 
-  test('stream-through door: an ineligible original promotes class-less (no header)', async () => {
+  test("stream-through door: an ineligible original promotes class-less (no header)", async () => {
     const policy = resolveBackupPolicy({
       directToColdOriginals: { minBytes: 1024 },
     });
     // Non-media original at size — sniffs application/pdf, so it never goes cold.
     const h = openStreamHarness(policy, SUPPORTED);
-    const sha = await streamThroughIngress(h.coordinator(), randomBytes(4096), 'application/pdf');
+    const sha = await streamThroughIngress(
+      h.coordinator(),
+      randomBytes(4096),
+      "application/pdf"
+    );
     expect(h.classOf.get(sha)).toBeUndefined();
   });
 });

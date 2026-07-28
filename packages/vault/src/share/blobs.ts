@@ -13,8 +13,8 @@
 // the inode survives until the last vault lets go — no shared pin table, no
 // cross-vault bookkeeping.
 
-import type { LocalBlobStore } from '../blob/local.js';
-import { VaultShareError } from '../errors.js';
+import type { LocalBlobStore } from "../blob/local.js";
+import { VaultShareError } from "../errors.js";
 
 /**
  * How a content address came to be in the audience vault's CAS.
@@ -24,7 +24,7 @@ import { VaultShareError } from '../errors.js';
  *               were written through the store's own write-once temp+rename
  *               path. Identical semantics, costs bytes.
  */
-export type BlobPlacementMode = 'present' | 'linked' | 'copied';
+export type BlobPlacementMode = "present" | "linked" | "copied";
 
 /** One content address placed into the audience vault, and how. */
 export interface BlobPlacement {
@@ -43,14 +43,14 @@ export interface BlobPlacement {
 export function placeBlob(
   origin: LocalBlobStore,
   audience: LocalBlobStore,
-  sha: string,
+  sha: string
 ): BlobPlacementMode {
-  if (audience.hasSync(sha)) return 'present';
+  if (audience.hasSync(sha)) return "present";
   const source = origin.localPathSync?.(sha) ?? null;
   if (source !== null && audience.linkFromSync) {
     const outcome = audience.linkFromSync(sha, source);
-    if (outcome === 'linked') return 'linked';
-    if (outcome === 'exists') return 'present';
+    if (outcome === "linked") return "linked";
+    if (outcome === "exists") return "present";
     // 'unsupported' — the filesystem will not link these two paths. Fall
     // through to the byte copy below rather than failing the share.
   }
@@ -60,9 +60,9 @@ export function placeBlob(
   const bytes = origin.getSync(sha);
   if (bytes === null) {
     throw new VaultShareError(
-      `cannot share ${sha}: the origin vault holds no local bytes for it (bytes must be resident to be placed)`,
+      `cannot share ${sha}: the origin vault holds no local bytes for it (bytes must be resident to be placed)`
     );
   }
   audience.putSync(sha, bytes);
-  return 'copied';
+  return "copied";
 }

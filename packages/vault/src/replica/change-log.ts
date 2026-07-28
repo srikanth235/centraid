@@ -1,21 +1,21 @@
 // governance: allow-repo-hygiene file-size-limit (#406) trigger generation, cursor reads, and retention share one transactional log invariant
-import { createHash, randomUUID } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
+import { createHash, randomUUID } from "node:crypto";
+import type { DatabaseSync } from "node:sqlite";
 
-import { REPLICA_SCHEMA_EPOCH } from '../schema/replica.js';
-import { listVaultEntities, resolveEntity } from '../schema/tables.js';
+import { REPLICA_SCHEMA_EPOCH } from "../schema/replica.js";
+import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import {
   formatReplicaCursor,
   parseReplicaCursor,
   type ReplicaCursor,
   type ReplicaCursorInput,
-} from './cursor.js';
-import { replicaUnavailableColumnsOf } from './unavailable-columns.js';
+} from "./cursor.js";
+import { replicaUnavailableColumnsOf } from "./unavailable-columns.js";
 
 export const REPLICA_RETENTION_DAYS = 30;
 export const REPLICA_RETENTION_MAX_ENTRIES = 100_000;
 
-export type ReplicaChangeOp = 'insert' | 'update' | 'delete';
+export type ReplicaChangeOp = "insert" | "update" | "delete";
 
 export interface ReplicaChangeEntry {
   seq: number;
@@ -46,15 +46,18 @@ export interface ReplicaChangePage {
   hasMore: boolean;
 }
 
-export type ReplicaRebootstrapReason = 'epoch-mismatch' | 'retention' | 'cursor-ahead';
+export type ReplicaRebootstrapReason =
+  | "epoch-mismatch"
+  | "retention"
+  | "cursor-ahead";
 
 export class ReplicaRebootstrapRequiredError extends Error {
   constructor(
     readonly reason: ReplicaRebootstrapReason,
-    readonly state: ReplicaLogState,
+    readonly state: ReplicaLogState
   ) {
     super(`replica bootstrap required: ${reason}`);
-    this.name = 'ReplicaRebootstrapRequiredError';
+    this.name = "ReplicaRebootstrapRequiredError";
   }
 }
 
@@ -85,11 +88,13 @@ function sqlString(value: string): string {
 function triggerSpecs(vault: DatabaseSync): EntityTriggerSpec[] {
   const specs = listVaultEntities(vault).flatMap((logical) => {
     const ref = resolveEntity(logical, vault);
-    if (!ref || ref.file !== 'vault') return [];
+    if (!ref || ref.file !== "vault") return [];
     // One catalog read per entity supplies both identity and projection
     // columns. This path runs on fresh schema/ext DDL, so avoiding a second
     // PRAGMA per table materially reduces cold vault-open work.
-    const columns = vault.prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`).all() as {
+    const columns = vault
+      .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
+      .all() as {
       name: string;
       pk: number;
     }[];
@@ -111,9 +116,9 @@ function triggerSpecs(vault: DatabaseSync): EntityTriggerSpec[] {
   // Intent outcomes are protocol metadata rather than an app-grantable
   // ontology entity, so they deliberately stay out of schema/tables.ts.
   specs.push({
-    logical: 'replica.intent',
-    physical: 'replica_intent_outcome',
-    primaryKey: ['intent_id'],
+    logical: "replica.intent",
+    physical: "replica_intent_outcome",
+    primaryKey: ["intent_id"],
     // Outcomes are device-scoped protocol metadata rather than app data, so
     // the generic vault log never snapshots them.
     oldValueColumns: [],
@@ -121,12 +126,14 @@ function triggerSpecs(vault: DatabaseSync): EntityTriggerSpec[] {
   return specs;
 }
 
-function rowIdExpression(alias: 'new' | 'old', primaryKey: string[]): string {
+function rowIdExpression(alias: "new" | "old", primaryKey: string[]): string {
   if (primaryKey.length === 0) return `CAST(${alias}.rowid AS TEXT)`;
-  const values = primaryKey.map((column) => `${alias}.${quoteIdentifier(column)}`);
+  const values = primaryKey.map(
+    (column) => `${alias}.${quoteIdentifier(column)}`
+  );
   return primaryKey.length === 1
     ? `CAST(${values[0]} AS TEXT)`
-    : `json_array(${values.join(', ')})`;
+    : `json_array(${values.join(", ")})`;
 }
 
 function oldValuesExpression(spec: EntityTriggerSpec): string {
@@ -137,16 +144,20 @@ function oldValuesExpression(spec: EntityTriggerSpec): string {
     // to null; replica filters over BLOB columns fail closed at shape build.
     `CASE WHEN typeof(old.${quoteIdentifier(column)}) = 'blob' THEN NULL ELSE old.${quoteIdentifier(column)} END`,
   ]);
-  return `json_object(${pairs.join(', ')})`;
+  return `json_object(${pairs.join(", ")})`;
 }
 
-function triggerSql(spec: EntityTriggerSpec, suffix: 'ai' | 'au' | 'ad'): string {
-  const event = suffix === 'ai' ? 'INSERT' : suffix === 'au' ? 'UPDATE' : 'DELETE';
+function triggerSql(
+  spec: EntityTriggerSpec,
+  suffix: "ai" | "au" | "ad"
+): string {
+  const event =
+    suffix === "ai" ? "INSERT" : suffix === "au" ? "UPDATE" : "DELETE";
   const name = `trg_replica_${spec.physical}_${suffix}`;
   const changedAt = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
-  if (suffix === 'au') {
-    const oldId = rowIdExpression('old', spec.primaryKey);
-    const newId = rowIdExpression('new', spec.primaryKey);
+  if (suffix === "au") {
+    const oldId = rowIdExpression("old", spec.primaryKey);
+    const newId = rowIdExpression("new", spec.primaryKey);
     return `CREATE TRIGGER ${quoteIdentifier(name)} AFTER ${event} ON ${quoteIdentifier(spec.physical)} BEGIN
   INSERT INTO replica_change (epoch, entity, row_id, op, old_values_json, changed_at)
   SELECT epoch, ${sqlString(spec.logical)}, ${oldId}, 'delete', ${oldValuesExpression(spec)}, ${changedAt}
@@ -159,9 +170,9 @@ function triggerSql(spec: EntityTriggerSpec, suffix: 'ai' | 'au' | 'ad'): string
     FROM replica_meta WHERE singleton = 1;
 END`;
   }
-  const op = suffix === 'ai' ? 'insert' : 'delete';
-  const alias = suffix === 'ai' ? 'new' : 'old';
-  const oldValues = suffix === 'ad' ? oldValuesExpression(spec) : 'NULL';
+  const op = suffix === "ai" ? "insert" : "delete";
+  const alias = suffix === "ai" ? "new" : "old";
+  const oldValues = suffix === "ad" ? oldValuesExpression(spec) : "NULL";
   return `CREATE TRIGGER ${quoteIdentifier(name)} AFTER ${event} ON ${quoteIdentifier(spec.physical)} BEGIN
   INSERT INTO replica_change (epoch, entity, row_id, op, old_values_json, changed_at)
   SELECT epoch, ${sqlString(spec.logical)}, ${rowIdExpression(alias, spec.primaryKey)}, ${sqlString(op)},
@@ -171,11 +182,11 @@ END`;
 }
 
 function normalizeSql(sql: string): string {
-  return sql.replaceAll(/\s+/gu, ' ').replace(/;$/u, '').trim();
+  return sql.replaceAll(/\s+/gu, " ").replace(/;$/u, "").trim();
 }
 
 function sqliteSchemaVersion(vault: DatabaseSync): number {
-  const row = vault.prepare('PRAGMA schema_version').get() as {
+  const row = vault.prepare("PRAGMA schema_version").get() as {
     schema_version: number;
   };
   return row.schema_version;
@@ -183,14 +194,16 @@ function sqliteSchemaVersion(vault: DatabaseSync): number {
 
 function triggerContractMarker(
   vault: DatabaseSync,
-  specs: EntityTriggerSpec[] = triggerSpecs(vault),
+  specs: EntityTriggerSpec[] = triggerSpecs(vault)
 ): number {
   const contract = specs.flatMap((spec) =>
-    (['ai', 'au', 'ad'] as const).map((suffix) => normalizeSql(triggerSql(spec, suffix))),
+    (["ai", "au", "ad"] as const).map((suffix) =>
+      normalizeSql(triggerSql(spec, suffix))
+    )
   );
-  const digest = createHash('sha256')
+  const digest = createHash("sha256")
     .update(JSON.stringify([sqliteSchemaVersion(vault), contract]))
-    .digest('hex');
+    .digest("hex");
   return Number.parseInt(digest.slice(0, 8), 16);
 }
 
@@ -206,32 +219,35 @@ export function refreshReplicaTriggers(vault: DatabaseSync): void {
       vault
         .prepare(
           `SELECT name, sql FROM sqlite_master
-            WHERE type = 'trigger' AND name LIKE 'trg_replica_%'`,
+            WHERE type = 'trigger' AND name LIKE 'trg_replica_%'`
         )
         .all() as { name: string; sql: string | null }[]
-    ).map((row) => [row.name, row.sql] as const),
+    ).map((row) => [row.name, row.sql] as const)
   );
   const ddl: string[] = [];
   for (const spec of specs) {
-    for (const suffix of ['ai', 'au', 'ad'] as const) {
+    for (const suffix of ["ai", "au", "ad"] as const) {
       const name = `trg_replica_${spec.physical}_${suffix}`;
       const wanted = triggerSql(spec, suffix);
       const current = existing.get(name);
       if (current && normalizeSql(current) === normalizeSql(wanted)) continue;
-      if (current !== undefined) ddl.push(`DROP TRIGGER ${quoteIdentifier(name)}`);
+      if (current !== undefined)
+        ddl.push(`DROP TRIGGER ${quoteIdentifier(name)}`);
       ddl.push(wanted);
     }
   }
   // Crossing the JS/native boundary once is substantially cheaper than one
   // exec per trigger on the fresh-vault path; SQLite still applies the batch
   // inside the caller-owned transaction.
-  if (ddl.length > 0) vault.exec(ddl.join(';\n'));
+  if (ddl.length > 0) vault.exec(ddl.join(";\n"));
   // SQLite increments schema_version for every table/trigger DDL change. A
   // persisted match lets ordinary warm opens skip hundreds of PRAGMA and
   // sqlite_master probes, while any later ext/schema/manual trigger change
   // invalidates the marker and forces this repair pass again.
   vault
-    .prepare(`UPDATE replica_meta SET trigger_schema_version = ? WHERE singleton = 1`)
+    .prepare(
+      `UPDATE replica_meta SET trigger_schema_version = ? WHERE singleton = 1`
+    )
     .run(triggerContractMarker(vault, specs));
 }
 
@@ -240,10 +256,10 @@ function meta(vault: DatabaseSync): MetaRow {
     .prepare(
       `SELECT epoch, floor_seq, schema_epoch, trigger_schema_version,
               epoch_reason, epoch_started_at
-         FROM replica_meta WHERE singleton = 1`,
+         FROM replica_meta WHERE singleton = 1`
     )
     .get() as MetaRow | undefined;
-  if (!row) throw new Error('replica metadata is missing');
+  if (!row) throw new Error("replica metadata is missing");
   return row;
 }
 
@@ -276,24 +292,29 @@ export function currentReplicaLogState(vault: DatabaseSync): ReplicaLogState {
  * Initialize the protocol after fresh vault schema bootstrap. A contract change
  * invalidates every derived replica by changing epoch before triggers resume.
  */
-export function initializeReplicaProtocol(vault: DatabaseSync): ReplicaLogState {
+export function initializeReplicaProtocol(
+  vault: DatabaseSync
+): ReplicaLogState {
   const row = meta(vault);
   const contractChanged = row.schema_epoch !== currentSchemaEpoch(vault);
-  if (!contractChanged && row.trigger_schema_version === triggerContractMarker(vault)) {
+  if (
+    !contractChanged &&
+    row.trigger_schema_version === triggerContractMarker(vault)
+  ) {
     return currentReplicaLogState(vault);
   }
   // Epoch rotation and the trigger catalog it identifies are one contract
   // change. A crash may expose neither or both, never a new epoch fed by old
   // trigger projection rules.
-  vault.exec('BEGIN IMMEDIATE');
+  vault.exec("BEGIN IMMEDIATE");
   try {
     if (contractChanged) {
-      bumpReplicaEpochInTransaction(vault, { reason: 'schema-change' });
+      bumpReplicaEpochInTransaction(vault, { reason: "schema-change" });
     }
     refreshReplicaTriggers(vault);
-    vault.exec('COMMIT');
+    vault.exec("COMMIT");
   } catch (error) {
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     throw error;
   }
   return currentReplicaLogState(vault);
@@ -309,13 +330,13 @@ export interface AppendReplicaChangeInput {
 /** Append a protocol-only change inside the caller's current transaction. */
 export function appendReplicaChange(
   vault: DatabaseSync,
-  input: AppendReplicaChangeInput,
+  input: AppendReplicaChangeInput
 ): ReplicaChangeEntry {
   const changedAt = input.changedAt ?? new Date().toISOString();
   const result = vault
     .prepare(
       `INSERT INTO replica_change (epoch, entity, row_id, op, old_values_json, changed_at)
-       SELECT epoch, ?, ?, ?, NULL, ? FROM replica_meta WHERE singleton = 1`,
+       SELECT epoch, ?, ?, ?, NULL, ? FROM replica_meta WHERE singleton = 1`
     )
     .run(input.entity, input.rowId, input.op, changedAt);
   const seq = Number(result.lastInsertRowid);
@@ -338,22 +359,26 @@ export interface ReadReplicaChangesOptions {
 /** Read one stable, resumable incremental page. */
 export function readReplicaChanges(
   vault: DatabaseSync,
-  options: ReadReplicaChangesOptions = {},
+  options: ReadReplicaChangesOptions = {}
 ): ReplicaChangePage {
   const state = currentReplicaLogState(vault);
-  const since = options.since ? parseReplicaCursor(options.since) : { ...state.floor };
+  const since = options.since
+    ? parseReplicaCursor(options.since)
+    : { ...state.floor };
   if (since.epoch !== state.epoch) {
-    throw new ReplicaRebootstrapRequiredError('epoch-mismatch', state);
+    throw new ReplicaRebootstrapRequiredError("epoch-mismatch", state);
   }
   if (since.seq < state.floor.seq) {
-    throw new ReplicaRebootstrapRequiredError('retention', state);
+    throw new ReplicaRebootstrapRequiredError("retention", state);
   }
   if (since.seq > state.watermark.seq) {
-    throw new ReplicaRebootstrapRequiredError('cursor-ahead', state);
+    throw new ReplicaRebootstrapRequiredError("cursor-ahead", state);
   }
   const limit = options.limit ?? 1_000;
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
-    throw new RangeError('replica change page limit must be an integer between 1 and 10000');
+    throw new RangeError(
+      "replica change page limit must be an integer between 1 and 10000"
+    );
   }
   const rows = vault
     .prepare(
@@ -361,7 +386,7 @@ export function readReplicaChanges(
          FROM replica_change
         WHERE epoch = ? AND seq > ? AND seq <= ?
         ORDER BY seq
-        LIMIT ?`,
+        LIMIT ?`
     )
     .all(state.epoch, since.seq, state.watermark.seq, limit + 1) as {
     seq: number;
@@ -384,7 +409,10 @@ export function readReplicaChanges(
     changedAt: row.changed_at,
   }));
   const last = changes.at(-1);
-  const next = hasMore && last ? { epoch: state.epoch, seq: last.seq } : { ...state.watermark };
+  const next =
+    hasMore && last
+      ? { epoch: state.epoch, seq: last.seq }
+      : { ...state.watermark };
   return {
     changes,
     next,
@@ -404,22 +432,22 @@ export interface BumpReplicaEpochOptions {
 /** Invalidate all cursors (backup restore, schema change, or explicit reset). */
 export function bumpReplicaEpoch(
   vault: DatabaseSync,
-  options: BumpReplicaEpochOptions,
+  options: BumpReplicaEpochOptions
 ): ReplicaLogState {
   const epoch = options.epoch ?? randomUUID();
   // Validate the same wire restrictions as a cursor before persisting it.
   formatReplicaCursor({ epoch, seq: 0 });
   const now = (options.now ?? new Date()).toISOString();
-  vault.exec('BEGIN IMMEDIATE');
+  vault.exec("BEGIN IMMEDIATE");
   try {
     bumpReplicaEpochInTransaction(vault, {
       ...options,
       epoch,
       now: new Date(now),
     });
-    vault.exec('COMMIT');
+    vault.exec("COMMIT");
   } catch (error) {
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     throw error;
   }
   return currentReplicaLogState(vault);
@@ -427,7 +455,7 @@ export function bumpReplicaEpoch(
 
 function bumpReplicaEpochInTransaction(
   vault: DatabaseSync,
-  options: BumpReplicaEpochOptions,
+  options: BumpReplicaEpochOptions
 ): void {
   const epoch = options.epoch ?? randomUUID();
   formatReplicaCursor({ epoch, seq: 0 });
@@ -442,7 +470,7 @@ function bumpReplicaEpochInTransaction(
       `UPDATE replica_meta
           SET epoch = ?, floor_seq = ?, schema_epoch = ?, epoch_reason = ?,
               epoch_started_at = ?, updated_at = ?
-        WHERE singleton = 1`,
+        WHERE singleton = 1`
     )
     .run(epoch, floor, currentSchemaEpoch(vault), options.reason, now, now);
 }
@@ -462,7 +490,11 @@ export interface ReplicaPruneResult {
   retained: number;
 }
 
-function maxSeq(vault: DatabaseSync, sql: string, ...params: (string | number)[]): number {
+function maxSeq(
+  vault: DatabaseSync,
+  sql: string,
+  ...params: (string | number)[]
+): number {
   const row = vault.prepare(sql).get(...params) as { seq: number | null };
   return row.seq ?? 0;
 }
@@ -470,34 +502,42 @@ function maxSeq(vault: DatabaseSync, sql: string, ...params: (string | number)[]
 /** Apply the smaller of the age/count windows and advance only across deleted prefixes. */
 export function pruneReplicaChanges(
   vault: DatabaseSync,
-  options: PruneReplicaChangesOptions = {},
+  options: PruneReplicaChangesOptions = {}
 ): ReplicaPruneResult {
-  const maxAgeMs = options.maxAgeMs ?? REPLICA_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
+  const maxAgeMs =
+    options.maxAgeMs ?? REPLICA_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
   const maxEntries = options.maxEntries ?? REPLICA_RETENTION_MAX_ENTRIES;
   if (!Number.isSafeInteger(maxAgeMs) || maxAgeMs < 0) {
-    throw new RangeError('replica retention maxAgeMs must be a non-negative safe integer');
+    throw new RangeError(
+      "replica retention maxAgeMs must be a non-negative safe integer"
+    );
   }
   if (!Number.isSafeInteger(maxEntries) || maxEntries < 0) {
-    throw new RangeError('replica retention maxEntries must be a non-negative safe integer');
+    throw new RangeError(
+      "replica retention maxEntries must be a non-negative safe integer"
+    );
   }
-  const cutoff = new Date((options.now ?? new Date()).getTime() - maxAgeMs).toISOString();
+  const cutoff = new Date(
+    (options.now ?? new Date()).getTime() - maxAgeMs
+  ).toISOString();
   const epoch = meta(vault).epoch;
   let floorCandidate = 0;
   let expired = 0;
   let compacted = 0;
   let overflow = 0;
   let discardedPriorEpochs = 0;
-  vault.exec('BEGIN IMMEDIATE');
+  vault.exec("BEGIN IMMEDIATE");
   try {
     discardedPriorEpochs = Number(
-      vault.prepare(`DELETE FROM replica_change WHERE epoch <> ?`).run(epoch).changes,
+      vault.prepare(`DELETE FROM replica_change WHERE epoch <> ?`).run(epoch)
+        .changes
     );
 
     const ageThrough = maxSeq(
       vault,
       `SELECT MAX(seq) AS seq FROM replica_change WHERE epoch = ? AND changed_at < ?`,
       epoch,
-      cutoff,
+      cutoff
     );
     if (ageThrough > 0) {
       // Delete the whole prefix, not only timestamp matches: floor cursors
@@ -505,13 +545,15 @@ export function pruneReplicaChanges(
       expired = Number(
         vault
           .prepare(`DELETE FROM replica_change WHERE epoch = ? AND seq <= ?`)
-          .run(epoch, ageThrough).changes,
+          .run(epoch, ageThrough).changes
       );
       floorCandidate = Math.max(floorCandidate, ageThrough);
     }
 
     let count = (
-      vault.prepare(`SELECT COUNT(*) AS n FROM replica_change WHERE epoch = ?`).get(epoch) as {
+      vault
+        .prepare(`SELECT COUNT(*) AS n FROM replica_change WHERE epoch = ?`)
+        .get(epoch) as {
         n: number;
       }
     ).n;
@@ -535,7 +577,7 @@ export function pruneReplicaChanges(
                  AND newer.row_id = older.row_id
                  AND newer.seq > older.seq
             )`,
-        epoch,
+        epoch
       );
       if (compactionThrough > 0) {
         compacted = Number(
@@ -549,18 +591,20 @@ export function pruneReplicaChanges(
                        AND newer.entity = replica_change.entity
                        AND newer.row_id = replica_change.row_id
                        AND newer.seq > replica_change.seq
-                  )`,
+                  )`
             )
-            .run(epoch, compactionThrough).changes,
+            .run(epoch, compactionThrough).changes
         );
         overflow += Number(
           vault
             .prepare(`DELETE FROM replica_change WHERE epoch = ? AND seq <= ?`)
-            .run(epoch, compactionThrough).changes,
+            .run(epoch, compactionThrough).changes
         );
         floorCandidate = Math.max(floorCandidate, compactionThrough);
         count = (
-          vault.prepare(`SELECT COUNT(*) AS n FROM replica_change WHERE epoch = ?`).get(epoch) as {
+          vault
+            .prepare(`SELECT COUNT(*) AS n FROM replica_change WHERE epoch = ?`)
+            .get(epoch) as {
             n: number;
           }
         ).n;
@@ -572,13 +616,15 @@ export function pruneReplicaChanges(
         const excess = count - maxEntries;
         const countThrough = (
           vault
-            .prepare(`SELECT seq FROM replica_change WHERE epoch = ? ORDER BY seq LIMIT 1 OFFSET ?`)
+            .prepare(
+              `SELECT seq FROM replica_change WHERE epoch = ? ORDER BY seq LIMIT 1 OFFSET ?`
+            )
             .get(epoch, excess - 1) as { seq: number }
         ).seq;
         overflow += Number(
           vault
             .prepare(`DELETE FROM replica_change WHERE epoch = ? AND seq <= ?`)
-            .run(epoch, countThrough).changes,
+            .run(epoch, countThrough).changes
         );
         floorCandidate = Math.max(floorCandidate, countThrough);
       }
@@ -587,16 +633,20 @@ export function pruneReplicaChanges(
     const existingFloor = meta(vault).floor_seq;
     const floor = Math.max(existingFloor, floorCandidate);
     vault
-      .prepare(`UPDATE replica_meta SET floor_seq = ?, updated_at = ? WHERE singleton = 1`)
+      .prepare(
+        `UPDATE replica_meta SET floor_seq = ?, updated_at = ? WHERE singleton = 1`
+      )
       .run(floor, (options.now ?? new Date()).toISOString());
-    vault.exec('COMMIT');
+    vault.exec("COMMIT");
   } catch (error) {
-    vault.exec('ROLLBACK');
+    vault.exec("ROLLBACK");
     throw error;
   }
   const state = currentReplicaLogState(vault);
   const retained = (
-    vault.prepare(`SELECT COUNT(*) AS n FROM replica_change WHERE epoch = ?`).get(epoch) as {
+    vault
+      .prepare(`SELECT COUNT(*) AS n FROM replica_change WHERE epoch = ?`)
+      .get(epoch) as {
       n: number;
     }
   ).n;

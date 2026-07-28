@@ -1,21 +1,24 @@
-import { type JSX } from 'react';
+import { type JSX } from "react";
 
-import type { AppearancePrefs } from '../../../app-shell-context.js';
-import type { HomeMenuAnchor } from '../../screen-contracts.js';
-import StarredScreen from '../../screens/StarredScreen.js';
-import { useShellActions } from '../actions.js';
-import { openMenu } from '../contextMenu.js';
-import PageScroll from '../PageScroll.js';
-import type { ShellMenuAnchor } from '../Sidebar.js';
-import { PageEmpty } from '../status.js';
-import { useAsyncData } from '../useAsyncData.js';
-import { collectAutomationRuns, type AutomationFeedEntry } from './automationsData.js';
-import { buildHomeAppItems, buildHomeAutoItems } from './homeData.js';
+import type { AppearancePrefs } from "../../../app-shell-context.js";
+import type { HomeMenuAnchor } from "../../screen-contracts.js";
+import StarredScreen from "../../screens/StarredScreen.js";
+import { useShellActions } from "../actions.js";
+import { openMenu } from "../contextMenu.js";
+import PageScroll from "../PageScroll.js";
+import type { ShellMenuAnchor } from "../Sidebar.js";
+import { PageEmpty } from "../status.js";
+import { useAsyncData } from "../useAsyncData.js";
+import {
+  collectAutomationRuns,
+  type AutomationFeedEntry,
+} from "./automationsData.js";
+import { buildHomeAppItems, buildHomeAutoItems } from "./homeData.js";
 
 export interface StarredRouteProps {
   userApps: readonly UserAppMeta[];
   drafts: readonly DraftAppMeta[];
-  tileVariant: AppearancePrefs['tileVariant'];
+  tileVariant: AppearancePrefs["tileVariant"];
   isStarred: (id: string) => boolean;
   toggleStar: (id: string) => void;
 }
@@ -35,23 +38,25 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
     collectAutomationRuns().catch(() => ({
       rows: [] as CentraidAutomationRow[],
       entries: [] as AutomationFeedEntry[],
-    })),
+    }))
   );
 
   const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
-  const rows = feed.status === 'ready' ? feed.data.rows : [];
-  const entries = feed.status === 'ready' ? feed.data.entries : [];
+  const rows = feed.status === "ready" ? feed.data.rows : [];
+  const entries = feed.status === "ready" ? feed.data.entries : [];
   const appItems = buildHomeAppItems(apps, {
     userApps,
     isStarred,
     tileVariant,
   }).filter((a) => a.starred);
-  const automationItems = buildHomeAutoItems(rows, entries, isStarred).filter((r) => r.starred);
+  const automationItems = buildHomeAutoItems(rows, entries, isStarred).filter(
+    (r) => r.starred
+  );
 
   const toAnchor = (a: HomeMenuAnchor): ShellMenuAnchor =>
-    a.kind === 'point'
-      ? { kind: 'point', x: a.x ?? 0, y: a.y ?? 0 }
-      : { kind: 'rect', rect: a.rect as unknown as DOMRect };
+    a.kind === "point"
+      ? { kind: "point", x: a.x ?? 0, y: a.y ?? 0 }
+      : { kind: "rect", rect: a.rect as unknown as DOMRect };
 
   const appMenu = (id: string, anchor: HomeMenuAnchor): void => {
     const app = apps.find((a) => a.id === id);
@@ -59,46 +64,52 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
     const draft = (app as DraftAppMeta).__draft === true;
     const items = [
       draft
-        ? { id: 'update', label: 'Continue editing', icon: 'Sparkle' }
-        : { id: 'open', label: 'Open', icon: 'Eye' },
-      { id: 'star', label: 'Unstar', icon: 'Star' },
+        ? { id: "update", label: "Continue editing", icon: "Sparkle" }
+        : { id: "open", label: "Open", icon: "Eye" },
+      { id: "star", label: "Unstar", icon: "Star" },
     ];
     openMenu(items, toAnchor(anchor), (pick) => {
-      if (pick === 'open') navigate({ kind: 'app', id });
-      else if (pick === 'update') enterBuilder({ appContext: app });
-      else if (pick === 'star') toggleStar(id);
+      if (pick === "open") navigate({ kind: "app", id });
+      else if (pick === "update") enterBuilder({ appContext: app });
+      else if (pick === "star") toggleStar(id);
     });
   };
 
   const automationMenu = (ref: string, anchor: HomeMenuAnchor): void => {
     openMenu(
       [
-        { id: 'open', label: 'Open', icon: 'Eye' },
-        { id: 'star', label: 'Unstar', icon: 'Star' },
+        { id: "open", label: "Open", icon: "Eye" },
+        { id: "star", label: "Unstar", icon: "Star" },
       ],
       toAnchor(anchor),
       (pick) => {
-        if (pick === 'open') navigate({ kind: 'automation-view', automationId: ref });
-        else if (pick === 'star') toggleStar(ref);
-      },
+        if (pick === "open")
+          navigate({ kind: "automation-view", automationId: ref });
+        else if (pick === "star") toggleStar(ref);
+      }
     );
   };
 
   return (
-    <PageScroll title="Starred" subtitle="Apps you star show up here for quick access.">
+    <PageScroll
+      title="Starred"
+      subtitle="Apps you star show up here for quick access."
+    >
       {appItems.length + automationItems.length === 0 ? (
         <PageEmpty message="Nothing starred yet. Hover an app tile and tap the star." />
       ) : (
         <StarredScreen
           appItems={appItems}
           automationItems={automationItems}
-          onOpenApp={(id) => navigate({ kind: 'app', id })}
+          onOpenApp={(id) => navigate({ kind: "app", id })}
           onEnterDraft={(id) => {
             const a = apps.find((x) => x.id === id);
             if (a) enterBuilder({ appContext: a });
           }}
           onAppContext={appMenu}
-          onOpenAutomation={(ref) => navigate({ kind: 'automation-view', automationId: ref })}
+          onOpenAutomation={(ref) =>
+            navigate({ kind: "automation-view", automationId: ref })
+          }
           onAutomationMenu={automationMenu}
         />
       )}

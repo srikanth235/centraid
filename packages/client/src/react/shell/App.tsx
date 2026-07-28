@@ -3,10 +3,17 @@
 // switcher's popover callbacks. A route-wiring extraction remains the right
 // follow-up; #599 shrank this file rather than growing it (the space switcher's
 // callbacks and the New-space modal left for Household).
-import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type JSX,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
-import { relativeTime } from '../../app-format.js';
-import type { ShellRoute } from '../../app-shell-context.js';
+import { relativeTime } from "../../app-format.js";
+import type { ShellRoute } from "../../app-shell-context.js";
 import {
   ASSISTANT_APP_ID,
   deleteConversation,
@@ -15,66 +22,80 @@ import {
   searchConversations,
   setConversationArchived,
   setConversationPinned,
-} from '../../gateway-client.js';
-import PaletteScreen from '../screens/PaletteScreen.js';
-import WhatsNewModal from '../screens/WhatsNewModal.js';
-import { type ShellActions, ShellActionsProvider } from './actions.js';
-import { openConfirm } from './confirm.js';
-import { openMenu } from './contextMenu.js';
-import { countGateways, getCachedGatewayRows, openGatewayRegistry } from './gatewayRegistry.js';
+} from "../../gateway-client.js";
+import PaletteScreen from "../screens/PaletteScreen.js";
+import WhatsNewModal from "../screens/WhatsNewModal.js";
+import { type ShellActions, ShellActionsProvider } from "./actions.js";
+import { openConfirm } from "./confirm.js";
+import { openMenu } from "./contextMenu.js";
+import {
+  countGateways,
+  getCachedGatewayRows,
+  openGatewayRegistry,
+} from "./gatewayRegistry.js";
 import {
   closeGatewaySwitcher,
   openGatewaySwitcher,
   updateGatewaySwitcherRows,
-} from './gatewaySwitcher.js';
-import IdentityHead from './IdentityHead.js';
-import { openPrompt } from './prompt.js';
-import ApprovalsRoute from './routes/ApprovalsRoute.js';
-import AppViewRoute from './routes/AppViewRoute.js';
-import AssistantRoute from './routes/AssistantRoute.js';
-import AtlasRoute from './routes/AtlasRoute.js';
-import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
-import AutomationsRoute from './routes/AutomationsRoute.js';
-import AutomationViewRoute from './routes/AutomationViewRoute.js';
-import BuilderRoute from './routes/BuilderRoute.js';
-import ConnectFlowModal from './routes/ConnectFlowModal.js';
-import ConnectorsRoute from './routes/ConnectorsRoute.js';
-import { downloadConversation, type ExportFormat } from './routes/conversationExport.js';
-import { conversationScope, conversationScopes } from './routes/conversationScopes.js';
-import DiscoverRoute from './routes/DiscoverRoute.js';
-import GatewayRoute from './routes/GatewayRoute.js';
-import HomeRoute from './routes/HomeRoute.js';
-import HouseholdRoute from './routes/HouseholdRoute.js';
-import InlineAppRoute from './routes/InlineAppRoute.js';
-import { inlineAppLoader } from './routes/inlineApps.js';
-import InsightsRoute from './routes/InsightsRoute.js';
-import { createPaletteConversationSearch } from './routes/paletteConversationSearch.js';
-import { buildPaletteGroups } from './routes/paletteData.js';
-import RenameGatewayModal from './routes/RenameGatewayModal.js';
-import RunViewRoute from './routes/RunViewRoute.js';
-import SettingsRoute from './routes/SettingsRoute.js';
-import StarredRoute from './routes/StarredRoute.js';
-import StorageRoute from './routes/StorageRoute.js';
-import TemplatesRoute from './routes/TemplatesRoute.js';
-import TestConnectionModal from './routes/TestConnectionModal.js';
-import ShellApp, { type ShellNav } from './ShellApp.js';
+} from "./gatewaySwitcher.js";
+import IdentityHead from "./IdentityHead.js";
+import { openPrompt } from "./prompt.js";
+import ApprovalsRoute from "./routes/ApprovalsRoute.js";
+import AppViewRoute from "./routes/AppViewRoute.js";
+import AssistantRoute from "./routes/AssistantRoute.js";
+import AtlasRoute from "./routes/AtlasRoute.js";
+import AutomationEditorRoute from "./routes/AutomationEditorRoute.js";
+import AutomationsRoute from "./routes/AutomationsRoute.js";
+import AutomationViewRoute from "./routes/AutomationViewRoute.js";
+import BuilderRoute from "./routes/BuilderRoute.js";
+import ConnectFlowModal from "./routes/ConnectFlowModal.js";
+import ConnectorsRoute from "./routes/ConnectorsRoute.js";
+import {
+  downloadConversation,
+  type ExportFormat,
+} from "./routes/conversationExport.js";
+import {
+  conversationScope,
+  conversationScopes,
+} from "./routes/conversationScopes.js";
+import DiscoverRoute from "./routes/DiscoverRoute.js";
+import GatewayRoute from "./routes/GatewayRoute.js";
+import HomeRoute from "./routes/HomeRoute.js";
+import HouseholdRoute from "./routes/HouseholdRoute.js";
+import InlineAppRoute from "./routes/InlineAppRoute.js";
+import { inlineAppLoader } from "./routes/inlineApps.js";
+import InsightsRoute from "./routes/InsightsRoute.js";
+import { createPaletteConversationSearch } from "./routes/paletteConversationSearch.js";
+import { buildPaletteGroups } from "./routes/paletteData.js";
+import RenameGatewayModal from "./routes/RenameGatewayModal.js";
+import RunViewRoute from "./routes/RunViewRoute.js";
+import SettingsRoute from "./routes/SettingsRoute.js";
+import StarredRoute from "./routes/StarredRoute.js";
+import StorageRoute from "./routes/StorageRoute.js";
+import TemplatesRoute from "./routes/TemplatesRoute.js";
+import TestConnectionModal from "./routes/TestConnectionModal.js";
+import ShellApp, { type ShellNav } from "./ShellApp.js";
 import Sidebar, {
   type ShellMenuAnchor,
   type SidebarConversation,
   type SidebarPage,
-} from './Sidebar.js';
-import { PageEmpty } from './status.js';
-import { showToast } from './toast.js';
-import { showUndoToast } from './undoToast.js';
-import { useAppearance } from './useAppearance.js';
-import { useAssistantConversations } from './useAssistantConversations.js';
-import { useBlockingCount } from './useBlockingCount.js';
-import { useBuilderEnabled } from './useBuilderEnabled.js';
-import { useGatewayRuntime } from './useGatewayRuntime.js';
-import { useMemberScopes } from './useMemberScopes.js';
-import { useShellApps } from './useShellApps.js';
-import { useStarred } from './useStarred.js';
-import { relaunchToUpdate, updatePillTitle, useUpdateStatus } from './useUpdateStatus.js';
+} from "./Sidebar.js";
+import { PageEmpty } from "./status.js";
+import { showToast } from "./toast.js";
+import { showUndoToast } from "./undoToast.js";
+import { useAppearance } from "./useAppearance.js";
+import { useAssistantConversations } from "./useAssistantConversations.js";
+import { useBlockingCount } from "./useBlockingCount.js";
+import { useBuilderEnabled } from "./useBuilderEnabled.js";
+import { useGatewayRuntime } from "./useGatewayRuntime.js";
+import { useMemberScopes } from "./useMemberScopes.js";
+import { useShellApps } from "./useShellApps.js";
+import { useStarred } from "./useStarred.js";
+import {
+  relaunchToUpdate,
+  updatePillTitle,
+  useUpdateStatus,
+} from "./useUpdateStatus.js";
 
 // Build the ShellActions surface for the current render. Navigation + toast +
 // confirm are live; the remaining overlay actions (⌘K palette, the generic app
@@ -84,7 +105,7 @@ function makeActions(
   nav: ShellNav,
   openCommandPalette: () => void,
   refreshAssistantThreads: () => void,
-  builderEnabled: boolean,
+  builderEnabled: boolean
 ): ShellActions {
   return {
     showToast,
@@ -95,11 +116,11 @@ function makeActions(
     refreshAssistantThreads,
     enterBuilder: (opts) =>
       nav.navigate({
-        kind: 'builder',
+        kind: "builder",
         ...(opts.appContext ? { appContext: opts.appContext } : {}),
         ...(opts.initialPrompt ? { initialPrompt: opts.initialPrompt } : {}),
       }),
-    openNewAppSheet: () => nav.navigate({ kind: 'builder' }),
+    openNewAppSheet: () => nav.navigate({ kind: "builder" }),
     openCommandPalette,
     openContextMenu: () => {
       /* the home app-card context menu is wired inside HomeRoute */
@@ -110,29 +131,29 @@ function makeActions(
 // Map the current route to the sidebar's active-page highlight.
 function activePageFor(route: ShellRoute): SidebarPage | undefined {
   switch (route.kind) {
-    case 'home':
-    case 'assistant':
-    case 'insights':
-    case 'discover':
-    case 'starred':
-    case 'automations':
-    case 'connectors':
-    case 'approvals':
-    case 'gateway':
-    case 'household':
-    case 'storage':
-    case 'atlas':
+    case "home":
+    case "assistant":
+    case "insights":
+    case "discover":
+    case "starred":
+    case "automations":
+    case "connectors":
+    case "approvals":
+    case "gateway":
+    case "household":
+    case "storage":
+    case "atlas":
       return route.kind;
-    case 'settings':
+    case "settings":
       // Legacy deep link Settings → Connections → promote highlight to Connectors.
-      return route.page === 'connections' ? 'connectors' : 'settings';
-    case 'app':
-    case 'builder':
-    case 'run-view':
-    case 'automation-view':
-    case 'automation-builder':
-    case 'automation-editor':
-    case 'templates':
+      return route.page === "connections" ? "connectors" : "settings";
+    case "app":
+    case "builder":
+    case "run-view":
+    case "automation-view":
+    case "automation-builder":
+    case "automation-editor":
+    case "templates":
       // Detail routes with no corresponding sidebar nav item — nothing to highlight.
       return undefined;
     default:
@@ -156,7 +177,7 @@ const NO_DRAFTS: readonly DraftAppMeta[] = [];
 // there's no dead builder frame to Back into, and renders nothing meanwhile.
 export function BuilderRouteRedirect({ nav }: { nav: ShellNav }): JSX.Element {
   useEffect(() => {
-    nav.replace({ kind: 'home' });
+    nav.replace({ kind: "home" });
   }, [nav]);
   return <PageEmpty message="" />;
 }
@@ -173,9 +194,9 @@ export default function App(): JSX.Element {
   const assistantConversations = useAssistantConversations();
   // Conversations mid-undo-window after a delete — optimistically hidden from
   // the sidebar until the grace timer commits or the reader undoes (§3).
-  const [pendingConversationDeletes, setPendingConversationDeletes] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [pendingConversationDeletes, setPendingConversationDeletes] = useState<
+    Set<string>
+  >(() => new Set());
   const { isStarred, toggleStar } = useStarred();
   const memberScopes = useMemberScopes();
   const blockingCount = useBlockingCount();
@@ -200,8 +221,8 @@ export default function App(): JSX.Element {
         const [changelog, settings] = await Promise.all([get(), getSettings()]);
         if (!alive) return;
         setWhatsNewAutoChecked(true);
-        const current = changelog.currentVersion?.replace(/^v/iu, '') ?? '';
-        const seen = (settings.changelogSeenVersion ?? '').replace(/^v/iu, '');
+        const current = changelog.currentVersion?.replace(/^v/iu, "") ?? "";
+        const seen = (settings.changelogSeenVersion ?? "").replace(/^v/iu, "");
         if (current && current !== seen && changelog.releases.length > 0) {
           setWhatsNewOpen(true);
         }
@@ -246,9 +267,10 @@ export default function App(): JSX.Element {
   const paletteConversationSearch = useMemo(
     () =>
       createPaletteConversationSearch({
-        search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
+        search: (query, limit) =>
+          searchConversations(ASSISTANT_APP_ID, query, limit),
       }),
-    [],
+    []
   );
   const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
   // How many gateways this client knows. The gateway switcher is the ONE
@@ -279,39 +301,40 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const meta = e.metaKey || e.ctrlKey;
-      if (meta && e.key === '[') {
+      if (meta && e.key === "[") {
         e.preventDefault();
         navRef.current?.back();
-      } else if (meta && e.key === ']') {
+      } else if (meta && e.key === "]") {
         e.preventDefault();
         navRef.current?.forward();
-      } else if (meta && (e.key === 'k' || e.key === 'K')) {
+      } else if (meta && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         setPaletteOpen((open) => !open);
       }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
 
     // The delegated builder (window.openBuilder) reaches back through
     // window.Centraid for nav actions (optional-chained). React owns routing
     // now, so publish a nav-backed shim in place of the retired vanilla app.ts.
-    const go = (route: ShellRoute) => (): void => void navRef.current?.navigate(route);
+    const go = (route: ShellRoute) => (): void =>
+      void navRef.current?.navigate(route);
     (window as unknown as { Centraid: unknown }).Centraid = {
-      openApp: (id: string) => navRef.current?.navigate({ kind: 'app', id }),
-      openSettings: go({ kind: 'settings' }),
+      openApp: (id: string) => navRef.current?.navigate({ kind: "app", id }),
+      openSettings: go({ kind: "settings" }),
       openSearch: () => {},
-      openDiscover: go({ kind: 'discover' }),
-      openStarred: go({ kind: 'starred' }),
-      openAutomations: go({ kind: 'automations' }),
-      openConnectors: go({ kind: 'connectors' }),
-      openInsights: go({ kind: 'insights' }),
-      renderHome: go({ kind: 'home' }),
+      openDiscover: go({ kind: "discover" }),
+      openStarred: go({ kind: "starred" }),
+      openAutomations: go({ kind: "automations" }),
+      openConnectors: go({ kind: "connectors" }),
+      openInsights: go({ kind: "insights" }),
+      renderHome: go({ kind: "home" }),
       getRuntimeMode: () => undefined,
     };
 
     const reScope = (): void => {
       void refresh();
-      navRef.current?.navigate({ kind: 'home' });
+      navRef.current?.navigate({ kind: "home" });
     };
     window.CentraidApi.onGatewayChanged?.(reScope);
     window.CentraidApi.onVaultChanged?.(reScope);
@@ -324,7 +347,7 @@ export default function App(): JSX.Element {
     recount();
     window.CentraidApi.onGatewayChanged?.(recount);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
       // The gateway switcher is a body-portalled overlay outside React's tree —
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeGatewaySwitcher();
@@ -341,11 +364,13 @@ export default function App(): JSX.Element {
   // when the window lapses — an Undo restores the row untouched.
   const deleteAssistantConversation = useCallback(
     (id: string) => {
-      const target = assistantConversations.conversations.find((c) => c.id === id);
+      const target = assistantConversations.conversations.find(
+        (c) => c.id === id
+      );
       setPendingConversationDeletes((prev) => new Set(prev).add(id));
       const cur = navRef.current?.route;
-      if (cur?.kind === 'assistant' && cur.conversationId === id) {
-        navRef.current?.navigate({ kind: 'assistant' });
+      if (cur?.kind === "assistant" && cur.conversationId === id) {
+        navRef.current?.navigate({ kind: "assistant" });
       }
       const unhide = (): void =>
         setPendingConversationDeletes((prev) => {
@@ -353,55 +378,77 @@ export default function App(): JSX.Element {
           next.delete(id);
           return next;
         });
-      showUndoToast(`Deleted “${target?.title || 'New conversation'}”`, unhide, {
-        onExpire: () => {
-          void (async () => {
-            await deleteConversation(ASSISTANT_APP_ID, id, conversationScope(id)).catch(
-              (err: unknown) =>
-                showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
-            );
-            unhide();
-            await assistantConversations.refresh();
-          })();
-        },
-      });
+      showUndoToast(
+        `Deleted “${target?.title || "New conversation"}”`,
+        unhide,
+        {
+          onExpire: () => {
+            void (async () => {
+              await deleteConversation(
+                ASSISTANT_APP_ID,
+                id,
+                conversationScope(id)
+              ).catch((err: unknown) =>
+                showToast(
+                  `Couldn't delete: ${err instanceof Error ? err.message : String(err)}`
+                )
+              );
+              unhide();
+              await assistantConversations.refresh();
+            })();
+          },
+        }
+      );
     },
-    [assistantConversations],
+    [assistantConversations]
   );
 
   // Inline rename (§3) — the shared text-prompt dialog, then a PATCH + refresh.
   const renameAssistantConversation = useCallback(
     (id: string) => {
-      const target = assistantConversations.conversations.find((c) => c.id === id);
+      const target = assistantConversations.conversations.find(
+        (c) => c.id === id
+      );
       void (async () => {
         const next = await openPrompt({
-          title: 'Rename conversation',
-          initial: target?.title ?? '',
-          placeholder: 'Conversation name',
-          confirmLabel: 'Rename',
+          title: "Rename conversation",
+          initial: target?.title ?? "",
+          placeholder: "Conversation name",
+          confirmLabel: "Rename",
         });
         if (!next) return;
-        await renameConversation(ASSISTANT_APP_ID, id, next, conversationScope(id)).catch(
-          (err: unknown) =>
-            showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
+        await renameConversation(
+          ASSISTANT_APP_ID,
+          id,
+          next,
+          conversationScope(id)
+        ).catch((err: unknown) =>
+          showToast(
+            `Couldn't rename: ${err instanceof Error ? err.message : String(err)}`
+          )
         );
         await assistantConversations.refresh();
       })();
     },
-    [assistantConversations],
+    [assistantConversations]
   );
 
   // Pin/unpin (§3) — a PATCH + refresh; the store sorts pinned threads first.
   const pinAssistantConversation = useCallback(
     (id: string, pinned: boolean) => {
       void (async () => {
-        await setConversationPinned(ASSISTANT_APP_ID, id, pinned, conversationScope(id)).catch(
-          (err: unknown) => showToast(`Couldn't ${pinned ? 'pin' : 'unpin'}: ${errMsg(err)}`),
+        await setConversationPinned(
+          ASSISTANT_APP_ID,
+          id,
+          pinned,
+          conversationScope(id)
+        ).catch((err: unknown) =>
+          showToast(`Couldn't ${pinned ? "pin" : "unpin"}: ${errMsg(err)}`)
         );
         await assistantConversations.refresh();
       })();
     },
-    [assistantConversations],
+    [assistantConversations]
   );
 
   // Archive/unarchive (§3) — a PATCH + refresh. Archiving the open thread
@@ -409,64 +456,86 @@ export default function App(): JSX.Element {
   const archiveAssistantConversation = useCallback(
     (id: string, archived: boolean) => {
       void (async () => {
-        await setConversationArchived(ASSISTANT_APP_ID, id, archived, conversationScope(id)).catch(
-          (err: unknown) =>
-            showToast(`Couldn't ${archived ? 'archive' : 'unarchive'}: ${errMsg(err)}`),
+        await setConversationArchived(
+          ASSISTANT_APP_ID,
+          id,
+          archived,
+          conversationScope(id)
+        ).catch((err: unknown) =>
+          showToast(
+            `Couldn't ${archived ? "archive" : "unarchive"}: ${errMsg(err)}`
+          )
         );
         const cur = navRef.current?.route;
-        if (archived && cur?.kind === 'assistant' && cur.conversationId === id) {
-          navRef.current?.navigate({ kind: 'assistant' });
+        if (
+          archived &&
+          cur?.kind === "assistant" &&
+          cur.conversationId === id
+        ) {
+          navRef.current?.navigate({ kind: "assistant" });
         }
         await assistantConversations.refresh();
       })();
     },
-    [assistantConversations],
+    [assistantConversations]
   );
 
   // Export (§3) — fetch the full transcript, then serialize + download.
-  const exportAssistantConversation = useCallback((id: string, format: ExportFormat) => {
-    void (async () => {
-      try {
-        const conv = await loadConversation(ASSISTANT_APP_ID, id, conversationScope(id));
-        downloadConversation(conv, format);
-      } catch (err: unknown) {
-        showToast(`Couldn't export: ${errMsg(err)}`);
-      }
-    })();
-  }, []);
+  const exportAssistantConversation = useCallback(
+    (id: string, format: ExportFormat) => {
+      void (async () => {
+        try {
+          const conv = await loadConversation(
+            ASSISTANT_APP_ID,
+            id,
+            conversationScope(id)
+          );
+          downloadConversation(conv, format);
+        } catch (err: unknown) {
+          showToast(`Couldn't export: ${errMsg(err)}`);
+        }
+      })();
+    },
+    []
+  );
 
   // The sidebar row ••• / right-click menu: Rename, Export, Pin, Archive, Delete.
   const conversationMenu = useCallback(
     (id: string, anchor: ShellMenuAnchor) => {
-      const conv = assistantConversations.conversations.find((c) => c.id === id);
+      const conv = assistantConversations.conversations.find(
+        (c) => c.id === id
+      );
       const pinned = conv?.pinned ?? false;
       const archived = conv?.archived ?? false;
       openMenu(
         [
-          { id: 'rename', label: 'Rename', icon: 'Pencil' },
-          { id: 'export-md', label: 'Export as Markdown', icon: 'Share' },
-          { id: 'export-json', label: 'Export as JSON', icon: 'Share' },
-          'sep',
+          { id: "rename", label: "Rename", icon: "Pencil" },
+          { id: "export-md", label: "Export as Markdown", icon: "Share" },
+          { id: "export-json", label: "Export as JSON", icon: "Share" },
+          "sep",
           pinned
-            ? { id: 'unpin', label: 'Unpin', icon: 'Star' }
-            : { id: 'pin', label: 'Pin', icon: 'Star' },
+            ? { id: "unpin", label: "Unpin", icon: "Star" }
+            : { id: "pin", label: "Pin", icon: "Star" },
           archived
-            ? { id: 'unarchive', label: 'Unarchive', icon: 'History' }
-            : { id: 'archive', label: 'Archive', icon: 'Folder' },
-          'sep',
-          { id: 'delete', label: 'Delete', icon: 'Trash', danger: true },
+            ? { id: "unarchive", label: "Unarchive", icon: "History" }
+            : { id: "archive", label: "Archive", icon: "Folder" },
+          "sep",
+          { id: "delete", label: "Delete", icon: "Trash", danger: true },
         ],
         anchor,
         (picked) => {
-          if (picked === 'rename') renameAssistantConversation(id);
-          else if (picked === 'export-md') exportAssistantConversation(id, 'markdown');
-          else if (picked === 'export-json') exportAssistantConversation(id, 'json');
-          else if (picked === 'pin') pinAssistantConversation(id, true);
-          else if (picked === 'unpin') pinAssistantConversation(id, false);
-          else if (picked === 'archive') archiveAssistantConversation(id, true);
-          else if (picked === 'unarchive') archiveAssistantConversation(id, false);
-          else if (picked === 'delete') deleteAssistantConversation(id);
-        },
+          if (picked === "rename") renameAssistantConversation(id);
+          else if (picked === "export-md")
+            exportAssistantConversation(id, "markdown");
+          else if (picked === "export-json")
+            exportAssistantConversation(id, "json");
+          else if (picked === "pin") pinAssistantConversation(id, true);
+          else if (picked === "unpin") pinAssistantConversation(id, false);
+          else if (picked === "archive") archiveAssistantConversation(id, true);
+          else if (picked === "unarchive")
+            archiveAssistantConversation(id, false);
+          else if (picked === "delete") deleteAssistantConversation(id);
+        }
       );
     },
     [
@@ -476,7 +545,7 @@ export default function App(): JSX.Element {
       pinAssistantConversation,
       archiveAssistantConversation,
       deleteAssistantConversation,
-    ],
+    ]
   );
 
   const renderSidebar = useCallback(
@@ -487,12 +556,13 @@ export default function App(): JSX.Element {
       // Decision 14): it names the member's own space and the gateway it lives
       // on, and it opens Household. Choosing a space is no longer a mode —
       // Household lists them and every creation flow names its own target.
-      const activeGatewayId = memberScopes.gatewayId ?? '';
+      const activeGatewayId = memberScopes.gatewayId ?? "";
       const openGatewayPicker = (anchor: DOMRect): void => {
         setGatewaySwitcherOpen(true);
         const labelOf = (gatewayId: string): string =>
-          getCachedGatewayRows(activeGatewayId).find((g) => g.gatewayId === gatewayId)
-            ?.gatewayLabel ?? gatewayId;
+          getCachedGatewayRows(activeGatewayId).find(
+            (g) => g.gatewayId === gatewayId
+          )?.gatewayLabel ?? gatewayId;
         // Paint instantly from whatever a prior open cached, then probe every
         // registered gateway concurrently and patch rows in place as each
         // settles (stale-while-revalidate).
@@ -501,33 +571,36 @@ export default function App(): JSX.Element {
           rows: getCachedGatewayRows(activeGatewayId),
           onAddGateway: () => setAddGatewayOpen(true),
           onSelectGateway: (gatewayId) => {
-            void window.CentraidApi.setActiveGateway({ id: gatewayId }).catch((err: unknown) =>
-              showToast(`Couldn't switch gateway: ${errMsg(err)}`),
+            void window.CentraidApi.setActiveGateway({ id: gatewayId }).catch(
+              (err: unknown) =>
+                showToast(`Couldn't switch gateway: ${errMsg(err)}`)
             );
           },
           onRemoveGateway: (gatewayId) => {
             void (async () => {
               const ok = await openConfirm({
-                confirmLabel: 'Remove',
+                confirmLabel: "Remove",
                 danger: true,
                 message:
-                  'This device stops talking to it — the gateway and its spaces are untouched.',
-                title: 'Remove this gateway connection?',
+                  "This device stops talking to it — the gateway and its spaces are untouched.",
+                title: "Remove this gateway connection?",
               });
               if (!ok) return;
-              await window.CentraidApi.removeGateway({ id: gatewayId }).catch((err: unknown) =>
-                showToast(`Couldn't remove: ${errMsg(err)}`),
+              await window.CentraidApi.removeGateway({ id: gatewayId }).catch(
+                (err: unknown) => showToast(`Couldn't remove: ${errMsg(err)}`)
               );
             })();
           },
-          onRenameGateway: (gatewayId) => setRenameTarget({ gatewayId, label: labelOf(gatewayId) }),
+          onRenameGateway: (gatewayId) =>
+            setRenameTarget({ gatewayId, label: labelOf(gatewayId) }),
           onTestConnection: (gatewayId) =>
             setTestConnectionTarget({ gatewayId, label: labelOf(gatewayId) }),
           onClose: () => setGatewaySwitcherOpen(false),
         });
-        void openGatewayRegistry(activeGatewayId, updateGatewaySwitcherRows).then(
-          updateGatewaySwitcherRows,
-        );
+        void openGatewayRegistry(
+          activeGatewayId,
+          updateGatewaySwitcherRows
+        ).then(updateGatewaySwitcherRows);
       };
       const headSlot = (
         <IdentityHead
@@ -535,18 +608,19 @@ export default function App(): JSX.Element {
             ? {
                 space: {
                   name: memberScopes.primary.label,
-                  color: memberScopes.primary.color ?? '#4E68DD',
-                  icon: memberScopes.primary.icon ?? 'Sparkle',
+                  color: memberScopes.primary.color ?? "#4E68DD",
+                  icon: memberScopes.primary.icon ?? "Sparkle",
                 },
               }
             : {})}
           gatewayLabel={
             memberScopes.loading
-              ? '—'
-              : (memberScopes.gatewayKind === 'local' ? 'This Mac' : memberScopes.gatewayLabel) ||
-                'This Mac'
+              ? "—"
+              : (memberScopes.gatewayKind === "local"
+                  ? "This Mac"
+                  : memberScopes.gatewayLabel) || "This Mac"
           }
-          onOpenHousehold={() => nav.navigate({ kind: 'household' })}
+          onOpenHousehold={() => nav.navigate({ kind: "household" })}
           {...(gatewayCount > 1
             ? {
                 onSwitchGateway: openGatewayPicker,
@@ -560,49 +634,60 @@ export default function App(): JSX.Element {
       // every row would drown the useful case.
       const scopeById = conversationScopes();
       const ownScopeId = memberScopes.primary?.id;
-      const conversations: SidebarConversation[] = assistantConversations.conversations
-        .filter((c) => !pendingConversationDeletes.has(c.id))
-        .map((c) => {
-          const scopeId = scopeById[c.id];
-          const label =
-            scopeId && scopeId !== ownScopeId
-              ? memberScopes.scopes.find((s) => s.id === scopeId)?.label
-              : undefined;
-          return {
-            id: c.id,
-            title: c.title || 'New conversation',
-            timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
-            pinned: c.pinned,
-            archived: c.archived,
-            ...(label ? { scopeLabel: label } : {}),
-          };
-        });
+      const conversations: SidebarConversation[] =
+        assistantConversations.conversations
+          .filter((c) => !pendingConversationDeletes.has(c.id))
+          .map((c) => {
+            const scopeId = scopeById[c.id];
+            const label =
+              scopeId && scopeId !== ownScopeId
+                ? memberScopes.scopes.find((s) => s.id === scopeId)?.label
+                : undefined;
+            return {
+              id: c.id,
+              title: c.title || "New conversation",
+              timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
+              pinned: c.pinned,
+              archived: c.archived,
+              ...(label ? { scopeLabel: label } : {}),
+            };
+          });
       return (
         <Sidebar
           activePage={page}
           conversations={conversations}
           activeConversationId={
-            nav.route.kind === 'assistant' ? nav.route.conversationId : undefined
+            nav.route.kind === "assistant"
+              ? nav.route.conversationId
+              : undefined
           }
-          headSlot={memberScopes.loading || memberScopes.scopes.length > 0 ? headSlot : undefined}
-          onHome={go({ kind: 'home' })}
+          headSlot={
+            memberScopes.loading || memberScopes.scopes.length > 0
+              ? headSlot
+              : undefined
+          }
+          onHome={go({ kind: "home" })}
           onSearch={() => setPaletteOpen(true)}
-          onAssistant={go({ kind: 'assistant' })}
-          onInsights={go({ kind: 'insights' })}
-          onDiscover={go({ kind: 'discover' })}
-          onAutomations={go({ kind: 'automations' })}
-          onConnectors={go({ kind: 'connectors' })}
-          onApprovals={go({ kind: 'approvals' })}
+          onAssistant={go({ kind: "assistant" })}
+          onInsights={go({ kind: "insights" })}
+          onDiscover={go({ kind: "discover" })}
+          onAutomations={go({ kind: "automations" })}
+          onConnectors={go({ kind: "connectors" })}
+          onApprovals={go({ kind: "approvals" })}
           approvalsCount={blockingCount}
-          onGateway={go({ kind: 'gateway' })}
+          onGateway={go({ kind: "gateway" })}
           gatewayStatus={gatewayStatus}
-          onHousehold={go({ kind: 'household' })}
-          onStorage={go({ kind: 'storage' })}
-          onAtlas={go({ kind: 'atlas' })}
-          onSettings={go({ kind: 'settings' })}
-          {...(builderEnabled ? { onNewApp: () => nav.navigate({ kind: 'builder' }) } : {})}
-          onNewChat={() => nav.navigate({ kind: 'assistant' })}
-          onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
+          onHousehold={go({ kind: "household" })}
+          onStorage={go({ kind: "storage" })}
+          onAtlas={go({ kind: "atlas" })}
+          onSettings={go({ kind: "settings" })}
+          {...(builderEnabled
+            ? { onNewApp: () => nav.navigate({ kind: "builder" }) }
+            : {})}
+          onNewChat={() => nav.navigate({ kind: "assistant" })}
+          onSelectConversation={(id) =>
+            nav.navigate({ kind: "assistant", conversationId: id })
+          }
           onDeleteConversation={deleteAssistantConversation}
           onConversationMenu={conversationMenu}
           onWhatsNew={() => setWhatsNewOpen(true)}
@@ -629,7 +714,7 @@ export default function App(): JSX.Element {
       deleteAssistantConversation,
       conversationMenu,
       pendingConversationDeletes,
-    ],
+    ]
   );
 
   const renderRoute = useCallback(
@@ -639,7 +724,7 @@ export default function App(): JSX.Element {
       // lookup, and the sidebar all agree.
       const visibleDrafts = builderEnabled ? drafts : NO_DRAFTS;
       switch (nav.route.kind) {
-        case 'home':
+        case "home":
           return (
             <HomeRoute
               userApps={userApps}
@@ -650,25 +735,25 @@ export default function App(): JSX.Element {
               refreshApps={refresh}
             />
           );
-        case 'assistant':
+        case "assistant":
           return <AssistantRoute conversationId={nav.route.conversationId} />;
-        case 'insights':
+        case "insights":
           return <InsightsRoute />;
-        case 'automations':
+        case "automations":
           return <AutomationsRoute />;
-        case 'connectors':
+        case "connectors":
           return <ConnectorsRoute />;
-        case 'approvals':
+        case "approvals":
           return <ApprovalsRoute />;
-        case 'gateway':
+        case "gateway":
           return <GatewayRoute />;
-        case 'household':
+        case "household":
           return <HouseholdRoute />;
-        case 'storage':
+        case "storage":
           return <StorageRoute />;
-        case 'atlas':
+        case "atlas":
           return <AtlasRoute />;
-        case 'automation-view':
+        case "automation-view":
           // Keyed so an in-place automation change remounts: traces, watched
           // turn ids, and any open SSE all belong to one automation (#541).
           return (
@@ -677,7 +762,7 @@ export default function App(): JSX.Element {
               automationId={nav.route.automationId}
             />
           );
-        case 'automation-editor':
+        case "automation-editor":
           return (
             <AutomationEditorRoute
               automationId={nav.route.automationId}
@@ -685,19 +770,34 @@ export default function App(): JSX.Element {
               watchEntity={nav.route.watchEntity}
             />
           );
-        case 'run-view':
-          return <RunViewRoute automationId={nav.route.automationId} runId={nav.route.runId} />;
-        case 'discover':
+        case "run-view":
           return (
-            <DiscoverRoute userApps={userApps} setUserApps={setUserApps} refreshApps={refresh} />
+            <RunViewRoute
+              automationId={nav.route.automationId}
+              runId={nav.route.runId}
+            />
           );
-        case 'templates':
+        case "discover":
+          return (
+            <DiscoverRoute
+              userApps={userApps}
+              setUserApps={setUserApps}
+              refreshApps={refresh}
+            />
+          );
+        case "templates":
           return <TemplatesRoute />;
-        case 'settings':
+        case "settings":
           // Legacy deep link: Settings → Connections now lives at Connectors.
-          if (nav.route.page === 'connections') return <ConnectorsRoute />;
-          return <SettingsRoute prefs={prefs} setPrefs={setPrefs} initialPage={nav.route.page} />;
-        case 'app': {
+          if (nav.route.page === "connections") return <ConnectorsRoute />;
+          return (
+            <SettingsRoute
+              prefs={prefs}
+              setPrefs={setPrefs}
+              initialPage={nav.route.page}
+            />
+          );
+        case "app": {
           const id = nav.route.id;
           const app = [...userApps, ...visibleDrafts].find((a) => a.id === id);
           if (!app) return <PageEmpty message="App not found." />;
@@ -722,7 +822,9 @@ export default function App(): JSX.Element {
                 nav={nav}
                 renderSidebar={renderSidebar}
                 prefs={prefs}
-                onToggleSidebar={() => setPrefs({ sidebarOpen: !prefs.sidebarOpen })}
+                onToggleSidebar={() =>
+                  setPrefs({ sidebarOpen: !prefs.sidebarOpen })
+                }
               />
             );
           }
@@ -733,16 +835,20 @@ export default function App(): JSX.Element {
               nav={nav}
               renderSidebar={renderSidebar}
               prefs={prefs}
-              onToggleSidebar={() => setPrefs({ sidebarOpen: !prefs.sidebarOpen })}
+              onToggleSidebar={() =>
+                setPrefs({ sidebarOpen: !prefs.sidebarOpen })
+              }
             />
           );
         }
-        case 'automation-builder':
+        case "automation-builder":
           // Builder handoff route — gated with the builder (issue #434, Phase
           // 3). Normal automation editing lives on `automation-editor`.
           if (!builderEnabled) return <BuilderRouteRedirect nav={nav} />;
-          return <AutomationEditorRoute automationId={nav.route.automationId} />;
-        case 'builder':
+          return (
+            <AutomationEditorRoute automationId={nav.route.automationId} />
+          );
+        case "builder":
           if (!builderEnabled) return <BuilderRouteRedirect nav={nav} />;
           return (
             <BuilderRoute
@@ -752,10 +858,12 @@ export default function App(): JSX.Element {
               setUserApps={setUserApps}
               renderSidebar={renderSidebar}
               prefs={prefs}
-              onToggleSidebar={() => setPrefs({ sidebarOpen: !prefs.sidebarOpen })}
+              onToggleSidebar={() =>
+                setPrefs({ sidebarOpen: !prefs.sidebarOpen })
+              }
             />
           );
-        case 'starred':
+        case "starred":
           return (
             <StarredRoute
               userApps={userApps}
@@ -767,7 +875,9 @@ export default function App(): JSX.Element {
           );
         default:
           // Staged: ported one-by-one from the vanilla app-*.ts render fns.
-          return <PageEmpty message="This screen is being migrated to React." />;
+          return (
+            <PageEmpty message="This screen is being migrated to React." />
+          );
       }
     },
     [
@@ -781,7 +891,7 @@ export default function App(): JSX.Element {
       refresh,
       setUserApps,
       renderSidebar,
-    ],
+    ]
   );
 
   const closePalette = useCallback(() => {
@@ -794,7 +904,7 @@ export default function App(): JSX.Element {
   return (
     <>
       <ShellApp
-        initialRoute={{ kind: 'home' }}
+        initialRoute={{ kind: "home" }}
         sidebarOpen={prefs.sidebarOpen}
         onSidebarOpenChange={(open) => setPrefs({ sidebarOpen: open })}
         renderSidebar={renderSidebar}
@@ -809,14 +919,14 @@ export default function App(): JSX.Element {
               () => {
                 void assistantConversations.refresh();
               },
-              builderEnabled,
+              builderEnabled
             )}
           >
             {renderRoute(nav)}
           </ShellActionsProvider>
         )}
         {...(builderEnabled
-          ? { onNewApp: () => navRef.current?.navigate({ kind: 'builder' }) }
+          ? { onNewApp: () => navRef.current?.navigate({ kind: "builder" }) }
           : {})}
       />
       {whatsNewOpen ? <WhatsNewModal onClose={closeWhatsNew} /> : null}
@@ -835,7 +945,7 @@ export default function App(): JSX.Element {
               navigate: (route) => navRef.current?.navigate(route),
               enterBuilder: (initialPrompt) =>
                 navRef.current?.navigate({
-                  kind: 'builder',
+                  kind: "builder",
                   ...(initialPrompt ? { initialPrompt } : {}),
                 }),
               onClose: closePalette,
@@ -874,7 +984,9 @@ export default function App(): JSX.Element {
             void window.CentraidApi.renameGateway({ id: gatewayId, label })
               .then(() => showToast(`Renamed · ${label}`))
               .catch((err: unknown) =>
-                showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
+                showToast(
+                  `Couldn't rename: ${err instanceof Error ? err.message : String(err)}`
+                )
               );
           }}
         />

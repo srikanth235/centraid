@@ -1,5 +1,5 @@
-import { fc } from '@centraid/test-kit/fast-check';
-import { describe, expect, test } from 'vitest';
+import { fc } from "@centraid/test-kit/fast-check";
+import { describe, expect, test } from "vitest";
 
 import {
   decrypt,
@@ -8,7 +8,7 @@ import {
   deriveNonce,
   encrypt,
   encryptWithNonce,
-} from './crypto.js';
+} from "./crypto.js";
 
 const keyBytes: fc.Arbitrary<Uint8Array> = fc
   .uint8Array({ minLength: 32, maxLength: 32 })
@@ -24,19 +24,19 @@ const plainBytes: fc.Arbitrary<Uint8Array> = fc
  * Model: AES-256-GCM round-trips; any bit flip or wrong key fails closed;
  * deterministic nonces and HKDF keys are pure functions of their inputs.
  */
-describe('backup crypto property', () => {
-  test('encrypt/decrypt round-trips every plaintext under every key', () => {
+describe("backup crypto property", () => {
+  test("encrypt/decrypt round-trips every plaintext under every key", () => {
     fc.assert(
       fc.property(keyBytes, plainBytes, (key, plain) => {
         const blob = encrypt(key, plain);
         const back = decrypt(key, blob);
         expect([...back]).toStrictEqual([...plain]);
       }),
-      { numRuns: 40, seed: 53240 },
+      { numRuns: 40, seed: 53240 }
     );
   });
 
-  test('encryptWithNonce is deterministic for the same (key, nonce, plain, aad)', () => {
+  test("encryptWithNonce is deterministic for the same (key, nonce, plain, aad)", () => {
     fc.assert(
       fc.property(
         keyBytes,
@@ -52,56 +52,65 @@ describe('backup crypto property', () => {
           const b = encryptWithNonce(key, nonce, plain, aad);
           expect([...a]).toStrictEqual([...b]);
           expect([...decrypt(key, a, aad)]).toStrictEqual([...plain]);
-        },
+        }
       ),
-      { numRuns: 32, seed: 53241 },
+      { numRuns: 32, seed: 53241 }
     );
   });
 
-  test('any single-byte ciphertext flip fails auth', () => {
+  test("any single-byte ciphertext flip fails auth", () => {
     fc.assert(
-      fc.property(keyBytes, plainBytes, fc.integer({ min: 0, max: 10_000 }), (key, plain, salt) => {
-        const blob = encrypt(key, plain);
-        fc.pre(blob.length > 0);
-        const idx = salt % blob.length;
-        const tampered = new Uint8Array(blob);
-        tampered[idx] = (tampered[idx]! ^ 0xff) & 0xff;
-        // If flip produced identical byte (impossible with XOR 0xff on byte), skip.
-        if (tampered[idx] === blob[idx]) return;
-        expect(() => decrypt(key, tampered)).toThrow(
-          /unsupported state or unable to authenticate data/iu,
-        );
-      }),
-      { numRuns: 32, seed: 53242 },
+      fc.property(
+        keyBytes,
+        plainBytes,
+        fc.integer({ min: 0, max: 10_000 }),
+        (key, plain, salt) => {
+          const blob = encrypt(key, plain);
+          fc.pre(blob.length > 0);
+          const idx = salt % blob.length;
+          const tampered = new Uint8Array(blob);
+          tampered[idx] = (tampered[idx]! ^ 0xff) & 0xff;
+          // If flip produced identical byte (impossible with XOR 0xff on byte), skip.
+          if (tampered[idx] === blob[idx]) return;
+          expect(() => decrypt(key, tampered)).toThrow(
+            /unsupported state or unable to authenticate data/iu
+          );
+        }
+      ),
+      { numRuns: 32, seed: 53242 }
     );
   });
 
-  test('wrong key never decrypts', () => {
+  test("wrong key never decrypts", () => {
     fc.assert(
       fc.property(keyBytes, keyBytes, plainBytes, (key, wrong, plain) => {
         fc.pre([...key].some((b, i) => b !== wrong[i]));
         const blob = encrypt(key, plain);
         expect(() => decrypt(wrong, blob)).toThrow(
-          /unsupported state or unable to authenticate data/iu,
+          /unsupported state or unable to authenticate data/iu
         );
       }),
-      { numRuns: 24, seed: 53243 },
+      { numRuns: 24, seed: 53243 }
     );
   });
 
-  test('deriveNonce is deterministic and 12 bytes', () => {
+  test("deriveNonce is deterministic and 12 bytes", () => {
     fc.assert(
-      fc.property(keyBytes, fc.string({ minLength: 1, maxLength: 64 }), (key, info) => {
-        const a = deriveNonce(key, info);
-        const b = deriveNonce(key, info);
-        expect(a).toHaveLength(12);
-        expect([...a]).toStrictEqual([...b]);
-      }),
-      { numRuns: 32, seed: 53244 },
+      fc.property(
+        keyBytes,
+        fc.string({ minLength: 1, maxLength: 64 }),
+        (key, info) => {
+          const a = deriveNonce(key, info);
+          const b = deriveNonce(key, info);
+          expect(a).toHaveLength(12);
+          expect([...a]).toStrictEqual([...b]);
+        }
+      ),
+      { numRuns: 32, seed: 53244 }
     );
   });
 
-  test('distinct info strings yield distinct nonces (collision-resistant for samples)', () => {
+  test("distinct info strings yield distinct nonces (collision-resistant for samples)", () => {
     fc.assert(
       fc.property(
         keyBytes,
@@ -109,33 +118,45 @@ describe('backup crypto property', () => {
         fc.string({ minLength: 1, maxLength: 32 }),
         (key, infoA, infoB) => {
           fc.pre(infoA !== infoB);
-          expect([...deriveNonce(key, infoA)]).not.toStrictEqual([...deriveNonce(key, infoB)]);
-        },
+          expect([...deriveNonce(key, infoA)]).not.toStrictEqual([
+            ...deriveNonce(key, infoB),
+          ]);
+        }
       ),
-      { numRuns: 24, seed: 53245 },
+      { numRuns: 24, seed: 53245 }
     );
   });
 
-  test('data and dedup keys diverge for the same vaultId', () => {
+  test("data and dedup keys diverge for the same vaultId", () => {
     fc.assert(
-      fc.property(keyBytes, fc.string({ minLength: 1, maxLength: 36 }), (master, vaultId) => {
-        const data = deriveDataKey(master, vaultId);
-        const dedup = deriveDedupKey(master, vaultId);
-        expect(data).toHaveLength(32);
-        expect(dedup).toHaveLength(32);
-        expect([...data]).not.toStrictEqual([...dedup]);
-      }),
-      { numRuns: 24, seed: 53246 },
+      fc.property(
+        keyBytes,
+        fc.string({ minLength: 1, maxLength: 36 }),
+        (master, vaultId) => {
+          const data = deriveDataKey(master, vaultId);
+          const dedup = deriveDedupKey(master, vaultId);
+          expect(data).toHaveLength(32);
+          expect(dedup).toHaveLength(32);
+          expect([...data]).not.toStrictEqual([...dedup]);
+        }
+      ),
+      { numRuns: 24, seed: 53246 }
     );
   });
 
-  test('truncated blobs always fail closed', () => {
+  test("truncated blobs always fail closed", () => {
     fc.assert(
-      fc.property(keyBytes, fc.uint8Array({ minLength: 0, maxLength: 27 }), (key, truncatedArr) => {
-        const truncated = new Uint8Array(truncatedArr);
-        expect(() => decrypt(key, truncated)).toThrow('encrypted blob truncated');
-      }),
-      { numRuns: 24, seed: 53247 },
+      fc.property(
+        keyBytes,
+        fc.uint8Array({ minLength: 0, maxLength: 27 }),
+        (key, truncatedArr) => {
+          const truncated = new Uint8Array(truncatedArr);
+          expect(() => decrypt(key, truncated)).toThrow(
+            "encrypted blob truncated"
+          );
+        }
+      ),
+      { numRuns: 24, seed: 53247 }
     );
   });
 });

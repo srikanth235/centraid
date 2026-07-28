@@ -3,7 +3,7 @@
 // at serve time (a value import of this module would 404). Grounded in the
 // `library`/`search`/`note` query payloads and app.tsx's module-level
 // `state`/`data` bags. Mirrors the pilot's locker/types.ts model.
-import type { Attachment } from './kit.ts';
+import type { Attachment } from "./kit.ts";
 
 /** One free-form tag edge decorating a note (library projection). */
 export interface NoteTag {
@@ -50,10 +50,10 @@ export interface SidebarTag {
 
 /** The current sidebar navigation selection. */
 export type Nav =
-  | { kind: 'all' }
-  | { kind: 'pinned' }
-  | { kind: 'notebook'; notebookId: string }
-  | { kind: 'tag'; conceptId: string };
+  | { kind: "all" }
+  | { kind: "pinned" }
+  | { kind: "notebook"; notebookId: string }
+  | { kind: "tag"; conceptId: string };
 
 /** A parked create (no note_id exists yet) rendered as a ghost card. */
 export interface PendingCreate {
@@ -76,7 +76,7 @@ export interface AppData {
 /** The client-side presentation state — never persisted, never sent to the vault. */
 export interface AppState {
   nav: Nav;
-  view: 'masonry' | 'list';
+  view: "masonry" | "list";
   search: string;
   searchResults: Note[] | null;
   libraryWindow: number;

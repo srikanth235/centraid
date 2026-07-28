@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync } from "node:fs";
+import path from "node:path";
 // Scenario seeds end-to-end (issue #290 phase 1): every blueprint seed.js
 // runs in the real handler worker against a real vault plane through the
 // demo bridge — the same path the demo route drives — then purges clean.
@@ -7,12 +7,12 @@ import path from 'node:path';
 // longer exists (or whose input changed) fails HERE, not on an owner's
 // first click.
 
-import { runHandler } from '@centraid/app-engine';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, test } from 'vitest';
+import { runHandler } from "@centraid/app-engine";
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, describe, expect, test } from "vitest";
 
-import { openVaultPlane, type VaultPlane } from './vault-plane.js';
+import { openVaultPlane, type VaultPlane } from "./vault-plane.js";
 
 const silentLogger = {
   info: () => undefined,
@@ -21,50 +21,69 @@ const silentLogger = {
 };
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('demo-seed', () => {
+describe("demo-seed", () => {
   afterEach(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
   function openPlane(dir: string): VaultPlane {
     const plane = openVaultPlane({
       bootstrap: true,
       dir,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
     cleanups.push(() => plane.stop());
     return plane;
   }
 
-  const BLUEPRINTS = path.join(import.meta.dirname, '..', '..', '..', 'blueprints', 'apps');
+  const BLUEPRINTS = path.join(
+    import.meta.dirname,
+    "..",
+    "..",
+    "..",
+    "blueprints",
+    "apps"
+  );
 
-  async function loadSeed(plane: VaultPlane, appId: string, appsDir: string): Promise<void> {
-    const seedFile = path.join(BLUEPRINTS, appId, 'seed.js');
+  async function loadSeed(
+    plane: VaultPlane,
+    appId: string,
+    appsDir: string
+  ): Promise<void> {
+    const seedFile = path.join(BLUEPRINTS, appId, "seed.js");
     expect(existsSync(seedFile), `${appId} ships seed.js`).toBe(true);
     const outcome = await runHandler({
       app: { id: appId, dir: path.join(appsDir, appId) },
       handlerFile: seedFile,
-      handlerKind: 'action',
+      handlerKind: "action",
       args: { input: { seed: 1, now: new Date().toISOString() } },
       timeoutMs: 60_000,
       vault: plane.demoBridgeFor(appId),
     });
-    expect(outcome.ok, `${appId} seed: ${outcome.error ?? ''}`).toBe(true);
+    expect(outcome.ok, `${appId} seed: ${outcome.error ?? ""}`).toBe(true);
   }
 
-  test('every shipped scenario seeds through the demo register and purges clean', async () => {
+  test("every shipped scenario seeds through the demo register and purges clean", async () => {
     const dir = await tempDir();
     const plane = openPlane(dir);
-    const appsDir = path.join(dir, 'apps');
+    const appsDir = path.join(dir, "apps");
 
-    await forEachSequentially(['tasks', 'notes', 'people', 'tally'], (appId) =>
-      loadSeed(plane, appId, appsDir),
+    await forEachSequentially(["tasks", "notes", "people", "tally"], (appId) =>
+      loadSeed(plane, appId, appsDir)
     );
 
     const status = plane.demoStatus();
     const byApp = new Map(status.map((s) => [s.appId, s.rows]));
-    expect([...byApp.keys()].sort()).toStrictEqual(['notes', 'people', 'tally', 'tasks']);
-    for (const [appId, rows] of byApp) expect(rows, `${appId} seeded rows`).toBeGreaterThan(0);
+    expect([...byApp.keys()].sort()).toStrictEqual([
+      "notes",
+      "people",
+      "tally",
+      "tasks",
+    ]);
+    for (const [appId, rows] of byApp)
+      expect(rows, `${appId} seeded rows`).toBeGreaterThan(0);
 
     // Every seeded ENTITY carries seed.demo provenance and one registry row —
     // provenance may hold several rows per entity (a task added then completed
@@ -72,11 +91,11 @@ describe('demo-seed', () => {
     const provCounts = plane.db.journal
       .prepare(
         `SELECT count(DISTINCT entity_type || ':' || entity_id) AS n
-         FROM consent_provenance WHERE prov_activity = 'seed.demo'`,
+         FROM consent_provenance WHERE prov_activity = 'seed.demo'`
       )
       .get() as { n: number };
     const registered = plane.db.vault
-      .prepare('SELECT count(*) AS n FROM consent_seed_row')
+      .prepare("SELECT count(*) AS n FROM consent_seed_row")
       .get() as {
       n: number;
     };
@@ -87,21 +106,28 @@ describe('demo-seed', () => {
     expect(purge.blocked).toStrictEqual([]);
     expect(purge.purged).toBe(registered.n);
     expect(plane.demoStatus()).toStrictEqual([]);
-    for (const table of ['schedule_task', 'knowledge_note', 'tally_expense', 'people_profile']) {
-      const left = plane.db.vault.prepare(`SELECT count(*) AS n FROM ${table}`).get() as {
+    for (const table of [
+      "schedule_task",
+      "knowledge_note",
+      "tally_expense",
+      "people_profile",
+    ]) {
+      const left = plane.db.vault
+        .prepare(`SELECT count(*) AS n FROM ${table}`)
+        .get() as {
         n: number;
       };
       expect(left.n, `${table} empty after purge`).toBe(0);
     }
   });
 
-  test('the demo bridge refuses non-scenario ops and non-owner registers stay impossible', async () => {
+  test("the demo bridge refuses non-scenario ops and non-owner registers stay impossible", async () => {
     const dir = await tempDir();
     const plane = openPlane(dir);
-    const bridge = plane.demoBridgeFor('tasks');
+    const bridge = plane.demoBridgeFor("tasks");
     const refused = await bridge({
-      op: 'changes',
-      payload: { entities: ['schedule.task'] },
+      op: "changes",
+      payload: { entities: ["schedule.task"] },
     });
     expect(refused.ok).toBe(false);
     expect(refused.error).toMatch(/not part of the scenario surface/u);

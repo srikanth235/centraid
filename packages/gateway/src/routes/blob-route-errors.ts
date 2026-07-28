@@ -1,4 +1,4 @@
-import type { ServerResponse } from 'node:http';
+import type { ServerResponse } from "node:http";
 
 import {
   VaultBlobAuthorizationError,
@@ -7,9 +7,9 @@ import {
   VaultBlobRemoteUnavailableError,
   VaultBlobSessionError,
   VaultDiskFullError,
-} from '@centraid/vault';
+} from "@centraid/vault";
 
-import { sendJson } from './route-helpers.js';
+import { sendJson } from "./route-helpers.js";
 
 /** Stable HTTP problem mapping for the blob transfer protocol. */
 export function sendBlobRouteError(res: ServerResponse, error: unknown): true {
@@ -21,7 +21,7 @@ export function sendBlobRouteError(res: ServerResponse, error: unknown): true {
     return true;
   }
   if (error instanceof VaultBlobBackpressureError) {
-    res.setHeader('Retry-After', '5');
+    res.setHeader("Retry-After", "5");
     return sendJson(res, 429, {
       error: error.code,
       message: error.message,
@@ -41,19 +41,21 @@ export function sendBlobRouteError(res: ServerResponse, error: unknown): true {
     return sendJson(res, 409, {
       error: error.code,
       message: error.message,
-      ...(error.expectedOffset === undefined ? {} : { expectedOffset: error.expectedOffset }),
+      ...(error.expectedOffset === undefined
+        ? {}
+        : { expectedOffset: error.expectedOffset }),
     });
   }
   if (error instanceof VaultBlobAuthorizationError) {
     return sendJson(res, 403, { error: error.code, message: error.message });
   }
   if (error instanceof VaultBlobRemoteUnavailableError) {
-    res.setHeader('Retry-After', '5');
+    res.setHeader("Retry-After", "5");
     return sendJson(res, 503, {
       error: error.code,
       message: error.message,
       retryable: true,
-      fallback: 'gateway',
+      fallback: "gateway",
     });
   }
   if (error instanceof VaultDiskFullError) {

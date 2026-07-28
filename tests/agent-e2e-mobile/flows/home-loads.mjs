@@ -2,10 +2,10 @@
 // `no-gateway` state. Proves the harness loop end-to-end (sim discovery,
 // app-install check, ctx.run, screenshot capture, verdict.md).
 
-import { skipOnboarding } from '../lib/first-run.mjs';
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from '../lib/harness.mjs';
+import { skipOnboarding } from "../lib/first-run.mjs";
+import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
-await runFlow('home-loads', async (ctx) => {
+await runFlow("home-loads", async (ctx) => {
   // Wait on the "YOUR APPS" rail label, not the pairing card: the launcher rail
   // (Home.tsx) is painted immediately, whereas the pairing card only appears
   // once the gateway probe has resolved to `no-gateway`. Waiting on the card
@@ -26,7 +26,7 @@ ${skipOnboarding(ctx.state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUnti
 - takeScreenshot: home-fresh
 - assertVisible: "YOUR APPS"
 `,
-    'home-fresh',
+    "home-fresh"
   );
 
   // The pairing card sits below the fold on a phone-sized screen, and on a
@@ -47,12 +47,12 @@ ${skipOnboarding(ctx.state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUnti
 - assertVisible: "Pair desktop"
 - takeScreenshot: home-fresh-pairing
 `,
-    'home-fresh-pairing',
+    "home-fresh-pairing"
   );
 
-  ctx.note('Home rendered no-gateway state after clearState launch');
+  ctx.note("Home rendered no-gateway state after clearState launch");
   return {
     pass: true,
-    notes: 'no-gateway Home renders within 30s of fresh launch',
+    notes: "no-gateway Home renders within 30s of fresh launch",
   };
 });

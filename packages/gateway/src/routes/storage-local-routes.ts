@@ -29,9 +29,9 @@
  * are different facts and a client should be able to tell them apart.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { LocalUsageScanner } from '../serve/local-usage.js';
+import type { LocalUsageScanner } from "../serve/local-usage.js";
 import {
   DEFAULT_STORAGE_LIMITS,
   StorageLimitsError,
@@ -39,11 +39,11 @@ import {
   type StorageLimits,
   type StorageLimitsPatch,
   type StorageLimitsStore,
-} from '../serve/storage-limits.js';
-import { readJson, sendError, sendJson } from './route-helpers.js';
+} from "../serve/storage-limits.js";
+import { readJson, sendError, sendJson } from "./route-helpers.js";
 
-const LOCAL_PATH = '/centraid/_gateway/storage/local';
-const LIMITS_PATH = '/centraid/_gateway/storage/limits';
+const LOCAL_PATH = "/centraid/_gateway/storage/local";
+const LIMITS_PATH = "/centraid/_gateway/storage/limits";
 
 export interface StorageLocalRouteDeps {
   /** Local component accounting — absent on a gateway built without it. */
@@ -52,30 +52,34 @@ export interface StorageLocalRouteDeps {
   storageLimits?: StorageLimitsStore;
 }
 
-async function currentLimits(deps: StorageLocalRouteDeps): Promise<StorageLimits> {
-  return deps.storageLimits ? await deps.storageLimits.load() : { ...DEFAULT_STORAGE_LIMITS };
+async function currentLimits(
+  deps: StorageLocalRouteDeps
+): Promise<StorageLimits> {
+  return deps.storageLimits
+    ? await deps.storageLimits.load()
+    : { ...DEFAULT_STORAGE_LIMITS };
 }
 
 async function handleLocal(
   url: URL,
   req: IncomingMessage,
   res: ServerResponse,
-  deps: StorageLocalRouteDeps,
+  deps: StorageLocalRouteDeps
 ): Promise<boolean> {
-  if ((req.method ?? 'GET') !== 'GET') {
+  if ((req.method ?? "GET") !== "GET") {
     return sendJson(res, 405, {
-      error: 'method_not_allowed',
-      message: 'GET only',
+      error: "method_not_allowed",
+      message: "GET only",
     });
   }
   if (!deps.localUsage) {
     return sendJson(res, 503, {
-      error: 'local_usage_unavailable',
-      message: 'this gateway was built without local disk accounting',
+      error: "local_usage_unavailable",
+      message: "this gateway was built without local disk accounting",
     });
   }
   try {
-    const force = url.searchParams.get('refresh') === '1';
+    const force = url.searchParams.get("refresh") === "1";
     const report = await deps.localUsage.report({ force });
     const limits = await currentLimits(deps);
     // The evaluation rides the report rather than being left to the client:
@@ -94,26 +98,27 @@ async function handleLocal(
 async function handleLimits(
   req: IncomingMessage,
   res: ServerResponse,
-  deps: StorageLocalRouteDeps,
+  deps: StorageLocalRouteDeps
 ): Promise<boolean> {
-  const method = req.method ?? 'GET';
-  if (method === 'GET') {
+  const method = req.method ?? "GET";
+  if (method === "GET") {
     try {
       return sendJson(res, 200, { limits: await currentLimits(deps) });
     } catch (err) {
       return sendError(res, err);
     }
   }
-  if (method !== 'PUT' && method !== 'PATCH') {
+  if (method !== "PUT" && method !== "PATCH") {
     return sendJson(res, 405, {
-      error: 'method_not_allowed',
-      message: 'GET or PUT',
+      error: "method_not_allowed",
+      message: "GET or PUT",
     });
   }
   if (!deps.storageLimits) {
     return sendJson(res, 503, {
-      error: 'storage_limits_unavailable',
-      message: 'this gateway has no storage state directory to persist limits in',
+      error: "storage_limits_unavailable",
+      message:
+        "this gateway has no storage state directory to persist limits in",
     });
   }
   try {
@@ -134,7 +139,7 @@ export async function tryStorageLocalRoutes(
   url: URL,
   req: IncomingMessage,
   res: ServerResponse,
-  deps: StorageLocalRouteDeps,
+  deps: StorageLocalRouteDeps
 ): Promise<boolean> {
   if (url.pathname === LOCAL_PATH) return handleLocal(url, req, res, deps);
   if (url.pathname === LIMITS_PATH) return handleLimits(req, res, deps);

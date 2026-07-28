@@ -11,33 +11,39 @@
  *     docs subdomain or `.html` docs filenames.
  *  5. No page resurrects retired Duaility branding.
  */
-import { access, readFile, readdir, stat } from 'node:fs/promises';
-import path from 'node:path';
+import { access, readFile, readdir, stat } from "node:fs/promises";
+import path from "node:path";
 
 const { join, posix } = path;
 
-const repoRoot = join(import.meta.dirname, '..', '..');
-const outDir = join(repoRoot, 'dist', 'docs-site');
-const homeIndex = join(repoRoot, 'scripts', 'home-site', 'public', 'index.html');
+const repoRoot = join(import.meta.dirname, "..", "..");
+const outDir = join(repoRoot, "dist", "docs-site");
+const homeIndex = join(
+  repoRoot,
+  "scripts",
+  "home-site",
+  "public",
+  "index.html"
+);
 
 const REQUIRED = [
-  'index.html',
-  'start/index.html',
-  'understand/index.html',
-  'data/index.html',
-  'apps/index.html',
-  'devices/index.html',
-  'backups/index.html',
-  'privacy/index.html',
-  'terms/index.html',
-  'ontology/index.html',
-  '404.html',
-  '_headers',
-  'assets/docs.css',
-  'assets/docs.js',
-  'assets/centraid-mark.svg',
-  'assets/og-docs.svg',
-  'pagefind/pagefind.js',
+  "index.html",
+  "start/index.html",
+  "understand/index.html",
+  "data/index.html",
+  "apps/index.html",
+  "devices/index.html",
+  "backups/index.html",
+  "privacy/index.html",
+  "terms/index.html",
+  "ontology/index.html",
+  "404.html",
+  "_headers",
+  "assets/docs.css",
+  "assets/docs.js",
+  "assets/centraid-mark.svg",
+  "assets/og-docs.svg",
+  "pagefind/pagefind.js",
 ];
 
 let failures = 0;
@@ -55,7 +61,7 @@ async function exists(rel) {
   }
 }
 
-async function walk(dir, prefix = '') {
+async function walk(dir, prefix = "") {
   const entries = await readdir(dir);
   return (
     await Promise.all(
@@ -64,48 +70,48 @@ async function walk(dir, prefix = '') {
         const rel = prefix ? posix.join(prefix, entry) : entry;
         const info = await stat(abs);
         return info.isDirectory() ? walk(abs, rel) : [rel];
-      }),
+      })
     )
   ).flat();
 }
 
 async function resolves(clean, fromPage) {
-  if (clean === '' || clean === './') return true;
+  if (clean === "" || clean === "./") return true;
 
   let candidate = clean;
-  if (candidate.startsWith('/')) {
-    const basePath = process.env.DOCS_SITE_BASE_PATH || '';
+  if (candidate.startsWith("/")) {
+    const basePath = process.env.DOCS_SITE_BASE_PATH || "";
     candidate = candidate.replace(
-      new RegExp(`^${basePath.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}/?`, 'u'),
-      '',
+      new RegExp(`^${basePath.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}/?`, "u"),
+      ""
     );
-    candidate = candidate.replace(/^\//u, '');
+    candidate = candidate.replace(/^\//u, "");
   } else {
     candidate = posix.normalize(posix.join(posix.dirname(fromPage), candidate));
   }
 
-  if (candidate === '.') candidate = 'index.html';
-  if (candidate.endsWith('/')) candidate = `${candidate}index.html`;
+  if (candidate === ".") candidate = "index.html";
+  if (candidate.endsWith("/")) candidate = `${candidate}index.html`;
   if (await exists(candidate)) return true;
-  if (await exists(posix.join(candidate, 'index.html'))) return true;
+  if (await exists(posix.join(candidate, "index.html"))) return true;
   return false;
 }
 
 const required = await Promise.all(
-  REQUIRED.map(async (rel) => ({ rel, exists: await exists(rel) })),
+  REQUIRED.map(async (rel) => ({ rel, exists: await exists(rel) }))
 );
 for (const { rel, exists: present } of required) {
   if (!present) fail(`missing required file: ${rel}`);
 }
 
-const pages = (await walk(outDir)).filter((f) => f.endsWith('.html'));
+const pages = (await walk(outDir)).filter((f) => f.endsWith(".html"));
 const HREF_RE = /(?:href|src)="(?<url>[^"]+)"/gu;
-const tagAttr = (html, tag, attr, value, readAttr = 'content') => {
+const tagAttr = (html, tag, attr, value, readAttr = "content") => {
   const re = new RegExp(
     `<${tag}\\b(?=[^>]*\\b${attr}="${value}")[^>]*\\b${readAttr}="(?<attrValue>[^"]*)"[^>]*>`,
-    'iu',
+    "iu"
   );
-  return html.match(re)?.groups?.attrValue || '';
+  return html.match(re)?.groups?.attrValue || "";
 };
 const titleValues = new Map();
 const descriptionValues = new Map();
@@ -116,53 +122,70 @@ const descriptionValues = new Map();
 const validatePage = async (index) => {
   const page = pages[index];
   if (!page) return;
-  const html = await readFile(join(outDir, page), 'utf8');
+  const html = await readFile(join(outDir, page), "utf8");
 
-  if (/duaility/iu.test(html)) fail(`${page}: retired "Duaility" branding still present`);
+  if (/duaility/iu.test(html))
+    fail(`${page}: retired "Duaility" branding still present`);
 
   const title =
-    html.match(/<title>(?<titleText>[^<]+)<\/title>/iu)?.groups?.titleText?.trim() || '';
-  const description = tagAttr(html, 'meta', 'name', 'description');
-  const noIndex = /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/iu.test(html);
+    html
+      .match(/<title>(?<titleText>[^<]+)<\/title>/iu)
+      ?.groups?.titleText?.trim() || "";
+  const description = tagAttr(html, "meta", "name", "description");
+  const noIndex =
+    /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/iu.test(
+      html
+    );
 
   if (!title) fail(`${page}: missing <title>`);
   if (title.length > 70)
-    fail(`${page}: <title> is too long for a clean search result (${title.length})`);
+    fail(
+      `${page}: <title> is too long for a clean search result (${title.length})`
+    );
   if (!description) fail(`${page}: missing meta description`);
 
   if (!noIndex) {
     if (description && (description.length < 80 || description.length > 170)) {
       fail(
-        `${page}: meta description should stay between 80 and 170 characters (${description.length})`,
+        `${page}: meta description should stay between 80 and 170 characters (${description.length})`
       );
     }
-    const canonical = tagAttr(html, 'link', 'rel', 'canonical', 'href');
+    const canonical = tagAttr(html, "link", "rel", "canonical", "href");
     if (!canonical) fail(`${page}: missing canonical link`);
-    if (canonical && !canonical.startsWith('https://centraid.dev/docs/')) {
+    if (canonical && !canonical.startsWith("https://centraid.dev/docs/")) {
       fail(`${page}: canonical must stay under https://centraid.dev/docs/`);
     }
-    if (!tagAttr(html, 'meta', 'property', 'og:title')) fail(`${page}: missing og:title`);
-    if (!tagAttr(html, 'meta', 'property', 'og:description'))
+    if (!tagAttr(html, "meta", "property", "og:title"))
+      fail(`${page}: missing og:title`);
+    if (!tagAttr(html, "meta", "property", "og:description"))
       fail(`${page}: missing og:description`);
-    if (!tagAttr(html, 'meta', 'property', 'og:url')) fail(`${page}: missing og:url`);
-    if (!tagAttr(html, 'meta', 'property', 'og:image')) fail(`${page}: missing og:image`);
-    if (!tagAttr(html, 'meta', 'name', 'twitter:card')) fail(`${page}: missing twitter:card`);
-    if (!tagAttr(html, 'meta', 'name', 'twitter:image')) fail(`${page}: missing twitter:image`);
+    if (!tagAttr(html, "meta", "property", "og:url"))
+      fail(`${page}: missing og:url`);
+    if (!tagAttr(html, "meta", "property", "og:image"))
+      fail(`${page}: missing og:image`);
+    if (!tagAttr(html, "meta", "name", "twitter:card"))
+      fail(`${page}: missing twitter:card`);
+    if (!tagAttr(html, "meta", "name", "twitter:image"))
+      fail(`${page}: missing twitter:image`);
     if (!/<main\b[^>]*data-pagefind-body(?:[=>\s]|$)/u.test(html)) {
       fail(`${page}: missing Pagefind body marker`);
     }
-    if (!/<meta\b(?=[^>]*\bdata-pagefind-meta="label\[content\]")/u.test(html)) {
+    if (
+      !/<meta\b(?=[^>]*\bdata-pagefind-meta="label\[content\]")/u.test(html)
+    ) {
       fail(`${page}: missing Pagefind label metadata`);
     }
     if (!/<script\b[^>]*type="application\/ld\+json"[^>]*>/u.test(html)) {
       fail(`${page}: missing JSON-LD structured data`);
     }
     if (titleValues.has(title))
-      fail(`${page}: duplicate SEO title also used by ${titleValues.get(title)}`);
+      fail(
+        `${page}: duplicate SEO title also used by ${titleValues.get(title)}`
+      );
     else titleValues.set(title, page);
     if (descriptionValues.has(description)) {
       fail(
-        `${page}: duplicate meta description also used by ${descriptionValues.get(description)}`,
+        `${page}: duplicate meta description also used by ${descriptionValues.get(description)}`
       );
     } else {
       descriptionValues.set(description, page);
@@ -171,33 +194,40 @@ const validatePage = async (index) => {
 
   await Promise.all(
     [...html.matchAll(HREF_RE)].map(async (href) => {
-      const url = href.groups?.url ?? '';
+      const url = href.groups?.url ?? "";
       if (
-        url.startsWith('http') ||
-        url.startsWith('#') ||
-        url.startsWith('mailto:') ||
-        url.startsWith('data:')
+        url.startsWith("http") ||
+        url.startsWith("#") ||
+        url.startsWith("mailto:") ||
+        url.startsWith("data:")
       ) {
         return;
       }
-      const clean = url.split('#')[0].split('?')[0];
-      if (!(await resolves(clean, page))) fail(`${page}: broken internal link -> ${url}`);
-    }),
+      const clean = url.split("#")[0].split("?")[0];
+      if (!(await resolves(clean, page)))
+        fail(`${page}: broken internal link -> ${url}`);
+    })
   );
   return validatePage(index + 1);
 };
 await validatePage(0);
 
-const homeHtml = await readFile(homeIndex, 'utf8');
+const homeHtml = await readFile(homeIndex, "utf8");
 if (/https:\/\/docs\.centraid\.dev/u.test(homeHtml)) {
-  fail('home-site index.html: production docs links must stay under /docs/');
+  fail("home-site index.html: production docs links must stay under /docs/");
 }
-if (/href="\/docs\/(?:start|data|apps|devices|backups|ontology)\.html(?:#.*?)?"/u.test(homeHtml)) {
-  fail('home-site index.html: docs links must use clean /docs/<route>/ URLs');
+if (
+  /href="\/docs\/(?:start|data|apps|devices|backups|ontology)\.html(?:#.*?)?"/u.test(
+    homeHtml
+  )
+) {
+  fail("home-site index.html: docs links must use clean /docs/<route>/ URLs");
 }
 
 if (failures) {
   console.error(`docs-site smoke: ${failures} failure(s)`);
   process.exit(1);
 }
-console.log(`docs-site smoke: ${pages.length} pages OK, all internal links resolve`);
+console.log(
+  `docs-site smoke: ${pages.length} pages OK, all internal links resolve`
+);

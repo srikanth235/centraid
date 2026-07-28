@@ -3,19 +3,28 @@ import {
   webCryptoIdFactory,
   type ReplicaDigest,
   type ReplicaIdFactory,
-} from './digest.js';
-import type { IntentRecordStore } from './intent-record-store.js';
-import { intentPayloadHash } from './payload-hash.js';
+} from "./digest.js";
+import type { IntentRecordStore } from "./intent-record-store.js";
+import { intentPayloadHash } from "./payload-hash.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
   IntentState,
   OptimisticMutation,
   ReplicaIntent,
-} from './types.js';
+} from "./types.js";
 
-const OVERLAY_STATES = new Set<IntentState>(['queued', 'sending', 'awaiting-change', 'parked']);
-const TERMINAL_OUTCOMES = new Set<IntentOutcome['status']>(['executed', 'denied', 'failed']);
+const OVERLAY_STATES = new Set<IntentState>([
+  "queued",
+  "sending",
+  "awaiting-change",
+  "parked",
+]);
+const TERMINAL_OUTCOMES = new Set<IntentOutcome["status"]>([
+  "executed",
+  "denied",
+  "failed",
+]);
 
 /**
  * Intent transitions share one durable queue; preserve outcome order instead
@@ -23,11 +32,11 @@ const TERMINAL_OUTCOMES = new Set<IntentOutcome['status']>(['executed', 'denied'
  */
 function applyInIntentOrder<T>(
   values: Iterable<T>,
-  apply: (value: T) => void | PromiseLike<void>,
+  apply: (value: T) => void | PromiseLike<void>
 ): Promise<void> {
   return Array.from(values).reduce<Promise<void>>(
     (sequence, value) => sequence.then(() => apply(value)),
-    Promise.resolve(),
+    Promise.resolve()
   );
 }
 
@@ -43,7 +52,7 @@ export class IntentQueue {
 
   constructor(
     private readonly store: IntentRecordStore,
-    options: IntentQueueOptions = {},
+    options: IntentQueueOptions = {}
   ) {
     this.#idFactory = options.idFactory ?? webCryptoIdFactory;
     this.#digest = options.digest ?? webCryptoDigest;
@@ -58,7 +67,7 @@ export class IntentQueue {
       appId: input.appId,
       action: input.action,
       input: input.input,
-      state: 'queued',
+      state: "queued",
       attempts: 0,
       optimistic: input.optimistic ?? [],
       dependencies: input.dependencies ?? [],
@@ -70,22 +79,22 @@ export class IntentQueue {
   }
 
   transportFailed(intentId: string, reason?: string): Promise<ReplicaIntent> {
-    return this.store.transition(intentId, ['sending'], {
-      state: 'queued',
+    return this.store.transition(intentId, ["sending"], {
+      state: "queued",
       reason,
     });
   }
 
   awaitingChange(intentId: string): Promise<ReplicaIntent> {
-    return this.store.transition(intentId, ['sending'], {
-      state: 'awaiting-change',
+    return this.store.transition(intentId, ["sending"], {
+      state: "awaiting-change",
       reason: undefined,
     });
   }
 
   parked(intentId: string, reason?: string): Promise<ReplicaIntent> {
-    return this.store.transition(intentId, ['sending', 'awaiting-change'], {
-      state: 'parked',
+    return this.store.transition(intentId, ["sending", "awaiting-change"], {
+      state: "parked",
       reason,
     });
   }
@@ -103,8 +112,16 @@ export class IntentQueue {
       };
       updated.push(
         TERMINAL_OUTCOMES.has(outcome.status)
-          ? await this.store.settle(outcome.intentId, [...OVERLAY_STATES], patch)
-          : await this.store.transition(outcome.intentId, [...OVERLAY_STATES], patch),
+          ? await this.store.settle(
+              outcome.intentId,
+              [...OVERLAY_STATES],
+              patch
+            )
+          : await this.store.transition(
+              outcome.intentId,
+              [...OVERLAY_STATES],
+              patch
+            )
       );
     });
     return updated;
@@ -115,20 +132,28 @@ export class IntentQueue {
   }
 
   /** A renderer crash can strand claimed work; replay it with the same id and hash. */
-  async recoverSending(reason = 'recovered after reload'): Promise<ReplicaIntent[]> {
+  async recoverSending(
+    reason = "recovered after reload"
+  ): Promise<ReplicaIntent[]> {
     const recovered: ReplicaIntent[] = [];
-    await applyInIntentOrder(await this.store.list(['sending']), async (intent) => {
-      recovered.push(
-        await this.store.transition(intent.intentId, ['sending'], {
-          state: 'queued',
-          reason,
-        }),
-      );
-    });
+    await applyInIntentOrder(
+      await this.store.list(["sending"]),
+      async (intent) => {
+        recovered.push(
+          await this.store.transition(intent.intentId, ["sending"], {
+            state: "queued",
+            reason,
+          })
+        );
+      }
+    );
     return recovered;
   }
 
-  async overlayMutations(shapeId?: string, entity?: string): Promise<OptimisticMutation[]> {
+  async overlayMutations(
+    shapeId?: string,
+    entity?: string
+  ): Promise<OptimisticMutation[]> {
     const intents = await this.pending();
     const result: OptimisticMutation[] = [];
     for (const intent of intents) {

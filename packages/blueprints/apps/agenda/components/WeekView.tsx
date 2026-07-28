@@ -3,14 +3,20 @@
 // click-a-slot to propose prefilled. Scrolls to ~7am whenever the displayed
 // week changes (not on every unrelated re-render — an attach elsewhere must
 // not jerk a manually-scrolled view back).
-import { useEffect, useRef } from 'react';
-import type { CSSProperties } from 'react';
+import { useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
 
-import { bucketByDay, fmtRange, layoutDay, segTimeText, startOfWeek } from '../format.ts';
-import { localDayKey } from '../kit.ts';
-import type { AgEvent, DaySegment } from '../types.ts';
+import {
+  bucketByDay,
+  fmtRange,
+  layoutDay,
+  segTimeText,
+  startOfWeek,
+} from "../format.ts";
+import { localDayKey } from "../kit.ts";
+import type { AgEvent, DaySegment } from "../types.ts";
 
-import styles from './WeekView.module.css';
+import styles from "./WeekView.module.css";
 
 type ColorFor = (calendarId: string | null | undefined) => string | null;
 
@@ -20,7 +26,7 @@ function WeekDayHead({ date, isToday }: { date: Date; isToday: boolean }) {
   return (
     <div className={styles.weekDayHead} data-today={String(isToday)}>
       <span className={styles.weekDow}>
-        {date.toLocaleDateString(undefined, { weekday: 'short' })}
+        {date.toLocaleDateString(undefined, { weekday: "short" })}
       </span>
       <span className={styles.weekNum}>{date.getDate()}</span>
     </div>
@@ -48,7 +54,7 @@ function AllDayCell({
           className={styles.alldayChip}
           style={
             {
-              '--ev-color': colorFor(seg.ev.calendar_id) ?? undefined,
+              "--ev-color": colorFor(seg.ev.calendar_id) ?? undefined,
             } as CSSProperties
           }
           title={fmtRange(seg.ev)}
@@ -68,8 +74,8 @@ function WeekAxis() {
       {hours.map((h) => (
         <span key={h} className={styles.weekHour} style={{ top: h * HOUR_PX }}>
           {new Date(2024, 0, 1, h)
-            .toLocaleTimeString(undefined, { hour: 'numeric' })
-            .replace(' ', '')}
+            .toLocaleTimeString(undefined, { hour: "numeric" })
+            .replace(" ", "")}
         </span>
       ))}
     </div>
@@ -92,20 +98,28 @@ function WeekCol({
   onEventOpen: (ev: AgEvent) => void;
 }) {
   const key = localDayKey(date);
-  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayStart = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  ).getTime();
   const segs = (byDay.get(key) ?? []).filter((s) => !s.spansAll);
   const laidOut = layoutDay(segs);
   const now = new Date();
   const nowTop = (now.getHours() + now.getMinutes() / 60) * HOUR_PX;
 
   const dayLabel = date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
+    weekday: "long",
+    month: "long",
+    day: "numeric",
   });
 
   return (
-    <div className={styles.weekCol} data-today={String(isToday)} style={{ height: 24 * HOUR_PX }}>
+    <div
+      className={styles.weekCol}
+      data-today={String(isToday)}
+      style={{ height: 24 * HOUR_PX }}
+    >
       {/* Clicking a slot proposes an event at that time. That is a real button
           stretched over the column (issue #573) rather than a click handler on
           the column div: the event blocks are positioned above it, so the old
@@ -120,24 +134,34 @@ function WeekCol({
           const rect = e.currentTarget.getBoundingClientRect();
           const hour = Math.max(
             0,
-            Math.min(23.5, Math.floor(((e.clientY - rect.top) / HOUR_PX) * 2) / 2),
+            Math.min(
+              23.5,
+              Math.floor(((e.clientY - rect.top) / HOUR_PX) * 2) / 2
+            )
           );
           const at = new Date(
             date.getFullYear(),
             date.getMonth(),
             date.getDate(),
             Math.floor(hour),
-            (hour % 1) * 60,
+            (hour % 1) * 60
           );
           onSlotCreate(date, at);
         }}
       />
       {isToday ? (
-        <span className={styles.nowLine} style={{ top: nowTop }} aria-hidden="true" />
+        <span
+          className={styles.nowLine}
+          style={{ top: nowTop }}
+          aria-hidden="true"
+        />
       ) : null}
       {laidOut.map((seg) => {
         const top = ((seg.segStart - dayStart) / 3600000) * HOUR_PX;
-        const height = Math.max(((seg.segEnd - seg.segStart) / 3600000) * HOUR_PX, 22);
+        const height = Math.max(
+          ((seg.segEnd - seg.segStart) / 3600000) * HOUR_PX,
+          22
+        );
         const color = colorFor(seg.ev.calendar_id);
         return (
           <button
@@ -147,7 +171,7 @@ function WeekCol({
             data-status={seg.ev.status}
             style={
               {
-                '--ev-color': color ?? undefined,
+                "--ev-color": color ?? undefined,
                 top: `${top}px`,
                 height: `${height}px`,
                 left: `${(seg.col / seg.width) * 100}%`,
@@ -185,11 +209,14 @@ export function WeekView({
   const start = startOfWeek(cursor);
   const days = Array.from(
     { length: 7 },
-    (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i),
+    (_, i) =>
+      new Date(start.getFullYear(), start.getMonth(), start.getDate() + i)
   );
   const byDay = bucketByDay(events);
   const todayKey = localDayKey(new Date());
-  const hasAllDay = days.some((d) => (byDay.get(localDayKey(d)) ?? []).some((s) => s.spansAll));
+  const hasAllDay = days.some((d) =>
+    (byDay.get(localDayKey(d)) ?? []).some((s) => s.spansAll)
+  );
   const weekKey = localDayKey(start);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -202,7 +229,11 @@ export function WeekView({
       <div className={styles.weekHead}>
         <span />
         {days.map((d) => (
-          <WeekDayHead key={localDayKey(d)} date={d} isToday={localDayKey(d) === todayKey} />
+          <WeekDayHead
+            key={localDayKey(d)}
+            date={d}
+            isToday={localDayKey(d) === todayKey}
+          />
         ))}
       </div>
       {hasAllDay ? (

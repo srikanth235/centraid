@@ -48,7 +48,7 @@ interface LintRule {
    * keeping string literals — for the module-import rule whose target *is* a
    * string specifier (`from 'fs'`).
    */
-  readonly target?: 'code' | 'withStrings';
+  readonly target?: "code" | "withStrings";
 }
 
 /**
@@ -60,53 +60,53 @@ interface LintRule {
  */
 const RULES: readonly LintRule[] = [
   {
-    id: 'no-ctx-tool',
+    id: "no-ctx-tool",
     // `ctx.tool` (dot form, with optional whitespace before `(`) and the
     // bracket forms `ctx['tool'](` / `ctx["tool"](`. Uses the string-keeping
     // view so the bracketed string key isn't masked away.
     re: /\bctx\s*(?:\.\s*tool|\[\s*['"]tool['"]\s*\])\s*\(/gu,
     message:
-      'ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent.',
-    target: 'withStrings',
+      "ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent.",
+    target: "withStrings",
   },
   {
-    id: 'no-date-now',
+    id: "no-date-now",
     re: /\bDate\.now\s*\(/gu,
     message:
-      'Date.now() reads the wall clock, so a re-run produces a different value. Use the fixed ctx.now fire instant, derive time windows from ctx.runs.last() / ctx.state, or read a timestamp off a ctx.vault result.',
+      "Date.now() reads the wall clock, so a re-run produces a different value. Use the fixed ctx.now fire instant, derive time windows from ctx.runs.last() / ctx.state, or read a timestamp off a ctx.vault result.",
   },
   {
-    id: 'no-new-date',
+    id: "no-new-date",
     re: /\bnew\s+Date\s*\(\s*\)/gu,
     message:
-      'new Date() (no args) reads the wall clock — nondeterministic across re-runs. Use the fixed ctx.now fire instant or pass an explicit ms/ISO argument. (new Date(value) with an argument is fine.)',
+      "new Date() (no args) reads the wall clock — nondeterministic across re-runs. Use the fixed ctx.now fire instant or pass an explicit ms/ISO argument. (new Date(value) with an argument is fine.)",
   },
   {
-    id: 'no-math-random',
+    id: "no-math-random",
     re: /\bMath\.random\s*\(/gu,
     message:
-      'Math.random() is nondeterministic — each run produces a different value. Derive any needed variation from the run inputs (ctx.input, ctx.state, a ctx.vault result).',
+      "Math.random() is nondeterministic — each run produces a different value. Derive any needed variation from the run inputs (ctx.input, ctx.state, a ctx.vault result).",
   },
   {
-    id: 'no-random-uuid',
+    id: "no-random-uuid",
     re: /\brandomUUID\s*\(/gu,
     message:
-      'randomUUID() mints a fresh id on every run, so a re-run after a crash duplicates work under a new id. Derive ids deterministically from the run inputs, or have a ctx.vault write mint and return the id.',
+      "randomUUID() mints a fresh id on every run, so a re-run after a crash duplicates work under a new id. Derive ids deterministically from the run inputs, or have a ctx.vault write mint and return the id.",
   },
   {
-    id: 'no-random-bytes',
+    id: "no-random-bytes",
     re: /\b(?:getRandomValues|randomBytes|randomFillSync|randomInt)\s*\(/gu,
     message:
-      'crypto randomness is nondeterministic — re-runs diverge. Use values derived from the run inputs instead.',
+      "crypto randomness is nondeterministic — re-runs diverge. Use values derived from the run inputs instead.",
   },
   {
-    id: 'no-performance-now',
+    id: "no-performance-now",
     re: /\bperformance\.now\s*\(/gu,
     message:
-      'performance.now() reads a monotonic wall clock — nondeterministic across runs. Measure via ctx.runs timestamps instead.',
+      "performance.now() reads a monotonic wall clock — nondeterministic across runs. Measure via ctx.runs timestamps instead.",
   },
   {
-    id: 'no-raw-fetch',
+    id: "no-raw-fetch",
     // `ctx.fetch(...)` is exempt: it is the audited connector rail (ledgered,
     // broker-injected, host-pinned, read-only) — the very thing this rule
     // steers toward. Everything else spelling `fetch(` is ambient I/O.
@@ -115,17 +115,17 @@ const RULES: readonly LintRule[] = [
       'A raw fetch() is network I/O that bypasses the run ledger. READS ride ctx.fetch (connector fires, broker-injected and host-pinned) or a ctx.vault read; an external WRITE (send an email, call a mutating API) is staged, never sent: ctx.vault.invoke({ command: "outbox.stage", … }) parks it for the owner and the gateway executor performs the send (issue #306).',
   },
   {
-    id: 'no-node-io-import',
+    id: "no-node-io-import",
     re: /\b(?:from|require\s*\(\s*)\s*['"](?:node:)?(?:fs(?:\/promises)?|child_process|net|http|https|dns|dgram|tls|cluster)['"]/gu,
     message:
-      'Direct node I/O modules (fs, child_process, net, http, …) bypass the run ledger — their effects are unrecorded. All I/O must go through the ctx.* rails (ctx.fetch / ctx.vault).',
-    target: 'withStrings',
+      "Direct node I/O modules (fs, child_process, net, http, …) bypass the run ledger — their effects are unrecorded. All I/O must go through the ctx.* rails (ctx.fetch / ctx.vault).",
+    target: "withStrings",
   },
   {
-    id: 'no-process-ambient',
+    id: "no-process-ambient",
     re: /\bprocess\.(?:env|hrtime|cwd|uptime|argv|pid|platform)\b/gu,
     message:
-      'Reading ambient process state (env, hrtime, cwd, argv, …) makes the handler depend on the host environment, not its run inputs. Pass configuration through the manifest / ctx.state instead.',
+      "Reading ambient process state (env, hrtime, cwd, argv, …) makes the handler depend on the host environment, not its run inputs. Pass configuration through the manifest / ctx.state instead.",
   },
 ];
 
@@ -136,7 +136,7 @@ const RULES: readonly LintRule[] = [
  * distinguishable from the argless `new Date()`: the masked argument becomes
  * `\0\0\0`, not whitespace that would read as empty parens.
  */
-const MASK = '\0';
+const MASK = "\0";
 
 /**
  * Mask comments — and, when `maskStrings`, string/template literal bodies and
@@ -150,9 +150,9 @@ const MASK = '\0';
  * decides whether string content is blanked.
  */
 function maskNonCode(src: string, maskStrings: boolean): string {
-  const out = src.split('');
+  const out = src.split("");
   const mask = (k: number): void => {
-    if (out[k] !== '\n') out[k] = MASK;
+    if (out[k] !== "\n") out[k] = MASK;
   };
   const maskStr = (k: number): void => {
     if (maskStrings) mask(k);
@@ -161,44 +161,44 @@ function maskNonCode(src: string, maskStrings: boolean): string {
   // Saved brace depths for each open template-literal interpolation. Entering
   // `${` pushes the outer depth and resets; the matching `}` pops it.
   const tplStack: number[] = [];
-  let mode: 'code' | 'line' | 'block' | 'sq' | 'dq' | 'tpl' = 'code';
+  let mode: "code" | "line" | "block" | "sq" | "dq" | "tpl" = "code";
   let braceDepth = 0;
   let i = 0;
   while (i < n) {
     const c = src[i];
-    const d = i + 1 < n ? src[i + 1] : '';
-    if (mode === 'code') {
-      if (c === '/' && d === '/') {
+    const d = i + 1 < n ? src[i + 1] : "";
+    if (mode === "code") {
+      if (c === "/" && d === "/") {
         mask(i);
         mask(i + 1);
-        mode = 'line';
+        mode = "line";
         i += 2;
-      } else if (c === '/' && d === '*') {
+      } else if (c === "/" && d === "*") {
         mask(i);
         mask(i + 1);
-        mode = 'block';
+        mode = "block";
         i += 2;
       } else if (c === "'") {
         maskStr(i);
-        mode = 'sq';
+        mode = "sq";
         i++;
       } else if (c === '"') {
         maskStr(i);
-        mode = 'dq';
+        mode = "dq";
         i++;
-      } else if (c === '`') {
+      } else if (c === "`") {
         maskStr(i);
-        mode = 'tpl';
+        mode = "tpl";
         i++;
-      } else if (c === '{') {
+      } else if (c === "{") {
         braceDepth++;
         i++;
-      } else if (c === '}') {
+      } else if (c === "}") {
         if (braceDepth === 0 && tplStack.length > 0) {
           // Closes a template interpolation — the brace is template syntax.
           braceDepth = tplStack.pop()!;
           mask(i);
-          mode = 'tpl';
+          mode = "tpl";
         } else {
           if (braceDepth > 0) braceDepth--;
         }
@@ -206,27 +206,27 @@ function maskNonCode(src: string, maskStrings: boolean): string {
       } else {
         i++;
       }
-    } else if (mode === 'line') {
-      if (c === '\n') mode = 'code';
+    } else if (mode === "line") {
+      if (c === "\n") mode = "code";
       else mask(i);
       i++;
-    } else if (mode === 'block') {
+    } else if (mode === "block") {
       mask(i);
-      if (c === '*' && d === '/') {
+      if (c === "*" && d === "/") {
         mask(i + 1);
-        mode = 'code';
+        mode = "code";
         i += 2;
       } else {
         i++;
       }
-    } else if (mode === 'sq' || mode === 'dq') {
-      const quote = mode === 'sq' ? "'" : '"';
+    } else if (mode === "sq" || mode === "dq") {
+      const quote = mode === "sq" ? "'" : '"';
       maskStr(i);
-      if (c === '\\') {
+      if (c === "\\") {
         if (i + 1 < n) maskStr(i + 1);
         i += 2;
       } else if (c === quote) {
-        mode = 'code';
+        mode = "code";
         i++;
       } else {
         i++;
@@ -234,33 +234,36 @@ function maskNonCode(src: string, maskStrings: boolean): string {
     } else {
       // template literal body
       maskStr(i);
-      if (c === '\\') {
+      if (c === "\\") {
         if (i + 1 < n) maskStr(i + 1);
         i += 2;
-      } else if (c === '`') {
-        mode = 'code';
+      } else if (c === "`") {
+        mode = "code";
         i++;
-      } else if (c === '$' && d === '{') {
+      } else if (c === "$" && d === "{") {
         // Enter an interpolation: the `${` is template syntax, the body is code.
         maskStr(i + 1);
         tplStack.push(braceDepth);
         braceDepth = 0;
-        mode = 'code';
+        mode = "code";
         i += 2;
       } else {
         i++;
       }
     }
   }
-  return out.join('');
+  return out.join("");
 }
 
 /** Map a character offset to a 1-based {line, column}. */
-function offsetToPosition(src: string, offset: number): { line: number; column: number } {
+function offsetToPosition(
+  src: string,
+  offset: number
+): { line: number; column: number } {
   let line = 1;
   let lineStart = 0;
   for (let k = 0; k < offset; k++) {
-    if (src[k] === '\n') {
+    if (src[k] === "\n") {
       line++;
       lineStart = k + 1;
     }
@@ -276,10 +279,10 @@ function offsetToPosition(src: string, offset: number): { line: number; column: 
 export function lintHandlerSource(source: string): HandlerLintFinding[] {
   const codeOnly = maskNonCode(source, true);
   const withStrings = maskNonCode(source, false);
-  const lines = source.split('\n');
+  const lines = source.split("\n");
   const findings: HandlerLintFinding[] = [];
   for (const rule of RULES) {
-    const masked = rule.target === 'withStrings' ? withStrings : codeOnly;
+    const masked = rule.target === "withStrings" ? withStrings : codeOnly;
     rule.re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = rule.re.exec(masked)) !== null) {
@@ -289,7 +292,7 @@ export function lintHandlerSource(source: string): HandlerLintFinding[] {
         message: rule.message,
         line,
         column,
-        snippet: (lines[line - 1] ?? '').trim(),
+        snippet: (lines[line - 1] ?? "").trim(),
       });
       // Guard against a zero-width match looping forever.
       if (m.index === rule.re.lastIndex) rule.re.lastIndex++;
@@ -306,17 +309,21 @@ export function lintHandlerSource(source: string): HandlerLintFinding[] {
  */
 export function formatHandlerLintError(
   findings: readonly HandlerLintFinding[],
-  file = 'handler.js',
+  file = "handler.js"
 ): string | undefined {
   if (findings.length === 0) return undefined;
   const lines = findings.map(
-    (f) => `  ${file}:${f.line}:${f.column} [${f.rule}] ${f.message}\n    → ${f.snippet}`,
+    (f) =>
+      `  ${file}:${f.line}:${f.column} [${f.rule}] ${f.message}\n    → ${f.snippet}`
   );
-  const count = findings.length === 1 ? '1 unsafe pattern' : `${findings.length} unsafe patterns`;
+  const count =
+    findings.length === 1
+      ? "1 unsafe pattern"
+      : `${findings.length} unsafe patterns`;
   return (
     `${file} has ${count} — an automation handler's effects must go through the audited ctx.* ` +
     `rails, and it must stay deterministic so a re-run does not diverge. Route all I/O and ` +
     `nondeterminism through ctx.*:\n` +
-    lines.join('\n')
+    lines.join("\n")
   );
 }

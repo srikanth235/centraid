@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
 import {
   formatHardwareProfileDetail,
@@ -8,84 +8,84 @@ import {
   type ResourceKnobName,
   type ResourceKnobSource,
   toStructuredResourceProfile,
-} from './hardware-profile.js';
+} from "./hardware-profile.js";
 
 /** All six knobs Linked to the preset — the no-override baseline. */
 const ALL_PRESET_SOURCES: Record<ResourceKnobName, ResourceKnobSource> = {
-  workerMaxConcurrent: { source: 'preset' },
-  workerMaxOldGenerationMb: { source: 'preset' },
-  workerPoolSize: { source: 'preset' },
-  replicationConcurrency: { source: 'preset' },
-  staticBrotliQuality: { source: 'preset' },
-  staticGzipQuality: { source: 'preset' },
+  workerMaxConcurrent: { source: "preset" },
+  workerMaxOldGenerationMb: { source: "preset" },
+  workerPoolSize: { source: "preset" },
+  replicationConcurrency: { source: "preset" },
+  staticBrotliQuality: { source: "preset" },
+  staticGzipQuality: { source: "preset" },
 };
 
-describe('hardware-profile', () => {
-  test('slow storage selects one coherent constrained-host profile', () => {
+describe("hardware-profile", () => {
+  test("slow storage selects one coherent constrained-host profile", () => {
     expect(
       resolveGatewayHardwareProfile(
         { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, storageFsyncMs: 20 },
-        {},
-      ),
+        {}
+      )
     ).toMatchObject({
-      class: 'constrained',
-      resourceMode: 'auto',
+      class: "constrained",
+      resourceMode: "auto",
       // Detection tunes concurrency, but durability only relaxes on an
       // explicit operator choice.
-      sqliteSynchronous: 'FULL',
+      sqliteSynchronous: "FULL",
       workerMaxConcurrent: 2,
       workerMaxOldGenerationMb: 128,
       workerPoolSize: 0,
       replicationConcurrency: 1,
       staticBrotliQuality: 5,
       staticGzipQuality: 6,
-      vaultMountStrategy: 'eager',
+      vaultMountStrategy: "eager",
       vaultSweepIntervalMs: 7_200_000,
       outboxIdleIntervalMs: 120_000,
     });
   });
 
-  test('only an explicitly selected constrained profile opts into NORMAL', () => {
+  test("only an explicitly selected constrained profile opts into NORMAL", () => {
     expect(
       resolveGatewayHardwareProfile(
         { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, storageFsyncMs: 1 },
-        { CENTRAID_HARDWARE_PROFILE: 'constrained' },
-      ),
-    ).toMatchObject({ class: 'constrained', sqliteSynchronous: 'NORMAL' });
+        { CENTRAID_HARDWARE_PROFILE: "constrained" }
+      )
+    ).toMatchObject({ class: "constrained", sqliteSynchronous: "NORMAL" });
   });
 
-  test('explicit profile and durability overrides win over detection', () => {
+  test("explicit profile and durability overrides win over detection", () => {
     expect(
       resolveGatewayHardwareProfile(
         { cores: 2, totalMemoryBytes: 1024 ** 3, storageFsyncMs: 30 },
         {
-          CENTRAID_HARDWARE_PROFILE: 'standard',
-          CENTRAID_SQLITE_SYNCHRONOUS: 'NORMAL',
-        },
-      ),
+          CENTRAID_HARDWARE_PROFILE: "standard",
+          CENTRAID_SQLITE_SYNCHRONOUS: "NORMAL",
+        }
+      )
     ).toMatchObject({
-      class: 'standard',
-      sqliteSynchronous: 'NORMAL',
+      class: "standard",
+      sqliteSynchronous: "NORMAL",
       workerPoolSize: 2,
-      vaultMountStrategy: 'eager',
+      vaultMountStrategy: "eager",
       vaultSweepIntervalMs: 3_600_000,
       outboxIdleIntervalMs: 60_000,
     });
   });
 
-  test('explicit tuning overrides are reflected in the resolved profile', () => {
+  test("explicit tuning overrides are reflected in the resolved profile", () => {
     expect(
       resolveGatewayHardwareProfile(
         { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, storageFsyncMs: 1 },
         {
-          CENTRAID_WORKER_MAX_CONCURRENT: '3',
-          CENTRAID_WORKER_MAX_OLD_GENERATION_MB: '192',
-          CENTRAID_WORKER_POOL_SIZE: '1',
-          CENTRAID_REPLICATION_CONCURRENCY: '2',
-          CENTRAID_STATIC_BROTLI_QUALITY: '7',
-          CENTRAID_STATIC_GZIP_QUALITY: '8',
-        },
-      ),
+          CENTRAID_WORKER_MAX_CONCURRENT: "3",
+          CENTRAID_WORKER_MAX_OLD_GENERATION_MB: "192",
+          CENTRAID_WORKER_POOL_SIZE: "1",
+          CENTRAID_REPLICATION_CONCURRENCY: "2",
+          CENTRAID_STATIC_BROTLI_QUALITY: "7",
+          CENTRAID_STATIC_GZIP_QUALITY: "8",
+        }
+      )
     ).toMatchObject({
       workerMaxConcurrent: 3,
       workerMaxOldGenerationMb: 192,
@@ -96,100 +96,104 @@ describe('hardware-profile', () => {
     });
   });
 
-  test('Conserve mode pins constrained limits and NORMAL durability', () => {
+  test("Conserve mode pins constrained limits and NORMAL durability", () => {
     const profile = resolveGatewayHardwareProfile(
       {
         cores: 16,
         totalMemoryBytes: 32 * 1024 ** 3,
         storageFsyncMs: 1,
-        resourceMode: 'conserve',
+        resourceMode: "conserve",
       },
-      {},
+      {}
     );
     expect(profile).toMatchObject({
-      class: 'constrained',
-      resourceMode: 'conserve',
-      sqliteSynchronous: 'NORMAL',
+      class: "constrained",
+      resourceMode: "conserve",
+      sqliteSynchronous: "NORMAL",
       workerMaxConcurrent: 2,
       workerPoolSize: 0,
       replicationConcurrency: 1,
     });
-    expect(formatHardwareProfileDetail(profile)).toContain('mode=Conserve');
-    expect(formatHardwareProfileDetail(profile)).toContain('class=constrained');
+    expect(formatHardwareProfileDetail(profile)).toContain("mode=Conserve");
+    expect(formatHardwareProfileDetail(profile)).toContain("class=constrained");
   });
 
-  test('Balanced mode pins standard throughput on a small host', () => {
+  test("Balanced mode pins standard throughput on a small host", () => {
     expect(
       resolveGatewayHardwareProfile(
         {
           cores: 2,
           totalMemoryBytes: 2 * 1024 ** 3,
           storageFsyncMs: 30,
-          resourceMode: 'balanced',
+          resourceMode: "balanced",
         },
-        {},
-      ),
+        {}
+      )
     ).toMatchObject({
-      class: 'standard',
-      resourceMode: 'balanced',
+      class: "standard",
+      resourceMode: "balanced",
       workerMaxConcurrent: 8,
       workerPoolSize: 2,
       replicationConcurrency: 3,
-      sqliteSynchronous: 'FULL',
+      sqliteSynchronous: "FULL",
     });
   });
 
-  test('Performance mode raises standard-class worker and replication ceilings', () => {
+  test("Performance mode raises standard-class worker and replication ceilings", () => {
     const performance = resolveGatewayHardwareProfile(
       {
         cores: 8,
         totalMemoryBytes: 16 * 1024 ** 3,
         storageFsyncMs: 1,
-        resourceMode: 'performance',
+        resourceMode: "performance",
       },
-      {},
+      {}
     );
     const balanced = resolveGatewayHardwareProfile(
       {
         cores: 8,
         totalMemoryBytes: 16 * 1024 ** 3,
         storageFsyncMs: 1,
-        resourceMode: 'balanced',
+        resourceMode: "balanced",
       },
-      {},
+      {}
     );
-    expect(performance.class).toBe('standard');
-    expect(performance.workerMaxConcurrent).toBeGreaterThan(balanced.workerMaxConcurrent);
+    expect(performance.class).toBe("standard");
+    expect(performance.workerMaxConcurrent).toBeGreaterThan(
+      balanced.workerMaxConcurrent
+    );
     expect(performance.workerPoolSize).toBeGreaterThan(balanced.workerPoolSize);
-    expect(performance.replicationConcurrency).toBeGreaterThan(balanced.replicationConcurrency);
+    expect(performance.replicationConcurrency).toBeGreaterThan(
+      balanced.replicationConcurrency
+    );
   });
 
-  test('CENTRAID_HARDWARE_PROFILE still wins over Resource mode for class', () => {
+  test("CENTRAID_HARDWARE_PROFILE still wins over Resource mode for class", () => {
     expect(
       resolveGatewayHardwareProfile(
         {
           cores: 16,
           totalMemoryBytes: 32 * 1024 ** 3,
-          resourceMode: 'conserve',
+          resourceMode: "conserve",
         },
-        { CENTRAID_HARDWARE_PROFILE: 'standard' },
-      ),
-    ).toMatchObject({ class: 'standard', resourceMode: 'conserve' });
+        { CENTRAID_HARDWARE_PROFILE: "standard" }
+      )
+    ).toMatchObject({ class: "standard", resourceMode: "conserve" });
   });
 
-  test('toStructuredResourceProfile projects a constrained conserve profile', () => {
+  test("toStructuredResourceProfile projects a constrained conserve profile", () => {
     const profile = resolveGatewayHardwareProfile(
       {
         cores: 2,
         totalMemoryBytes: 2 * 1024 ** 3,
         storageFsyncMs: 20,
-        resourceMode: 'conserve',
+        resourceMode: "conserve",
       },
-      {},
+      {}
     );
     expect(toStructuredResourceProfile(profile)).toStrictEqual({
-      class: 'constrained',
-      mode: 'conserve',
+      class: "constrained",
+      mode: "conserve",
       host: {
         cores: 2,
         totalMemoryBytes: 2 * 1024 ** 3,
@@ -209,7 +213,7 @@ describe('hardware-profile', () => {
         replicationConcurrency: 1,
         staticBrotliQuality: 5,
         staticGzipQuality: 6,
-        sqliteSynchronous: 'NORMAL',
+        sqliteSynchronous: "NORMAL",
         vaultSweepIntervalMs: 7_200_000,
         outboxIdleIntervalMs: 120_000,
       },
@@ -218,19 +222,19 @@ describe('hardware-profile', () => {
     });
   });
 
-  test('toStructuredResourceProfile projects a standard performance profile', () => {
+  test("toStructuredResourceProfile projects a standard performance profile", () => {
     const profile = resolveGatewayHardwareProfile(
       {
         cores: 8,
         totalMemoryBytes: 16 * 1024 ** 3,
         storageFsyncMs: 1,
-        resourceMode: 'performance',
+        resourceMode: "performance",
       },
-      {},
+      {}
     );
     expect(toStructuredResourceProfile(profile)).toStrictEqual({
-      class: 'standard',
-      mode: 'performance',
+      class: "standard",
+      mode: "performance",
       host: {
         cores: 8,
         totalMemoryBytes: 16 * 1024 ** 3,
@@ -250,7 +254,7 @@ describe('hardware-profile', () => {
         replicationConcurrency: 4,
         staticBrotliQuality: 10,
         staticGzipQuality: 9,
-        sqliteSynchronous: 'FULL',
+        sqliteSynchronous: "FULL",
         vaultSweepIntervalMs: 3_600_000,
         outboxIdleIntervalMs: 60_000,
       },
@@ -259,43 +263,53 @@ describe('hardware-profile', () => {
     });
   });
 
-  test('toStructuredResourceProfile carries a null host storageFsyncMs through', () => {
+  test("toStructuredResourceProfile carries a null host storageFsyncMs through", () => {
     const profile = resolveGatewayHardwareProfile(
       { cores: 8, totalMemoryBytes: 16 * 1024 ** 3 },
-      {},
+      {}
     );
     expect(toStructuredResourceProfile(profile).host.storageFsyncMs).toBeNull();
   });
 
-  test('budget presets frame conserve/balanced/performance as a share of the granted host', () => {
+  test("budget presets frame conserve/balanced/performance as a share of the granted host", () => {
     const conserve = resolveGatewayHardwareProfile(
-      { cores: 2, totalMemoryBytes: 4 * 1024 ** 3, resourceMode: 'conserve' },
-      {},
+      { cores: 2, totalMemoryBytes: 4 * 1024 ** 3, resourceMode: "conserve" },
+      {}
     );
     const balanced = resolveGatewayHardwareProfile(
-      { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, resourceMode: 'balanced' },
-      {},
+      { cores: 8, totalMemoryBytes: 16 * 1024 ** 3, resourceMode: "balanced" },
+      {}
     );
     const performance = resolveGatewayHardwareProfile(
       {
         cores: 8,
         totalMemoryBytes: 16 * 1024 ** 3,
-        resourceMode: 'performance',
+        resourceMode: "performance",
       },
-      {},
+      {}
     );
     expect(conserve.budget.cpuShare).toBe(0.5);
     expect(balanced.budget.cpuShare).toBe(0.75);
     expect(performance.budget.cpuShare).toBe(1);
-    expect(performance.budget.memoryCapMb).toBeGreaterThan(balanced.budget.memoryCapMb);
+    expect(performance.budget.memoryCapMb).toBeGreaterThan(
+      balanced.budget.memoryCapMb
+    );
   });
 
-  test('hardwareClassForResourceMode maps modes without re-detection', () => {
-    expect(hardwareClassForResourceMode('auto', 'constrained')).toBe('constrained');
-    expect(hardwareClassForResourceMode('auto', 'standard')).toBe('standard');
-    expect(hardwareClassForResourceMode('conserve', 'standard')).toBe('constrained');
-    expect(hardwareClassForResourceMode('balanced', 'constrained')).toBe('standard');
-    expect(hardwareClassForResourceMode('performance', 'constrained')).toBe('standard');
+  test("hardwareClassForResourceMode maps modes without re-detection", () => {
+    expect(hardwareClassForResourceMode("auto", "constrained")).toBe(
+      "constrained"
+    );
+    expect(hardwareClassForResourceMode("auto", "standard")).toBe("standard");
+    expect(hardwareClassForResourceMode("conserve", "standard")).toBe(
+      "constrained"
+    );
+    expect(hardwareClassForResourceMode("balanced", "constrained")).toBe(
+      "standard"
+    );
+    expect(hardwareClassForResourceMode("performance", "constrained")).toBe(
+      "standard"
+    );
   });
 
   // --- #528 Phase F: durable per-knob UI overrides through the ONE resolver ---
@@ -306,35 +320,35 @@ describe('hardware-profile', () => {
     storageFsyncMs: 1,
   };
 
-  test('a prefs override wins over the preset baseline and is attributed to prefs', () => {
+  test("a prefs override wins over the preset baseline and is attributed to prefs", () => {
     const profile = resolveGatewayHardwareProfile(
       { ...STANDARD_HOST, prefsOverrides: { workerMaxConcurrent: 5 } },
-      {},
+      {}
     );
     // Balanced preset would be 8; the durable override lands 5.
     expect(profile.workerMaxConcurrent).toBe(5);
     expect(profile.sources.workerMaxConcurrent).toStrictEqual({
-      source: 'prefs',
+      source: "prefs",
     });
     // Untouched knobs stay Linked to the preset.
     expect(profile.sources.replicationConcurrency).toStrictEqual({
-      source: 'preset',
+      source: "preset",
     });
   });
 
-  test('env still wins over a prefs override for the same knob, with the env var named', () => {
+  test("env still wins over a prefs override for the same knob, with the env var named", () => {
     const profile = resolveGatewayHardwareProfile(
       { ...STANDARD_HOST, prefsOverrides: { workerMaxConcurrent: 5 } },
-      { CENTRAID_WORKER_MAX_CONCURRENT: '9' },
+      { CENTRAID_WORKER_MAX_CONCURRENT: "9" }
     );
     expect(profile.workerMaxConcurrent).toBe(9);
     expect(profile.sources.workerMaxConcurrent).toStrictEqual({
-      source: 'env',
-      envVar: 'CENTRAID_WORKER_MAX_CONCURRENT',
+      source: "env",
+      envVar: "CENTRAID_WORKER_MAX_CONCURRENT",
     });
   });
 
-  test('a prefs override clamps through the same bounds as env', () => {
+  test("a prefs override clamps through the same bounds as env", () => {
     const profile = resolveGatewayHardwareProfile(
       {
         ...STANDARD_HOST,
@@ -343,47 +357,52 @@ describe('hardware-profile', () => {
           workerMaxOldGenerationMb: 4,
         },
       },
-      {},
+      {}
     );
     // Above-max clamps to the ceiling; below-min is rejected → preset carries.
-    expect(profile.workerMaxConcurrent).toBe(RESOURCE_KNOB_BOUNDS.workerMaxConcurrent.max);
+    expect(profile.workerMaxConcurrent).toBe(
+      RESOURCE_KNOB_BOUNDS.workerMaxConcurrent.max
+    );
     expect(profile.sources.workerMaxConcurrent).toStrictEqual({
-      source: 'prefs',
+      source: "prefs",
     });
     expect(profile.workerMaxOldGenerationMb).toBe(256); // balanced preset
     expect(profile.sources.workerMaxOldGenerationMb).toStrictEqual({
-      source: 'preset',
+      source: "preset",
     });
   });
 
-  test('a prefs override of a knob does not disturb the compression sources', () => {
+  test("a prefs override of a knob does not disturb the compression sources", () => {
     const profile = resolveGatewayHardwareProfile(
       { ...STANDARD_HOST, prefsOverrides: { replicationConcurrency: 2 } },
-      { CENTRAID_STATIC_BROTLI_QUALITY: '3' },
+      { CENTRAID_STATIC_BROTLI_QUALITY: "3" }
     );
     expect(profile.sources.replicationConcurrency).toStrictEqual({
-      source: 'prefs',
+      source: "prefs",
     });
     expect(profile.sources.staticBrotliQuality).toStrictEqual({
-      source: 'env',
-      envVar: 'CENTRAID_STATIC_BROTLI_QUALITY',
+      source: "env",
+      envVar: "CENTRAID_STATIC_BROTLI_QUALITY",
     });
     // The static quality knobs never carry a prefs source (no pref key).
     expect(profile.sources.staticGzipQuality).toStrictEqual({
-      source: 'preset',
+      source: "preset",
     });
   });
 
-  test('no prefsOverrides yields output identical to omitting the field', () => {
-    const withEmpty = resolveGatewayHardwareProfile({ ...STANDARD_HOST, prefsOverrides: {} }, {});
+  test("no prefsOverrides yields output identical to omitting the field", () => {
+    const withEmpty = resolveGatewayHardwareProfile(
+      { ...STANDARD_HOST, prefsOverrides: {} },
+      {}
+    );
     const without = resolveGatewayHardwareProfile({ ...STANDARD_HOST }, {});
     expect(withEmpty).toStrictEqual(without);
     expect(withEmpty.sources).toStrictEqual(ALL_PRESET_SOURCES);
   });
 
-  test('the structured profile publishes the bounds table for the client', () => {
+  test("the structured profile publishes the bounds table for the client", () => {
     const structured = toStructuredResourceProfile(
-      resolveGatewayHardwareProfile({ ...STANDARD_HOST }, {}),
+      resolveGatewayHardwareProfile({ ...STANDARD_HOST }, {})
     );
     expect(structured.bounds).toStrictEqual(RESOURCE_KNOB_BOUNDS);
     expect(structured.bounds.workerPoolSize).toStrictEqual({ min: 0, max: 8 });

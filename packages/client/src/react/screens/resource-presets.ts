@@ -7,10 +7,10 @@
 // vary with the machine), so mirroring them is faithful. Keep in sync with the
 // gateway table if the presets ever change (issue #528 follow-up).
 
-import { formatMbAsGb } from './resource-summary.js';
+import { formatMbAsGb } from "./resource-summary.js";
 
 /** The three concrete presets. `auto` is not a preset — it defers to one of these. */
-export type PresetMode = 'conserve' | 'balanced' | 'performance';
+export type PresetMode = "conserve" | "balanced" | "performance";
 
 /** One budget preset — the knobs a mode selects, before host resolution. */
 export interface ResourcePreset {
@@ -22,7 +22,7 @@ export interface ResourcePreset {
   replicationConcurrency: number;
   staticBrotliQuality: number;
   staticGzipQuality: number;
-  sqliteSynchronous: 'FULL' | 'NORMAL';
+  sqliteSynchronous: "FULL" | "NORMAL";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
 }
@@ -39,7 +39,7 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     replicationConcurrency: 1,
     staticBrotliQuality: 5,
     staticGzipQuality: 6,
-    sqliteSynchronous: 'NORMAL',
+    sqliteSynchronous: "NORMAL",
     vaultSweepIntervalMs: 2 * HOUR,
     outboxIdleIntervalMs: 2 * MIN,
   },
@@ -51,7 +51,7 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     replicationConcurrency: 3,
     staticBrotliQuality: 10,
     staticGzipQuality: 9,
-    sqliteSynchronous: 'FULL',
+    sqliteSynchronous: "FULL",
     vaultSweepIntervalMs: HOUR,
     outboxIdleIntervalMs: MIN,
   },
@@ -63,7 +63,7 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     replicationConcurrency: 4,
     staticBrotliQuality: 10,
     staticGzipQuality: 9,
-    sqliteSynchronous: 'FULL',
+    sqliteSynchronous: "FULL",
     vaultSweepIntervalMs: HOUR,
     outboxIdleIntervalMs: MIN,
   },
@@ -71,7 +71,7 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
 
 /** Whole-hour / whole-minute intervals read cleaner as `2 h` / `1 min` than `120 min`. */
 export function formatInterval(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return '—';
+  if (!Number.isFinite(ms) || ms < 0) return "—";
   if (ms >= HOUR) {
     const h = ms / HOUR;
     return `${Number.isInteger(h) ? h : h.toFixed(1)} h`;
@@ -88,8 +88,8 @@ export function formatInterval(ms: number): string {
  * `8 · 2.0 GB`). `auto` has no fixed budget — it detects — so it reads
  * `detect`.
  */
-export function presetHint(mode: 'auto' | PresetMode): string {
-  if (mode === 'auto') return 'detect';
+export function presetHint(mode: "auto" | PresetMode): string {
+  if (mode === "auto") return "detect";
   const p = RESOURCE_PRESETS[mode];
   return `${p.workerMaxConcurrent} · ${formatMbAsGb(p.workerMaxConcurrent * p.workerMaxOldGenerationMb)}`;
 }
@@ -103,9 +103,15 @@ export interface CompareRow {
   values: Record<PresetMode, string>;
 }
 
-const PRESET_MODES: readonly PresetMode[] = ['conserve', 'balanced', 'performance'];
+const PRESET_MODES: readonly PresetMode[] = [
+  "conserve",
+  "balanced",
+  "performance",
+];
 
-function byPreset(fn: (p: ResourcePreset) => string): Record<PresetMode, string> {
+function byPreset(
+  fn: (p: ResourcePreset) => string
+): Record<PresetMode, string> {
   return {
     conserve: fn(RESOURCE_PRESETS.conserve),
     balanced: fn(RESOURCE_PRESETS.balanced),
@@ -117,58 +123,64 @@ function byPreset(fn: (p: ResourcePreset) => string): Record<PresetMode, string>
 export function resourceCompareRows(): CompareRow[] {
   return [
     {
-      key: 'cpu',
-      label: 'CPU budget',
+      key: "cpu",
+      label: "CPU budget",
       hint: "Share of this machine's granted CPU the gateway may use for background work.",
       values: byPreset((p) => `${Math.round(p.cpuShare * 100)}%`),
     },
     {
-      key: 'workers',
-      label: 'Background workers',
-      hint: 'How many background jobs may run at the same time.',
+      key: "workers",
+      label: "Background workers",
+      hint: "How many background jobs may run at the same time.",
       values: byPreset((p) => String(p.workerMaxConcurrent)),
     },
     {
-      key: 'memory',
-      label: 'Memory ceiling',
-      hint: 'Upper bound across all background workers (workers × per-worker heap).',
-      values: byPreset((p) => formatMbAsGb(p.workerMaxConcurrent * p.workerMaxOldGenerationMb)),
+      key: "memory",
+      label: "Memory ceiling",
+      hint: "Upper bound across all background workers (workers × per-worker heap).",
+      values: byPreset((p) =>
+        formatMbAsGb(p.workerMaxConcurrent * p.workerMaxOldGenerationMb)
+      ),
     },
     {
-      key: 'pool',
-      label: 'Warm pool',
-      hint: 'Workers kept ready so background jobs skip a cold start.',
-      values: byPreset((p) => (p.workerPoolSize === 0 ? 'none' : String(p.workerPoolSize))),
+      key: "pool",
+      label: "Warm pool",
+      hint: "Workers kept ready so background jobs skip a cold start.",
+      values: byPreset((p) =>
+        p.workerPoolSize === 0 ? "none" : String(p.workerPoolSize)
+      ),
     },
     {
-      key: 'replication',
-      label: 'Replication',
-      hint: 'Parallel backup / replication streams to remote storage.',
+      key: "replication",
+      label: "Replication",
+      hint: "Parallel backup / replication streams to remote storage.",
       values: byPreset((p) => `${p.replicationConcurrency}×`),
     },
     {
-      key: 'sweep',
-      label: 'Vault sweep',
-      hint: 'How often the vault housekeeping sweep runs.',
+      key: "sweep",
+      label: "Vault sweep",
+      hint: "How often the vault housekeeping sweep runs.",
       values: byPreset((p) => formatInterval(p.vaultSweepIntervalMs)),
     },
     {
-      key: 'poll',
-      label: 'Outbox poll',
-      hint: 'How often the outbox checks for work when idle.',
+      key: "poll",
+      label: "Outbox poll",
+      hint: "How often the outbox checks for work when idle.",
       values: byPreset((p) => formatInterval(p.outboxIdleIntervalMs)),
     },
     {
-      key: 'compression',
-      label: 'Compression',
-      hint: 'Static-asset compression effort — higher is smaller on the wire but costs more CPU.',
+      key: "compression",
+      label: "Compression",
+      hint: "Static-asset compression effort — higher is smaller on the wire but costs more CPU.",
       values: byPreset((p) => `brotli q${p.staticBrotliQuality}`),
     },
     {
-      key: 'durability',
-      label: 'Data durability',
-      hint: 'SQLite fsync durability. Relaxed trades a little crash-safety for less disk churn.',
-      values: byPreset((p) => (p.sqliteSynchronous === 'NORMAL' ? 'Relaxed' : 'Full')),
+      key: "durability",
+      label: "Data durability",
+      hint: "SQLite fsync durability. Relaxed trades a little crash-safety for less disk churn.",
+      values: byPreset((p) =>
+        p.sqliteSynchronous === "NORMAL" ? "Relaxed" : "Full"
+      ),
     },
   ];
 }

@@ -15,8 +15,8 @@
  * `index.html`, rewrites `automations/<id>/automation.json`).
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 /**
  * Pure string variant: replace the first `<title>...</title>` in an HTML
@@ -41,11 +41,14 @@ export function rewriteTitleInHtml(html: string, newName: string): string {
  * Missing `index.html` → no-op. No `<title>` tag → no-op. Only the
  * first match is replaced.
  */
-export async function rewriteIndexHtmlTitle(appDir: string, newName: string): Promise<void> {
-  const htmlPath = path.join(appDir, 'index.html');
+export async function rewriteIndexHtmlTitle(
+  appDir: string,
+  newName: string
+): Promise<void> {
+  const htmlPath = path.join(appDir, "index.html");
   let raw: string;
   try {
-    raw = await fs.readFile(htmlPath, 'utf8');
+    raw = await fs.readFile(htmlPath, "utf8");
   } catch {
     return; // app has no index.html (automation app) — nothing to rewrite.
   }
@@ -73,16 +76,21 @@ export interface AppVisualIdentity {
  * copies that predate the keys). Returns `null` when the input is
  * unparseable so the caller can skip it.
  */
-export function applyAppVisualIdentity(raw: string, visual: AppVisualIdentity): string | null {
+export function applyAppVisualIdentity(
+  raw: string,
+  visual: AppVisualIdentity
+): string | null {
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return null; // unparseable — caller leaves it alone.
   }
-  if (visual.iconKey && typeof parsed.iconKey !== 'string') parsed.iconKey = visual.iconKey;
-  if (visual.colorKey && typeof parsed.colorKey !== 'string') parsed.colorKey = visual.colorKey;
-  return JSON.stringify(parsed, null, 2) + '\n';
+  if (visual.iconKey && typeof parsed.iconKey !== "string")
+    parsed.iconKey = visual.iconKey;
+  if (visual.colorKey && typeof parsed.colorKey !== "string")
+    parsed.colorKey = visual.colorKey;
+  return JSON.stringify(parsed, null, 2) + "\n";
 }
 
 /**
@@ -92,12 +100,12 @@ export function applyAppVisualIdentity(raw: string, visual: AppVisualIdentity): 
  */
 export async function stampAppVisualIdentity(
   appDir: string,
-  visual: AppVisualIdentity,
+  visual: AppVisualIdentity
 ): Promise<void> {
-  const appJsonPath = path.join(appDir, 'app.json');
+  const appJsonPath = path.join(appDir, "app.json");
   let raw: string;
   try {
-    raw = await fs.readFile(appJsonPath, 'utf8');
+    raw = await fs.readFile(appJsonPath, "utf8");
   } catch {
     return; // app has no app.json — nothing to stamp.
   }
@@ -124,7 +132,7 @@ export interface AutomationManifestRewriteOptions {
 export function applyManifestName(
   raw: string,
   newName: string,
-  opts: AutomationManifestRewriteOptions = {},
+  opts: AutomationManifestRewriteOptions = {}
 ): string | null {
   let parsed: Record<string, unknown>;
   try {
@@ -134,9 +142,9 @@ export function applyManifestName(
   }
   parsed.name = newName;
   if (opts.stampGenerated) {
-    parsed.generated = { by: 'centraid-builder', at: new Date().toISOString() };
+    parsed.generated = { by: "centraid-builder", at: new Date().toISOString() };
   }
-  return JSON.stringify(parsed, null, 2) + '\n';
+  return JSON.stringify(parsed, null, 2) + "\n";
 }
 
 /**
@@ -153,9 +161,9 @@ export function applyManifestName(
 export async function rewriteAutomationManifestNames(
   appDir: string,
   newName: string,
-  opts: AutomationManifestRewriteOptions = {},
+  opts: AutomationManifestRewriteOptions = {}
 ): Promise<void> {
-  const autoRoot = path.join(appDir, 'automations');
+  const autoRoot = path.join(appDir, "automations");
   let names: string[];
   try {
     names = await fs.readdir(autoRoot);
@@ -164,28 +172,28 @@ export async function rewriteAutomationManifestNames(
   }
   await Promise.all(
     names
-      .filter((name) => !name.startsWith('.') && !name.startsWith('_'))
+      .filter((name) => !name.startsWith(".") && !name.startsWith("_"))
       .map(async (name) => {
-        const manifestPath = path.join(autoRoot, name, 'automation.json');
+        const manifestPath = path.join(autoRoot, name, "automation.json");
         // readFile naturally fails for non-directories and missing manifests,
         // so we don't need a separate `isDirectory()` check via Dirent.
         let raw: string;
         try {
-          raw = await fs.readFile(manifestPath, 'utf8');
+          raw = await fs.readFile(manifestPath, "utf8");
         } catch {
           return;
         }
         const next = applyManifestName(raw, newName, opts);
         if (next !== null) await fs.writeFile(manifestPath, next);
-      }),
+      })
   );
 }
 
 function escapeHtml(s: string): string {
   return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }

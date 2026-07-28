@@ -1,5 +1,5 @@
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * Desktop cold-path budget (#496 PD3).
@@ -7,16 +7,18 @@ import { pathToFileURL } from 'node:url';
  * Full Electron cold-start remains nightly Playwright; this owns the matrix cell
  * with a continuous, CI-runnable floor.
  */
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { describe, expect, test } from 'vitest';
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
+import { describe, expect, test } from "vitest";
 
-const OWNER = 'tests/perf/desktop-cold.perf.test.ts';
+const OWNER = "tests/perf/desktop-cold.perf.test.ts";
 const BUDGET_MS = 3_000;
 
-describe('desktop-cold.perf', () => {
-  test('desktop gateway-supervisor-core first import stays under budget', async () => {
+describe("desktop-cold.perf", () => {
+  test("desktop gateway-supervisor-core first import stays under budget", async () => {
     const started = performance.now();
-    const modPath = path.resolve('apps/desktop/src/main/gateway-supervisor-core.ts');
+    const modPath = path.resolve(
+      "apps/desktop/src/main/gateway-supervisor-core.ts"
+    );
     // Dynamic import of the pure core (no Electron). Timing is host-sensitive;
     // budget is a catastrophic-failure floor, not a tight CI gate.
     const url = pathToFileURL(modPath).href;
@@ -25,15 +27,15 @@ describe('desktop-cold.perf', () => {
     expect(mod).toBeTruthy();
     const passed = durationMs < BUDGET_MS;
     await recordQualityResult({
-      lane: 'perf',
+      lane: "perf",
       owner: OWNER,
-      name: 'Desktop cold module import',
-      status: passed ? 'passed' : 'failed',
+      name: "Desktop cold module import",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
-          name: 'import wall clock',
+          name: "import wall clock",
           value: durationMs,
-          unit: 'ms',
+          unit: "ms",
           budget: BUDGET_MS,
         },
       ],

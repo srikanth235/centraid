@@ -15,28 +15,30 @@ interface RawParty {
 }
 
 export default async function partiesHandler({ ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   try {
     // The owner is the implicit `me` (same source Tally reads) — everyone
     // else in the directory is a peer who could be invited.
     const [vaultRes, partiesRes] = await Promise.all([
-      ctx.vault.read({ entity: 'core.vault', purpose }),
+      ctx.vault.read({ entity: "core.vault", purpose }),
       ctx.vault.read({
-        entity: 'core.party',
-        where: [{ column: 'kind', op: 'eq', value: 'person' }],
+        entity: "core.party",
+        where: [{ column: "kind", op: "eq", value: "person" }],
         purpose,
       }),
     ]);
-    const me = ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
+    const me =
+      ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
     const parties = ((partiesRes.rows ?? []) as unknown as RawParty[])
       .map((p) => ({
         party_id: p.party_id,
-        name: p.display_name ?? 'Guest',
+        name: p.display_name ?? "Guest",
         is_you: p.party_id === me,
       }))
       .toSorted(
         (a, b) =>
-          (b.is_you ? 1 : 0) - (a.is_you ? 1 : 0) || String(a.name).localeCompare(String(b.name)),
+          (b.is_you ? 1 : 0) - (a.is_you ? 1 : 0) ||
+          String(a.name).localeCompare(String(b.name))
       );
     return { parties, me };
   } catch (err) {

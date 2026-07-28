@@ -1,4 +1,4 @@
-import { nodeProject } from '@centraid/test-kit/vitest';
+import { nodeProject } from "@centraid/test-kit/vitest";
 
 // Project config for @centraid/blueprints. Coverage + the unified run live in the root.
 //
@@ -10,7 +10,7 @@ import { nodeProject } from '@centraid/test-kit/vitest';
 // app a bogus class map; do not "simplify" it back to a plain `.module.css`.
 export default nodeProject({
   test: {
-    name: '@centraid/blueprints',
-    include: ['src/**/*.test.ts'],
+    name: "@centraid/blueprints",
+    include: ["src/**/*.test.ts"],
   },
 });

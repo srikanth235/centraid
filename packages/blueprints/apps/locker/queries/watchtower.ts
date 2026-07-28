@@ -6,15 +6,21 @@
  * stored breach flag. Only non-trashed items are reviewed.
  */
 
-import { decorate, readTags, readStarred, readWatchtower, type RawItem } from './items.ts';
+import {
+  decorate,
+  readTags,
+  readStarred,
+  readWatchtower,
+  type RawItem,
+} from "./items.ts";
 
 export default async function watchtowerHandler({ ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
+  const purpose = "dpv:ServiceProvision";
   try {
     const res = await ctx.vault.read({
-      entity: 'locker.item',
-      where: [{ column: 'deleted_at', op: 'is-null' }],
-      orderBy: { column: 'updated_at', dir: 'desc' },
+      entity: "locker.item",
+      where: [{ column: "deleted_at", op: "is-null" }],
+      orderBy: { column: "updated_at", dir: "desc" },
       limit: 2000,
       purpose,
     });
@@ -26,7 +32,9 @@ export default async function watchtowerHandler({ ctx }: HandlerArgs) {
       readWatchtower(ctx, purpose),
     ]);
     const decorated = decorate(rows, tagsByItem, starredIds, watchByItem);
-    const affected = decorated.filter((it) => it.compromised || it.weak || it.reused);
+    const affected = decorated.filter(
+      (it) => it.compromised || it.weak || it.reused
+    );
     return {
       compromised: decorated.filter((it) => it.compromised).length,
       weak: decorated.filter((it) => it.weak).length,

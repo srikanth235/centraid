@@ -1,10 +1,10 @@
-import type { InlineAppModule } from '@centraid/blueprints/apps/inline-types';
-import { toBlueprintCss } from '@centraid/design-tokens';
+import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
+import { toBlueprintCss } from "@centraid/design-tokens";
 
 // The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
 // banners, ask panel) that blueprint component modules reference. Loaded once,
 // globally, by the route host — same as the served path's <link rel=kit.css>.
-import '@centraid/blueprints/kit/kit.css';
+import "@centraid/blueprints/kit/kit.css";
 import {
   type JSX,
   type ReactNode,
@@ -15,31 +15,38 @@ import {
   useMemo,
   useRef,
   useState,
-} from 'react';
+} from "react";
 
-import type { AppearancePrefs } from '../../../app-shell-context.js';
-import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
+import type { AppearancePrefs } from "../../../app-shell-context.js";
+import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
 import {
   acquireReplicaShellSession,
   type ReplicaScopeLease,
-} from '../../../replica/shell-session.js';
-import { addInlineScope, installInlineCentraid } from '../../blueprints/centraid-inline.js';
-import { installInlineBlobImages } from '../../blueprints/inline-blob-images.js';
-import { installInlineAsk } from '../../blueprints/kit-ask-inline.js';
-import { useShellActions } from '../actions.js';
-import ErrorBoundary from '../ErrorBoundary.js';
-import { iconSvg } from '../iconSvg.js';
-import { openPrompt } from '../prompt.js';
-import type { ShellNav } from '../ShellApp.js';
-import ShellFrame from '../ShellFrame.js';
-import { useAsyncData } from '../useAsyncData.js';
-import AppSettingsController from './AppSettingsController.js';
-import { fetchAppKnobValues, pushKnobToInlineRoot } from './appSettingsData.js';
-import { loadAppTemplates } from './templatesData.js';
-import { scopeSetKey, useAppScopes, type ResolvedAppScope } from './useAppScopes.js';
+} from "../../../replica/shell-session.js";
+import {
+  addInlineScope,
+  installInlineCentraid,
+} from "../../blueprints/centraid-inline.js";
+import { installInlineBlobImages } from "../../blueprints/inline-blob-images.js";
+import { installInlineAsk } from "../../blueprints/kit-ask-inline.js";
+import { useShellActions } from "../actions.js";
+import ErrorBoundary from "../ErrorBoundary.js";
+import { iconSvg } from "../iconSvg.js";
+import { openPrompt } from "../prompt.js";
+import type { ShellNav } from "../ShellApp.js";
+import ShellFrame from "../ShellFrame.js";
+import { useAsyncData } from "../useAsyncData.js";
+import AppSettingsController from "./AppSettingsController.js";
+import { fetchAppKnobValues, pushKnobToInlineRoot } from "./appSettingsData.js";
+import { loadAppTemplates } from "./templatesData.js";
+import {
+  scopeSetKey,
+  useAppScopes,
+  type ResolvedAppScope,
+} from "./useAppScopes.js";
 
-import chrome from '../chrome.module.css';
-import styles from './InlineAppRoute.module.css';
+import chrome from "../chrome.module.css";
+import styles from "./InlineAppRoute.module.css";
 
 export interface InlineAppRouteProps {
   app: AppMetaResolvedType;
@@ -51,7 +58,7 @@ export interface InlineAppRouteProps {
   onToggleSidebar: () => void;
 }
 
-const INLINE_SCOPE_CLASS = 'centraid-inline-scope';
+const INLINE_SCOPE_CLASS = "centraid-inline-scope";
 
 // The blueprint token layer (--mono/--surface/--_accent/--ease/type scale …),
 // rescoped from `:root` to the inline app subtree so it never restyles the
@@ -59,14 +66,23 @@ const INLINE_SCOPE_CLASS = 'centraid-inline-scope';
 // drives the dark block. Kept synchronous so inline theming needs no paint gap.
 let inlineTokensInjected = false;
 function ensureInlineScopeTokens(): void {
-  if (inlineTokensInjected || typeof document === 'undefined') return;
+  if (inlineTokensInjected || typeof document === "undefined") return;
   inlineTokensInjected = true;
   const scoped = toBlueprintCss()
-    .replace(/:root\[data-theme='dark'\]/gu, `:root[data-theme='dark'] .${INLINE_SCOPE_CLASS}`)
-    .replace(/:root:not\(\[data-theme\]\)/gu, `:root:not([data-theme]) .${INLINE_SCOPE_CLASS}`)
-    .replace(/(?<lineStart>^|\n):root\s*\{/gu, `$<lineStart>.${INLINE_SCOPE_CLASS} {`);
-  const style = document.createElement('style');
-  style.dataset.centraidInlineTokens = 'true';
+    .replace(
+      /:root\[data-theme='dark'\]/gu,
+      `:root[data-theme='dark'] .${INLINE_SCOPE_CLASS}`
+    )
+    .replace(
+      /:root:not\(\[data-theme\]\)/gu,
+      `:root:not([data-theme]) .${INLINE_SCOPE_CLASS}`
+    )
+    .replace(
+      /(?<lineStart>^|\n):root\s*\{/gu,
+      `$<lineStart>.${INLINE_SCOPE_CLASS} {`
+    );
+  const style = document.createElement("style");
+  style.dataset.centraidInlineTokens = "true";
   style.textContent = scoped;
   document.head.appendChild(style);
 }
@@ -76,10 +92,13 @@ function ensureInlineScopeTokens(): void {
 // Suspense remount would re-run the loader forever on a persistent chunk
 // failure instead of surfacing the error boundary. Retry bumps `attempt` to a
 // fresh key (and drops the old one) to re-import.
-const descriptorCache = new Map<string, Promise<{ default: InlineAppModule }>>();
+const descriptorCache = new Map<
+  string,
+  Promise<{ default: InlineAppModule }>
+>();
 function loadDescriptor(
   key: string,
-  loader: () => Promise<{ default: InlineAppModule }>,
+  loader: () => Promise<{ default: InlineAppModule }>
 ): Promise<{ default: InlineAppModule }> {
   let promise = descriptorCache.get(key);
   if (!promise) {
@@ -113,7 +132,7 @@ function InlineAppMount({
   const primaryIdentity = primary.identity;
   const primaryLease = useMemo(
     () => acquireReplicaShellSession(primaryIdentity),
-    [primaryIdentity],
+    [primaryIdentity]
   );
   const descriptor = use(descriptorPromise).default;
   const lease = use(primaryLease);
@@ -175,7 +194,9 @@ function InlineAppMount({
     };
   }, []);
   const Root = descriptor.Root;
-  return <Root rootRef={(el: HTMLElement | null) => onRootReady(el, descriptor)} />;
+  return (
+    <Root rootRef={(el: HTMLElement | null) => onRootReady(el, descriptor)} />
+  );
 }
 
 export default function InlineAppRoute({
@@ -187,7 +208,8 @@ export default function InlineAppRoute({
   prefs,
   onToggleSidebar,
 }: InlineAppRouteProps): JSX.Element {
-  const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } = useShellActions();
+  const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
+    useShellActions();
   // Opening the settings panel snapshots the mounted inline root at click
   // time — an event handler may read the ref, render may not.
   const [settings, setSettings] = useState<{
@@ -203,7 +225,9 @@ export default function InlineAppRoute({
   ensureInlineScopeTokens();
 
   const bundledState = useAsyncData(() => loadAppTemplates(), []);
-  const bundled = bundledState.status === 'ready' && bundledState.data.some((t) => t.id === app.id);
+  const bundled =
+    bundledState.status === "ready" &&
+    bundledState.data.some((t) => t.id === app.id);
 
   // Best-effort, non-blocking knob fetch — never gates first paint.
   useEffect(() => {
@@ -212,7 +236,9 @@ export default function InlineAppRoute({
       if (!alive) return;
       knobValues.current = values;
       const el = appRootRef.current;
-      if (el) for (const [k, v] of Object.entries(values)) pushKnobToInlineRoot(el, k, v);
+      if (el)
+        for (const [k, v] of Object.entries(values))
+          pushKnobToInlineRoot(el, k, v);
     });
     return () => {
       alive = false;
@@ -232,8 +258,9 @@ export default function InlineAppRoute({
       appRootRef.current = el;
       if (!el) return;
       el.classList.add(INLINE_SCOPE_CLASS);
-      el.style.setProperty('--accent', 'var(--c-teal)');
-      for (const [k, v] of Object.entries(knobValues.current)) pushKnobToInlineRoot(el, k, v);
+      el.style.setProperty("--accent", "var(--c-teal)");
+      for (const [k, v] of Object.entries(knobValues.current))
+        pushKnobToInlineRoot(el, k, v);
       // Authorize blob-backed <img>/background-image refs (grids, lightbox,
       // covers) through the gateway — every inline app, not just photos (#505).
       blobTeardown.current = installInlineBlobImages(el);
@@ -251,7 +278,7 @@ export default function InlineAppRoute({
         }
       }
     },
-    [appId],
+    [appId]
   );
 
   useEffect(
@@ -261,59 +288,63 @@ export default function InlineAppRoute({
       blobTeardown.current?.();
       blobTeardown.current = null;
     },
-    [],
+    []
   );
 
   const renameFlow = async (): Promise<void> => {
     const next = await openPrompt({
-      title: 'Rename app',
+      title: "Rename app",
       initial: app.name,
-      placeholder: 'App name',
-      confirmLabel: 'Rename',
+      placeholder: "App name",
+      confirmLabel: "Rename",
     });
     if (!next) return;
     try {
       await updateAppMeta({ id: app.id, name: next });
       showToast(`Renamed to "${next}"`);
     } catch (err) {
-      showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(
+        `Could not rename: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   };
 
   const deleteFlow = async (): Promise<void> => {
     const ok = bundled
       ? await confirm({
-          confirmLabel: 'Uninstall',
+          confirmLabel: "Uninstall",
           danger: true,
           title: `Uninstall ${app.name}?`,
           message: `Removes "${app.name}" and revokes its access. Your data stays in your vault.`,
         })
       : await confirm({
-          confirmLabel: 'Delete',
+          confirmLabel: "Delete",
           danger: true,
-          title: 'Delete app?',
+          title: "Delete app?",
           message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
         });
     if (!ok) return;
     try {
       await deleteApp({ id: app.id });
-      showToast(`${bundled ? 'Uninstalled' : 'Deleted'} "${app.name}"`);
-      nav.navigate({ kind: 'home' });
+      showToast(`${bundled ? "Uninstalled" : "Deleted"} "${app.name}"`);
+      nav.navigate({ kind: "home" });
     } catch (err) {
-      const verb = bundled ? 'uninstall' : 'delete';
-      showToast(`Could not ${verb}: ${err instanceof Error ? err.message : String(err)}`);
+      const verb = bundled ? "uninstall" : "delete";
+      showToast(
+        `Could not ${verb}: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   };
 
-  const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
   const brandChip = (
     <span>
       <span
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
+          display: "inline-flex",
+          alignItems: "center",
           gap: 8,
-          font: 'var(--t-body-strong, 600 0.85rem/1.4 system-ui)',
+          font: "var(--t-body-strong, 600 0.85rem/1.4 system-ui)",
         }}
       >
         <span
@@ -321,9 +352,9 @@ export default function InlineAppRoute({
             width: 20,
             height: 20,
             borderRadius: 6,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
             background: finish.background,
             color: finish.glyphColor,
             boxShadow: finish.boxShadow || undefined,
@@ -336,7 +367,7 @@ export default function InlineAppRoute({
   );
 
   const titlebarRight = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
       {builderEnabled ? (
         <button
           className={chrome.tbBtn}
@@ -344,7 +375,7 @@ export default function InlineAppRoute({
           aria-label="Build"
           title="Build"
           onClick={() => enterBuilder({ appContext: app })}
-          dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 14) }}
+          dangerouslySetInnerHTML={{ __html: iconSvg("Sparkle", 14) }}
         />
       ) : null}
       <span className={chrome.tbBtnWrap}>
@@ -353,9 +384,13 @@ export default function InlineAppRoute({
           type="button"
           aria-label="App settings"
           aria-haspopup="dialog"
-          data-open={settingsOpen ? 'true' : undefined}
-          onClick={() => setSettings(settingsOpen ? null : { inlineRoot: appRootRef.current })}
-          dangerouslySetInnerHTML={{ __html: iconSvg('Settings', 15) }}
+          data-open={settingsOpen ? "true" : undefined}
+          onClick={() =>
+            setSettings(
+              settingsOpen ? null : { inlineRoot: appRootRef.current }
+            )
+          }
+          dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
         />
         <span className={chrome.tooltip}>App settings</span>
       </span>
@@ -366,13 +401,16 @@ export default function InlineAppRoute({
   // Kick the descriptor chunk import off NOW, so it downloads in parallel with
   // the scopes fetch below — InlineAppMount receives this same promise, and
   // first paint pays max(chunk, scopes) instead of their sum.
-  const descriptorPromise = useMemo(() => loadDescriptor(cacheKey, loader), [cacheKey, loader]);
+  const descriptorPromise = useMemo(
+    () => loadDescriptor(cacheKey, loader),
+    [cacheKey, loader]
+  );
   // The mount key gains a SCOPE-SET axis (issue #599, docs/client-keying.md):
   // the same app over a different set of scopes is a different mount, because
   // `window.centraid` and every replica lease it holds are per scope set.
   const scopesState = useAppScopes(appId);
-  const scopes = scopesState.status === 'ready' ? scopesState.data : null;
-  const scopeKey = scopes ? scopeSetKey(scopes) : '';
+  const scopes = scopesState.status === "ready" ? scopesState.data : null;
+  const scopeKey = scopes ? scopeSetKey(scopes) : "";
 
   return (
     <ShellFrame
@@ -398,7 +436,11 @@ export default function InlineAppRoute({
               setAttempt((a) => a + 1);
             }}
           >
-            <Suspense fallback={<div className={styles.fallback}>Loading {app.name}…</div>}>
+            <Suspense
+              fallback={
+                <div className={styles.fallback}>Loading {app.name}…</div>
+              }
+            >
               {scopes ? (
                 <InlineAppMount
                   key={`${appId}\0${cacheKey}\0${scopeKey}`}
@@ -424,18 +466,20 @@ export default function InlineAppRoute({
             onClose={() => setSettings(null)}
             onOpenAutomations={() => {
               setSettings(null);
-              nav.navigate({ kind: 'automations' });
+              nav.navigate({ kind: "automations" });
             }}
             onOpenOrder={(ref) => {
               setSettings(null);
-              nav.navigate({ kind: 'automation-view', automationId: ref });
+              nav.navigate({ kind: "automation-view", automationId: ref });
             }}
             onRename={() => {
               setSettings(null);
               void renameFlow();
             }}
-            onShare={() => showToast('Sharing isn’t available yet.')}
-            onReveal={() => void window.CentraidApi.openAppFolder({ id: app.id })}
+            onShare={() => showToast("Sharing isn’t available yet.")}
+            onReveal={() =>
+              void window.CentraidApi.openAppFolder({ id: app.id })
+            }
             onDelete={() => {
               setSettings(null);
               void deleteFlow();

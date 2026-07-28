@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type PointerEvent } from 'react';
+import { useCallback, useRef, useState, type PointerEvent } from "react";
 
 import {
   IDENTITY_VIEW,
@@ -9,7 +9,7 @@ import {
   clientToViewBox,
   panView,
   zoomView,
-} from './atlasOrreryGeometry.js';
+} from "./atlasOrreryGeometry.js";
 
 // The orrery's pan/zoom camera (issue #519), lifted out of AtlasRelationsTab so
 // the tab stays about graph state. `view` is a lens over the chart body, never a
@@ -74,8 +74,19 @@ export function useOrreryCamera(): OrreryCamera {
     const factor = Math.exp(-ev.deltaY * 0.0016);
     const target = ev.currentTarget as SVGSVGElement | null;
     const rect = target?.getBoundingClientRect();
-    const p = rect ? clientToViewBox(rect, ORRERY.view, ev.clientX, ev.clientY) : null;
-    setView((v) => zoomView(v, p?.x ?? ORRERY.cx, p?.y ?? ORRERY.cy, factor, ZOOM_MIN, ZOOM_MAX));
+    const p = rect
+      ? clientToViewBox(rect, ORRERY.view, ev.clientX, ev.clientY)
+      : null;
+    setView((v) =>
+      zoomView(
+        v,
+        p?.x ?? ORRERY.cx,
+        p?.y ?? ORRERY.cy,
+        factor,
+        ZOOM_MIN,
+        ZOOM_MAX
+      )
+    );
   }, []);
 
   const onPointerDown = useCallback((ev: PointerEvent<SVGSVGElement>) => {
@@ -100,7 +111,11 @@ export function useOrreryCamera(): OrreryCamera {
     if (!d || ev.pointerId !== d.id) return;
     if (!d.moved) {
       // Hold as a click until the pointer travels past the threshold.
-      if (Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) < DRAG_THRESHOLD) return;
+      if (
+        Math.hypot(ev.clientX - d.startX, ev.clientY - d.startY) <
+        DRAG_THRESHOLD
+      )
+        return;
       d.moved = true;
       draggedRef.current = true;
     }
@@ -121,7 +136,9 @@ export function useOrreryCamera(): OrreryCamera {
   }, []);
 
   const zoomBy = useCallback((factor: number) => {
-    setView((v) => zoomView(v, ORRERY.cx, ORRERY.cy, factor, ZOOM_MIN, ZOOM_MAX));
+    setView((v) =>
+      zoomView(v, ORRERY.cx, ORRERY.cy, factor, ZOOM_MIN, ZOOM_MAX)
+    );
   }, []);
 
   return {

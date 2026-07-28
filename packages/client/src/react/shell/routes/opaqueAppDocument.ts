@@ -1,7 +1,10 @@
-import type { AppFrameResourceRequest, AppFrameResourceResponse } from './appFrameReplicaBridge.js';
+import type {
+  AppFrameResourceRequest,
+  AppFrameResourceResponse,
+} from "./appFrameReplicaBridge.js";
 
-const IROH_VIRTUAL_PREFIX = '/__centraid_iroh__/';
-const OPAQUE_CSP_META = 'centraid-opaque-app-csp';
+const IROH_VIRTUAL_PREFIX = "/__centraid_iroh__/";
+const OPAQUE_CSP_META = "centraid-opaque-app-csp";
 
 interface TunnelScope {
   origin: string;
@@ -14,7 +17,9 @@ export interface OpaqueAppDocument {
   /** A self-contained document with an opaque principal once sandboxed. */
   documentUrl: string;
   /** Parent-owned fetch capability, locked to this one virtual tunnel scope. */
-  fetchResource: (request: AppFrameResourceRequest) => Promise<AppFrameResourceResponse>;
+  fetchResource: (
+    request: AppFrameResourceRequest
+  ) => Promise<AppFrameResourceResponse>;
 }
 
 export function isOpaqueAppTunnelUrl(raw: string): boolean {
@@ -28,30 +33,36 @@ export async function prepareOpaqueAppDocument(options: {
   fetch?: typeof window.fetch;
 }): Promise<OpaqueAppDocument> {
   const scope = tunnelScope(options.launchUrl);
-  if (!scope) throw resourceError('App launch URL is not a local Iroh session.');
+  if (!scope)
+    throw resourceError("App launch URL is not a local Iroh session.");
   const fetcher = options.fetch ?? window.fetch.bind(window);
   const launch = await fetcher(options.launchUrl, {
-    method: 'GET',
-    credentials: 'same-origin',
-    redirect: 'follow',
+    method: "GET",
+    credentials: "same-origin",
+    redirect: "follow",
   });
-  if (!launch.ok) throw resourceError(`App document failed to load (${launch.status}).`);
-  const finalUrl = assertStrictlyScopedUrl(launch.url || options.launchUrl, scope);
+  if (!launch.ok)
+    throw resourceError(`App document failed to load (${launch.status}).`);
+  const finalUrl = assertStrictlyScopedUrl(
+    launch.url || options.launchUrl,
+    scope
+  );
   assertAppDocumentUrl(finalUrl, scope, options.appId);
 
-  const contentType = launch.headers.get('content-type')?.toLowerCase() ?? '';
-  if (contentType && !contentType.includes('text/html')) {
-    throw resourceError('App session did not return an HTML document.');
+  const contentType = launch.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType && !contentType.includes("text/html")) {
+    throw resourceError("App session did not return an HTML document.");
   }
   const html = await launch.text();
   const shellNonce = document
     .querySelector<HTMLMetaElement>('meta[name="centraid-csp-nonce"]')
-    ?.getAttribute('content');
-  if (!shellNonce) throw resourceError('The shell CSP nonce is unavailable.');
+    ?.getAttribute("content");
+  if (!shellNonce) throw resourceError("The shell CSP nonce is unavailable.");
 
   const parser = new DOMParser();
-  const parsed = parser.parseFromString(html, 'text/html');
-  if (parsed.querySelector('parsererror')) throw resourceError('App document is malformed.');
+  const parsed = parser.parseFromString(html, "text/html");
+  if (parsed.querySelector("parsererror"))
+    throw resourceError("App document is malformed.");
 
   await inlineStylesheets(parsed, finalUrl, scope, options.appId, fetcher);
   await inlineScripts(parsed, finalUrl, scope, options.appId, fetcher);
@@ -65,7 +76,8 @@ export async function prepareOpaqueAppDocument(options: {
   const serialized = `<!doctype html>\n${parsed.documentElement.outerHTML}`;
   return {
     documentUrl: htmlDataUrl(serialized),
-    fetchResource: (request) => fetchScopedResource(request, scope, options.appId, fetcher),
+    fetchResource: (request) =>
+      fetchScopedResource(request, scope, options.appId, fetcher),
   };
 }
 
@@ -74,28 +86,36 @@ async function inlineStylesheets(
   appBaseUrl: string,
   scope: TunnelScope,
   appId: string,
-  fetcher: typeof window.fetch,
+  fetcher: typeof window.fetch
 ): Promise<void> {
-  const links = [...parsed.querySelectorAll<HTMLLinkElement>('link[href]')];
+  const links = [...parsed.querySelectorAll<HTMLLinkElement>("link[href]")];
   await Promise.all(
     links.map(async (link) => {
       const rel = new Set(link.rel.toLowerCase().split(/\s+/u).filter(Boolean));
-      if (!rel.has('stylesheet')) {
+      if (!rel.has("stylesheet")) {
         // A data document cannot safely consume preloads, icons, manifests, or
         // alternate documents from the shell origin. The live server already
         // bundles the module graph, so these are presentation hints only.
         link.remove();
         return;
       }
-      const url = normalizeScopedUrl(link.getAttribute('href') ?? '', scope, appId, appBaseUrl);
-      const response = await fetcher(url, { credentials: 'same-origin' });
-      if (!response.ok) throw resourceError(`App stylesheet failed to load (${response.status}).`);
+      const url = normalizeScopedUrl(
+        link.getAttribute("href") ?? "",
+        scope,
+        appId,
+        appBaseUrl
+      );
+      const response = await fetcher(url, { credentials: "same-origin" });
+      if (!response.ok)
+        throw resourceError(
+          `App stylesheet failed to load (${response.status}).`
+        );
       assertResponseStayedInScope(response, scope, appId);
-      const style = parsed.createElement('style');
+      const style = parsed.createElement("style");
       if (link.media) style.media = link.media;
       style.textContent = await response.text();
       link.replaceWith(style);
-    }),
+    })
   );
 }
 
@@ -104,21 +124,32 @@ async function inlineScripts(
   appBaseUrl: string,
   scope: TunnelScope,
   appId: string,
-  fetcher: typeof window.fetch,
+  fetcher: typeof window.fetch
 ): Promise<void> {
-  const scripts = [...parsed.querySelectorAll<HTMLScriptElement>('script[src]')];
+  const scripts = [
+    ...parsed.querySelectorAll<HTMLScriptElement>("script[src]"),
+  ];
   await Promise.all(
     scripts.map(async (script) => {
-      const url = normalizeScopedUrl(script.getAttribute('src') ?? '', scope, appId, appBaseUrl);
-      const response = await fetcher(url, { credentials: 'same-origin' });
-      if (!response.ok) throw resourceError(`App script failed to load (${response.status}).`);
+      const url = normalizeScopedUrl(
+        script.getAttribute("src") ?? "",
+        scope,
+        appId,
+        appBaseUrl
+      );
+      const response = await fetcher(url, { credentials: "same-origin" });
+      if (!response.ok)
+        throw resourceError(`App script failed to load (${response.status}).`);
       assertResponseStayedInScope(response, scope, appId);
-      const source = (await response.text()).replace(/<\/script/giu, '<\\/script');
-      script.removeAttribute('src');
-      script.removeAttribute('integrity');
-      script.removeAttribute('crossorigin');
+      const source = (await response.text()).replace(
+        /<\/script/giu,
+        "<\\/script"
+      );
+      script.removeAttribute("src");
+      script.removeAttribute("integrity");
+      script.removeAttribute("crossorigin");
       script.textContent = source;
-    }),
+    })
   );
 }
 
@@ -129,54 +160,60 @@ function hardenDocument(
     appBaseUrl: string;
     documentNonce: string;
     shellNonce: string;
-  },
+  }
 ): void {
-  parsed.querySelectorAll('base').forEach((base) => base.remove());
+  parsed.querySelectorAll("base").forEach((base) => base.remove());
   parsed
-    .querySelectorAll('meta[http-equiv]')
+    .querySelectorAll("meta[http-equiv]")
     .forEach((meta) =>
-      meta.getAttribute('http-equiv')?.toLowerCase() === 'content-security-policy'
+      meta.getAttribute("http-equiv")?.toLowerCase() ===
+      "content-security-policy"
         ? meta.remove()
-        : undefined,
+        : undefined
     );
 
   let head = parsed.head;
   if (!head) {
-    head = parsed.createElement('head');
+    head = parsed.createElement("head");
     parsed.documentElement.prepend(head);
   }
-  const csp = parsed.createElement('meta');
+  const csp = parsed.createElement("meta");
   csp.id = OPAQUE_CSP_META;
-  csp.httpEquiv = 'Content-Security-Policy';
+  csp.httpEquiv = "Content-Security-Policy";
   csp.content = [
     "default-src 'none'",
     `script-src 'nonce-${values.shellNonce}' blob:`,
     "style-src 'unsafe-inline'",
-    'img-src data: blob:',
-    'media-src data: blob:',
-    'object-src blob:',
-    'font-src data: blob:',
+    "img-src data: blob:",
+    "media-src data: blob:",
+    "object-src blob:",
+    "font-src data: blob:",
     "connect-src 'none'",
     "frame-src 'none'",
-    'worker-src blob:',
+    "worker-src blob:",
     "base-uri 'none'",
     "form-action 'none'",
-  ].join('; ');
+  ].join("; ");
 
-  const bootstrap = parsed.createElement('script');
+  const bootstrap = parsed.createElement("script");
   // `HTMLScriptElement.nonce` is intentionally hidden in some DOMs and does
   // not reliably reflect into serialization. Set the content attribute: this
   // document is serialized into a data URL before the browser parses it.
-  bootstrap.setAttribute('nonce', values.shellNonce);
-  bootstrap.textContent = `window.centraid=Object.assign(window.centraid||{},${safeInlineJson({
-    appId: values.appId,
-    documentNonce: values.documentNonce,
-    opaqueBaseUrl: values.appBaseUrl,
-  })});`;
-  for (const script of parsed.querySelectorAll<HTMLScriptElement>('script')) {
-    script.setAttribute('nonce', values.shellNonce);
+  bootstrap.setAttribute("nonce", values.shellNonce);
+  bootstrap.textContent = `window.centraid=Object.assign(window.centraid||{},${safeInlineJson(
+    {
+      appId: values.appId,
+      documentNonce: values.documentNonce,
+      opaqueBaseUrl: values.appBaseUrl,
+    }
+  )});`;
+  for (const script of parsed.querySelectorAll<HTMLScriptElement>("script")) {
+    script.setAttribute("nonce", values.shellNonce);
     if (!script.src && script.textContent) {
-      script.textContent = script.textContent.replace(/<\/script/giu, '<\\/script');
+      script.textContent = script.textContent.replace(
+        /<\/script/giu,
+        "<\\/script"
+      );
     }
   }
   head.prepend(csp, bootstrap);
@@ -186,24 +223,24 @@ async function fetchScopedResource(
   request: AppFrameResourceRequest,
   scope: TunnelScope,
   appId: string,
-  fetcher: typeof window.fetch,
+  fetcher: typeof window.fetch
 ): Promise<AppFrameResourceResponse> {
   const url = normalizeScopedUrl(request.url, scope, appId);
   const method = request.method.toUpperCase();
   if (!/^(?:GET|HEAD|POST|PUT|PATCH|DELETE)$/u.test(method)) {
-    throw resourceError('App resource method is not allowed.');
+    throw resourceError("App resource method is not allowed.");
   }
   const headers = new Headers(request.headers);
   const headerNames = Array.from(headers.keys());
   for (const name of headerNames) {
     const lower = name.toLowerCase();
     if (
-      lower === 'authorization' ||
-      lower === 'cookie' ||
-      lower === 'host' ||
-      lower === 'origin' ||
-      lower.startsWith('proxy-') ||
-      lower.startsWith('sec-')
+      lower === "authorization" ||
+      lower === "cookie" ||
+      lower === "host" ||
+      lower === "origin" ||
+      lower.startsWith("proxy-") ||
+      lower.startsWith("sec-")
     ) {
       headers.delete(name);
     }
@@ -211,9 +248,11 @@ async function fetchScopedResource(
   const response = await fetcher(url, {
     method,
     headers,
-    ...(method === 'GET' || method === 'HEAD' ? {} : { body: request.body ?? null }),
-    credentials: 'same-origin',
-    redirect: 'follow',
+    ...(method === "GET" || method === "HEAD"
+      ? {}
+      : { body: request.body ?? null }),
+    credentials: "same-origin",
+    redirect: "follow",
   });
   assertResponseStayedInScope(response, scope, appId);
   return {
@@ -225,16 +264,28 @@ async function fetchScopedResource(
   };
 }
 
-function assertResponseStayedInScope(response: Response, scope: TunnelScope, appId: string): void {
+function assertResponseStayedInScope(
+  response: Response,
+  scope: TunnelScope,
+  appId: string
+): void {
   if (response.url)
-    assertAllowedAppResource(assertStrictlyScopedUrl(response.url, scope), scope, appId);
+    assertAllowedAppResource(
+      assertStrictlyScopedUrl(response.url, scope),
+      scope,
+      appId
+    );
 }
 
-function assertAppDocumentUrl(url: string, scope: TunnelScope, appId: string): void {
+function assertAppDocumentUrl(
+  url: string,
+  scope: TunnelScope,
+  appId: string
+): void {
   const parsed = new URL(url);
   const targetPath = parsed.pathname.slice(scope.rootPath.length);
   if (targetPath !== `/centraid/${encodeURIComponent(appId)}/`) {
-    throw resourceError('App session resolved outside the requested app.');
+    throw resourceError("App session resolved outside the requested app.");
   }
 }
 
@@ -242,43 +293,50 @@ function normalizeScopedUrl(
   raw: string,
   scope: TunnelScope,
   appId: string,
-  base = scope.rootUrl,
+  base = scope.rootUrl
 ): string {
   let url: URL;
   try {
     url = new URL(raw, base);
   } catch {
-    throw resourceError('App resource URL is invalid.');
+    throw resourceError("App resource URL is invalid.");
   }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw resourceError('App resource protocol is not allowed.');
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw resourceError("App resource protocol is not allowed.");
   }
-  if (url.origin !== scope.origin) throw resourceError('App resource escaped the shell origin.');
+  if (url.origin !== scope.origin)
+    throw resourceError("App resource escaped the shell origin.");
 
   if (
     url.pathname.startsWith(IROH_VIRTUAL_PREFIX) &&
     !url.pathname.startsWith(`${scope.rootPath}/`)
   ) {
-    throw resourceError('App resource selected another Iroh session.');
+    throw resourceError("App resource selected another Iroh session.");
   }
   if (!url.pathname.startsWith(`${scope.rootPath}/`)) {
     // Root-relative app code (blob routes, replica capability paths, etc.) was
     // authored for a direct gateway origin. Re-home it under this exact Iroh
     // bridge rather than letting it address the PWA shell.
-    url = new URL(`${scope.rootUrl.replace(/\/$/u, '')}${url.pathname}${url.search}${url.hash}`);
+    url = new URL(
+      `${scope.rootUrl.replace(/\/$/u, "")}${url.pathname}${url.search}${url.hash}`
+    );
   }
   if (!url.pathname.startsWith(`${scope.rootPath}/`)) {
-    throw resourceError('App resource escaped its Iroh session.');
+    throw resourceError("App resource escaped its Iroh session.");
   }
   assertAllowedAppResource(url.toString(), scope, appId);
   // Cache Storage is shared by every opaque app document under this PWA
   // origin. Pin every parent-fetched capability request to the authenticated
   // app so a guessed content id cannot reuse another app's cached bytes.
-  url.searchParams.set('__centraid_app', appId);
+  url.searchParams.set("__centraid_app", appId);
   return url.toString();
 }
 
-function assertAllowedAppResource(raw: string, scope: TunnelScope, appId: string): void {
+function assertAllowedAppResource(
+  raw: string,
+  scope: TunnelScope,
+  appId: string
+): void {
   const url = new URL(raw);
   const targetPath = url.pathname.slice(scope.rootPath.length);
   const appRoot = `/centraid/${encodeURIComponent(appId)}/`;
@@ -290,9 +348,9 @@ function assertAllowedAppResource(raw: string, scope: TunnelScope, appId: string
   // replica surface. Its web-session cookie remains app-scoped server-side;
   // the fixed app query above additionally partitions any safe GET response
   // cached by the SW.
-  const sharedCapability = targetPath.startsWith('/centraid/_vault/');
+  const sharedCapability = targetPath.startsWith("/centraid/_vault/");
   if (!appOwned && !sharedCapability) {
-    throw resourceError('App resource escaped the requested app capability.');
+    throw resourceError("App resource escaped the requested app capability.");
   }
 }
 
@@ -301,10 +359,13 @@ function assertStrictlyScopedUrl(raw: string, scope: TunnelScope): string {
   try {
     url = new URL(raw);
   } catch {
-    throw resourceError('App resource URL is invalid.');
+    throw resourceError("App resource URL is invalid.");
   }
-  if (url.origin !== scope.origin || !url.pathname.startsWith(`${scope.rootPath}/`)) {
-    throw resourceError('App resource escaped its Iroh session.');
+  if (
+    url.origin !== scope.origin ||
+    !url.pathname.startsWith(`${scope.rootPath}/`)
+  ) {
+    throw resourceError("App resource escaped its Iroh session.");
   }
   return url.toString();
 }
@@ -312,11 +373,14 @@ function assertStrictlyScopedUrl(raw: string, scope: TunnelScope): string {
 function tunnelScope(raw: string): TunnelScope | undefined {
   try {
     const url = new URL(raw, window.location.href);
-    if (url.origin !== window.location.origin || !url.pathname.startsWith(IROH_VIRTUAL_PREFIX)) {
+    if (
+      url.origin !== window.location.origin ||
+      !url.pathname.startsWith(IROH_VIRTUAL_PREFIX)
+    ) {
       return undefined;
     }
     const rest = url.pathname.slice(IROH_VIRTUAL_PREFIX.length);
-    const slash = rest.indexOf('/');
+    const slash = rest.indexOf("/");
     if (slash < 1) return undefined;
     const bridgeId = rest.slice(0, slash);
     if (!/^[de]-[A-Za-z0-9_-]+$/u.test(bridgeId)) return undefined;
@@ -334,7 +398,7 @@ function tunnelScope(raw: string): TunnelScope | undefined {
 
 function htmlDataUrl(html: string): string {
   const bytes = new TextEncoder().encode(html);
-  let binary = '';
+  let binary = "";
   const chunk = 0x8000;
   for (let index = 0; index < bytes.length; index += chunk) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
@@ -344,11 +408,11 @@ function htmlDataUrl(html: string): string {
 
 function safeInlineJson(value: unknown): string {
   return JSON.stringify(value).replace(/[<>&\u2028\u2029]/gu, (character) => {
-    const code = character.charCodeAt(0).toString(16).padStart(4, '0');
+    const code = character.charCodeAt(0).toString(16).padStart(4, "0");
     return `\\u${code}`;
   });
 }
 
 function resourceError(message: string): Error & { code: string } {
-  return Object.assign(new Error(message), { code: 'APP_RESOURCE_DENIED' });
+  return Object.assign(new Error(message), { code: "APP_RESOURCE_DENIED" });
 }

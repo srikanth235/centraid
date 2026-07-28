@@ -1,8 +1,12 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX } from "react";
 
-import { hostFactRows, resolvedKnobRows, type ResourceProfileDTO } from './resource-summary.js';
+import {
+  hostFactRows,
+  resolvedKnobRows,
+  type ResourceProfileDTO,
+} from "./resource-summary.js";
 
-import styles from './GatewayScreen.module.css';
+import styles from "./GatewayScreen.module.css";
 
 // L2 of the Resource card (issue #528 Phase B): the host facts + resolved knobs
 // behind "How we sized this". Read-only. Two render modes:
@@ -18,11 +22,18 @@ export interface ResourceCardDetailsProps {
   embedded?: boolean;
 }
 
-function DetailGroups({ profile }: { profile: ResourceProfileDTO }): JSX.Element {
+function DetailGroups({
+  profile,
+}: {
+  profile: ResourceProfileDTO;
+}): JSX.Element {
   const host = hostFactRows(profile);
   const knobs = resolvedKnobRows(profile);
   return (
-    <div className={styles.resourceDetailsBody} data-testid="resource-details-body">
+    <div
+      className={styles.resourceDetailsBody}
+      data-testid="resource-details-body"
+    >
       <div className={styles.resourceDetailsGroup}>
         <div className={styles.resourceDetailsGroupTitle}>This host</div>
         <dl className={styles.resourceDetailsList}>
@@ -35,7 +46,9 @@ function DetailGroups({ profile }: { profile: ResourceProfileDTO }): JSX.Element
         </dl>
       </div>
       <div className={styles.resourceDetailsGroup}>
-        <div className={styles.resourceDetailsGroupTitle}>Resolved settings</div>
+        <div className={styles.resourceDetailsGroupTitle}>
+          Resolved settings
+        </div>
         <dl className={styles.resourceDetailsList}>
           {knobs.map((row) => (
             <div key={row.label} className={styles.resourceDetailsRow}>
@@ -70,7 +83,7 @@ export default function ResourceCardDetails({
       >
         <span>How we sized this</span>
         <span className={styles.resourceDetailsChevron} aria-hidden="true">
-          {open ? '▾' : '▸'}
+          {open ? "▾" : "▸"}
         </span>
       </button>
       {open ? <DetailGroups profile={profile} /> : null}

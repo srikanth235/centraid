@@ -11,20 +11,20 @@
 // So a settled, connected home shows one calm line, and a home that needs the
 // owner shows exactly the cards that do.
 
-import type { IconName } from '@centraid/design-tokens';
-import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { IconName } from "@centraid/design-tokens";
+import React, { useMemo } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import Icon from '../../kit/components/Icon';
-import { family, t, useTheme, type ThemeColors } from '../../kit/theme';
+import Icon from "../../kit/components/Icon";
+import { family, t, useTheme, type ThemeColors } from "../../kit/theme";
 
 // Mirrors Home's load state, minus the resolved app payload — this component
 // only needs to know whether the desktop is reachable, not what it returned.
 export type ConnectionState =
-  | { kind: 'loading' }
-  | { kind: 'no-gateway' }
-  | { kind: 'ready' }
-  | { kind: 'error'; message: string };
+  | { kind: "loading" }
+  | { kind: "no-gateway" }
+  | { kind: "ready" }
+  | { kind: "error"; message: string };
 
 export interface AttentionLineProps {
   connection: ConnectionState;
@@ -51,9 +51,9 @@ export default function AttentionLine({
 
   // While we're still resolving the gateway there's nothing honest to say yet;
   // the dimmed grid already reads as "not connected", so stay silent.
-  if (connection.kind === 'loading') return null;
+  if (connection.kind === "loading") return null;
 
-  if (connection.kind === 'no-gateway') {
+  if (connection.kind === "no-gateway") {
     return (
       <View style={styles.wrap}>
         <BannerCard
@@ -70,7 +70,7 @@ export default function AttentionLine({
     );
   }
 
-  if (connection.kind === 'error') {
+  if (connection.kind === "error") {
     return (
       <View style={styles.wrap}>
         <BannerCard
@@ -114,7 +114,11 @@ export default function AttentionLine({
             icon="Bell"
             count={approvals}
             title="Approvals"
-            sub={approvals === 1 ? '1 waiting on you' : `${approvals} waiting on you`}
+            sub={
+              approvals === 1
+                ? "1 waiting on you"
+                : `${approvals} waiting on you`
+            }
             onPress={onApprovals}
             styles={styles}
             colors={colors}
@@ -124,7 +128,7 @@ export default function AttentionLine({
           <ChipCard
             icon="Sparkle"
             title="Automations"
-            sub={automations === 1 ? '1 available' : `${automations} available`}
+            sub={automations === 1 ? "1 available" : `${automations} available`}
             onPress={onAutomations}
             styles={styles}
             colors={colors}
@@ -173,7 +177,7 @@ function ChipCard({
       </View>
       {count === undefined ? null : (
         <View style={[styles.badge, { backgroundColor: colors.accent }]}>
-          <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+          <Text style={styles.badgeText}>{count > 99 ? "99+" : count}</Text>
         </View>
       )}
     </Pressable>
@@ -191,7 +195,7 @@ function BannerCard({
   styles,
   colors,
 }: {
-  tone: 'pair' | 'error';
+  tone: "pair" | "error";
   icon: IconName;
   title: string;
   copy: string;
@@ -200,7 +204,8 @@ function BannerCard({
   styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
 }): React.JSX.Element {
-  const accent = tone === 'error' ? (colors.danger ?? colors.accent) : colors.accent;
+  const accent =
+    tone === "error" ? (colors.danger ?? colors.accent) : colors.accent;
   return (
     <Pressable
       accessibilityRole="button"
@@ -223,74 +228,74 @@ function BannerCard({
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     allClear: {
-      alignItems: 'center',
-      flexDirection: 'row',
+      alignItems: "center",
+      flexDirection: "row",
       gap: 8,
     },
-    allClearText: { ...t('small'), color: colors.ink2 },
+    allClearText: { ...t("small"), color: colors.ink2 },
     badge: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 10,
-      justifyContent: 'center',
+      justifyContent: "center",
       minWidth: 20,
       paddingHorizontal: 5,
       paddingVertical: 1,
     },
-    badgeText: { color: '#fff', fontFamily: family.sansBold, fontSize: 11 },
+    badgeText: { color: "#fff", fontFamily: family.sansBold, fontSize: 11 },
     banner: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 12,
       paddingHorizontal: 14,
       paddingVertical: 14,
     },
-    bannerAction: { ...t('small'), fontFamily: family.sansBold },
+    bannerAction: { ...t("small"), fontFamily: family.sansBold },
     bannerCopy: { flex: 1 },
     bannerIcon: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 12,
       height: 42,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 42,
     },
     bannerSub: {
-      ...t('small'),
+      ...t("small"),
       color: colors.ink2,
       lineHeight: 18,
       marginTop: 2,
     },
-    bannerTitle: { ...t('bodyStrong'), color: colors.ink },
+    bannerTitle: { ...t("bodyStrong"), color: colors.ink },
     chip: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       borderRadius: 14,
       borderWidth: StyleSheet.hairlineWidth,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 10,
       paddingHorizontal: 12,
       paddingVertical: 10,
     },
     chipCopy: { maxWidth: 150 },
     chipIcon: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 10,
       height: 32,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 32,
     },
-    chipSub: { ...t('tiny'), color: colors.ink3, marginTop: 1 },
+    chipSub: { ...t("tiny"), color: colors.ink3, marginTop: 1 },
     chipTitle: {
-      ...t('small'),
+      ...t("small"),
       color: colors.ink,
       fontFamily: family.sansBold,
     },
     dot: { borderRadius: 3, height: 6, width: 6 },
     pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
-    strip: { flexDirection: 'row', gap: 10 },
+    strip: { flexDirection: "row", gap: 10 },
     wrap: { marginBottom: 22 },
   });

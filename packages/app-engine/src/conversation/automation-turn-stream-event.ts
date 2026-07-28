@@ -7,13 +7,13 @@
  * item that owns it.
  */
 
-import type { TurnStreamEvent } from './runner.js';
-import type { ItemKind } from './schema.js';
+import type { TurnStreamEvent } from "./runner.js";
+import type { ItemKind } from "./schema.js";
 
 export type AutomationTurnStreamEvent =
-  | { type: 'turn.start'; turnId: string }
+  | { type: "turn.start"; turnId: string }
   | {
-      type: 'item.start';
+      type: "item.start";
       itemId: string;
       ordinal: number;
       callId?: string;
@@ -25,14 +25,14 @@ export type AutomationTurnStreamEvent =
     }
   /** Ephemeral shared conversation event nested under its durable item. */
   | {
-      type: 'item.delta';
+      type: "item.delta";
       itemId: string;
       ordinal: number;
       callId?: string;
       event: TurnStreamEvent;
     }
   | {
-      type: 'item.end';
+      type: "item.end";
       itemId: string;
       ordinal: number;
       callId?: string;
@@ -42,4 +42,4 @@ export type AutomationTurnStreamEvent =
       durationMs: number;
       rawJson?: string;
     }
-  | { type: 'turn.end'; turnId: string; ok: boolean; error?: string };
+  | { type: "turn.end"; turnId: string; ok: boolean; error?: string };

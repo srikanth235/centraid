@@ -14,14 +14,14 @@
  *
  * Per-PR lane (`bun run test:mutation:pr`) is `--affected --enforce-floors`.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 
-import { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from './seeds.mjs';
+import { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from "./seeds.mjs";
 
-export { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from './seeds.mjs';
-const root = path.resolve(import.meta.dirname, '../..');
+export { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from "./seeds.mjs";
+const root = path.resolve(import.meta.dirname, "../..");
 
 /**
  * Normalize a Stryker JSON report into a score percentage.
@@ -29,32 +29,39 @@ const root = path.resolve(import.meta.dirname, '../..');
  * @returns {number | null} Mutation score 0–100, or null if missing.
  */
 export function mutationScoreFromReport(report) {
-  if (!report || typeof report !== 'object') return null;
+  if (!report || typeof report !== "object") return null;
   const r = /** @type {Record<string, unknown>} */ (report);
-  if (typeof r.mutationScore === 'number') return r.mutationScore;
+  if (typeof r.mutationScore === "number") return r.mutationScore;
   const metrics = r.metrics ?? r.totals;
-  if (metrics && typeof metrics === 'object') {
+  if (metrics && typeof metrics === "object") {
     const m = /** @type {Record<string, unknown>} */ (metrics);
-    if (typeof m.mutationScore === 'number') return m.mutationScore;
-    if (typeof m.killed === 'number' && typeof m.totalValid === 'number' && m.totalValid > 0) {
+    if (typeof m.mutationScore === "number") return m.mutationScore;
+    if (
+      typeof m.killed === "number" &&
+      typeof m.totalValid === "number" &&
+      m.totalValid > 0
+    ) {
       return (m.killed / m.totalValid) * 100;
     }
     if (
-      typeof m.killed === 'number' &&
-      typeof m.survived === 'number' &&
-      typeof m.timeout === 'number'
+      typeof m.killed === "number" &&
+      typeof m.survived === "number" &&
+      typeof m.timeout === "number"
     ) {
-      const denom = m.killed + m.survived + m.timeout + (Number(m.noCoverage) || 0);
+      const denom =
+        m.killed + m.survived + m.timeout + (Number(m.noCoverage) || 0);
       if (denom > 0) return (m.killed / denom) * 100;
     }
   }
-  if (r.files && typeof r.files === 'object') {
+  if (r.files && typeof r.files === "object") {
     const fileEntries = Object.values(
       /** @type {Record<string, { mutationScore?: number; mutants?: Array<{ status?: string }> }> } */ (
         r.files
-      ),
+      )
     );
-    const scores = fileEntries.map((f) => f?.mutationScore).filter((n) => typeof n === 'number');
+    const scores = fileEntries
+      .map((f) => f?.mutationScore)
+      .filter((n) => typeof n === "number");
     if (scores.length) {
       return scores.reduce((a, b) => a + b, 0) / scores.length;
     }
@@ -65,14 +72,14 @@ export function mutationScoreFromReport(report) {
       for (const m of f.mutants) {
         const status = m?.status;
         if (
-          status === 'Killed' ||
-          status === 'Timeout' ||
-          status === 'RuntimeError' ||
-          status === 'CompileError'
+          status === "Killed" ||
+          status === "Timeout" ||
+          status === "RuntimeError" ||
+          status === "CompileError"
         ) {
-          killed += status === 'Killed' || status === 'Timeout' ? 1 : 0;
+          killed += status === "Killed" || status === "Timeout" ? 1 : 0;
           valid += 1;
-        } else if (status === 'Survived' || status === 'NoCoverage') {
+        } else if (status === "Survived" || status === "NoCoverage") {
           valid += 1;
         }
       }
@@ -90,7 +97,7 @@ export function mutationScoreFromReport(report) {
 export function buildScoresArtifact(rows) {
   return {
     generatedAt: new Date().toISOString(),
-    lane: 'mutation',
+    lane: "mutation",
     packages: rows,
   };
 }
@@ -109,13 +116,15 @@ export function buildScoresArtifact(rows) {
  */
 export function assertFloorsSubsetOfSeeds(floors, seeds = MUTATION_SEEDS) {
   const errors = [];
-  if (!floors || typeof floors !== 'object') return errors;
+  if (!floors || typeof floors !== "object") return errors;
   const seedIds = new Set(seeds.map((s) => s.id));
   for (const id of Object.keys(floors)) {
-    if (id.startsWith('_') || id === 'approvedDeviation') continue;
-    if (typeof floors[id] !== 'number') continue;
+    if (id.startsWith("_") || id === "approvedDeviation") continue;
+    if (typeof floors[id] !== "number") continue;
     if (!seedIds.has(id)) {
-      errors.push(`mutation floor "${id}" has no matching MUTATION_SEEDS entry (floors ⊆ seeds)`);
+      errors.push(
+        `mutation floor "${id}" has no matching MUTATION_SEEDS entry (floors ⊆ seeds)`
+      );
     }
   }
   return errors;
@@ -123,25 +132,27 @@ export function assertFloorsSubsetOfSeeds(floors, seeds = MUTATION_SEEDS) {
 
 export function enforceMutationFloors(scores, floors) {
   const errors = [];
-  if (!floors || typeof floors !== 'object') return errors;
+  if (!floors || typeof floors !== "object") return errors;
   const byId = new Map(
-    (scores?.packages ?? []).filter((p) => p?.id).map((p) => [/** @type {string} */ (p.id), p]),
+    (scores?.packages ?? [])
+      .filter((p) => p?.id)
+      .map((p) => [/** @type {string} */ (p.id), p])
   );
   for (const [id, floor] of Object.entries(floors)) {
-    if (id.startsWith('_') || id === 'approvedDeviation') continue;
-    if (typeof floor !== 'number') continue;
+    if (id.startsWith("_") || id === "approvedDeviation") continue;
+    if (typeof floor !== "number") continue;
     const row = byId.get(id);
     // #545 A5 — missing score is a gate failure (Stryker crash, renamed seed,
     // config drift). Previously `continue` left mutation-pr green.
-    if (!row || typeof row.score !== 'number') {
+    if (!row || typeof row.score !== "number") {
       errors.push(
-        `mutation floor "${id}" has no measured score (seed missing, crashed, or skipped)`,
+        `mutation floor "${id}" has no measured score (seed missing, crashed, or skipped)`
       );
       continue;
     }
     if (row.score + 1e-9 < floor) {
       errors.push(
-        `mutation floor "${id}" not met: measured ${row.score.toFixed(2)} < floor ${floor}`,
+        `mutation floor "${id}" not met: measured ${row.score.toFixed(2)} < floor ${floor}`
       );
     }
   }
@@ -158,12 +169,14 @@ export function enforceMutationFloors(scores, floors) {
 export function selectAffectedSeeds(
   changedFiles,
   seeds = MUTATION_SEEDS,
-  globalWatch = MUTATION_GLOBAL_WATCH,
+  globalWatch = MUTATION_GLOBAL_WATCH
 ) {
-  const changed = new Set(changedFiles.map((f) => f.replace(/\\/gu, '/')));
+  const changed = new Set(changedFiles.map((f) => f.replace(/\\/gu, "/")));
   if (globalWatch.some((g) => changed.has(g))) return [...seeds];
   return seeds.filter((seed) =>
-    seed.watch.some((w) => changed.has(w) || [...changed].some((c) => c.startsWith(`${w}/`))),
+    seed.watch.some(
+      (w) => changed.has(w) || [...changed].some((c) => c.startsWith(`${w}/`))
+    )
   );
 }
 
@@ -175,22 +188,22 @@ export function selectAffectedSeeds(
  */
 export function listChangedFiles(base, cwd = root) {
   try {
-    const out = execFileSync('git', ['diff', '--name-only', `${base}...HEAD`], {
+    const out = execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], {
       cwd,
-      encoding: 'utf8',
+      encoding: "utf8",
     });
     return out
-      .split('\n')
+      .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
   } catch {
     try {
-      const out = execFileSync('git', ['diff', '--name-only', base], {
+      const out = execFileSync("git", ["diff", "--name-only", base], {
         cwd,
-        encoding: 'utf8',
+        encoding: "utf8",
       });
       return out
-        .split('\n')
+        .split("\n")
         .map((l) => l.trim())
         .filter(Boolean);
     } catch {
@@ -204,9 +217,11 @@ export function listChangedFiles(base, cwd = root) {
  * @param {string} [floorsPath] Absolute path to mutation-floors.json.
  * @returns {Record<string, unknown>} Parsed floors object, or empty when missing.
  */
-export function loadMutationFloors(floorsPath = path.join(root, 'tests/mutation-floors.json')) {
+export function loadMutationFloors(
+  floorsPath = path.join(root, "tests/mutation-floors.json")
+) {
   if (!existsSync(floorsPath)) return {};
-  return JSON.parse(readFileSync(floorsPath, 'utf8'));
+  return JSON.parse(readFileSync(floorsPath, "utf8"));
 }
 
 function parseArgs(argv) {
@@ -216,23 +231,30 @@ function parseArgs(argv) {
     help: false,
     affected: false,
     enforceFloors: false,
-    base: 'origin/main',
+    base: "origin/main",
   };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--package' && argv[i + 1]) out.package = argv[++i];
-    else if (argv[i] === '--dry-run') out.dryRun = true;
-    else if (argv[i] === '--affected') out.affected = true;
-    else if (argv[i] === '--enforce-floors') out.enforceFloors = true;
-    else if (argv[i] === '--base' && argv[i + 1]) out.base = argv[++i];
-    else if (argv[i] === '--help' || argv[i] === '-h') out.help = true;
+    if (argv[i] === "--package" && argv[i + 1]) out.package = argv[++i];
+    else if (argv[i] === "--dry-run") out.dryRun = true;
+    else if (argv[i] === "--affected") out.affected = true;
+    else if (argv[i] === "--enforce-floors") out.enforceFloors = true;
+    else if (argv[i] === "--base" && argv[i + 1]) out.base = argv[++i];
+    else if (argv[i] === "--help" || argv[i] === "-h") out.help = true;
   }
   return out;
 }
 
 function findStrykerBin() {
   for (const candidate of [
-    path.join(root, 'node_modules', '.bin', 'stryker'),
-    path.join(root, 'node_modules', '@stryker-mutator', 'core', 'bin', 'stryker.js'),
+    path.join(root, "node_modules", ".bin", "stryker"),
+    path.join(
+      root,
+      "node_modules",
+      "@stryker-mutator",
+      "core",
+      "bin",
+      "stryker.js"
+    ),
   ]) {
     if (existsSync(candidate)) return candidate;
   }
@@ -247,14 +269,14 @@ function runSeeds(seeds) {
   const stryker = findStrykerBin();
   if (!stryker) {
     console.error(
-      'mutation: @stryker-mutator/core not installed (devDependency). Nightly installs it via bun install.',
+      "mutation: @stryker-mutator/core not installed (devDependency). Nightly installs it via bun install."
     );
     return seeds.map((s) => ({
       id: s.id,
       label: s.label,
       score: null,
-      status: 'unavailable',
-      error: 'stryker binary missing',
+      status: "unavailable",
+      error: "stryker binary missing",
     }));
   }
 
@@ -268,7 +290,7 @@ function runSeeds(seeds) {
         id: seed.id,
         label: seed.label,
         score: null,
-        status: 'failed',
+        status: "failed",
         error: `missing ${seed.cwd}/${seed.config}`,
       });
       continue;
@@ -277,23 +299,25 @@ function runSeeds(seeds) {
     // One retry: CI hosts occasionally return "No tests were executed" on the
     // first dry-run under load even though the same vitest.mutation.config is
     // healthy (repro intermittent on ubuntu-latest for vault/automation).
-    let result = spawnSync(process.execPath, [stryker, 'run', seed.config], {
+    let result = spawnSync(process.execPath, [stryker, "run", seed.config], {
       cwd: pkgDir,
-      encoding: 'utf8',
-      env: { ...process.env, FORCE_COLOR: '0' },
+      encoding: "utf8",
+      env: { ...process.env, FORCE_COLOR: "0" },
       maxBuffer: 64 * 1024 * 1024,
     });
-    const combined = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+    const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
     if (
       result.status !== 0 &&
       /No tests were (?:executed|found)/iu.test(combined) &&
       !existsSync(path.join(root, seed.report))
     ) {
-      console.warn(`mutation: ${seed.id} dry-run found no tests — retrying once…`);
-      result = spawnSync(process.execPath, [stryker, 'run', seed.config], {
+      console.warn(
+        `mutation: ${seed.id} dry-run found no tests — retrying once…`
+      );
+      result = spawnSync(process.execPath, [stryker, "run", seed.config], {
         cwd: pkgDir,
-        encoding: 'utf8',
-        env: { ...process.env, FORCE_COLOR: '0' },
+        encoding: "utf8",
+        env: { ...process.env, FORCE_COLOR: "0" },
         maxBuffer: 64 * 1024 * 1024,
       });
     }
@@ -301,19 +325,19 @@ function runSeeds(seeds) {
     if (result.stderr) process.stderr.write(result.stderr);
 
     let score = null;
-    let status = result.status === 0 ? 'ok' : 'failed';
+    let status = result.status === 0 ? "ok" : "failed";
     const reportAbs = path.join(root, seed.report);
     if (existsSync(reportAbs)) {
       try {
-        const report = JSON.parse(readFileSync(reportAbs, 'utf8'));
+        const report = JSON.parse(readFileSync(reportAbs, "utf8"));
         score = mutationScoreFromReport(report);
-        if (score !== null) status = 'ok';
+        if (score !== null) status = "ok";
       } catch (err) {
         rows.push({
           id: seed.id,
           label: seed.label,
           score: null,
-          status: 'failed',
+          status: "failed",
           reportPath: seed.report,
           error: String(err),
         });
@@ -336,7 +360,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     console.log(
-      'Usage: node scripts/mutation/run.mjs [--package <label>] [--affected] [--base origin/main] [--enforce-floors] [--dry-run]',
+      "Usage: node scripts/mutation/run.mjs [--package <label>] [--affected] [--base origin/main] [--enforce-floors] [--dry-run]"
     );
     process.exit(0);
   }
@@ -344,7 +368,9 @@ function main() {
   /** @type {import('./seeds.mjs').MutationSeed[]} */
   let seeds;
   if (args.package) {
-    seeds = MUTATION_SEEDS.filter((s) => s.label === args.package || s.id.includes(args.package));
+    seeds = MUTATION_SEEDS.filter(
+      (s) => s.label === args.package || s.id.includes(args.package)
+    );
     if (!seeds.length) {
       console.error(`mutation: unknown package filter ${args.package}`);
       process.exitCode = 1;
@@ -354,27 +380,27 @@ function main() {
     const changed = listChangedFiles(args.base);
     seeds = selectAffectedSeeds(changed);
     console.log(
-      `mutation: --affected vs ${args.base}: ${changed.length} changed file(s), ${seeds.length} seed(s)`,
+      `mutation: --affected vs ${args.base}: ${changed.length} changed file(s), ${seeds.length} seed(s)`
     );
     if (!seeds.length) {
-      mkdirSync(path.join(root, 'artifacts/mutation'), { recursive: true });
+      mkdirSync(path.join(root, "artifacts/mutation"), { recursive: true });
       writeFileSync(
-        path.join(root, 'artifacts/mutation/scores.json'),
+        path.join(root, "artifacts/mutation/scores.json"),
         JSON.stringify(
           buildScoresArtifact([
             {
-              id: '_none',
-              label: 'none',
+              id: "_none",
+              label: "none",
               score: null,
-              status: 'skipped',
-              error: 'no mutation seeds affected by diff',
+              status: "skipped",
+              error: "no mutation seeds affected by diff",
             },
           ]),
           null,
-          2,
-        ),
+          2
+        )
       );
-      console.log('mutation: no seeds affected — skipping Stryker (ok)');
+      console.log("mutation: no seeds affected — skipping Stryker (ok)");
       return;
     }
     for (const s of seeds) console.log(`  - ${s.id}`);
@@ -382,38 +408,40 @@ function main() {
     seeds = MUTATION_SEEDS;
   }
 
-  mkdirSync(path.join(root, 'artifacts/mutation'), { recursive: true });
+  mkdirSync(path.join(root, "artifacts/mutation"), { recursive: true });
 
   if (args.dryRun) {
     const rows = seeds.map((s) => ({
       id: s.id,
       label: s.label,
       score: null,
-      status: 'dry-run',
+      status: "dry-run",
       reportPath: s.report,
     }));
     writeFileSync(
-      path.join(root, 'artifacts/mutation/scores.json'),
-      JSON.stringify(buildScoresArtifact(rows), null, 2),
+      path.join(root, "artifacts/mutation/scores.json"),
+      JSON.stringify(buildScoresArtifact(rows), null, 2)
     );
-    console.log('mutation: dry-run wrote artifacts/mutation/scores.json');
+    console.log("mutation: dry-run wrote artifacts/mutation/scores.json");
     return;
   }
 
   const rows = runSeeds(seeds);
   const artifact = buildScoresArtifact(rows);
   writeFileSync(
-    path.join(root, 'artifacts/mutation/scores.json'),
-    JSON.stringify(artifact, null, 2),
+    path.join(root, "artifacts/mutation/scores.json"),
+    JSON.stringify(artifact, null, 2)
   );
-  console.log('mutation: wrote artifacts/mutation/scores.json');
+  console.log("mutation: wrote artifacts/mutation/scores.json");
   for (const row of rows) {
     console.log(
-      `  - ${row.id}: ${row.score === null ? 'n/a' : `${row.score.toFixed(1)}%`} (${row.status})`,
+      `  - ${row.id}: ${row.score === null ? "n/a" : `${row.score.toFixed(1)}%`} (${row.status})`
     );
   }
 
-  let failed = rows.some((r) => r.status === 'failed' || r.status === 'unavailable');
+  let failed = rows.some(
+    (r) => r.status === "failed" || r.status === "unavailable"
+  );
 
   if (args.enforceFloors) {
     const floors = loadMutationFloors();
@@ -422,25 +450,29 @@ function main() {
     const ranIds = new Set(rows.map((r) => r.id));
     const floorsForRun = Object.fromEntries(
       Object.entries(floors).filter(([id, v]) => {
-        if (id.startsWith('_') || id === 'approvedDeviation') return true;
-        if (typeof v !== 'number') return true;
+        if (id.startsWith("_") || id === "approvedDeviation") return true;
+        if (typeof v !== "number") return true;
         return ranIds.has(id);
-      }),
+      })
     );
     const subsetErrors = assertFloorsSubsetOfSeeds(floors);
-    const floorErrors = [...subsetErrors, ...enforceMutationFloors(artifact, floorsForRun)];
+    const floorErrors = [
+      ...subsetErrors,
+      ...enforceMutationFloors(artifact, floorsForRun),
+    ];
     if (floorErrors.length) {
       for (const e of floorErrors) console.error(`mutation: ${e}`);
       failed = true;
     } else {
-      console.log('mutation: floors met for measured packages');
+      console.log("mutation: floors met for measured packages");
     }
   }
 
   if (failed) process.exitCode = 1;
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
   main();
 }

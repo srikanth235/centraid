@@ -3,44 +3,44 @@
 // title/notes/subtask-draft state always starts from the newly opened task,
 // no stale-buffer bugs, no defaultValue tricks. Edits commit on blur/Enter
 // (never per keystroke) so typing never spams the vault with writes.
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 
-import { flagLevel, plusDays, todayStr } from '../format.ts';
-import { I } from '../icons.ts';
-import { renderAttachments } from '../kit.ts';
-import type { ActivityEntry, EditPatch, Task } from '../types.ts';
-import { Icon } from './Shared.tsx';
+import { flagLevel, plusDays, todayStr } from "../format.ts";
+import { I } from "../icons.ts";
+import { renderAttachments } from "../kit.ts";
+import type { ActivityEntry, EditPatch, Task } from "../types.ts";
+import { Icon } from "./Shared.tsx";
 
-import styles from './Detail.module.css';
-import shared from './shared.module.css';
+import styles from "./Detail.module.css";
+import shared from "./shared.module.css";
 
 const PRIORITY_CHIPS: Array<{ value: number; label: string }> = [
-  { value: 0, label: '—' },
-  { value: 1, label: 'High' },
-  { value: 5, label: 'Med' },
-  { value: 9, label: 'Low' },
+  { value: 0, label: "—" },
+  { value: 1, label: "High" },
+  { value: 5, label: "Med" },
+  { value: 9, label: "Low" },
 ];
 // Effort has no "clear" affordance: actions/edit.ts only forwards
 // `effort_min` when it's truthy (`if (raw.effort_min) …`), so a value of 0
 // can never reach the vault — there is no clearing chip here, only the set.
 const EFFORT_CHIPS: Array<{ value: number; label: string }> = [
-  { value: 15, label: '15m' },
-  { value: 30, label: '30m' },
-  { value: 60, label: '1h' },
+  { value: 15, label: "15m" },
+  { value: 30, label: "30m" },
+  { value: 60, label: "1h" },
 ];
 const REPEAT_CHIPS: Array<{ value: string | null; label: string }> = [
-  { value: null, label: '—' },
-  { value: 'FREQ=DAILY', label: 'Daily' },
-  { value: 'FREQ=WEEKLY', label: 'Weekly' },
-  { value: 'FREQ=MONTHLY', label: 'Monthly' },
+  { value: null, label: "—" },
+  { value: "FREQ=DAILY", label: "Daily" },
+  { value: "FREQ=WEEKLY", label: "Weekly" },
+  { value: "FREQ=MONTHLY", label: "Monthly" },
 ];
 const REMIND_CHIPS: Array<{ value: number | null; label: string }> = [
-  { value: null, label: '—' },
-  { value: 0, label: 'At time' },
-  { value: 15, label: '15m' },
-  { value: 60, label: '1h' },
-  { value: 1440, label: '1 day' },
+  { value: null, label: "—" },
+  { value: 0, label: "At time" },
+  { value: 15, label: "15m" },
+  { value: 60, label: "1h" },
+  { value: 1440, label: "1 day" },
 ];
 
 function TagStrip({
@@ -52,13 +52,13 @@ function TagStrip({
   onAddTag: (taskId: string, label: string) => void;
   onRemoveTag: (tagId: string) => void;
 }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const label = draft.trim();
     if (!label) return;
     onAddTag(task.task_id, label);
-    setDraft('');
+    setDraft("");
   };
   return (
     <div className={styles.tagStrip}>
@@ -98,10 +98,13 @@ function AttachStrip({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (ref.current) renderAttachments(ref.current, task.attachments ?? [], onRemove);
+    if (ref.current)
+      renderAttachments(ref.current, task.attachments ?? [], onRemove);
   }, [task.attachments, onRemove]);
   if (!task.attachments?.length) return null;
-  return <div className={`kit-attach-strip ${styles.detailAttach}`} ref={ref} />;
+  return (
+    <div className={`kit-attach-strip ${styles.detailAttach}`} ref={ref} />
+  );
 }
 
 interface DetailProps {
@@ -120,7 +123,9 @@ interface DetailProps {
   onToggleSubtask: (sub: Task) => void;
   onAddSubtask: (parentId: string, title: string) => void;
   onAttach: (taskId: string) => void;
-  onRemoveAttachment: (attachmentId: string) => Promise<VaultOutcome | undefined>;
+  onRemoveAttachment: (
+    attachmentId: string
+  ) => Promise<VaultOutcome | undefined>;
   onAddTag: (taskId: string, label: string) => void;
   onRemoveTag: (tagId: string) => void;
   onToggleProcess: (t: Task) => void;
@@ -150,25 +155,25 @@ export function Detail({
   onCancel,
 }: DetailProps) {
   const [title, setTitle] = useState(task.title);
-  const [notes, setNotes] = useState(task.description ?? '');
-  const [subDraft, setSubDraft] = useState('');
+  const [notes, setNotes] = useState(task.description ?? "");
+  const [subDraft, setSubDraft] = useState("");
 
-  const isDone = task.status === 'completed';
-  const cancelled = task.status === 'cancelled';
+  const isDone = task.status === "completed";
+  const cancelled = task.status === "cancelled";
   const statusLabel = isDone
-    ? 'Completed'
-    : task.status === 'in-process'
-      ? 'In progress'
+    ? "Completed"
+    : task.status === "in-process"
+      ? "In progress"
       : cancelled
-        ? 'Cancelled'
-        : 'To do';
+        ? "Cancelled"
+        : "To do";
   const children = task.children ?? [];
-  const doneChildren = children.filter((c) => c.status === 'completed').length;
+  const doneChildren = children.filter((c) => c.status === "completed").length;
   const duePresets = [
-    { key: 'today', label: 'Today', due: todayStr() },
-    { key: 'tomorrow', label: 'Tomorrow', due: plusDays(1) },
-    { key: 'week', label: 'Next wk', due: plusDays(7) },
-    { key: 'none', label: 'None', due: null },
+    { key: "today", label: "Today", due: todayStr() },
+    { key: "tomorrow", label: "Tomorrow", due: plusDays(1) },
+    { key: "week", label: "Next wk", due: plusDays(7) },
+    { key: "none", label: "None", due: null },
   ];
 
   const commitTitle = () => {
@@ -178,15 +183,17 @@ export function Detail({
   };
   const commitNotes = () => {
     const next = notes.trim();
-    const prev = String(task.description ?? '');
-    if (next && next !== prev) onNotesCommit(task.task_id, { description: next });
-    else if (!next && prev) onNotesCommit(task.task_id, { clear_description: true });
+    const prev = String(task.description ?? "");
+    if (next && next !== prev)
+      onNotesCommit(task.task_id, { description: next });
+    else if (!next && prev)
+      onNotesCommit(task.task_id, { clear_description: true });
   };
   const submitSubtask = () => {
     const t = subDraft.trim();
     if (!t) return;
     onAddSubtask(task.task_id, t);
-    setSubDraft('');
+    setSubDraft("");
   };
 
   return (
@@ -195,7 +202,12 @@ export function Detail({
           handler on the backdrop itself, which no keyboard could reach. It is a
           real button now, laid under the drawer (`.detail` is `position:
           relative`, so it paints above); the dim still comes from the backdrop. */}
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
       <div className={pending ? `${styles.detail} kit-pending` : styles.detail}>
         <div className={styles.detailHead}>
           <button
@@ -203,7 +215,7 @@ export function Detail({
             className={`${shared.circle} ${shared.lg}`}
             data-on={String(isDone)}
             data-cancelled={String(cancelled)}
-            aria-label={isDone ? 'Reopen task' : 'Complete task'}
+            aria-label={isDone ? "Reopen task" : "Complete task"}
             onClick={() => onToggleStatus(task)}
           >
             {isDone ? <Icon svg={I.check} /> : null}
@@ -229,7 +241,7 @@ export function Detail({
             onChange={(e) => setTitle(e.target.value)}
             onBlur={commitTitle}
             onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === "Enter") e.currentTarget.blur();
             }}
           />
           <textarea
@@ -250,10 +262,13 @@ export function Detail({
                 <button
                   key={c.key}
                   type="button"
-                  className={active ? 'on' : ''}
+                  className={active ? "on" : ""}
                   aria-pressed={Boolean(active)}
                   onClick={() =>
-                    onPickDue(task.task_id, c.due ? { due_at: c.due } : { clear_due: true })
+                    onPickDue(
+                      task.task_id,
+                      c.due ? { due_at: c.due } : { clear_due: true }
+                    )
                   }
                 >
                   {c.label}
@@ -265,9 +280,10 @@ export function Detail({
             type="date"
             className={`kit-input ${styles.detailDate}`}
             aria-label="Due date"
-            value={task.due_at ? String(task.due_at).slice(0, 10) : ''}
+            value={task.due_at ? String(task.due_at).slice(0, 10) : ""}
             onChange={(e) => {
-              if (e.target.value) onPickDue(task.task_id, { due_at: e.target.value });
+              if (e.target.value)
+                onPickDue(task.task_id, { due_at: e.target.value });
             }}
           />
 
@@ -284,7 +300,7 @@ export function Detail({
                     <button
                       key={c.value}
                       type="button"
-                      className={active ? 'on' : ''}
+                      className={active ? "on" : ""}
                       aria-pressed={Boolean(active)}
                       onClick={() => onPickPriority(task.task_id, c.value)}
                     >
@@ -301,7 +317,7 @@ export function Detail({
                   <button
                     key={c.value}
                     type="button"
-                    className={task.effort_min === c.value ? 'on' : ''}
+                    className={task.effort_min === c.value ? "on" : ""}
                     aria-pressed={task.effort_min === c.value}
                     onClick={() => onPickEffort(task.task_id, c.value)}
                   >
@@ -320,13 +336,13 @@ export function Detail({
                   <button
                     key={c.label}
                     type="button"
-                    className={task.rrule === c.value ? 'on' : ''}
+                    className={task.rrule === c.value ? "on" : ""}
                     aria-pressed={task.rrule === c.value}
                     disabled={!task.due_at}
                     onClick={() =>
                       onPickRepeat(
                         task.task_id,
-                        c.value ? { rrule: c.value } : { clear_rrule: true },
+                        c.value ? { rrule: c.value } : { clear_rrule: true }
                       )
                     }
                   >
@@ -347,13 +363,15 @@ export function Detail({
                     <button
                       key={c.label}
                       type="button"
-                      className={active ? 'on' : ''}
+                      className={active ? "on" : ""}
                       aria-pressed={active}
                       disabled={!task.due_at}
                       onClick={() =>
                         onPickRemind(
                           task.task_id,
-                          c.value == null ? { clear_remind: true } : { remind_before_min: c.value },
+                          c.value == null
+                            ? { clear_remind: true }
+                            : { remind_before_min: c.value }
                         )
                       }
                     >
@@ -375,7 +393,7 @@ export function Detail({
 
           <div className={shared.eyebrowLabel}>
             Subtasks
-            {children.length ? ` · ${doneChildren}/${children.length}` : ''}
+            {children.length ? ` · ${doneChildren}/${children.length}` : ""}
           </div>
           <div className={styles.subtasks}>
             {children.map((s) => (
@@ -383,15 +401,19 @@ export function Detail({
                 <button
                   type="button"
                   className={`${shared.circle} ${shared.sm}`}
-                  data-on={String(s.status === 'completed')}
-                  aria-label={s.status === 'completed' ? 'Reopen subtask' : 'Complete subtask'}
+                  data-on={String(s.status === "completed")}
+                  aria-label={
+                    s.status === "completed"
+                      ? "Reopen subtask"
+                      : "Complete subtask"
+                  }
                   onClick={() => onToggleSubtask(s)}
                 >
-                  {s.status === 'completed' ? <Icon svg={I.check} /> : null}
+                  {s.status === "completed" ? <Icon svg={I.check} /> : null}
                 </button>
                 <span
                   className={
-                    s.status === 'completed'
+                    s.status === "completed"
                       ? `${styles.subtaskTitle} ${styles.done}`
                       : styles.subtaskTitle
                   }
@@ -409,7 +431,7 @@ export function Detail({
                 value={subDraft}
                 onChange={(e) => setSubDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === "Enter") {
                     e.preventDefault();
                     submitSubtask();
                   }
@@ -421,7 +443,9 @@ export function Detail({
           <div className={shared.eyebrowLabel}>Activity</div>
           <div className={styles.activity}>
             {activity.length === 0 ? (
-              <p className={`${styles.activityEmpty} muted small`}>No activity yet this session.</p>
+              <p className={`${styles.activityEmpty} muted small`}>
+                No activity yet this session.
+              </p>
             ) : (
               activity.map((a, i) => (
                 <div className={styles.activityItem} key={i}>
@@ -430,7 +454,9 @@ export function Detail({
                     <div className={styles.activityText}>{a.text}</div>
                     <div className={styles.activityMeta}>
                       <span className={styles.activityDate}>{a.when}</span>
-                      {a.receiptId ? <span className={styles.receiptChip}>receipt</span> : null}
+                      {a.receiptId ? (
+                        <span className={styles.receiptChip}>receipt</span>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -455,7 +481,7 @@ export function Detail({
             className={`kit-btn ${styles.flex}`}
             onClick={() => onToggleProcess(task)}
           >
-            {task.status === 'in-process' ? 'Pause' : 'Start'}
+            {task.status === "in-process" ? "Pause" : "Start"}
           </button>
           <button
             type="button"
@@ -463,7 +489,7 @@ export function Detail({
             disabled={cancelled}
             onClick={() => onCancel(task)}
           >
-            {cancelled ? 'Cancelled' : 'Cancel task'}
+            {cancelled ? "Cancelled" : "Cancel task"}
           </button>
         </div>
       </div>

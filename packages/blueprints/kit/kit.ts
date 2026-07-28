@@ -3,14 +3,14 @@
    makes the implementation the public type source; the legacy Ask controller
    still needs a follow-up strictness pass after it is split from the DOM primitives. */
 // @ts-nocheck
-import { richAnswerHtml, hydrateRefs, wireCodeCopy } from './assistant-rich.js';
+import { richAnswerHtml, hydrateRefs, wireCodeCopy } from "./assistant-rich.js";
 import {
   outcomeOf,
   fetchParkedEntry,
   describeParked,
   confirmParked as confirmParkedShared,
   normalizeApproveOutcome,
-} from './consent-cards.js';
+} from "./consent-cards.js";
 import {
   conversationsPath,
   conversationPath,
@@ -19,8 +19,12 @@ import {
   vaultAppsPath,
   normalizeModelState,
   modelLabel,
-} from './conversation-client.js';
-import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upload.js';
+} from "./conversation-client.js";
+import {
+  sha256FileStream,
+  stageDirectFile,
+  stageFallbackFile,
+} from "./edge-upload.js";
 // Centraid blueprint kit — the shared UX substrate for template apps.
 //
 // Canonical (and ONLY) copy: packages/blueprints/kit/kit.ts. Apps don't
@@ -41,33 +45,33 @@ import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upl
 // configure those elements, so app code that calls them is unchanged. The
 // live-network controllers (Ask driver, @-mention popover/field) stay as the
 // imperative controllers they always were — see the excluded set in issue #327.
-import { entityKindLabel } from './elements.js';
+import { entityKindLabel } from "./elements.js";
 // Shared chat-client core (issue #420) — the same parser/renderer/consent-flow
 // the React shell uses, so the Ask panel renders ref-chips + typed blocks and
 // gains stop/cancel from one canonical source.
-import { consumeSse } from './turn-stream.js';
+import { consumeSse } from "./turn-stream.js";
 
-export { entityKindLabel } from './elements.js';
+export { entityKindLabel } from "./elements.js";
 
 /** Apply side effects in source order when later work must not start early. */
 function applyInOrder<T>(
   values: Iterable<T>,
-  apply: (value: T, index: number) => void | PromiseLike<void>,
+  apply: (value: T, index: number) => void | PromiseLike<void>
 ): Promise<void> {
   let index = 0;
   return Array.from(values).reduce<Promise<void>>(
     (sequence, value) => sequence.then(() => apply(value, index++)),
-    Promise.resolve(),
+    Promise.resolve()
   );
 }
 
 export type VaultOutcomeStatus =
-  | 'executed'
-  | 'parked'
-  | 'queued'
-  | 'in-flight'
-  | 'failed'
-  | 'denied';
+  | "executed"
+  | "parked"
+  | "queued"
+  | "in-flight"
+  | "failed"
+  | "denied";
 
 export interface VaultOutcome {
   status: VaultOutcomeStatus;
@@ -153,7 +157,7 @@ export interface Reference {
 
 /** Parse an HTML string and return its first element. */
 export function el(html: string): HTMLElement {
-  const t = document.createElement('template');
+  const t = document.createElement("template");
   t.innerHTML = html.trim();
   return t.content.firstElementChild;
 }
@@ -170,12 +174,12 @@ export function h(
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k === 'html') e.innerHTML = v;
-    else if (k === 'style') e.setAttribute('style', v);
-    else if (k.startsWith('on') && typeof v === 'function')
+    if (k === "class") e.className = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k === "style") e.setAttribute("style", v);
+    else if (k.startsWith("on") && typeof v === "function")
       e.addEventListener(k.slice(2).toLowerCase(), v);
-    else e.setAttribute(k, v === true ? '' : String(v));
+    else e.setAttribute(k, v === true ? "" : String(v));
   }
   for (const kid of kids.flat()) {
     if (kid == null || kid === false) continue;
@@ -203,10 +207,10 @@ let toastHost = null;
 
 function ensureToastHost() {
   if (toastHost) return toastHost;
-  toastHost = document.createElement('div');
-  toastHost.className = 'kit-toasts';
-  toastHost.setAttribute('role', 'status');
-  toastHost.setAttribute('aria-live', 'polite');
+  toastHost = document.createElement("div");
+  toastHost.className = "kit-toasts";
+  toastHost.setAttribute("role", "status");
+  toastHost.setAttribute("aria-live", "polite");
   document.body.appendChild(toastHost);
   return toastHost;
 }
@@ -218,11 +222,11 @@ function ensureToastHost() {
  */
 export function toast(
   text: string,
-  { undoLabel, onUndo, duration = 5000 }: ToastOptions = {},
+  { undoLabel, onUndo, duration = 5000 }: ToastOptions = {}
 ): () => void {
-  haptic('success');
+  haptic("success");
   const host = ensureToastHost();
-  const el = document.createElement('kit-toast');
+  const el = document.createElement("kit-toast");
   el.text = text;
   let timer = 0;
   const dismiss = () => {
@@ -231,13 +235,13 @@ export function toast(
   };
   if (undoLabel && onUndo) {
     el.undoLabel = undoLabel;
-    el.addEventListener('kit-undo', () => {
+    el.addEventListener("kit-undo", () => {
       dismiss();
       onUndo();
     });
   }
-  el.addEventListener('kit-dismiss', dismiss);
-  if (duration === 0) el.dataset.sticky = '1';
+  el.addEventListener("kit-dismiss", dismiss);
+  if (duration === 0) el.dataset.sticky = "1";
   host.appendChild(el);
   // A quick-capture burst (bulk add, demo seed) stacks a toast per receipt
   // and can cover half the app for seconds — keep only the newest few.
@@ -247,7 +251,8 @@ export function toast(
   const MAX_TOASTS = 3;
   while (host.children.length > MAX_TOASTS) {
     const victim =
-      [...host.children].find((c) => c.dataset.sticky !== '1') ?? host.firstElementChild;
+      [...host.children].find((c) => c.dataset.sticky !== "1") ??
+      host.firstElementChild;
     if (!victim) break;
     victim.remove();
   }
@@ -256,23 +261,29 @@ export function toast(
 }
 
 /** The shared translation of a typed-command outcome into a human sentence. */
-export function outcomeMessage(outcome: VaultOutcome | null | undefined): string | null {
-  if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
-    return outcome.reason ?? 'Saved on this device — it will sync when the gateway is reachable.';
+export function outcomeMessage(
+  outcome: VaultOutcome | null | undefined
+): string | null {
+  if (outcome?.status === "queued" || outcome?.status === "in-flight") {
+    return (
+      outcome.reason ??
+      "Saved on this device — it will sync when the gateway is reachable."
+    );
   }
-  if (outcome?.status === 'parked') {
-    return 'Waiting for your approval — it lands once you confirm it in vault settings.';
+  if (outcome?.status === "parked") {
+    return "Waiting for your approval — it lands once you confirm it in vault settings.";
   }
-  if (outcome?.status === 'failed') {
-    const detail = outcome.predicate ?? outcome.reason ?? 'a precondition failed';
+  if (outcome?.status === "failed") {
+    const detail =
+      outcome.predicate ?? outcome.reason ?? "a precondition failed";
     // A command-authored friendly message (see ConditionSpec.message) is
     // already a full sentence with its own punctuation — don't double it up
     // ("...on your calendar..") the way the raw `name: column op value`
     // fallback needs its trailing period added.
-    return `The vault refused: ${detail}${/[.!?]$/u.test(detail) ? '' : '.'}`;
+    return `The vault refused: ${detail}${/[.!?]$/u.test(detail) ? "" : "."}`;
   }
-  if (outcome?.status === 'denied') {
-    return `Denied by consent${outcome.reason ? `: ${outcome.reason}` : '.'}`;
+  if (outcome?.status === "denied") {
+    return `Denied by consent${outcome.reason ? `: ${outcome.reason}` : "."}`;
   }
   return null;
 }
@@ -281,8 +292,8 @@ export function outcomeMessage(outcome: VaultOutcome | null | undefined): string
 
 /** Fill a container with shimmer rows while the first read is in flight. */
 export function showSkeleton(container: Element, rows = 3): void {
-  container.innerHTML = '';
-  const el = document.createElement('kit-skeleton');
+  container.innerHTML = "";
+  const el = document.createElement("kit-skeleton");
   el.rows = rows;
   container.appendChild(el);
 }
@@ -293,7 +304,8 @@ export function showSkeleton(container: Element, rows = 3): void {
  */
 export function readFailed(bannerEl: HTMLElement | null | undefined): void {
   if (!bannerEl) return;
-  bannerEl.textContent = 'Couldn’t reach the vault — retrying when you come back.';
+  bannerEl.textContent =
+    "Couldn’t reach the vault — retrying when you come back.";
   bannerEl.hidden = false;
 }
 
@@ -306,9 +318,9 @@ export function readFailed(bannerEl: HTMLElement | null | undefined): void {
  */
 export function subscribeReadUpdates<T = unknown>(
   read: unknown,
-  onUpdate: (value: T) => void,
+  onUpdate: (value: T) => void
 ): ReadSubscription {
-  if (typeof read?.subscribe !== 'function') {
+  if (typeof read?.subscribe !== "function") {
     return { managed: false, unsubscribe: () => {} };
   }
   let settled = false;
@@ -325,7 +337,8 @@ export function subscribeReadUpdates<T = unknown>(
   Promise.resolve(read)
     .then((initial) => {
       settled = true;
-      if (buffered && latest !== initial) queueMicrotask(() => onUpdate(latest));
+      if (buffered && latest !== initial)
+        queueMicrotask(() => onUpdate(latest));
     })
     .catch(() => {
       settled = true;
@@ -341,23 +354,26 @@ export function subscribeReadUpdates<T = unknown>(
  */
 export function armConfirm(
   btn: HTMLElement,
-  { armedLabel = 'Sure?', timeout = 3000 }: { armedLabel?: string; timeout?: number } = {},
+  {
+    armedLabel = "Sure?",
+    timeout = 3000,
+  }: { armedLabel?: string; timeout?: number } = {}
 ): boolean {
-  if (btn.dataset.kitArmed === 'true') {
+  if (btn.dataset.kitArmed === "true") {
     clearTimeout(Number(btn.dataset.kitArmTimer));
     delete btn.dataset.kitArmed;
     btn.textContent = btn.dataset.kitLabel ?? btn.textContent;
     return true;
   }
-  haptic('selection');
-  btn.dataset.kitArmed = 'true';
+  haptic("selection");
+  btn.dataset.kitArmed = "true";
   btn.dataset.kitLabel = btn.textContent;
   btn.textContent = armedLabel;
   btn.dataset.kitArmTimer = String(
     setTimeout(() => {
       delete btn.dataset.kitArmed;
       btn.textContent = btn.dataset.kitLabel ?? btn.textContent;
-    }, timeout),
+    }, timeout)
   );
   return false;
 }
@@ -365,15 +381,18 @@ export function armConfirm(
 // ---------- Formatting ----------
 
 /** Minor units → localized currency string ("€12.34"), tolerant of gaps. */
-export function fmtMoney(minor: number | null | undefined, currency?: string): string {
+export function fmtMoney(
+  minor: number | null | undefined,
+  currency?: string
+): string {
   const value = Number(minor ?? 0) / 100;
   try {
     return new Intl.NumberFormat(undefined, {
-      style: 'currency',
+      style: "currency",
       currency,
     }).format(value);
   } catch {
-    return `${value.toFixed(2)} ${currency ?? ''}`.trim();
+    return `${value.toFixed(2)} ${currency ?? ""}`.trim();
   }
 }
 
@@ -381,7 +400,7 @@ export function fmtMoney(minor: number | null | undefined, currency?: string): s
 export function localDayKey(dateish: string | number | Date): string {
   const d = dateish instanceof Date ? dateish : new Date(dateish);
   if (Number.isNaN(d.getTime())) return String(dateish).slice(0, 10);
-  const pad = (n) => String(n).padStart(2, '0');
+  const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
@@ -393,21 +412,21 @@ export function localMonthKey(dateish: string | number | Date): string {
 /** "5m" / "3h" / "2d" / "Mar 4" — the inbox-style relative timestamp. */
 export function relTime(iso: string): string {
   const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
+  if (Number.isNaN(then)) return "";
   const mins = Math.round((Date.now() - then) / 60000);
-  if (mins < 1) return 'now';
+  if (mins < 1) return "now";
   if (mins < 60) return `${mins}m`;
   if (mins < 60 * 24) return `${Math.round(mins / 60)}h`;
   if (mins < 60 * 24 * 7) return `${Math.round(mins / (60 * 24))}d`;
   return new Date(iso).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
+    month: "short",
+    day: "numeric",
   });
 }
 
 export function debounce<Args extends unknown[]>(
   fn: (...args: Args) => void,
-  ms = 200,
+  ms = 200
 ): (...args: Args) => void {
   let timer = 0;
   return (...args) => {
@@ -437,18 +456,19 @@ export function debounce<Args extends unknown[]>(
 export function onDataChange(
   tables: string[] | null | undefined,
   cb: (detail: CentraidChangeDetail) => void,
-  { debounceMs = 200 }: { debounceMs?: number } = {},
+  { debounceMs = 200 }: { debounceMs?: number } = {}
 ): () => void {
   const want = new Set(tables);
   let timer = 0;
   const pending = new Map();
   const unsub = window.centraid?.onChange?.((detail) => {
     const named = detail && Array.isArray(detail.tables) ? detail.tables : null;
-    if (named && named.length && want.size && !named.some((t) => want.has(t))) return;
+    if (named && named.length && want.size && !named.some((t) => want.has(t)))
+      return;
     const key =
-      detail?.source === 'overlay' && typeof detail?.intentId === 'string'
-        ? `${detail.intentId}:${detail.intentState ?? ''}`
-        : 'latest';
+      detail?.source === "overlay" && typeof detail?.intentId === "string"
+        ? `${detail.intentId}:${detail.intentState ?? ""}`
+        : "latest";
     pending.set(key, detail);
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -475,19 +495,19 @@ export function onDataChange(
  */
 export function onFocusRefresh(
   cb: () => void,
-  { minIntervalMs = 30000 }: { minIntervalMs?: number } = {},
+  { minIntervalMs = 30000 }: { minIntervalMs?: number } = {}
 ): () => void {
   let last = 0;
   const onFocus = () => {
-    const banner = document.querySelector('#consentBanner');
+    const banner = document.querySelector("#consentBanner");
     const recovering = banner && !banner.hidden;
     const now = Date.now();
     if (!recovering && now - last < minIntervalMs) return;
     last = now;
     cb();
   };
-  window.addEventListener('focus', onFocus);
-  return () => window.removeEventListener('focus', onFocus);
+  window.addEventListener("focus", onFocus);
+  return () => window.removeEventListener("focus", onFocus);
 }
 
 /**
@@ -502,26 +522,26 @@ export function observeWidth(
   el: Element | null,
   breakpoint: number,
   onNarrow: (isNarrow: boolean) => void,
-  { pollMs = 250 }: { pollMs?: number } = {},
+  { pollMs = 250 }: { pollMs?: number } = {}
 ): () => void {
   const measure = () => {
     if (!el) return;
-    const forced = document.documentElement.dataset.appWidth === 'narrow';
+    const forced = document.documentElement.dataset.appWidth === "narrow";
     onNarrow(forced || el.clientWidth < breakpoint);
   };
   measure();
-  if (typeof ResizeObserver === 'function' && el) {
+  if (typeof ResizeObserver === "function" && el) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     // The forced-narrow knob flips an attribute, not a size — catch it too.
-    window.addEventListener('resize', measure);
+    window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
-      window.removeEventListener('resize', measure);
+      window.removeEventListener("resize", measure);
     };
   }
   const id = setInterval(() => {
-    if (document.visibilityState === 'hidden') return;
+    if (document.visibilityState === "hidden") return;
     measure();
   }, pollMs);
   return () => clearInterval(id);
@@ -536,10 +556,10 @@ export function observeWidth(
  */
 export function letterAvatar(
   name: string,
-  { size = '2.25rem', color, initials, src, shape }: AvatarOptions = {},
+  { size = "2.25rem", color, initials, src, shape }: AvatarOptions = {}
 ): HTMLElement {
-  const el = document.createElement('kit-avatar');
-  el.name = String(name ?? '?');
+  const el = document.createElement("kit-avatar");
+  el.name = String(name ?? "?");
   el.size = size;
   if (color) el.color = color;
   if (initials) el.initials = initials;
@@ -562,14 +582,14 @@ export function lineChart(
   {
     width = 640,
     height = 160,
-    label = 'Trend',
+    label = "Trend",
   }: {
     width?: number;
     height?: number;
     label?: string;
-  } = {},
+  } = {}
 ): HTMLElement {
-  const el = document.createElement('kit-line-chart');
+  const el = document.createElement("kit-line-chart");
   el.points = points ?? [];
   el.width = width;
   el.height = height;
@@ -578,8 +598,11 @@ export function lineChart(
 }
 
 /** Horizontal proportion bar element (e.g. cost share behind a row's amount). */
-export function barSpan(ratio: number, { tone }: { tone?: string } = {}): HTMLElement {
-  const el = document.createElement('kit-meter');
+export function barSpan(
+  ratio: number,
+  { tone }: { tone?: string } = {}
+): HTMLElement {
+  const el = document.createElement("kit-meter");
   el.ratio = ratio;
   if (tone) el.tone = tone;
   return el;
@@ -591,14 +614,14 @@ export function barChart(
   {
     width = 640,
     height = 160,
-    label = 'Totals',
+    label = "Totals",
   }: {
     width?: number;
     height?: number;
     label?: string;
-  } = {},
+  } = {}
 ): HTMLElement {
-  const el = document.createElement('kit-bar-chart');
+  const el = document.createElement("kit-bar-chart");
   el.items = items ?? [];
   el.width = width;
   el.height = height;
@@ -610,17 +633,17 @@ export function barChart(
 // Small files travel inline as data: URIs through the command JSON; larger
 // ones stream to the vault's blob staging route and attach by sha (issue #296).
 
-export const BLOB_ROUTE = '/centraid/_vault/blobs';
+export const BLOB_ROUTE = "/centraid/_vault/blobs";
 export const INLINE_ATTACH_BYTES = 256 * 1024;
 
 /** Read a File into a data: URI (the inline path for small attachments). */
 export function fileToDataUri(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.addEventListener('load', () => resolve(String(r.result)), {
+    r.addEventListener("load", () => resolve(String(r.result)), {
       once: true,
     });
-    r.addEventListener('error', () => reject(r.error), { once: true });
+    r.addEventListener("error", () => reject(r.error), { once: true });
     r.readAsDataURL(file);
   });
 }
@@ -631,7 +654,7 @@ export function fileToDataUri(file: File): Promise<string> {
  * streams from the File on the following fetch.
  */
 export async function sha256File(file: File): Promise<string | null> {
-  if (typeof file?.arrayBuffer !== 'function') return null;
+  if (typeof file?.arrayBuffer !== "function") return null;
   return sha256FileStream(file);
 }
 
@@ -640,7 +663,7 @@ export async function stageDerivative(
   parentSha: string,
   variant: string,
   body: BodyInit,
-  mediaType = 'application/octet-stream',
+  mediaType = "application/octet-stream"
 ): Promise<StagedBlob> {
   const q = new URLSearchParams({
     variant,
@@ -648,20 +671,23 @@ export async function stageDerivative(
     media_type: mediaType,
   });
   const res = await fetch(`${BLOB_ROUTE}?${q}`, {
-    method: 'POST',
-    headers: { 'content-type': mediaType },
+    method: "POST",
+    headers: { "content-type": mediaType },
     body,
   });
-  if (!res.ok) throw new Error(`${variant} contribution refused (${res.status})`);
+  if (!res.ok)
+    throw new Error(`${variant} contribution refused (${res.status})`);
   return res.json();
 }
 
 /** Strict policy acknowledges success only after provider custody. */
-export function isPendingOffsite(staged: StagedBlob | null | undefined): boolean {
+export function isPendingOffsite(
+  staged: StagedBlob | null | undefined
+): boolean {
   return (
-    staged?.casAck === 'replicated' &&
-    staged?.custody !== 'replicated' &&
-    staged?.custody !== 'remote-only'
+    staged?.casAck === "replicated" &&
+    staged?.custody !== "replicated" &&
+    staged?.custody !== "remote-only"
   );
 }
 
@@ -684,13 +710,13 @@ export function isPendingOffsite(staged: StagedBlob | null | undefined): boolean
  */
 export async function stageFileBytes(
   file: File,
-  extra = '',
-  { hash = true, scope }: { hash?: boolean; scope?: string } = {},
+  extra = "",
+  { hash = true, scope }: { hash?: boolean; scope?: string } = {}
 ): Promise<StagedBlob> {
   const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
-  const scopeHeader = scope ? { 'x-centraid-vault': scope } : {};
+  if (file.name) q.set("filename", file.name);
+  if (file.type) q.set("media_type", file.type);
+  const scopeHeader = scope ? { "x-centraid-vault": scope } : {};
   let declaredSha = null;
   if (hash) {
     try {
@@ -700,23 +726,28 @@ export async function stageFileBytes(
     }
   }
   if (declaredSha) {
-    q.set('sha256', declaredSha);
+    q.set("sha256", declaredSha);
     try {
       const preflight = new URLSearchParams({ byte_size: String(file.size) });
-      if (file.type) preflight.set('media_type', file.type);
-      if (file.name) preflight.set('filename', file.name);
-      const have = await fetch(`${BLOB_ROUTE}/_sha/${declaredSha}?${preflight}`, {
-        method: 'HEAD',
-        headers: scopeHeader,
-      });
+      if (file.type) preflight.set("media_type", file.type);
+      if (file.name) preflight.set("filename", file.name);
+      const have = await fetch(
+        `${BLOB_ROUTE}/_sha/${declaredSha}?${preflight}`,
+        {
+          method: "HEAD",
+          headers: scopeHeader,
+        }
+      );
       if (have.ok) {
         return {
           sha256: declaredSha,
-          mediaType: have.headers.get('x-centraid-media-type') ?? file.type ?? null,
-          byteSize: Number(have.headers.get('content-length')) || file.size || 0,
-          existingContentId: have.headers.get('x-centraid-content-id'),
-          casAck: have.headers.get('x-centraid-cas-ack'),
-          custody: have.headers.get('x-centraid-custody'),
+          mediaType:
+            have.headers.get("x-centraid-media-type") ?? file.type ?? null,
+          byteSize:
+            Number(have.headers.get("content-length")) || file.size || 0,
+          existingContentId: have.headers.get("x-centraid-content-id"),
+          casAck: have.headers.get("x-centraid-cas-ack"),
+          custody: have.headers.get("x-centraid-custody"),
           alreadyPresent: true,
         };
       }
@@ -732,10 +763,10 @@ export async function stageFileBytes(
     // Session/direct routes are optional protocol extensions. The permanent
     // authoritative POST remains the compatibility and backpressure fallback.
     const legacy = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'content-type': file.type || 'application/octet-stream',
-        'x-content-sha256': declaredSha,
+        "content-type": file.type || "application/octet-stream",
+        "x-content-sha256": declaredSha,
         ...scopeHeader,
       },
       body: file,
@@ -744,10 +775,10 @@ export async function stageFileBytes(
     return legacy.json();
   }
   const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'content-type': file.type || 'application/octet-stream',
-      ...(declaredSha ? { 'x-content-sha256': declaredSha } : {}),
+      "content-type": file.type || "application/octet-stream",
+      ...(declaredSha ? { "x-content-sha256": declaredSha } : {}),
       ...scopeHeader,
     },
     body: file,
@@ -757,7 +788,7 @@ export async function stageFileBytes(
 }
 
 /** "812 B" / "24 KB" / "1.3 MB" — `empty` is returned for 0/absent sizes. */
-export function fmtBytes(n: number | null | undefined, empty = ''): string {
+export function fmtBytes(n: number | null | undefined, empty = ""): string {
   if (!n || !Number.isFinite(Number(n))) return empty;
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
@@ -775,8 +806,10 @@ export function fmtBytes(n: number | null | undefined, empty = ''): string {
 export function renderAttachments(
   stripEl: HTMLElement,
   list: Attachment[] | null | undefined,
-  onRemove: ((attachmentId: string) => Promise<VaultOutcome | undefined>) | null,
-  { onZoom }: { onZoom?: (attachment: Attachment) => void } = {},
+  onRemove:
+    | ((attachmentId: string) => Promise<VaultOutcome | undefined>)
+    | null,
+  { onZoom }: { onZoom?: (attachment: Attachment) => void } = {}
 ): void {
   // An imperative rebuild (any refresh — e.g. the window-focus one) would
   // otherwise wipe an armed remove button mid-confirm: the owner's second
@@ -784,49 +817,50 @@ export function renderAttachments(
   // the armed state across the rebuild (the old node's disarm timer fires
   // on the detached button — a no-op).
   const armed = new Set(
-    [...stripEl.querySelectorAll('.kit-attach-remove[data-kit-armed="true"]')].map(
-      (b) => b.dataset.kitAttachmentId,
-    ),
+    [
+      ...stripEl.querySelectorAll('.kit-attach-remove[data-kit-armed="true"]'),
+    ].map((b) => b.dataset.kitAttachmentId)
   );
-  stripEl.innerHTML = '';
+  stripEl.innerHTML = "";
   for (const a of list ?? []) {
-    const tile = document.createElement('div');
-    tile.className = 'kit-attach-tile';
-    if (String(a.media_type).startsWith('image/')) {
-      const img = document.createElement('img');
+    const tile = document.createElement("div");
+    tile.className = "kit-attach-tile";
+    if (String(a.media_type).startsWith("image/")) {
+      const img = document.createElement("img");
       img.src = a.content_uri;
-      img.alt = a.title ?? 'attachment';
+      img.alt = a.title ?? "attachment";
       if (onZoom) {
-        img.className = 'kit-attach-zoom';
-        img.addEventListener('click', () => onZoom(a));
+        img.className = "kit-attach-zoom";
+        img.addEventListener("click", () => onZoom(a));
       }
       tile.appendChild(img);
     } else {
-      const link = document.createElement('a');
-      link.className = 'kit-attach-file';
+      const link = document.createElement("a");
+      link.className = "kit-attach-file";
       link.href = a.content_uri;
-      link.download = a.title ?? 'file';
-      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
+      link.download = a.title ?? "file";
+      link.textContent = (a.title ?? a.media_type ?? "file").slice(0, 24);
       tile.appendChild(link);
     }
-    const meta = document.createElement('span');
-    meta.className = 'kit-attach-meta';
+    const meta = document.createElement("span");
+    meta.className = "kit-attach-meta";
     meta.textContent = fmtBytes(a.byte_size);
     tile.appendChild(meta);
     if (onRemove) {
-      const rm = document.createElement('button');
-      rm.type = 'button';
-      rm.className = 'kit-attach-remove';
-      rm.textContent = '×';
-      rm.title = 'Remove';
-      rm.setAttribute('aria-label', 'Remove attachment');
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "kit-attach-remove";
+      rm.textContent = "×";
+      rm.title = "Remove";
+      rm.setAttribute("aria-label", "Remove attachment");
       rm.dataset.kitAttachmentId = String(a.attachment_id);
-      rm.addEventListener('click', async () => {
-        if (!armConfirm(rm, { armedLabel: 'Sure?' })) return;
+      rm.addEventListener("click", async () => {
+        if (!armConfirm(rm, { armedLabel: "Sure?" })) return;
         const outcome = await onRemove(a.attachment_id);
-        if (outcome?.status === 'executed') tile.remove();
+        if (outcome?.status === "executed") tile.remove();
       });
-      if (armed.has(String(a.attachment_id))) armConfirm(rm, { armedLabel: 'Sure?' });
+      if (armed.has(String(a.attachment_id)))
+        armConfirm(rm, { armedLabel: "Sure?" });
       tile.appendChild(rm);
     }
     stripEl.appendChild(tile);
@@ -849,13 +883,16 @@ export function wireAttachInput(
     notice,
     refresh,
   }: {
-    act: (action: string, input: Record<string, unknown>) => Promise<VaultOutcome | undefined>;
+    act: (
+      action: string,
+      input: Record<string, unknown>
+    ) => Promise<VaultOutcome | undefined>;
     narrate: (outcome: VaultOutcome | undefined) => boolean;
     notice?: (text: string) => void;
     refresh?: () => void | Promise<void>;
-  },
+  }
 ): void {
-  inputEl.addEventListener('change', async () => {
+  inputEl.addEventListener("change", async () => {
     const subjectId = getSubjectId();
     if (!subjectId) return;
     let narrating = true;
@@ -881,16 +918,16 @@ export function wireAttachInput(
           };
         }
       } catch {
-        notice?.('Could not read that file.');
+        notice?.("Could not read that file.");
         return;
       }
-      const outcome = await act('attach', input);
-      if (outcome?.status === 'executed' && isPendingOffsite(custodyReceipt)) {
-        notice?.('Attached locally · waiting for offsite custody.');
+      const outcome = await act("attach", input);
+      if (outcome?.status === "executed" && isPendingOffsite(custodyReceipt)) {
+        notice?.("Attached locally · waiting for offsite custody.");
       }
       narrating = narrate(outcome);
     });
-    inputEl.value = '';
+    inputEl.value = "";
     await refresh?.();
   });
 }
@@ -931,23 +968,23 @@ export function openPopover(
   {
     focus = false,
     className,
-    role = 'menu',
+    role = "menu",
     onClose,
   }: {
     focus?: boolean;
     className?: string;
     role?: string;
     onClose?: () => void;
-  } = {},
+  } = {}
 ): void {
   closePopover();
-  const box = h('div', {
-    class: className ? `kit-popover ${className}` : 'kit-popover',
+  const box = h("div", {
+    class: className ? `kit-popover ${className}` : "kit-popover",
     role,
   });
   build(box);
-  box.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
       e.stopPropagation();
       closePopover();
     }
@@ -956,7 +993,10 @@ export function openPopover(
   const rect = anchor.getBoundingClientRect();
   const left = Math.max(
     8,
-    Math.min(rect.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8),
+    Math.min(
+      rect.right - box.offsetWidth,
+      window.innerWidth - box.offsetWidth - 8
+    )
   );
   let top = rect.bottom + 4;
   if (top + box.offsetHeight > window.innerHeight - 8)
@@ -970,21 +1010,22 @@ export function openPopover(
     // Scrolling inside the popover — or inside the kit's own body-level
     // @-mention list — must not close the popover hosting it.
     if (box.contains(e.target)) return;
-    if (e.target instanceof Element && e.target.closest?.('.kit-mention-pop')) return;
+    if (e.target instanceof Element && e.target.closest?.(".kit-mention-pop"))
+      return;
     closePopover();
   };
-  const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
-  window.addEventListener('resize', closePopover);
-  window.addEventListener('scroll', onScroll, true);
+  const timer = setTimeout(() => document.addEventListener("click", onDoc), 0);
+  window.addEventListener("resize", closePopover);
+  window.addEventListener("scroll", onScroll, true);
   popoverEl = box;
   popoverCleanup = () => {
     clearTimeout(timer);
-    document.removeEventListener('click', onDoc);
-    window.removeEventListener('resize', closePopover);
-    window.removeEventListener('scroll', onScroll, true);
+    document.removeEventListener("click", onDoc);
+    window.removeEventListener("resize", closePopover);
+    window.removeEventListener("scroll", onScroll, true);
     onClose?.();
   };
-  if (focus) box.querySelector('input, select, textarea, button')?.focus();
+  if (focus) box.querySelector("input, select, textarea, button")?.focus();
 }
 
 /** One menu row for `openPopover`: label + optional icon, dot, danger tone. */
@@ -1001,18 +1042,20 @@ export function popItem(
     disabled?: boolean;
     iconHtml?: string | null;
     dotColor?: string | null;
-  } = {},
+  } = {}
 ): HTMLButtonElement {
-  const btn = h('button', {
-    type: 'button',
-    class: `kit-popover-item${danger ? ' danger' : ''}`,
-    role: 'menuitem',
+  const btn = h("button", {
+    type: "button",
+    class: `kit-popover-item${danger ? " danger" : ""}`,
+    role: "menuitem",
     disabled: disabled || undefined,
     onclick: onClick,
   });
   if (iconHtml) btn.appendChild(el(iconHtml));
   if (dotColor)
-    btn.appendChild(h('span', { class: 'kit-dotmini', style: `background:${dotColor};` }));
+    btn.appendChild(
+      h("span", { class: "kit-dotmini", style: `background:${dotColor};` })
+    );
   btn.appendChild(document.createTextNode(label));
   return btn;
 }
@@ -1030,15 +1073,21 @@ export function emptyState(
     title,
     sub,
     action,
-  }: { icon?: string | Node; title?: string; sub?: string; action?: Node } = {},
+  }: { icon?: string | Node; title?: string; sub?: string; action?: Node } = {}
 ): void {
-  const subEl = h('div', { class: 'kit-empty-sub' }, sub ?? '');
+  const subEl = h("div", { class: "kit-empty-sub" }, sub ?? "");
   if (action) subEl.appendChild(action);
   const kids = [];
   if (icon) {
-    kids.push(h('div', { class: 'kit-empty-icon' }, typeof icon === 'string' ? el(icon) : icon));
+    kids.push(
+      h(
+        "div",
+        { class: "kit-empty-icon" },
+        typeof icon === "string" ? el(icon) : icon
+      )
+    );
   }
-  kids.push(h('div', { class: 'kit-empty-title' }, title ?? ''), subEl);
+  kids.push(h("div", { class: "kit-empty-title" }, title ?? ""), subEl);
   container.replaceChildren(...kids);
   container.hidden = false;
 }
@@ -1046,12 +1095,15 @@ export function emptyState(
 // ---------- Search-hit snippets ----------
 
 /** Render a `⟦hit⟧` search snippet into `target`, marking the hits. */
-export function snippetInto(target: HTMLElement, snippet: string | null | undefined): void {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
+export function snippetInto(
+  target: HTMLElement,
+  snippet: string | null | undefined
+): void {
+  const parts = String(snippet ?? "").split(/[⟦⟧]/u);
   for (let i = 0; i < parts.length; i += 1) {
     if (!parts[i]) continue;
     if (i % 2 === 1) {
-      const mark = document.createElement('mark');
+      const mark = document.createElement("mark");
       mark.textContent = parts[i];
       target.appendChild(mark);
     } else {
@@ -1073,7 +1125,7 @@ export async function runBulk(
   {
     progress,
     done,
-    suffix = '',
+    suffix = "",
     notice,
     friendly,
     after,
@@ -1084,7 +1136,7 @@ export async function runBulk(
     notice: (text: string) => void;
     friendly?: (outcome: VaultOutcome | undefined) => string | null;
     after?: () => void | Promise<void>;
-  },
+  }
 ): Promise<void> {
   const n = ids.length;
   let ok = 0;
@@ -1093,16 +1145,18 @@ export async function runBulk(
   await applyInOrder(Array.from({ length: n }), async (_, i) => {
     notice(`${progress} ${i + 1} of ${n}…`);
     const outcome = await run(ids[i]);
-    if (outcome?.status === 'executed') ok += 1;
-    else if (outcome?.status === 'parked') parked += 1;
-    else failures.push(friendly?.(outcome) ?? 'The write failed.');
+    if (outcome?.status === "executed") ok += 1;
+    else if (outcome?.status === "parked") parked += 1;
+    else failures.push(friendly?.(outcome) ?? "The write failed.");
   });
   notice(
-    failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
+    failures.length > 0
+      ? `${failures.length} of ${n} didn’t go through — ${failures[0]}`
+      : ""
   );
   const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
   if (parked > 0) parts.push(`${parked} waiting for approval.`);
-  toast(parts.join(' '));
+  toast(parts.join(" "));
   await after?.();
 }
 
@@ -1116,9 +1170,11 @@ const MOON_SVG =
 /** Effective theme right now: the explicit data-theme, else the OS scheme. */
 export function isDarkNow(): boolean {
   const t = document.documentElement.dataset.theme;
-  if (t === 'dark') return true;
-  if (t === 'light') return false;
-  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+  if (t === "dark") return true;
+  if (t === "light") return false;
+  return (
+    window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches
+  );
 }
 
 /**
@@ -1128,16 +1184,17 @@ export function isDarkNow(): boolean {
  */
 export function wireThemeToggle(
   btn: HTMLElement,
-  { onChange }: { onChange?: (dark: boolean) => void } = {},
+  { onChange }: { onChange?: (dark: boolean) => void } = {}
 ): () => void {
   const setIcon = () => {
     btn.innerHTML = isDarkNow() ? SUN_SVG : MOON_SVG;
   };
-  btn.addEventListener('click', () => {
+  btn.addEventListener("click", () => {
     const dark = !isDarkNow();
     const root = document.documentElement;
-    root.dataset.theme = dark ? 'dark' : 'light';
-    if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
+    root.dataset.theme = dark ? "dark" : "light";
+    if (dark && !root.style.getPropertyValue("--bg-l"))
+      root.style.setProperty("--bg-l", "10%");
     setIcon();
     onChange?.(dark);
   });
@@ -1172,13 +1229,13 @@ export function wireThemeToggle(
   const cfg = window.KIT_ASK || {};
 
   function el(html) {
-    const t = document.createElement('template');
+    const t = document.createElement("template");
     t.innerHTML = html.trim();
     return t.content.firstChild;
   }
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>]/gu, (c) => {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    return String(s == null ? "" : s).replace(/[&<>]/gu, (c) => {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
     });
   }
 
@@ -1193,37 +1250,39 @@ export function wireThemeToggle(
   function introText() {
     return (
       cfg.intro ||
-      'Ask me to add, change, find or remove anything here. I’ll show the change for your approval before it touches the vault.'
+      "Ask me to add, change, find or remove anything here. I’ll show the change for your approval before it touches the vault."
     );
   }
 
   function panelHTML() {
-    const scope = esc(cfg.scope || 'this app');
+    const scope = esc(cfg.scope || "this app");
     const sugg = (cfg.suggest || [])
       .map((s) => {
-        return '<button type="button" class="kit-ask-chip">' + esc(s) + '</button>';
+        return (
+          '<button type="button" class="kit-ask-chip">' + esc(s) + "</button>"
+        );
       })
-      .join('');
+      .join("");
     return (
       '<div class="kit-ask-ov" id="kitAskOverlay" hidden><div class="kit-ask-panel" role="dialog" aria-modal="true" aria-label="Ask your vault">' +
       '<div class="kit-ask-head"><h2>Ask</h2><span class="kit-ask-note">a projection of your vault</span>' +
       '<button type="button" class="kit-ask-history-btn" aria-label="Conversation history" aria-pressed="false">' +
       HISTORY_ICON +
-      '</button>' +
+      "</button>" +
       '<button type="button" class="kit-ask-x" aria-label="Close">✕</button></div>' +
       '<div class="kit-ask-context"><span class="kit-ask-scope">Scope · ' +
       scope +
       '</span><span class="kit-ask-scope" data-kit-grant>read + write · consent-gated</span></div>' +
       '<div class="kit-ask-log" role="log" aria-live="polite"><div class="kit-msg ai">' +
       esc(introText()) +
-      '</div></div>' +
+      "</div></div>" +
       '<div class="kit-ask-history" hidden>' +
       '<div class="kit-ask-history-head"><button type="button" class="kit-ask-history-new">+ New conversation</button></div>' +
       '<div class="kit-ask-history-list" role="list"></div>' +
-      '</div>' +
+      "</div>" +
       '<div class="kit-ask-suggest">' +
       sugg +
-      '</div>' +
+      "</div>" +
       // Composer — one rounded frame (`.kit-ask-compose`) holding staged
       // attachment chips, the input, and a slim bottom controls strip
       // (attach left, model picker + send right) — modeled on Claude
@@ -1236,24 +1295,24 @@ export function wireThemeToggle(
       '<input type="file" class="kit-ask-file" multiple hidden aria-hidden="true" tabindex="-1">' +
       '<div class="kit-ask-pending" hidden></div>' +
       '<input class="kit-ask-input" placeholder="' +
-      esc(cfg.placeholder || 'Ask…') +
+      esc(cfg.placeholder || "Ask…") +
       '" aria-label="Ask">' +
       '<div class="kit-ask-controls">' +
       '<button type="button" class="kit-ask-attach" aria-label="Attach files">' +
       CLIP_ICON +
-      '</button>' +
+      "</button>" +
       '<div class="kit-ask-controls-spacer"></div>' +
       '<div class="kit-ask-model">' +
       '<button type="button" class="kit-ask-model-btn" aria-label="Model" aria-haspopup="menu" aria-expanded="false">' +
       '<span class="kit-ask-model-label">Default</span>' +
       CHEVRON_ICON +
-      '</button>' +
+      "</button>" +
       '<div class="kit-ask-model-menu" hidden role="menu" aria-label="Choose the ask model"></div>' +
-      '</div>' +
+      "</div>" +
       '<button class="kit-ask-send" type="submit" aria-label="Send">→</button>' +
-      '</div>' +
-      '</form>' +
-      '</div></div>'
+      "</div>" +
+      "</form>" +
+      "</div></div>"
     );
   }
 
@@ -1265,7 +1324,7 @@ export function wireThemeToggle(
    * same thread (mirrors the id-provisioning contract in `makeVaultDriver`).
    */
   function makeConversationSession() {
-    const key = 'kitask:conversation:' + (appId() || location.pathname);
+    const key = "kitask:conversation:" + (appId() || location.pathname);
     let cached = null;
     return {
       get() {
@@ -1295,36 +1354,37 @@ export function wireThemeToggle(
   function init() {
     if (window.kitAsk) return; // once
     const mount =
-      document.querySelector('[data-ask-mount]') ||
-      document.querySelector('.head-tools') ||
-      document.querySelector('.head') ||
+      document.querySelector("[data-ask-mount]") ||
+      document.querySelector(".head-tools") ||
+      document.querySelector(".head") ||
       document.body;
     if (
       mount.classList &&
-      (mount.classList.contains('head') || mount.classList.contains('head-tools'))
+      (mount.classList.contains("head") ||
+        mount.classList.contains("head-tools"))
     ) {
-      mount.style.flexWrap = 'wrap';
+      mount.style.flexWrap = "wrap";
     }
     const btn = el(
-      '<button type="button" class="kit-ask-btn" id="kitAskBtn"><span class="kit-spark">✦</span> Ask</button>',
+      '<button type="button" class="kit-ask-btn" id="kitAskBtn"><span class="kit-spark">✦</span> Ask</button>'
     );
     mount.appendChild(btn);
 
     const ov = el(panelHTML());
     document.body.appendChild(ov);
-    const panel = ov.querySelector('.kit-ask-panel');
-    const log = ov.querySelector('.kit-ask-log');
-    const historyBtn = ov.querySelector('.kit-ask-history-btn');
-    const historyView = ov.querySelector('.kit-ask-history');
-    const historyList = ov.querySelector('.kit-ask-history-list');
-    const historyNewBtn = ov.querySelector('.kit-ask-history-new');
-    const suggestRow = ov.querySelector('.kit-ask-suggest');
-    const pendingStrip = ov.querySelector('.kit-ask-pending');
-    const form = ov.querySelector('.kit-ask-compose');
-    const input = form.querySelector('.kit-ask-input');
-    const fileInput = form.querySelector('.kit-ask-file');
-    const attachBtn = form.querySelector('.kit-ask-attach');
-    const sendBtn = form.querySelector('.kit-ask-send');
+    const panel = ov.querySelector(".kit-ask-panel");
+    const log = ov.querySelector(".kit-ask-log");
+    const historyBtn = ov.querySelector(".kit-ask-history-btn");
+    const historyView = ov.querySelector(".kit-ask-history");
+    const historyList = ov.querySelector(".kit-ask-history-list");
+    const historyNewBtn = ov.querySelector(".kit-ask-history-new");
+    const suggestRow = ov.querySelector(".kit-ask-suggest");
+    const pendingStrip = ov.querySelector(".kit-ask-pending");
+    const form = ov.querySelector(".kit-ask-compose");
+    const input = form.querySelector(".kit-ask-input");
+    const fileInput = form.querySelector(".kit-ask-file");
+    const attachBtn = form.querySelector(".kit-ask-attach");
+    const sendBtn = form.querySelector(".kit-ask-send");
     const session = makeConversationSession();
     let lastFocus = null;
     let autoLoadAttempted = false;
@@ -1342,24 +1402,24 @@ export function wireThemeToggle(
     // The AbortController of the in-flight turn, so the Send button can double
     // as Stop while busy (issue #420 — the kit's Ask panel gains cancel).
     let activeAbort = null;
-    const SEND_ARROW = '→';
-    const SEND_STOP = '■';
+    const SEND_ARROW = "→";
+    const SEND_STOP = "■";
     function setBusy(b) {
       busy = !!b;
-      form.dataset.busy = busy ? 'true' : 'false';
+      form.dataset.busy = busy ? "true" : "false";
       // While busy the button stays enabled and becomes Stop; clicking it
       // aborts the turn (see the sendBtn click handler below) instead of
       // double-sending. Idle, it's the Send arrow that submits the form.
       sendBtn.disabled = false;
       sendBtn.innerHTML = busy ? SEND_STOP : SEND_ARROW;
-      sendBtn.setAttribute('aria-label', busy ? 'Stop' : 'Send');
-      if (busy) sendBtn.dataset.stop = 'true';
+      sendBtn.setAttribute("aria-label", busy ? "Stop" : "Send");
+      if (busy) sendBtn.dataset.stop = "true";
       else delete sendBtn.dataset.stop;
       if (modelPicker) modelPicker.setDisabled(busy);
     }
     // Intercept clicks while busy: cancel the turn rather than submit. Runs
     // before the form's submit handler; `preventDefault` stops the submit.
-    sendBtn.addEventListener('click', (e) => {
+    sendBtn.addEventListener("click", (e) => {
       if (busy) {
         e.preventDefault();
         if (activeAbort) activeAbort.abort();
@@ -1372,7 +1432,7 @@ export function wireThemeToggle(
       // Re-check on every open, not just the first — a grant can change
       // (revoke, re-grant, scope widening) between opens within the same
       // iframe session, and the chip should never show stale consent state.
-      refreshGrantChip(ov.querySelector('[data-kit-grant]'));
+      refreshGrantChip(ov.querySelector("[data-kit-grant]"));
       maybeAutoLoadStoredConversation();
       if (modelPicker) modelPicker.load();
       setTimeout(() => {
@@ -1383,16 +1443,16 @@ export function wireThemeToggle(
       ov.hidden = true;
       if (lastFocus && lastFocus.focus) lastFocus.focus();
     }
-    btn.addEventListener('click', open);
-    ov.querySelector('.kit-ask-x').addEventListener('click', close);
-    ov.addEventListener('click', (e) => {
+    btn.addEventListener("click", open);
+    ov.querySelector(".kit-ask-x").addEventListener("click", close);
+    ov.addEventListener("click", (e) => {
       if (e.target === ov) close();
     });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !ov.hidden) close();
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !ov.hidden) close();
     });
-    ov.querySelectorAll('.kit-ask-chip').forEach((c) => {
-      c.addEventListener('click', () => {
+    ov.querySelectorAll(".kit-ask-chip").forEach((c) => {
+      c.addEventListener("click", () => {
         input.value = c.textContent;
         input.focus();
       });
@@ -1408,15 +1468,15 @@ export function wireThemeToggle(
     // `open()` re-fetches, since the pref can change elsewhere (desktop
     // Settings → Agents) between opens.
     function initAskModelPicker() {
-      const wrap = form.querySelector('.kit-ask-model');
-      const modelBtn = form.querySelector('.kit-ask-model-btn');
-      const labelEl = form.querySelector('.kit-ask-model-label');
-      const menu = form.querySelector('.kit-ask-model-menu');
+      const wrap = form.querySelector(".kit-ask-model");
+      const modelBtn = form.querySelector(".kit-ask-model-btn");
+      const labelEl = form.querySelector(".kit-ask-model-label");
+      const menu = form.querySelector(".kit-ask-model-menu");
       if (!wrap || !modelBtn || !menu) return null;
       const state = {
         loaded: false,
         current: null,
-        defaultModel: '',
+        defaultModel: "",
         catalog: [],
       };
 
@@ -1428,14 +1488,14 @@ export function wireThemeToggle(
         if (!menu.contains(e.target) && e.target !== modelBtn) closeMenu();
       }
       function onDocKey(e) {
-        if (e.key === 'Escape') closeMenu();
+        if (e.key === "Escape") closeMenu();
       }
       function closeMenu() {
         if (menu.hidden) return;
         menu.hidden = true;
-        modelBtn.setAttribute('aria-expanded', 'false');
-        document.removeEventListener('mousedown', onDocPointer, true);
-        document.removeEventListener('keydown', onDocKey, true);
+        modelBtn.setAttribute("aria-expanded", "false");
+        document.removeEventListener("mousedown", onDocPointer, true);
+        document.removeEventListener("keydown", onDocKey, true);
       }
 
       function choose(modelId) {
@@ -1443,13 +1503,14 @@ export function wireThemeToggle(
         const prev = state.current;
         state.current = modelId; // optimistic
         renderLabel();
-        fetch(appBase() + '_turn/model', {
-          method: 'PUT',
-          headers: { 'content-type': 'application/json' },
+        fetch(appBase() + "_turn/model", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ model: modelId }),
         })
           .then((r) => {
-            if (!r.ok) throw new Error('model update failed (' + r.status + ')');
+            if (!r.ok)
+              throw new Error("model update failed (" + r.status + ")");
             return r.json();
           })
           .then((body) => {
@@ -1463,33 +1524,34 @@ export function wireThemeToggle(
       }
 
       function renderMenu() {
-        menu.innerHTML = '';
+        menu.innerHTML = "";
         const useDefault = el(
           '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
-            (state.current ? '' : ' is-active') +
+            (state.current ? "" : " is-active") +
             '" aria-checked="' +
             !state.current +
             '"><span>Use default</span><span class="kit-ask-model-hint">' +
-            esc(state.defaultModel || 'gateway default') +
-            '</span></button>',
+            esc(state.defaultModel || "gateway default") +
+            "</span></button>"
         );
-        useDefault.addEventListener('click', () => {
+        useDefault.addEventListener("click", () => {
           choose(null);
         });
         menu.appendChild(useDefault);
-        if (state.catalog.length) menu.appendChild(el('<div class="kit-ask-model-divider"></div>'));
+        if (state.catalog.length)
+          menu.appendChild(el('<div class="kit-ask-model-divider"></div>'));
         state.catalog.forEach((m) => {
           let active = m.id === state.current;
           let item = el(
             '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
-              (active ? ' is-active' : '') +
+              (active ? " is-active" : "") +
               '" aria-checked="' +
               active +
               '"><span>' +
               esc(m.label || m.id) +
-              '</span></button>',
+              "</span></button>"
           );
-          item.addEventListener('click', () => {
+          item.addEventListener("click", () => {
             choose(m.id);
           });
           menu.appendChild(item);
@@ -1499,12 +1561,12 @@ export function wireThemeToggle(
       function openMenu() {
         renderMenu();
         menu.hidden = false;
-        modelBtn.setAttribute('aria-expanded', 'true');
-        document.addEventListener('mousedown', onDocPointer, true);
-        document.addEventListener('keydown', onDocKey, true);
+        modelBtn.setAttribute("aria-expanded", "true");
+        document.addEventListener("mousedown", onDocPointer, true);
+        document.addEventListener("keydown", onDocKey, true);
       }
 
-      modelBtn.addEventListener('click', () => {
+      modelBtn.addEventListener("click", () => {
         if (modelBtn.disabled) return;
         if (menu.hidden) openMenu();
         else closeMenu();
@@ -1513,8 +1575,9 @@ export function wireThemeToggle(
       return {
         /** Re-fetch the picker state (called on every panel `open()`). */
         load() {
-          return fetchJson(appBase() + '_turn/model').then((r) => {
-            if (r.ok && r.body) Object.assign(state, normalizeModelState(r.body));
+          return fetchJson(appBase() + "_turn/model").then((r) => {
+            if (r.ok && r.body)
+              Object.assign(state, normalizeModelState(r.body));
             renderLabel();
           }, renderLabel);
         },
@@ -1536,17 +1599,20 @@ export function wireThemeToggle(
 
     /** Attachment-chip markup for a message bubble — a just-sent turn or a loaded transcript. */
     function attachmentChipsHtml(atts) {
-      if (!atts || !atts.length) return '';
+      if (!atts || !atts.length) return "";
       return (
         '<div class="kit-ask-msg-atts">' +
         atts
           .map((a) => {
             return (
-              '<span class="kit-ask-msg-att">' + CLIP_ICON + esc(a.filename || 'file') + '</span>'
+              '<span class="kit-ask-msg-att">' +
+              CLIP_ICON +
+              esc(a.filename || "file") +
+              "</span>"
             );
           })
-          .join('') +
-        '</div>'
+          .join("") +
+        "</div>"
       );
     }
 
@@ -1555,11 +1621,11 @@ export function wireThemeToggle(
       close,
       /** append a user bubble (escaped); `atts` optionally renders attachment chips beneath it */
       user(t, atts) {
-        return bubble('user', esc(t) + attachmentChipsHtml(atts));
+        return bubble("user", esc(t) + attachmentChipsHtml(atts));
       },
       /** append an assistant bubble (HTML allowed — caller sanitises) */
       ai(html) {
-        return bubble('ai', html);
+        return bubble("ai", html);
       },
       /** show a typing indicator; returns { done() } */
       typing() {
@@ -1585,15 +1651,15 @@ export function wireThemeToggle(
           '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
             esc(o.title) +
             '<span class="ac-s">' +
-            esc(o.receipt || 'saved as a receipt') +
-            '</span></span>' +
-            (o.onUndo ? '<button class="ac-undo">Undo</button>' : '') +
-            '</div>',
+            esc(o.receipt || "saved as a receipt") +
+            "</span></span>" +
+            (o.onUndo ? '<button class="ac-undo">Undo</button>' : "") +
+            "</div>"
         );
         log.appendChild(a);
-        let u = a.querySelector('.ac-undo');
+        let u = a.querySelector(".ac-undo");
         if (u)
-          u.addEventListener('click', () => {
+          u.addEventListener("click", () => {
             o.onUndo();
             a.remove();
           });
@@ -1616,30 +1682,33 @@ export function wireThemeToggle(
             esc(o.diff[0]) +
             '</span> → <span class="d2">' +
             esc(o.diff[1]) +
-            '</span></div>'
-          : '';
+            "</span></div>"
+          : "";
         let card = el(
           '<div class="kit-ask-action"><span class="aa-label">Proposed write · needs your ok</span>' +
             '<div class="aa-title">' +
             esc(o.title) +
             '</div><div class="aa-detail">' +
-            esc(o.detail || '') +
-            '</div>' +
+            esc(o.detail || "") +
+            "</div>" +
             diff +
             '<div class="aa-btns"><button class="kit-aa-approve">Approve</button>' +
-            (o.onEdit ? '<button class="kit-aa-ghost aa-edit">Edit</button>' : '') +
-            '<button class="kit-aa-ghost aa-discard">Discard</button></div></div>',
+            (o.onEdit
+              ? '<button class="kit-aa-ghost aa-edit">Edit</button>'
+              : "") +
+            '<button class="kit-aa-ghost aa-discard">Discard</button></div></div>'
         );
         log.appendChild(card);
         function setBusy(busy) {
-          card.querySelectorAll('button').forEach((b) => {
+          card.querySelectorAll("button").forEach((b) => {
             b.disabled = busy;
           });
-          card.classList.toggle('aa-busy', busy);
+          card.classList.toggle("aa-busy", busy);
         }
         function note(text) {
           let n =
-            card.querySelector('.aa-note') || card.appendChild(el('<div class="aa-note"></div>'));
+            card.querySelector(".aa-note") ||
+            card.appendChild(el('<div class="aa-note"></div>'));
           n.textContent = text;
           log.scrollTop = log.scrollHeight;
         }
@@ -1649,38 +1718,40 @@ export function wireThemeToggle(
               '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
                 esc(o.title) +
                 '<span class="ac-s">' +
-                esc(receipt || 'approved · saved as a receipt') +
-                '</span></span></div>',
-            ),
+                esc(receipt || "approved · saved as a receipt") +
+                "</span></span></div>"
+            )
           );
           log.scrollTop = log.scrollHeight;
         }
-        card.querySelector('.kit-aa-approve').addEventListener('click', () => {
+        card.querySelector(".kit-aa-approve").addEventListener("click", () => {
           let settled = o.onApprove ? o.onApprove() : undefined;
-          if (!settled || typeof settled.then !== 'function') return swapApplied();
+          if (!settled || typeof settled.then !== "function")
+            return swapApplied();
           setBusy(true);
           settled
             .then((r) => {
               if (r && r.ok === false) {
                 setBusy(false);
-                note(r.note || 'The vault refused this write.');
+                note(r.note || "The vault refused this write.");
                 return;
               }
               swapApplied(r && r.receipt);
             })
             .catch((err) => {
               setBusy(false);
-              note(String((err && err.message) || err || 'Approval failed.'));
+              note(String((err && err.message) || err || "Approval failed."));
             });
         });
-        let edit = card.querySelector('.aa-edit');
+        let edit = card.querySelector(".aa-edit");
         if (edit)
-          edit.addEventListener('click', () => {
+          edit.addEventListener("click", () => {
             o.onEdit();
           });
-        card.querySelector('.aa-discard').addEventListener('click', () => {
+        card.querySelector(".aa-discard").addEventListener("click", () => {
           let settled = o.onDiscard ? o.onDiscard() : undefined;
-          if (!settled || typeof settled.then !== 'function') return card.remove();
+          if (!settled || typeof settled.then !== "function")
+            return card.remove();
           setBusy(true);
           settled
             .then(() => {
@@ -1688,7 +1759,7 @@ export function wireThemeToggle(
             })
             .catch((err) => {
               setBusy(false);
-              note(String((err && err.message) || err || 'Discard failed.'));
+              note(String((err && err.message) || err || "Discard failed."));
             });
         });
         log.scrollTop = log.scrollHeight;
@@ -1714,29 +1785,35 @@ export function wireThemeToggle(
     const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
     function renderPending() {
-      pendingStrip.innerHTML = '';
+      pendingStrip.innerHTML = "";
       pendingStrip.hidden = pending.length === 0 || !historyView.hidden;
       pending.forEach((p) => {
         let chip = el(
           '<span class="kit-ask-pending-chip' +
-            (p.status === 'uploading' ? ' is-uploading' : '') +
-            (p.status === 'error' ? ' is-error' : '') +
+            (p.status === "uploading" ? " is-uploading" : "") +
+            (p.status === "error" ? " is-error" : "") +
             '">' +
-            (p.status === 'uploading' ? '<i class="kit-ask-pending-spin"></i>' : '') +
+            (p.status === "uploading"
+              ? '<i class="kit-ask-pending-spin"></i>'
+              : "") +
             '<span class="kit-ask-pending-name">' +
             esc(p.file.name) +
             '</span><span class="kit-ask-pending-size">' +
-            (p.status === 'error' ? esc(p.error || 'failed') : esc(fmtBytes(p.file.size, '0 B'))) +
+            (p.status === "error"
+              ? esc(p.error || "failed")
+              : esc(fmtBytes(p.file.size, "0 B"))) +
             '</span><button type="button" class="kit-ask-pending-remove" aria-label="Remove ' +
             esc(p.file.name) +
-            '">✕</button></span>',
+            '">✕</button></span>'
         );
-        chip.querySelector('.kit-ask-pending-remove').addEventListener('click', () => {
-          pending = pending.filter((x) => {
-            return x.cid !== p.cid;
+        chip
+          .querySelector(".kit-ask-pending-remove")
+          .addEventListener("click", () => {
+            pending = pending.filter((x) => {
+              return x.cid !== p.cid;
+            });
+            renderPending();
           });
-          renderPending();
-        });
         pendingStrip.appendChild(chip);
       });
     }
@@ -1748,19 +1825,19 @@ export function wireThemeToggle(
 
     function addFiles(files) {
       Array.prototype.slice.call(files || []).forEach((file) => {
-        let p = { cid: ++pendingSeq, file, status: 'uploading' };
+        let p = { cid: ++pendingSeq, file, status: "uploading" };
         pending.push(p);
         renderPending();
         if (file.size > MAX_UPLOAD_BYTES) {
-          p.status = 'error';
-          p.error = 'over 25 MB';
+          p.status = "error";
+          p.error = "over 25 MB";
           renderPending();
           return;
         }
         uploadBlob(file)
           .then((r) => {
             if (!pending.includes(p)) return; // removed mid-upload
-            p.status = 'done';
+            p.status = "done";
             p.hash = r.hash;
             p.mime = r.mime;
             p.sizeBytes = r.sizeBytes;
@@ -1769,8 +1846,8 @@ export function wireThemeToggle(
           })
           .catch((err) => {
             if (!pending.includes(p)) return;
-            p.status = 'error';
-            p.error = String((err && err.message) || err || 'upload failed');
+            p.status = "error";
+            p.error = String((err && err.message) || err || "upload failed");
             renderPending();
           });
       });
@@ -1778,33 +1855,33 @@ export function wireThemeToggle(
 
     function typesHasFiles(dt) {
       if (!dt || !dt.types) return false;
-      for (const type of dt.types) if (type === 'Files') return true;
+      for (const type of dt.types) if (type === "Files") return true;
       return false;
     }
 
-    attachBtn.addEventListener('click', () => {
+    attachBtn.addEventListener("click", () => {
       fileInput.click();
     });
-    fileInput.addEventListener('change', () => {
+    fileInput.addEventListener("change", () => {
       addFiles(fileInput.files);
-      fileInput.value = '';
+      fileInput.value = "";
     });
-    panel.addEventListener('dragover', (e) => {
+    panel.addEventListener("dragover", (e) => {
       if (!typesHasFiles(e.dataTransfer)) return;
       e.preventDefault();
-      panel.classList.add('is-dragover');
+      panel.classList.add("is-dragover");
     });
-    panel.addEventListener('dragleave', (e) => {
-      if (e.target === panel) panel.classList.remove('is-dragover');
+    panel.addEventListener("dragleave", (e) => {
+      if (e.target === panel) panel.classList.remove("is-dragover");
     });
-    panel.addEventListener('drop', (e) => {
+    panel.addEventListener("drop", (e) => {
       if (!typesHasFiles(e.dataTransfer)) return;
       e.preventDefault();
-      panel.classList.remove('is-dragover');
+      panel.classList.remove("is-dragover");
       let files = (e.dataTransfer && e.dataTransfer.files) || [];
       if (files.length) addFiles(files);
     });
-    input.addEventListener('paste', (e) => {
+    input.addEventListener("paste", (e) => {
       let files = (e.clipboardData && e.clipboardData.files) || [];
       if (files.length) addFiles(files);
     });
@@ -1812,31 +1889,37 @@ export function wireThemeToggle(
     // ---------- Conversation history (issue #190 read side) ----------
 
     function setViewMode(mode) {
-      const isHistory = mode === 'history';
+      const isHistory = mode === "history";
       historyView.hidden = !isHistory;
       log.hidden = isHistory;
       suggestRow.hidden = isHistory;
       form.hidden = isHistory;
       pendingStrip.hidden = isHistory || pending.length === 0;
-      historyBtn.setAttribute('aria-pressed', isHistory ? 'true' : 'false');
-      historyBtn.classList.toggle('is-active', isHistory);
+      historyBtn.setAttribute("aria-pressed", isHistory ? "true" : "false");
+      historyBtn.classList.toggle("is-active", isHistory);
     }
 
     function historyNote(text) {
-      historyList.innerHTML = '';
-      historyList.appendChild(el('<div class="kit-ask-history-empty"></div>')).textContent = text;
+      historyList.innerHTML = "";
+      historyList.appendChild(
+        el('<div class="kit-ask-history-empty"></div>')
+      ).textContent = text;
     }
 
     function renderHistoryList(sessions) {
-      historyList.innerHTML = '';
+      historyList.innerHTML = "";
       if (!sessions || !sessions.length) {
-        historyNote('No past conversations');
+        historyNote("No past conversations");
         return;
       }
       sessions.forEach((s) => {
-        let title = s.title && String(s.title).trim() ? s.title : 'Conversation';
+        let title =
+          s.title && String(s.title).trim() ? s.title : "Conversation";
         let turns = s.turnCount || 0;
-        let meta = (turns === 1 ? '1 turn' : turns + ' turns') + ' · ' + relTime(s.updatedAt);
+        let meta =
+          (turns === 1 ? "1 turn" : turns + " turns") +
+          " · " +
+          relTime(s.updatedAt);
         let row = el(
           '<div class="kit-ask-history-row">' +
             '<button type="button" class="kit-ask-history-item" data-id="' +
@@ -1845,19 +1928,19 @@ export function wireThemeToggle(
             esc(title) +
             '</span><span class="kit-ask-history-meta">' +
             esc(meta) +
-            '</span></button>' +
+            "</span></button>" +
             '<button type="button" class="kit-ask-history-del" data-id="' +
             esc(s.id) +
             '" aria-label="Delete ' +
             esc(title) +
-            '">✕</button></div>',
+            '">✕</button></div>'
         );
         historyList.appendChild(row);
       });
     }
 
     function loadHistoryList() {
-      historyNote('Loading…');
+      historyNote("Loading…");
       fetchJson(conversationsBase()).then((r) => {
         if (!r.ok) {
           historyNote("Couldn't load past conversations.");
@@ -1868,7 +1951,7 @@ export function wireThemeToggle(
     }
 
     function resetLogToIntro() {
-      log.innerHTML = '';
+      log.innerHTML = "";
       const m = el('<div class="kit-msg ai"></div>');
       m.textContent = introText();
       log.appendChild(m);
@@ -1876,26 +1959,33 @@ export function wireThemeToggle(
 
     /** Reconstruct the log from a loaded session's messages, collapsing a run of `tool` items into one muted note. */
     function renderTranscript(messages) {
-      log.innerHTML = '';
+      log.innerHTML = "";
       const list = messages || [];
       let i = 0;
       while (i < list.length) {
         const payload = (list[i] && list[i].payload) || {};
-        if (payload.kind === 'user') {
-          bubble('user', esc(payload.text || '') + attachmentChipsHtml(payload.attachments));
+        if (payload.kind === "user") {
+          bubble(
+            "user",
+            esc(payload.text || "") + attachmentChipsHtml(payload.attachments)
+          );
           i++;
-        } else if (payload.kind === 'tool') {
+        } else if (payload.kind === "tool") {
           let n = 0;
-          while (i < list.length && list[i].payload && list[i].payload.kind === 'tool') {
+          while (
+            i < list.length &&
+            list[i].payload &&
+            list[i].payload.kind === "tool"
+          ) {
             n++;
             i++;
           }
           const note = el('<div class="kit-ask-toolnote"></div>');
-          note.textContent = '⚙ used ' + n + (n === 1 ? ' tool' : ' tools');
+          note.textContent = "⚙ used " + n + (n === 1 ? " tool" : " tools");
           log.appendChild(note);
         } else {
           // 'ai' (and any future kind) render as a plain assistant bubble.
-          bubble('ai', esc(payload.text || ''));
+          bubble("ai", esc(payload.text || ""));
           i++;
         }
       }
@@ -1904,8 +1994,8 @@ export function wireThemeToggle(
     }
 
     function openConversation(id) {
-      historyNote('Loading…');
-      fetchJson(conversationPath(appId() || '', id)).then((r) => {
+      historyNote("Loading…");
+      fetchJson(conversationPath(appId() || "", id)).then((r) => {
         if (!r.ok) {
           if (r.status === 404) {
             loadHistoryList(); // a stale row — refresh the list in place
@@ -1916,45 +2006,47 @@ export function wireThemeToggle(
         }
         session.set(id);
         renderTranscript(r.body && r.body.messages);
-        setViewMode('chat');
+        setViewMode("chat");
       });
     }
 
     function deleteConversationRow(id) {
-      fetch(conversationPath(appId() || '', id), { method: 'DELETE' }).then(() => {
-        if (session.get() === id) {
-          session.clear();
-          resetLogToIntro();
+      fetch(conversationPath(appId() || "", id), { method: "DELETE" }).then(
+        () => {
+          if (session.get() === id) {
+            session.clear();
+            resetLogToIntro();
+          }
+          loadHistoryList();
         }
-        loadHistoryList();
-      });
+      );
     }
 
-    historyBtn.addEventListener('click', () => {
+    historyBtn.addEventListener("click", () => {
       if (historyView.hidden) {
         loadHistoryList();
-        setViewMode('history');
+        setViewMode("history");
       } else {
-        setViewMode('chat');
+        setViewMode("chat");
       }
     });
-    historyNewBtn.addEventListener('click', () => {
+    historyNewBtn.addEventListener("click", () => {
       session.clear();
       resetLogToIntro();
       clearPending();
-      setViewMode('chat');
+      setViewMode("chat");
       if (input) input.focus();
     });
-    historyList.addEventListener('click', (e) => {
-      let del = e.target.closest('.kit-ask-history-del');
+    historyList.addEventListener("click", (e) => {
+      let del = e.target.closest(".kit-ask-history-del");
       if (del) {
         // Same two-click "arm then confirm" idiom as every other destructive
         // control in the kit — no native confirm() dialog.
-        if (!armConfirm(del, { armedLabel: '✕?' })) return;
+        if (!armConfirm(del, { armedLabel: "✕?" })) return;
         deleteConversationRow(del.dataset.id);
         return;
       }
-      let item = e.target.closest('.kit-ask-history-item');
+      let item = e.target.closest(".kit-ask-history-item");
       if (item) openConversation(item.dataset.id);
     });
 
@@ -1966,7 +2058,7 @@ export function wireThemeToggle(
       // "empty" == still just the intro bubble — a fresh page load, not a
       // conversation this panel has already rendered this session.
       if (!id || log.children.length > 1) return;
-      fetchJson(conversationPath(appId() || '', id)).then((r) => {
+      fetchJson(conversationPath(appId() || "", id)).then((r) => {
         if (!r.ok) {
           if (r.status === 404) session.clear(); // stale id — a fresh vault, a restart
           return;
@@ -1976,11 +2068,11 @@ export function wireThemeToggle(
     }
 
     let handler = null;
-    form.addEventListener('submit', (e) => {
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
       if (busy) return; // a turn is already in flight — guard double-sends
       let uploaded = pending.filter((p) => {
-        return p.status === 'done';
+        return p.status === "done";
       });
       let refs = uploaded.map((p) => {
         return {
@@ -1990,17 +2082,18 @@ export function wireThemeToggle(
           sizeBytes: p.sizeBytes,
         };
       });
-      let v = input.value.trim() || (refs.length ? '(attachment)' : '');
+      let v = input.value.trim() || (refs.length ? "(attachment)" : "");
       if (!v) return;
       api.user(v, refs.length ? refs : undefined);
-      input.value = '';
+      input.value = "";
       clearPending();
       // Fresh AbortController per turn — the Send/Stop button aborts this
       // signal, and the default driver threads it into fetch + consumeSse.
       // Passed as a 3rd arg so a custom `onAsk` handler can honor cancel too
       // (older handlers that ignore it keep working).
       activeAbort = new AbortController();
-      if (handler) handler(v, refs.length ? refs : undefined, activeAbort.signal);
+      if (handler)
+        handler(v, refs.length ? refs : undefined, activeAbort.signal);
     });
 
     // Default brain: the app's _turn conversation agent. Registered after
@@ -2008,7 +2101,7 @@ export function wireThemeToggle(
     if (!cfg.demo) handler = makeVaultDriver(api, session);
 
     if (cfg.demo) playDemo(api, cfg.demo);
-    document.dispatchEvent(new CustomEvent('kitask:ready'));
+    document.dispatchEvent(new CustomEvent("kitask:ready"));
   }
 
   // ---------- Default vault driver (real surfaces only, no stubs) ----------
@@ -2021,17 +2114,17 @@ export function wireThemeToggle(
   /** Base for app-scoped routes. Absolute when the bridge pinned an app id. */
   function appBase() {
     const id = appId();
-    return id ? '/centraid/' + encodeURIComponent(id) + '/' : '';
+    return id ? "/centraid/" + encodeURIComponent(id) + "/" : "";
   }
 
   /** Base for this app's conversation-history sessions (issue #98/#190; distinct from `appBase()`'s `/centraid/<id>/` turn surface). Route single-sourced in conversation-client.js (#420). */
   function conversationsBase() {
-    return conversationsPath(appId() || '');
+    return conversationsPath(appId() || "");
   }
 
   /** This app's attachment blob CAS — `POST` uploads, returns `{hash, sizeBytes, mime, url}`. */
   function blobsBase() {
-    return blobsPath(appId() || '');
+    return blobsPath(appId() || "");
   }
 
   function fetchJson(url, opts) {
@@ -2051,8 +2144,8 @@ export function wireThemeToggle(
   /** Upload one File to the conversation blob CAS; resolves `{hash, sizeBytes, mime, url}`. */
   function uploadBlob(file) {
     return fetch(blobsBase(), {
-      method: 'POST',
-      headers: { 'content-type': file.type || 'application/octet-stream' },
+      method: "POST",
+      headers: { "content-type": file.type || "application/octet-stream" },
       body: file,
     }).then((r) => {
       return r.text().then((t) => {
@@ -2063,7 +2156,9 @@ export function wireThemeToggle(
           // The caller receives the HTTP failure below with no parsed body.
         }
         if (!r.ok) {
-          throw new Error((j && (j.message || j.error)) || 'upload failed (' + r.status + ')');
+          throw new Error(
+            (j && (j.message || j.error)) || "upload failed (" + r.status + ")"
+          );
         }
         return j;
       });
@@ -2085,7 +2180,7 @@ export function wireThemeToggle(
         // vaultId is the real "connected" signal; the old `active === true`
         // check misreported "no vault connected" against a working vault.
         if (!s.ok || !s.body || !s.body.vaultId) {
-          chip.textContent = 'no vault connected';
+          chip.textContent = "no vault connected";
           return;
         }
         return fetchJson(vaultAppsPath()).then((a) => {
@@ -2095,26 +2190,27 @@ export function wireThemeToggle(
           // bridge — `name` is the field that carries the manifest id.
           let mine = apps.find((x) => x.name === appId());
           if (!mine) {
-            chip.textContent = 'not enrolled — vault calls deny';
+            chip.textContent = "not enrolled — vault calls deny";
             return;
           }
           let grants = mine.grants || [];
           if (!grants.length) {
-            chip.textContent = 'no grant yet — writes deny or park';
+            chip.textContent = "no grant yet — writes deny or park";
             return;
           }
           let verbs = {};
           grants.forEach((g) => {
             (g.scopes || []).forEach((sc) => {
-              String(sc.verbs || '')
-                .split(',')
+              String(sc.verbs || "")
+                .split(",")
                 .forEach((v) => {
                   if (v.trim()) verbs[v.trim()] = 1;
                 });
             });
           });
           let list = Object.keys(verbs);
-          chip.textContent = (list.length ? list.join(' + ') : 'granted') + ' · consent-gated';
+          chip.textContent =
+            (list.length ? list.join(" + ") : "granted") + " · consent-gated";
         });
       })
       .catch(() => {
@@ -2148,12 +2244,12 @@ export function wireThemeToggle(
      */
     function createConversation() {
       return fetchJson(conversationsBase(), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({}),
       }).then((r) => {
         if (!r.ok || !r.body || !r.body.id) {
-          throw new Error('could not start a conversation (' + r.status + ')');
+          throw new Error("could not start a conversation (" + r.status + ")");
         }
         session.set(r.body.id);
         return r.body.id;
@@ -2186,8 +2282,8 @@ export function wireThemeToggle(
         if (!entry) {
           api.ai(
             esc(
-              'A write parked for your approval but is no longer pending — it may have been handled from another surface.',
-            ),
+              "A write parked for your approval but is no longer pending — it may have been handled from another surface."
+            )
           );
           return;
         }
@@ -2197,7 +2293,7 @@ export function wireThemeToggle(
           detail: d.detail,
           onApprove() {
             return confirmParkedShared(invocationId, true, { fetchJson }).then(
-              normalizeApproveOutcome,
+              normalizeApproveOutcome
             );
           },
           onDiscard() {
@@ -2217,21 +2313,21 @@ export function wireThemeToggle(
       api.setBusy(true);
       const typing = api.typing();
       let stream = null; // the streaming assistant bubble element
-      let streamText = ''; // accumulated raw answer text
+      let streamText = ""; // accumulated raw answer text
       let finalized = false;
       // One idempotency key per user send (issue #420), REUSED on the 404
       // re-mint retry below so a duplicate turn replays instead of re-running.
       const idempotencyKey =
-        typeof crypto !== 'undefined' && crypto.randomUUID
+        typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
-          : 'k-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+          : "k-" + Date.now() + "-" + Math.random().toString(16).slice(2);
       function say(t) {
         typing.done();
         return api.ai(esc(t));
       }
       function ensureStream() {
         typing.done();
-        if (!stream) stream = api.ai('');
+        if (!stream) stream = api.ai("");
         return stream;
       }
       // While streaming, show plain text live; on `final` we upgrade to the
@@ -2252,34 +2348,35 @@ export function wireThemeToggle(
       }
       function handleEvent(ev) {
         switch (ev.type) {
-          case 'assistant.delta':
-            if (typeof ev.delta === 'string') append(ev.delta);
+          case "assistant.delta":
+            if (typeof ev.delta === "string") append(ev.delta);
             return;
-          case 'tool.result': {
+          case "tool.result": {
             const o = outcomeOf(ev.result);
-            if (o && o.status === 'parked' && o.invocationId) renderParked(o.invocationId);
-            else if (o && o.status === 'denied') {
+            if (o && o.status === "parked" && o.invocationId)
+              renderParked(o.invocationId);
+            else if (o && o.status === "denied") {
               say(
-                'The vault denied that write' +
-                  (o.reason ? ': ' + o.reason : '.') +
-                  ' Grant this app access from Settings → Vault to allow it.',
+                "The vault denied that write" +
+                  (o.reason ? ": " + o.reason : ".") +
+                  " Grant this app access from Settings → Vault to allow it."
               );
             }
             return;
           }
-          case 'final':
+          case "final":
             finalizeRich(ev.text);
             return;
-          case 'notice':
+          case "notice":
             // Non-fatal runner notice (issue #420), e.g. "can't read PDFs".
             typing.done();
-            api.ai(esc(ev.message || 'Notice'));
+            api.ai(esc(ev.message || "Notice"));
             return;
-          case 'error':
-            say('The agent hit an error: ' + (ev.message || 'unknown'));
+          case "error":
+            say("The agent hit an error: " + (ev.message || "unknown"));
             return;
-          case 'aborted':
-            say('The turn was aborted before it finished.');
+          case "aborted":
+            say("The turn was aborted before it finished.");
           // falls through
           default:
             break;
@@ -2297,13 +2394,13 @@ export function wireThemeToggle(
         const body = {
           conversationId: id,
           message: text,
-          register: 'ask',
+          register: "ask",
           idempotencyKey,
         };
         if (attachments && attachments.length) body.attachments = attachments;
-        return fetch(appBase() + '_turn', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+        return fetch(appBase() + "_turn", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
           signal,
         }).then((res) => {
@@ -2315,7 +2412,12 @@ export function wireThemeToggle(
               } catch {
                 // A non-JSON error body has no structured retry detail.
               }
-              if (res.status === 404 && j && j.error === 'not_found' && !isRetry) {
+              if (
+                res.status === 404 &&
+                j &&
+                j.error === "not_found" &&
+                !isRetry
+              ) {
                 forgetConversation();
                 return createConversation().then((freshId) => {
                   return runTurn(freshId, true);
@@ -2324,17 +2426,23 @@ export function wireThemeToggle(
               if (res.status === 429) {
                 // Turn backpressure (issue #420): the vault is busy. The React
                 // shell auto-retries; the kit keeps it simple with a nudge.
-                say('The vault is busy running other turns — try again in a moment.');
-              } else if (res.status === 503 && j && j.error === 'no_conversation_runner') {
                 say(
-                  'No coding agent is configured to answer yet — open Settings → Agents, pick one, and ask again.',
+                  "The vault is busy running other turns — try again in a moment."
+                );
+              } else if (
+                res.status === 503 &&
+                j &&
+                j.error === "no_conversation_runner"
+              ) {
+                say(
+                  "No coding agent is configured to answer yet — open Settings → Agents, pick one, and ask again."
                 );
               } else {
                 say(
-                  'The gateway refused the turn (' +
+                  "The gateway refused the turn (" +
                     res.status +
-                    (j && j.message ? ' · ' + j.message : '') +
-                    ').',
+                    (j && j.message ? " · " + j.message : "") +
+                    ")."
                 );
               }
             });
@@ -2348,8 +2456,12 @@ export function wireThemeToggle(
         })
         .catch((err) => {
           // A user-initiated cancel surfaces as an AbortError — not a failure.
-          if ((signal && signal.aborted) || (err && err.name === 'AbortError')) return;
-          say("Couldn't reach the vault gateway — " + String((err && err.message) || err));
+          if ((signal && signal.aborted) || (err && err.name === "AbortError"))
+            return;
+          say(
+            "Couldn't reach the vault gateway — " +
+              String((err && err.message) || err)
+          );
         })
         .then(() => {
           typing.done();
@@ -2381,7 +2493,8 @@ export function wireThemeToggle(
   }
 
   // Kick off once everything above is defined.
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
 
@@ -2413,17 +2526,17 @@ export async function createReference(
   from: { type: string; id: string },
   to: { type: string; id: string },
   relation: string,
-  selector?: unknown,
+  selector?: unknown
 ): Promise<VaultOutcome> {
-  const r = await fetch('/centraid/_vault/links', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+  const r = await fetch("/centraid/_vault/links", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({
       from_type: from.type,
       from_id: from.id,
       to_type: to.type,
       to_id: to.id,
-      relation: relation || 'references',
+      relation: relation || "references",
       ...(selector ? { selector } : {}),
     }),
   });
@@ -2432,9 +2545,12 @@ export async function createReference(
 
 /** End a link (temporal — the row survives with valid_to set). */
 export async function removeReference(linkId: string): Promise<VaultOutcome> {
-  const r = await fetch('/centraid/_vault/links/' + encodeURIComponent(linkId), {
-    method: 'DELETE',
-  });
+  const r = await fetch(
+    "/centraid/_vault/links/" + encodeURIComponent(linkId),
+    {
+      method: "DELETE",
+    }
+  );
   return r.json();
 }
 
@@ -2465,19 +2581,19 @@ export async function removeReference(linkId: string): Promise<VaultOutcome> {
 export function renderReferenceStrip(
   stripEl: HTMLElement,
   refs: Reference[] | null | undefined,
-  options: Record<string, unknown> = {},
+  options: Record<string, unknown> = {}
 ): void {
   const { inlineIds, onRemove, emptyText } = options;
   let strip = stripEl.firstElementChild;
-  if (!strip || strip.tagName !== 'KIT-REFERENCE-STRIP') {
-    stripEl.innerHTML = '';
-    strip = document.createElement('kit-reference-strip');
+  if (!strip || strip.tagName !== "KIT-REFERENCE-STRIP") {
+    stripEl.innerHTML = "";
+    strip = document.createElement("kit-reference-strip");
     stripEl.appendChild(strip);
   }
   strip.refs = refs ?? [];
   strip.inlineIds = inlineIds ?? null;
   strip.onRemove = onRemove ?? null;
-  strip.emptyText = emptyText ?? '';
+  strip.emptyText = emptyText ?? "";
 }
 
 /**
@@ -2486,12 +2602,18 @@ export function renderReferenceStrip(
  * #282). A locator write: the link judgment itself is untouched, so clearing
  * demotes the reference to strip-only.
  */
-export async function reanchorReference(linkId: string, selector: unknown): Promise<VaultOutcome> {
-  const r = await fetch('/centraid/_vault/links/' + encodeURIComponent(linkId), {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ selector: selector ?? null }),
-  });
+export async function reanchorReference(
+  linkId: string,
+  selector: unknown
+): Promise<VaultOutcome> {
+  const r = await fetch(
+    "/centraid/_vault/links/" + encodeURIComponent(linkId),
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ selector: selector ?? null }),
+    }
+  );
   return r.json();
 }
 
@@ -2513,7 +2635,11 @@ const MENTION_CONTEXT = 24;
  * TextQuoteSelector (exact + surrounding context) belt, TextPositionSelector
  * (start, in UTF-16 code units) suspenders.
  */
-export function computeMentionSelector(text: string, start: number, end: number): unknown {
+export function computeMentionSelector(
+  text: string,
+  start: number,
+  end: number
+): unknown {
   return {
     exact: text.slice(start, end),
     prefix: text.slice(Math.max(0, start - MENTION_CONTEXT), start),
@@ -2527,21 +2653,21 @@ export function computeMentionSelector(text: string, start: number, end: number)
 // is still an exact hit modulo these two classes. The map carries normalized
 // indices back to raw ones.
 function normalizeWithMap(text) {
-  let out = '';
+  let out = "";
   const map = [];
   let lastWasSpace = false;
   for (let i = 0; i < text.length; i += 1) {
     let ch = text[i];
     if (/\s/u.test(ch)) {
       if (lastWasSpace) continue;
-      out += ' ';
+      out += " ";
       map.push(i);
       lastWasSpace = true;
       continue;
     }
     lastWasSpace = false;
-    if (ch === '‘' || ch === '’') ch = "'";
-    else if (ch === '“' || ch === '”') ch = '"';
+    if (ch === "‘" || ch === "’") ch = "'";
+    else if (ch === "“" || ch === "”") ch = '"';
     out += ch;
     map.push(i);
   }
@@ -2551,8 +2677,8 @@ function normalizeWithMap(text) {
 // How much of the stored context survives around an occurrence — matching
 // outward from the boundary, so nearby identical quotes separate cleanly.
 function contextScore(body, occStart, occEnd, sel) {
-  const prefix = sel.prefix ?? '';
-  const suffix = sel.suffix ?? '';
+  const prefix = sel.prefix ?? "";
+  const suffix = sel.suffix ?? "";
   let score = 0;
   for (let k = 1; k <= prefix.length; k += 1) {
     if (body[occStart - k] === prefix[prefix.length - k]) score += 1;
@@ -2595,7 +2721,8 @@ export function assignAnchors(body: string, anchors: unknown): unknown {
   let norm = null;
   for (const anchor of anchors) {
     const sel = anchor.selector;
-    if (!sel || typeof sel.exact !== 'string' || sel.exact.length === 0) continue;
+    if (!sel || typeof sel.exact !== "string" || sel.exact.length === 0)
+      continue;
     let spans = occurrencesOf(body, sel.exact).map((at) => ({
       start: at,
       end: at + sel.exact.length,
@@ -2619,7 +2746,9 @@ export function assignAnchors(body: string, anchors: unknown): unknown {
         end: span.end,
         normalized: span.normalized,
         score: contextScore(body, span.start, span.end, sel),
-        posDist: Math.abs(span.start - (Number.isFinite(sel.start) ? sel.start : 0)),
+        posDist: Math.abs(
+          span.start - (Number.isFinite(sel.start) ? sel.start : 0)
+        ),
       });
     }
   }
@@ -2630,7 +2759,7 @@ export function assignAnchors(body: string, anchors: unknown): unknown {
       a.normalized - b.normalized ||
       b.score - a.score ||
       a.posDist - b.posDist ||
-      a.start - b.start,
+      a.start - b.start
   );
   const assigned = new Map();
   const claimed = [];
@@ -2647,38 +2776,38 @@ export function assignAnchors(body: string, anchors: unknown): unknown {
 // technique: clone the metrics that shape line wrapping, lay out the text up
 // to `index`, and read where a marker span lands.
 const MIRROR_STYLES = [
-  'boxSizing',
-  'width',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderTopWidth',
-  'borderRightWidth',
-  'borderBottomWidth',
-  'borderLeftWidth',
-  'fontFamily',
-  'fontSize',
-  'fontWeight',
-  'fontStyle',
-  'letterSpacing',
-  'lineHeight',
-  'textTransform',
-  'wordSpacing',
-  'textIndent',
+  "boxSizing",
+  "width",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth",
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "fontStyle",
+  "letterSpacing",
+  "lineHeight",
+  "textTransform",
+  "wordSpacing",
+  "textIndent",
 ];
 
 function caretRect(textarea, index) {
-  const mirror = document.createElement('div');
+  const mirror = document.createElement("div");
   const style = getComputedStyle(textarea);
   for (const prop of MIRROR_STYLES) mirror.style[prop] = style[prop];
-  mirror.style.position = 'absolute';
-  mirror.style.visibility = 'hidden';
-  mirror.style.whiteSpace = 'pre-wrap';
-  mirror.style.overflowWrap = 'break-word';
+  mirror.style.position = "absolute";
+  mirror.style.visibility = "hidden";
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.overflowWrap = "break-word";
   mirror.textContent = textarea.value.slice(0, index);
-  const marker = document.createElement('span');
-  marker.textContent = '​';
+  const marker = document.createElement("span");
+  marker.textContent = "​";
   mirror.appendChild(marker);
   document.body.appendChild(mirror);
   const top = marker.offsetTop;
@@ -2710,7 +2839,7 @@ function caretRect(textarea, index) {
  */
 export function attachMentionPopover(
   textarea: HTMLTextAreaElement,
-  options: Record<string, unknown> = {},
+  options: Record<string, unknown> = {}
 ): () => void {
   let pop = null;
   let cards = null; // the one batch fetched for this popover
@@ -2731,18 +2860,18 @@ export function attachMentionPopover(
     const caret = textarea.selectionStart;
     if (caret !== textarea.selectionEnd) return null;
     const upto = textarea.value.slice(0, caret);
-    const at = upto.lastIndexOf('@');
+    const at = upto.lastIndexOf("@");
     if (at === -1) return null;
-    const before = at === 0 ? '' : upto[at - 1];
+    const before = at === 0 ? "" : upto[at - 1];
     if (before && !/[\s(]/u.test(before)) return null;
     const token = upto.slice(at + 1);
-    if (token.length > 40 || token.includes('\n')) return null;
+    if (token.length > 40 || token.includes("\n")) return null;
     return { at, caret, token };
   }
 
   function filtered() {
     const gesture = tokenAtCaret();
-    const term = (gesture?.token ?? '').trim().toLowerCase();
+    const term = (gesture?.token ?? "").trim().toLowerCase();
     const excluded = options.exclude
       ? (c) => c.type === options.exclude.type && c.id === options.exclude.id
       : () => false;
@@ -2750,7 +2879,8 @@ export function attachMentionPopover(
       .filter((c) => !excluded(c))
       .filter((c) => {
         if (!term) return true;
-        const hay = `${c.title ?? ''} ${c.subtitle ?? ''} ${entityKindLabel(c.type)}`.toLowerCase();
+        const hay =
+          `${c.title ?? ""} ${c.subtitle ?? ""} ${entityKindLabel(c.type)}`.toLowerCase();
         return hay.includes(term);
       })
       .slice(0, 8);
@@ -2766,31 +2896,32 @@ export function attachMentionPopover(
   function renderList() {
     if (!pop) return;
     const list = pop.firstChild;
-    list.innerHTML = '';
+    list.innerHTML = "";
     const visible = filtered();
     if (selected >= visible.length) selected = Math.max(0, visible.length - 1);
     if (cards && visible.length === 0) {
-      const empty = document.createElement('p');
-      empty.className = 'kit-mention-empty';
-      empty.textContent = 'Nothing in your vault matches that.';
+      const empty = document.createElement("p");
+      empty.className = "kit-mention-empty";
+      empty.textContent = "Nothing in your vault matches that.";
       list.appendChild(empty);
       return;
     }
     visible.forEach((card, i) => {
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'kit-mention-row';
-      row.setAttribute('role', 'option');
-      row.setAttribute('aria-selected', i === selected ? 'true' : 'false');
-      const kind = document.createElement('span');
-      kind.className = 'kit-mention-kind';
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "kit-mention-row";
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", i === selected ? "true" : "false");
+      const kind = document.createElement("span");
+      kind.className = "kit-mention-kind";
       kind.textContent = entityKindLabel(card.type);
-      const title = document.createElement('span');
-      title.className = 'kit-mention-title';
-      title.textContent = card.title ?? `${entityKindLabel(card.type)} ${card.id.slice(-6)}`;
+      const title = document.createElement("span");
+      title.className = "kit-mention-title";
+      title.textContent =
+        card.title ?? `${entityKindLabel(card.type)} ${card.id.slice(-6)}`;
       row.append(kind, title);
       // pointerdown, not click: keep the textarea focused through the pick.
-      row.addEventListener('pointerdown', (e) => {
+      row.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         pick(card);
       });
@@ -2811,17 +2942,17 @@ export function attachMentionPopover(
     atIndex = gesture.at;
     selected = 0;
     if (!pop) {
-      pop = document.createElement('div');
-      pop.className = 'kit-mention-pop';
-      pop.setAttribute('role', 'listbox');
-      pop.setAttribute('aria-label', 'Mention an entity from your vault');
-      const list = document.createElement('div');
-      list.className = 'kit-mention-list';
-      list.dataset.state = 'loading';
+      pop = document.createElement("div");
+      pop.className = "kit-mention-pop";
+      pop.setAttribute("role", "listbox");
+      pop.setAttribute("aria-label", "Mention an entity from your vault");
+      const list = document.createElement("div");
+      list.className = "kit-mention-list";
+      list.dataset.state = "loading";
       pop.appendChild(list);
-      const note = document.createElement('p');
-      note.className = 'kit-mention-note';
-      note.textContent = 'Picking links only the picked item — receipted.';
+      const note = document.createElement("p");
+      note.className = "kit-mention-note";
+      note.textContent = "Picking links only the picked item — receipted.";
       pop.appendChild(note);
       document.body.appendChild(pop);
     }
@@ -2829,11 +2960,12 @@ export function attachMentionPopover(
     if (cards === null) {
       const mine = ++fetchSeq;
       const params = new URLSearchParams();
-      params.set('limit', '25');
-      if (options.kinds && options.kinds.length) params.set('kinds', options.kinds.join(','));
+      params.set("limit", "25");
+      if (options.kinds && options.kinds.length)
+        params.set("kinds", options.kinds.join(","));
       let batch = [];
       try {
-        const r = await fetch('/centraid/_vault/picker?' + params.toString());
+        const r = await fetch("/centraid/_vault/picker?" + params.toString());
         const body = r.ok ? await r.json() : null;
         batch = (body && body.cards) || [];
       } catch {
@@ -2859,17 +2991,19 @@ export function attachMentionPopover(
   function onKeydown(e) {
     if (!pop) return;
     const visible = filtered();
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
       close();
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       e.stopPropagation();
-      const delta = e.key === 'ArrowDown' ? 1 : -1;
-      selected = (selected + delta + Math.max(1, visible.length)) % Math.max(1, visible.length);
+      const delta = e.key === "ArrowDown" ? 1 : -1;
+      selected =
+        (selected + delta + Math.max(1, visible.length)) %
+        Math.max(1, visible.length);
       renderList();
-    } else if ((e.key === 'Enter' || e.key === 'Tab') && visible.length > 0) {
+    } else if ((e.key === "Enter" || e.key === "Tab") && visible.length > 0) {
       e.preventDefault();
       e.stopPropagation();
       pick(visible[selected]);
@@ -2886,18 +3020,18 @@ export function attachMentionPopover(
     }, 80);
   }
 
-  textarea.addEventListener('input', onInput);
+  textarea.addEventListener("input", onInput);
   // Capture phase: while the popover is open its Enter/Arrows must win over
   // the app's own editor keydown handlers (e.g. checklist continuation).
-  textarea.addEventListener('keydown', onKeydown, true);
-  textarea.addEventListener('blur', onBlur);
-  textarea.addEventListener('click', onInput);
+  textarea.addEventListener("keydown", onKeydown, true);
+  textarea.addEventListener("blur", onBlur);
+  textarea.addEventListener("click", onInput);
   return function detach() {
     close();
-    textarea.removeEventListener('input', onInput);
-    textarea.removeEventListener('keydown', onKeydown, true);
-    textarea.removeEventListener('blur', onBlur);
-    textarea.removeEventListener('click', onInput);
+    textarea.removeEventListener("input", onInput);
+    textarea.removeEventListener("keydown", onKeydown, true);
+    textarea.removeEventListener("blur", onBlur);
+    textarea.removeEventListener("click", onInput);
   };
 }
 
@@ -2910,7 +3044,7 @@ export function attachMentionPopover(
 
 /** The live-card chip element for one resolved anchor span (see `<kit-mention-chip>`). */
 export function mentionChip(ref: Reference): HTMLElement {
-  const chip = document.createElement('kit-mention-chip');
+  const chip = document.createElement("kit-mention-chip");
   chip.card = ref.card ?? {};
   return chip;
 }
@@ -2924,7 +3058,7 @@ export function mentionChip(ref: Reference): HTMLElement {
 export function resolveInlineSpans(body: string, refs: Reference[]): unknown {
   const anchored = (refs ?? []).filter((r) => r.selector);
   if (anchored.length === 0) return [];
-  const assigned = assignAnchors(String(body ?? ''), anchored);
+  const assigned = assignAnchors(String(body ?? ""), anchored);
   return anchored
     .filter((r) => assigned.has(r.link_id))
     .map((r) => ({
@@ -2952,9 +3086,11 @@ export function appendWithChips(
   text: string,
   absStart: number,
   spans: unknown,
-  renderPlain: unknown,
+  renderPlain: unknown
 ): void {
-  const plain = renderPlain || ((node, seg) => node.appendChild(document.createTextNode(seg)));
+  const plain =
+    renderPlain ||
+    ((node, seg) => node.appendChild(document.createTextNode(seg)));
   const absEnd = absStart + text.length;
   const inside = (spans ?? [])
     .filter((r) => r.start >= absStart && r.end <= absEnd)
@@ -2994,13 +3130,17 @@ export function appendWithChips(
 // returns { detach(), reconcile(body): Promise, startMention() }.
 export function attachMentionField(
   textarea: HTMLTextAreaElement,
-  options: Record<string, unknown> = {},
+  options: Record<string, unknown> = {}
 ): () => void {
-  const relation = options.relation || 'references';
+  const relation = options.relation || "references";
   const getFrom = () =>
-    (typeof options.from === 'function' ? options.from() : options.from) || null;
+    (typeof options.from === "function" ? options.from() : options.from) ||
+    null;
   const getRefs = () => {
-    const r = typeof options.references === 'function' ? options.references() : options.references;
+    const r =
+      typeof options.references === "function"
+        ? options.references()
+        : options.references;
     return r || [];
   };
   const changed = () => options.onChange && options.onChange();
@@ -3013,7 +3153,7 @@ export function attachMentionField(
     const from = getFrom();
     if (!from) return;
     if (card.type === from.type && card.id === from.id) {
-      toast('You can’t reference this record from itself.');
+      toast("You can’t reference this record from itself.");
       return;
     }
     const refs = getRefs();
@@ -3027,29 +3167,29 @@ export function attachMentionField(
         r.selector &&
         !preAssigned.has(r.link_id) &&
         r.card?.type === card.type &&
-        r.card?.id === card.id,
+        r.card?.id === card.id
     );
     const label = card.title ?? entityKindLabel(card.type);
-    textarea.setRangeText(label, range.start, range.end, 'end');
+    textarea.setRangeText(label, range.start, range.end, "end");
     textarea.focus();
     // One synthetic input event lets the app's own handler sync its draft and
     // schedule its save — no duplicated bookkeeping here.
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
     const selector = computeMentionSelector(
       textarea.value,
       range.start,
-      range.start + label.length,
+      range.start + label.length
     );
     const outcome = orphan
       ? await reanchorReference(orphan.link_id, selector)
       : await createReference(from, card, relation, selector);
-    if (outcome?.status !== 'executed') {
+    if (outcome?.status !== "executed") {
       fail(outcome, label);
       return;
     }
     if (orphan) orphan.selector = selector;
     else refs.push({ link_id: outcome.output?.link_id, selector, card });
-    toast(`${orphan ? 'Re-linked' : 'Linked'} ${label}.`);
+    toast(`${orphan ? "Re-linked" : "Linked"} ${label}.`);
     changed();
   }
 
@@ -3091,14 +3231,14 @@ export function attachMentionField(
         cur.start !== fresh.start
       ) {
         const outcome = await reanchorReference(ref.link_id, fresh);
-        if (outcome?.status === 'executed') ref.selector = fresh;
+        if (outcome?.status === "executed") ref.selector = fresh;
       }
     });
     if (orphans.length === 0) return;
     const retracted = [];
     await applyInOrder(orphans, async (ref) => {
       const outcome = await removeReference(ref.link_id);
-      if (outcome?.status === 'executed') retracted.push(ref);
+      if (outcome?.status === "executed") retracted.push(ref);
     });
     if (retracted.length === 0) return;
     for (const ref of retracted) {
@@ -3106,13 +3246,15 @@ export function attachMentionField(
       if (i >= 0) refs.splice(i, 1);
     }
     changed();
-    const names = retracted.map((r) => r.card?.title ?? entityKindLabel(r.card?.type)).join(', ');
+    const names = retracted
+      .map((r) => r.card?.title ?? entityKindLabel(r.card?.type))
+      .join(", ");
     toast(
       retracted.length === 1
         ? `Unlinked ${names} — its mention left the text.`
         : `Unlinked ${retracted.length} references whose mentions left the text.`,
       {
-        undoLabel: 'Undo',
+        undoLabel: "Undo",
         // Undo re-asserts a FRESH, anchorless edge (history is never rewritten;
         // an anchorless link lives in the strip, exempt from re-retraction —
         // so it can't oscillate against the still-missing words).
@@ -3120,7 +3262,7 @@ export function attachMentionField(
           if (!from) return;
           await applyInOrder(retracted, async (ref) => {
             const outcome = await createReference(from, ref.card, relation);
-            if (outcome?.status === 'executed') {
+            if (outcome?.status === "executed") {
               refs.push({
                 link_id: outcome.output?.link_id,
                 selector: null,
@@ -3130,7 +3272,7 @@ export function attachMentionField(
           });
           changed();
         },
-      },
+      }
     );
   }
 
@@ -3139,9 +3281,14 @@ export function attachMentionField(
   function startMention() {
     textarea.focus();
     const pos = textarea.selectionStart ?? textarea.value.length;
-    const prev = pos > 0 ? textarea.value[pos - 1] : '';
-    textarea.setRangeText(prev && !/[\s(]/u.test(prev) ? ' @' : '@', pos, pos, 'end');
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    const prev = pos > 0 ? textarea.value[pos - 1] : "";
+    textarea.setRangeText(
+      prev && !/[\s(]/u.test(prev) ? " @" : "@",
+      pos,
+      pos,
+      "end"
+    );
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   return { detach: detachPopover, reconcile, startMention };

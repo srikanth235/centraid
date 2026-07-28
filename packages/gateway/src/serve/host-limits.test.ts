@@ -1,19 +1,21 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { probeHostLimits } from './host-limits.js';
+import { probeHostLimits } from "./host-limits.js";
 
 /** Build an injected fs reader from a path→contents map (missing paths ⇒ null). */
-function reader(files: Record<string, string>): (path: string) => string | null {
+function reader(
+  files: Record<string, string>
+): (path: string) => string | null {
   return (path) => files[path] ?? null;
 }
 
-describe('host-limits', () => {
-  test('reads a cgroup v2 CPU + memory limit', () => {
+describe("host-limits", () => {
+  test("reads a cgroup v2 CPU + memory limit", () => {
     const limits = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: reader({
-        '/sys/fs/cgroup/cpu.max': '200000 100000\n',
-        '/sys/fs/cgroup/memory.max': '2147483648\n',
+        "/sys/fs/cgroup/cpu.max": "200000 100000\n",
+        "/sys/fs/cgroup/memory.max": "2147483648\n",
       }),
       stealSample: () => null,
     });
@@ -23,10 +25,10 @@ describe('host-limits', () => {
 
   test('cgroup v2 "max" means unlimited', () => {
     const limits = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: reader({
-        '/sys/fs/cgroup/cpu.max': 'max 100000\n',
-        '/sys/fs/cgroup/memory.max': 'max\n',
+        "/sys/fs/cgroup/cpu.max": "max 100000\n",
+        "/sys/fs/cgroup/memory.max": "max\n",
       }),
       stealSample: () => null,
     });
@@ -34,13 +36,13 @@ describe('host-limits', () => {
     expect(limits.cgroupMemoryLimitBytes).toBeNull();
   });
 
-  test('falls back to cgroup v1 when v2 files are absent', () => {
+  test("falls back to cgroup v1 when v2 files are absent", () => {
     const limits = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: reader({
-        '/sys/fs/cgroup/cpu/cpu.cfs_quota_us': '150000\n',
-        '/sys/fs/cgroup/cpu/cpu.cfs_period_us': '100000\n',
-        '/sys/fs/cgroup/memory/memory.limit_in_bytes': '1073741824\n',
+        "/sys/fs/cgroup/cpu/cpu.cfs_quota_us": "150000\n",
+        "/sys/fs/cgroup/cpu/cpu.cfs_period_us": "100000\n",
+        "/sys/fs/cgroup/memory/memory.limit_in_bytes": "1073741824\n",
       }),
       stealSample: () => null,
     });
@@ -48,13 +50,13 @@ describe('host-limits', () => {
     expect(limits.cgroupMemoryLimitBytes).toBe(1_073_741_824);
   });
 
-  test('cgroup v1 quota -1 and the memory no-limit sentinel are unlimited', () => {
+  test("cgroup v1 quota -1 and the memory no-limit sentinel are unlimited", () => {
     const limits = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: reader({
-        '/sys/fs/cgroup/cpu/cpu.cfs_quota_us': '-1\n',
-        '/sys/fs/cgroup/cpu/cpu.cfs_period_us': '100000\n',
-        '/sys/fs/cgroup/memory/memory.limit_in_bytes': '9223372036854771712\n',
+        "/sys/fs/cgroup/cpu/cpu.cfs_quota_us": "-1\n",
+        "/sys/fs/cgroup/cpu/cpu.cfs_period_us": "100000\n",
+        "/sys/fs/cgroup/memory/memory.limit_in_bytes": "9223372036854771712\n",
       }),
       stealSample: () => null,
     });
@@ -62,12 +64,12 @@ describe('host-limits', () => {
     expect(limits.cgroupMemoryLimitBytes).toBeNull();
   });
 
-  test('garbage and missing files resolve to nulls, never throw', () => {
+  test("garbage and missing files resolve to nulls, never throw", () => {
     const limits = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: reader({
-        '/sys/fs/cgroup/cpu.max': 'not-a-number\n',
-        '/sys/fs/cgroup/memory.max': 'garbage',
+        "/sys/fs/cgroup/cpu.max": "not-a-number\n",
+        "/sys/fs/cgroup/memory.max": "garbage",
       }),
       stealSample: () => null,
     });
@@ -75,7 +77,7 @@ describe('host-limits', () => {
     expect(limits.cgroupMemoryLimitBytes).toBeNull();
 
     const empty = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: () => null,
       stealSample: () => null,
     });
@@ -86,18 +88,18 @@ describe('host-limits', () => {
     });
   });
 
-  test('converts one cumulative steal sample into a boot-time percent', () => {
+  test("converts one cumulative steal sample into a boot-time percent", () => {
     const limits = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: () => null,
       stealSample: () => ({ steal: 150, total: 1000 }),
     });
     expect(limits.stealPercent).toBeCloseTo(15);
   });
 
-  test('a null steal sample yields a null percent', () => {
+  test("a null steal sample yields a null percent", () => {
     const limits = probeHostLimits({
-      platform: 'linux',
+      platform: "linux",
       readText: () => null,
       stealSample: () => null,
     });

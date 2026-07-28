@@ -39,7 +39,7 @@ export interface OutboxWireRequest {
  */
 export type OutboxRequestRebuilder = (
   original: OutboxWireRequest,
-  artifact: Record<string, unknown>,
+  artifact: Record<string, unknown>
 ) => OutboxWireRequest;
 
 /**
@@ -50,9 +50,11 @@ export type OutboxRequestRebuilder = (
  * list of non-empty strings.
  */
 function normalizeRecipients(value: unknown): string[] {
-  if (typeof value === 'string' && value.length > 0) return [value];
+  if (typeof value === "string" && value.length > 0) return [value];
   if (Array.isArray(value)) {
-    const strings = value.filter((v): v is string => typeof v === 'string' && v.length > 0);
+    const strings = value.filter(
+      (v): v is string => typeof v === "string" && v.length > 0
+    );
     if (strings.length === value.length && strings.length > 0) return strings;
   }
   return [];
@@ -64,14 +66,14 @@ function normalizeRecipients(value: unknown): string[] {
  */
 function rawRfc2822(to: string[], subject: string, body: string): string {
   const lines = [
-    `To: ${to.join(', ')}`,
-    `Subject: ${subject || '(no subject)'}`,
-    'MIME-Version: 1.0',
+    `To: ${to.join(", ")}`,
+    `Subject: ${subject || "(no subject)"}`,
+    "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
-    '',
+    "",
     body,
   ];
-  return Buffer.from(lines.join('\r\n'), 'utf8').toString('base64url');
+  return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
 }
 
 /**
@@ -82,14 +84,14 @@ function rawRfc2822(to: string[], subject: string, body: string): string {
  */
 function rebuildGmailSend(
   original: OutboxWireRequest,
-  artifact: Record<string, unknown>,
+  artifact: Record<string, unknown>
 ): OutboxWireRequest {
   const to = normalizeRecipients(artifact.to);
   if (to.length === 0) {
     throw new Error('gmail.send needs at least one recipient in "to"');
   }
-  const subject = typeof artifact.subject === 'string' ? artifact.subject : '';
-  const body = typeof artifact.body === 'string' ? artifact.body : '';
+  const subject = typeof artifact.subject === "string" ? artifact.subject : "";
+  const body = typeof artifact.body === "string" ? artifact.body : "";
   return {
     ...original,
     body: JSON.stringify({ raw: rawRfc2822(to, subject, body) }),
@@ -97,7 +99,7 @@ function rebuildGmailSend(
 }
 
 const REBUILDERS: Record<string, OutboxRequestRebuilder> = {
-  'gmail.send': rebuildGmailSend,
+  "gmail.send": rebuildGmailSend,
 };
 
 /** Whether an outbox item's verb has a request rebuilder — the owner surface's `canEdit` signal. */
@@ -106,7 +108,9 @@ export function outboxVerbIsEditable(verb: string): boolean {
 }
 
 /** The rebuilder for a verb, or `undefined` when editing isn't supported yet. */
-export function rebuilderForVerb(verb: string): OutboxRequestRebuilder | undefined {
+export function rebuilderForVerb(
+  verb: string
+): OutboxRequestRebuilder | undefined {
   return REBUILDERS[verb];
 }
 
@@ -120,28 +124,32 @@ export function rebuilderForVerb(verb: string): OutboxRequestRebuilder | undefin
  */
 export function assertArtifactShapeUnchanged(
   staged: Record<string, unknown>,
-  edited: Record<string, unknown>,
+  edited: Record<string, unknown>
 ): void {
   const stagedKeys = Object.keys(staged).sort();
   const editedKeys = Object.keys(edited).sort();
   const sameKeys =
-    stagedKeys.length === editedKeys.length && stagedKeys.every((k, i) => k === editedKeys[i]);
+    stagedKeys.length === editedKeys.length &&
+    stagedKeys.every((k, i) => k === editedKeys[i]);
   if (!sameKeys) {
     throw new Error(
-      `edited artifact must have exactly the staged fields (${stagedKeys.join(', ')}) — fields can't be added or removed`,
+      `edited artifact must have exactly the staged fields (${stagedKeys.join(", ")}) — fields can't be added or removed`
     );
   }
   for (const key of stagedKeys) {
     const stagedVal = staged[key];
     const editedVal = edited[key];
-    if (typeof stagedVal === 'string') {
-      if (typeof editedVal !== 'string') {
+    if (typeof stagedVal === "string") {
+      if (typeof editedVal !== "string") {
         throw new Error(`field "${key}" must stay a string`);
       }
       continue;
     }
     if (Array.isArray(stagedVal)) {
-      if (!Array.isArray(editedVal) || editedVal.some((v) => typeof v !== 'string')) {
+      if (
+        !Array.isArray(editedVal) ||
+        editedVal.some((v) => typeof v !== "string")
+      ) {
         throw new Error(`field "${key}" must stay a list of strings`);
       }
       continue;
@@ -149,7 +157,9 @@ export function assertArtifactShapeUnchanged(
     // Not an editable primitive — the owner surface offers no control for
     // it, so it must come back untouched.
     if (JSON.stringify(stagedVal) !== JSON.stringify(editedVal)) {
-      throw new Error(`field "${key}" isn't editable — it must match the staged value exactly`);
+      throw new Error(
+        `field "${key}" isn't editable — it must match the staged value exactly`
+      );
     }
   }
 }

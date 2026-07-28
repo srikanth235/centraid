@@ -3,7 +3,7 @@
 // pattern as `logic.ts`: no JSX here, so these live in their own module
 // purely to keep app.tsx under the file-size cap, closing over app.tsx's
 // own `state`/`data` plus the render entry points only app.tsx can define.
-import type { AppState, Nav } from './types.ts';
+import type { AppState, Nav } from "./types.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
@@ -48,7 +48,9 @@ export function createNav({
     renderQuick();
   }
   function quickStep(delta: number) {
-    const idx = state.visibleRows.findIndex((d) => d.document_id === state.quickId);
+    const idx = state.visibleRows.findIndex(
+      (d) => d.document_id === state.quickId
+    );
     const next = idx < 0 ? undefined : state.visibleRows[idx + delta];
     if (next) openQuick(next.document_id);
   }
@@ -72,7 +74,7 @@ export function createNav({
   function triggerUpload() {
     state.newMenuOpen = false;
     renderNewMenu();
-    $('uploadInput').click();
+    $("uploadInput").click();
   }
   function startCreateFolder() {
     state.newMenuOpen = false;
@@ -90,7 +92,7 @@ export function createNav({
   // toggling off when the same tag is clicked again (a chip row's usual
   // idiom) rather than requiring a separate "All" chip of its own.
   function selectTag(key: string) {
-    state.tag = state.tag === key ? 'all' : key;
+    state.tag = state.tag === key ? "all" : key;
     clearSelection();
     render();
   }
@@ -99,13 +101,13 @@ export function createNav({
     state.nav = nav;
     clearSelection();
     state.detailsId = null;
-    state.search = '';
+    state.search = "";
     state.searchResults = null;
-    ($('searchInput') as HTMLInputElement).value = '';
+    ($("searchInput") as HTMLInputElement).value = "";
     state.newMenuOpen = false;
     state.creatingFolder = false;
     state.renamingFolderId = null;
-    if (state.narrow) $('root').classList.remove('side-open');
+    if (state.narrow) $("root").classList.remove("side-open");
     renderDetails();
     render();
   }

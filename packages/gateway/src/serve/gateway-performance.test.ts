@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GatewayPerformanceMonitor } from './gateway-performance.js';
+import { GatewayPerformanceMonitor } from "./gateway-performance.js";
 
 class FakeHistogram {
   count = 4;
@@ -31,7 +31,7 @@ class FakeHistogram {
 describe(GatewayPerformanceMonitor, () => {
   afterEach(() => vi.useRealTimers());
 
-  it('surfaces event-loop delay in milliseconds and the boot fsync sample', () => {
+  it("surfaces event-loop delay in milliseconds and the boot fsync sample", () => {
     const histogram = new FakeHistogram();
     const monitor = new GatewayPerformanceMonitor({
       histogram,
@@ -57,7 +57,7 @@ describe(GatewayPerformanceMonitor, () => {
     expect(histogram.enabled).toBe(false);
   });
 
-  it('subtracts the sampling interval so an idle histogram reports zero lag', () => {
+  it("subtracts the sampling interval so an idle histogram reports zero lag", () => {
     const histogram = new FakeHistogram();
     histogram.max = 20_000_000;
     histogram.p99 = 20_000_000;
@@ -75,7 +75,7 @@ describe(GatewayPerformanceMonitor, () => {
     monitor.close();
   });
 
-  it('does not shed while the histogram has no samples', () => {
+  it("does not shed while the histogram has no samples", () => {
     const histogram = new FakeHistogram();
     histogram.count = 0;
     const monitor = new GatewayPerformanceMonitor({
@@ -87,7 +87,7 @@ describe(GatewayPerformanceMonitor, () => {
     monitor.close();
   });
 
-  it('keeps collection enabled continuously between rolling snapshots', async () => {
+  it("keeps collection enabled continuously between rolling snapshots", async () => {
     vi.useFakeTimers();
     const histogram = new FakeHistogram();
     const monitor = new GatewayPerformanceMonitor({

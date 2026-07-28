@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { writeFile } from "node:fs/promises";
 // Worker-spawn admission control (issue #351 Tier 4 hygiene): `runHandler`
 // used to spawn one 256MB-capped worker thread per request with no cap at
 // all — a request burst could spawn unboundedly and OOM the host. These pin
@@ -9,21 +9,21 @@ import { writeFile } from 'node:fs/promises';
 // Each test builds its own small `WorkerAdmission` (2-4 slots) rather than
 // the shared production default (8 concurrent + 16 queued) so the cap is
 // cheap to exercise without spinning up dozens of real worker threads.
-import path from 'node:path';
+import path from "node:path";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { beforeEach, describe, expect, test } from "vitest";
 
-import { runHandler, type HandlerOutcome } from './handler-runner.js';
-import { WorkerAdmission } from './worker-admission.js';
+import { runHandler, type HandlerOutcome } from "./handler-runner.js";
+import { WorkerAdmission } from "./worker-admission.js";
 
 let appDir: string;
 let handlerFile: string;
 
-describe('handler-runner', () => {
+describe("handler-runner", () => {
   beforeEach(async () => {
-    appDir = await tempDir('centraid-worker-admission-');
-    handlerFile = path.join(appDir, 'slow.js');
+    appDir = await tempDir("centraid-worker-admission-");
+    handlerFile = path.join(appDir, "slow.js");
     // Sleeps long enough that several worker calls genuinely overlap
     // in-flight, short enough to keep the test fast.
     // Park on a shared file gate (written by the test after slots fill) so the
@@ -31,31 +31,36 @@ describe('handler-runner', () => {
     await writeFile(
       handlerFile,
       `import { access } from 'node:fs/promises';
-     const gate = ${JSON.stringify(path.join(appDir, 'release.gate'))};
+     const gate = ${JSON.stringify(path.join(appDir, "release.gate"))};
      export default async ({ body }) => {
        const deadline = Date.now() + 5_000;
        while (Date.now() < deadline) {
          try { await access(gate); break; } catch { await new Promise((r) => setImmediate(r)); }
        }
        return { seq: body.seq, finishedAt: Date.now() };
-     };`,
+     };`
     );
   });
 
-  function run(admission: WorkerAdmission, seq: number): Promise<HandlerOutcome> {
+  function run(
+    admission: WorkerAdmission,
+    seq: number
+  ): Promise<HandlerOutcome> {
     return runHandler({
-      app: { id: 'demo', dir: appDir },
+      app: { id: "demo", dir: appDir },
       handlerFile,
-      handlerKind: 'action',
+      handlerKind: "action",
       args: { body: { seq } },
       admission,
     });
   }
 
-  test('a burst beyond cap+queue fails fast with a busy outcome; admitted calls still complete', async () => {
+  test("a burst beyond cap+queue fails fast with a busy outcome; admitted calls still complete", async () => {
     // 2 concurrent + 2 queued = 4 slots total; a 5th call must be refused.
     const admission = new WorkerAdmission(2, 2, 5_000);
-    const [c1, c2, c3, c4, c5] = [1, 2, 3, 4, 5].map((seq) => run(admission, seq));
+    const [c1, c2, c3, c4, c5] = [1, 2, 3, 4, 5].map((seq) =>
+      run(admission, seq)
+    );
 
     // The 5th call is refused immediately — it must not sit behind the
     // admitted handlers waiting for a slot that will never come. Assert the
@@ -74,10 +79,12 @@ describe('handler-runner', () => {
     expect(fifth.error).toMatch(/busy/iu);
 
     // Release the gate once the busy refusal is proven so the admitted four finish.
-    await writeFile(path.join(appDir, 'release.gate'), 'go');
+    await writeFile(path.join(appDir, "release.gate"), "go");
     const admitted = await admittedPromise;
     for (const outcome of admitted) expect(outcome.ok).toBe(true);
-    const seqs = admitted.map((o) => (o.value as { seq: number }).seq).toSorted((a, b) => a - b);
+    const seqs = admitted
+      .map((o) => (o.value as { seq: number }).seq)
+      .toSorted((a, b) => a - b);
     expect(seqs).toStrictEqual([1, 2, 3, 4]);
 
     // The gate is empty again once every call has settled, and the cumulative
@@ -90,7 +97,7 @@ describe('handler-runner', () => {
     expect(settled.busyMs).toBeGreaterThanOrEqual(0);
   });
 
-  test('cumulative task + busyMs counters track admitted work with an injected clock (#528)', async () => {
+  test("cumulative task + busyMs counters track admitted work with an injected clock (#528)", async () => {
     let clock = 0;
     const admission = new WorkerAdmission(1, 4, 5_000, () => clock);
 
@@ -107,11 +114,11 @@ describe('handler-runner', () => {
     expect(stats.inFlight).toBe(0);
   });
 
-  test('queued requests drain in FIFO order as slots free up', async () => {
+  test("queued requests drain in FIFO order as slots free up", async () => {
     // Only 1 concurrent slot — every later call queues behind the first.
     // Gate is open so handlers finish promptly; ordering is still forced by
     // the single admission slot.
-    await writeFile(path.join(appDir, 'release.gate'), 'go');
+    await writeFile(path.join(appDir, "release.gate"), "go");
     const admission = new WorkerAdmission(1, 3, 5_000);
     const calls = [1, 2, 3, 4].map((seq) => run(admission, seq));
     const outcomes = await Promise.all(calls);
@@ -124,7 +131,7 @@ describe('handler-runner', () => {
     expect(finishOrder).toStrictEqual([1, 2, 3, 4]);
   });
 
-  test('a request that times out waiting in queue gets a busy outcome, not a hang', async () => {
+  test("a request that times out waiting in queue gets a busy outcome, not a hang", async () => {
     // 1 concurrent slot, held by a handler that parks on the gate past the
     // queue wait timeout; the second call times out after 60ms.
     const admission = new WorkerAdmission(1, 1, 60);
@@ -134,7 +141,7 @@ describe('handler-runner', () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.busy).toBe(true);
     expect(outcome.error).toMatch(/timed out/iu);
-    await writeFile(path.join(appDir, 'release.gate'), 'go');
+    await writeFile(path.join(appDir, "release.gate"), "go");
     await holder; // let the first handler finish and release its slot
   });
 });

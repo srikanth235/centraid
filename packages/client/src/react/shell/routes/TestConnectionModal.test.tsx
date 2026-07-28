@@ -1,8 +1,8 @@
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import TestConnectionModal from './TestConnectionModal.js';
+import TestConnectionModal from "./TestConnectionModal.js";
 
 // connectFlowIO.js (pulled in transitively for local-vault loading elsewhere
 // in the module) imports gateway-client.js, which registers an
@@ -10,13 +10,14 @@ import TestConnectionModal from './TestConnectionModal.js';
 // side effect doesn't reach for a `window.CentraidApi` this file only wires
 // up inside `beforeEach` (same trap spaceModals.test.ts / ConnectFlow.test.tsx
 // sidestep).
-vi.mock(import('../../../gateway-client.js'), () => ({
+vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () => Promise.resolve([]),
 }));
 
-const testGatewayConnection = vi.fn<typeof window.CentraidApi.testGatewayConnection>();
+const testGatewayConnection =
+  vi.fn<typeof window.CentraidApi.testGatewayConnection>();
 
-describe('routes/TestConnectionModal', () => {
+describe("routes/TestConnectionModal", () => {
   beforeEach(() => {
     testGatewayConnection.mockReset();
     (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
@@ -34,12 +35,16 @@ describe('routes/TestConnectionModal', () => {
   });
 
   function mount(onClose: () => void): HTMLDivElement {
-    container = document.createElement('div');
+    container = document.createElement("div");
     document.body.appendChild(container);
     act(() => {
       root = createRoot(container as HTMLDivElement);
       root.render(
-        <TestConnectionModal gatewayId="home" gatewayLabel="home-server" onClose={onClose} />,
+        <TestConnectionModal
+          gatewayId="home"
+          gatewayLabel="home-server"
+          onClose={onClose}
+        />
       );
     });
     return container;
@@ -56,45 +61,49 @@ describe('routes/TestConnectionModal', () => {
     it('runs the test against {kind:"gateway", gatewayId} on mount and renders the report', async () => {
       testGatewayConnection.mockResolvedValue({
         ok: true,
-        stages: [{ id: 'reach', label: 'Reach', status: 'pass' }],
+        stages: [{ id: "reach", label: "Reach", status: "pass" }],
         gateway: {
-          version: '0.5.2',
+          version: "0.5.2",
           schemaEpoch: 3,
-          instanceId: 'i1',
+          instanceId: "i1",
           compatible: true,
         },
       });
       const el = mount(vi.fn());
       await flush();
       expect(testGatewayConnection).toHaveBeenCalledWith({
-        gatewayId: 'home',
-        kind: 'gateway',
+        gatewayId: "home",
+        kind: "gateway",
       });
-      expect(el.textContent).toContain('Reach');
-      expect(el.textContent).toContain('v0.5.2');
+      expect(el.textContent).toContain("Reach");
+      expect(el.textContent).toContain("v0.5.2");
     });
 
-    it('Retry re-runs the test', async () => {
+    it("Retry re-runs the test", async () => {
       testGatewayConnection.mockResolvedValue({ ok: true, stages: [] });
       const el = mount(vi.fn());
       await flush();
-      const retry = [...el.querySelectorAll('button')].find(
-        (b) => b.textContent === 'Retry',
+      const retry = [...el.querySelectorAll("button")].find(
+        (b) => b.textContent === "Retry"
       ) as HTMLButtonElement;
-      act(() => retry.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      act(() =>
+        retry.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       await flush();
       expect(testGatewayConnection).toHaveBeenCalledTimes(2);
     });
 
-    it('Close fires onClose', async () => {
+    it("Close fires onClose", async () => {
       testGatewayConnection.mockResolvedValue({ ok: true, stages: [] });
       const onClose = vi.fn<() => void>();
       const el = mount(onClose);
       await flush();
-      const close = [...el.querySelectorAll('button')].find(
-        (b) => b.textContent === 'Close',
+      const close = [...el.querySelectorAll("button")].find(
+        (b) => b.textContent === "Close"
       ) as HTMLButtonElement;
-      act(() => close.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      act(() =>
+        close.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      );
       expect(onClose).toHaveBeenCalledOnce();
     });
   });

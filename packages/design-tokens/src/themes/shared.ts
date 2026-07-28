@@ -2,36 +2,36 @@
 // Each preset under this folder builds a `Theme` literal; the
 // `themes/index.ts` barrel collects them into a typed registry.
 
-import type { Palette } from '../palette';
+import type { Palette } from "../palette";
 
 // Brand teal — the single source of truth for the Centraid identity.
 // This is the exact hue used by the logo + app-icon marks; the SVG
 // assets under `assets/` and `docs/assets/` hardcode this same hex, and
 // `toCss()` emits it as a theme-independent `--brand` var.
-export const BRAND = '#3EC8B4';
+export const BRAND = "#3EC8B4";
 
 // Teal accent ramp derived from BRAND. Used for the FAB, sparkle button,
 // primary CTAs, brand mark, focus rings, and active state in version
 // history. Only Centraid's own light/dark themes read these — the
 // emulation presets (Notion, GitHub, …) define their own accents inline.
 // The base accent is BRAND itself (see above); the ramp extends from it.
-export const ACCENT_LIGHT = '#62D6C6';
-export const ACCENT_DEEP = '#2AA593';
-export const ACCENT_MIDNIGHT = '#12645A';
-export const ACCENT_VIOLET = '#7C5BD9';
+export const ACCENT_LIGHT = "#62D6C6";
+export const ACCENT_DEEP = "#2AA593";
+export const ACCENT_MIDNIGHT = "#12645A";
+export const ACCENT_VIOLET = "#7C5BD9";
 
-export const SUCCESS = '#5C8A4E';
-export const DANGER = '#C44A4A';
+export const SUCCESS = "#5C8A4E";
+export const DANGER = "#C44A4A";
 
 // Mobile phones have dark bezels regardless of UI theme — keep the
 // phone-frame chrome constant across every preset.
-export const BEZEL = '#0a0d13';
-export const BEZEL_INNER = '#14181F';
+export const BEZEL = "#0a0d13";
+export const BEZEL_INNER = "#14181F";
 
 export interface Theme {
   /** Light vs dark family — drives the picker grouping and the
    * applicability of dark-only tuning knobs (cool-blue-cast, --bg-l). */
-  kind: 'light' | 'dark';
+  kind: "light" | "dark";
 
   /** Single brand accent — FAB, sparkle, primary CTAs, focus rings. */
   accent: string;

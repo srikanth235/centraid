@@ -32,9 +32,9 @@ const MAX_MENTION_LEN = 40;
  */
 export function mentionTokenAt(text: string, caret: number): CaretToken | null {
   const upto = text.slice(0, caret);
-  const at = upto.lastIndexOf('@');
+  const at = upto.lastIndexOf("@");
   if (at < 0) return null;
-  const before = at === 0 ? ' ' : upto[at - 1];
+  const before = at === 0 ? " " : upto[at - 1];
   if (before !== undefined && !/[\s(]/u.test(before)) return null;
   const query = upto.slice(at + 1);
   if (query.length > MAX_MENTION_LEN) return null;
@@ -48,7 +48,7 @@ export function mentionTokenAt(text: string, caret: number): CaretToken | null {
  * yet) — a slash mid-sentence is just a slash.
  */
 export function slashCommandAt(text: string, caret: number): CaretToken | null {
-  if (text[0] !== '/') return null;
+  if (text[0] !== "/") return null;
   const upto = text.slice(0, caret);
   const query = upto.slice(1);
   if (/\s/u.test(query)) return null;
@@ -58,7 +58,7 @@ export function slashCommandAt(text: string, caret: number): CaretToken | null {
 /** The canonical inline-ref string the shared renderer hydrates into a chip. */
 export function refString(label: string, type: string, id: string): string {
   // Labels can't contain `]`; strip it so the `@[label](...)` bracket stays valid.
-  const safeLabel = label.replace(/[\]]/gu, '').trim() || `${type} ${id}`;
+  const safeLabel = label.replace(/[\]]/gu, "").trim() || `${type} ${id}`;
   return `@[${safeLabel}](ref:${type}/${id})`;
 }
 
@@ -71,7 +71,7 @@ export function insertRef(
   text: string,
   start: number,
   caret: number,
-  entity: { label: string; type: string; id: string },
+  entity: { label: string; type: string; id: string }
 ): { text: string; caret: number } {
   const ref = `${refString(entity.label, entity.type, entity.id)} `;
   const next = text.slice(0, start) + ref + text.slice(caret);

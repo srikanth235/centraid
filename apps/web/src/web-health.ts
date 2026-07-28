@@ -1,12 +1,12 @@
-import type { CentraidGatewayRuntime } from '../../../packages/client/src/centraid-api.js';
-import { gatewayJson, loadConnection } from './web-state.js';
+import type { CentraidGatewayRuntime } from "../../../packages/client/src/centraid-api.js";
+import { gatewayJson, loadConnection } from "./web-state.js";
 
 export const HEALTH_POLL_INTERVAL_MS = 15000;
 
 interface CentraidGatewayHealth {
   uptimeMs: number;
   startedAt: string;
-  status: NonNullable<CentraidGatewayRuntime['healthStatus']>;
+  status: NonNullable<CentraidGatewayRuntime["healthStatus"]>;
   components: Array<{
     component: string;
     status: string;
@@ -17,14 +17,16 @@ interface CentraidGatewayHealth {
 export async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
   const started = performance.now();
   try {
-    const health = await gatewayJson<CentraidGatewayHealth>('/centraid/_gateway/health');
+    const health = await gatewayJson<CentraidGatewayHealth>(
+      "/centraid/_gateway/health"
+    );
     const now = Date.now();
     return {
-      gatewayId: 'web',
+      gatewayId: "web",
       gatewayLabel: loadConnection().label,
-      gatewayKind: 'remote',
+      gatewayKind: "remote",
       trackingSince: now - health.uptimeMs,
-      status: 'up',
+      status: "up",
       statusSince: now - health.uptimeMs,
       lastCheckAt: now,
       latencyMs: Math.round(performance.now() - started),
@@ -39,7 +41,7 @@ export async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
       alertHistory: [],
       healthStatus: health.status,
       componentIssues: health.components
-        .filter((component) => component.status !== 'ok')
+        .filter((component) => component.status !== "ok")
         .map((component) => ({
           component: component.component,
           status: component.status,
@@ -48,11 +50,11 @@ export async function healthSnapshot(): Promise<CentraidGatewayRuntime> {
     };
   } catch (error) {
     return {
-      gatewayId: 'web',
+      gatewayId: "web",
       gatewayLabel: loadConnection().label,
-      gatewayKind: 'remote',
+      gatewayKind: "remote",
       trackingSince: Date.now(),
-      status: 'down',
+      status: "down",
       lastCheckAt: Date.now(),
       lastError: error instanceof Error ? error.message : String(error),
       checksTotal: 1,

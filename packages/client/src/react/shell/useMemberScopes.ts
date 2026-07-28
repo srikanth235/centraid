@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import { listAppScopes, listVaults } from '../../gateway-client.js';
-import { canWrite, type MemberScope } from './memberScope.js';
-import { useAsyncData } from './useAsyncData.js';
+import { listAppScopes, listVaults } from "../../gateway-client.js";
+import { canWrite, type MemberScope } from "./memberScope.js";
+import { useAsyncData } from "./useAsyncData.js";
 
 // The member's scope registry (issue #599, Decision 14) — successor to the
 // sidebar-head vault registry that fed the retired space switcher.
@@ -36,7 +36,7 @@ export interface MemberScopesController {
    *  `getSettings` is unavailable (stubbed test bridges). */
   gatewayId: string | undefined;
   gatewayLabel: string | undefined;
-  gatewayKind: 'local' | 'remote' | undefined;
+  gatewayKind: "local" | "remote" | undefined;
   /** True until the first fetch settles (success or failure). */
   loading: boolean;
 }
@@ -46,7 +46,7 @@ interface ScopesSnapshot {
   defaultScopeId: string;
   gatewayId: string | undefined;
   gatewayLabel: string | undefined;
-  gatewayKind: 'local' | 'remote' | undefined;
+  gatewayKind: "local" | "remote" | undefined;
 }
 
 async function loadScopes(): Promise<MemberScope[]> {
@@ -81,7 +81,7 @@ async function loadScopes(): Promise<MemberScope[]> {
     label: entry.name,
     ...(entry.color ? { color: entry.color } : {}),
     ...(entry.icon ? { icon: entry.icon } : {}),
-    role: 'admin',
+    role: "admin",
     canWrite: true,
   }));
 }
@@ -95,7 +95,7 @@ async function loadScopeRegistry(): Promise<ScopesSnapshot> {
   ]);
   return {
     scopes,
-    defaultScopeId: auth?.vaultId ?? scopes[0]?.id ?? '',
+    defaultScopeId: auth?.vaultId ?? scopes[0]?.id ?? "",
     gatewayId: settings?.activeGatewayId,
     gatewayLabel: settings?.activeGatewayLabel,
     gatewayKind: settings?.activeGatewayKind,
@@ -122,9 +122,9 @@ export function useMemberScopes(): MemberScopesController {
     };
   }, [refresh]);
 
-  const ready = state.status === 'ready' ? state.data : undefined;
+  const ready = state.status === "ready" ? state.data : undefined;
   const scopes = ready?.scopes ?? [];
-  const defaultScopeId = ready?.defaultScopeId ?? '';
+  const defaultScopeId = ready?.defaultScopeId ?? "";
   // The member's own space is the gateway's first, oldest scope; fall back to
   // whatever the default pointer names when the list is ordered otherwise.
   const primary = scopes[0] ?? scopes.find((s) => s.id === defaultScopeId);
@@ -136,6 +136,6 @@ export function useMemberScopes(): MemberScopesController {
     gatewayId: ready?.gatewayId,
     gatewayLabel: ready?.gatewayLabel,
     gatewayKind: ready?.gatewayKind,
-    loading: state.status === 'loading',
+    loading: state.status === "loading",
   };
 }

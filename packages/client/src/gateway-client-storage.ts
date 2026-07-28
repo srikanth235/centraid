@@ -19,12 +19,21 @@
 
 /* eslint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
 
-import { consumeSseFrames, frameData } from '@centraid/blueprints/kit/turn-stream.js';
+import {
+  consumeSseFrames,
+  frameData,
+} from "@centraid/blueprints/kit/turn-stream.js";
 
-import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  enc,
+  readJson,
+} from "./gateway-client-core.js";
 
 /** One kind only (#436 §2): every connection is a managed provider home bundle. */
-export type StorageConnectionKind = 'provider';
+export type StorageConnectionKind = "provider";
 
 export interface StorageConnectionDTO {
   id: string;
@@ -41,7 +50,7 @@ export interface StorageConnectionDTO {
 }
 
 export interface CreateProviderConnectionInput {
-  kind: 'provider';
+  kind: "provider";
   name: string;
   baseUrl: string;
   apiKey: string;
@@ -54,7 +63,7 @@ export type CreateStorageConnectionInput = CreateProviderConnectionInput;
 export class RecoveryKitNotConfirmedError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'RecoveryKitNotConfirmedError';
+    this.name = "RecoveryKitNotConfirmedError";
   }
 }
 
@@ -65,7 +74,7 @@ export class ProviderNotHomeProfileError extends Error {
   readonly missingCapabilities: string[];
   constructor(message: string, missingCapabilities: string[]) {
     super(message);
-    this.name = 'ProviderNotHomeProfileError';
+    this.name = "ProviderNotHomeProfileError";
     this.missingCapabilities = missingCapabilities;
   }
 }
@@ -73,25 +82,27 @@ export class ProviderNotHomeProfileError extends Error {
 /** Pull the `(missing a, b, c)` clause out of the gateway's home-profile
  *  message into a clean capability list. Empty when none was named. */
 function parseMissingCapabilities(message: string | undefined): string[] {
-  const match = /missing (?<capabilities>[^)]+)\)/u.exec(message ?? '');
+  const match = /missing (?<capabilities>[^)]+)\)/u.exec(message ?? "");
   const capabilities = match?.groups?.capabilities;
   if (!capabilities) return [];
   return capabilities
-    .split(',')
+    .split(",")
     .map((c) => c.trim())
     .filter((c) => c.length > 0);
 }
 
 /** Every configured storage connection (never carries a secret field). */
-export async function listStorageConnections(): Promise<StorageConnectionDTO[]> {
+export async function listStorageConnections(): Promise<
+  StorageConnectionDTO[]
+> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/storage/connections', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_gateway/storage/connections", {
+    method: "GET",
     headers: authHeaders(token),
   });
   const out = await readJson<{ connections: StorageConnectionDTO[] }>(
     res,
-    'list storage connections',
+    "list storage connections"
   );
   return out.connections ?? [];
 }
@@ -102,18 +113,19 @@ export async function listStorageConnections(): Promise<StorageConnectionDTO[]> 
  * exported, re-selected, and verified the current recovery kit.
  */
 export async function createStorageConnection(
-  input: CreateStorageConnectionInput,
+  input: CreateStorageConnectionInput
 ): Promise<StorageConnectionDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/storage/connections', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+  const res = await doFetch(baseUrl, "/centraid/_gateway/storage/connections", {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify(input),
   });
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new RecoveryKitNotConfirmedError(
-      body.message ?? 'confirm the recovery kit before enabling a remote storage tier',
+      body.message ??
+        "confirm the recovery kit before enabling a remote storage tier"
     );
   }
   if (res.status === 400) {
@@ -121,45 +133,55 @@ export async function createStorageConnection(
       error?: string;
       message?: string;
     };
-    if (body.error === 'provider_not_home_profile') {
+    if (body.error === "provider_not_home_profile") {
       throw new ProviderNotHomeProfileError(
-        body.message ?? 'this provider does not advertise the home profile',
-        parseMissingCapabilities(body.message),
+        body.message ?? "this provider does not advertise the home profile",
+        parseMissingCapabilities(body.message)
       );
     }
-    throw new Error(body.message ?? 'create storage connection failed (HTTP 400)');
+    throw new Error(
+      body.message ?? "create storage connection failed (HTTP 400)"
+    );
   }
   const out = await readJson<{ connection: StorageConnectionDTO }>(
     res,
-    'create storage connection',
+    "create storage connection"
   );
   return out.connection;
 }
 
 export async function updateStorageConnection(
   id: string,
-  patch: Partial<CreateStorageConnectionInput>,
+  patch: Partial<CreateStorageConnectionInput>
 ): Promise<StorageConnectionDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_gateway/storage/connections/${enc(id)}`, {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(patch),
-  });
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/storage/connections/${enc(id)}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(patch),
+    }
+  );
   const out = await readJson<{ connection: StorageConnectionDTO }>(
     res,
-    'update storage connection',
+    "update storage connection"
   );
   return out.connection;
 }
 
 export async function deleteStorageConnection(id: string): Promise<void> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_gateway/storage/connections/${enc(id)}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
-  await readJson(res, 'delete storage connection');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/storage/connections/${enc(id)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    }
+  );
+  await readJson(res, "delete storage connection");
 }
 
 export type StorageConnectionTestResult =
@@ -167,13 +189,19 @@ export type StorageConnectionTestResult =
   | { ok: false; error: string };
 
 /** Real signed HEAD probe against the connection's bucket. */
-export async function testStorageConnection(id: string): Promise<StorageConnectionTestResult> {
+export async function testStorageConnection(
+  id: string
+): Promise<StorageConnectionTestResult> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_gateway/storage/connections/${enc(id)}/test`, {
-    method: 'POST',
-    headers: authHeaders(token),
-  });
-  return readJson<StorageConnectionTestResult>(res, 'test storage connection');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/storage/connections/${enc(id)}/test`,
+    {
+      method: "POST",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson<StorageConnectionTestResult>(res, "test storage connection");
 }
 
 /**
@@ -208,7 +236,7 @@ export interface StorageVaultStatusDTO {
     uploading: number;
     lastError: string | null;
   };
-  casAck?: 'receipt' | 'replicated';
+  casAck?: "receipt" | "replicated";
   outboxBudgetBytes?: number;
   reservedHeadroomBytes?: number;
   lastSweep: {
@@ -225,11 +253,14 @@ export interface StorageVaultStatusDTO {
 /** Per-vault replication progress — backs the Storage card's per-vault rows. */
 export async function getStorageStatus(): Promise<StorageVaultStatusDTO[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/storage/status', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_gateway/storage/status", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const out = await readJson<{ vaults: StorageVaultStatusDTO[] }>(res, 'storage status');
+  const out = await readJson<{ vaults: StorageVaultStatusDTO[] }>(
+    res,
+    "storage status"
+  );
   return out.vaults ?? [];
 }
 
@@ -240,16 +271,21 @@ export async function getStorageStatus(): Promise<StorageVaultStatusDTO[]> {
  */
 export async function streamStorageCustody(
   onStatus: (vaults: StorageVaultStatusDTO[]) => void,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   try {
-    const res = await doFetch(baseUrl, '/centraid/_gateway/storage/status/events', {
-      method: 'GET',
-      headers: authHeaders(token),
-      signal,
-    });
-    if (!res.ok || !res.body) throw new Error(`storage custody stream failed (HTTP ${res.status})`);
+    const res = await doFetch(
+      baseUrl,
+      "/centraid/_gateway/storage/status/events",
+      {
+        method: "GET",
+        headers: authHeaders(token),
+        signal,
+      }
+    );
+    if (!res.ok || !res.body)
+      throw new Error(`storage custody stream failed (HTTP ${res.status})`);
     await consumeSseFrames(
       res.body,
       (frame) => {
@@ -264,7 +300,7 @@ export async function streamStorageCustody(
           // A malformed frame is isolated; the next custody event remains useful.
         }
       },
-      { signal },
+      { signal }
     );
   } catch (error) {
     if (!signal.aborted) throw error;
@@ -285,7 +321,9 @@ export interface StorageConnectionUsageDTO {
   kind: StorageConnectionKind;
   /** `null` before the first successful poll, or if the provider doesn't meter.
    *  Keyed by store class — `backup`, `cas`, `derived` (PROTOCOL.md StoreClass). */
-  providerReported: Partial<Record<'backup' | 'cas' | 'derived', StoreUsageReportDTO>> | null;
+  providerReported: Partial<
+    Record<"backup" | "cas" | "derived", StoreUsageReportDTO>
+  > | null;
   /** Locally-computed replicated bytes (custody's own ground truth) — compare
    *  against `providerReported` for an honest drift/integrity read. */
   localReplicatedBytes: number;
@@ -296,18 +334,21 @@ export interface StorageConnectionUsageDTO {
 /** Per-connection usage — the quota bar's data source. */
 export async function getStorageUsage(): Promise<StorageConnectionUsageDTO[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/storage/usage', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_gateway/storage/usage", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const out = await readJson<{ connections: StorageConnectionUsageDTO[] }>(res, 'storage usage');
+  const out = await readJson<{ connections: StorageConnectionUsageDTO[] }>(
+    res,
+    "storage usage"
+  );
   return out.connections ?? [];
 }
 
 export interface BlobStoreSettingsDTO {
-  kind: 'fs' | 's3';
+  kind: "fs" | "s3";
   connectionId?: string;
-  connectionKind?: 'provider';
+  connectionKind?: "provider";
   endpoint?: string;
   region?: string;
   bucket?: string;
@@ -318,11 +359,14 @@ export interface BlobStoreSettingsDTO {
 /** The addressed vault's current byte-custody settings. */
 export async function getVaultBlobStore(): Promise<BlobStoreSettingsDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/blob-store', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/blob-store", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const out = await readJson<{ blob_store: BlobStoreSettingsDTO }>(res, 'get vault blob store');
+  const out = await readJson<{ blob_store: BlobStoreSettingsDTO }>(
+    res,
+    "get vault blob store"
+  );
   return out.blob_store;
 }
 
@@ -333,23 +377,24 @@ export async function getVaultBlobStore(): Promise<BlobStoreSettingsDTO> {
  * is; there is no bypass for exporting live remote custody.
  */
 export async function attachVaultStorageConnection(
-  connectionId: string,
+  connectionId: string
 ): Promise<BlobStoreSettingsDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/blob-store', {
-    method: 'PUT',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ blob_store: { kind: 's3', connectionId } }),
+  const res = await doFetch(baseUrl, "/centraid/_vault/blob-store", {
+    method: "PUT",
+    headers: authHeaders(token, "application/json"),
+    body: JSON.stringify({ blob_store: { kind: "s3", connectionId } }),
   });
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new RecoveryKitNotConfirmedError(
-      body.message ?? 'confirm the recovery kit before enabling a remote storage tier',
+      body.message ??
+        "confirm the recovery kit before enabling a remote storage tier"
     );
   }
   const out = await readJson<{ blob_store: BlobStoreSettingsDTO }>(
     res,
-    'attach storage connection',
+    "attach storage connection"
   );
   return out.blob_store;
 }
@@ -358,11 +403,14 @@ export async function attachVaultStorageConnection(
  *  'fs'}`) — never gated by the recovery kit; going local-only is always safe. */
 export async function detachVaultStorageConnection(): Promise<BlobStoreSettingsDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/blob-store', {
-    method: 'PUT',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ blob_store: { kind: 'fs' } }),
+  const res = await doFetch(baseUrl, "/centraid/_vault/blob-store", {
+    method: "PUT",
+    headers: authHeaders(token, "application/json"),
+    body: JSON.stringify({ blob_store: { kind: "fs" } }),
   });
-  const out = await readJson<{ blob_store: BlobStoreSettingsDTO }>(res, 'detach vault storage');
+  const out = await readJson<{ blob_store: BlobStoreSettingsDTO }>(
+    res,
+    "detach vault storage"
+  );
   return out.blob_store;
 }

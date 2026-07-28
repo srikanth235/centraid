@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import crypto from "node:crypto";
 /*
  * Multi-client integration: prove that two independent HTTP clients
  * pointed at the same daemon see consistent gateway state. The "two
@@ -16,43 +16,52 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * covered in `cli.test.ts`. This test focuses on the runtime contract
  * a second client expects after the gateway holds a published app.
  */
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { describe, afterEach, beforeEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import type { WorktreeStore } from '../worktree-store/index.js';
-import { serve, type GatewayServeHandle } from './serve.ts';
-import type { GatewayPaths } from '../paths.ts';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
+import type { GatewayPaths } from "../paths.ts";
+import type { WorktreeStore } from "../worktree-store/index.js";
+import { serve, type GatewayServeHandle } from "./serve.ts";
 
 let dataDir: string;
 let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    vaultDir: path.join(dir, 'vault'),
+    vaultDir: path.join(dir, "vault"),
   };
 }
 
 /** Publish one app onto the git-store `main`, before serve() boots. */
 async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
-  const session = await store.openSession('seed');
-  const appDir = path.join(session.worktreePath, 'apps', appId);
+  const session = await store.openSession("seed");
+  const appDir = path.join(session.worktreePath, "apps", appId);
   await fs.mkdir(appDir, { recursive: true });
   await fs.writeFile(
-    path.join(appDir, 'app.json'),
-    JSON.stringify({ manifestVersion: 1, id: appId, name: 'multiclient-test', version: '0.1.0' }),
+    path.join(appDir, "app.json"),
+    JSON.stringify({
+      manifestVersion: 1,
+      id: appId,
+      name: "multiclient-test",
+      version: "0.1.0",
+    })
   );
-  await fs.writeFile(path.join(appDir, 'index.html'), '<!doctype html><title>mc</title>');
-  await store.publish({ sessionId: 'seed', appId, message: 'seed' });
-  await store.closeSession('seed');
+  await fs.writeFile(
+    path.join(appDir, "index.html"),
+    "<!doctype html><title>mc</title>"
+  );
+  await store.publish({ sessionId: "seed", appId, message: "seed" });
+  await store.closeSession("seed");
 }
 
-describe('serve-multiclient scenarios', () => {
+describe("serve-multiclient scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`mc-gateway-${crypto.randomUUID()}-`);
     handle = await serve({ paths: pathsUnder(dataDir) });
-    await seedApp(await handle.appsStore(), 'multiclient-test');
+    await seedApp(await handle.appsStore(), "multiclient-test");
     await handle.syncApps();
   });
 
@@ -61,14 +70,14 @@ describe('serve-multiclient scenarios', () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  test('two clients see the published app consistently in the registry + static serve', async () => {
+  test("two clients see the published app consistently in the registry + static serve", async () => {
     // Client A: list — sees the app synced from `main`.
     const list = await fetch(`${handle.url}/centraid/_apps`, {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
     expect(list.status).toBe(200);
     const apps = (await list.json()) as Array<{ id: string }>;
-    expect(apps.some((a) => a.id === 'multiclient-test')).toBeTruthy();
+    expect(apps.some((a) => a.id === "multiclient-test")).toBeTruthy();
 
     // Client B: static-serve the app's index.html — proves the daemon's
     // `/centraid/<id>/` static path resolves the live `main` worktree, not

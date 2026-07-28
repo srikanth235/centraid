@@ -1,7 +1,7 @@
-import type { Database } from '@sqlite.org/sqlite-wasm';
+import type { Database } from "@sqlite.org/sqlite-wasm";
 
-import { ReplicaSqliteStore } from './store-core.js';
-import { WasmSqliteDriver } from './wasm-sqlite-driver.js';
+import { ReplicaSqliteStore } from "./store-core.js";
+import { WasmSqliteDriver } from "./wasm-sqlite-driver.js";
 
 /**
  * Web replica store: the shared {@link ReplicaSqliteStore} core over a

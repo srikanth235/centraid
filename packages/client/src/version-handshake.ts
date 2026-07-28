@@ -20,4 +20,4 @@ export {
   type GatewayInfo,
   type HandshakeResult,
   type GatewayCapabilities,
-} from '@centraid/protocol';
+} from "@centraid/protocol";

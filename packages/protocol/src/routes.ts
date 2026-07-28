@@ -20,16 +20,16 @@
  */
 
 /** Shell / control plane prefix. */
-export const GATEWAY_PLANE_PREFIX = '/centraid/_gateway' as const;
+export const GATEWAY_PLANE_PREFIX = "/centraid/_gateway" as const;
 
 /** Vault plane prefix. */
-export const VAULT_PLANE_PREFIX = '/centraid/_vault' as const;
+export const VAULT_PLANE_PREFIX = "/centraid/_vault" as const;
 
 /** Apps plane prefix. */
-export const APPS_PLANE_PREFIX = '/centraid/_apps' as const;
+export const APPS_PLANE_PREFIX = "/centraid/_apps" as const;
 
 /** Browser session plane prefix. */
-export const WEB_PLANE_PREFIX = '/centraid/_web' as const;
+export const WEB_PLANE_PREFIX = "/centraid/_web" as const;
 
 export const ROUTES = {
   gatewayInfo: `${GATEWAY_PLANE_PREFIX}/info`,
@@ -57,12 +57,16 @@ export function vaultConnectionPath(encodedConnectionId: string): string {
   return `${ROUTES.vaultConnections}/${encodedConnectionId}`;
 }
 
-export function vaultConnectionAuthorizePath(encodedConnectionId: string): string {
+export function vaultConnectionAuthorizePath(
+  encodedConnectionId: string
+): string {
   return `${vaultConnectionPath(encodedConnectionId)}/authorize`;
 }
 
 /** Every known absolute path constant — used by the route-literal drift check. */
-export const ROUTE_PATHS: readonly string[] = Object.freeze(Object.values(ROUTES));
+export const ROUTE_PATHS: readonly string[] = Object.freeze(
+  Object.values(ROUTES)
+);
 
 /**
  * Build the app-scoped action-invocation path (issue #505). `POST` here with

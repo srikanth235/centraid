@@ -18,9 +18,9 @@
  *   - Retention runs at end-of-run per `manifest.history.keep`.
  */
 
-import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import path from "node:path";
 
 import {
   appendLogs,
@@ -35,35 +35,35 @@ import {
   WorkerPool,
   workerPoolSizeFromEnv,
   workerResourceLimitsFromEnv,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
 
-import { validateOutputAgainstSchema } from '../manifest/manifest-output.js';
-import type { HistoryConfig, OutputSchema } from '../manifest/manifest.js';
+import { validateOutputAgainstSchema } from "../manifest/manifest-output.js";
+import type { HistoryConfig, OutputSchema } from "../manifest/manifest.js";
 import {
   applyRetention,
   extractReturnEnvelope,
   noopRunEventSink,
   truncateForAudit,
   type HandlerReturnEnvelope,
-} from './audit.js';
+} from "./audit.js";
 import {
   handleAgentMessage,
   handleRunsMessage,
   handleStateMessage,
   handleVaultMessage,
   type AuditState,
-} from './ctx.js';
+} from "./ctx.js";
 
 function resolveWorkerFile(): string {
   // `here` is the dir of this module (`src/handler` → `dist/handler` once
   // built); the worker runner lives one level up under `worker/`.
   const here = import.meta.dirname;
-  const jsPath = path.join(here, '..', 'worker', 'runner.js');
+  const jsPath = path.join(here, "..", "worker", "runner.js");
   if (existsSync(jsPath)) return jsPath;
   // Running tests via tsx from src/ where .js isn't emitted — fall back to
   // the .ts source. tsx propagates its loader to spawned Workers via
   // NODE_OPTIONS, so this works under `tsx --test`.
-  return path.join(here, '..', 'worker', 'runner.ts');
+  return path.join(here, "..", "worker", "runner.ts");
 }
 
 const WORKER_FILE = resolveWorkerFile();
@@ -75,7 +75,7 @@ function automationWorkerPool(): WorkerPool {
     automationWorkerPoolInstance = new WorkerPool(
       WORKER_FILE,
       workerPoolSizeFromEnv(),
-      workerResourceLimitsFromEnv(),
+      workerResourceLimitsFromEnv()
     );
     automationWorkerPoolInstance.prewarm();
   }
@@ -108,7 +108,10 @@ export interface AgentCall {
   readonly onEvent?: (ev: TurnStreamEvent) => void;
 }
 
-export type AgentDispatcher = (call: AgentCall, ctx: DispatchContext) => Promise<unknown>;
+export type AgentDispatcher = (
+  call: AgentCall,
+  ctx: DispatchContext
+) => Promise<unknown>;
 
 export interface DispatchContext {
   readonly runId: string;
@@ -143,7 +146,7 @@ export interface RunHandlerOptions {
     store: ConversationStore,
     conversationId: string,
     turnId: string,
-    ok: boolean,
+    ok: boolean
   ) => void;
   /** Fixed harness owner for this automation conversation. */
   runnerKind?: string;
@@ -264,26 +267,26 @@ export interface ConnectionAuth {
   readonly readOnlyPosts?: readonly {
     readonly host: string;
     readonly path: string;
-    readonly body: 'json' | 'graphql-query';
+    readonly body: "json" | "graphql-query";
   }[];
 }
 
 export function isBrokerReadOnlyPost(
-  policies: ConnectionAuth['readOnlyPosts'],
+  policies: ConnectionAuth["readOnlyPosts"],
   url: URL,
-  body: string | undefined,
+  body: string | undefined
 ): boolean {
   const policy = policies?.find(
-    (entry) => entry.host === url.hostname && entry.path === url.pathname,
+    (entry) => entry.host === url.hostname && entry.path === url.pathname
   );
   if (!policy || body === undefined) return false;
   try {
     const parsed = JSON.parse(body) as unknown;
-    if (policy.body === 'json') return true;
+    if (policy.body === "json") return true;
     if (
-      typeof parsed !== 'object' ||
+      typeof parsed !== "object" ||
       parsed === null ||
-      typeof (parsed as { query?: unknown }).query !== 'string'
+      typeof (parsed as { query?: unknown }).query !== "string"
     ) {
       return false;
     }
@@ -291,7 +294,7 @@ export function isBrokerReadOnlyPost(
     // Erring closed here is preferable to letting a connector smuggle a
     // GraphQL mutation through the read-only POST exception.
     const document = (parsed as { query: string }).query
-      .replace(/#[^\r\n]*/gu, '')
+      .replace(/#[^\r\n]*/gu, "")
       .replace(/"""[\s\S]*?"""/gu, '""')
       .replace(/"(?:\\.|[^"\\])*"/gu, '""');
     return !/\b(?:mutation|subscription)\b/iu.test(document);
@@ -303,12 +306,18 @@ export function isBrokerReadOnlyPost(
 function bindConnectorVaultPayload(
   op: string,
   payload: Record<string, unknown>,
-  connectionId: string | undefined,
+  connectionId: string | undefined
 ): Record<string, unknown> {
-  if (op !== 'invoke' || !connectionId) return payload;
-  if (payload.command !== 'sync.begin_run' && payload.command !== 'sync.stage_rows') return payload;
+  if (op !== "invoke" || !connectionId) return payload;
+  if (
+    payload.command !== "sync.begin_run" &&
+    payload.command !== "sync.stage_rows"
+  )
+    return payload;
   const input =
-    payload.input && typeof payload.input === 'object' && !Array.isArray(payload.input)
+    payload.input &&
+    typeof payload.input === "object" &&
+    !Array.isArray(payload.input)
       ? (payload.input as Record<string, unknown>)
       : {};
   return { ...payload, input: { ...input, connection_id: connectionId } };
@@ -320,7 +329,7 @@ export interface HandlerOutcome {
   summary?: string;
   output?: unknown;
   error?: string;
-  logs: Array<{ level: 'info' | 'warn' | 'error'; msg: string }>;
+  logs: Array<{ level: "info" | "warn" | "error"; msg: string }>;
   toolBatches: number;
   agentCalls: number;
 }
@@ -339,35 +348,35 @@ interface FetchSpecWire {
 
 type WorkerToParentMessage =
   | {
-      type: 'agent';
+      type: "agent";
       id: number;
       prompt: string;
       json?: unknown;
       content?: { contentId: string; variant: string; maxBytes?: number }[];
     }
-  | { type: 'fetch'; id: number; spec: FetchSpecWire }
-  | { type: 'connector-open'; id: number; principal: string }
+  | { type: "fetch"; id: number; spec: FetchSpecWire }
+  | { type: "connector-open"; id: number; principal: string }
   | {
-      type: 'state';
+      type: "state";
       id: number;
-      method: 'get' | 'set' | 'delete';
+      method: "get" | "set" | "delete";
       key: string;
       value?: unknown;
     }
   | {
-      type: 'runs';
+      type: "runs";
       id: number;
-      method: 'last' | 'list';
+      method: "last" | "list";
       filter: {
         automationId?: string;
-        status?: 'ok' | 'error';
+        status?: "ok" | "error";
         since?: number;
         limit?: number;
       };
     }
-  | { type: 'vault'; id: number; op: VaultOp; payload: Record<string, unknown> }
-  | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
-  | { type: 'result'; ok: boolean; value?: unknown; error?: string };
+  | { type: "vault"; id: number; op: VaultOp; payload: Record<string, unknown> }
+  | { type: "log"; level: "info" | "warn" | "error"; msg: string }
+  | { type: "result"; ok: boolean; value?: unknown; error?: string };
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -377,21 +386,23 @@ const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
  */
 function applyInOrder<T>(
   values: Iterable<T>,
-  apply: (value: T, index: number) => void | PromiseLike<void>,
+  apply: (value: T, index: number) => void | PromiseLike<void>
 ): Promise<void> {
   let index = 0;
   return Array.from(values).reduce<Promise<void>>(
     (sequence, value) => sequence.then(() => apply(value, index++)),
-    Promise.resolve(),
+    Promise.resolve()
   );
 }
 
-export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcome> {
+export async function runHandler(
+  opts: RunHandlerOptions
+): Promise<HandlerOutcome> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  const logs: HandlerOutcome['logs'] = [];
+  const logs: HandlerOutcome["logs"] = [];
   const persistedEntries: LogEntry[] = [];
-  const handlerName = path.basename(opts.handlerFile).replace(/\.js$/u, '');
+  const handlerName = path.basename(opts.handlerFile).replace(/\.js$/u, "");
 
   const abortController = new AbortController();
   const dispatchCtx: DispatchContext = {
@@ -415,7 +426,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       // Both the raw form and its JSON-escaped form — a secret embedded in
       // stringified output would otherwise slip the net.
       for (const needle of [value, JSON.stringify(value).slice(1, -1)]) {
-        if (needle) out = out.replaceAll(needle, '«secret»');
+        if (needle) out = out.replaceAll(needle, "«secret»");
       }
     }
     return out;
@@ -424,22 +435,25 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
   const substituteSecrets = async (
     spec: FetchSpecWire,
-    connectionValues: Readonly<Record<string, string>>,
+    connectionValues: Readonly<Record<string, string>>
   ): Promise<{ spec: FetchSpecWire; injected: boolean }> => {
     const allow = new Set(opts.connector?.secrets);
     const resolved = new Map<string, string>();
     let injected = false;
     const substitute = async (text: string): Promise<string> => {
-      const refs = [...text.matchAll(SECRET_REF_RE)].map((match) => match.groups!.ref!);
+      const refs = [...text.matchAll(SECRET_REF_RE)].map(
+        (match) => match.groups!.ref!
+      );
       let out = text;
       await applyInOrder(refs, async (ref) => {
         if (!allow.has(ref)) {
           throw new Error(
-            `secret "${ref}" is outside this connector's requires.secrets allowlist (issue #293)`,
+            `secret "${ref}" is outside this connector's requires.secrets allowlist (issue #293)`
           );
         }
         if (!resolved.has(ref)) {
-          if (!opts.resolveSecret) throw new Error('no secret resolver is available for this run');
+          if (!opts.resolveSecret)
+            throw new Error("no secret resolver is available for this run");
           const value = await opts.resolveSecret(ref);
           resolved.set(ref, value);
           resolvedSecretValues.add(value);
@@ -456,8 +470,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         if (value === undefined) {
           throw new Error(
             Object.keys(connectionValues).length === 0
-              ? 'this connection carries no broker credential — attach one with sync.configure_credential (issue #304)'
-              : `connection credential has no "${name}" value (carries: ${Object.keys(connectionValues).join(', ')})`,
+              ? "this connection carries no broker credential — attach one with sync.configure_credential (issue #304)"
+              : `connection credential has no "${name}" value (carries: ${Object.keys(connectionValues).join(", ")})`
           );
         }
         injected = true;
@@ -467,15 +481,20 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       return out;
     };
     const headers: Record<string, string> = {};
-    await applyInOrder(Object.entries(spec.headers ?? {}), async ([key, value]) => {
-      headers[key] = await substitute(value);
-    });
+    await applyInOrder(
+      Object.entries(spec.headers ?? {}),
+      async ([key, value]) => {
+        headers[key] = await substitute(value);
+      }
+    );
     return {
       spec: {
         url: await substitute(spec.url),
         ...(spec.method ? { method: spec.method } : {}),
         ...(spec.headers ? { headers } : {}),
-        ...(spec.body === undefined ? {} : { body: await substitute(spec.body) }),
+        ...(spec.body === undefined
+          ? {}
+          : { body: await substitute(spec.body) }),
       },
       injected,
     };
@@ -487,21 +506,30 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   // and the desktop's local bridges).
   const hostAllowed = (url: URL): boolean =>
     (opts.connectionAuth?.allowedHosts ?? []).some((entry) =>
-      entry.startsWith('*.')
-        ? url.hostname.endsWith(entry.slice(1)) && url.hostname.length > entry.length - 1
-        : url.hostname === entry,
+      entry.startsWith("*.")
+        ? url.hostname.endsWith(entry.slice(1)) &&
+          url.hostname.length > entry.length - 1
+        : url.hostname === entry
     );
   const isLoopback = (url: URL): boolean =>
-    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
-  const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-  const assertInjectable = (rawUrl: string, method: string, body?: string): void => {
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "::1";
+  const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+  const assertInjectable = (
+    rawUrl: string,
+    method: string,
+    body?: string
+  ): void => {
     const url = new URL(rawUrl);
-    if (url.protocol !== 'https:' && !isLoopback(url)) {
-      throw new Error(`injected fetch refuses non-https destination ${url.hostname} (issue #304)`);
+    if (url.protocol !== "https:" && !isLoopback(url)) {
+      throw new Error(
+        `injected fetch refuses non-https destination ${url.hostname} (issue #304)`
+      );
     }
     if (!hostAllowed(url)) {
       throw new Error(
-        `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(', ')} (issue #304)`,
+        `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(", ")} (issue #304)`
       );
     }
     // Read-only ceiling (issue #304 phase 5): a broker credential injects
@@ -513,12 +541,12 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       !SAFE_METHODS.has(normalizedMethod) &&
       !opts.connectionAuth?.allowWrites &&
       !(
-        normalizedMethod === 'POST' &&
+        normalizedMethod === "POST" &&
         isBrokerReadOnlyPost(opts.connectionAuth?.readOnlyPosts, url, body)
       )
     ) {
       throw new Error(
-        `injected ${method.toUpperCase()} refused — this connection is read-only inside a fire. External writes are STAGED, never sent from handler code: ctx.vault.invoke({ command: 'outbox.stage', input: { kind, label, verb, target, artifact, request } }) parks the exact request for the owner's approval and the gateway executor performs the send (issues #304/#306)`,
+        `injected ${method.toUpperCase()} refused — this connection is read-only inside a fire. External writes are STAGED, never sent from handler code: ctx.vault.invoke({ command: 'outbox.stage', input: { kind, label, verb, target, artifact, request } }) parks the exact request for the owner's approval and the gateway executor performs the send (issues #304/#306)`
       );
     }
   };
@@ -531,13 +559,13 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       }, ms);
       const onAbort = (): void => {
         cleanup();
-        reject(new Error('aborted'));
+        reject(new Error("aborted"));
       };
       const cleanup = (): void => {
         clearTimeout(t);
-        dispatchCtx.abortSignal.removeEventListener('abort', onAbort);
+        dispatchCtx.abortSignal.removeEventListener("abort", onAbort);
       };
-      dispatchCtx.abortSignal.addEventListener('abort', onAbort, {
+      dispatchCtx.abortSignal.addEventListener("abort", onAbort, {
         once: true,
       });
     });
@@ -551,21 +579,24 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   // One HTTP round trip. Injected requests never auto-follow redirects — a
   // cross-host Location would carry the Authorization header somewhere the
   // pin never approved; the handler sees the 3xx and follows deliberately.
-  const fetchOnce = async (spec: FetchSpecWire, injected: boolean): Promise<FetchWireResult> => {
+  const fetchOnce = async (
+    spec: FetchSpecWire,
+    injected: boolean
+  ): Promise<FetchWireResult> => {
     const response = await fetch(spec.url, {
-      method: spec.method ?? 'GET',
+      method: spec.method ?? "GET",
       ...(spec.headers ? { headers: spec.headers } : {}),
       ...(spec.body === undefined ? {} : { body: spec.body }),
-      ...(injected ? { redirect: 'manual' as const } : {}),
+      ...(injected ? { redirect: "manual" as const } : {}),
       signal: dispatchCtx.abortSignal,
     });
     const text = (await response.text()).slice(0, 2 * 1024 * 1024);
     return {
       status: response.status,
       headers: {
-        'content-type': response.headers.get('content-type') ?? '',
-        ...(response.headers.get('retry-after')
-          ? { 'retry-after': response.headers.get('retry-after')! }
+        "content-type": response.headers.get("content-type") ?? "",
+        ...(response.headers.get("retry-after")
+          ? { "retry-after": response.headers.get("retry-after")! }
           : {}),
       },
       text,
@@ -581,10 +612,15 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
    * fetches keep the raw single-shot behavior — their errors belong to the
    * handler.
    */
-  const executeFetch = async (rawSpec: FetchSpecWire): Promise<FetchWireResult> => {
-    let { spec, injected } = await substituteSecrets(rawSpec, opts.connectionAuth?.values ?? {});
+  const executeFetch = async (
+    rawSpec: FetchSpecWire
+  ): Promise<FetchWireResult> => {
+    let { spec, injected } = await substituteSecrets(
+      rawSpec,
+      opts.connectionAuth?.values ?? {}
+    );
     if (!injected) return fetchOnce(spec, false);
-    assertInjectable(spec.url, spec.method ?? 'GET', spec.body);
+    assertInjectable(spec.url, spec.method ?? "GET", spec.body);
     const auth = opts.connectionAuth!;
     const gated = (s: FetchSpecWire): Promise<FetchWireResult> =>
       auth.limit ? auth.limit(() => fetchOnce(s, true)) : fetchOnce(s, true);
@@ -596,12 +632,14 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       if (result.status === 429 || result.status >= 500) {
         if (transientRetries >= retryDelays.length) return result;
         const planned = retryDelays[transientRetries]!;
-        const retryAfterMs = Number(result.headers['retry-after']) * 1000;
+        const retryAfterMs = Number(result.headers["retry-after"]) * 1000;
         await abortableDelay(
           Math.min(
-            Number.isFinite(retryAfterMs) ? Math.max(retryAfterMs, planned) : planned,
-            30_000,
-          ),
+            Number.isFinite(retryAfterMs)
+              ? Math.max(retryAfterMs, planned)
+              : planned,
+            30_000
+          )
         );
         transientRetries += 1;
         return attempt();
@@ -616,17 +654,19 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       }
       if (result.status === 401) {
         await auth
-          .onAuthDead?.('external service rejected the credential (401)')
+          .onAuthDead?.("external service rejected the credential (401)")
           .catch(() => undefined);
         return result;
       }
       if (
         result.status === 403 &&
-        /insufficient.{0,4}(?:scope|permission)|invalid_scope/iu.test(result.text)
+        /insufficient.{0,4}(?:scope|permission)|invalid_scope/iu.test(
+          result.text
+        )
       ) {
         await auth
           .onAuthDead?.(
-            'permission withdrawn upstream (403 insufficient scope) — reconnect with the scopes this connector needs',
+            "permission withdrawn upstream (403 insufficient scope) — reconnect with the scopes this connector needs"
           )
           .catch(() => undefined);
         return result;
@@ -648,21 +688,21 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   // Every fire appends to the automation's stable canonical conversation.
   // Harness sessions are per-runner resume bindings beneath this identity,
   // so A → B → A never forks execution history.
-  const slash = audit.automationId.indexOf('/');
+  const slash = audit.automationId.indexOf("/");
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = audit.store.ensureAutomationConversation(
     audit.automationId,
     appId,
     opts.automationName,
-    opts.runnerKind,
+    opts.runnerKind
   );
   const startedAt = opts.now === undefined ? Date.now() : Date.parse(opts.now);
   if (!Number.isFinite(startedAt))
-    throw new Error('automation ctx.now must be a valid ISO instant');
+    throw new Error("automation ctx.now must be a valid ISO instant");
   audit.store.insertTurn({
     turnId: audit.runId,
     conversationId: execConversationId,
-    triggerKind: opts.triggerKind ?? 'scheduled',
+    triggerKind: opts.triggerKind ?? "scheduled",
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
     ...(opts.note ? { note: opts.note } : {}),
     ...(opts.parentRunId ? { parentTurnId: opts.parentRunId } : {}),
@@ -674,8 +714,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   if (opts.input !== undefined) {
     audit.store.insertMessageIn({
       turnId: audit.runId,
-      role: 'user',
-      text: truncateForAudit(opts.input) ?? '',
+      role: "user",
+      text: truncateForAudit(opts.input) ?? "",
       startedAt,
     });
     audit.ordinal = 1;
@@ -686,8 +726,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       itemId: randomUUID(),
       turnId: audit.runId,
       ordinal: audit.ordinal,
-      kind: 'step',
-      name: 'notice:warn:failover',
+      kind: "step",
+      name: "notice:warn:failover",
       outputJson: JSON.stringify({ text: opts.failoverNotice }),
       ok: true,
       startedAt: at,
@@ -699,7 +739,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   // `turn.start` opens the live stream; a viewer that joins later replays it
   // from the ledger instead. Guarded — a wedged sink must not fail the run.
   try {
-    emit({ type: 'turn.start', turnId: audit.runId });
+    emit({ type: "turn.start", turnId: audit.runId });
   } catch {
     /* swallow */
   }
@@ -715,9 +755,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   let timeoutHandle: NodeJS.Timeout | undefined;
   if (timeoutMs > 0) {
     timeoutHandle = setTimeout(() => {
-      abortController.abort('timeout');
+      abortController.abort("timeout");
       // eslint-disable-next-line unicorn/require-post-message-target-origin -- grandfathered pre-existing suppression (#247)
-      worker.postMessage({ type: 'abort', reason: 'timeout' });
+      worker.postMessage({ type: "abort", reason: "timeout" });
       setTimeout(() => {
         worker.terminate().catch(() => {});
       }, 2000);
@@ -736,38 +776,46 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
 
   const invokeConnectorCommand = async (
     command: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Promise<Record<string, unknown>> => {
-    const reply = await handleVaultMessage(audit, opts.vault, 'invoke', {
+    const reply = await handleVaultMessage(audit, opts.vault, "invoke", {
       command,
       input,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     if (!reply.ok) throw new Error(reply.error ?? `${command} failed`);
     const result = reply.result;
-    if (!result || typeof result !== 'object') return {};
+    if (!result || typeof result !== "object") return {};
     const outcome = result as Record<string, unknown>;
-    return outcome.output && typeof outcome.output === 'object'
+    return outcome.output && typeof outcome.output === "object"
       ? (outcome.output as Record<string, unknown>)
       : outcome;
   };
 
-  const openConnectorRun = async (principal: string): Promise<Record<string, unknown>> => {
+  const openConnectorRun = async (
+    principal: string
+  ): Promise<Record<string, unknown>> => {
     if (!opts.connector?.connectionId) {
-      throw new Error('declarative pull connector has no durable connection binding');
+      throw new Error(
+        "declarative pull connector has no durable connection binding"
+      );
     }
     if (connectorRunOpened) {
-      throw new Error('connector run scope may be opened exactly once');
+      throw new Error("connector run scope may be opened exactly once");
     }
     connectorRunOpened = true;
-    const opened = await invokeConnectorCommand('sync.begin_run', {
+    const opened = await invokeConnectorCommand("sync.begin_run", {
       connection_id: opts.connector.connectionId,
       principal,
     });
-    if (typeof opened.run_id === 'string') connectorRunId = opened.run_id;
-    if (typeof opened.connection_id === 'string') connectorConnectionId = opened.connection_id;
-    if (!opened.refused && (connectorRunId === undefined || connectorConnectionId === undefined)) {
-      throw new Error('sync.begin_run did not return a connection-scoped run');
+    if (typeof opened.run_id === "string") connectorRunId = opened.run_id;
+    if (typeof opened.connection_id === "string")
+      connectorConnectionId = opened.connection_id;
+    if (
+      !opened.refused &&
+      (connectorRunId === undefined || connectorConnectionId === undefined)
+    ) {
+      throw new Error("sync.begin_run did not return a connection-scoped run");
     }
     return opened;
   };
@@ -775,10 +823,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const closeConnectorRun = async (
     ok: boolean,
     counts: { staged?: number; published?: number; skipped?: number } = {},
-    error?: string,
+    error?: string
   ): Promise<void> => {
     if (!connectorRunId || connectorRunClosed) return;
-    await invokeConnectorCommand('sync.finish_run', {
+    await invokeConnectorCommand("sync.finish_run", {
       run_id: connectorRunId,
       ok,
       ...counts,
@@ -788,33 +836,38 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   };
 
   const publishPullResult = async (
-    pull: Record<string, unknown>,
+    pull: Record<string, unknown>
   ): Promise<{ summary?: string; output: Record<string, unknown> }> => {
     if (!connectorRunId || !connectorConnectionId || !opts.connector) {
-      throw new Error('pull connector returned rows without an open connection-scoped run');
+      throw new Error(
+        "pull connector returned rows without an open connection-scoped run"
+      );
     }
     const rows = Array.isArray(pull.rows) ? pull.rows : [];
     let staged = 0;
     let published = 0;
     try {
-      const chunks = Array.from({ length: Math.ceil(rows.length / 500) }, (_, index) =>
-        rows.slice(index * 500, (index + 1) * 500),
+      const chunks = Array.from(
+        { length: Math.ceil(rows.length / 500) },
+        (_, index) => rows.slice(index * 500, (index + 1) * 500)
       );
       await applyInOrder(chunks, async (chunk) => {
-        const outcome = await invokeConnectorCommand('sync.stage_rows', {
+        const outcome = await invokeConnectorCommand("sync.stage_rows", {
           connection_id: connectorConnectionId,
           rows: chunk,
         });
         staged += chunk.length;
-        const counts = outcome.published as { created?: number; updated?: number } | undefined;
+        const counts = outcome.published as
+          | { created?: number; updated?: number }
+          | undefined;
         published += (counts?.created ?? 0) + (counts?.updated ?? 0);
       });
       const cursors = Array.isArray(pull.cursors) ? pull.cursors : [];
       await applyInOrder(cursors, async (entry) => {
-        if (!Array.isArray(entry) || typeof entry[0] !== 'string') {
-          throw new Error('pull connector returned an invalid cursor update');
+        if (!Array.isArray(entry) || typeof entry[0] !== "string") {
+          throw new Error("pull connector returned an invalid cursor update");
         }
-        await invokeConnectorCommand('sync.set_cursor', {
+        await invokeConnectorCommand("sync.set_cursor", {
           connection_id: connectorConnectionId,
           key: entry[0],
           value: entry[1],
@@ -822,12 +875,14 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       });
       await closeConnectorRun(true, { staged, published });
       return {
-        ...(typeof pull.summary === 'string' ? { summary: pull.summary } : {}),
+        ...(typeof pull.summary === "string" ? { summary: pull.summary } : {}),
         output: { staged, published },
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await closeConnectorRun(false, { staged, published }, message).catch(() => undefined);
+      await closeConnectorRun(false, { staged, published }, message).catch(
+        () => undefined
+      );
       throw err;
     }
   };
@@ -847,10 +902,14 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         if (outcome.error) outcome.error = scrub(outcome.error);
         if (outcome.summary) outcome.summary = scrub(outcome.summary);
         if (outcome.output !== undefined) {
-          outcome.output = JSON.parse(scrub(JSON.stringify(outcome.output))) as unknown;
+          outcome.output = JSON.parse(
+            scrub(JSON.stringify(outcome.output))
+          ) as unknown;
         }
         if (outcome.value !== undefined) {
-          outcome.value = JSON.parse(scrub(JSON.stringify(outcome.value))) as unknown;
+          outcome.value = JSON.parse(
+            scrub(JSON.stringify(outcome.value))
+          ) as unknown;
         }
         outcome.logs = outcome.logs.map((l) => ({ ...l, msg: scrub(l.msg) }));
         for (const entry of persistedEntries) entry.msg = scrub(entry.msg);
@@ -871,28 +930,34 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           ...(outcome.summary ? { summary: outcome.summary } : {}),
           ...(outcome.output === undefined
             ? {}
-            : { outputJson: truncateForAudit(outcome.output) ?? '' }),
+            : { outputJson: truncateForAudit(outcome.output) ?? "" }),
         });
       };
       try {
         audit.store.runInTransaction(() => {
           settleTurn();
-          opts.finalizeTurn?.(audit.store, execConversationId, audit.runId, outcome.ok);
+          opts.finalizeTurn?.(
+            audit.store,
+            execConversationId,
+            audit.runId,
+            outcome.ok
+          );
         });
       } catch (error) {
         // The rollback took the `finishTurn` with it, so without a second,
         // non-transactional write this turn would stay `running` forever while
         // the handler had in fact completed. Binding/watermark finalization is
         // what failed; the run itself is settled honestly.
-        const finalizationError = error instanceof Error ? error.message : String(error);
+        const finalizationError =
+          error instanceof Error ? error.message : String(error);
         try {
           const at = Date.now();
           audit.store.insertItem({
             itemId: randomUUID(),
             turnId: audit.runId,
             ordinal: audit.ordinal,
-            kind: 'step',
-            name: 'notice:error:finalization',
+            kind: "step",
+            name: "notice:error:finalization",
             outputJson: JSON.stringify({
               text: `Turn finalization failed after the handler completed: ${finalizationError}`,
             }),
@@ -919,7 +984,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       }
       try {
         emit({
-          type: 'turn.end',
+          type: "turn.end",
           turnId: audit.runId,
           ok: outcome.ok,
           ...(outcome.error ? { error: outcome.error } : {}),
@@ -931,22 +996,23 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       abortController.abort();
       worker.removeAllListeners();
       worker.terminate().catch(() => {});
-      if (persistedEntries.length > 0) void appendLogs(opts.automationDir, persistedEntries);
+      if (persistedEntries.length > 0)
+        void appendLogs(opts.automationDir, persistedEntries);
       // eslint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
       resolve(outcome);
     };
 
-    worker.on('message', (msg: WorkerToParentMessage) => {
-      if (msg.type === 'agent') {
+    worker.on("message", (msg: WorkerToParentMessage) => {
+      if (msg.type === "agent") {
         // Connectors are deterministic code — no LLM turn ever runs inside
         // a sync loop (issue #290: agents write code, not data).
         if (opts.connector) {
           send({
-            type: 'agent-reply',
+            type: "agent-reply",
             id: msg.id,
             ok: false,
             error:
-              'ctx.agent is forbidden in connector handlers — connectors are deterministic published code; repair happens at authoring time (issue #290)',
+              "ctx.agent is forbidden in connector handlers — connectors are deterministic published code; repair happens at authoring time (issue #290)",
           });
           return;
         }
@@ -958,37 +1024,38 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           msg.prompt,
           msg.json,
           msg.content,
-          opts.vault,
+          opts.vault
         ).then((reply) => {
-          send({ type: 'agent-reply', id: msg.id, ...reply });
+          send({ type: "agent-reply", id: msg.id, ...reply });
         });
         return;
       }
-      if (msg.type === 'fetch') {
+      if (msg.type === "fetch") {
         // Transport-level secret injection (issue #293): connector-only —
         // the recorded spec keeps its placeholders; substitution happens
         // here, past the worker boundary, and the response rides back to
         // the handler without ever being journaled.
         if (!opts.connector) {
           send({
-            type: 'fetch-reply',
+            type: "fetch-reply",
             id: msg.id,
             ok: false,
-            error: 'ctx.fetch is connector-only (issue #293) — declare manifest.connector',
+            error:
+              "ctx.fetch is connector-only (issue #293) — declare manifest.connector",
           });
           return;
         }
         logs.push({
-          level: 'info',
-          msg: `fetch ${msg.spec.method ?? 'GET'} ${msg.spec.url}`,
+          level: "info",
+          msg: `fetch ${msg.spec.method ?? "GET"} ${msg.spec.url}`,
         });
         void executeFetch(msg.spec)
           .then((result) => {
-            send({ type: 'fetch-reply', id: msg.id, ok: true, result });
+            send({ type: "fetch-reply", id: msg.id, ok: true, result });
           })
           .catch((err: unknown) => {
             send({
-              type: 'fetch-reply',
+              type: "fetch-reply",
               id: msg.id,
               ok: false,
               error: scrub(err instanceof Error ? err.message : String(err)),
@@ -996,20 +1063,20 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           });
         return;
       }
-      if (msg.type === 'connector-open') {
+      if (msg.type === "connector-open") {
         if (!opts.connector) {
           send({
-            type: 'connector-open-reply',
+            type: "connector-open-reply",
             id: msg.id,
             ok: false,
-            error: 'connection-scoped runs are connector-only',
+            error: "connection-scoped runs are connector-only",
           });
           return;
         }
         void openConnectorRun(msg.principal)
           .then((result) => {
             send({
-              type: 'connector-open-reply',
+              type: "connector-open-reply",
               id: msg.id,
               ok: true,
               result,
@@ -1017,7 +1084,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           })
           .catch((err: unknown) => {
             send({
-              type: 'connector-open-reply',
+              type: "connector-open-reply",
               id: msg.id,
               ok: false,
               error: err instanceof Error ? err.message : String(err),
@@ -1025,45 +1092,47 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           });
         return;
       }
-      if (msg.type === 'state') {
+      if (msg.type === "state") {
         send({
-          type: 'state-reply',
+          type: "state-reply",
           id: msg.id,
           ...handleStateMessage(audit, msg.method, msg.key, msg.value),
         });
         return;
       }
-      if (msg.type === 'runs') {
+      if (msg.type === "runs") {
         send({
-          type: 'runs-reply',
+          type: "runs-reply",
           id: msg.id,
           ...handleRunsMessage(audit, msg.method, msg.filter),
         });
         return;
       }
-      if (msg.type === 'vault') {
+      if (msg.type === "vault") {
         const payload = bindConnectorVaultPayload(
           msg.op,
           msg.payload,
-          opts.connector?.connectionId,
+          opts.connector?.connectionId
         );
-        void handleVaultMessage(audit, opts.vault, msg.op, payload).then((reply) => {
-          send({ type: 'vault-reply', id: msg.id, ...reply });
-        });
+        void handleVaultMessage(audit, opts.vault, msg.op, payload).then(
+          (reply) => {
+            send({ type: "vault-reply", id: msg.id, ...reply });
+          }
+        );
         return;
       }
-      if (msg.type === 'log') {
+      if (msg.type === "log") {
         logs.push({ level: msg.level, msg: msg.msg });
         persistedEntries.push({
           ts: Date.now(),
           level: msg.level,
           msg: msg.msg,
-          source: 'action',
+          source: "action",
           handler: handlerName,
         });
         return;
       }
-      if (msg.type === 'result') {
+      if (msg.type === "result") {
         void (async () => {
           try {
             let rawValue = msg.value;
@@ -1074,17 +1143,18 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
               await closeConnectorRun(
                 false,
                 {},
-                msg.error ?? 'pull connector failed before returning rows',
+                msg.error ?? "pull connector failed before returning rows"
               ).catch(() => undefined);
             }
             if (
               msg.ok &&
               rawValue &&
-              typeof rawValue === 'object' &&
-              '__centraidPull' in rawValue
+              typeof rawValue === "object" &&
+              "__centraidPull" in rawValue
             ) {
               const published = await publishPullResult(
-                (rawValue as { __centraidPull: Record<string, unknown> }).__centraidPull,
+                (rawValue as { __centraidPull: Record<string, unknown> })
+                  .__centraidPull
               );
               rawValue = {
                 ...(published.summary ? { summary: published.summary } : {}),
@@ -1097,7 +1167,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
             let outcomeError = msg.error;
             let outcomeOk = msg.ok;
             if (msg.ok && opts.outputSchema && envelope.output !== undefined) {
-              const schemaErr = validateOutputAgainstSchema(opts.outputSchema, envelope.output);
+              const schemaErr = validateOutputAgainstSchema(
+                opts.outputSchema,
+                envelope.output
+              );
               if (schemaErr) {
                 outcomeOk = false;
                 outcomeError = `outputSchema validation failed: ${schemaErr}`;
@@ -1106,17 +1179,21 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
             if (!outcomeOk && outcomeError) {
               persistedEntries.push({
                 ts: Date.now(),
-                level: 'error',
+                level: "error",
                 msg: `automation handler failed: ${outcomeError}`,
-                source: 'action',
+                source: "action",
                 handler: handlerName,
               });
             }
             finish({
               ok: outcomeOk,
               value: envelope.value,
-              ...(envelope.summary === undefined ? {} : { summary: envelope.summary }),
-              ...(envelope.output === undefined ? {} : { output: envelope.output }),
+              ...(envelope.summary === undefined
+                ? {}
+                : { summary: envelope.summary }),
+              ...(envelope.output === undefined
+                ? {}
+                : { output: envelope.output }),
               ...(outcomeError === undefined ? {} : { error: outcomeError }),
               logs,
               toolBatches,
@@ -1137,40 +1214,44 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       }
     });
 
-    worker.on('error', (err) => {
+    worker.on("error", (err) => {
       // @types/node 26 types this callback's argument as `unknown` — a worker
       // can reject with any value, not only an Error.
       const message = err instanceof Error ? err.message : String(err);
       persistedEntries.push({
         ts: Date.now(),
-        level: 'error',
+        level: "error",
         msg: `worker error: ${message}`,
-        source: 'action',
+        source: "action",
         handler: handlerName,
       });
       void closeConnectorRun(false, {}, message)
         .catch(() => undefined)
-        .finally(() => finish({ ok: false, error: message, logs, toolBatches, agentCalls }));
+        .finally(() =>
+          finish({ ok: false, error: message, logs, toolBatches, agentCalls })
+        );
     });
 
-    worker.on('exit', (code) => {
+    worker.on("exit", (code) => {
       if (code !== 0) {
         persistedEntries.push({
           ts: Date.now(),
-          level: 'error',
+          level: "error",
           msg: `worker exited with code ${code}`,
-          source: 'action',
+          source: "action",
           handler: handlerName,
         });
         const error = `worker exited with code ${code}`;
         void closeConnectorRun(false, {}, error)
           .catch(() => undefined)
-          .finally(() => finish({ ok: false, error, logs, toolBatches, agentCalls }));
+          .finally(() =>
+            finish({ ok: false, error, logs, toolBatches, agentCalls })
+          );
       }
     });
 
     // The acquired spare has already paid thread/module boot. It remains
     // single-use: this kickoff is its only handler, and finish() terminates it.
-    send({ type: 'run', request: workerRequest });
+    send({ type: "run", request: workerRequest });
   });
 }

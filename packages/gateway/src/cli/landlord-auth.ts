@@ -16,19 +16,19 @@
  * deliberately not a routine operation (see SECURITY.md, issue #568 item J).
  */
 
-import { createHmac } from 'node:crypto';
+import { createHmac } from "node:crypto";
 
-import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
+import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
 
-import { daemonKeyStore } from './key-store.js';
-import { daemonLayoutFor } from './paths.js';
+import { daemonKeyStore } from "./key-store.js";
+import { daemonLayoutFor } from "./paths.js";
 
-const LANDLORD_BEARER_CONTEXT = 'centraid/landlord-http/v1';
+const LANDLORD_BEARER_CONTEXT = "centraid/landlord-http/v1";
 
 export function landlordBearerForEndpointSecret(secret: Uint8Array): string {
-  return createHmac('sha256', Buffer.from(secret))
-    .update(LANDLORD_BEARER_CONTEXT, 'utf8')
-    .digest('hex');
+  return createHmac("sha256", Buffer.from(secret))
+    .update(LANDLORD_BEARER_CONTEXT, "utf8")
+    .digest("hex");
 }
 
 /**
@@ -46,7 +46,7 @@ export function landlordBearerForEndpointSecret(secret: Uint8Array): string {
  */
 export function landlordBearerForDataDir(
   dataDir: string,
-  options: { masterKey?: Buffer } = {},
+  options: { masterKey?: Buffer } = {}
 ): string | undefined {
   const keysDir = daemonLayoutFor(dataDir).keysDir;
   try {
@@ -55,7 +55,7 @@ export function landlordBearerForDataDir(
           protector: aesGcmKeyProtector(options.masterKey),
         })
       : daemonKeyStore(keysDir);
-    const secret = store.load('endpoint-key.bin');
+    const secret = store.load("endpoint-key.bin");
     return secret ? landlordBearerForEndpointSecret(secret) : undefined;
   } catch {
     // Unreadable custody is a legitimate "cannot derive" answer here: the

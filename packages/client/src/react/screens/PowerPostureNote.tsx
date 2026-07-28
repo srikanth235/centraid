@@ -1,8 +1,11 @@
-import { type JSX } from 'react';
+import { type JSX } from "react";
 
-import { powerPostureLine, type PowerContextState } from './resource-summary.js';
+import {
+  powerPostureLine,
+  type PowerContextState,
+} from "./resource-summary.js";
 
-import styles from './GatewayScreen.module.css';
+import styles from "./GatewayScreen.module.css";
 
 // Power-context posture note on the Resource card (issue #528 Phase D). Battery
 // and thermal chrome render ONLY when the gateway host actually has a battery;
@@ -15,7 +18,9 @@ export interface PowerPostureNoteProps {
   power: PowerContextState;
 }
 
-export default function PowerPostureNote({ power }: PowerPostureNoteProps): JSX.Element | null {
+export default function PowerPostureNote({
+  power,
+}: PowerPostureNoteProps): JSX.Element | null {
   const line = powerPostureLine(power);
   if (line === null) return null;
   return (

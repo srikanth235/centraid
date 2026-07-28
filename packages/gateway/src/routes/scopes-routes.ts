@@ -30,15 +30,18 @@
  * "not installed" are different answers.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { EnrollmentStore, GrantableRole } from '../serve/enrollment-store.js';
-import { sendJson } from './route-helpers.js';
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type {
+  EnrollmentStore,
+  GrantableRole,
+} from "../serve/enrollment-store.js";
+import { sendJson } from "./route-helpers.js";
 
-export const SCOPES_PATH = '/centraid/_vault/scopes';
+export const SCOPES_PATH = "/centraid/_vault/scopes";
 
 /** The registry facts one scope row is rendered from (structurally `VaultInfo`). */
 export interface ScopeVault {
@@ -79,7 +82,7 @@ export interface ScopesRouteDeps {
 function callerDeviceKey(req: IncomingMessage): string | undefined {
   const raw = req.headers[AUTHED_DEVICE_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
@@ -89,20 +92,24 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
    */
   const rolesFor = (
     memberId: string | undefined,
-    vaults: readonly ScopeVault[],
+    vaults: readonly ScopeVault[]
   ): Map<string, GrantableRole> => {
     if (memberId === undefined) {
-      return new Map(vaults.map((vault) => [vault.vaultId, 'admin' as GrantableRole]));
+      return new Map(
+        vaults.map((vault) => [vault.vaultId, "admin" as GrantableRole])
+      );
     }
     const granted = new Map(
-      deps.enrollments.members.grants(memberId).map((grant) => [grant.vaultId, grant.role]),
+      deps.enrollments.members
+        .grants(memberId)
+        .map((grant) => [grant.vaultId, grant.role])
     );
     // Intersect with what is MOUNTED: a grant on a vault this gateway no
     // longer carries is not a place the caller can work.
     return new Map(
       vaults
         .filter((vault) => granted.has(vault.vaultId))
-        .map((vault) => [vault.vaultId, granted.get(vault.vaultId)!]),
+        .map((vault) => [vault.vaultId, granted.get(vault.vaultId)!])
     );
   };
 
@@ -116,7 +123,7 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
    */
   const reconcileInstalls = async (
     appId: string,
-    installed: Map<string, boolean>,
+    installed: Map<string, boolean>
   ): Promise<void> => {
     const ensure = deps.ensureAppInstalled;
     if (!ensure) return;
@@ -130,27 +137,34 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
           } catch {
             return [vaultId, false] as const;
           }
-        }),
+        })
     );
-    for (const [vaultId, present] of reconciled) installed.set(vaultId, present);
+    for (const [vaultId, present] of reconciled)
+      installed.set(vaultId, present);
   };
 
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
     if (url.pathname !== SCOPES_PATH) return false;
-    if ((req.method ?? 'GET') !== 'GET') {
-      return sendJson(res, 405, { error: 'method_not_allowed' });
+    if ((req.method ?? "GET") !== "GET") {
+      return sendJson(res, 405, { error: "method_not_allowed" });
     }
     const hostCustody = deps.isHostCustody?.(req) === true;
     const deviceKey = callerDeviceKey(req);
     // Host custody is above the role system rather than inside it, so it never
     // resolves a member: it answers `admin` for every mounted vault.
     const member =
-      hostCustody || deviceKey === undefined ? undefined : deps.enrollments.memberFor(deviceKey);
+      hostCustody || deviceKey === undefined
+        ? undefined
+        : deps.enrollments.memberFor(deviceKey);
     if (!member && !hostCustody) {
       return sendJson(res, 403, {
-        error: 'forbidden',
-        message: 'listing scopes requires a proved iroh device identity bound to a member',
+        error: "forbidden",
+        message:
+          "listing scopes requires a proved iroh device identity bound to a member",
       });
     }
 
@@ -158,14 +172,14 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
     const roles = rolesFor(member?.memberId, vaults);
     const visible = vaults.filter((vault) => roles.has(vault.vaultId));
 
-    const appId = url.searchParams.get('app') ?? undefined;
+    const appId = url.searchParams.get("app") ?? undefined;
     let installed: Map<string, boolean> | undefined;
     if (appId !== undefined && appId.length > 0) {
       installed = new Map(
         visible.map((vault) => [
           vault.vaultId,
           deps.installedApps(vault.vaultId)?.has(appId) === true,
-        ]),
+        ])
       );
       await reconcileInstalls(appId, installed);
     }
@@ -176,7 +190,9 @@ export function makeScopesRouteHandler(deps: ScopesRouteDeps): RouteHandler {
       ...(vault.color === undefined ? {} : { color: vault.color }),
       ...(vault.icon === undefined ? {} : { icon: vault.icon }),
       role: roles.get(vault.vaultId)!,
-      ...(installed ? { installed: installed.get(vault.vaultId) === true } : {}),
+      ...(installed
+        ? { installed: installed.get(vault.vaultId) === true }
+        : {}),
     }));
     return sendJson(res, 200, { scopes });
   };

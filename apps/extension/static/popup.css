@@ -213,10 +213,10 @@ summary {
   text-transform: capitalize;
   color: #667085;
 }
-.permissions li[data-state='granted'] small {
+.permissions li[data-state="granted"] small {
   color: #188953;
 }
-.permissions li[data-state='paused'] small {
+.permissions li[data-state="paused"] small {
   color: #976400;
 }
 .danger {
@@ -229,7 +229,7 @@ summary {
   color: #188953;
   font-size: 12px;
 }
-#notice[data-kind='error'] {
+#notice[data-kind="error"] {
   color: #a43636;
 }
 [inert] {

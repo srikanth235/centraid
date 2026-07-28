@@ -22,12 +22,12 @@
  * `.ts` under tsx (tests), so both boot shapes find it.
  */
 
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import * as esbuild from 'esbuild';
+import * as esbuild from "esbuild";
 
 interface ResolveContext {
   parentURL?: string;
@@ -41,7 +41,7 @@ interface ResolveResult {
 }
 type NextResolve = (
   specifier: string,
-  context: ResolveContext,
+  context: ResolveContext
 ) => ResolveResult | Promise<ResolveResult>;
 
 interface LoadContext {
@@ -54,23 +54,26 @@ interface LoadResult {
   source?: string | ArrayBuffer | Uint8Array;
   shortCircuit?: boolean;
 }
-type NextLoad = (url: string, context: LoadContext) => LoadResult | Promise<LoadResult>;
+type NextLoad = (
+  url: string,
+  context: LoadContext
+) => LoadResult | Promise<LoadResult>;
 
 const TS_URL_RE = /\.tsx?$/u;
 
 /** Candidate on-disk TS URLs for a relative specifier Node couldn't resolve. */
 function tsCandidates(specifier: string, parentURL: string): string[] {
-  if (!specifier.startsWith('./') && !specifier.startsWith('../')) return [];
+  if (!specifier.startsWith("./") && !specifier.startsWith("../")) return [];
   const bases: string[] = [];
-  if (specifier.endsWith('.js')) {
+  if (specifier.endsWith(".js")) {
     // TS ESM convention: source imports the emitted `.js`, file on disk is `.ts`.
     bases.push(specifier.slice(0, -3));
-  } else if (path.extname(specifier) === '') {
+  } else if (path.extname(specifier) === "") {
     bases.push(specifier);
   }
   const urls: string[] = [];
   for (const base of bases) {
-    for (const ext of ['.ts', '.tsx']) {
+    for (const ext of [".ts", ".tsx"]) {
       const candidate = new URL(base + ext, parentURL);
       if (existsSync(fileURLToPath(candidate))) urls.push(candidate.href);
     }
@@ -81,14 +84,14 @@ function tsCandidates(specifier: string, parentURL: string): string[] {
 export async function resolve(
   specifier: string,
   context: ResolveContext,
-  nextResolve: NextResolve,
+  nextResolve: NextResolve
 ): Promise<ResolveResult> {
   try {
     return await nextResolve(specifier, context);
   } catch (err) {
     if (context.parentURL) {
       const [first] = tsCandidates(specifier, context.parentURL);
-      if (first) return { url: first, format: 'module', shortCircuit: true };
+      if (first) return { url: first, format: "module", shortCircuit: true };
     }
     throw err;
   }
@@ -97,18 +100,18 @@ export async function resolve(
 export async function load(
   url: string,
   context: LoadContext,
-  nextLoad: NextLoad,
+  nextLoad: NextLoad
 ): Promise<LoadResult> {
   if (!TS_URL_RE.test(url)) return nextLoad(url, context);
   const file = fileURLToPath(url);
-  const source = await readFile(file, 'utf8');
+  const source = await readFile(file, "utf8");
   const { code } = await esbuild.transform(source, {
-    loader: url.endsWith('.tsx') ? 'tsx' : 'ts',
-    format: 'esm',
+    loader: url.endsWith(".tsx") ? "tsx" : "ts",
+    format: "esm",
     sourcefile: file,
     // TS-authored handlers may use React dialect in a `.tsx` sibling; keep the
     // same automatic runtime as the browser transform. Inert for plain `.ts`.
-    jsx: 'automatic',
+    jsx: "automatic",
   });
-  return { format: 'module', source: code, shortCircuit: true };
+  return { format: "module", source: code, shortCircuit: true };
 }

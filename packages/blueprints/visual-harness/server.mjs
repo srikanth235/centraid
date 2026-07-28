@@ -14,33 +14,33 @@
 //
 // Run: bun packages/blueprints/visual-harness/server.mjs
 // (also wired as the "visual-harness" launch.json config, port 4173)
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import http from 'node:http';
-import path from 'node:path';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import http from "node:http";
+import path from "node:path";
 
 // Imported straight from source — bun runs .ts directly, no build step, and
 // this is the whole point of the harness: exercise the REAL serveStatic.
-import { serveStatic } from '../../app-engine/src/http/static-server.ts';
+import { serveStatic } from "../../app-engine/src/http/static-server.ts";
 
 const __dirname = import.meta.dirname;
-const REPO_ROOT = path.resolve(__dirname, '../../..');
-const APPS_DIR = path.join(REPO_ROOT, 'packages/blueprints/apps');
-const KIT_DIR = path.join(REPO_ROOT, 'packages/blueprints/kit');
-const MOCK_SCRIPT_FILE = path.join(__dirname, 'mock-centraid.js');
+const REPO_ROOT = path.resolve(__dirname, "../../..");
+const APPS_DIR = path.join(REPO_ROOT, "packages/blueprints/apps");
+const KIT_DIR = path.join(REPO_ROOT, "packages/blueprints/kit");
+const MOCK_SCRIPT_FILE = path.join(__dirname, "mock-centraid.js");
 
 const PORT = Number(process.env.PORT) || 4173;
 const SUPPORTED_APPS = new Set([
-  'docs',
-  'photos',
-  'tasks',
-  'notes',
-  'agenda',
-  'people',
-  'tally',
-  'locker',
+  "docs",
+  "photos",
+  "tasks",
+  "notes",
+  "agenda",
+  "people",
+  "tally",
+  "locker",
 ]);
-const BLOB_PREFIX = '/centraid/_vault/blobs';
+const BLOB_PREFIX = "/centraid/_vault/blobs";
 
 // ---------------------------------------------------------------------
 // A minimal stand-in for node's ServerResponse, just enough of the surface
@@ -69,7 +69,8 @@ class CaptureResponse {
 
 let mockScriptCache = null;
 async function mockScriptSource() {
-  if (mockScriptCache == null) mockScriptCache = await fs.readFile(MOCK_SCRIPT_FILE, 'utf8');
+  if (mockScriptCache == null)
+    mockScriptCache = await fs.readFile(MOCK_SCRIPT_FILE, "utf8");
   return mockScriptCache;
 }
 
@@ -93,34 +94,39 @@ async function serveAppAsset(req, res, appId, rel) {
   // Content-Encoding would corrupt the body). The harness re-encodes nothing,
   // so ask for identity bytes and let node send them plain.
   const headers = { ...req.headers };
-  delete headers['accept-encoding'];
+  delete headers["accept-encoding"];
   const plainReq = Object.create(req, {
     headers: { value: headers, enumerable: true },
   });
   await serveStatic(plainReq, cap, appDir, rel, { sharedAssetsDir: KIT_DIR });
 
-  const contentType = String(cap.headers['Content-Type'] || '');
+  const contentType = String(cap.headers["Content-Type"] || "");
   let body = cap.body;
-  if (cap.statusCode === 200 && contentType.startsWith('text/html')) {
-    let html = body.toString('utf8');
-    const csp = String(cap.headers['Content-Security-Policy'] || '');
+  if (cap.statusCode === 200 && contentType.startsWith("text/html")) {
+    let html = body.toString("utf8");
+    const csp = String(cap.headers["Content-Security-Policy"] || "");
     const nonceMatch = /nonce-(?<nonce>[^']+)'/u.exec(csp);
-    const nonceAttr = nonceMatch ? ` nonce="${nonceMatch.groups?.nonce ?? ''}"` : '';
+    const nonceAttr = nonceMatch
+      ? ` nonce="${nonceMatch.groups?.nonce ?? ""}"`
+      : "";
     const mockSrc = await mockScriptSource();
     const tag = `<script${nonceAttr}>\n${mockSrc}\n</script>\n`;
     if (/<script\s+type=["']module["']/iu.test(html)) {
-      html = html.replace(/<script\s+type=["']module["']/iu, tag + '<script type="module"');
+      html = html.replace(
+        /<script\s+type=["']module["']/iu,
+        tag + '<script type="module"'
+      );
     } else {
       // Defensive fallback — both shipped apps have a module script, but a
       // future app might not.
       html = html.replace(/<\/body>/iu, `${tag}</body>`);
     }
-    body = Buffer.from(html, 'utf8');
+    body = Buffer.from(html, "utf8");
   }
 
   res.statusCode = cap.statusCode;
   for (const [key, value] of Object.entries(cap.headers)) {
-    if (key.toLowerCase() === 'content-length') continue; // let node recompute for the new body
+    if (key.toLowerCase() === "content-length") continue; // let node recompute for the new body
     res.setHeader(key, value);
   }
   res.end(body);
@@ -140,14 +146,15 @@ async function serveAppAsset(req, res, appId, rel) {
 // ---------------------------------------------------------------------
 function hashHue(id) {
   let h = 0;
-  for (let i = 0; i < id.length; i += 1) h = (Math.imul(h, 31) + id.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < id.length; i += 1)
+    h = (Math.imul(h, 31) + id.charCodeAt(i)) >>> 0;
   return h % 360;
 }
 
 function escapeXml(s) {
   return s.replace(
     /[<>&"]/gu,
-    (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c],
+    (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]
   );
 }
 
@@ -171,34 +178,36 @@ function placeholderSvg(id, thumb) {
 }
 
 async function handleBlobRoute(req, res, url) {
-  if (req.method === 'POST') {
-    const hash = createHash('sha256');
+  if (req.method === "POST") {
+    const hash = createHash("sha256");
     await new Promise((resolve, reject) => {
-      req.on('data', (chunk) => hash.update(chunk));
-      req.on('end', resolve);
-      req.on('error', reject);
+      req.on("data", (chunk) => hash.update(chunk));
+      req.on("end", resolve);
+      req.on("error", reject);
     });
-    const sha256 = hash.digest('hex');
+    const sha256 = hash.digest("hex");
     const body = JSON.stringify({
       sha256,
-      media_type: url.searchParams.get('media_type') || null,
+      media_type: url.searchParams.get("media_type") || null,
     });
     res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.end(body);
     return;
   }
-  if (req.method === 'GET' || req.method === 'HEAD') {
-    const id = decodeURIComponent(url.pathname.slice(BLOB_PREFIX.length + 1)) || 'unknown';
-    const thumb = url.searchParams.get('variant') === 'thumb';
+  if (req.method === "GET" || req.method === "HEAD") {
+    const id =
+      decodeURIComponent(url.pathname.slice(BLOB_PREFIX.length + 1)) ||
+      "unknown";
+    const thumb = url.searchParams.get("variant") === "thumb";
     res.statusCode = 200;
-    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store');
-    res.end(req.method === 'HEAD' ? undefined : placeholderSvg(id, thumb));
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.end(req.method === "HEAD" ? undefined : placeholderSvg(id, thumb));
     return;
   }
   res.statusCode = 405;
-  res.end('method not allowed');
+  res.end("method not allowed");
 }
 
 // ---------------------------------------------------------------------
@@ -210,35 +219,37 @@ async function handleBlobRoute(req, res, url) {
 // ---------------------------------------------------------------------
 function handleChangesStub(req, res, appId) {
   res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive',
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
   });
-  res.write(`: connected to ${appId} (visual-harness stub — no real changes)\n\n`);
+  res.write(
+    `: connected to ${appId} (visual-harness stub — no real changes)\n\n`
+  );
   const timer = setInterval(() => {
-    if (!res.writableEnded) res.write(': ping\n\n');
+    if (!res.writableEnded) res.write(": ping\n\n");
   }, 30_000);
-  req.on('close', () => clearInterval(timer));
+  req.on("close", () => clearInterval(timer));
 }
 
 function sendPlain(res, status, text) {
   res.statusCode = status;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.end(text);
 }
 
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const url = new URL(req.url ?? "/", "http://localhost");
     const pathname = url.pathname;
 
-    if (pathname === '/' || pathname === '') {
+    if (pathname === "/" || pathname === "") {
       res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.end(
         '<!doctype html><html><body style="font:14px system-ui;padding:2rem">' +
-          '<h1>Blueprint visual-verification harness</h1>' +
-          '<ul>' +
+          "<h1>Blueprint visual-verification harness</h1>" +
+          "<ul>" +
           '<li><a href="/centraid/docs/">/centraid/docs/</a></li>' +
           '<li><a href="/centraid/photos/">/centraid/photos/</a></li>' +
           '<li><a href="/centraid/tasks/">/centraid/tasks/</a></li>' +
@@ -247,9 +258,9 @@ const server = http.createServer(async (req, res) => {
           '<li><a href="/centraid/people/">/centraid/people/</a></li>' +
           '<li><a href="/centraid/tally/">/centraid/tally/</a></li>' +
           '<li><a href="/centraid/locker/">/centraid/locker/</a></li>' +
-          '</ul>' +
-          '<p>Knobs: <code>?empty=1</code>, <code>?denied=1</code>, <code>#theme=dark&amp;bgL=10</code></p>' +
-          '</body></html>',
+          "</ul>" +
+          "<p>Knobs: <code>?empty=1</code>, <code>?denied=1</code>, <code>#theme=dark&amp;bgL=10</code></p>" +
+          "</body></html>"
       );
       return;
     }
@@ -259,33 +270,39 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const appMatch = /^\/centraid\/(?<appId>[^/]+)(?<rest>\/.*)?$/u.exec(pathname);
+    const appMatch = /^\/centraid\/(?<appId>[^/]+)(?<rest>\/.*)?$/u.exec(
+      pathname
+    );
     if (!appMatch) {
-      sendPlain(res, 404, 'not found');
+      sendPlain(res, 404, "not found");
       return;
     }
-    const appId = decodeURIComponent(appMatch.groups?.appId ?? '');
+    const appId = decodeURIComponent(appMatch.groups?.appId ?? "");
     if (!SUPPORTED_APPS.has(appId)) {
-      sendPlain(res, 404, `unknown app: ${appId} (wired up: ${[...SUPPORTED_APPS].join('/')})`);
+      sendPlain(
+        res,
+        404,
+        `unknown app: ${appId} (wired up: ${[...SUPPORTED_APPS].join("/")})`
+      );
       return;
     }
-    let rel = appMatch.groups?.rest || '/';
+    let rel = appMatch.groups?.rest || "/";
 
-    if (rel === '/_changes') {
+    if (rel === "/_changes") {
       handleChangesStub(req, res, appId);
       return;
     }
 
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      sendPlain(res, 405, 'method not allowed');
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      sendPlain(res, 405, "method not allowed");
       return;
     }
 
-    if (rel === '/' || rel === '') rel = '/index.html';
+    if (rel === "/" || rel === "") rel = "/index.html";
     await serveAppAsset(req, res, appId, rel);
   } catch (err) {
-    console.error('[visual-harness] request failed:', err);
-    if (!res.headersSent) sendPlain(res, 500, 'internal error');
+    console.error("[visual-harness] request failed:", err);
+    if (!res.headersSent) sendPlain(res, 500, "internal error");
   }
 });
 
@@ -299,5 +316,5 @@ server.listen(PORT, () => {
   console.log(`  people: http://localhost:${PORT}/centraid/people/`);
   console.log(`  tally:  http://localhost:${PORT}/centraid/tally/`);
   console.log(`  locker: http://localhost:${PORT}/centraid/locker/`);
-  console.log('  knobs:  ?empty=1  ?denied=1  #theme=dark&bgL=10');
+  console.log("  knobs:  ?empty=1  ?denied=1  #theme=dark&bgL=10");
 });

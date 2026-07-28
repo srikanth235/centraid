@@ -1,12 +1,12 @@
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import type { RegistryEntry } from '../types.ts';
-import { cleanupDeregisteredApp } from './deregister-cleanup.ts';
+import type { RegistryEntry } from "../types.ts";
+import { cleanupDeregisteredApp } from "./deregister-cleanup.ts";
 
 let workspace: string;
 let appsDir: string;
@@ -17,10 +17,10 @@ const logger = {
   },
 };
 
-describe('deregister-cleanup', () => {
+describe("deregister-cleanup", () => {
   beforeEach(async () => {
-    workspace = await tempDir('centraid-cleanup-');
-    appsDir = path.join(workspace, 'centraid');
+    workspace = await tempDir("centraid-cleanup-");
+    appsDir = path.join(workspace, "centraid");
     await fs.mkdir(appsDir, { recursive: true });
     warnings.length = 0;
   });
@@ -38,49 +38,66 @@ describe('deregister-cleanup', () => {
   }
 
   async function seedAppDir(entry: RegistryEntry): Promise<void> {
-    await fs.mkdir(path.join(entry.path, 'versions', 'v_2026-05-12T00-00-00-000Z_abc123'), {
-      recursive: true,
-    });
-    await fs.writeFile(path.join(entry.path, 'data.sqlite'), crypto.randomBytes(16));
-    await fs.writeFile(
-      path.join(entry.path, 'current.json'),
-      JSON.stringify({
-        activeVersion: 'v_2026-05-12T00-00-00-000Z_abc123',
-        history: [],
-      }),
+    await fs.mkdir(
+      path.join(entry.path, "versions", "v_2026-05-12T00-00-00-000Z_abc123"),
+      {
+        recursive: true,
+      }
     );
     await fs.writeFile(
-      path.join(entry.path, 'versions', 'v_2026-05-12T00-00-00-000Z_abc123', 'index.html'),
-      '<!doctype html>',
+      path.join(entry.path, "data.sqlite"),
+      crypto.randomBytes(16)
+    );
+    await fs.writeFile(
+      path.join(entry.path, "current.json"),
+      JSON.stringify({
+        activeVersion: "v_2026-05-12T00-00-00-000Z_abc123",
+        history: [],
+      })
+    );
+    await fs.writeFile(
+      path.join(
+        entry.path,
+        "versions",
+        "v_2026-05-12T00-00-00-000Z_abc123",
+        "index.html"
+      ),
+      "<!doctype html>"
     );
   }
 
-  test('removes the wrapper dir for an uploaded app', async () => {
-    const entry = makeUploadedEntry('myapp-abc123');
+  test("removes the wrapper dir for an uploaded app", async () => {
+    const entry = makeUploadedEntry("myapp-abc123");
     await seedAppDir(entry);
     expect((await fs.stat(entry.path)).isDirectory()).toBeTruthy();
 
     const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
-    expect(result).toStrictEqual({ kind: 'removed' });
+    expect(result).toStrictEqual({ kind: "removed" });
     await expect(fs.stat(entry.path)).rejects.toThrow(/ENOENT/u);
     expect(warnings).toHaveLength(0);
   });
 
-  test('removes data.sqlite, current.json, and all versions', async () => {
-    const entry = makeUploadedEntry('myapp-xyz');
+  test("removes data.sqlite, current.json, and all versions", async () => {
+    const entry = makeUploadedEntry("myapp-xyz");
     await seedAppDir(entry);
 
     await cleanupDeregisteredApp(appsDir, entry, logger);
 
-    await expect(fs.stat(path.join(entry.path, 'data.sqlite'))).rejects.toThrow(/ENOENT/u);
-    await expect(fs.stat(path.join(entry.path, 'current.json'))).rejects.toThrow(/ENOENT/u);
-    await expect(fs.stat(path.join(entry.path, 'versions'))).rejects.toThrow(/ENOENT/u);
+    await expect(fs.stat(path.join(entry.path, "data.sqlite"))).rejects.toThrow(
+      /ENOENT/u
+    );
+    await expect(
+      fs.stat(path.join(entry.path, "current.json"))
+    ).rejects.toThrow(/ENOENT/u);
+    await expect(fs.stat(path.join(entry.path, "versions"))).rejects.toThrow(
+      /ENOENT/u
+    );
   });
 
-  test('appsDir itself is preserved', async () => {
-    const a = makeUploadedEntry('app-a');
-    const b = makeUploadedEntry('app-b');
+  test("appsDir itself is preserved", async () => {
+    const a = makeUploadedEntry("app-a");
+    const b = makeUploadedEntry("app-b");
     await seedAppDir(a);
     await seedAppDir(b);
 
@@ -92,15 +109,15 @@ describe('deregister-cleanup', () => {
     await expect(fs.stat(a.path)).rejects.toThrow(/ENOENT/u);
   });
 
-  test('refuses to remove a corrupt entry whose path is outside appsDir', async () => {
-    const externalDir = path.join(workspace, 'outside');
+  test("refuses to remove a corrupt entry whose path is outside appsDir", async () => {
+    const externalDir = path.join(workspace, "outside");
     await fs.mkdir(externalDir, { recursive: true });
-    await fs.writeFile(path.join(externalDir, 'keep.txt'), 'safe');
+    await fs.writeFile(path.join(externalDir, "keep.txt"), "safe");
 
     // Simulate a corrupt registry row whose path is not under appsDir.
     // The defense-in-depth check should refuse.
     const entry: RegistryEntry = {
-      id: 'corrupt',
+      id: "corrupt",
       path: externalDir,
       registeredAt: new Date().toISOString(),
     };
@@ -108,18 +125,20 @@ describe('deregister-cleanup', () => {
     const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
     expect(result).toStrictEqual({
-      kind: 'skipped',
-      reason: 'outside-appsdir',
+      kind: "skipped",
+      reason: "outside-appsdir",
     });
     expect((await fs.stat(externalDir)).isDirectory()).toBeTruthy();
-    expect((await fs.stat(path.join(externalDir, 'keep.txt'))).isFile()).toBeTruthy();
+    expect(
+      (await fs.stat(path.join(externalDir, "keep.txt"))).isFile()
+    ).toBeTruthy();
     expect(warnings).toHaveLength(1);
     expect(warnings[0]!).toMatch(/outside appsDir/u);
   });
 
-  test('refuses when path === appsDir (would wipe the entire state dir)', async () => {
+  test("refuses when path === appsDir (would wipe the entire state dir)", async () => {
     const entry: RegistryEntry = {
-      id: 'evil',
+      id: "evil",
       path: appsDir,
       registeredAt: new Date().toISOString(),
     };
@@ -127,19 +146,19 @@ describe('deregister-cleanup', () => {
     const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
     expect(result).toStrictEqual({
-      kind: 'skipped',
-      reason: 'outside-appsdir',
+      kind: "skipped",
+      reason: "outside-appsdir",
     });
     expect((await fs.stat(appsDir)).isDirectory()).toBeTruthy();
   });
 
   test('refuses on traversal attempts via "..", appsDir untouched', async () => {
-    const traversal = path.join(appsDir, '..', 'outside');
+    const traversal = path.join(appsDir, "..", "outside");
     await fs.mkdir(traversal, { recursive: true });
-    await fs.writeFile(path.join(traversal, 'keep.txt'), 'safe');
+    await fs.writeFile(path.join(traversal, "keep.txt"), "safe");
 
     const entry: RegistryEntry = {
-      id: 'traversal',
+      id: "traversal",
       path: traversal,
       registeredAt: new Date().toISOString(),
     };
@@ -147,21 +166,23 @@ describe('deregister-cleanup', () => {
     const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
     expect(result).toStrictEqual({
-      kind: 'skipped',
-      reason: 'outside-appsdir',
+      kind: "skipped",
+      reason: "outside-appsdir",
     });
-    expect((await fs.stat(path.join(traversal, 'keep.txt'))).isFile()).toBeTruthy();
+    expect(
+      (await fs.stat(path.join(traversal, "keep.txt"))).isFile()
+    ).toBeTruthy();
   });
 
-  test('treats a missing wrapper dir as success (idempotent)', async () => {
-    const entry = makeUploadedEntry('never-uploaded');
+  test("treats a missing wrapper dir as success (idempotent)", async () => {
+    const entry = makeUploadedEntry("never-uploaded");
     // Don't create entry.path — registry row exists but dir doesn't.
 
     const result = await cleanupDeregisteredApp(appsDir, entry, logger);
 
     // fs.rm with force:true treats ENOENT as success — that's the intended
     // semantic: deregister stays idempotent even if disk state already drifted.
-    expect(result).toStrictEqual({ kind: 'removed' });
+    expect(result).toStrictEqual({ kind: "removed" });
     expect(warnings).toHaveLength(0);
   });
 });

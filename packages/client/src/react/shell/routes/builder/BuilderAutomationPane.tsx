@@ -1,25 +1,25 @@
-import { type JSX, type ReactNode, useEffect, useState } from 'react';
+import { type JSX, type ReactNode, useEffect, useState } from "react";
 
-import { cronNextRuns, describeCron } from '../../../../cron.js';
+import { cronNextRuns, describeCron } from "../../../../cron.js";
 import {
   listAutomationTurns,
   readAutomationTurn,
   runAutomationNow,
-} from '../../../../gateway-client.js';
-import { cx } from '../../../ui/cx.js';
-import { iconSvg } from '../../iconSvg.js';
-import ConfigView from './BuilderAutomationConfigView.js';
+} from "../../../../gateway-client.js";
+import { cx } from "../../../ui/cx.js";
+import { iconSvg } from "../../iconSvg.js";
+import ConfigView from "./BuilderAutomationConfigView.js";
 import {
   Glyph,
   fmtRetention,
   fmtNextRun,
   relTime,
   runOriginLabel,
-} from './BuilderAutomationPaneShared.js';
-import { formatWhereClauses } from './BuilderAutomationTriggers.js';
+} from "./BuilderAutomationPaneShared.js";
+import { formatWhereClauses } from "./BuilderAutomationTriggers.js";
 
-import buttonCss from '../../../ui/Button.module.css';
-import styles from './BuilderAutomationPane.module.css';
+import buttonCss from "../../../ui/Button.module.css";
+import styles from "./BuilderAutomationPane.module.css";
 
 // React port of the vanilla builder's automation-mode right-pane views —
 // Config / Flow / Runs / Code (see builder.ts `renderConfig` /
@@ -31,7 +31,7 @@ import styles from './BuilderAutomationPane.module.css';
 // global styles in styles.css apply unchanged.
 
 export interface BuilderAutomationPaneProps {
-  tab: 'config' | 'flow' | 'runs' | 'code';
+  tab: "config" | "flow" | "runs" | "code";
   appId: string;
   /** Latest automation.json snapshot the shell re-reads after each agent turn. */
   automationRow: CentraidAutomationRow | undefined;
@@ -41,25 +41,33 @@ export interface BuilderAutomationPaneProps {
 
 // Icon SVG strings — the exact glyphs + sizes the vanilla panes drew. Injected
 // via dangerouslySetInnerHTML (the only sanctioned use here).
-const svgChevronDown14 = iconSvg('ChevronDown', 14);
-const svgPlay12 = iconSvg('Play', 12);
+const svgChevronDown14 = iconSvg("ChevronDown", 14);
+const svgPlay12 = iconSvg("Play", 12);
 
 const LOADING = (wrapClass: string | undefined): JSX.Element => (
   <div className={wrapClass}>
-    <p className={cx(styles.muted, styles.configLoading)}>Loading automation…</p>
+    <p className={cx(styles.muted, styles.configLoading)}>
+      Loading automation…
+    </p>
   </div>
 );
 
 // ---------- Code view ----------
 
-function CodeView({ automationRow }: { automationRow: CentraidAutomationRow }): JSX.Element {
+function CodeView({
+  automationRow,
+}: {
+  automationRow: CentraidAutomationRow;
+}): JSX.Element {
   return (
     <div className={styles.code}>
       <div className={styles.codeHead}>
         <span className={styles.codeFile}>automation.json</span>
         <span className={styles.codeTag}>read-only</span>
       </div>
-      <pre className={styles.codePre}>{JSON.stringify(automationRow.manifest, null, 2)}</pre>
+      <pre className={styles.codePre}>
+        {JSON.stringify(automationRow.manifest, null, 2)}
+      </pre>
     </div>
   );
 }
@@ -107,85 +115,96 @@ interface FlowStage {
   sub?: ReactNode;
 }
 
-function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): JSX.Element {
+function FlowView({
+  automationRow,
+}: {
+  automationRow: CentraidAutomationRow;
+}): JSX.Element {
   const m = automationRow.manifest;
   const stages: FlowStage[] = [];
 
   // Trigger.
   const t0 = (m.triggers ?? [])[0];
-  let trigSvg = iconSvg('Play', 16);
-  let trigTitle = 'Manual only';
-  let trigSub: ReactNode = 'Runs only when you fire it.';
+  let trigSvg = iconSvg("Play", 16);
+  let trigTitle = "Manual only";
+  let trigSub: ReactNode = "Runs only when you fire it.";
   if (t0) {
-    if (t0.kind === 'cron') {
-      trigSvg = iconSvg('Clock', 16);
+    if (t0.kind === "cron") {
+      trigSvg = iconSvg("Clock", 16);
       trigTitle = describeCron(t0.expr);
       const next = cronNextRuns(t0.expr, 1)[0];
       trigSub = next ? `Next: ${fmtNextRun(next)}` : t0.expr;
-    } else if (t0.kind === 'data') {
-      trigSvg = iconSvg('Clock', 16);
-      trigTitle = 'Data trigger';
-      trigSub = `Fires on changes to ${t0.entities.join(', ')}`;
-    } else if (t0.kind === 'condition') {
-      trigSvg = iconSvg('Clock', 16);
-      trigTitle = 'Condition trigger';
+    } else if (t0.kind === "data") {
+      trigSvg = iconSvg("Clock", 16);
+      trigTitle = "Data trigger";
+      trigSub = `Fires on changes to ${t0.entities.join(", ")}`;
+    } else if (t0.kind === "condition") {
+      trigSvg = iconSvg("Clock", 16);
+      trigTitle = "Condition trigger";
       // GAP 2: render the actual `where` clause instead of hiding it.
       const whereText = formatWhereClauses(t0.where);
       trigSub = (
         <>
           <span>Fires when {t0.entity} matches its condition</span>
-          {whereText ? <pre className={styles.whereBlock}>{whereText}</pre> : null}
+          {whereText ? (
+            <pre className={styles.whereBlock}>{whereText}</pre>
+          ) : null}
         </>
       );
-    } else if (t0.kind === 'event') {
-      trigSvg = iconSvg('Clock', 16);
-      trigTitle = 'Connector event';
-      const repo = t0.filter && typeof t0.filter.repo === 'string' ? ` · ${t0.filter.repo}` : '';
+    } else if (t0.kind === "event") {
+      trigSvg = iconSvg("Clock", 16);
+      trigTitle = "Connector event";
+      const repo =
+        t0.filter && typeof t0.filter.repo === "string"
+          ? ` · ${t0.filter.repo}`
+          : "";
       trigSub = `${t0.connectorKind} · ${t0.event}${repo}`;
     } else {
-      trigSvg = iconSvg('Webhook', 16);
-      trigTitle = t0.id ? 'Webhook' : 'Webhook — provisioning…';
-      trigSub = t0.id ? `/${t0.id}` : 'A URL + secret are minted server-side.';
+      trigSvg = iconSvg("Webhook", 16);
+      trigTitle = t0.id ? "Webhook" : "Webhook — provisioning…";
+      trigSub = t0.id ? `/${t0.id}` : "A URL + secret are minted server-side.";
     }
   }
   stages.push(
     {
       svg: trigSvg,
-      kind: 'Trigger',
+      kind: "Trigger",
       title: trigTitle,
       sub: trigSub,
     },
     // Agent.
     {
-      svg: iconSvg('Sparkle', 16),
-      kind: 'Agent',
-      title: m.requires.model || 'Workspace default',
-      sub: m.prompt || 'Not described yet.',
-    },
+      svg: iconSvg("Sparkle", 16),
+      kind: "Agent",
+      title: m.requires.model || "Workspace default",
+      sub: m.prompt || "Not described yet.",
+    }
   );
 
   // Connected apps / tools (optional).
   const connected = [...(m.requires.mcps ?? []), ...(m.apps ?? [])];
   if (connected.length > 0) {
     stages.push({
-      svg: iconSvg('Plug', 16),
-      kind: 'Connected',
-      title: connected.join(', '),
+      svg: iconSvg("Plug", 16),
+      kind: "Connected",
+      title: connected.join(", "),
     });
   }
 
   // Outcome.
   stages.push({
-    svg: iconSvg('Check', 16),
-    kind: 'Outcome',
-    title: 'Run recorded',
-    sub: m.onFailure ? `On failure: run "${m.onFailure}"` : fmtRetention(m.history.keep),
+    svg: iconSvg("Check", 16),
+    kind: "Outcome",
+    title: "Run recorded",
+    sub: m.onFailure
+      ? `On failure: run "${m.onFailure}"`
+      : fmtRetention(m.history.keep),
   });
 
   return (
     <div className={styles.flow}>
       {stages.map((s, i) => (
-        <div key={i} style={{ display: 'contents' }}>
+        <div key={i} style={{ display: "contents" }}>
           {i > 0 ? <FlowConnector /> : null}
           <FlowNode svg={s.svg} kind={s.kind} title={s.title} sub={s.sub} />
         </div>
@@ -207,12 +226,13 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
   // having to clear the previous list first.
   const [settled, setSettled] = useState<{
     key: string;
-    result: CentraidAutomationTurnRecord[] | 'error';
+    result: CentraidAutomationTurnRecord[] | "error";
   } | null>(null);
   const key = `${appId} ${nonce}`;
-  const current = settled !== null && settled.key === key ? settled.result : null;
-  const runs = current === 'error' ? null : current;
-  const failed = current === 'error';
+  const current =
+    settled !== null && settled.key === key ? settled.result : null;
+  const runs = current === "error" ? null : current;
+  const failed = current === "error";
 
   useEffect(() => {
     if (!appId) return;
@@ -222,7 +242,7 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
         if (alive) setSettled({ key, result: r });
       })
       .catch(() => {
-        if (alive) setSettled({ key, result: 'error' });
+        if (alive) setSettled({ key, result: "error" });
       });
     return () => {
       alive = false;
@@ -283,19 +303,29 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
           ) : runs === null ? (
             <p className={styles.muted}>Loading runs…</p>
           ) : runs.length === 0 ? (
-            <p className={styles.muted}>No runs yet. Use "Run once" to test it.</p>
+            <p className={styles.muted}>
+              No runs yet. Use "Run once" to test it.
+            </p>
           ) : (
             runs.map((r) => {
               const dur =
-                r.endedAt === undefined ? '—' : `${((r.endedAt - r.startedAt) / 1000).toFixed(1)}s`;
+                r.endedAt === undefined
+                  ? "—"
+                  : `${((r.endedAt - r.startedAt) / 1000).toFixed(1)}s`;
               return (
-                <div className={styles.runrow} data-ok={String(r.ok)} key={r.turnId}>
+                <div
+                  className={styles.runrow}
+                  data-ok={String(r.ok)}
+                  key={r.turnId}
+                >
                   <span className={styles.runDot} data-ok={String(r.ok)} />
                   <span className={styles.runSummary}>
-                    {r.summary || r.error || (r.ok ? 'Completed' : 'Failed')}
+                    {r.summary || r.error || (r.ok ? "Completed" : "Failed")}
                   </span>
                   <span className={styles.runTrigger}>{runOriginLabel(r)}</span>
-                  <span className={styles.runMeta}>{`${dur} · ${relTime(r.startedAt)}`}</span>
+                  <span
+                    className={styles.runMeta}
+                  >{`${dur} · ${relTime(r.startedAt)}`}</span>
                 </div>
               );
             })
@@ -308,16 +338,20 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
 
 // ---------- Root ----------
 
-export default function BuilderAutomationPane(props: BuilderAutomationPaneProps): JSX.Element {
+export default function BuilderAutomationPane(
+  props: BuilderAutomationPaneProps
+): JSX.Element {
   const { tab, appId, automationRow, flashSections } = props;
 
-  if (tab === 'runs') return <RunsView appId={appId} />;
+  if (tab === "runs") return <RunsView appId={appId} />;
 
-  if (tab === 'config') {
+  if (tab === "config") {
     if (!automationRow) return LOADING(styles.config);
-    return <ConfigView automationRow={automationRow} flashSections={flashSections} />;
+    return (
+      <ConfigView automationRow={automationRow} flashSections={flashSections} />
+    );
   }
-  if (tab === 'flow') {
+  if (tab === "flow") {
     if (!automationRow) return LOADING(styles.flow);
     return <FlowView automationRow={automationRow} />;
   }

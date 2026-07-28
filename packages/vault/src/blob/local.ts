@@ -7,7 +7,7 @@
 // with a two-hex-char fan-out (a directory detail, not part of any key);
 // in-memory vaults (tests) get a Map with identical semantics.
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   createReadStream,
@@ -23,12 +23,18 @@ import {
   rmSync,
   statSync,
   writeSync,
-} from 'node:fs';
-import path from 'node:path';
-import type { Readable } from 'node:stream';
+} from "node:fs";
+import path from "node:path";
+import type { Readable } from "node:stream";
 
-import { asVaultDiskFullError } from '../errors.js';
-import { assertSha, resolveRange, type BlobRange, type BlobStat, type BlobStore } from './store.js';
+import { asVaultDiskFullError } from "../errors.js";
+import {
+  assertSha,
+  resolveRange,
+  type BlobRange,
+  type BlobStat,
+  type BlobStore,
+} from "./store.js";
 
 /* eslint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
 
@@ -43,7 +49,7 @@ import { assertSha, resolveRange, type BlobRange, type BlobStat, type BlobStore 
  *                   EPERM where hardlinks are restricted). The caller falls
  *                   back to a byte copy: identical semantics, costs bytes.
  */
-export type BlobLinkOutcome = 'linked' | 'exists' | 'unsupported';
+export type BlobLinkOutcome = "linked" | "exists" | "unsupported";
 
 /** The synchronous surface the command pipeline and sweeps rely on. */
 export interface LocalBlobStore extends BlobStore {
@@ -70,7 +76,7 @@ export interface LocalBlobStore extends BlobStore {
    */
   openReadStreamSync?: (
     sha256: string,
-    range?: BlobRange,
+    range?: BlobRange
   ) => {
     stream: Readable;
     size: number;
@@ -89,13 +95,13 @@ export interface LocalBlobStore extends BlobStore {
 }
 
 export class FsBlobStore implements LocalBlobStore {
-  readonly kind = 'fs';
+  readonly kind = "fs";
 
   constructor(readonly root: string) {}
 
   private fileFor(sha: string): string {
     assertSha(sha);
-    return path.join(this.root, 'sha256', sha.slice(0, 2), sha);
+    return path.join(this.root, "sha256", sha.slice(0, 2), sha);
   }
 
   putSync(sha: string, bytes: Buffer): void {
@@ -103,9 +109,9 @@ export class FsBlobStore implements LocalBlobStore {
     if (existsSync(file)) return; // content-addressed: same key, same bytes
     mkdirSync(path.dirname(file), { recursive: true });
     // Write-then-rename so a crash never leaves a half blob under its key.
-    const tmp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
+    const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
     try {
-      const fd = openSync(tmp, 'w', 0o600);
+      const fd = openSync(tmp, "w", 0o600);
       try {
         writeSync(fd, bytes);
         fsyncSync(fd);
@@ -117,7 +123,7 @@ export class FsBlobStore implements LocalBlobStore {
       // A write that ran out of disk leaves a partial (or zero-byte) tmp
       // file behind — never let that linger under the blob's fan-out dir.
       rmSync(tmp, { force: true });
-      throw asVaultDiskFullError('blob CAS write', err);
+      throw asVaultDiskFullError("blob CAS write", err);
     }
   }
 
@@ -129,7 +135,7 @@ export class FsBlobStore implements LocalBlobStore {
         const resolved = resolveRange(size, range);
         if (!resolved) return null;
         const bytes = Buffer.alloc(resolved.end - resolved.start + 1);
-        const fd = openSync(file, 'r');
+        const fd = openSync(file, "r");
         try {
           readSync(fd, bytes, 0, bytes.length, resolved.start);
         } finally {
@@ -137,7 +143,7 @@ export class FsBlobStore implements LocalBlobStore {
         }
         return bytes;
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
         throw err;
       }
     }
@@ -145,7 +151,7 @@ export class FsBlobStore implements LocalBlobStore {
     try {
       whole = readFileSync(file);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
     return whole;
@@ -160,7 +166,7 @@ export class FsBlobStore implements LocalBlobStore {
   }
 
   listSync(): string[] {
-    const base = path.join(this.root, 'sha256');
+    const base = path.join(this.root, "sha256");
     if (!existsSync(base)) return [];
     const shas: string[] = [];
     for (const fan of readdirSync(base)) {
@@ -182,14 +188,14 @@ export class FsBlobStore implements LocalBlobStore {
     try {
       return { size: statSync(this.fileFor(sha)).size };
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
   }
 
   openReadStreamSync(
     sha: string,
-    range?: BlobRange,
+    range?: BlobRange
   ): {
     stream: Readable;
     size: number;
@@ -222,7 +228,7 @@ export class FsBlobStore implements LocalBlobStore {
       renameSync(tempPath, file);
       return true;
     } catch (err) {
-      throw asVaultDiskFullError('blob CAS temp adoption', err);
+      throw asVaultDiskFullError("blob CAS temp adoption", err);
     }
   }
 
@@ -243,37 +249,37 @@ export class FsBlobStore implements LocalBlobStore {
    */
   linkFromSync(sha: string, sourcePath: string): BlobLinkOutcome {
     const file = this.fileFor(sha);
-    if (existsSync(file)) return 'exists';
+    if (existsSync(file)) return "exists";
     mkdirSync(path.dirname(file), { recursive: true });
     try {
       linkSync(sourcePath, file);
-      return 'linked';
+      return "linked";
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       // A concurrent placer won the race to the same content address. CAS is
       // write-once, so the winner's bytes are ours too.
-      if (code === 'EEXIST') return 'exists';
+      if (code === "EEXIST") return "exists";
       // EXDEV: source and destination are on different filesystems.
       // EPERM/EACCES/EOPNOTSUPP/ENOSYS/EMLINK: the filesystem (or its mount
       // options, or the inode's link limit) refuses this link.
       if (
-        code === 'EXDEV' ||
-        code === 'EPERM' ||
-        code === 'EACCES' ||
-        code === 'EOPNOTSUPP' ||
-        code === 'ENOSYS' ||
-        code === 'EMLINK'
+        code === "EXDEV" ||
+        code === "EPERM" ||
+        code === "EACCES" ||
+        code === "EOPNOTSUPP" ||
+        code === "ENOSYS" ||
+        code === "EMLINK"
       ) {
-        return 'unsupported';
+        return "unsupported";
       }
-      throw asVaultDiskFullError('blob CAS hardlink', err);
+      throw asVaultDiskFullError("blob CAS hardlink", err);
     }
   }
 
   promotionTempPathSync(sha: string): string {
     const file = this.fileFor(sha);
     mkdirSync(path.dirname(file), { recursive: true });
-    return `${file}.${randomBytes(6).toString('hex')}.read-through.tmp`;
+    return `${file}.${randomBytes(6).toString("hex")}.read-through.tmp`;
   }
 
   put(sha: string, bytes: Buffer): Promise<void> {
@@ -300,7 +306,7 @@ export class FsBlobStore implements LocalBlobStore {
 
 /** In-memory twin for `:memory:` vaults — identical semantics, no files. */
 export class MemoryBlobStore implements LocalBlobStore {
-  readonly kind = 'memory';
+  readonly kind = "memory";
   private readonly blobs = new Map<string, Buffer>();
 
   putSync(sha: string, bytes: Buffer): void {

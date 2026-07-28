@@ -17,20 +17,30 @@
  * report so already-published URLs never break. Dated slots are pruned to
  * --keep (default 30) most recent; the JSON series is never pruned.
  */
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import path from "node:path";
 
-const root = path.resolve(import.meta.dirname, '../..');
+const root = path.resolve(import.meta.dirname, "../..");
 const flags = parseFlags(process.argv.slice(2));
-const reportDir = path.resolve(flags.report ?? path.join(root, 'dist/test-report'));
-const siteDir = path.resolve(flags.site ?? path.join(root, 'site'));
-const slot = String(flags.slot ?? 'latest').replace(/^\/+|\/+$/gu, '');
+const reportDir = path.resolve(
+  flags.report ?? path.join(root, "dist/test-report")
+);
+const siteDir = path.resolve(flags.site ?? path.join(root, "site"));
+const slot = String(flags.slot ?? "latest").replace(/^\/+|\/+$/gu, "");
 const runDate = normalizeDate(flags.date);
-const runId = sanitizeSegment(flags['run-id'] ?? '');
-const runUrl = String(flags['run-url'] ?? '');
+const runId = sanitizeSegment(flags["run-id"] ?? "");
+const runUrl = String(flags["run-url"] ?? "");
 const keep = Math.max(1, Number(flags.keep ?? 30) || 30);
 
-if (!slot || slot.includes('..')) {
+if (!slot || slot.includes("..")) {
   console.error(`invalid --slot: ${flags.slot}`);
   process.exit(1);
 }
@@ -40,62 +50,78 @@ if (flags.date && !runDate) {
 }
 
 const runSlug = runDate ? (runId ? `${runDate}-${runId}` : runDate) : null;
-const dest = path.join(siteDir, 'test-report', slot);
+const dest = path.join(siteDir, "test-report", slot);
 await mkdir(dest, { recursive: true });
 await cp(reportDir, dest, { recursive: true });
 
 // Main slot clarity (#535 F7): ensure the per-push page states its scope and
 // links to nightly even when the HTML was generated without --scope main.
-if (slot === 'main') {
-  await ensureMainScopeBanner(path.join(dest, 'index.html'));
+if (slot === "main") {
+  await ensureMainScopeBanner(path.join(dest, "index.html"));
 }
 
 let archived = null;
 let series = [];
 if (runSlug) {
-  archived = path.join(dest, 'runs', runSlug);
+  archived = path.join(dest, "runs", runSlug);
   await rm(archived, { recursive: true, force: true });
   await mkdir(archived, { recursive: true });
   await cp(reportDir, archived, { recursive: true });
   series = await appendSeries({
-    historyDir: path.join(siteDir, 'test-report', 'history'),
-    summary: await readJson(path.join(reportDir, 'summary.json'), null),
+    historyDir: path.join(siteDir, "test-report", "history"),
+    summary: await readJson(path.join(reportDir, "summary.json"), null),
     slug: runSlug,
     date: runDate,
     runId,
     runUrl,
     reportPath: `test-report/${slot}/runs/${runSlug}/`,
   });
-  const pruned = await pruneRuns(path.join(dest, 'runs'), keep);
+  const pruned = await pruneRuns(path.join(dest, "runs"), keep);
   if (pruned.length)
-    console.log(`pages site: pruned ${pruned.length} dated slot(s) beyond ${keep}`);
+    console.log(
+      `pages site: pruned ${pruned.length} dated slot(s) beyond ${keep}`
+    );
 } else {
-  const index = await readJson(path.join(siteDir, 'test-report', 'history', 'index.json'), {});
+  const index = await readJson(
+    path.join(siteDir, "test-report", "history", "index.json"),
+    {}
+  );
   series = Array.isArray(index?.entries) ? index.entries : [];
 }
 
 // Pages must not run Jekyll (underscored dirs / raw HTML).
-await writeFile(path.join(siteDir, '.nojekyll'), '', 'utf8');
+await writeFile(path.join(siteDir, ".nojekyll"), "", "utf8");
 
-const slots = await listSlots(path.join(siteDir, 'test-report'));
+const slots = await listSlots(path.join(siteDir, "test-report"));
 const landing = renderLanding(slots, {
-  repo: process.env.GITHUB_REPOSITORY ?? 'centraid',
+  repo: process.env.GITHUB_REPOSITORY ?? "centraid",
   generatedAt: new Date().toISOString(),
   highlight: slot,
   series,
   // Link only the dated slots whose HTML actually survives pruning.
   retained: await retainedSlugs(series),
 });
-await writeFile(path.join(siteDir, 'index.html'), landing, 'utf8');
+await writeFile(path.join(siteDir, "index.html"), landing, "utf8");
 
-console.log(`pages site: slot=test-report/${slot} → ${path.relative(root, dest)}`);
-if (archived) console.log(`pages site: archived run → ${path.relative(root, archived)}`);
 console.log(
-  `pages site: landing lists ${slots.length} slot(s), ${series.length} history entr(ies)`,
+  `pages site: slot=test-report/${slot} → ${path.relative(root, dest)}`
+);
+if (archived)
+  console.log(`pages site: archived run → ${path.relative(root, archived)}`);
+console.log(
+  `pages site: landing lists ${slots.length} slot(s), ${series.length} history entr(ies)`
 );
 
 /** Append this run to the durable JSON series; never drops earlier entries. */
-async function appendSeries({ historyDir, summary, slug, date, runId, runUrl, reportPath }) {
+async function appendSeries({
+  historyDir,
+  summary,
+  slug,
+  date,
+  runId,
+  runUrl,
+  reportPath,
+}) {
   await mkdir(historyDir, { recursive: true });
   const entryPath = path.join(historyDir, `${slug}.json`);
   const record = {
@@ -106,21 +132,23 @@ async function appendSeries({ historyDir, summary, slug, date, runId, runUrl, re
     reportPath,
     summary: summary ?? null,
   };
-  await writeFile(entryPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  await writeFile(entryPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
 
   const files = (await readdir(historyDir).catch(() => []))
-    .filter((file) => file.endsWith('.json') && file !== 'index.json')
+    .filter((file) => file.endsWith(".json") && file !== "index.json")
     .sort();
   const entries = (
-    await Promise.all(files.map((file) => readJson(path.join(historyDir, file), null)))
+    await Promise.all(
+      files.map((file) => readJson(path.join(historyDir, file), null))
+    )
   )
     .filter((loaded) => loaded?.slug)
     .map((loaded) => summarizeEntry(loaded));
   entries.sort((a, b) => (a.slug < b.slug ? 1 : a.slug > b.slug ? -1 : 0));
   await writeFile(
-    path.join(historyDir, 'index.json'),
+    path.join(historyDir, "index.json"),
     `${JSON.stringify({ updatedAt: new Date().toISOString(), entries }, null, 2)}\n`,
-    'utf8',
+    "utf8"
   );
   return entries;
 }
@@ -151,26 +179,30 @@ async function retainedSlugs(series) {
     (Array.isArray(series) ? series : []).map(async (entry) => {
       if (!entry?.reportPath) return;
       try {
-        await stat(path.join(siteDir, entry.reportPath, 'index.html'));
+        await stat(path.join(siteDir, entry.reportPath, "index.html"));
         kept.add(entry.slug);
       } catch {
         // pruned
       }
-    }),
+    })
   );
   return kept;
 }
 
 /** Keep the `keep` newest dated slots; older HTML is dropped (JSON series stays). */
 async function pruneRuns(runsDir, keep) {
-  const entries = (await readdir(runsDir, { withFileTypes: true }).catch(() => []))
+  const entries = (
+    await readdir(runsDir, { withFileTypes: true }).catch(() => [])
+  )
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort()
     .toReversed();
   const stale = entries.slice(keep);
   await Promise.all(
-    stale.map((name) => rm(path.join(runsDir, name), { recursive: true, force: true })),
+    stale.map((name) =>
+      rm(path.join(runsDir, name), { recursive: true, force: true })
+    )
   );
   return stale;
 }
@@ -188,31 +220,34 @@ async function listSlots(base) {
       entries.map(async (entry) => {
         if (!entry.isDirectory()) return;
         // Dated archives and the JSON series are listed from the history index.
-        if (!prefix && entry.name === 'history') return;
-        if (entry.name === 'runs') return;
+        if (!prefix && entry.name === "history") return;
+        if (entry.name === "runs") return;
         const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-        const indexPath = path.join(dir, entry.name, 'index.html');
+        const indexPath = path.join(dir, entry.name, "index.html");
         try {
           await stat(indexPath);
           found.push(rel);
         } catch {
           await walk(path.join(dir, entry.name), rel);
         }
-      }),
+      })
     );
   }
-  await walk(base, '');
+  await walk(base, "");
   return found.sort();
 }
 
-function renderLanding(slots, { repo, generatedAt, highlight, series, retained }) {
+function renderLanding(
+  slots,
+  { repo, generatedAt, highlight, series, retained }
+) {
   const items = slots
     .map((s) => {
       const href = `test-report/${s}/`;
       const label = s === highlight ? `${s} (this deploy)` : s;
       return `<li><a href="${href}">${escapeHtml(label)}</a></li>`;
     })
-    .join('\n');
+    .join("\n");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -246,7 +281,7 @@ function renderLanding(slots, { repo, generatedAt, highlight, series, retained }
   </ul>
   <h2>Latest</h2>
   <ul>
-${items || '    <li><em>No reports published yet.</em></li>'}
+${items || "    <li><em>No reports published yet.</em></li>"}
   </ul>
 ${renderHistory(series, retained)}
 </body>
@@ -256,61 +291,64 @@ ${renderHistory(series, retained)}
 
 function renderHistory(series, retained) {
   const entries = Array.isArray(series) ? series : [];
-  if (!entries.length) return '';
+  if (!entries.length) return "";
   const groups = new Map();
   for (const entry of entries) {
-    const month = String(entry.date ?? entry.slug ?? '').slice(0, 7) || 'unknown';
+    const month =
+      String(entry.date ?? entry.slug ?? "").slice(0, 7) || "unknown";
     if (!groups.has(month)) groups.set(month, []);
     groups.get(month).push(entry);
   }
   const blocks = [...groups.entries()].map(([month, rows]) => {
     const list = rows
       .map((entry) => {
-        const failed = Number(entry.failed ?? 0) + Number(entry.cellsFailed ?? 0);
+        const failed =
+          Number(entry.failed ?? 0) + Number(entry.cellsFailed ?? 0);
         const badge = Number.isFinite(failed)
           ? failed > 0
             ? `<span class="tag bad">${failed} failing</span>`
             : '<span class="tag ok">green</span>'
-          : '';
-        const label = escapeHtml(entry.slug ?? entry.date ?? 'run');
+          : "";
+        const label = escapeHtml(entry.slug ?? entry.date ?? "run");
         const body =
           entry.reportPath && retained.has(entry.slug)
             ? `<a href="${escapeHtml(entry.reportPath)}">${label}</a>`
             : `${label} <span class="meta">(HTML pruned)</span>`;
         const run = entry.runUrl
           ? ` <a class="meta" href="${escapeHtml(entry.runUrl)}">run</a>`
-          : '';
+          : "";
         return `      <li>${body}${badge}${run}</li>`;
       })
-      .join('\n');
+      .join("\n");
     return `    <h3>${escapeHtml(month)}</h3>\n    <ul>\n${list}\n    </ul>`;
   });
   return `  <h2>Nightly history</h2>
   <p class="meta">Newest first · HTML kept for the most recent runs only (${entries.filter((entry) => retained.has(entry.slug)).length} of ${entries.length}) · full series: <a href="test-report/history/index.json">history/index.json</a></p>
-${blocks.join('\n')}`;
+${blocks.join("\n")}`;
 }
 
 function numberOrNull(value) {
-  if (value == null || value === '' || !Number.isFinite(Number(value))) return null;
+  if (value == null || value === "" || !Number.isFinite(Number(value)))
+    return null;
   return Number(value);
 }
 
 function normalizeDate(value) {
-  const text = String(value ?? '').trim();
+  const text = String(value ?? "").trim();
   if (!text) return null;
   const match = /^(?<date>\d{4}-\d{2}-\d{2})/u.exec(text);
   return match?.groups?.date ?? null;
 }
 
 function sanitizeSegment(value) {
-  return String(value ?? '')
+  return String(value ?? "")
     .trim()
-    .replace(/[^A-Za-z0-9._-]/gu, '');
+    .replace(/[^A-Za-z0-9._-]/gu, "");
 }
 
 async function readJson(file, fallback) {
   try {
-    return JSON.parse(await readFile(file, 'utf8'));
+    return JSON.parse(await readFile(file, "utf8"));
   } catch {
     return fallback;
   }
@@ -318,17 +356,17 @@ async function readJson(file, fallback) {
 
 function escapeHtml(value) {
   return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 function parseFlags(args) {
   const result = {};
   for (let index = 0; index < args.length; index += 1) {
     const current = args[index];
-    if (!current.startsWith('--')) continue;
+    if (!current.startsWith("--")) continue;
     result[current.slice(2)] = args[index + 1];
     index += 1;
   }
@@ -342,15 +380,16 @@ function parseFlags(args) {
 async function ensureMainScopeBanner(indexPath) {
   let html;
   try {
-    html = await readFile(indexPath, 'utf8');
+    html = await readFile(indexPath, "utf8");
   } catch {
     return;
   }
-  if (html.includes('/test-report/nightly/') && html.includes('per-push')) return;
+  if (html.includes("/test-report/nightly/") && html.includes("per-push"))
+    return;
   const banner = `<p class="lede" style="border-left:3px solid var(--blue);padding-left:12px">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/" style="color:var(--blue)">/test-report/nightly/</a>.</p>`;
   // Prefer after the primary lede paragraph.
   const next = html.includes('<p class="lede">')
     ? html.replace('<p class="lede">', `${banner}<p class="lede">`)
-    : html.replace('<body>', `<body>${banner}`);
-  if (next !== html) await writeFile(indexPath, next, 'utf8');
+    : html.replace("<body>", `<body>${banner}`);
+  if (next !== html) await writeFile(indexPath, next, "utf8");
 }

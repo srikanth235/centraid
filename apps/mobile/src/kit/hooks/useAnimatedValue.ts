@@ -6,8 +6,8 @@
 // (a ref read during render can silently produce a stale UI). `useMemo` keeps
 // one legal render-time value for each initial position.
 
-import { useMemo } from 'react';
-import { Animated } from 'react-native';
+import { useMemo } from "react";
+import { Animated } from "react-native";
 
 export function useAnimatedValue(initial: number): Animated.Value {
   return useMemo(() => new Animated.Value(initial), [initial]);

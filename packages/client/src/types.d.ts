@@ -14,7 +14,7 @@ import type {
   ThemePreset,
   TileVariant,
   TileFinish,
-} from '@centraid/design-tokens';
+} from "@centraid/design-tokens";
 
 // Make this file a module so `declare global` augments globals.
 
@@ -33,12 +33,15 @@ declare global {
     /** Ordered presets the Settings → Appearance picker renders. */
     themePresets: ReadonlyArray<ThemePreset>;
     palette: Palette;
-    icons: Record<IconName, readonly { d: string; fill?: 'currentColor' }[]>;
+    icons: Record<IconName, readonly { d: string; fill?: "currentColor" }[]>;
     apps: AppMetaResolved[];
     spacing: Record<string, number>;
     radii: Record<string, number>;
     fonts: Record<string, string>;
-    type: Record<string, { size: number; lineHeight: number; family: string; weight: string }>;
+    type: Record<
+      string,
+      { size: number; lineHeight: number; family: string; weight: string }
+    >;
     /**
      * Computes a tile's visual treatment for a given hue + variant.
      * Pure; safe to call on every tile render.
@@ -59,7 +62,11 @@ declare global {
     trustedHtml?: string;
   };
   type ElChild = Node | string | null | false | undefined;
-  type ElHelper = (tag: string, attrs?: ElAttrs, children?: ElChild | ElChild[]) => HTMLElement;
+  type ElHelper = (
+    tag: string,
+    attrs?: ElAttrs,
+    children?: ElChild | ElChild[]
+  ) => HTMLElement;
 
   interface CentraidRoot {
     el: ElHelper;
@@ -90,7 +97,7 @@ declare global {
      * Current runtime mode ('local' or 'remote'), or undefined before the
      * first settings fetch resolves.
      */
-    getRuntimeMode: () => 'local' | 'remote' | undefined;
+    getRuntimeMode: () => "local" | "remote" | undefined;
   }
 
   interface UserAppMeta extends AppMetaResolved {
@@ -130,16 +137,18 @@ declare global {
    * predictable edge-flipping. Shared across `app.ts` and `chrome.ts` so
    * the sidebar can hand the right-click event off to the home shell.
    */
-  type MenuAnchor = { kind: 'point'; x: number; y: number } | { kind: 'rect'; rect: DOMRect };
+  type MenuAnchor =
+    | { kind: "point"; x: number; y: number }
+    | { kind: "rect"; rect: DOMRect };
 
   type SidebarPage =
-    | 'home'
-    | 'assistant'
-    | 'insights'
-    | 'discover'
-    | 'starred'
-    | 'automations'
-    | 'settings';
+    | "home"
+    | "assistant"
+    | "insights"
+    | "discover"
+    | "starred"
+    | "automations"
+    | "settings";
 
   interface Window {
     CentraidTokens: CentraidTokensBridge;

@@ -1,29 +1,35 @@
-import path from 'node:path';
+import path from "node:path";
 
-import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, shell } from "electron";
 
 import {
   installApplicationMenu,
   installDeepLinkProtocol,
   installTray,
   setTrayGatewayRunning,
-} from './main/app-chrome.js';
-import { installAuthInjector } from './main/auth-injector.js';
-import { installCrashHandlers } from './main/crash-log.js';
+} from "./main/app-chrome.js";
+import { installAuthInjector } from "./main/auth-injector.js";
+import { installCrashHandlers } from "./main/crash-log.js";
 import {
   nudgeGatewayMonitor,
   startGatewayMonitor,
   stopGatewayMonitor,
-} from './main/gateway-monitor.js';
-import { registerIpcHandlers } from './main/ipc.js';
-import { markLocalGatewaysDisposed, shutdownAllLocalGatewaysExcept } from './main/local-gateway.js';
-import { applyLaunchAtLogin } from './main/login-item.js';
-import { ensurePhoneLink, shutdownPhoneLink } from './main/phone-link.js';
-import { registerPowerContextListeners } from './main/power-context-push.js';
-import { startReminderMonitor, stopReminderMonitor } from './main/reminder-monitor.js';
-import { loadSettings } from './main/settings.js';
-import { startUpdateWatcher } from './main/update-watcher.js';
-import { loadWindowState, trackWindowState } from './main/window-state.js';
+} from "./main/gateway-monitor.js";
+import { registerIpcHandlers } from "./main/ipc.js";
+import {
+  markLocalGatewaysDisposed,
+  shutdownAllLocalGatewaysExcept,
+} from "./main/local-gateway.js";
+import { applyLaunchAtLogin } from "./main/login-item.js";
+import { ensurePhoneLink, shutdownPhoneLink } from "./main/phone-link.js";
+import { registerPowerContextListeners } from "./main/power-context-push.js";
+import {
+  startReminderMonitor,
+  stopReminderMonitor,
+} from "./main/reminder-monitor.js";
+import { loadSettings } from "./main/settings.js";
+import { startUpdateWatcher } from "./main/update-watcher.js";
+import { loadWindowState, trackWindowState } from "./main/window-state.js";
 
 const __dirname = import.meta.dirname;
 
@@ -49,7 +55,7 @@ const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (gotSingleInstanceLock) {
   // Deep-link second-instance handler is also registered in app-chrome;
   // this block focuses the window when the user re-launches without a URL.
-  app.on('second-instance', () => {
+  app.on("second-instance", () => {
     const [win] = BrowserWindow.getAllWindows();
     if (!win) return;
     if (win.isMinimized()) win.restore();
@@ -67,7 +73,7 @@ if (gotSingleInstanceLock) {
   // for the BrowserWindow on Windows/Linux and the macOS dock during dev.
   // Packaged builds will pick up the .icns via electron-builder config
   // (appId: dev.centraid.desktop — electron-builder/app-id.json).
-  const ICON_PATH = path.join(__dirname, '..', 'icon.png');
+  const ICON_PATH = path.join(__dirname, "..", "icon.png");
 
   // The builder preview iframe is served by the gateway itself (issue #141,
   // Phase 4): it points at `/centraid/_draft/<sessionId>/<id>/`, a real HTTP
@@ -79,7 +85,7 @@ if (gotSingleInstanceLock) {
 
   const canOpenExternal = (url: string): boolean => {
     try {
-      return ['https:', 'http:', 'mailto:'].includes(new URL(url).protocol);
+      return ["https:", "http:", "mailto:"].includes(new URL(url).protocol);
     } catch {
       return false;
     }
@@ -88,7 +94,7 @@ if (gotSingleInstanceLock) {
   const createWindow = (): void => {
     const state = loadWindowState();
     const win = new BrowserWindow({
-      backgroundColor: '#e8e9ec',
+      backgroundColor: "#e8e9ec",
       height: state.height,
       width: state.width,
       x: state.x,
@@ -96,35 +102,38 @@ if (gotSingleInstanceLock) {
       icon: ICON_PATH,
       minHeight: 720,
       minWidth: 1100,
-      titleBarStyle: 'hiddenInset',
+      titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 16 },
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
-        preload: path.join(__dirname, 'preload.cjs'),
+        preload: path.join(__dirname, "preload.cjs"),
         sandbox: true,
       },
     });
     if (state.isMaximized) win.maximize();
     flushWindowState = trackWindowState(win);
 
-    void win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+    void win.loadFile(path.join(__dirname, "renderer", "index.html"));
 
     win.webContents.setWindowOpenHandler(({ url }) => {
       if (canOpenExternal(url)) {
         void shell.openExternal(url);
       }
-      return { action: 'deny' };
+      return { action: "deny" };
     });
 
-    win.webContents.on('console-message', (_event, level, message, line, source) => {
-      const prefix = level >= 2 ? 'RENDERER-ERR' : 'RENDERER';
-      process.stdout.write(`[${prefix}] ${message} (${source}:${line})\n`);
-    });
+    win.webContents.on(
+      "console-message",
+      (_event, level, message, line, source) => {
+        const prefix = level >= 2 ? "RENDERER-ERR" : "RENDERER";
+        process.stdout.write(`[${prefix}] ${message} (${source}:${line})\n`);
+      }
+    );
   };
 
   void app.whenReady().then(async () => {
-    if (process.platform === 'darwin' && app.dock) {
+    if (process.platform === "darwin" && app.dock) {
       app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
     }
     installApplicationMenu();
@@ -155,9 +164,9 @@ if (gotSingleInstanceLock) {
     } catch (err) {
       setTrayGatewayRunning(false);
       dialog.showErrorBox(
-        'Centraid gateway failed to start',
+        "Centraid gateway failed to start",
         `The embedded gateway could not start:\n\n${err instanceof Error ? err.message : String(err)}\n\n` +
-          'Centraid will keep retrying automatically in the background.',
+          "Centraid will keep retrying automatically in the background."
       );
     }
     createWindow();
@@ -190,15 +199,15 @@ if (gotSingleInstanceLock) {
     // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`):
     // it's colocated with the runner and probes its own host on demand, so the
     // desktop no longer runs a first-launch credential probe.
-    app.on('activate', () => {
+    app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
       }
     });
   });
 
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
       app.quit();
     }
   });
@@ -219,7 +228,7 @@ if (gotSingleInstanceLock) {
   const QUIT_TEARDOWN_TIMEOUT_MS = 5000;
   let quitting = false;
 
-  app.on('before-quit', (event) => {
+  app.on("before-quit", (event) => {
     if (quitting) return;
     quitting = true;
     event.preventDefault();

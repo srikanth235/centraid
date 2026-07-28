@@ -12,21 +12,21 @@ export default async function setPlace({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'media.set_asset_place',
+      command: "media.set_asset_place",
       input: {
-        asset_id: String(input.asset_id ?? ''),
-        ...(input.place_id != null && input.place_id !== ''
+        asset_id: String(input.asset_id ?? ""),
+        ...(input.place_id != null && input.place_id !== ""
           ? { place_id: String(input.place_id) }
           : {}),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

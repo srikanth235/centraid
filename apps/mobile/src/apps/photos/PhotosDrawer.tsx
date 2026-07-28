@@ -10,19 +10,27 @@
 // nearest real screen or surfaces an "on desktop" note, matching how the rest
 // of the Photos port handles desktop-only affordances.
 
-import { Feather } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
+import {
+  Animated,
+  Easing,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
-import { family, useTheme } from '../../kit/theme';
-import { getProfileColor, getProfileName, initialsOf } from '../../lib/profile';
-import { getActiveSpace, subscribeSpaces } from '../../lib/spaces';
+import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import { family, useTheme } from "../../kit/theme";
+import { getProfileColor, getProfileName, initialsOf } from "../../lib/profile";
+import { getActiveSpace, subscribeSpaces } from "../../lib/spaces";
 
 const PANEL_WIDTH = 288;
 // The green used by the design for the "On" backup badge.
-const ON_GREEN = '#5C8A4E';
+const ON_GREEN = "#5C8A4E";
 
 // A ~12%-alpha wash of a 6-hex colour for the accent pill; opaque palette hexes
 // get an alpha byte appended, anything else falls back to an elevated surface.
@@ -54,7 +62,8 @@ export default function PhotosDrawer({
   // vault the app is actually pointed at — not a static placeholder.
   const [space, setSpace] = useState(() => getActiveSpace());
   useEffect(() => subscribeSpaces(() => setSpace(getActiveSpace())), []);
-  const vaultName = space?.vaultName || space?.desktopName || name || 'Personal vault';
+  const vaultName =
+    space?.vaultName || space?.desktopName || name || "Personal vault";
   const vaultColor = space?.color || color;
   const slide = useAnimatedValue(-PANEL_WIDTH);
   const fade = useAnimatedValue(0);
@@ -80,7 +89,12 @@ export default function PhotosDrawer({
   }, [visible, slide, fade]);
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+    >
       <View style={styles.root}>
         <Animated.View
           style={[
@@ -99,10 +113,15 @@ export default function PhotosDrawer({
               <Text style={styles.avatarText}>{initialsOf(name)}</Text>
             </View>
             <View style={styles.profileMeta}>
-              <Text style={[styles.profileName, { color: colors.ink }]} numberOfLines={1}>
-                {name || 'You'}
+              <Text
+                style={[styles.profileName, { color: colors.ink }]}
+                numberOfLines={1}
+              >
+                {name || "You"}
               </Text>
-              <Text style={[styles.profileSub, { color: colors.ink3 }]}>Personal vault</Text>
+              <Text style={[styles.profileSub, { color: colors.ink3 }]}>
+                Personal vault
+              </Text>
             </View>
           </View>
 
@@ -120,10 +139,17 @@ export default function PhotosDrawer({
                 pressed && styles.pressed,
               ]}
             >
-              <View style={[styles.vaultDot, { backgroundColor: vaultColor }]} />
+              <View
+                style={[styles.vaultDot, { backgroundColor: vaultColor }]}
+              />
               <View style={styles.switchMeta}>
-                <Text style={[styles.switchEyebrow, { color: colors.ink3 }]}>CURRENT VAULT</Text>
-                <Text style={[styles.switchName, { color: colors.ink }]} numberOfLines={1}>
+                <Text style={[styles.switchEyebrow, { color: colors.ink3 }]}>
+                  CURRENT VAULT
+                </Text>
+                <Text
+                  style={[styles.switchName, { color: colors.ink }]}
+                  numberOfLines={1}
+                >
                   {vaultName}
                 </Text>
               </View>
@@ -134,36 +160,64 @@ export default function PhotosDrawer({
                 ]}
               >
                 <Feather name="chevrons-down" size={13} color={colors.accent} />
-                <Text style={[styles.switchPillText, { color: colors.accent }]}>Switch</Text>
+                <Text style={[styles.switchPillText, { color: colors.accent }]}>
+                  Switch
+                </Text>
               </View>
             </Pressable>
 
-            <View style={[styles.storageCard, { backgroundColor: colors.bgSunken }]}>
+            <View
+              style={[styles.storageCard, { backgroundColor: colors.bgSunken }]}
+            >
               <View style={styles.storageHead}>
                 <Feather name="cloud" size={20} color={colors.accent} />
-                <Text style={[styles.storageText, { color: colors.ink }]}>0.86 GB of 5 TB</Text>
+                <Text style={[styles.storageText, { color: colors.ink }]}>
+                  0.86 GB of 5 TB
+                </Text>
               </View>
-              <View style={[styles.storageTrack, { backgroundColor: colors.bgElev }]}>
-                <View style={[styles.storageFill, { backgroundColor: colors.accent }]} />
+              <View
+                style={[
+                  styles.storageTrack,
+                  { backgroundColor: colors.bgElev },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.storageFill,
+                    { backgroundColor: colors.accent },
+                  ]}
+                />
               </View>
               <View style={styles.storageActions}>
                 <Pressable>
-                  <Text style={[styles.storageAction, { color: colors.accent }]}>Get more</Text>
+                  <Text
+                    style={[styles.storageAction, { color: colors.accent }]}
+                  >
+                    Get more
+                  </Text>
                 </Pressable>
                 <Pressable>
-                  <Text style={[styles.storageAction, { color: colors.accent }]}>
+                  <Text
+                    style={[styles.storageAction, { color: colors.accent }]}
+                  >
                     Free up space
                   </Text>
                 </Pressable>
               </View>
             </View>
 
-            <Text style={[styles.sectionLabel, { color: colors.ink3 }]}>MORE FROM PHOTOS</Text>
+            <Text style={[styles.sectionLabel, { color: colors.ink3 }]}>
+              MORE FROM PHOTOS
+            </Text>
 
             <View style={[styles.row, { borderBottomColor: colors.line }]}>
               <Feather name="cloud" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Backup</Text>
-              <View style={[styles.onPill, { backgroundColor: `${ON_GREEN}24` }]}>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Backup
+              </Text>
+              <View
+                style={[styles.onPill, { backgroundColor: `${ON_GREEN}24` }]}
+              >
                 <View style={[styles.onDot, { backgroundColor: ON_GREEN }]} />
                 <Text style={[styles.onText, { color: ON_GREEN }]}>On</Text>
               </View>
@@ -171,13 +225,17 @@ export default function PhotosDrawer({
 
             <Pressable style={[styles.row, { borderBottomColor: colors.line }]}>
               <Feather name="smartphone" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Free up space on device</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Free up space on device
+              </Text>
               <Feather name="chevron-right" size={17} color={colors.ink4} />
             </Pressable>
 
             <Pressable style={styles.row}>
               <Feather name="shield" size={19} color={colors.ink3} />
-              <Text style={[styles.rowLabel, { color: colors.ink }]}>Your data in Centraid</Text>
+              <Text style={[styles.rowLabel, { color: colors.ink }]}>
+                Your data in Centraid
+              </Text>
               <Feather name="chevron-right" size={17} color={colors.ink4} />
             </Pressable>
 
@@ -185,11 +243,15 @@ export default function PhotosDrawer({
 
             <Pressable style={styles.footerItem} onPress={onHome}>
               <Feather name="home" size={17} color={colors.ink2} />
-              <Text style={[styles.footerLabel, { color: colors.ink }]}>Home</Text>
+              <Text style={[styles.footerLabel, { color: colors.ink }]}>
+                Home
+              </Text>
             </Pressable>
             <Pressable style={styles.footerItem} onPress={onSettings}>
               <Feather name="settings" size={17} color={colors.ink2} />
-              <Text style={[styles.footerLabel, { color: colors.ink }]}>Settings</Text>
+              <Text style={[styles.footerLabel, { color: colors.ink }]}>
+                Settings
+              </Text>
             </Pressable>
           </View>
         </Animated.View>
@@ -208,18 +270,18 @@ export default function PhotosDrawer({
 
 const styles = StyleSheet.create({
   avatar: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 21,
     height: 42,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: 42,
   },
-  avatarText: { color: '#fff', fontFamily: family.sansBold, fontSize: 15 },
+  avatarText: { color: "#fff", fontFamily: family.sansBold, fontSize: 15 },
   divider: { height: 0.5, marginHorizontal: 14, marginVertical: 8 },
   footerItem: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 12,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 13,
     paddingHorizontal: 14,
     paddingVertical: 13,
@@ -227,9 +289,9 @@ const styles = StyleSheet.create({
   footerLabel: { fontFamily: family.sansRegular, fontSize: 15 },
   onDot: { borderRadius: 3, height: 5, width: 5 },
   onPill: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 999,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 5,
     paddingHorizontal: 9,
     paddingVertical: 3,
@@ -238,15 +300,15 @@ const styles = StyleSheet.create({
   panel: {
     borderRightWidth: 0.5,
     flex: 0,
-    height: '100%',
+    height: "100%",
     paddingHorizontal: 0,
     width: PANEL_WIDTH,
   },
   pressed: { opacity: 0.6 },
   profile: {
-    alignItems: 'center',
+    alignItems: "center",
     borderBottomWidth: 0.5,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     paddingBottom: 16,
     paddingHorizontal: 20,
@@ -255,17 +317,17 @@ const styles = StyleSheet.create({
   profileMeta: { flex: 1, minWidth: 0 },
   profileName: { fontFamily: family.sansBold, fontSize: 15 },
   profileSub: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 1 },
-  root: { flex: 1, flexDirection: 'row' },
+  root: { flex: 1, flexDirection: "row" },
   row: {
-    alignItems: 'center',
+    alignItems: "center",
     borderBottomWidth: 0.5,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     paddingHorizontal: 2,
     paddingVertical: 11,
   },
   rowLabel: { flex: 1, fontFamily: family.sansRegular, fontSize: 15 },
-  scrim: { backgroundColor: 'rgba(0,0,0,.4)', flex: 1 },
+  scrim: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
   scroll: { flex: 1, paddingHorizontal: 10, paddingTop: 10 },
   sectionLabel: {
     fontFamily: family.monoMedium,
@@ -276,12 +338,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   storageAction: { fontFamily: family.sansBold, fontSize: 15 },
-  storageActions: { flexDirection: 'row', gap: 18 },
+  storageActions: { flexDirection: "row", gap: 18 },
   storageCard: { borderRadius: 12, marginBottom: 12, padding: 13 },
-  storageFill: { borderRadius: 4, height: '100%', width: '6%' },
+  storageFill: { borderRadius: 4, height: "100%", width: "6%" },
   storageHead: {
-    alignItems: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    flexDirection: "row",
     gap: 9,
     marginBottom: 11,
   },
@@ -290,7 +352,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     height: 7,
     marginBottom: 11,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   switchEyebrow: {
     fontFamily: family.monoMedium,
@@ -301,18 +363,18 @@ const styles = StyleSheet.create({
   switchMeta: { flex: 1, minWidth: 0 },
   switchName: { fontFamily: family.sansBold, fontSize: 15 },
   switchPill: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 999,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 5,
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
   switchPillText: { fontFamily: family.sansBold, fontSize: 12 },
   switchVault: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 12,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 11,
     marginBottom: 11,
     paddingHorizontal: 13,

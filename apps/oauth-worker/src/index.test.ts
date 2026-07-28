@@ -1,51 +1,51 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 
 // governance: allow-repo-hygiene file-size-limit #545 cohesive security/ACID suite for one module
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { handleRequest } from './worker.js';
+import { handleRequest } from "./worker.js";
 
 const NOW = Date.UTC(2026, 6, 23, 10, 0, 0);
-const STATE = `w.${'A'.repeat(43)}`;
-const VERIFIER = 'v'.repeat(43);
-const CODE = 'google-authorization-code';
-const BROWSER_BINDING = 'b'.repeat(43);
+const STATE = `w.${"A".repeat(43)}`;
+const VERIFIER = "v".repeat(43);
+const CODE = "google-authorization-code";
+const BROWSER_BINDING = "b".repeat(43);
 
 function environment(): Env {
   return {
-    APP_ORIGIN: 'https://app.centraid.dev',
-    CALLBACK_URL: 'https://oauth.centraid.dev/callback',
-    CALLBACK_RECEIPT_SECRET: 'receipt-secret-with-at-least-thirty-two-bytes',
-    EXCHANGE_ENABLED: 'true',
+    APP_ORIGIN: "https://app.centraid.dev",
+    CALLBACK_URL: "https://oauth.centraid.dev/callback",
+    CALLBACK_RECEIPT_SECRET: "receipt-secret-with-at-least-thirty-two-bytes",
+    EXCHANGE_ENABLED: "true",
     GLOBAL_LIMITER: { limit: async () => ({ success: true }) } as RateLimit,
-    GOOGLE_CLIENT_ID: 'shared.apps.googleusercontent.com',
-    GOOGLE_CLIENT_SECRET: 'worker-only-google-secret',
+    GOOGLE_CLIENT_ID: "shared.apps.googleusercontent.com",
+    GOOGLE_CLIENT_SECRET: "worker-only-google-secret",
     IP_LIMITER: { limit: async () => ({ success: true }) } as RateLimit,
     METRICS: {
-      writeDataPoint: vi.fn<AnalyticsEngineDataset['writeDataPoint']>(),
+      writeDataPoint: vi.fn<AnalyticsEngineDataset["writeDataPoint"]>(),
     } as unknown as AnalyticsEngineDataset,
-    RESTRICTED_SCOPES_ENABLED: 'false',
+    RESTRICTED_SCOPES_ENABLED: "false",
   };
 }
 
 const context = {} as ExecutionContext;
 
-describe('index', () => {
+describe("index", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   async function bindCookie(
     env: Env,
-    origin = 'https://oauth.centraid.dev',
-    now = NOW,
+    origin = "https://oauth.centraid.dev",
+    now = NOW
   ): Promise<string> {
     const response = await handleRequest(
       new Request(`${origin}/bind`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'content-type': 'application/json',
-          'cf-connecting-ip': '203.0.113.7',
+          "content-type": "application/json",
+          "cf-connecting-ip": "203.0.113.7",
         },
         body: JSON.stringify({
           state: STATE,
@@ -54,125 +54,144 @@ describe('index', () => {
       }),
       env,
       context,
-      { fetch, now: () => now },
+      { fetch, now: () => now }
     );
     expect(response.status).toBe(204);
-    return response.headers.get('set-cookie')!.split(';', 1)[0]!;
+    return response.headers.get("set-cookie")!.split(";", 1)[0]!;
   }
 
   async function callbackReceipt(env: Env, now = NOW): Promise<string> {
-    const cookie = await bindCookie(env, 'https://oauth.centraid.dev', now);
+    const cookie = await bindCookie(env, "https://oauth.centraid.dev", now);
     const response = await handleRequest(
       new Request(
         `https://oauth.centraid.dev/callback?state=${encodeURIComponent(STATE)}&code=${encodeURIComponent(CODE)}`,
-        { headers: { cookie, 'cf-connecting-ip': '203.0.113.7' } },
+        { headers: { cookie, "cf-connecting-ip": "203.0.113.7" } }
       ),
       env,
       context,
-      { fetch, now: () => now },
+      { fetch, now: () => now }
     );
     expect(response.status).toBe(303);
-    const location = new URL(response.headers.get('location')!);
-    expect(location.origin + location.pathname).toBe('https://app.centraid.dev/oauth/finish');
+    const location = new URL(response.headers.get("location")!);
+    expect(location.origin + location.pathname).toBe(
+      "https://app.centraid.dev/oauth/finish"
+    );
     const fragment = new URLSearchParams(location.hash.slice(1));
-    expect(fragment.get('state')).toBe(STATE);
-    expect(fragment.get('code')).toBe(CODE);
-    return fragment.get('receipt')!;
+    expect(fragment.get("state")).toBe(STATE);
+    expect(fragment.get("code")).toBe(CODE);
+    return fragment.get("receipt")!;
   }
 
-  function exchangeRequest(receipt?: string, bodyPatch: Record<string, unknown> = {}): Request {
-    return new Request('https://oauth.centraid.dev/exchange', {
-      method: 'POST',
+  function exchangeRequest(
+    receipt?: string,
+    bodyPatch: Record<string, unknown> = {}
+  ): Request {
+    return new Request("https://oauth.centraid.dev/exchange", {
+      method: "POST",
       headers: {
-        'content-type': 'application/json',
-        'cf-connecting-ip': '203.0.113.7',
+        "content-type": "application/json",
+        "cf-connecting-ip": "203.0.113.7",
       },
       body: JSON.stringify({
-        provider: 'google',
+        provider: "google",
         code: CODE,
         code_verifier: VERIFIER,
-        redirect_uri: 'https://oauth.centraid.dev/callback',
+        redirect_uri: "https://oauth.centraid.dev/callback",
         state: STATE,
         browser_binding: BROWSER_BINDING,
-        scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+        scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
         ...(receipt ? { receipt } : {}),
         ...bodyPatch,
       }),
     });
   }
 
-  describe('Centraid Assist Worker', () => {
-    test('deployment has no durable-storage binding or alternate public hostname', () => {
-      const config = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+  describe("Centraid Assist Worker", () => {
+    test("deployment has no durable-storage binding or alternate public hostname", () => {
+      const config = readFileSync(
+        new URL("../wrangler.jsonc", import.meta.url),
+        "utf8"
+      );
       expect(config).toContain('"workers_dev": false');
       expect(config).toContain('"preview_urls": false');
       expect(config).toContain('"invocation_logs": false');
       expect(config).toContain('"traces": {\n      "enabled": false');
       expect(config).toContain('"logs": {\n      "enabled": false');
       expect(config).not.toMatch(
-        /kv_namespaces|d1_databases|durable_objects|r2_buckets|queues|hyperdrive|browser/u,
+        /kv_namespaces|d1_databases|durable_objects|r2_buckets|queues|hyperdrive|browser/u
       );
     });
 
-    test('start page scrubs its fragment before binding and contains no ceremony material', async () => {
+    test("start page scrubs its fragment before binding and contains no ceremony material", async () => {
       const response = await handleRequest(
-        new Request('https://oauth.centraid.dev/start'),
+        new Request("https://oauth.centraid.dev/start"),
         environment(),
-        context,
+        context
       );
       const html = await response.text();
       expect(response.status).toBe(200);
-      expect(response.headers.get('content-security-policy')).toContain("connect-src 'self'");
-      expect(html.indexOf('history.replaceState')).toBeLessThan(html.indexOf("fetch('/bind'"));
+      expect(response.headers.get("content-security-policy")).toContain(
+        "connect-src 'self'"
+      );
+      expect(html.indexOf("history.replaceState")).toBeLessThan(
+        html.indexOf("fetch('/bind'")
+      );
       expect(html).not.toContain(CODE);
       expect(html).not.toContain(BROWSER_BINDING);
     });
 
-    test('callback mints a short-lived receipt and exchange attaches the Worker-only secret', async () => {
+    test("callback mints a short-lived receipt and exchange attaches the Worker-only secret", async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
       const upstream = vi.fn<typeof fetch>(
         async (_url: string | URL | Request, init?: RequestInit) => {
           const form = new URLSearchParams(String(init?.body));
-          expect(form.get('client_id')).toBe(env.GOOGLE_CLIENT_ID);
-          expect(form.get('client_secret')).toBe(env.GOOGLE_CLIENT_SECRET);
-          expect(form.get('code_verifier')).toBe(VERIFIER);
+          expect(form.get("client_id")).toBe(env.GOOGLE_CLIENT_ID);
+          expect(form.get("client_secret")).toBe(env.GOOGLE_CLIENT_SECRET);
+          expect(form.get("code_verifier")).toBe(VERIFIER);
           return Response.json({
-            access_token: 'ya29.gateway-only',
-            refresh_token: '1//gateway-only',
+            access_token: "ya29.gateway-only",
+            refresh_token: "1//gateway-only",
             expires_in: 3600,
-            token_type: 'Bearer',
-            scope: 'https://www.googleapis.com/auth/calendar.readonly',
+            token_type: "Bearer",
+            scope: "https://www.googleapis.com/auth/calendar.readonly",
           });
-        },
+        }
       );
-      const response = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: upstream as typeof fetch,
-        now: () => NOW,
-      });
+      const response = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: upstream as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toStrictEqual({
-        access_token: 'ya29.gateway-only',
-        refresh_token: '1//gateway-only',
+        access_token: "ya29.gateway-only",
+        refresh_token: "1//gateway-only",
         expires_in: 3600,
-        token_type: 'Bearer',
-        scope: 'https://www.googleapis.com/auth/calendar.readonly',
+        token_type: "Bearer",
+        scope: "https://www.googleapis.com/auth/calendar.readonly",
       });
       expect(upstream).toHaveBeenCalledOnce();
-      expect(response.headers.get('cache-control')).toContain('no-store');
-      expect(response.headers.get('access-control-allow-origin')).toBeNull();
-      expect(response.headers.get('strict-transport-security')).toContain('includeSubDomains');
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      expect(response.headers.get("strict-transport-security")).toContain(
+        "includeSubDomains"
+      );
     });
 
-    test('callback telemetry is aggregate-only and desktop HTML exposes no tokens', async () => {
+    test("callback telemetry is aggregate-only and desktop HTML exposes no tokens", async () => {
       const env = environment();
-      const log = vi.spyOn(console, 'info');
-      const desktopState = `d.${'D'.repeat(43)}`;
-      const desktopBinding = 'd'.repeat(43);
+      const log = vi.spyOn(console, "info");
+      const desktopState = `d.${"D".repeat(43)}`;
+      const desktopBinding = "d".repeat(43);
       const bindResponse = await handleRequest(
-        new Request('https://oauth.centraid.dev/bind', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+        new Request("https://oauth.centraid.dev/bind", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
             state: desktopState,
             browser_binding: desktopBinding,
@@ -180,40 +199,42 @@ describe('index', () => {
         }),
         env,
         context,
-        { fetch, now: () => NOW },
+        { fetch, now: () => NOW }
       );
-      const cookie = bindResponse.headers.get('set-cookie')!.split(';', 1)[0]!;
+      const cookie = bindResponse.headers.get("set-cookie")!.split(";", 1)[0]!;
       const response = await handleRequest(
         new Request(
           `https://oauth.centraid.dev/callback?state=${desktopState}&code=${encodeURIComponent(CODE)}`,
-          { headers: { cookie } },
+          { headers: { cookie } }
         ),
         env,
         context,
-        { fetch, now: () => NOW },
+        { fetch, now: () => NOW }
       );
       expect(response.status).toBe(200);
-      expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+      expect(response.headers.get("content-security-policy")).toContain(
+        "default-src 'none'"
+      );
       const html = await response.text();
-      expect(html).toContain('centraid://oauth/finish#');
-      expect(html).not.toContain('ya29.');
+      expect(html).toContain("centraid://oauth/finish#");
+      expect(html).not.toContain("ya29.");
       expect(log).toHaveBeenCalledTimes(0);
       expect(env.METRICS.writeDataPoint).toHaveBeenCalledWith({
-        blobs: ['callback', 'success'],
+        blobs: ["callback", "success"],
         doubles: [200, 1],
       });
     });
 
-    test('browser binding plus missing, forged, and expired receipts fail before Google is called', async () => {
+    test("browser binding plus missing, forged, and expired receipts fail before Google is called", async () => {
       const env = environment();
       const upstream = vi.fn<typeof fetch>();
       const unboundCallback = await handleRequest(
         new Request(
-          `https://oauth.centraid.dev/callback?state=${encodeURIComponent(STATE)}&code=${encodeURIComponent(CODE)}`,
+          `https://oauth.centraid.dev/callback?state=${encodeURIComponent(STATE)}&code=${encodeURIComponent(CODE)}`
         ),
         env,
         context,
-        { fetch: upstream as typeof fetch, now: () => NOW },
+        { fetch: upstream as typeof fetch, now: () => NOW }
       );
       expect(unboundCallback.status).toBe(400);
       await expect(unboundCallback.text()).resolves.not.toContain(CODE);
@@ -223,46 +244,56 @@ describe('index', () => {
       });
       expect(missing.status).toBe(400);
       await expect(missing.json()).resolves.toStrictEqual({
-        error: 'invalid_body',
+        error: "invalid_body",
       });
 
       const receipt = await callbackReceipt(env);
-      const forged = `${receipt.slice(0, -1)}${receipt.endsWith('A') ? 'B' : 'A'}`;
-      const forgedResponse = await handleRequest(exchangeRequest(forged), env, context, {
-        fetch: upstream as typeof fetch,
-        now: () => NOW,
-      });
+      const forged = `${receipt.slice(0, -1)}${receipt.endsWith("A") ? "B" : "A"}`;
+      const forgedResponse = await handleRequest(
+        exchangeRequest(forged),
+        env,
+        context,
+        {
+          fetch: upstream as typeof fetch,
+          now: () => NOW,
+        }
+      );
       await expect(forgedResponse.json()).resolves.toStrictEqual({
-        error: 'invalid_receipt',
+        error: "invalid_receipt",
       });
 
       const wrongBrowser = await handleRequest(
-        exchangeRequest(receipt, { browser_binding: 'x'.repeat(43) }),
+        exchangeRequest(receipt, { browser_binding: "x".repeat(43) }),
         env,
         context,
-        { fetch: upstream as typeof fetch, now: () => NOW },
+        { fetch: upstream as typeof fetch, now: () => NOW }
       );
       await expect(wrongBrowser.json()).resolves.toStrictEqual({
-        error: 'invalid_receipt',
+        error: "invalid_receipt",
       });
 
-      const expired = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: upstream as typeof fetch,
-        now: () => NOW + 121_000,
-      });
+      const expired = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: upstream as typeof fetch,
+          now: () => NOW + 121_000,
+        }
+      );
       await expect(expired.json()).resolves.toStrictEqual({
-        error: 'expired_receipt',
+        error: "expired_receipt",
       });
       expect(upstream).toHaveBeenCalledTimes(0);
     });
 
-    test('invalid body shape and PKCE verifier are rejected before any upstream call', async () => {
+    test("invalid body shape and PKCE verifier are rejected before any upstream call", async () => {
       const env = environment();
       const upstream = vi.fn<typeof fetch>();
-      const nonObject = new Request('https://oauth.centraid.dev/exchange', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '[]',
+      const nonObject = new Request("https://oauth.centraid.dev/exchange", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "[]",
       });
       expect(
         (
@@ -270,105 +301,110 @@ describe('index', () => {
             fetch: upstream as typeof fetch,
             now: () => NOW,
           })
-        ).status,
+        ).status
       ).toBe(400);
       const receipt = await callbackReceipt(env);
       const weakPkce = await handleRequest(
-        exchangeRequest(receipt, { code_verifier: 'too-short' }),
+        exchangeRequest(receipt, { code_verifier: "too-short" }),
         env,
         context,
-        { fetch: upstream as typeof fetch, now: () => NOW },
+        { fetch: upstream as typeof fetch, now: () => NOW }
       );
       await expect(weakPkce.json()).resolves.toStrictEqual({
-        error: 'invalid_body',
+        error: "invalid_body",
       });
       const restricted = await handleRequest(
         exchangeRequest(receipt, {
-          scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+          scopes: ["https://www.googleapis.com/auth/gmail.readonly"],
         }),
         env,
         context,
-        { fetch: upstream as typeof fetch, now: () => NOW },
+        { fetch: upstream as typeof fetch, now: () => NOW }
       );
       await expect(restricted.json()).resolves.toStrictEqual({
-        error: 'invalid_body',
+        error: "invalid_body",
       });
       expect(upstream).toHaveBeenCalledTimes(0);
     });
 
-    test('Google must return the exact requested allowlisted scope set', async () => {
+    test("Google must return the exact requested allowlisted scope set", async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
       const upstream = vi.fn<typeof fetch>(async () =>
         Response.json({
-          access_token: 'ya29.must-not-leave-worker',
-          refresh_token: '1//must-not-leave-worker',
-          scope: 'https://www.googleapis.com/auth/gmail.readonly',
-        }),
+          access_token: "ya29.must-not-leave-worker",
+          refresh_token: "1//must-not-leave-worker",
+          scope: "https://www.googleapis.com/auth/gmail.readonly",
+        })
       );
-      const response = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: upstream as typeof fetch,
-        now: () => NOW,
-      });
+      const response = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: upstream as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(response.status).toBe(502);
       await expect(response.json()).resolves.toStrictEqual({
-        error: 'invalid_upstream_response',
+        error: "invalid_upstream_response",
       });
     });
 
-    test('refresh is stateless and returns only allowlisted OAuth fields', async () => {
+    test("refresh is stateless and returns only allowlisted OAuth fields", async () => {
       const env = environment();
       const upstream = vi.fn<typeof fetch>(
         async (_url: string | URL | Request, init?: RequestInit) => {
           const form = new URLSearchParams(String(init?.body));
-          expect(form.get('grant_type')).toBe('refresh_token');
-          expect(form.get('refresh_token')).toBe('1//stored-on-gateway');
-          expect(form.get('client_secret')).toBe(env.GOOGLE_CLIENT_SECRET);
+          expect(form.get("grant_type")).toBe("refresh_token");
+          expect(form.get("refresh_token")).toBe("1//stored-on-gateway");
+          expect(form.get("client_secret")).toBe(env.GOOGLE_CLIENT_SECRET);
           return Response.json({
-            access_token: 'ya29.refreshed',
+            access_token: "ya29.refreshed",
             expires_in: 3600,
-            id_token: 'must-not-leave-worker',
+            id_token: "must-not-leave-worker",
           });
-        },
+        }
       );
       const response = await handleRequest(
-        new Request('https://oauth.centraid.dev/refresh', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+        new Request("https://oauth.centraid.dev/refresh", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            provider: 'google',
-            refresh_token: '1//stored-on-gateway',
+            provider: "google",
+            refresh_token: "1//stored-on-gateway",
           }),
         }),
         env,
         context,
-        { fetch: upstream as typeof fetch, now: () => NOW },
+        { fetch: upstream as typeof fetch, now: () => NOW }
       );
       await expect(response.json()).resolves.toStrictEqual({
-        access_token: 'ya29.refreshed',
+        access_token: "ya29.refreshed",
         expires_in: 3600,
-        token_type: 'Bearer',
+        token_type: "Bearer",
       });
     });
 
-    test('kill switch and rate limits fail closed without contacting Google', async () => {
+    test("kill switch and rate limits fail closed without contacting Google", async () => {
       const disabled = {
         ...environment(),
-        EXCHANGE_ENABLED: 'false',
+        EXCHANGE_ENABLED: "false",
       } as unknown as Env;
       const upstream = vi.fn<typeof fetch>();
       const response = await handleRequest(
-        exchangeRequest('v1.0000000000.bad'),
+        exchangeRequest("v1.0000000000.bad"),
         disabled,
         context,
         {
           fetch: upstream as typeof fetch,
           now: () => NOW,
-        },
+        }
       );
       expect(response.status).toBe(503);
       await expect(response.json()).resolves.toStrictEqual({
-        error: 'assist_disabled',
+        error: "assist_disabled",
       });
       expect(upstream).toHaveBeenCalledTimes(0);
 
@@ -377,172 +413,204 @@ describe('index', () => {
         limit: async () => ({ success: false }),
       } as RateLimit;
       const limitedResponse = await handleRequest(
-        exchangeRequest('v1.0000000000.bad'),
+        exchangeRequest("v1.0000000000.bad"),
         limited,
         context,
-        { fetch: upstream as typeof fetch, now: () => NOW },
+        { fetch: upstream as typeof fetch, now: () => NOW }
       );
       expect(limitedResponse.status).toBe(429);
-      expect(limitedResponse.headers.get('retry-after')).toBe('60');
+      expect(limitedResponse.headers.get("retry-after")).toBe("60");
       expect(upstream).toHaveBeenCalledTimes(0);
     });
 
-    test('fixed public origins and environment invariants fail closed', async () => {
+    test("fixed public origins and environment invariants fail closed", async () => {
       const env = environment();
       expect(
         (
           await handleRequest(
-            new Request('https://centraid-oauth.workers.dev/callback'),
+            new Request("https://centraid-oauth.workers.dev/callback"),
             env,
-            context,
+            context
           )
-        ).status,
+        ).status
       ).toBe(421);
       expect(
         (
           await handleRequest(
-            new Request('https://oauth.centraid.dev/callback'),
-            { ...env, APP_ORIGIN: 'https://evil.example' } as unknown as Env,
-            context,
+            new Request("https://oauth.centraid.dev/callback"),
+            { ...env, APP_ORIGIN: "https://evil.example" } as unknown as Env,
+            context
           )
-        ).status,
+        ).status
       ).toBe(503);
 
       const allowed = await handleRequest(
-        new Request('https://oauth.centraid.dev/exchange', {
-          method: 'OPTIONS',
-          headers: { origin: 'https://app.centraid.dev' },
+        new Request("https://oauth.centraid.dev/exchange", {
+          method: "OPTIONS",
+          headers: { origin: "https://app.centraid.dev" },
         }),
         env,
-        context,
+        context
       );
       expect(allowed.status).toBe(204);
-      expect(allowed.headers.get('access-control-allow-methods')).toBe('GET');
+      expect(allowed.headers.get("access-control-allow-methods")).toBe("GET");
       const denied = await handleRequest(
-        new Request('https://oauth.centraid.dev/exchange', {
-          method: 'OPTIONS',
-          headers: { origin: 'https://evil.example' },
+        new Request("https://oauth.centraid.dev/exchange", {
+          method: "OPTIONS",
+          headers: { origin: "https://evil.example" },
         }),
         env,
-        context,
+        context
       );
       expect(denied.status).toBe(403);
     });
 
-    test('separate local Testing credentials can run on an exact loopback callback', async () => {
+    test("separate local Testing credentials can run on an exact loopback callback", async () => {
       const env = {
         ...environment(),
-        APP_ORIGIN: 'http://127.0.0.1:4173',
-        CALLBACK_URL: 'http://127.0.0.1:8787/callback',
+        APP_ORIGIN: "http://127.0.0.1:4173",
+        CALLBACK_URL: "http://127.0.0.1:8787/callback",
       } as unknown as Env;
-      const cookie = await bindCookie(env, 'http://127.0.0.1:8787');
+      const cookie = await bindCookie(env, "http://127.0.0.1:8787");
       const response = await handleRequest(
-        new Request(`http://127.0.0.1:8787/callback?state=${STATE}&code=${CODE}`, {
-          headers: { cookie },
-        }),
+        new Request(
+          `http://127.0.0.1:8787/callback?state=${STATE}&code=${CODE}`,
+          {
+            headers: { cookie },
+          }
+        ),
         env,
         context,
-        { fetch, now: () => NOW },
+        { fetch, now: () => NOW }
       );
       expect(response.status).toBe(303);
-      expect(response.headers.get('location')).toMatch(
-        /^http:\/\/127\.0\.0\.1:4173\/oauth\/finish#/u,
+      expect(response.headers.get("location")).toMatch(
+        /^http:\/\/127\.0\.0\.1:4173\/oauth\/finish#/u
       );
 
       const wrongPort = await handleRequest(
-        new Request(`http://127.0.0.1:8788/callback?state=${STATE}&code=${CODE}`),
+        new Request(
+          `http://127.0.0.1:8788/callback?state=${STATE}&code=${CODE}`
+        ),
         {
           ...env,
-          CALLBACK_URL: 'http://127.0.0.1:8788/callback',
+          CALLBACK_URL: "http://127.0.0.1:8788/callback",
         } as unknown as Env,
         context,
-        { fetch, now: () => NOW },
+        { fetch, now: () => NOW }
       );
       expect(wrongPort.status).toBe(421);
     });
 
-    test('upstream Google timeout and 5xx map to transient failures without leaking tokens', async () => {
+    test("upstream Google timeout and 5xx map to transient failures without leaking tokens", async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
 
       const timeoutUpstream = vi.fn<typeof fetch>(async () => {
-        throw new Error('Google token endpoint timed out');
+        throw new Error("Google token endpoint timed out");
       });
-      const timeoutResponse = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: timeoutUpstream as typeof fetch,
-        now: () => NOW,
-      });
+      const timeoutResponse = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: timeoutUpstream as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(timeoutResponse.status).toBe(503);
       await expect(timeoutResponse.json()).resolves.toStrictEqual({
-        error: 'upstream_unavailable',
+        error: "upstream_unavailable",
       });
       expect(timeoutUpstream).toHaveBeenCalledOnce();
       expect(String(timeoutUpstream.mock.calls.at(0)?.at(0))).toBe(
-        'https://oauth2.googleapis.com/token',
+        "https://oauth2.googleapis.com/token"
       );
 
       const fiveXxUpstream = vi.fn<typeof fetch>(async () =>
         Response.json(
-          { error: 'server_error', error_description: 'ya29.must-not-leak' },
-          { status: 503 },
-        ),
+          { error: "server_error", error_description: "ya29.must-not-leak" },
+          { status: 503 }
+        )
       );
-      const fiveXx = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: fiveXxUpstream as typeof fetch,
-        now: () => NOW,
-      });
+      const fiveXx = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: fiveXxUpstream as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(fiveXx.status).toBe(503);
       const fiveXxBody = await fiveXx.json();
-      expect(fiveXxBody).toStrictEqual({ error: 'server_error' });
-      expect(JSON.stringify(fiveXxBody)).not.toContain('ya29');
+      expect(fiveXxBody).toStrictEqual({ error: "server_error" });
+      expect(JSON.stringify(fiveXxBody)).not.toContain("ya29");
     });
 
-    test('malformed Google responses fail closed as invalid_upstream_response', async () => {
+    test("malformed Google responses fail closed as invalid_upstream_response", async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
-      const notJson = vi.fn<typeof fetch>(async () => new Response('not-json{', { status: 200 }));
-      const notJsonResponse = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: notJson as typeof fetch,
-        now: () => NOW,
-      });
+      const notJson = vi.fn<typeof fetch>(
+        async () => new Response("not-json{", { status: 200 })
+      );
+      const notJsonResponse = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: notJson as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(notJsonResponse.status).toBe(502);
       await expect(notJsonResponse.json()).resolves.toStrictEqual({
-        error: 'invalid_upstream_response',
+        error: "invalid_upstream_response",
       });
 
       const missingToken = vi.fn<typeof fetch>(async () =>
         Response.json({
-          token_type: 'Bearer',
-          scope: 'https://www.googleapis.com/auth/calendar.readonly',
-        }),
+          token_type: "Bearer",
+          scope: "https://www.googleapis.com/auth/calendar.readonly",
+        })
       );
-      const missing = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: missingToken as typeof fetch,
-        now: () => NOW,
-      });
+      const missing = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: missingToken as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(missing.status).toBe(502);
       await expect(missing.json()).resolves.toStrictEqual({
-        error: 'invalid_upstream_response',
+        error: "invalid_upstream_response",
       });
     });
 
-    test('receipt clock-skew beyond the TTL window is rejected as expired_receipt', async () => {
+    test("receipt clock-skew beyond the TTL window is rejected as expired_receipt", async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
       const upstream = vi.fn<typeof fetch>();
       // Receipt expiresAt is NOW/1000 + 120. A clock that is more than TTL
       // *ahead* of mint time also fails closed (future skew).
-      const skewedFuture = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: upstream as typeof fetch,
-        now: () => NOW - 121_000,
-      });
+      const skewedFuture = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: upstream as typeof fetch,
+          now: () => NOW - 121_000,
+        }
+      );
       await expect(skewedFuture.json()).resolves.toStrictEqual({
-        error: 'expired_receipt',
+        error: "expired_receipt",
       });
       expect(upstream.mock.calls).toStrictEqual([]);
     });
 
-    test('rate-limit recovery: a later request succeeds after the limiter opens', async () => {
+    test("rate-limit recovery: a later request succeeds after the limiter opens", async () => {
       const env = environment();
       const receipt = await callbackReceipt(env);
       let open = false;
@@ -551,31 +619,41 @@ describe('index', () => {
       } as RateLimit;
       const upstream = vi.fn<typeof fetch>(async () =>
         Response.json({
-          access_token: 'ya29.recovered',
+          access_token: "ya29.recovered",
           expires_in: 3600,
-          token_type: 'Bearer',
-          scope: 'https://www.googleapis.com/auth/calendar.readonly',
-        }),
+          token_type: "Bearer",
+          scope: "https://www.googleapis.com/auth/calendar.readonly",
+        })
       );
 
-      const blocked = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: upstream as typeof fetch,
-        now: () => NOW,
-      });
+      const blocked = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: upstream as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(blocked.status).toBe(429);
       await expect(blocked.json()).resolves.toStrictEqual({
-        error: 'rate_limited',
+        error: "rate_limited",
       });
       expect(upstream.mock.calls).toStrictEqual([]);
 
       open = true;
-      const recovered = await handleRequest(exchangeRequest(receipt), env, context, {
-        fetch: upstream as typeof fetch,
-        now: () => NOW,
-      });
+      const recovered = await handleRequest(
+        exchangeRequest(receipt),
+        env,
+        context,
+        {
+          fetch: upstream as typeof fetch,
+          now: () => NOW,
+        }
+      );
       expect(recovered.status).toBe(200);
       await expect(recovered.json()).resolves.toMatchObject({
-        access_token: 'ya29.recovered',
+        access_token: "ya29.recovered",
       });
       expect(upstream).toHaveBeenCalledOnce();
     });

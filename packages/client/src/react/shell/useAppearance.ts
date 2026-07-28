@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { AppearancePrefs } from '../../app-shell-context.js';
-import { getUserPrefs, saveUserPrefs } from '../../gateway-client.js';
+import type { AppearancePrefs } from "../../app-shell-context.js";
+import { getUserPrefs, saveUserPrefs } from "../../gateway-client.js";
 import {
   applyPrefsToDocument,
   DEFAULT_PREFS,
   pickAppearance,
   toRemoteShape,
-} from './appearance.js';
-import { Store } from './store.js';
+} from "./appearance.js";
+import { Store } from "./store.js";
 
 export interface AppearanceController {
   prefs: AppearancePrefs;
@@ -24,7 +24,7 @@ export interface AppearanceController {
 export function useAppearance(): AppearanceController {
   const [prefs, setPrefs] = useState<AppearancePrefs>(() => ({
     ...DEFAULT_PREFS,
-    ...Store.get<Partial<AppearancePrefs>>('appearance', {}),
+    ...Store.get<Partial<AppearancePrefs>>("appearance", {}),
     bgL: 5,
   }));
 
@@ -46,7 +46,7 @@ export function useAppearance(): AppearanceController {
         if (alive && Object.keys(recognised).length > 0) {
           setPrefs((prev) => {
             const next = { ...prev, ...recognised, bgL: 5 };
-            Store.set('appearance', next);
+            Store.set("appearance", next);
             return next;
           });
         }
@@ -62,7 +62,7 @@ export function useAppearance(): AppearanceController {
   const updatePrefs = useCallback((patch: Partial<AppearancePrefs>) => {
     setPrefs((prev) => {
       const next = { ...prev, ...patch };
-      Store.set('appearance', next);
+      Store.set("appearance", next);
       return next;
     });
     const remotePatch = toRemoteShape(patch);

@@ -6,11 +6,11 @@
 // orchestration relies on: no upscaling, and `null` for unsupported / oversize
 // / corrupt inputs.
 
-import jpegJs from 'jpeg-js';
-import { PNG } from 'pngjs';
-import { describe, expect, test } from 'vitest';
+import jpegJs from "jpeg-js";
+import { PNG } from "pngjs";
+import { describe, expect, test } from "vitest";
 
-import { createImagePreviewCodec } from './codec.js';
+import { createImagePreviewCodec } from "./codec.js";
 
 const codec = createImagePreviewCodec();
 
@@ -31,7 +31,9 @@ function raster(width: number, height: number): Buffer {
 }
 
 function makeJpeg(width: number, height: number): Buffer {
-  return Buffer.from(jpegJs.encode({ data: raster(width, height), width, height }, 90).data);
+  return Buffer.from(
+    jpegJs.encode({ data: raster(width, height), width, height }, 90).data
+  );
 }
 
 function makePng(width: number, height: number): Buffer {
@@ -61,11 +63,11 @@ function decodedSize(bytes: Buffer): { width: number; height: number } {
   return { width: img.width, height: img.height };
 }
 
-describe('codec', () => {
-  test('JPEG source downscales to the tiny rung (256 long edge), output is JPEG', async () => {
-    const out = await codec.downscale(makeJpeg(1000, 600), 'image/jpeg', 256);
+describe("codec", () => {
+  test("JPEG source downscales to the tiny rung (256 long edge), output is JPEG", async () => {
+    const out = await codec.downscale(makeJpeg(1000, 600), "image/jpeg", 256);
     expect(out).not.toBeNull();
-    expect(out!.mediaType).toBe('image/jpeg');
+    expect(out!.mediaType).toBe("image/jpeg");
     expect(Math.max(out!.width, out!.height)).toBe(256);
     expect(out!.height).toBe(Math.round((256 / 1000) * 600)); // aspect preserved
     // The reported dims match what the bytes actually decode to.
@@ -78,95 +80,103 @@ describe('codec', () => {
     expect(out!.bytes.length).toBeLessThan(60_000);
   });
 
-  test('PNG source decodes and re-encodes to a JPEG rung', async () => {
-    const out = await codec.downscale(makePng(800, 800), 'image/png', 256);
+  test("PNG source decodes and re-encodes to a JPEG rung", async () => {
+    const out = await codec.downscale(makePng(800, 800), "image/png", 256);
     expect(out).not.toBeNull();
-    expect(out!.mediaType).toBe('image/jpeg');
+    expect(out!.mediaType).toBe("image/jpeg");
     expect(out!.width).toBe(256);
     expect(out!.height).toBe(256);
   });
 
-  test('medium rung (2048) on a smaller source never upscales', async () => {
-    const out = await codec.downscale(makeJpeg(1000, 600), 'image/jpeg', 2048);
+  test("medium rung (2048) on a smaller source never upscales", async () => {
+    const out = await codec.downscale(makeJpeg(1000, 600), "image/jpeg", 2048);
     expect(out).not.toBeNull();
     expect(out!.width).toBe(1000); // native size preserved, just re-encoded
     expect(out!.height).toBe(600);
   });
 
-  test('perceptual hash matches the Photos 9x8 left-brighter dHash contract', async () => {
+  test("perceptual hash matches the Photos 9x8 left-brighter dHash contract", async () => {
     // Each source row encodes a chosen comparison byte, pinning comparison
     // direction, bit order, row order and the fixed-width lowercase hex form.
     const pattern = [0x00, 0xff, 0xaa, 0x55, 0x80, 0x01, 0xf0, 0x0f];
-    await expect(codec.perceptualHash(makeDhashPattern(pattern), 'image/png')).resolves.toBe(
-      '00ffaa558001f00f',
-    );
-    await expect(codec.perceptualHash(makePng(9, 8), 'image/gif')).resolves.toBeNull();
+    await expect(
+      codec.perceptualHash(makeDhashPattern(pattern), "image/png")
+    ).resolves.toBe("00ffaa558001f00f");
+    await expect(
+      codec.perceptualHash(makePng(9, 8), "image/gif")
+    ).resolves.toBeNull();
   });
 
-  test('thumbhash encodes a known raster to the exact reference value', async () => {
+  test("thumbhash encodes a known raster to the exact reference value", async () => {
     // The fixture is what the faithful ThumbHash reference port emits for this
     // 64×64 gradient — a regression pin on the byte-identical algorithm. 24 hash
     // bytes → 32 unpadded base64 chars, standard alphabet.
-    const hash = await codec.thumbhash(makePng(64, 64), 'image/png');
-    expect(hash).toBe('mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK');
-    expect(Buffer.from(hash!, 'base64')).toHaveLength(24);
+    const hash = await codec.thumbhash(makePng(64, 64), "image/png");
+    expect(hash).toBe("mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK");
+    expect(Buffer.from(hash!, "base64")).toHaveLength(24);
     // Canonical: unpadded standard base64 that round-trips exactly.
-    expect(Buffer.from(hash!, 'base64').toString('base64').replace(/=+$/u, '')).toBe(hash);
+    expect(
+      Buffer.from(hash!, "base64").toString("base64").replace(/=+$/u, "")
+    ).toBe(hash);
     // A landscape source sets the landscape bit — a different, still-valid hash.
-    await expect(codec.thumbhash(makePng(96, 48), 'image/png')).resolves.toBe(
-      'WQkGJIhABeJzh3dziIVPikSx9w',
+    await expect(codec.thumbhash(makePng(96, 48), "image/png")).resolves.toBe(
+      "WQkGJIhABeJzh3dziIVPikSx9w"
     );
     // Unsupported / undecodable inputs are null, exactly like the other rungs.
-    await expect(codec.thumbhash(makePng(9, 8), 'image/gif')).resolves.toBeNull();
     await expect(
-      codec.thumbhash(Buffer.from('definitely not a PNG'), 'image/png'),
+      codec.thumbhash(makePng(9, 8), "image/gif")
+    ).resolves.toBeNull();
+    await expect(
+      codec.thumbhash(Buffer.from("definitely not a PNG"), "image/png")
     ).resolves.toBeNull();
   });
 
   // A generous timeout: pure-JS decode/downscale of a multi-MP source is
   // hundreds of ms and can stretch under parallel-suite CPU contention (exactly
   // why generation is a bounded background backstop, never a request path).
-  test('the medium rung of a large source is meaningfully bigger than the tiny rung', async () => {
+  test("the medium rung of a large source is meaningfully bigger than the tiny rung", async () => {
     const src = makeJpeg(2600, 1800); // long edge > 2048, so medium truly downscales
-    const tiny = await codec.downscale(src, 'image/jpeg', 256);
-    const medium = await codec.downscale(src, 'image/jpeg', 2048);
+    const tiny = await codec.downscale(src, "image/jpeg", 256);
+    const medium = await codec.downscale(src, "image/jpeg", 2048);
     expect(Math.max(medium!.width, medium!.height)).toBe(2048);
     expect(medium!.bytes.length).toBeGreaterThan(tiny!.bytes.length);
   });
 
-  test('unsupported media types return null (placeholder contract covers them)', async () => {
+  test("unsupported media types return null (placeholder contract covers them)", async () => {
     const png = makePng(64, 64);
-    await expect(codec.downscale(png, 'image/gif', 256)).resolves.toBeNull();
-    await expect(codec.downscale(png, 'image/webp', 256)).resolves.toBeNull();
-    await expect(codec.downscale(png, 'video/mp4', 256)).resolves.toBeNull();
+    await expect(codec.downscale(png, "image/gif", 256)).resolves.toBeNull();
+    await expect(codec.downscale(png, "image/webp", 256)).resolves.toBeNull();
+    await expect(codec.downscale(png, "video/mp4", 256)).resolves.toBeNull();
   });
 
-  test('an input past the dimension cap returns null, never throws', async () => {
+  test("an input past the dimension cap returns null, never throws", async () => {
     // 13000 px on one edge is over MAX_INPUT_EDGE — a cheap 13000×1 strip proves
     // the guard fires before any heavy downscale work.
-    await expect(codec.downscale(makePng(13_000, 1), 'image/png', 256)).resolves.toBeNull();
-  });
-
-  test('corrupt bytes are a miss, not a crash', async () => {
     await expect(
-      codec.downscale(Buffer.from('definitely not a PNG'), 'image/png', 256),
-    ).resolves.toBeNull();
-    await expect(
-      codec.downscale(Buffer.from([0xff, 0xd8, 0x00, 0x01]), 'image/jpeg', 256),
-    ).resolves.toBeNull();
-    await expect(
-      codec.perceptualHash(Buffer.from('definitely not a PNG'), 'image/png'),
+      codec.downscale(makePng(13_000, 1), "image/png", 256)
     ).resolves.toBeNull();
   });
 
-  test('a missing native codec falls back to the portable implementation', async () => {
+  test("corrupt bytes are a miss, not a crash", async () => {
+    await expect(
+      codec.downscale(Buffer.from("definitely not a PNG"), "image/png", 256)
+    ).resolves.toBeNull();
+    await expect(
+      codec.downscale(Buffer.from([0xff, 0xd8, 0x00, 0x01]), "image/jpeg", 256)
+    ).resolves.toBeNull();
+    await expect(
+      codec.perceptualHash(Buffer.from("definitely not a PNG"), "image/png")
+    ).resolves.toBeNull();
+  });
+
+  test("a missing native codec falls back to the portable implementation", async () => {
     const fallback = createImagePreviewCodec(async () => {
-      throw new Error('native addon unavailable');
+      throw new Error("native addon unavailable");
     });
-    const out = await fallback.downscale(makePng(320, 160), 'image/png', 160);
+    const out = await fallback.downscale(makePng(320, 160), "image/png", 160);
 
     expect(out).toMatchObject({
-      mediaType: 'image/jpeg',
+      mediaType: "image/jpeg",
       width: 160,
       height: 80,
     });

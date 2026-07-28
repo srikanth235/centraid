@@ -20,9 +20,9 @@
  * data.
  */
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import type { ComponentStatus, HealthProbe } from './health-registry.js';
+import type { ComponentStatus, HealthProbe } from "./health-registry.js";
 
 export interface VaultIntegrityEntry {
   readonly vaultId: string;
@@ -55,14 +55,14 @@ const DEFAULT_MAX_LINES = 3;
 /** Runs `PRAGMA quick_check` on one handle. `ok` iff the sole result row is literally `'ok'`. */
 function runQuickCheck(
   db: DatabaseSync,
-  file: 'vault.db' | 'journal.db',
-  maxLines: number,
+  file: "vault.db" | "journal.db",
+  maxLines: number
 ): { ok: boolean; lines: string[] } {
   try {
-    const rows = db.prepare('PRAGMA quick_check').all() as {
+    const rows = db.prepare("PRAGMA quick_check").all() as {
       quick_check: string;
     }[];
-    const ok = rows.length === 1 && rows[0]?.quick_check === 'ok';
+    const ok = rows.length === 1 && rows[0]?.quick_check === "ok";
     if (ok) return { ok: true, lines: [] };
     return {
       ok: false,
@@ -77,7 +77,9 @@ function runQuickCheck(
 }
 
 /** Builds the `vault-integrity` component's `HealthProbe` (registered in `build-gateway.ts`). */
-export function createVaultIntegrityHealthProbe(options: VaultIntegrityHealthOptions): HealthProbe {
+export function createVaultIntegrityHealthProbe(
+  options: VaultIntegrityHealthOptions
+): HealthProbe {
   const now = options.now ?? Date.now;
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const maxLines = options.maxFailureLines ?? DEFAULT_MAX_LINES;
@@ -88,7 +90,8 @@ export function createVaultIntegrityHealthProbe(options: VaultIntegrityHealthOpt
 
   return async () => {
     const vaults = options.vaults();
-    if (vaults.length === 0) return { status: 'ok', detail: 'no vaults mounted' };
+    if (vaults.length === 0)
+      return { status: "ok", detail: "no vaults mounted" };
 
     const failing: string[] = [];
     let checkedNow = 0;
@@ -96,29 +99,36 @@ export function createVaultIntegrityHealthProbe(options: VaultIntegrityHealthOpt
     for (const entry of vaults) {
       const cached = cache.get(entry.vaultId);
       if (cached && now() - cached.checkedAt < intervalMs) {
-        if (!cached.ok) failing.push(`${entry.vaultId.slice(0, 8)}: ${cached.lines.join('; ')}`);
+        if (!cached.ok)
+          failing.push(
+            `${entry.vaultId.slice(0, 8)}: ${cached.lines.join("; ")}`
+          );
         continue;
       }
       checkedNow += 1;
-      const vaultCheck = runQuickCheck(entry.vault, 'vault.db', maxLines);
-      const journalCheck = runQuickCheck(entry.journal, 'journal.db', maxLines);
+      const vaultCheck = runQuickCheck(entry.vault, "vault.db", maxLines);
+      const journalCheck = runQuickCheck(entry.journal, "journal.db", maxLines);
       const ok = vaultCheck.ok && journalCheck.ok;
-      const lines = [...vaultCheck.lines, ...journalCheck.lines].slice(0, maxLines);
+      const lines = [...vaultCheck.lines, ...journalCheck.lines].slice(
+        0,
+        maxLines
+      );
       cache.set(entry.vaultId, { ok, lines, checkedAt: now() });
-      if (!ok) failing.push(`${entry.vaultId.slice(0, 8)}: ${lines.join('; ')}`);
+      if (!ok)
+        failing.push(`${entry.vaultId.slice(0, 8)}: ${lines.join("; ")}`);
     }
 
     const cadenceNote = `quick_check every ${Math.round(intervalMs / 60_000)}m, ${checkedNow} checked this tick`;
-    const status: ComponentStatus = failing.length > 0 ? 'error' : 'ok';
-    if (status === 'error') {
+    const status: ComponentStatus = failing.length > 0 ? "error" : "ok";
+    if (status === "error") {
       return {
         status,
-        detail: `${failing.length} of ${vaults.length} vault(s) failed quick_check: ${failing.join(' | ')} (${cadenceNote})`,
+        detail: `${failing.length} of ${vaults.length} vault(s) failed quick_check: ${failing.join(" | ")} (${cadenceNote})`,
       };
     }
     return {
       status,
-      detail: `${vaults.length} vault${vaults.length === 1 ? '' : 's'} clean (${cadenceNote})`,
+      detail: `${vaults.length} vault${vaults.length === 1 ? "" : "s"} clean (${cadenceNote})`,
     };
   };
 }

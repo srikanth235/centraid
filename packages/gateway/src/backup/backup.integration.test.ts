@@ -1,5 +1,5 @@
-import crypto, { randomBytes } from 'node:crypto';
-import { existsSync, promises as fs } from 'node:fs';
+import crypto, { randomBytes } from "node:crypto";
+import { existsSync, promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
  * The full-story end-to-end test for the offsite backup feature
@@ -14,8 +14,8 @@ import { existsSync, promises as fs } from 'node:fs';
  * runtime sane; tests that mutate provider state in ways that would affect
  * siblings (corruption, generation fencing) are deliberately ordered last.
  */
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import {
   openLocalBackupProvider,
@@ -24,24 +24,32 @@ import {
   validateKeyring,
   verifySnapshot,
   type BackupProvider,
-} from '@centraid/backup';
-import { forEachSequentially } from '@centraid/test-kit/sequential';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { currentReplicaLogState, sealAad, unsealValue, updateBackupPolicy } from '@centraid/vault';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+} from "@centraid/backup";
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import {
+  currentReplicaLogState,
+  sealAad,
+  unsealValue,
+  updateBackupPolicy,
+} from "@centraid/vault";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
-import { commandBackup } from '../cli/backup-admin.js';
-import { daemonKeyStore } from '../cli/key-store.js';
-import { daemonLayoutFor } from '../cli/paths.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
-import { HealthRegistry } from '../serve/health-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
-import { run } from '../worktree-store/git.js';
-import { WorktreeStore } from '../worktree-store/worktree-store.js';
-import type { BackupConfig } from './backup-config.js';
-import { BackupService } from './backup-service.js';
-import { loadBackupState, saveBackupState } from './backup-state.js';
+import { commandBackup } from "../cli/backup-admin.js";
+import { daemonKeyStore } from "../cli/key-store.js";
+import { daemonLayoutFor } from "../cli/paths.js";
+import { GatewayDatabase } from "../serve/gateway-db.js";
+import { HealthRegistry } from "../serve/health-registry.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
+import {
+  openVaultRegistry,
+  type VaultRegistry,
+} from "../serve/vault-registry.js";
+import { run } from "../worktree-store/git.js";
+import { WorktreeStore } from "../worktree-store/worktree-store.js";
+import type { BackupConfig } from "./backup-config.js";
+import { BackupService } from "./backup-service.js";
+import { loadBackupState, saveBackupState } from "./backup-state.js";
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -52,9 +60,9 @@ const silentLogger = {
 };
 
 const cleanups: Array<() => Promise<void> | void> = [];
-describe('backup', () => {
+describe("backup", () => {
   async function countFiles(dir: string): Promise<number> {
-    let entries: import('node:fs').Dirent[];
+    let entries: import("node:fs").Dirent[];
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
@@ -62,8 +70,8 @@ describe('backup', () => {
     }
     const counts = await Promise.all(
       entries.map(async (entry) =>
-        entry.isDirectory() ? countFiles(path.join(dir, entry.name)) : 1,
-      ),
+        entry.isDirectory() ? countFiles(path.join(dir, entry.name)) : 1
+      )
     );
     return counts.reduce((total, count) => total + count, 0);
   }
@@ -72,22 +80,27 @@ describe('backup', () => {
   function invoke(
     plane: VaultPlane,
     command: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Record<string, unknown> {
     const out = plane.gateway.invoke(plane.ownerCredential, { command, input });
-    if (out.status !== 'executed') throw new Error(`${command} failed: ${JSON.stringify(out)}`);
+    if (out.status !== "executed")
+      throw new Error(`${command} failed: ${JSON.stringify(out)}`);
     return (out as { output: Record<string, unknown> }).output;
   }
 
   /** Stage bytes through the real blob pipeline, then claim them onto a subject via core.attach. */
-  function stageAndAttach(plane: VaultPlane, subjectId: string, bytes: Buffer): string {
+  function stageAndAttach(
+    plane: VaultPlane,
+    subjectId: string,
+    bytes: Buffer
+  ): string {
     const staged = plane.gateway.stageBlob(plane.ownerCredential, {
       bytes,
-      mediaType: 'application/octet-stream',
-      filename: 'payload.bin',
+      mediaType: "application/octet-stream",
+      filename: "payload.bin",
     });
-    invoke(plane, 'core.attach', {
-      subject_type: 'schedule.task',
+    invoke(plane, "core.attach", {
+      subject_type: "schedule.task",
       subject_id: subjectId,
       staged_sha: staged.sha256,
     });
@@ -99,59 +112,62 @@ describe('backup', () => {
     itemId: string;
     grantId: string;
   } {
-    invoke(plane, 'sync.configure_credential', {
-      kind: 'pull.gmail',
-      label: 'personal',
-      cred_kind: 'api_key',
-      api_key: 'sk-e2e-test',
-      allowed_hosts: ['gmail.googleapis.com'],
+    invoke(plane, "sync.configure_credential", {
+      kind: "pull.gmail",
+      label: "personal",
+      cred_kind: "api_key",
+      api_key: "sk-e2e-test",
+      allowed_hosts: ["gmail.googleapis.com"],
     });
-    const staged = invoke(plane, 'outbox.stage', {
-      kind: 'pull.gmail',
-      label: 'personal',
-      verb: 'gmail.send',
-      target: 'ravi@example.com',
-      artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you.' },
+    const staged = invoke(plane, "outbox.stage", {
+      kind: "pull.gmail",
+      label: "personal",
+      verb: "gmail.send",
+      target: "ravi@example.com",
+      artifact: { to: "ravi@example.com", subject: "Hi", body: "See you." },
       request: {
-        method: 'POST',
-        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
-        headers: { authorization: 'Bearer {{connection:api_key}}' },
+        method: "POST",
+        url: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        headers: { authorization: "Bearer {{connection:api_key}}" },
         body: '{"raw":"x"}',
       },
     });
-    const itemId = staged['item_id'] as string;
+    const itemId = staged["item_id"] as string;
     const grantId = crypto.randomUUID();
     plane.db.vault
       .prepare(
         `INSERT INTO outbox_grant (grant_id, actor_id, verb, target, created_at, revoked_at)
-       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`,
+       VALUES (?, 'owner', 'gmail.send', 'ravi@example.com', ?, NULL)`
       )
       .run(grantId, new Date().toISOString());
     plane.db.vault
       .prepare(
-        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`,
+        `UPDATE outbox_item SET status = 'approved', decided_at = ?, grant_id = ? WHERE item_id = ?`
       )
       .run(new Date().toISOString(), grantId, itemId);
     return { itemId, grantId };
   }
 
   /** One real commit in the plane's own code store via a real WorktreeStore publish. */
-  async function publishRealApp(plane: VaultPlane, appId: string): Promise<void> {
+  async function publishRealApp(
+    plane: VaultPlane,
+    appId: string
+  ): Promise<void> {
     const store = new WorktreeStore({ root: plane.codeStoreRoot });
     await store.init();
-    const session = await store.openSession('s1');
-    const appDir = path.join(session.worktreePath, 'apps', appId);
-    await fs.mkdir(path.join(appDir, 'actions'), { recursive: true });
+    const session = await store.openSession("s1");
+    const appDir = path.join(session.worktreePath, "apps", appId);
+    await fs.mkdir(path.join(appDir, "actions"), { recursive: true });
     await fs.writeFile(
-      path.join(appDir, 'app.json'),
-      JSON.stringify({ id: appId, name: appId }, null, 2),
+      path.join(appDir, "app.json"),
+      JSON.stringify({ id: appId, name: appId }, null, 2)
     );
     await fs.writeFile(
-      path.join(appDir, 'actions', 'noop.js'),
-      'export default async () => ({ status: 200, body: {} });\n',
+      path.join(appDir, "actions", "noop.js"),
+      "export default async () => ({ status: 200, body: {} });\n"
     );
-    await store.publish({ sessionId: 's1', appId, message: 'v1' });
-    await store.closeSession('s1');
+    await store.publish({ sessionId: "s1", appId, message: "v1" });
+    await store.closeSession("s1");
   }
 
   async function capture(fn: () => Promise<void> | void): Promise<string> {
@@ -166,12 +182,12 @@ describe('backup', () => {
     } finally {
       process.stdout.write = original;
     }
-    return chunks.join('');
+    return chunks.join("");
   }
 
   function jsonLines(out: string): unknown[] {
     return out
-      .split('\n')
+      .split("\n")
       .filter((l) => l.trim().length > 0)
       .map((l) => JSON.parse(l) as unknown);
   }
@@ -208,23 +224,25 @@ describe('backup', () => {
   let h: Harness;
 
   function harnessKeyring() {
-    const bytes = daemonKeyStore(path.join(h.dataDir, 'keys')).export('keyring.key');
-    if (!bytes) throw new Error('fixture keyring missing');
-    return validateKeyring(JSON.parse(bytes.toString('utf8')));
+    const bytes = daemonKeyStore(path.join(h.dataDir, "keys")).export(
+      "keyring.key"
+    );
+    if (!bytes) throw new Error("fixture keyring missing");
+    return validateKeyring(JSON.parse(bytes.toString("utf8")));
   }
 
   function reopen(): void {
     h.gatewayDatabase = GatewayDatabase.open(h.dataDir);
-    const keyStore = daemonKeyStore(path.join(h.dataDir, 'keys'));
-    keyStore.loadOrCreate('endpoint-key.bin');
+    const keyStore = daemonKeyStore(path.join(h.dataDir, "keys"));
+    keyStore.loadOrCreate("endpoint-key.bin");
     h.registry = openVaultRegistry({
       rootDir: h.vaultDir,
       cacheRootDir: h.backupDir,
       keyStore,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
-    if (h.registry.isFresh()) h.registry.create('Personal');
+    if (h.registry.isFresh()) h.registry.create("Personal");
     const vaultId = h.vaultId || h.registry.defaultVaultId();
     h.plane = h.registry.get(vaultId)!;
     h.vaultId = vaultId;
@@ -241,24 +259,26 @@ describe('backup', () => {
   }
 
   beforeAll(async () => {
-    const dataDir = await tempDir('e2e-data');
-    const providerDir = await tempDir('e2e-provider');
-    const credentialRoot = await tempDir('e2e-host-credentials');
-    const previousCredentialRoot = process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'];
-    process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'] = credentialRoot;
+    const dataDir = await tempDir("e2e-data");
+    const providerDir = await tempDir("e2e-provider");
+    const credentialRoot = await tempDir("e2e-host-credentials");
+    const previousCredentialRoot =
+      process.env["CENTRAID_KEYSTORE_CREDENTIAL_ROOT"];
+    process.env["CENTRAID_KEYSTORE_CREDENTIAL_ROOT"] = credentialRoot;
     cleanups.push(() => {
       if (previousCredentialRoot === undefined) {
-        delete process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'];
+        delete process.env["CENTRAID_KEYSTORE_CREDENTIAL_ROOT"];
       } else {
-        process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'] = previousCredentialRoot;
+        process.env["CENTRAID_KEYSTORE_CREDENTIAL_ROOT"] =
+          previousCredentialRoot;
       }
     });
     const layout = daemonLayoutFor(dataDir);
     const config: BackupConfig = {
       enabled: true,
-      provider: { kind: 'local', dir: providerDir },
+      provider: { kind: "local", dir: providerDir },
     };
-    const configPath = path.join(dataDir, 'config.json');
+    const configPath = path.join(dataDir, "config.json");
     await fs.writeFile(configPath, JSON.stringify({ dataDir, backup: config }));
 
     h = {
@@ -268,7 +288,7 @@ describe('backup', () => {
       backupDir: layout.cacheDir,
       config,
       vaultDir: layout.vaultDir,
-      vaultId: '',
+      vaultId: "",
       registry: undefined as unknown as VaultRegistry,
       plane: undefined as unknown as VaultPlane,
       service: undefined as unknown as BackupService,
@@ -291,39 +311,45 @@ describe('backup', () => {
     // spans multiple FastCDC chunks), a real published app (code-store
     // commit), a real sealed value, and one approved outbox item so the
     // eventual quarantine has something real to park.
-    const taskTitles = ['Frame the print', 'Pay the invoice', 'Call the vet'];
+    const taskTitles = ["Frame the print", "Pay the invoice", "Call the vet"];
     const taskIds = taskTitles.map(
-      (title) => invoke(h.plane, 'schedule.add_task', { title })['task_id'] as string,
+      (title) =>
+        invoke(h.plane, "schedule.add_task", { title })["task_id"] as string
     );
 
     const PNG =
-      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-    const smallOut = invoke(h.plane, 'core.attach', {
-      subject_type: 'schedule.task',
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    const smallOut = invoke(h.plane, "core.attach", {
+      subject_type: "schedule.task",
       subject_id: taskIds[0],
       data_uri: PNG,
     });
-    const smallContentId = smallOut['content_id'] as string;
+    const smallContentId = smallOut["content_id"] as string;
     const smallBlobSha = (
       h.plane.db.vault
-        .prepare('SELECT content_uri FROM core_content_item WHERE content_id = ?')
+        .prepare(
+          "SELECT content_uri FROM core_content_item WHERE content_id = ?"
+        )
         .get(smallContentId) as { content_uri: string }
-    ).content_uri.slice('blob:sha256-'.length);
-    const smallBlobBytes = Buffer.from(PNG.slice(PNG.indexOf(',') + 1), 'base64');
+    ).content_uri.slice("blob:sha256-".length);
+    const smallBlobBytes = Buffer.from(
+      PNG.slice(PNG.indexOf(",") + 1),
+      "base64"
+    );
 
     const bigBlobBytes = randomBytes(1_600_000); // > 1MiB — multiple FastCDC chunks
     const bigBlobSha = stageAndAttach(h.plane, taskIds[1]!, bigBlobBytes);
 
-    await publishRealApp(h.plane, 'todo');
+    await publishRealApp(h.plane, "todo");
 
-    const lockerPlaintext = 'H2$kL9mVq!pR4wZ';
-    const lockerOut = invoke(h.plane, 'locker.add_item', {
-      type: 'login',
-      title: 'GitHub',
-      username: 'priya',
+    const lockerPlaintext = "H2$kL9mVq!pR4wZ";
+    const lockerOut = invoke(h.plane, "locker.add_item", {
+      type: "login",
+      title: "GitHub",
+      username: "priya",
       password: lockerPlaintext,
     });
-    const lockerItemId = lockerOut['item_id'] as string;
+    const lockerItemId = lockerOut["item_id"] as string;
 
     const { itemId: outboxItemId } = seedApprovedOutboxItem(h.plane);
 
@@ -341,14 +367,17 @@ describe('backup', () => {
     // 2. First real backup — REAL assembleSourceEntries → REAL LocalBackupProvider.
     await h.service.runBackup(h.vaultId);
     const first = (await h.service.status())[h.vaultId];
-    if (first?.lastSeq !== 1) throw new Error('initial backup did not register sequence 1');
+    if (first?.lastSeq !== 1)
+      throw new Error("initial backup did not register sequence 1");
   }, 30_000);
 
   afterAll(async () => {
-    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) => cleanup());
+    await forEachSequentially(cleanups.splice(0).toReversed(), (cleanup) =>
+      cleanup()
+    );
   });
 
-  test('no-change semantics: an idle vault registers NO new snapshot; a code publish does', async () => {
+  test("no-change semantics: an idle vault registers NO new snapshot; a code publish does", async () => {
     // OBSERVED CONTRACT (verified against engine.ts + backup-sources.ts): the db
     // bases are the shipper's pinned base clones — stable files that only re-clone
     // on a generation break, not a per-tick VACUUM — and the code-store bundle is
@@ -366,23 +395,23 @@ describe('backup', () => {
     // A code change moves the store's refs (a new `todo2/v1` tag + a main commit),
     // so the digest changes, the bundle regenerates, and the next backup registers
     // a fresh snapshot — the optimization skips UNCHANGED code, never real changes.
-    await publishRealApp(h.plane, 'todo2');
+    await publishRealApp(h.plane, "todo2");
     await h.service.runBackup(h.vaultId);
     const afterPublish = (await h.service.status())[h.vaultId];
     expect(afterPublish?.lastSeq).toBe((before?.lastSeq ?? 0) + 1);
   });
 
-  test('incremental backup: a new blob registers a small delta, not a re-upload of everything', async () => {
-    const objectsDir = path.join(h.providerDir, 'objects');
+  test("incremental backup: a new blob registers a small delta, not a re-upload of everything", async () => {
+    const objectsDir = path.join(h.providerDir, "objects");
     const targetId = (await h.service.status())[h.vaultId]!.targetId;
     // Per-store isolated prefix (PROTOCOL.md § Layer 1): LocalBackupProvider
     // nests each store class under its own subdirectory.
-    const chunksDir = path.join(objectsDir, targetId, 'backup', 'chunks');
+    const chunksDir = path.join(objectsDir, targetId, "backup", "chunks");
     const before = await countFiles(chunksDir);
 
-    const taskId = invoke(h.plane, 'schedule.add_task', {
-      title: 'Renew passport',
-    })['task_id'] as string;
+    const taskId = invoke(h.plane, "schedule.add_task", {
+      title: "Renew passport",
+    })["task_id"] as string;
     const newBlobBytes = randomBytes(700_000); // ~1-2 chunks worth
     stageAndAttach(h.plane, taskId, newBlobBytes);
 
@@ -401,7 +430,7 @@ describe('backup', () => {
     expect(delta).toBeLessThanOrEqual(4);
   });
 
-  test('CLI restore materializes a fresh dest, and adopting it as a live vault mounts, returns real data, and fires quarantine', async () => {
+  test("CLI restore materializes a fresh dest, and adopting it as a live vault mounts, returns real data, and fires quarantine", async () => {
     const sourceReplica = currentReplicaLogState(h.plane.db.vault);
     // Stop the shared registry before the CLI opens its own on the same
     // vaultDir (mirrors backup-admin.test.ts's pattern — avoid two live
@@ -410,69 +439,85 @@ describe('backup', () => {
     h.registry.stop();
     h.gatewayDatabase.close();
 
-    const destDir = path.join(h.dataDir, 'restored');
+    const destDir = path.join(h.dataDir, "restored");
     const out = await capture(() =>
       commandBackup(
-        ['restore', '--config', h.configPath, '--vault', h.vaultId, '--dest', destDir],
+        [
+          "restore",
+          "--config",
+          h.configPath,
+          "--vault",
+          h.vaultId,
+          "--dest",
+          destDir,
+        ],
         (msg) => {
           throw new Error(msg);
-        },
-      ),
+        }
+      )
     );
     const [result] = jsonLines(out) as [{ seq: number; entries: string[] }];
-    expect(result.entries).toContain('vault.db');
-    expect(result.entries).toContain('journal.db');
-    expect(result.entries).toContain('apps.bundle');
-    expect(result.entries).not.toContain('seal.key');
-    expect(existsSync(path.join(destDir, 'RESTORE_QUARANTINE.json'))).toBe(true);
+    expect(result.entries).toContain("vault.db");
+    expect(result.entries).toContain("journal.db");
+    expect(result.entries).toContain("apps.bundle");
+    expect(result.entries).not.toContain("seal.key");
+    expect(existsSync(path.join(destDir, "RESTORE_QUARANTINE.json"))).toBe(
+      true
+    );
     h.restoredDestDir = destDir;
-    const restoredDb = new DatabaseSync(path.join(destDir, 'vault.db'));
+    const restoredDb = new DatabaseSync(path.join(destDir, "vault.db"));
     const restoredReplica = currentReplicaLogState(restoredDb);
     restoredDb.close();
     expect(restoredReplica.epoch).not.toBe(sourceReplica.epoch);
-    expect(restoredReplica.epochReason).toBe('backup-restore');
+    expect(restoredReplica.epochReason).toBe("backup-restore");
 
     // Adopt the restored directory as a live vault — mirroring recovery onto
     // a fresh machine: a fresh registry root, the vault files placed under
     // <root>/<vaultId>/, the seal key placed at <root>/keys/<vaultId>.sealkey
     // per sealKeyFileFor's layout rule, and the code store rebuilt from the
     // restored git bundle.
-    const freshRoot = await tempDir('e2e-adopted-root');
+    const freshRoot = await tempDir("e2e-adopted-root");
     const adoptedDir = path.join(freshRoot, h.vaultId);
     await fs.mkdir(adoptedDir, { recursive: true });
-    await fs.copyFile(path.join(destDir, 'vault.db'), path.join(adoptedDir, 'vault.db'));
-    await fs.copyFile(path.join(destDir, 'journal.db'), path.join(adoptedDir, 'journal.db'));
-    await fs.cp(path.join(destDir, 'blobs'), path.join(adoptedDir, 'blobs'), {
+    await fs.copyFile(
+      path.join(destDir, "vault.db"),
+      path.join(adoptedDir, "vault.db")
+    );
+    await fs.copyFile(
+      path.join(destDir, "journal.db"),
+      path.join(adoptedDir, "journal.db")
+    );
+    await fs.cp(path.join(destDir, "blobs"), path.join(adoptedDir, "blobs"), {
       recursive: true,
     });
     await fs.copyFile(
-      path.join(destDir, 'RESTORE_QUARANTINE.json'),
-      path.join(adoptedDir, 'RESTORE_QUARANTINE.json'),
+      path.join(destDir, "RESTORE_QUARANTINE.json"),
+      path.join(adoptedDir, "RESTORE_QUARANTINE.json")
     );
-    const sourceKeys = daemonKeyStore(path.join(h.dataDir, 'keys'));
+    const sourceKeys = daemonKeyStore(path.join(h.dataDir, "keys"));
     const restoredSealKey = sourceKeys.export(`${h.vaultId}.sealkey`);
-    if (!restoredSealKey) throw new Error('source seal key missing');
-    const adoptedKeyStore = daemonKeyStore(path.join(freshRoot, 'keys'));
+    if (!restoredSealKey) throw new Error("source seal key missing");
+    const adoptedKeyStore = daemonKeyStore(path.join(freshRoot, "keys"));
     adoptedKeyStore.import(`${h.vaultId}.sealkey`, restoredSealKey);
-    await fs.mkdir(path.join(adoptedDir, 'code'), { recursive: true });
+    await fs.mkdir(path.join(adoptedDir, "code"), { recursive: true });
     await run(
       [
-        'clone',
-        '--quiet',
-        '--bare',
-        path.join(destDir, 'apps.bundle'),
-        path.join(adoptedDir, 'code', 'apps.git'),
+        "clone",
+        "--quiet",
+        "--bare",
+        path.join(destDir, "apps.bundle"),
+        path.join(adoptedDir, "code", "apps.git"),
       ],
       {
         cwd: freshRoot,
-      },
+      }
     );
 
     const adoptedRegistry = openVaultRegistry({
       rootDir: freshRoot,
       keyStore: adoptedKeyStore,
       logger: silentLogger,
-      ownerName: 'Priya',
+      ownerName: "Priya",
     });
     try {
       // The plane MOUNTS — catches "restored DB is garbage" and "seal key
@@ -483,24 +528,27 @@ describe('backup', () => {
       const plane = adopted!;
       // Adoption/migration must not invalidate it again: restore performed the
       // one epoch bump after WAL materialization.
-      expect(currentReplicaLogState(plane.db.vault).epoch).toBe(restoredReplica.epoch);
+      expect(currentReplicaLogState(plane.db.vault).epoch).toBe(
+        restoredReplica.epoch
+      );
 
       // Quarantine fired on this mount, and the pre-staged approved outbox
       // item got parked for real.
       expect(plane.quarantine).not.toBeNull();
       expect(plane.quarantine?.outboxParked).toBeGreaterThanOrEqual(1);
       const outboxRow = plane.db.vault
-        .prepare('SELECT status, grant_id FROM outbox_item WHERE item_id = ?')
+        .prepare("SELECT status, grant_id FROM outbox_item WHERE item_id = ?")
         .get(h.seeded.outboxItemId) as {
         status: string;
         grant_id: string | null;
       };
-      expect(outboxRow.status).toBe('pending');
+      expect(outboxRow.status).toBe("pending");
       expect(outboxRow.grant_id).toBeNull();
 
       // Original data rows come back via a real owner-credentialed query.
-      const rows = plane.sqlAsOwner('SELECT title FROM schedule_task ORDER BY title')
-        .rows as Array<{
+      const rows = plane.sqlAsOwner(
+        "SELECT title FROM schedule_task ORDER BY title"
+      ).rows as Array<{
         title: string;
       }>;
       const titles = rows.map((r) => r.title);
@@ -516,12 +564,12 @@ describe('backup', () => {
 
       // The sealed value decrypts — the seal-key round trip.
       const lockerRow = plane.db.vault
-        .prepare('SELECT password FROM locker_item WHERE item_id = ?')
+        .prepare("SELECT password FROM locker_item WHERE item_id = ?")
         .get(h.seeded.lockerItemId) as { password: string };
       const decrypted = unsealValue(
         plane.db.sealKey,
-        sealAad('locker_item', 'password', h.seeded.lockerItemId),
-        lockerRow.password,
+        sealAad("locker_item", "password", h.seeded.lockerItemId),
+        lockerRow.password
       );
       expect(decrypted).toBe(h.seeded.lockerPlaintext);
     } finally {
@@ -529,24 +577,24 @@ describe('backup', () => {
     }
 
     // The git bundle restores independently, too — clone + verify.
-    const bareRepo = path.join(adoptedDir, 'code', 'apps.git');
+    const bareRepo = path.join(adoptedDir, "code", "apps.git");
     await expect(
-      run(['bundle', 'verify', path.join(destDir, 'apps.bundle')], {
+      run(["bundle", "verify", path.join(destDir, "apps.bundle")], {
         cwd: bareRepo,
-      }),
+      })
     ).resolves.toBeTruthy();
-    const clone2 = await tempDir('e2e-bundle-clone');
-    await run(['clone', '--quiet', bareRepo, clone2], { cwd: freshRoot });
+    const clone2 = await tempDir("e2e-bundle-clone");
+    await run(["clone", "--quiet", bareRepo, clone2], { cwd: freshRoot });
     const appJson = JSON.parse(
-      await fs.readFile(path.join(clone2, 'apps', 'todo', 'app.json'), 'utf8'),
+      await fs.readFile(path.join(clone2, "apps", "todo", "app.json"), "utf8")
     ) as { id: string };
-    expect(appJson.id).toBe('todo');
+    expect(appJson.id).toBe("todo");
 
     // Reopen the shared registry for the remaining tests (fencing, verify).
     reopen();
   }, 30_000);
 
-  test('fencing for real: a second BackupService registers gen+1; the first service fences on its next run', async () => {
+  test("fencing for real: a second BackupService registers gen+1; the first service fences on its next run", async () => {
     const targetId = (await h.service.status())[h.vaultId]!.targetId;
     const provider: BackupProvider = openLocalBackupProvider({
       rootDir: h.providerDir,
@@ -559,13 +607,15 @@ describe('backup', () => {
     // its target generation bumped to currentGeneration + 1 — exactly what
     // "read currentGeneration from the target and register the next snapshot
     // with currentGeneration + 1" means in state-file terms.
-    const backupDir2 = await tempDir('e2e-backupdir-takeover');
+    const backupDir2 = await tempDir("e2e-backupdir-takeover");
     const gatewayDatabase2 = GatewayDatabase.open(backupDir2);
-    const keyStore2 = daemonKeyStore(path.join(backupDir2, 'keys'));
-    keyStore2.import('endpoint-key.bin', Buffer.from('b'.repeat(64), 'hex'));
-    const liveKeyring = daemonKeyStore(path.join(h.dataDir, 'keys')).export('keyring.key');
-    if (!liveKeyring) throw new Error('fixture keyring missing');
-    keyStore2.import('keyring.key', liveKeyring);
+    const keyStore2 = daemonKeyStore(path.join(backupDir2, "keys"));
+    keyStore2.import("endpoint-key.bin", Buffer.from("b".repeat(64), "hex"));
+    const liveKeyring = daemonKeyStore(path.join(h.dataDir, "keys")).export(
+      "keyring.key"
+    );
+    if (!liveKeyring) throw new Error("fixture keyring missing");
+    keyStore2.import("keyring.key", liveKeyring);
     const state = await loadBackupState(h.gatewayDatabase);
     state.targets[h.vaultId]!.generation = beforeGen + 1;
     await saveBackupState(gatewayDatabase2, state);
@@ -600,12 +650,20 @@ describe('backup', () => {
     expect(after?.lastError).toMatch(/another machine has taken over/u);
 
     const snap = await h.health.snapshot();
-    expect(snap.components.find((c) => c.component === 'backups')?.status).toBe('error');
+    expect(snap.components.find((c) => c.component === "backups")?.status).toBe(
+      "error"
+    );
   });
 
-  test('verify catches real damage: a deleted chunk is reported missing, a flipped chunk is reported corrupt', async () => {
+  test("verify catches real damage: a deleted chunk is reported missing, a flipped chunk is reported corrupt", async () => {
     const targetId = (await h.service.status())[h.vaultId]!.targetId;
-    const chunksDir = path.join(h.providerDir, 'objects', targetId, 'backup', 'chunks');
+    const chunksDir = path.join(
+      h.providerDir,
+      "objects",
+      targetId,
+      "backup",
+      "chunks"
+    );
 
     // Object GC never runs (PROTOCOL.md: "no server-side content GC"), so the
     // provider dir accumulates chunk files from EVERY prior snapshot in this
@@ -617,9 +675,14 @@ describe('backup', () => {
     const provider = openLocalBackupProvider({ rootDir: h.providerDir });
     const keyring = harnessKeyring();
     const newestRow = (await provider.listSnapshots(targetId))[0]!;
-    const store = await provider.openDataPlane(targetId, 'backup', 'read');
+    const store = await provider.openDataPlane(targetId, "backup", "read");
     const manifestBytes = await store.get(newestRow.manifestKey);
-    const opened = openManifest(manifestBytes, keyring, h.vaultId, newestRow.manifestHash);
+    const opened = openManifest(
+      manifestBytes,
+      keyring,
+      h.vaultId,
+      newestRow.manifestHash
+    );
     expect(opened.public.chunkIndex.length).toBeGreaterThan(1);
     const [victimA, victimB] = opened.public.chunkIndex;
 
@@ -646,23 +709,23 @@ describe('backup', () => {
     expect(result.corrupt).toContain(victimB!.id);
   });
 
-  test('restore refusal: a registered snapshot with a newer vaultUserVersion refuses BEFORE downloading anything', async () => {
+  test("restore refusal: a registered snapshot with a newer vaultUserVersion refuses BEFORE downloading anything", async () => {
     // A fully separate, minimal fixture — deliberately independent of the
     // shared harness's (now chunk-corrupted) provider dir.
-    const vaultDir = await tempDir('e2e-refusal-vault');
-    const providerDir = await tempDir('e2e-refusal-provider');
-    const backupDir = await tempDir('e2e-refusal-backup');
+    const vaultDir = await tempDir("e2e-refusal-vault");
+    const providerDir = await tempDir("e2e-refusal-provider");
+    const backupDir = await tempDir("e2e-refusal-backup");
     const registry = openVaultRegistry({
       rootDir: vaultDir,
       logger: silentLogger,
-      ownerName: 'Alex',
+      ownerName: "Alex",
     });
-    registry.create('Personal');
+    registry.create("Personal");
     const vaultId = registry.defaultVaultId();
     const health = new HealthRegistry();
     const config: BackupConfig = {
       enabled: true,
-      provider: { kind: 'local', dir: providerDir },
+      provider: { kind: "local", dir: providerDir },
     };
     const service = new BackupService({
       config,
@@ -684,9 +747,9 @@ describe('backup', () => {
       // error instead of the compatibility-gate message, proving the gate
       // really does run first.
       await provider.registerSnapshot(target.targetId, {
-        idempotencyKey: 'doctored-newer-version',
-        manifestKey: 'manifests/does-not-exist-on-disk.json',
-        manifestHash: 'f'.repeat(64),
+        idempotencyKey: "doctored-newer-version",
+        manifestKey: "manifests/does-not-exist-on-disk.json",
+        manifestHash: "f".repeat(64),
         totalBytes: 1,
         objectCount: 1,
         generation: targetInfo.currentGeneration,
@@ -694,11 +757,14 @@ describe('backup', () => {
         // version gate, not the format gate — the whole point of this test is
         // that a newer vaultUserVersion is refused before any download.
         format: SNAPSHOT_FORMAT_V2,
-        appMeta: { ...realRow.appMeta, vaultUserVersion: '99999' },
+        appMeta: { ...realRow.appMeta, vaultUserVersion: "99999" },
       });
-      const destDir = path.join(await tempDir('e2e-refusal-dest-parent'), 'refusal-dest');
+      const destDir = path.join(
+        await tempDir("e2e-refusal-dest-parent"),
+        "refusal-dest"
+      );
       await expect(service.restore({ vaultId, destDir })).rejects.toThrow(
-        /vaultUserVersion.*newer/u,
+        /vaultUserVersion.*newer/u
       );
       // Never attempted to materialize anything — the compat gate ran before
       // any directory creation or data-plane read.
@@ -708,7 +774,7 @@ describe('backup', () => {
     }
   });
 
-  test('restore refusal: the CLI refuses a non-empty --dest', async () => {
+  test("restore refusal: the CLI refuses a non-empty --dest", async () => {
     await h.service.stop();
     h.registry.stop();
     h.gatewayDatabase.close();
@@ -717,12 +783,20 @@ describe('backup', () => {
     await expect(
       capture(() =>
         commandBackup(
-          ['restore', '--config', h.configPath, '--vault', h.vaultId, '--dest', restoredDestDir!],
+          [
+            "restore",
+            "--config",
+            h.configPath,
+            "--vault",
+            h.vaultId,
+            "--dest",
+            restoredDestDir!,
+          ],
           (msg) => {
             throw new Error(msg);
-          },
-        ),
-      ),
+          }
+        )
+      )
     ).rejects.toThrow(/not empty/u);
     reopen();
   });

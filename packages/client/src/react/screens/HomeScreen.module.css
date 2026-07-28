@@ -184,10 +184,10 @@
   gap: 6px;
   color: var(--ink-3);
 }
-.hsecStat[data-tone='active'] {
+.hsecStat[data-tone="active"] {
   color: var(--ink-2);
 }
-.hsecStat[data-tone='attention'] {
+.hsecStat[data-tone="attention"] {
   color: var(--danger);
 }
 .hsecStat svg {
@@ -227,12 +227,12 @@
    toolbar re-pin) lives with the tile in ui/AppCard.module.css, keyed on
    this grid's `data-layout='rows'`. This module only owns the automation
    meta strip, which is Home-specific. */
-.appsGrid[data-layout='rows'] {
+.appsGrid[data-layout="rows"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.appsGrid[data-layout='rows'] .appCardMeta {
+.appsGrid[data-layout="rows"] .appCardMeta {
   /* Fixed-width slot so the status pill (its leftmost child) lands at the same
      x down the column — otherwise a longer trigger ("Weekdays at 11:30 PM" vs
      "Daily at 9:00 AM") shifts the whole cluster and the pills drift. The
@@ -245,10 +245,10 @@
   order: 1;
 }
 /* The status pill (leftmost child) keeps its intrinsic width. */
-.appsGrid[data-layout='rows'] .appCardMeta > :first-child {
+.appsGrid[data-layout="rows"] .appCardMeta > :first-child {
   flex: 0 0 auto;
 }
-.appsGrid[data-layout='rows'] .appCardMeta .appCardTrig {
+.appsGrid[data-layout="rows"] .appCardMeta .appCardTrig {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;

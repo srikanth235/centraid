@@ -18,56 +18,56 @@
 // distill_judgment and the owner's confirm-gate rides in front of it like
 // any other elevated act. No parallel mechanism.
 
-import type { Gateway } from '../gateway/gateway.js';
-import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { resolveEntity } from '../schema/tables.js';
+import type { Gateway } from "../gateway/gateway.js";
+import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { resolveEntity } from "../schema/tables.js";
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
   if (ctx.identity.partyId) return ctx.identity.partyId;
-  const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
-    | { owner_party_id: string | null }
-    | undefined;
-  if (!owner?.owner_party_id) throw new Error('vault has no owner');
+  const owner = ctx.db
+    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+    .get() as { owner_party_id: string | null } | undefined;
+  if (!owner?.owner_party_id) throw new Error("vault has no owner");
   return owner.owner_party_id;
 }
 
 function requireOwner(ctx: HandlerCtx, refusal: string): void {
-  if (ctx.identity.kind !== 'owner-device') throw new Error(refusal);
+  if (ctx.identity.kind !== "owner-device") throw new Error(refusal);
 }
 
 const RECORD_CORRECTION: CommandDefinition = {
-  name: 'agent.record_correction',
-  ownerSchema: 'agent',
+  name: "agent.record_correction",
+  ownerSchema: "agent",
   inputSchema: {
-    type: 'object',
-    required: ['target_type', 'target_id', 'after'],
+    type: "object",
+    required: ["target_type", "target_id", "after"],
     additionalProperties: false,
     properties: {
-      target_type: { type: 'string', minLength: 1 },
-      target_id: { type: 'string', minLength: 1 },
-      before: { type: 'object' },
-      after: { type: 'object' },
-      reason: { type: 'string' },
+      target_type: { type: "string", minLength: 1 },
+      target_id: { type: "string", minLength: 1 },
+      before: { type: "object" },
+      after: { type: "object" },
+      reason: { type: "string" },
     },
   },
   outputSchema: {
-    type: 'object',
-    required: ['correction_id'],
-    properties: { correction_id: { type: 'string' } },
+    type: "object",
+    required: ["correction_id"],
+    properties: { correction_id: { type: "string" } },
   },
   preconditions: [],
   postconditions: [
     {
-      name: 'correction_recorded',
-      sql: 'SELECT count(*) AS n FROM agent_correction WHERE correction_id = :correction_id',
-      column: 'n',
-      op: 'eq',
+      name: "correction_recorded",
+      sql: "SELECT count(*) AS n FROM agent_correction WHERE correction_id = :correction_id",
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  idempotency: 'once',
-  risk: 'low',
+  idempotency: "once",
+  risk: "low",
   handler: (ctx) => {
     const input = ctx.input as {
       target_type: string;
@@ -79,9 +79,13 @@ const RECORD_CORRECTION: CommandDefinition = {
     // The corrected thing must be a real canonical row — a correction about
     // nothing teaches nothing.
     const ref = resolveEntity(input.target_type, ctx.db);
-    if (!ref || ref.file !== 'vault')
-      throw new Error(`target_type names unknown entity "${input.target_type}"`);
-    const pkRow = ctx.db.prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`).all() as {
+    if (!ref || ref.file !== "vault")
+      throw new Error(
+        `target_type names unknown entity "${input.target_type}"`
+      );
+    const pkRow = ctx.db
+      .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
+      .all() as {
       name: string;
       pk: number;
     }[];
@@ -90,14 +94,15 @@ const RECORD_CORRECTION: CommandDefinition = {
     const live = ctx.db
       .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
       .get(input.target_id);
-    if (!live) throw new Error(`no ${input.target_type} with id ${input.target_id}`);
+    if (!live)
+      throw new Error(`no ${input.target_type} with id ${input.target_id}`);
 
     const correctionId = ctx.newId();
     ctx.db
       .prepare(
         `INSERT INTO agent_correction
            (correction_id, invocation_id, corrected_by_party_id, target_type, target_id, before_json, after_json, reason, created_at)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         correctionId,
@@ -107,9 +112,9 @@ const RECORD_CORRECTION: CommandDefinition = {
         input.before ? JSON.stringify(input.before) : null,
         JSON.stringify(input.after),
         input.reason ?? null,
-        ctx.now,
+        ctx.now
       );
-    ctx.wrote('agent.correction', correctionId);
+    ctx.wrote("agent.correction", correctionId);
     ctx.cite({
       claim: `correction recorded on ${input.target_type}`,
       entityType: input.target_type,
@@ -120,46 +125,49 @@ const RECORD_CORRECTION: CommandDefinition = {
 };
 
 const DISTILL_JUDGMENT: CommandDefinition = {
-  name: 'agent.distill_judgment',
-  ownerSchema: 'agent',
+  name: "agent.distill_judgment",
+  ownerSchema: "agent",
   inputSchema: {
-    type: 'object',
-    required: ['subject_scope', 'rule'],
+    type: "object",
+    required: ["subject_scope", "rule"],
     additionalProperties: false,
     properties: {
       // A schema name ('social') or a full command name ('social.send_message').
-      subject_scope: { type: 'string', minLength: 1 },
+      subject_scope: { type: "string", minLength: 1 },
       // The one rule shape the contract evaluator consults today.
       rule: {
-        type: 'object',
-        required: ['veto_command'],
+        type: "object",
+        required: ["veto_command"],
         additionalProperties: false,
-        properties: { veto_command: { type: 'string', minLength: 1 } },
+        properties: { veto_command: { type: "string", minLength: 1 } },
       },
-      correction_id: { type: 'string', minLength: 1 },
-      confidence: { type: 'number', minimum: 0, maximum: 1 },
-      expires_at: { type: 'string' },
+      correction_id: { type: "string", minLength: 1 },
+      confidence: { type: "number", minimum: 0, maximum: 1 },
+      expires_at: { type: "string" },
     },
   },
   outputSchema: {
-    type: 'object',
-    required: ['judgment_id'],
-    properties: { judgment_id: { type: 'string' } },
+    type: "object",
+    required: ["judgment_id"],
+    properties: { judgment_id: { type: "string" } },
   },
   preconditions: [],
   postconditions: [
     {
-      name: 'judgment_active',
-      sql: 'SELECT count(*) AS n FROM agent_judgment WHERE judgment_id = :judgment_id AND active = 1',
-      column: 'n',
-      op: 'eq',
+      name: "judgment_active",
+      sql: "SELECT count(*) AS n FROM agent_judgment WHERE judgment_id = :judgment_id AND active = 1",
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  idempotency: 'once',
-  risk: 'medium',
+  idempotency: "once",
+  risk: "medium",
   handler: (ctx) => {
-    requireOwner(ctx, "distilling a standing judgment is the owner's act (rule R08)");
+    requireOwner(
+      ctx,
+      "distilling a standing judgment is the owner's act (rule R08)"
+    );
     const input = ctx.input as {
       subject_scope: string;
       rule: { veto_command: string };
@@ -169,16 +177,17 @@ const DISTILL_JUDGMENT: CommandDefinition = {
     };
     if (input.correction_id) {
       const live = ctx.db
-        .prepare('SELECT 1 AS x FROM agent_correction WHERE correction_id = ?')
+        .prepare("SELECT 1 AS x FROM agent_correction WHERE correction_id = ?")
         .get(input.correction_id);
-      if (!live) throw new Error(`no agent.correction with id ${input.correction_id}`);
+      if (!live)
+        throw new Error(`no agent.correction with id ${input.correction_id}`);
     }
     const judgmentId = ctx.newId();
     ctx.db
       .prepare(
         `INSERT INTO agent_judgment
            (judgment_id, derived_from_correction_id, subject_scope, rule_json, confidence, active, learned_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?)`
       )
       .run(
         judgmentId,
@@ -187,12 +196,12 @@ const DISTILL_JUDGMENT: CommandDefinition = {
         JSON.stringify(input.rule),
         input.confidence ?? 1,
         ctx.now,
-        input.expires_at ?? null,
+        input.expires_at ?? null
       );
-    ctx.wrote('agent.judgment', judgmentId);
+    ctx.wrote("agent.judgment", judgmentId);
     ctx.cite({
       claim: `standing judgment learned: veto ${input.rule.veto_command} within ${input.subject_scope}`,
-      entityType: 'agent.judgment',
+      entityType: "agent.judgment",
       entityId: judgmentId,
     });
     return { judgment_id: judgmentId };
@@ -200,46 +209,46 @@ const DISTILL_JUDGMENT: CommandDefinition = {
 };
 
 const REVOKE_JUDGMENT: CommandDefinition = {
-  name: 'agent.revoke_judgment',
-  ownerSchema: 'agent',
+  name: "agent.revoke_judgment",
+  ownerSchema: "agent",
   inputSchema: {
-    type: 'object',
-    required: ['judgment_id'],
+    type: "object",
+    required: ["judgment_id"],
     additionalProperties: false,
-    properties: { judgment_id: { type: 'string', minLength: 1 } },
+    properties: { judgment_id: { type: "string", minLength: 1 } },
   },
   outputSchema: {
-    type: 'object',
-    required: ['judgment_id'],
-    properties: { judgment_id: { type: 'string' } },
+    type: "object",
+    required: ["judgment_id"],
+    properties: { judgment_id: { type: "string" } },
   },
   preconditions: [
     {
-      name: 'judgment_is_active',
-      sql: 'SELECT count(*) AS n FROM agent_judgment WHERE judgment_id = :judgment_id AND active = 1',
-      column: 'n',
-      op: 'eq',
+      name: "judgment_is_active",
+      sql: "SELECT count(*) AS n FROM agent_judgment WHERE judgment_id = :judgment_id AND active = 1",
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
   postconditions: [
     {
-      name: 'judgment_inactive',
-      sql: 'SELECT count(*) AS n FROM agent_judgment WHERE judgment_id = :judgment_id AND active = 0',
-      column: 'n',
-      op: 'eq',
+      name: "judgment_inactive",
+      sql: "SELECT count(*) AS n FROM agent_judgment WHERE judgment_id = :judgment_id AND active = 0",
+      column: "n",
+      op: "eq",
       value: 1,
     },
   ],
-  idempotency: 'once',
-  risk: 'low',
+  idempotency: "once",
+  risk: "low",
   handler: (ctx) => {
     requireOwner(ctx, "revoking a judgment is the owner's act");
     const input = ctx.input as { judgment_id: string };
     ctx.db
-      .prepare('UPDATE agent_judgment SET active = 0 WHERE judgment_id = ?')
+      .prepare("UPDATE agent_judgment SET active = 0 WHERE judgment_id = ?")
       .run(input.judgment_id);
-    ctx.wrote('agent.judgment', input.judgment_id);
+    ctx.wrote("agent.judgment", input.judgment_id);
     return { judgment_id: input.judgment_id };
   },
 };

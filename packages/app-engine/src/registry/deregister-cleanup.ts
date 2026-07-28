@@ -1,7 +1,7 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import type { RegistryEntry } from '../types.js';
+import type { RegistryEntry } from "../types.js";
 
 export interface DeregisterLogger {
   warn: (message: string) => void;
@@ -12,9 +12,9 @@ export interface DeregisterLogger {
  * Used by tests; the production handler just calls and logs.
  */
 export type CleanupOutcome =
-  | { kind: 'removed' }
-  | { kind: 'skipped'; reason: 'outside-appsdir' }
-  | { kind: 'failed'; error: Error };
+  | { kind: "removed" }
+  | { kind: "skipped"; reason: "outside-appsdir" }
+  | { kind: "failed"; error: Error };
 
 /**
  * Remove an app's wrapper dir (`<appsDir>/<id>/`) after the registry
@@ -26,20 +26,25 @@ export type CleanupOutcome =
 export async function cleanupDeregisteredApp(
   appsDir: string,
   entry: RegistryEntry,
-  logger: DeregisterLogger,
+  logger: DeregisterLogger
 ): Promise<CleanupOutcome> {
   const rel = path.relative(appsDir, entry.path);
-  const insideAppsDir = !!rel && !rel.startsWith('..') && !path.isAbsolute(rel) && rel.length > 0;
+  const insideAppsDir =
+    !!rel && !rel.startsWith("..") && !path.isAbsolute(rel) && rel.length > 0;
   if (!insideAppsDir) {
-    logger.warn(`[centraid] deregister: refusing to remove "${entry.path}" — outside appsDir`);
-    return { kind: 'skipped', reason: 'outside-appsdir' };
+    logger.warn(
+      `[centraid] deregister: refusing to remove "${entry.path}" — outside appsDir`
+    );
+    return { kind: "skipped", reason: "outside-appsdir" };
   }
   try {
     await fs.rm(entry.path, { recursive: true, force: true });
-    return { kind: 'removed' };
+    return { kind: "removed" };
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err));
-    logger.warn(`[centraid] deregister: failed to remove "${entry.path}": ${e.message}`);
-    return { kind: 'failed', error: e };
+    logger.warn(
+      `[centraid] deregister: failed to remove "${entry.path}": ${e.message}`
+    );
+    return { kind: "failed", error: e };
   }
 }

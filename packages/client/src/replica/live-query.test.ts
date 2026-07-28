@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
 
-import { LiveQuery } from './live-query.js';
+import { LiveQuery } from "./live-query.js";
 
 async function turn(): Promise<void> {
   await Promise.resolve();
@@ -8,12 +8,12 @@ async function turn(): Promise<void> {
 }
 
 describe(LiveQuery, () => {
-  test('is awaitable and publishes reruns only for captured dependencies', async () => {
+  test("is awaitable and publishes reruns only for captured dependencies", async () => {
     let value = 1;
     let runs = 0;
     const query = new LiveQuery(async () => ({
       value: { value, run: ++runs },
-      dependencies: [{ shapeId: 'shape-agenda', entity: 'core.event' }],
+      dependencies: [{ shapeId: "shape-agenda", entity: "core.event" }],
     }));
     await expect(query).resolves.toStrictEqual({ value: 1, run: 1 });
 
@@ -23,18 +23,18 @@ describe(LiveQuery, () => {
 
     value = 2;
     query.invalidate({
-      shapeId: 'shape-agenda',
-      entity: 'core.note',
-      source: 'canonical',
+      shapeId: "shape-agenda",
+      entity: "core.note",
+      source: "canonical",
     });
     await turn();
     expect(runs).toBe(1);
 
     query.invalidate({
-      shapeId: 'shape-agenda',
-      entity: 'core.event',
-      rowId: 'event-1',
-      source: 'canonical',
+      shapeId: "shape-agenda",
+      entity: "core.event",
+      rowId: "event-1",
+      source: "canonical",
     });
     await turn();
     expect(updates).toStrictEqual([1, 2]);
@@ -44,7 +44,7 @@ describe(LiveQuery, () => {
     query.dispose();
   });
 
-  test('coalesces invalidations received while one execution is in flight', async () => {
+  test("coalesces invalidations received while one execution is in flight", async () => {
     let release!: () => void;
     let runs = 0;
     const query = new LiveQuery(async () => {
@@ -52,7 +52,7 @@ describe(LiveQuery, () => {
       if (runs === 1) await new Promise<void>((resolve) => (release = resolve));
       return {
         value: runs,
-        dependencies: [{ shapeId: 'shape', entity: 'entity' }],
+        dependencies: [{ shapeId: "shape", entity: "entity" }],
       };
     });
     query.refresh();

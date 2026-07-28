@@ -8,7 +8,7 @@
 // dependents via the registry, not only engine FKs". The no-SQL-from-input
 // invariants of atlas-browse.ts apply here identically.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 import {
   BROWSE_REF_SEARCH_LIMIT,
@@ -17,9 +17,9 @@ import {
   primaryKeyColumns,
   resolveBrowseTable,
   tableInfo,
-} from './atlas-browse.js';
-import { atlasTables } from './atlas.js';
-import { POLY_REF_REGISTRY } from './poly-refs.js';
+} from "./atlas-browse.js";
+import { atlasTables } from "./atlas.js";
+import { POLY_REF_REGISTRY } from "./poly-refs.js";
 
 export interface BrowseRefHit {
   id: string;
@@ -36,15 +36,15 @@ export function browseRefSearch(
   vault: DatabaseSync,
   table: string,
   query: string,
-  limit = BROWSE_REF_SEARCH_LIMIT,
+  limit = BROWSE_REF_SEARCH_LIMIT
 ): BrowseRefHit[] {
   const ref = resolveBrowseTable(vault, table);
   const info = tableInfo(vault, ref.physical);
   const pks = primaryKeyColumns(vault, ref.physical);
-  const idCol = pks.length === 1 ? pks[0]! : 'rowid';
+  const idCol = pks.length === 1 ? pks[0]! : "rowid";
   const display = displayFieldOf(
     info.map((c) => c.name),
-    idCol,
+    idCol
   );
   const cap = Math.min(Math.max(limit, 1), BROWSE_REF_SEARCH_LIMIT);
   const q = query.trim();
@@ -56,7 +56,7 @@ export function browseRefSearch(
     bind = [];
   } else if (display === idCol) {
     sql = `SELECT ${idSelect} AS __id, "${display}" AS __disp FROM "${ref.physical}" WHERE "${idCol}" LIKE ? ORDER BY "${display}" LIMIT ${cap}`;
-    bind = [`${q.replaceAll('%', '').replaceAll('_', '')}%`];
+    bind = [`${q.replaceAll("%", "").replaceAll("_", "")}%`];
   } else {
     sql = `SELECT ${idSelect} AS __id, "${display}" AS __disp FROM "${ref.physical}" WHERE "${display}" LIKE ? ESCAPE '\\' ORDER BY "${display}" LIMIT ${cap}`;
     bind = [`%${likeEscape(q)}%`];
@@ -72,7 +72,10 @@ export function browseRefSearch(
 }
 
 function likeEscape(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("%", "\\%")
+    .replaceAll("_", "\\_");
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +88,7 @@ export interface BrowseDependent {
   /** How it points here: `<physical>.<column>` (engine) or `<table>.<typeCol>` (poly). */
   via: string;
   count: number;
-  mechanism: 'fk' | 'poly';
+  mechanism: "fk" | "poly";
 }
 
 export interface BrowseDependentsResult {
@@ -109,7 +112,7 @@ export interface BrowseDependentsResult {
 export function browseDependents(
   vault: DatabaseSync,
   table: string,
-  id: string,
+  id: string
 ): BrowseDependentsResult {
   const ref = resolveBrowseTable(vault, table);
   const logical = `${ref.schema}.${ref.table}`;
@@ -118,13 +121,15 @@ export function browseDependents(
 
   // Engine FKs: any vault table with an FK column whose parent is this table.
   for (const entry of atlasTables()) {
-    if (entry.file !== 'vault') continue;
+    if (entry.file !== "vault") continue;
     if (entry.physical === ref.physical) continue; // self-refs handled below
     for (const fk of foreignKeys(vault, entry.physical)) {
       if (fk.table !== ref.physical) continue;
       const count = (
         vault
-          .prepare(`SELECT COUNT(*) AS n FROM "${entry.physical}" WHERE "${fk.from}" = ?`)
+          .prepare(
+            `SELECT COUNT(*) AS n FROM "${entry.physical}" WHERE "${fk.from}" = ?`
+          )
           .get(id) as { n: number }
       ).n;
       if (count > 0) {
@@ -132,7 +137,7 @@ export function browseDependents(
           table: entry.logical,
           via: `${entry.physical}.${fk.from}`,
           count,
-          mechanism: 'fk',
+          mechanism: "fk",
         });
       }
     }
@@ -142,7 +147,9 @@ export function browseDependents(
     if (fk.table !== ref.physical) continue;
     const count = (
       vault
-        .prepare(`SELECT COUNT(*) AS n FROM "${ref.physical}" WHERE "${fk.from}" = ?`)
+        .prepare(
+          `SELECT COUNT(*) AS n FROM "${ref.physical}" WHERE "${fk.from}" = ?`
+        )
         .get(id) as { n: number }
     ).n;
     if (count > 0) {
@@ -150,7 +157,7 @@ export function browseDependents(
         table: logical,
         via: `${ref.physical}.${fk.from}`,
         count,
-        mechanism: 'fk',
+        mechanism: "fk",
       });
     }
   }
@@ -163,7 +170,7 @@ export function browseDependents(
       const count = (
         vault
           .prepare(
-            `SELECT COUNT(*) AS n FROM "${entry.table}" WHERE "${pair.typeCol}" = ? AND "${pair.idCol}" = ?`,
+            `SELECT COUNT(*) AS n FROM "${entry.table}" WHERE "${pair.typeCol}" = ? AND "${pair.idCol}" = ?`
           )
           .get(logical, id) as { n: number }
       ).n;
@@ -172,7 +179,7 @@ export function browseDependents(
           table: byPhysical.get(entry.table) ?? entry.table,
           via: `${entry.table}.${pair.typeCol}`,
           count,
-          mechanism: 'poly',
+          mechanism: "poly",
         });
       }
     }

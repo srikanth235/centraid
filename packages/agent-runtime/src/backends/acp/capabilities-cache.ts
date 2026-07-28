@@ -6,16 +6,19 @@
  * status poll.
  */
 
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import type { RunnerKind } from '@centraid/app-engine';
+import type { RunnerKind } from "@centraid/app-engine";
 
-import { acpConfigFor } from '../../registry.js';
-import { probeAcpCapabilities, type AcpAgentCapabilities } from './probe-capabilities.js';
+import { acpConfigFor } from "../../registry.js";
+import {
+  probeAcpCapabilities,
+  type AcpAgentCapabilities,
+} from "./probe-capabilities.js";
 
-export { type AcpAgentCapabilities } from './probe-capabilities.js';
+export { type AcpAgentCapabilities } from "./probe-capabilities.js";
 
 const cache = new Map<string, AcpAgentCapabilities>();
 const inflight = new Map<string, Promise<AcpAgentCapabilities>>();
@@ -30,29 +33,40 @@ const inflight = new Map<string, Promise<AcpAgentCapabilities>>();
 export const CAPABILITIES_TTL_MS = 24 * 60 * 60 * 1000;
 
 function isExpired(caps: AcpAgentCapabilities, now: number): boolean {
-  return !Number.isFinite(caps.probedAt) || now - caps.probedAt > CAPABILITIES_TTL_MS;
+  return (
+    !Number.isFinite(caps.probedAt) || now - caps.probedAt > CAPABILITIES_TTL_MS
+  );
 }
 
-function key(kind: RunnerKind, binPath?: string, extraArgs?: readonly string[]): string {
-  return `${kind}\0${binPath ?? ''}\0${JSON.stringify(extraArgs ?? [])}`;
+function key(
+  kind: RunnerKind,
+  binPath?: string,
+  extraArgs?: readonly string[]
+): string {
+  return `${kind}\0${binPath ?? ""}\0${JSON.stringify(extraArgs ?? [])}`;
 }
 
 function persistedPath(cacheDir: string, cacheKey: string): string {
-  return path.join(cacheDir, `${createHash('sha256').update(cacheKey).digest('hex')}.json`);
+  return path.join(
+    cacheDir,
+    `${createHash("sha256").update(cacheKey).digest("hex")}.json`
+  );
 }
 
 async function readPersisted(
   cacheDir: string | undefined,
-  cacheKey: string,
+  cacheKey: string
 ): Promise<AcpAgentCapabilities | undefined> {
   if (!cacheDir) return undefined;
   try {
     const parsed = JSON.parse(
-      await fs.readFile(persistedPath(cacheDir, cacheKey), 'utf8'),
+      await fs.readFile(persistedPath(cacheDir, cacheKey), "utf8")
     ) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return undefined;
     const caps = parsed as AcpAgentCapabilities;
-    return typeof caps.reachable === 'boolean' && Array.isArray(caps.configOptions)
+    return typeof caps.reachable === "boolean" &&
+      Array.isArray(caps.configOptions)
       ? caps
       : undefined;
   } catch {
@@ -63,7 +77,7 @@ async function readPersisted(
 async function writePersisted(
   cacheDir: string | undefined,
   cacheKey: string,
-  caps: AcpAgentCapabilities,
+  caps: AcpAgentCapabilities
 ): Promise<void> {
   if (!cacheDir) return;
   await fs.mkdir(cacheDir, { recursive: true });
@@ -98,7 +112,7 @@ export async function resolveAcpCapabilities(
     probeIfMissing?: boolean;
     /** Run the probe's live diagnostic prompt (default: `refresh`). */
     probeLivePrompt?: boolean;
-  },
+  }
 ): Promise<AcpAgentCapabilities | undefined> {
   const k = key(kind, opts?.binPath, opts?.extraArgs);
   const livePrompt = opts?.probeLivePrompt ?? opts?.refresh === true;
@@ -113,7 +127,8 @@ export async function resolveAcpCapabilities(
       }
     }
     if (known && !isExpired(known, now)) return known;
-    if (!opts?.probeIfMissing) return known ? { ...known, stale: true } : undefined;
+    if (!opts?.probeIfMissing)
+      return known ? { ...known, stale: true } : undefined;
   }
 
   const existing = inflight.get(k);

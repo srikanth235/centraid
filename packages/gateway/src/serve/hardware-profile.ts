@@ -1,14 +1,14 @@
-import { availableParallelism, totalmem } from 'node:os';
+import { availableParallelism, totalmem } from "node:os";
 
 import {
   parseResourceMode,
   resourceModeLabel,
   type ResourceKnobOverrides,
   type ResourceMode,
-} from './resource-mode.js';
+} from "./resource-mode.js";
 
-export { type ResourceMode } from './resource-mode.js';
-export type HardwareClass = 'constrained' | 'standard';
+export { type ResourceMode } from "./resource-mode.js";
+export type HardwareClass = "constrained" | "standard";
 
 /**
  * The six prioritized throughput knobs the resolver attributes a source to
@@ -16,12 +16,12 @@ export type HardwareClass = 'constrained' | 'standard';
  * compression qualities are env-or-preset only (no prefs key).
  */
 export type ResourceKnobName =
-  | 'workerMaxConcurrent'
-  | 'workerMaxOldGenerationMb'
-  | 'workerPoolSize'
-  | 'replicationConcurrency'
-  | 'staticBrotliQuality'
-  | 'staticGzipQuality';
+  | "workerMaxConcurrent"
+  | "workerMaxOldGenerationMb"
+  | "workerPoolSize"
+  | "replicationConcurrency"
+  | "staticBrotliQuality"
+  | "staticGzipQuality";
 
 /**
  * Per-knob provenance the client renders as Linked ('preset'), Custom
@@ -29,12 +29,15 @@ export type ResourceKnobName =
  * name and is present ONLY when `source === 'env'` (#528 Phase F).
  */
 export interface ResourceKnobSource {
-  source: 'env' | 'prefs' | 'preset';
+  source: "env" | "prefs" | "preset";
   envVar?: string;
 }
 
 /** Hard reject bounds per knob — the client mirrors these for input validation. */
-export const RESOURCE_KNOB_BOUNDS: Record<ResourceKnobName, { min: number; max: number }> = {
+export const RESOURCE_KNOB_BOUNDS: Record<
+  ResourceKnobName,
+  { min: number; max: number }
+> = {
   workerMaxConcurrent: { min: 1, max: 32 },
   workerMaxOldGenerationMb: { min: 8, max: 1_024 },
   workerPoolSize: { min: 0, max: 8 },
@@ -45,12 +48,12 @@ export const RESOURCE_KNOB_BOUNDS: Record<ResourceKnobName, { min: number; max: 
 
 /** The operator env var that pins each knob (source-attribution + publish). */
 const RESOURCE_KNOB_ENV_VARS: Record<ResourceKnobName, string> = {
-  workerMaxConcurrent: 'CENTRAID_WORKER_MAX_CONCURRENT',
-  workerMaxOldGenerationMb: 'CENTRAID_WORKER_MAX_OLD_GENERATION_MB',
-  workerPoolSize: 'CENTRAID_WORKER_POOL_SIZE',
-  replicationConcurrency: 'CENTRAID_REPLICATION_CONCURRENCY',
-  staticBrotliQuality: 'CENTRAID_STATIC_BROTLI_QUALITY',
-  staticGzipQuality: 'CENTRAID_STATIC_GZIP_QUALITY',
+  workerMaxConcurrent: "CENTRAID_WORKER_MAX_CONCURRENT",
+  workerMaxOldGenerationMb: "CENTRAID_WORKER_MAX_OLD_GENERATION_MB",
+  workerPoolSize: "CENTRAID_WORKER_POOL_SIZE",
+  replicationConcurrency: "CENTRAID_REPLICATION_CONCURRENCY",
+  staticBrotliQuality: "CENTRAID_STATIC_BROTLI_QUALITY",
+  staticGzipQuality: "CENTRAID_STATIC_GZIP_QUALITY",
 };
 
 export interface GatewayHardwareProfile {
@@ -68,7 +71,7 @@ export interface GatewayHardwareProfile {
   cgroupLimitedMemory: boolean;
   /** Cumulative CPU steal% since host boot (co-tenant contention), null off-Linux/unknown. */
   stealPercent: number | null;
-  sqliteSynchronous: 'FULL' | 'NORMAL';
+  sqliteSynchronous: "FULL" | "NORMAL";
   workerMaxConcurrent: number;
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
@@ -76,7 +79,7 @@ export interface GatewayHardwareProfile {
   staticBrotliQuality: number;
   staticGzipQuality: number;
   /** Lazy mount remains gated by A5's scheduler index; correctness selects eager. */
-  vaultMountStrategy: 'eager';
+  vaultMountStrategy: "eager";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
   /** Budget preset framed as the share of the granted host it claims (#528 Phase E). */
@@ -95,7 +98,7 @@ export interface GatewayHardwareProfile {
  * constrained class → conserve; standard + Performance → performance; else
  * balanced.
  */
-type BudgetPresetName = 'conserve' | 'balanced' | 'performance';
+type BudgetPresetName = "conserve" | "balanced" | "performance";
 interface BudgetPreset {
   /** Share of the granted host this budget claims (CPU and memory). */
   cpuShare: number;
@@ -172,12 +175,12 @@ function resolveKnob(params: {
   min: number;
   max: number;
 }): { value: number; source: ResourceKnobSource } {
-  if (params.envRaw !== undefined && params.envRaw !== '') {
+  if (params.envRaw !== undefined && params.envRaw !== "") {
     const parsed = Math.trunc(Number(params.envRaw));
     if (Number.isFinite(parsed) && parsed >= params.min) {
       return {
         value: Math.min(parsed, params.max),
-        source: { source: 'env', envVar: params.envVar },
+        source: { source: "env", envVar: params.envVar },
       };
     }
   }
@@ -188,10 +191,10 @@ function resolveKnob(params: {
   ) {
     return {
       value: Math.min(params.prefsValue, params.max),
-      source: { source: 'prefs' },
+      source: { source: "prefs" },
     };
   }
-  return { value: params.fallback, source: { source: 'preset' } };
+  return { value: params.fallback, source: { source: "preset" } };
 }
 
 /**
@@ -202,16 +205,16 @@ function resolveKnob(params: {
  */
 export function hardwareClassForResourceMode(
   mode: ResourceMode,
-  detected: HardwareClass,
+  detected: HardwareClass
 ): HardwareClass {
   switch (mode) {
-    case 'auto':
+    case "auto":
       return detected;
-    case 'conserve':
-      return 'constrained';
-    case 'balanced':
-    case 'performance':
-      return 'standard';
+    case "conserve":
+      return "constrained";
+    case "balanced":
+    case "performance":
+      return "standard";
   }
 }
 
@@ -246,7 +249,7 @@ export interface StructuredResourceProfile {
     replicationConcurrency: number;
     staticBrotliQuality: number;
     staticGzipQuality: number;
-    sqliteSynchronous: 'FULL' | 'NORMAL';
+    sqliteSynchronous: "FULL" | "NORMAL";
     vaultSweepIntervalMs: number;
     outboxIdleIntervalMs: number;
   };
@@ -257,7 +260,7 @@ export interface StructuredResourceProfile {
 }
 
 export function toStructuredResourceProfile(
-  profile: GatewayHardwareProfile,
+  profile: GatewayHardwareProfile
 ): StructuredResourceProfile {
   return {
     class: profile.class,
@@ -287,13 +290,17 @@ export function toStructuredResourceProfile(
   };
 }
 
-export function formatHardwareProfileDetail(profile: GatewayHardwareProfile): string {
+export function formatHardwareProfileDetail(
+  profile: GatewayHardwareProfile
+): string {
   // Name the share framing when a cgroup quota or steal actually shrank the
   // granted host below the raw machine (#528 Phase E) — otherwise stay terse.
   const shareNote =
-    profile.cgroupLimitedCpu || profile.cgroupLimitedMemory || (profile.stealPercent ?? 0) >= 10
-      ? '; sized for the share you granted of this host'
-      : '';
+    profile.cgroupLimitedCpu ||
+    profile.cgroupLimitedMemory ||
+    (profile.stealPercent ?? 0) >= 10
+      ? "; sized for the share you granted of this host"
+      : "";
   return (
     `mode=${resourceModeLabel(profile.resourceMode)} (${profile.resourceMode}); ` +
     `class=${profile.class}; sqlite=${profile.sqliteSynchronous}; ` +
@@ -327,7 +334,7 @@ export function resolveGatewayHardwareProfile(
      */
     prefsOverrides?: ResourceKnobOverrides;
   } = {},
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): GatewayHardwareProfile {
   const cores = input.cores ?? availableParallelism();
   const totalMemoryBytes = input.totalMemoryBytes ?? totalmem();
@@ -340,7 +347,9 @@ export function resolveGatewayHardwareProfile(
   // or looser limit is a no-op. Class + every knob derive from EFFECTIVE.
   const cpuLimit = input.cgroupCpuLimit ?? null;
   const effectiveCores =
-    cpuLimit !== null && cpuLimit > 0 ? Math.max(1, Math.min(cores, Math.ceil(cpuLimit))) : cores;
+    cpuLimit !== null && cpuLimit > 0
+      ? Math.max(1, Math.min(cores, Math.ceil(cpuLimit)))
+      : cores;
   const cgroupLimitedCpu = effectiveCores < cores;
   const memoryLimit = input.cgroupMemoryLimitBytes ?? null;
   const effectiveMemoryBytes =
@@ -354,17 +363,19 @@ export function resolveGatewayHardwareProfile(
     effectiveMemoryBytes <= CONSTRAINED_MEMORY_CEILING_BYTES ||
     (storageFsyncMs ?? 0) >= SLOW_STORAGE_FSYNC_MS ||
     (stealPercent ?? 0) >= STEAL_CONSTRAINED_THRESHOLD_PERCENT
-      ? 'constrained'
-      : 'standard';
+      ? "constrained"
+      : "standard";
 
   const resourceMode: ResourceMode =
-    input.resourceMode ?? parseResourceMode(env.CENTRAID_RESOURCE_MODE) ?? 'auto';
+    input.resourceMode ??
+    parseResourceMode(env.CENTRAID_RESOURCE_MODE) ??
+    "auto";
 
   const requested = env.CENTRAID_HARDWARE_PROFILE;
   // Explicit env class still wins (operator override). Otherwise Resource
   // mode selects; Auto falls through to detection.
   const hardwareClass: HardwareClass =
-    requested === 'constrained' || requested === 'standard'
+    requested === "constrained" || requested === "standard"
       ? requested
       : hardwareClassForResourceMode(resourceMode, detected);
 
@@ -373,31 +384,36 @@ export function resolveGatewayHardwareProfile(
   // of a small host (matches #456: only intentional low-end opts in).
   const syncOverride = env.CENTRAID_SQLITE_SYNCHRONOUS?.toUpperCase();
   const explicitConstrained =
-    requested === 'constrained' || (requested === undefined && resourceMode === 'conserve');
+    requested === "constrained" ||
+    (requested === undefined && resourceMode === "conserve");
   const sqliteSynchronous =
-    syncOverride === 'FULL' || syncOverride === 'NORMAL'
+    syncOverride === "FULL" || syncOverride === "NORMAL"
       ? syncOverride
       : explicitConstrained
-        ? 'NORMAL'
-        : 'FULL';
+        ? "NORMAL"
+        : "FULL";
 
-  const constrained = hardwareClass === 'constrained';
-  const performance = !constrained && resourceMode === 'performance';
+  const constrained = hardwareClass === "constrained";
+  const performance = !constrained && resourceMode === "performance";
   // Select the budget over the granted share. Byte-identical to the former
   // class/mode ternaries (hardware-profile.budget.test.ts): constrained class
   // spends the conserve budget, standard Performance the performance budget,
   // everything else balanced.
   const presetName: BudgetPresetName = constrained
-    ? 'conserve'
+    ? "conserve"
     : performance
-      ? 'performance'
-      : 'balanced';
+      ? "performance"
+      : "balanced";
   const preset = BUDGET_PRESETS[presetName];
 
   // Resolve each prioritized knob through the ONE precedence chain
   // (env > prefs > preset) and capture its provenance for the client.
   const prefsOverrides = input.prefsOverrides ?? {};
-  const knob = (name: ResourceKnobName, fallback: number, prefsValue?: number) =>
+  const knob = (
+    name: ResourceKnobName,
+    fallback: number,
+    prefsValue?: number
+  ) =>
     resolveKnob({
       envRaw: env[RESOURCE_KNOB_ENV_VARS[name]],
       envVar: RESOURCE_KNOB_ENV_VARS[name],
@@ -407,28 +423,31 @@ export function resolveGatewayHardwareProfile(
       max: RESOURCE_KNOB_BOUNDS[name].max,
     });
   const workerMaxConcurrent = knob(
-    'workerMaxConcurrent',
+    "workerMaxConcurrent",
     preset.workerMaxConcurrent,
-    prefsOverrides.workerMaxConcurrent,
+    prefsOverrides.workerMaxConcurrent
   );
   const workerMaxOldGenerationMb = knob(
-    'workerMaxOldGenerationMb',
+    "workerMaxOldGenerationMb",
     preset.workerMaxOldGenerationMb,
-    prefsOverrides.workerMaxOldGenerationMb,
+    prefsOverrides.workerMaxOldGenerationMb
   );
   const workerPoolSize = knob(
-    'workerPoolSize',
+    "workerPoolSize",
     preset.workerPoolSize,
-    prefsOverrides.workerPoolSize,
+    prefsOverrides.workerPoolSize
   );
   const replicationConcurrency = knob(
-    'replicationConcurrency',
+    "replicationConcurrency",
     preset.replicationConcurrency,
-    prefsOverrides.replicationConcurrency,
+    prefsOverrides.replicationConcurrency
   );
   // The two compression qualities have no prefs key — env or preset only.
-  const staticBrotliQuality = knob('staticBrotliQuality', preset.staticBrotliQuality);
-  const staticGzipQuality = knob('staticGzipQuality', preset.staticGzipQuality);
+  const staticBrotliQuality = knob(
+    "staticBrotliQuality",
+    preset.staticBrotliQuality
+  );
+  const staticGzipQuality = knob("staticGzipQuality", preset.staticGzipQuality);
 
   return {
     class: hardwareClass,
@@ -454,14 +473,16 @@ export function resolveGatewayHardwareProfile(
       staticBrotliQuality: staticBrotliQuality.source,
       staticGzipQuality: staticGzipQuality.source,
     },
-    vaultMountStrategy: 'eager',
+    vaultMountStrategy: "eager",
     vaultSweepIntervalMs: preset.vaultSweepIntervalMs,
     outboxIdleIntervalMs: preset.outboxIdleIntervalMs,
     // Budget claims `cpuShare` of the effective (granted) host; memoryCapMb is
     // that same share of the effective memory in MiB (#528 Phase E, additive).
     budget: {
       cpuShare: preset.cpuShare,
-      memoryCapMb: Math.round((effectiveMemoryBytes / 1024 ** 2) * preset.cpuShare),
+      memoryCapMb: Math.round(
+        (effectiveMemoryBytes / 1024 ** 2) * preset.cpuShare
+      ),
     },
   };
 }

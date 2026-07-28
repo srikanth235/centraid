@@ -12,13 +12,13 @@ import {
   useState,
   type KeyboardEvent,
   type ReactElement,
-} from 'react';
+} from "react";
 
-import type { InlineAppProps } from '../inline-types.ts';
-import { Chrome } from './Chrome.tsx';
-import { Board } from './components/Board.tsx';
-import { Detail } from './components/Detail.tsx';
-import { SidebarFoot, SidebarNav } from './components/Sidebar.tsx';
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome } from "./Chrome.tsx";
+import { Board } from "./components/Board.tsx";
+import { Detail } from "./components/Detail.tsx";
+import { SidebarFoot, SidebarNav } from "./components/Sidebar.tsx";
 import {
   observeWidth,
   onDataChange,
@@ -26,38 +26,49 @@ import {
   readFailed,
   wireAttachInput,
   wireThemeToggle,
-} from './kit.ts';
-import { buildSections, createLogic, sidebarCounts, todayProgress } from './logic.ts';
-import type { AppState, BoardData, EditPatch, Task, View } from './types.ts';
+} from "./kit.ts";
+import {
+  buildSections,
+  createLogic,
+  sidebarCounts,
+  todayProgress,
+} from "./logic.ts";
+import type { AppState, BoardData, EditPatch, Task, View } from "./types.ts";
 
 export const CHANGE_TABLES = [
-  'schedule.task',
-  'core.tag',
-  'core.concept',
-  'core.attachment',
-  'core.content_item',
-  'core.link',
+  "schedule.task",
+  "core.tag",
+  "core.concept",
+  "core.attachment",
+  "core.content_item",
+  "core.link",
 ];
 
 const VIEW_TITLES: Record<View, string> = {
-  today: 'Today',
-  upcoming: 'Upcoming',
-  anytime: 'Anytime',
-  all: 'All open',
-  logbook: 'Logbook',
+  today: "Today",
+  upcoming: "Upcoming",
+  anytime: "Anytime",
+  all: "All open",
+  logbook: "Logbook",
 };
 
-const VALID_VIEWS = new Set<View>(['today', 'upcoming', 'anytime', 'all', 'logbook']);
+const VALID_VIEWS = new Set<View>([
+  "today",
+  "upcoming",
+  "anytime",
+  "all",
+  "logbook",
+]);
 
 function initialView(rootEl: HTMLElement | null): View {
   const knob = rootEl?.dataset.appDefaultView;
-  return knob && VALID_VIEWS.has(knob as View) ? (knob as View) : 'today';
+  return knob && VALID_VIEWS.has(knob as View) ? (knob as View) : "today";
 }
 
 function makeState(view: View): AppState {
   return {
     view,
-    search: '',
+    search: "",
     searchResults: null,
     searchSnippets: null,
     boardWindow: 500,
@@ -73,37 +84,37 @@ function makeState(view: View): AppState {
 
 function emptyCopy(state: AppState): { title: string; sub: string } {
   const q = state.search.trim();
-  if (q) return { title: 'No matches', sub: `No tasks match “${q}”.` };
-  if (state.view === 'logbook')
+  if (q) return { title: "No matches", sub: `No tasks match “${q}”.` };
+  if (state.view === "logbook")
     return {
-      title: 'Nothing logged yet',
-      sub: 'Completed and cancelled tasks land here.',
+      title: "Nothing logged yet",
+      sub: "Completed and cancelled tasks land here.",
     };
-  if (state.view === 'today')
+  if (state.view === "today")
     return {
-      title: 'Nothing due today',
-      sub: 'Enjoy the breathing room — or capture something above.',
+      title: "Nothing due today",
+      sub: "Enjoy the breathing room — or capture something above.",
     };
-  if (state.view === 'upcoming')
+  if (state.view === "upcoming")
     return {
-      title: 'Nothing scheduled',
-      sub: 'Add a task above and it lands as a receipted vault command.',
+      title: "Nothing scheduled",
+      sub: "Add a task above and it lands as a receipted vault command.",
     };
-  if (state.view === 'anytime')
+  if (state.view === "anytime")
     return {
-      title: 'No loose tasks',
-      sub: 'Add a task above and it lands as a receipted vault command.',
+      title: "No loose tasks",
+      sub: "Add a task above and it lands as a receipted vault command.",
     };
   return {
-    title: 'All clear',
-    sub: 'Add a task above and it lands as a receipted vault command.',
+    title: "All clear",
+    sub: "Add a task above and it lands as a receipted vault command.",
   };
 }
 
 interface BoardPayload {
   open?: Task[];
   logbook?: Task[];
-  counts?: BoardData['counts'];
+  counts?: BoardData["counts"];
   window?: number;
   truncated?: boolean;
   vaultDenied?: { code?: string; message?: string };
@@ -134,20 +145,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     let res: BoardPayload;
     try {
       res = await window.centraid.read<BoardPayload>({
-        query: 'board',
+        query: "board",
         input: { limit: state.boardWindow },
       });
     } catch {
-      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
       return;
     }
     if (state.readFailedShown) {
       state.readFailedShown = false;
-      logic?.notice('');
+      logic?.notice("");
     }
     const denied = res?.vaultDenied;
-    consentRef.current = denied ? { message: denied.message ?? '' } : null;
+    consentRef.current = denied ? { message: denied.message ?? "" } : null;
     if (denied) {
       data.open = [];
       data.logbook = [];
@@ -161,7 +172,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     data.counts = res?.counts ?? {};
     data.window = res?.window ?? state.boardWindow;
     state.boardTruncated = Boolean(res?.truncated);
-    if (state.detailId && !logic?.findTask(state.detailId)) state.detailId = null;
+    if (state.detailId && !logic?.findTask(state.detailId))
+      state.detailId = null;
     bump();
   }, []);
 
@@ -181,21 +193,21 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       rootRef(el);
       if (el) {
         const view = initialView(el);
-        if (view !== stateRef.current.view && stateRef.current.search === '') {
+        if (view !== stateRef.current.view && stateRef.current.search === "") {
           stateRef.current.view = view;
           bump();
         }
       }
     },
-    [rootRef],
+    [rootRef]
   );
 
   const selectView = useCallback((view: View) => {
     const state = stateRef.current;
     state.view = view;
     if (state.search) {
-      if (searchInputRef.current) searchInputRef.current.value = '';
-      state.search = '';
+      if (searchInputRef.current) searchInputRef.current.value = "";
+      state.search = "";
       state.searchResults = null;
       state.searchSnippets = null;
     }
@@ -220,7 +232,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   // ---- chrome wiring: theme toggle, attach input, doorbell, focus, keys, width ----
   useEffect(() => {
     if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
-    const attachInput = document.querySelector('#attachInput') as HTMLInputElement | null;
+    const attachInput = document.querySelector(
+      "#attachInput"
+    ) as HTMLInputElement | null;
     if (attachInput) {
       wireAttachInput(attachInput, () => logic.getAttachTarget(), {
         act: logic.act,
@@ -239,25 +253,25 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
         e.target instanceof HTMLSelectElement;
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         if (stateRef.current.detailId) return void closeDetail();
         if (stateRef.current.search) {
-          if (searchInputRef.current) searchInputRef.current.value = '';
-          logic.applySearchInput('');
+          if (searchInputRef.current) searchInputRef.current.value = "";
+          logic.applySearchInput("");
           return;
         }
         return;
       }
       if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === 'n') {
+      if (e.key === "n") {
         e.preventDefault();
         captureFocusRef.current?.();
-      } else if (e.key === '/' || e.key === 'f') {
+      } else if (e.key === "/" || e.key === "f") {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
           stateRef.current.narrow = isNarrow;
@@ -267,7 +281,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       : () => {};
     void refresh();
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener("keydown", onKey);
       stopDoorbell();
       stopFocus();
       stopWidth();
@@ -280,30 +294,32 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const counts = sidebarCounts(data);
   const { sections, isEmpty } = buildSections(data, state);
   const q = state.search.trim();
-  const title = q ? `Results for “${q}”` : (VIEW_TITLES[state.view] ?? 'Today');
+  const title = q ? `Results for “${q}”` : (VIEW_TITLES[state.view] ?? "Today");
   let sub: string;
   if (q) {
     const n = sections.reduce((s, x) => s + x.rows.length, 0);
-    sub = `${n} match${n === 1 ? '' : 'es'} “${q}”`;
-  } else if (state.view === 'logbook') {
+    sub = `${n} match${n === 1 ? "" : "es"} “${q}”`;
+  } else if (state.view === "logbook") {
     sub = `${counts.logbook} completed & cancelled`;
   } else {
     sub =
       counts.all > 0
         ? `${counts.all} open · ${counts.today} due today or overdue`
-        : 'Your canonical task list, from the vault.';
+        : "Your canonical task list, from the vault.";
   }
   const empty = emptyCopy(state);
   const footer =
-    state.boardTruncated && !q ? { windowSize: data.window ?? state.boardWindow } : null;
+    state.boardTruncated && !q
+      ? { windowSize: data.window ?? state.boardWindow }
+      : null;
   const detailTask = state.detailId ? logic.findTask(state.detailId) : null;
 
   const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== "Escape") return;
     e.preventDefault();
     if (!searchInputRef.current?.value && !state.search) return;
-    if (searchInputRef.current) searchInputRef.current.value = '';
-    logic.applySearchInput('');
+    if (searchInputRef.current) searchInputRef.current.value = "";
+    logic.applySearchInput("");
   };
 
   return (
@@ -313,8 +329,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div
       ref={setRoot}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
         minWidth: 0,
         minHeight: 0,
@@ -330,8 +346,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onCloseSide={() => setSideOpen(false)}
         onNewTask={() => {
           setSideOpen(false);
-          if (state.view === 'logbook') {
-            state.view = 'today';
+          if (state.view === "logbook") {
+            state.view = "today";
             bump();
           }
           captureFocusRef.current?.();
@@ -344,12 +360,18 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         themeButtonRef={(el) => {
           themeBtnRef.current = el;
         }}
-        sidebarNav={<SidebarNav view={state.view} counts={counts} onSelectView={selectView} />}
+        sidebarNav={
+          <SidebarNav
+            view={state.view}
+            counts={counts}
+            onSelectView={selectView}
+          />
+        }
         sidebarFoot={<SidebarFoot progress={todayProgress(data)} />}
         board={
           <Board
             view={state.view}
-            showCapture={state.view !== 'logbook'}
+            showCapture={state.view !== "logbook"}
             captureProps={{
               onSubmit: (payload) => logic.submitCapture(payload),
               registerFocus: (fn) => {
@@ -384,21 +406,23 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                   id,
                   { title: title2 },
                   {
-                    toastText: 'Renamed · receipt',
+                    toastText: "Renamed · receipt",
                     activityText: `Renamed to “${title2}”`,
-                  },
+                  }
                 )
               }
               onNotesCommit={(id, patch) =>
                 logic.editField(id, patch, {
-                  toastText: 'Notes updated · receipt',
-                  activityText: 'Notes updated',
+                  toastText: "Notes updated · receipt",
+                  activityText: "Notes updated",
                 })
               }
               onPickDue={(id, patch: EditPatch) =>
                 logic.editField(id, patch, {
-                  toastText: 'Updated · receipt',
-                  activityText: patch.clear_due ? 'Due date cleared' : `Due ${patch.due_at}`,
+                  toastText: "Updated · receipt",
+                  activityText: patch.clear_due
+                    ? "Due date cleared"
+                    : `Due ${patch.due_at}`,
                 })
               }
               onPickPriority={(id, value) =>
@@ -406,9 +430,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                   id,
                   { priority: value },
                   {
-                    toastText: 'Priority updated · receipt',
-                    activityText: 'Priority updated',
-                  },
+                    toastText: "Priority updated · receipt",
+                    activityText: "Priority updated",
+                  }
                 )
               }
               onPickEffort={(id, value) =>
@@ -416,30 +440,42 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                   id,
                   { effort_min: value },
                   {
-                    toastText: 'Effort updated · receipt',
-                    activityText: 'Effort updated',
-                  },
+                    toastText: "Effort updated · receipt",
+                    activityText: "Effort updated",
+                  }
                 )
               }
               onPickRepeat={(id, patch: EditPatch) =>
                 logic.editField(id, patch, {
-                  toastText: 'Repeat updated · receipt',
-                  activityText: patch.clear_rrule ? 'Stopped repeating' : 'Repeat updated',
+                  toastText: "Repeat updated · receipt",
+                  activityText: patch.clear_rrule
+                    ? "Stopped repeating"
+                    : "Repeat updated",
                 })
               }
               onPickRemind={(id, patch: EditPatch) =>
                 logic.editField(id, patch, {
-                  toastText: 'Reminder updated · receipt',
-                  activityText: patch.clear_remind ? 'Reminder cleared' : 'Reminder updated',
+                  toastText: "Reminder updated · receipt",
+                  activityText: patch.clear_remind
+                    ? "Reminder cleared"
+                    : "Reminder updated",
                 })
               }
               onToggleSubtask={(sub2) => logic.toggleComplete(sub2)}
-              onAddSubtask={(parentId, title2) => logic.addSubtask(parentId, title2)}
+              onAddSubtask={(parentId, title2) =>
+                logic.addSubtask(parentId, title2)
+              }
               onAttach={(taskId) => {
                 logic.setAttachTarget(taskId);
-                (document.querySelector('#attachInput') as HTMLInputElement | null)?.click();
+                (
+                  document.querySelector(
+                    "#attachInput"
+                  ) as HTMLInputElement | null
+                )?.click();
               }}
-              onRemoveAttachment={(attachmentId) => logic.removeAttachment(attachmentId)}
+              onRemoveAttachment={(attachmentId) =>
+                logic.removeAttachment(attachmentId)
+              }
               onAddTag={(taskId, label) => logic.addTag(taskId, label)}
               onRemoveTag={(tagId) => logic.removeTag(tagId)}
               onToggleProcess={(t) => logic.toggleProcess(t)}

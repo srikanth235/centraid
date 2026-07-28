@@ -8,7 +8,7 @@
 // redirects `@centraid/blueprints/apps/*/app-inline` here so tsc resolves the
 // contract type instead of loading the .tsx, while Vite still emits the lazy
 // chunk from the literal import in inlineApps.ts.
-import type { InlineAppModule } from '@centraid/blueprints/apps/inline-types';
+import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
 
 declare const descriptor: InlineAppModule;
 export default descriptor;

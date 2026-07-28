@@ -2,10 +2,10 @@
 // party (issue #441 A3), not chosen and stored per Tally row, so there is no
 // colour picker. `af` is app.tsx's mutable `state.addFriend`; `onPatch`
 // mutates it in place and re-renders, same pattern as ExpenseModal's `onPatch`.
-import type { AddFriendModel } from '../types.ts';
-import { ModalBackdrop } from './Shared.tsx';
+import type { AddFriendModel } from "../types.ts";
+import { ModalBackdrop } from "./Shared.tsx";
 
-import shared from './shared.module.css';
+import shared from "./shared.module.css";
 
 export function FriendModal({
   af,
@@ -20,11 +20,11 @@ export function FriendModal({
 }) {
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="kit-modal" style={{ maxWidth: '400px' }}>
+      <div className="kit-modal" style={{ maxWidth: "400px" }}>
         <h2>Add a friend</h2>
         <input
           className={shared.in}
-          style={{ fontSize: '15px' }}
+          style={{ fontSize: "15px" }}
           value={af.name}
           placeholder="Name"
           onChange={(e) => onPatch({ name: e.target.value })}

@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import crypto from "node:crypto";
 /*
  * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
  * run, list, verify, restore, kit — constructed from the same `--config`
@@ -6,23 +6,23 @@ import crypto from 'node:crypto';
  * real explicitly-created vault dir, so this is closer to an integration test
  * than the unit-level `backup-service.test.ts`.
  */
-import { promises as fs, existsSync } from 'node:fs';
-import path from 'node:path';
+import { promises as fs, existsSync } from "node:fs";
+import path from "node:path";
 
 import {
   SNAPSHOT_FORMAT_V2,
   openLocalBackupProvider,
   parseRecoveryKit,
   type BackupProvider,
-} from '@centraid/backup';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { KeyStore } from '@centraid/vault';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+} from "@centraid/backup";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { KeyStore } from "@centraid/vault";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { GatewayDatabase } from '../serve/gateway-db.js';
-import { openVaultRegistry } from '../serve/vault-registry.js';
-import { commandBackup } from './backup-admin.js';
-import { daemonLayoutFor } from './paths.js';
+import { GatewayDatabase } from "../serve/gateway-db.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import { commandBackup } from "./backup-admin.js";
+import { daemonLayoutFor } from "./paths.js";
 
 // See admin.test.ts: real vault/daemon bootstrap per test, so this file is
 // fsync-bound and needs an escalation above the 30s node-project default.
@@ -33,10 +33,10 @@ vi.setConfig({ testTimeout: 60_000 });
 class CliFailError extends Error {
   constructor(
     message: string,
-    readonly code: number,
+    readonly code: number
   ) {
     super(message);
-    this.name = 'CliFailError';
+    this.name = "CliFailError";
   }
 }
 const fail = (message: string, code = 1): never => {
@@ -66,44 +66,46 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
   } finally {
     process.stdout.write = original;
   }
-  return chunks.join('');
+  return chunks.join("");
 }
 
 function lines(out: string): unknown[] {
   return out
-    .split('\n')
+    .split("\n")
     .filter((l) => l.trim().length > 0)
     .map((l) => JSON.parse(l) as unknown);
 }
 
-describe('backup-admin', () => {
+describe("backup-admin", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`backup-admin-${crypto.randomUUID()}-`);
-    providerDir = await tempDir(`backup-admin-provider-${crypto.randomUUID()}-`);
-    configPath = path.join(dataDir, 'config.json');
+    providerDir = await tempDir(
+      `backup-admin-provider-${crypto.randomUUID()}-`
+    );
+    configPath = path.join(dataDir, "config.json");
     await fs.writeFile(
       configPath,
       JSON.stringify({
         dataDir,
         backup: {
           enabled: true,
-          provider: { kind: 'local', dir: providerDir },
+          provider: { kind: "local", dir: providerDir },
         },
-      }),
+      })
     );
     // CLI tests opt into a vault explicitly; a virgin gateway is legal.
     const layout = daemonLayoutFor(dataDir);
     const database = GatewayDatabase.open(dataDir);
     database.close();
     const keyStore = new KeyStore(layout.keysDir);
-    keyStore.loadOrCreate('endpoint-key.bin');
+    keyStore.loadOrCreate("endpoint-key.bin");
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
       cacheRootDir: layout.cacheDir,
       keyStore,
       logger: silentLogger,
     });
-    registry.create('Backup fixture');
+    registry.create("Backup fixture");
     vaultId = registry.defaultVaultId();
     registry.stop();
   });
@@ -113,58 +115,83 @@ describe('backup-admin', () => {
     await fs.rm(providerDir, { recursive: true, force: true });
   });
 
-  test('run backs up every vault, status reports it, list shows the registry row', async () => {
-    const runOut = await capture(() => commandBackup(['run', '--config', configPath], fail));
+  test("run backs up every vault, status reports it, list shows the registry row", async () => {
+    const runOut = await capture(() =>
+      commandBackup(["run", "--config", configPath], fail)
+    );
     const [ran] = lines(runOut) as [Record<string, unknown>];
-    expect(ran['vaultId']).toBe(vaultId);
-    expect(ran['lastSeq']).toBe(1);
+    expect(ran["vaultId"]).toBe(vaultId);
+    expect(ran["lastSeq"]).toBe(1);
 
-    const statusOut = await capture(() => commandBackup(['status', '--config', configPath], fail));
+    const statusOut = await capture(() =>
+      commandBackup(["status", "--config", configPath], fail)
+    );
     const [status] = lines(statusOut) as [Record<string, unknown>];
-    expect(status['vaultId']).toBe(vaultId);
-    expect(status['generation']).toBe(1);
+    expect(status["vaultId"]).toBe(vaultId);
+    expect(status["generation"]).toBe(1);
 
-    const listOut = await capture(() => commandBackup(['list', '--config', configPath], fail));
+    const listOut = await capture(() =>
+      commandBackup(["list", "--config", configPath], fail)
+    );
     const [row] = lines(listOut) as [Record<string, unknown>];
-    expect(row['vaultId']).toBe(vaultId);
-    expect(row['seq']).toBe(1);
-    expect(row['format']).toBe(SNAPSHOT_FORMAT_V2);
+    expect(row["vaultId"]).toBe(vaultId);
+    expect(row["seq"]).toBe(1);
+    expect(row["format"]).toBe(SNAPSHOT_FORMAT_V2);
   });
 
-  test('verify reports a clean snapshot', async () => {
-    await capture(() => commandBackup(['run', '--config', configPath], fail));
+  test("verify reports a clean snapshot", async () => {
+    await capture(() => commandBackup(["run", "--config", configPath], fail));
     const out = await capture(() =>
-      commandBackup(['verify', '--config', configPath, '--vault', vaultId], fail),
+      commandBackup(
+        ["verify", "--config", configPath, "--vault", vaultId],
+        fail
+      )
     );
-    const [{ result }] = lines(out) as [{ result: { missing: string[]; corrupt: string[] } }];
+    const [{ result }] = lines(out) as [
+      { result: { missing: string[]; corrupt: string[] } },
+    ];
     expect(result.missing).toHaveLength(0);
     expect(result.corrupt).toHaveLength(0);
   });
 
-  test('restore materializes into a fresh --dest with a quarantine marker, never touching the live vault', async () => {
-    await capture(() => commandBackup(['run', '--config', configPath], fail));
-    const destDir = path.join(dataDir, 'restored');
+  test("restore materializes into a fresh --dest with a quarantine marker, never touching the live vault", async () => {
+    await capture(() => commandBackup(["run", "--config", configPath], fail));
+    const destDir = path.join(dataDir, "restored");
     const out = await capture(() =>
       commandBackup(
-        ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir],
-        fail,
-      ),
+        [
+          "restore",
+          "--config",
+          configPath,
+          "--vault",
+          vaultId,
+          "--dest",
+          destDir,
+        ],
+        fail
+      )
     );
     const [result] = lines(out) as [{ seq: number; entries: string[] }];
     expect(result.seq).toBe(1);
-    expect(result.entries).toContain('vault.db');
-    expect(existsSync(path.join(destDir, 'vault.db'))).toBe(true);
-    expect(existsSync(path.join(destDir, 'RESTORE_QUARANTINE.json'))).toBe(true);
+    expect(result.entries).toContain("vault.db");
+    expect(existsSync(path.join(destDir, "vault.db"))).toBe(true);
+    expect(existsSync(path.join(destDir, "RESTORE_QUARANTINE.json"))).toBe(
+      true
+    );
     // The live vault dir is untouched — restore only ever writes to --dest.
-    const liveVaultDb = path.join(daemonLayoutFor(dataDir).vaultDir, vaultId, 'vault.db');
+    const liveVaultDb = path.join(
+      daemonLayoutFor(dataDir).vaultDir,
+      vaultId,
+      "vault.db"
+    );
     expect(existsSync(liveVaultDb)).toBe(true);
   });
 
-  test('kit emits the recovery keyring with a store-offline warning on stderr', async () => {
-    await capture(() => commandBackup(['run', '--config', configPath], fail));
-    const kitFile = path.join(dataDir, 'kit.json');
-    const passwordFile = path.join(dataDir, 'kit-password.txt');
-    await fs.writeFile(passwordFile, 'correct horse battery staple\n', {
+  test("kit emits the recovery keyring with a store-offline warning on stderr", async () => {
+    await capture(() => commandBackup(["run", "--config", configPath], fail));
+    const kitFile = path.join(dataDir, "kit.json");
+    const passwordFile = path.join(dataDir, "kit-password.txt");
+    await fs.writeFile(passwordFile, "correct horse battery staple\n", {
       mode: 0o600,
     });
     const originalErr = process.stderr.write.bind(process.stderr);
@@ -175,31 +202,39 @@ describe('backup-admin', () => {
     }) as typeof process.stderr.write;
     try {
       await commandBackup(
-        ['kit', '--config', configPath, '--out', kitFile, '--password-file', passwordFile],
-        fail,
+        [
+          "kit",
+          "--config",
+          configPath,
+          "--out",
+          kitFile,
+          "--password-file",
+          passwordFile,
+        ],
+        fail
       );
     } finally {
       process.stderr.write = originalErr;
     }
     expect(existsSync(kitFile)).toBe(true);
-    const wrapped = JSON.parse(await fs.readFile(kitFile, 'utf8')) as {
+    const wrapped = JSON.parse(await fs.readFile(kitFile, "utf8")) as {
       kind: string;
       keyring?: unknown;
     };
-    expect(wrapped.kind).toBe('centraid-recovery-kit-wrapped');
+    expect(wrapped.kind).toBe("centraid-recovery-kit-wrapped");
     expect(wrapped.keyring).toBeUndefined();
-    const kit = parseRecoveryKit(wrapped, 'correct horse battery staple');
-    expect(kit.kind).toBe('centraid-recovery-kit');
+    const kit = parseRecoveryKit(wrapped, "correct horse battery staple");
+    expect(kit.kind).toBe("centraid-recovery-kit");
     expect(kit.keyring.epochs.length).toBeGreaterThan(0);
     expect(kit.targets.some((t) => t.vaultId === vaultId)).toBe(true);
-    expect(errChunks.join('')).toMatch(/store it offline/u);
+    expect(errChunks.join("")).toMatch(/store it offline/u);
   });
 
   test('backup CLI refuses when the config has no "backup" block', async () => {
-    const bareConfig = path.join(dataDir, 'bare.json');
+    const bareConfig = path.join(dataDir, "bare.json");
     await fs.writeFile(bareConfig, JSON.stringify({ dataDir }));
     await expect(
-      capture(() => commandBackup(['status', '--config', bareConfig], fail)),
+      capture(() => commandBackup(["status", "--config", bareConfig], fail))
     ).rejects.toThrow(/not configured/u);
   });
 
@@ -218,7 +253,7 @@ describe('backup-admin', () => {
         return caps.backup
           ? {
               ...caps,
-              backup: { ...caps.backup, restoreCostClass: 'metered-egress' },
+              backup: { ...caps.backup, restoreCostClass: "metered-egress" },
             }
           : caps;
       },
@@ -235,83 +270,129 @@ describe('backup-admin', () => {
     };
   }
 
-  test('restore accepts --full and reports a full (non-lazy) materialization (#439 R2)', async () => {
-    await capture(() => commandBackup(['run', '--config', configPath], fail));
-    const destDir = path.join(dataDir, 'restored-full');
+  test("restore accepts --full and reports a full (non-lazy) materialization (#439 R2)", async () => {
+    await capture(() => commandBackup(["run", "--config", configPath], fail));
+    const destDir = path.join(dataDir, "restored-full");
     const out = await capture(() =>
       commandBackup(
-        ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir, '--full'],
-        fail,
-      ),
+        [
+          "restore",
+          "--config",
+          configPath,
+          "--vault",
+          vaultId,
+          "--dest",
+          destDir,
+          "--full",
+        ],
+        fail
+      )
     );
     const [result] = lines(out) as [{ seq: number; previewsWarm?: unknown }];
     expect(result.seq).toBe(1);
     // A free-egress local home with no remote tier ⇒ a full restore: no warm pass.
     expect(result.previewsWarm).toBeUndefined();
-    expect(existsSync(path.join(destDir, 'vault.db'))).toBe(true);
+    expect(existsSync(path.join(destDir, "vault.db"))).toBe(true);
   });
 
-  test('a free-egress home never gates the restore (#439 R2)', async () => {
-    await capture(() => commandBackup(['run', '--config', configPath], fail));
-    const destDir = path.join(dataDir, 'restored-free');
+  test("a free-egress home never gates the restore (#439 R2)", async () => {
+    await capture(() => commandBackup(["run", "--config", configPath], fail));
+    const destDir = path.join(dataDir, "restored-free");
     // No --yes needed: the local provider is free-egress, so the metered gate
     // stays silent and the restore proceeds.
     const out = await capture(() =>
       commandBackup(
-        ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir],
-        fail,
-      ),
+        [
+          "restore",
+          "--config",
+          configPath,
+          "--vault",
+          vaultId,
+          "--dest",
+          destDir,
+        ],
+        fail
+      )
     );
     const [result] = lines(out) as [{ seq: number }];
     expect(result.seq).toBe(1);
-    expect(existsSync(path.join(destDir, 'vault.db'))).toBe(true);
+    expect(existsSync(path.join(destDir, "vault.db"))).toBe(true);
   });
 
-  test('a metered-egress home refuses restore without --yes and proceeds with it (#439 R2)', async () => {
+  test("a metered-egress home refuses restore without --yes and proceeds with it (#439 R2)", async () => {
     const provider = meteredLocalProvider(providerDir);
-    await capture(() => commandBackup(['run', '--config', configPath], fail, { provider }));
-    const destDir = path.join(dataDir, 'restored-metered');
+    await capture(() =>
+      commandBackup(["run", "--config", configPath], fail, { provider })
+    );
+    const destDir = path.join(dataDir, "restored-metered");
     // Without --yes: the metered gate refuses BEFORE any restore work.
     await expect(
       capture(() =>
         commandBackup(
-          ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir],
+          [
+            "restore",
+            "--config",
+            configPath,
+            "--vault",
+            vaultId,
+            "--dest",
+            destDir,
+          ],
           fail,
-          { provider },
-        ),
-      ),
+          { provider }
+        )
+      )
     ).rejects.toThrow(/metered-egress/u);
     expect(existsSync(destDir)).toBe(false);
     // With --yes: the acknowledged restore runs to completion.
     const out = await capture(() =>
       commandBackup(
-        ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir, '--yes'],
+        [
+          "restore",
+          "--config",
+          configPath,
+          "--vault",
+          vaultId,
+          "--dest",
+          destDir,
+          "--yes",
+        ],
         fail,
-        { provider },
-      ),
+        { provider }
+      )
     );
     const [result] = lines(out) as [{ seq: number }];
     expect(result.seq).toBe(1);
-    expect(existsSync(path.join(destDir, 'vault.db'))).toBe(true);
+    expect(existsSync(path.join(destDir, "vault.db"))).toBe(true);
   });
 
-  test('restore refuses a --dest that already holds a vault — restore stays to-side (#439 R3)', async () => {
-    await capture(() => commandBackup(['run', '--config', configPath], fail));
+  test("restore refuses a --dest that already holds a vault — restore stays to-side (#439 R3)", async () => {
+    await capture(() => commandBackup(["run", "--config", configPath], fail));
     // Restore NEVER writes in place: a dest that already contains a live vault
     // (vault.db present) is off-limits, so an accidental in-place PITR rollback
     // cannot happen. Adopting a fresh restore is a separate, deliberate step.
-    const destDir = path.join(dataDir, 'occupied-vault');
+    const destDir = path.join(dataDir, "occupied-vault");
     await fs.mkdir(destDir, { recursive: true });
-    await fs.writeFile(path.join(destDir, 'vault.db'), 'live-bytes');
+    await fs.writeFile(path.join(destDir, "vault.db"), "live-bytes");
     await expect(
       capture(() =>
         commandBackup(
-          ['restore', '--config', configPath, '--vault', vaultId, '--dest', destDir],
-          fail,
-        ),
-      ),
+          [
+            "restore",
+            "--config",
+            configPath,
+            "--vault",
+            vaultId,
+            "--dest",
+            destDir,
+          ],
+          fail
+        )
+      )
     ).rejects.toThrow(/not empty|refusing to restore over/u);
     // The pre-existing vault.db is untouched — nothing was overwritten.
-    await expect(fs.readFile(path.join(destDir, 'vault.db'), 'utf8')).resolves.toBe('live-bytes');
+    await expect(
+      fs.readFile(path.join(destDir, "vault.db"), "utf8")
+    ).resolves.toBe("live-bytes");
   });
 });

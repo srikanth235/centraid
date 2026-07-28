@@ -1,7 +1,7 @@
 name: Proposal
 description: A fleshed-out change (feature, refactor, or chore) ready for an implementing agent to pick up.
-title: 'proposal: <short summary>'
-labels: ['proposal']
+title: "proposal: <short summary>"
+labels: ["proposal"]
 body:
   - type: markdown
     attributes:

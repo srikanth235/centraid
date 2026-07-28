@@ -23,7 +23,7 @@
   font-weight: 600;
   color: var(--text-secondary);
 }
-.row[data-disposition='create'] .rowDisposition {
+.row[data-disposition="create"] .rowDisposition {
   color: var(--accent);
 }
 .rowId {
@@ -45,8 +45,8 @@
 .connectionLabel {
   font-weight: 600;
 }
-.connection[data-status='needs-auth'] .connectionLabel,
-.connection[data-status='failing'] .connectionLabel {
+.connection[data-status="needs-auth"] .connectionLabel,
+.connection[data-status="failing"] .connectionLabel {
   color: var(--danger, #c0392b);
 }
 .historyRow {

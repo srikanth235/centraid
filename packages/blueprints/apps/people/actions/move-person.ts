@@ -4,16 +4,16 @@
 export default async function movePerson({ body, ctx }: HandlerArgs) {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.move_person',
+      command: "people.move_person",
       input: (body ?? {}) as Record<string, unknown>,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
       status: 200,
-      body: { status: 'denied', reason: e.message, code: e.code },
+      body: { status: "denied", reason: e.message, code: e.code },
     };
   }
 }

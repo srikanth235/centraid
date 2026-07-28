@@ -22,7 +22,7 @@
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
-import { readAssetJoins, readPlaces, srcOf } from './_shared.ts';
+import { readAssetJoins, readPlaces, srcOf } from "./_shared.ts";
 
 interface RawHit {
   content_id: string;
@@ -58,18 +58,20 @@ interface RawCollection {
 }
 
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
-  const purpose = 'dpv:ServiceProvision';
-  const term = String(input?.term ?? '').trim();
+  const purpose = "dpv:ServiceProvision";
+  const term = String(input?.term ?? "").trim();
   if (!term) return { assets: [] };
   try {
     const hits = await ctx.vault.search({
-      entity: 'core.content_item',
+      entity: "core.content_item",
       query: term,
       limit: 300,
       purpose,
     });
     const contentIds = [
-      ...new Set(((hits.rows ?? []) as unknown as RawHit[]).map((c) => c.content_id)),
+      ...new Set(
+        ((hits.rows ?? []) as unknown as RawHit[]).map((c) => c.content_id)
+      ),
     ];
     if (contentIds.length === 0) return { assets: [] };
 
@@ -77,10 +79,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // into a table scan, and a trashed asset over matched bytes stays out
     // (re-uploading it is the restore path, same as the library query).
     const liveAssets = await ctx.vault.read({
-      entity: 'media.media_asset',
+      entity: "media.media_asset",
       where: [
-        { column: 'content_id', op: 'in', value: contentIds },
-        { column: 'deleted_at', op: 'is-null' },
+        { column: "content_id", op: "in", value: contentIds },
+        { column: "deleted_at", op: "is-null" },
       ],
       limit: 300,
       purpose,
@@ -91,41 +93,48 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const assetIds = assetsRaw.map((a) => a.asset_id);
     const [contents, entries, albums, places, joins] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.content_item',
-        where: [{ column: 'content_id', op: 'in', value: contentIds }],
+        entity: "core.content_item",
+        where: [{ column: "content_id", op: "in", value: contentIds }],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.collection_entry',
+        entity: "core.collection_entry",
         where: [
-          { column: 'target_type', op: 'eq', value: 'media.media_asset' },
-          { column: 'target_id', op: 'in', value: assetIds },
+          { column: "target_type", op: "eq", value: "media.media_asset" },
+          { column: "target_id", op: "in", value: assetIds },
         ],
         purpose,
       }),
-      ctx.vault.read({ entity: 'core.collection', purpose }),
+      ctx.vault.read({ entity: "core.collection", purpose }),
       readPlaces({ ctx, purpose }),
       readAssetJoins({ ctx, purpose, assetIds, contentIds }),
     ]);
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [c.content_id, c] as const),
+      ((contents.rows ?? []) as unknown as RawContent[]).map(
+        (c) => [c.content_id, c] as const
+      )
     );
     const { tagsByAsset, custodyByContent } = joins;
 
-    const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map((c) => ({
-      album_id: c.collection_id,
-      title: c.name,
-      cover_content_id: c.cover_content_id ?? null,
-    }));
+    const albumRows = ((albums.rows ?? []) as unknown as RawCollection[]).map(
+      (c) => ({
+        album_id: c.collection_id,
+        title: c.name,
+        cover_content_id: c.cover_content_id ?? null,
+      })
+    );
     const albumIdsByAsset = new Map<string, string[]>();
     for (const entry of (entries.rows ?? []) as unknown as RawEntry[]) {
-      if (!albumIdsByAsset.has(entry.target_id)) albumIdsByAsset.set(entry.target_id, []);
+      if (!albumIdsByAsset.has(entry.target_id))
+        albumIdsByAsset.set(entry.target_id, []);
       albumIdsByAsset.get(entry.target_id)!.push(entry.collection_id);
     }
     const albumsById = new Map(albumRows.map((a) => [a.album_id, a] as const));
 
     const placeOf = (asset: RawAsset) => {
-      const place = asset.place_id ? places.byId.get(asset.place_id) : undefined;
+      const place = asset.place_id
+        ? places.byId.get(asset.place_id)
+        : undefined;
       return place ? { place_id: place.place_id, name: place.name } : null;
     };
 
@@ -147,18 +156,23 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           title: content?.title ?? null,
           taken_at: asset.captured_at ?? content?.created_at ?? null,
           album_ids: albumIds,
-          album_titles: albumIds.map((id) => albumsById.get(id)?.title).filter((t) => t != null),
+          album_titles: albumIds
+            .map((id) => albumsById.get(id)?.title)
+            .filter((t) => t != null),
           place: placeOf(asset),
           tags: tagsByAsset.get(asset.asset_id) ?? [],
           custody_state: custodyByContent.get(asset.content_id) ?? null,
         };
       });
     // Vault rank order (best match first).
-    assets.sort((a, b) => contentIds.indexOf(a.content_id) - contentIds.indexOf(b.content_id));
+    assets.sort(
+      (a, b) =>
+        contentIds.indexOf(a.content_id) - contentIds.indexOf(b.content_id)
+    );
     return { assets };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    if (e.code === 'VAULT_CONSENT') {
+    if (e.code === "VAULT_CONSENT") {
       return { assets: [], vaultDenied: { code: e.code, message: e.message } };
     }
     return { assets: [], error: String(e.message ?? err) };

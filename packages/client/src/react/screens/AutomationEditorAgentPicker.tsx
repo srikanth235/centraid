@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from "react";
 
-import type { AutomationEditorData } from '../screen-contracts.js';
-import { Icon } from '../ui/index.js';
+import type { AutomationEditorData } from "../screen-contracts.js";
+import { Icon } from "../ui/index.js";
 
-import styles from './AutomationEditorScreen.module.css';
+import styles from "./AutomationEditorScreen.module.css";
 
-type RunnerOption = NonNullable<AutomationEditorData['agentRunners']>[number];
+type RunnerOption = NonNullable<AutomationEditorData["agentRunners"]>[number];
 
 export function AutomationEditorAgentPicker({
   runners,
@@ -24,24 +24,26 @@ export function AutomationEditorAgentPicker({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const effectiveRunner = runner ?? defaultRunnerKind ?? runners[0]?.kind ?? '';
+  const effectiveRunner = runner ?? defaultRunnerKind ?? runners[0]?.kind ?? "";
   const selected = runners.find((option) => option.kind === effectiveRunner);
   const effectiveDefaultModel =
-    selected?.defaultModel ?? (effectiveRunner === defaultRunnerKind ? defaultModel : null);
+    selected?.defaultModel ??
+    (effectiveRunner === defaultRunnerKind ? defaultModel : null);
 
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: MouseEvent): void => {
-      if (!wrapRef.current?.contains(event.target as Node | null)) setOpen(false);
+      if (!wrapRef.current?.contains(event.target as Node | null))
+        setOpen(false);
     };
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
     };
   }, [open]);
 
@@ -59,12 +61,16 @@ export function AutomationEditorAgentPicker({
         <Icon name="Cpu" size={14} />
         <span>Agent</span>
         <span className={styles.agentChipValue}>
-          {(selected?.label ?? effectiveRunner) || 'Default'}
+          {(selected?.label ?? effectiveRunner) || "Default"}
         </span>
         <Icon name="ChevronDown" size={12} />
       </button>
       {open ? (
-        <dialog open className={styles.agentPicker} aria-label="Automation agent">
+        <dialog
+          open
+          className={styles.agentPicker}
+          aria-label="Automation agent"
+        >
           <div>
             <strong className={styles.agentPickerTitle}>Agent</strong>
             <p className={styles.agentPickerHint}>
@@ -75,16 +81,18 @@ export function AutomationEditorAgentPicker({
             <span>Runner</span>
             <select
               aria-label="Automation runner"
-              value={runner ?? ''}
-              onChange={(event) => onChange({ runner: event.target.value || null, model: null })}
+              value={runner ?? ""}
+              onChange={(event) =>
+                onChange({ runner: event.target.value || null, model: null })
+              }
             >
               <option value="">
-                Use default{defaultRunnerKind ? ` (${defaultRunnerKind})` : ''}
+                Use default{defaultRunnerKind ? ` (${defaultRunnerKind})` : ""}
               </option>
               {runners.map((option) => (
                 <option key={option.kind} value={option.kind}>
                   {option.label}
-                  {option.connected ? '' : ' · unavailable'}
+                  {option.connected ? "" : " · unavailable"}
                 </option>
               ))}
             </select>
@@ -93,7 +101,7 @@ export function AutomationEditorAgentPicker({
             <span>Model</span>
             <select
               aria-label="Automation model"
-              value={model ?? ''}
+              value={model ?? ""}
               onChange={(event) =>
                 onChange({
                   runner: runner ?? null,
@@ -103,9 +111,10 @@ export function AutomationEditorAgentPicker({
             >
               <option value="">
                 Use default
-                {effectiveDefaultModel ? ` (${effectiveDefaultModel})` : ''}
+                {effectiveDefaultModel ? ` (${effectiveDefaultModel})` : ""}
               </option>
-              {model && !selected?.models.some((option) => option.id === model) ? (
+              {model &&
+              !selected?.models.some((option) => option.id === model) ? (
                 <option value={model}>{model}</option>
               ) : null}
               {(selected?.models ?? []).map((option) => (

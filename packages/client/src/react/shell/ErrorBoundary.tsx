@@ -1,7 +1,7 @@
 // Recoverable React error boundary for the shell root (issue #468 K1).
 // Class component required by React's error-boundary contract.
 
-import { Component, type ErrorInfo, type JSX, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type JSX, type ReactNode } from "react";
 
 export interface ErrorBoundaryProps {
   children: ReactNode;
@@ -18,8 +18,11 @@ interface ErrorBoundaryState {
 // Class error boundaries need setState + field state; house style prefers
 // functional components elsewhere. (#468)
 /* eslint-disable react/display-name, react/no-set-state, react/state-in-constructor, react/jsx-handler-names -- (#468) React error boundaries require a class component */
-export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  static readonly displayName = 'ErrorBoundary';
+export default class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  static readonly displayName = "ErrorBoundary";
 
   override state: ErrorBoundaryState = { error: null };
 
@@ -29,7 +32,7 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     // Surface in the host console; crash-log / SW capture live elsewhere.
-    console.error('[ErrorBoundary]', error, info.componentStack);
+    console.error("[ErrorBoundary]", error, info.componentStack);
   }
 
   private handleReset = (): void => {
@@ -42,22 +45,22 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     if (!error) {
       return <>{this.props.children}</>;
     }
-    const title = this.props.title ?? 'Something went wrong';
+    const title = this.props.title ?? "Something went wrong";
     return (
       <div
         role="alert"
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-start',
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
           gap: 12,
           padding: 24,
           maxWidth: 480,
-          margin: '10vh auto',
-          fontFamily: 'var(--font-sans, system-ui, sans-serif)',
-          color: 'var(--ink, #e8e9ec)',
-          background: 'var(--bg-elevated, #1a1d24)',
-          border: '1px solid var(--line, #2a2e38)',
+          margin: "10vh auto",
+          fontFamily: "var(--font-sans, system-ui, sans-serif)",
+          color: "var(--ink, #e8e9ec)",
+          background: "var(--bg-elevated, #1a1d24)",
+          border: "1px solid var(--line, #2a2e38)",
           borderRadius: 12,
         }}
       >
@@ -67,24 +70,24 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
             margin: 0,
             fontSize: 14,
             lineHeight: 1.5,
-            color: 'var(--ink-2, #a8adb8)',
+            color: "var(--ink-2, #a8adb8)",
           }}
         >
-          {error.message || 'An unexpected error stopped this view.'}
+          {error.message || "An unexpected error stopped this view."}
         </p>
         <button
           type="button"
           onClick={this.handleReset}
           style={{
             marginTop: 4,
-            padding: '8px 14px',
+            padding: "8px 14px",
             fontSize: 13,
             fontWeight: 500,
-            color: 'var(--bg, #111)',
-            background: 'var(--accent, #3EC8B4)',
-            border: 'none',
+            color: "var(--bg, #111)",
+            background: "var(--accent, #3EC8B4)",
+            border: "none",
             borderRadius: 8,
-            cursor: 'pointer',
+            cursor: "pointer",
           }}
         >
           Try again

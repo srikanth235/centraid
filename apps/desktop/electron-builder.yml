@@ -21,7 +21,7 @@ files:
   - icon.png
   - iconTemplate.png
   - iconTemplate@2x.png
-  - '!dist/**/*.map'
+  - "!dist/**/*.map"
 
 extraMetadata:
   main: dist/main.js

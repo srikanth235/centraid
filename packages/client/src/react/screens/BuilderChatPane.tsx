@@ -1,20 +1,20 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from "react";
 
 import type {
   BuilderAttachmentRef,
   BuilderChatBridgeProps,
   BuilderChatSnapshot,
-} from '../screen-contracts.js';
-import { cx } from '../ui/cx.js';
-import { Icon } from '../ui/index.js';
-import { EffortPicker, ModelPicker, RunnerPicker } from './AssistantScreen.js';
-import ChatComposer from './ChatComposer.js';
-import { BuilderChatMessage } from './BuilderChatMessages.js';
-import { workspaceKindLabel } from './workspaceKindLabel.js';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
+import { EffortPicker, ModelPicker, RunnerPicker } from "./AssistantScreen.js";
+import { BuilderChatMessage } from "./BuilderChatMessages.js";
+import ChatComposer from "./ChatComposer.js";
+import { workspaceKindLabel } from "./workspaceKindLabel.js";
 
-import chatCss from '../styles/chatMessage.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './BuilderChatPane.module.css';
+import chatCss from "../styles/chatMessage.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./BuilderChatPane.module.css";
 
 /**
  * Builder chat pane, ported to React (issue #325, Phase 3 — the plan's named
@@ -29,7 +29,7 @@ interface PendingBuilderAttachment {
   localId: string;
   filename: string;
   sizeBytes: number;
-  state: 'uploading' | 'ready' | 'error';
+  state: "uploading" | "ready" | "error";
   errorText?: string;
   ref?: BuilderAttachmentRef;
 }
@@ -55,17 +55,17 @@ export default function BuilderChatPane({
   onUploadAttachment,
 }: BuilderChatBridgeProps): JSX.Element {
   const [snap, setSnap] = useState<BuilderChatSnapshot>({
-    view: 'chat',
+    view: "chat",
     messages: [],
     generating: false,
     progress: null,
     suggestions: [],
     composerDisabled: true,
     historyNonce: 0,
-    workspaceKind: 'draft',
-    workspaceKinds: ['draft', 'app', 'vault-data'],
+    workspaceKind: "draft",
+    workspaceKinds: ["draft", "app", "vault-data"],
   });
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingBuilderAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
@@ -83,13 +83,15 @@ export default function BuilderChatPane({
           localId,
           filename: file.name,
           sizeBytes: file.size,
-          state: 'uploading',
+          state: "uploading",
         },
       ]);
       void onUploadAttachment(file).then(
         (ref) =>
           setPending((p) =>
-            p.map((a) => (a.localId === localId ? { ...a, state: 'ready', ref } : a)),
+            p.map((a) =>
+              a.localId === localId ? { ...a, state: "ready", ref } : a
+            )
           ),
         (err: unknown) =>
           setPending((p) =>
@@ -97,12 +99,13 @@ export default function BuilderChatPane({
               a.localId === localId
                 ? {
                     ...a,
-                    state: 'error',
-                    errorText: err instanceof Error ? err.message : 'Upload failed',
+                    state: "error",
+                    errorText:
+                      err instanceof Error ? err.message : "Upload failed",
                   }
-                : a,
-            ),
-          ),
+                : a
+            )
+          )
       );
     }
   };
@@ -120,10 +123,11 @@ export default function BuilderChatPane({
   // (a version op wants a fresh list). `renderHistoryInto` replaces children,
   // so re-running is idempotent.
   useEffect(() => {
-    if (snap.view === 'history' && historyRef.current) onMountHistory(historyRef.current);
+    if (snap.view === "history" && historyRef.current)
+      onMountHistory(historyRef.current);
   }, [snap.view, snap.historyNonce, onMountHistory]);
 
-  if (snap.view === 'history') {
+  if (snap.view === "history") {
     return (
       <div className={styles.chatBody}>
         <div className={styles.chatpaneHead}>
@@ -131,54 +135,79 @@ export default function BuilderChatPane({
             type="button"
             className={buttonCss.icon}
             aria-label="Back to chat"
-            onClick={() => onSetView('chat')}
+            onClick={() => onSetView("chat")}
           >
             <Icon name="ArrowLeft" size={14} />
           </button>
           <span className={styles.chatpaneHeadTitle}>Version history</span>
         </div>
-        <div className={cx(styles.historyList, styles.chatpaneHistory)} ref={historyRef} />
+        <div
+          className={cx(styles.historyList, styles.chatpaneHistory)}
+          ref={historyRef}
+        />
       </div>
     );
   }
 
   const ready = pending.filter(
     (a): a is PendingBuilderAttachment & { ref: BuilderAttachmentRef } =>
-      a.state === 'ready' && a.ref !== undefined,
+      a.state === "ready" && a.ref !== undefined
   );
   const send = (): void => {
     const t = draft.trim();
     if (snap.composerDisabled) return;
     if (!t && ready.length === 0) return;
-    if (pending.some((a) => a.state === 'uploading')) return;
-    setDraft('');
+    if (pending.some((a) => a.state === "uploading")) return;
+    setDraft("");
     setPending([]);
     onSend(t, ready.length ? ready.map((a) => a.ref) : undefined);
   };
 
   return (
     <div className={styles.chatBody}>
-      <div className={chatCss.scroll} ref={scrollRef} data-testid="builder-chat-scroll">
+      <div
+        className={chatCss.scroll}
+        ref={scrollRef}
+        data-testid="builder-chat-scroll"
+      >
         {snap.messages.map((m, i) => (
-          <BuilderChatMessage key={i} message={m} onToggleGroup={onToggleGroup} />
+          <BuilderChatMessage
+            key={i}
+            message={m}
+            onToggleGroup={onToggleGroup}
+          />
         ))}
         {snap.generating && snap.progress && (
-          <output className={styles.abProgress} aria-label={`${snap.progress.verb} — running`}>
+          <output
+            className={styles.abProgress}
+            aria-label={`${snap.progress.verb} — running`}
+          >
             <span className={styles.abProgressDots} aria-hidden="true">
               {[0, 1, 2, 3].map((i) => (
-                <i key={i} data-on={i < snap.progress!.filled ? 'true' : undefined} />
+                <i
+                  key={i}
+                  data-on={i < snap.progress!.filled ? "true" : undefined}
+                />
               ))}
             </span>
             <div className={styles.abProgressMain}>
               <div className={styles.abProgressLine}>
-                <span className={styles.abProgressVerb}>{snap.progress.verb}</span>
+                <span className={styles.abProgressVerb}>
+                  {snap.progress.verb}
+                </span>
                 {snap.progress.file && (
-                  <code className={styles.abProgressFile}>{snap.progress.file}</code>
+                  <code className={styles.abProgressFile}>
+                    {snap.progress.file}
+                  </code>
                 )}
               </div>
               <div className={styles.abProgressSub}>{snap.progress.sub}</div>
             </div>
-            <button type="button" className={styles.abProgressCancel} onClick={() => onCancel()}>
+            <button
+              type="button"
+              className={styles.abProgressCancel}
+              onClick={() => onCancel()}
+            >
               Cancel
             </button>
           </output>
@@ -187,7 +216,9 @@ export default function BuilderChatPane({
       <div className={styles.chatInputWrap}>
         {snap.suggestions.length > 0 && (
           <div className={styles.promptStartersGroup}>
-            <div className={styles.promptStartersLabel}>Suggested next moves</div>
+            <div className={styles.promptStartersLabel}>
+              Suggested next moves
+            </div>
             <div className={styles.promptStarters}>
               {snap.suggestions.map((s) => (
                 <button
@@ -211,11 +242,13 @@ export default function BuilderChatPane({
           disabled={snap.composerDisabled && !snap.generating}
           canSend={
             (draft.trim().length > 0 || ready.length > 0) &&
-            !pending.some((a) => a.state === 'uploading')
+            !pending.some((a) => a.state === "uploading")
           }
           placeholder="Describe a change…"
           ariaLabel="Describe a builder change"
-          context={snap.runnerConfig?.supportsContext ? snap.context : undefined}
+          context={
+            snap.runnerConfig?.supportsContext ? snap.context : undefined
+          }
           above={
             pending.length > 0 ? (
               <div className={styles.attachRow}>
@@ -224,21 +257,29 @@ export default function BuilderChatPane({
                     key={a.localId}
                     className={styles.attachChip}
                     data-state={a.state}
-                    title={a.state === 'error' ? (a.errorText ?? 'Upload failed') : a.filename}
+                    title={
+                      a.state === "error"
+                        ? (a.errorText ?? "Upload failed")
+                        : a.filename
+                    }
                   >
                     <span className={styles.attachName}>{a.filename}</span>
                     <span className={styles.attachSize}>
-                      {a.state === 'error'
-                        ? 'failed'
-                        : a.state === 'uploading'
-                          ? '…'
+                      {a.state === "error"
+                        ? "failed"
+                        : a.state === "uploading"
+                          ? "…"
                           : formatBytes(a.sizeBytes)}
                     </span>
                     <button
                       type="button"
                       className={styles.attachRemove}
                       aria-label={`Remove ${a.filename}`}
-                      onClick={() => setPending((p) => p.filter((x) => x.localId !== a.localId))}
+                      onClick={() =>
+                        setPending((p) =>
+                          p.filter((x) => x.localId !== a.localId)
+                        )
+                      }
                     >
                       <Icon name="X" size={10} />
                     </button>
@@ -268,7 +309,7 @@ export default function BuilderChatPane({
                     onChange={(e) => {
                       const files = Array.from(e.target.files ?? []);
                       if (files.length) attachFiles(files);
-                      e.target.value = '';
+                      e.target.value = "";
                     }}
                   />
                 </>
@@ -278,7 +319,9 @@ export default function BuilderChatPane({
                 aria-label="Workspace"
                 value={snap.workspaceKind}
                 onChange={(event) =>
-                  onSetWorkspaceKind(event.target.value as BuilderChatSnapshot['workspaceKind'])
+                  onSetWorkspaceKind(
+                    event.target.value as BuilderChatSnapshot["workspaceKind"]
+                  )
                 }
               >
                 {snap.workspaceKinds.map((kind) => (
@@ -332,7 +375,7 @@ export default function BuilderChatPane({
           // that picker exists (the runner config arrives with the snapshot).
           {...(snap.runnerConfig
             ? {
-                hint: 'Switching agents creates a bounded context handoff and may require provider consent.',
+                hint: "Switching agents creates a bounded context handoff and may require provider consent.",
               }
             : {})}
         />

@@ -11,7 +11,7 @@
  * the `insights/` boundary remains one-way (#151).
  */
 
-import type { RunKind } from './schema.js';
+import type { RunKind } from "./schema.js";
 
 /**
  * One summary row per agent run, as surfaced by the `run_summary` view.

@@ -1,11 +1,11 @@
-import { type JSX } from 'react';
+import { type JSX } from "react";
 
-import type { BrowseTableEntry } from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import type { BrowsePackGroup } from './atlasBrowseData.js';
+import type { BrowseTableEntry } from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import type { BrowsePackGroup } from "./atlasBrowseData.js";
 
-import styles from './AtlasBrowseTab.module.css';
+import styles from "./AtlasBrowseTab.module.css";
 
 // The table picker rail (issue #441 B3) — a left rail on desktop, a collapsible
 // sheet on narrow. Ontology packs list first, machinery bands below a divider.
@@ -29,7 +29,10 @@ export function TablePicker({
   onToggleOpen: () => void;
   onPick: (logical: string) => void;
 }): JSX.Element {
-  const options = (groups: BrowsePackGroup[], kind: 'ontology' | 'machinery'): JSX.Element[] =>
+  const options = (
+    groups: BrowsePackGroup[],
+    kind: "ontology" | "machinery"
+  ): JSX.Element[] =>
     groups.map((g) => (
       <div key={g.pack} className={styles.pickGroup}>
         <div className={styles.pickPack}>{g.packLabel}</div>
@@ -37,8 +40,11 @@ export function TablePicker({
           <button
             key={t.logical}
             type="button"
-            className={cx(styles.pickOption, selected === t.logical && styles.pickOptionActive)}
-            aria-current={selected === t.logical ? 'true' : undefined}
+            className={cx(
+              styles.pickOption,
+              selected === t.logical && styles.pickOptionActive
+            )}
+            aria-current={selected === t.logical ? "true" : undefined}
             data-testid="atlas-browse-table-option"
             data-logical={t.logical}
             data-pack-kind={kind}
@@ -61,8 +67,10 @@ export function TablePicker({
         data-testid="atlas-browse-picker-toggle"
       >
         <Icon name="Folder" size={14} />
-        <span className={styles.pickToggleLabel}>{selectedEntry?.label ?? 'Choose a table'}</span>
-        <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={14} />
+        <span className={styles.pickToggleLabel}>
+          {selectedEntry?.label ?? "Choose a table"}
+        </span>
+        <Icon name={open ? "ChevronDown" : "ChevronRight"} size={14} />
       </button>
 
       <div className={cx(styles.pickPanel, open && styles.pickPanelOpen)}>
@@ -82,13 +90,16 @@ export function TablePicker({
             described a widget this never was. The chosen table is the one
             carrying `aria-current`. */}
         <div className={styles.pickList}>
-          {options(grouped.ontology, 'ontology')}
+          {options(grouped.ontology, "ontology")}
           {grouped.machinery.length > 0 ? (
-            <div className={styles.pickDivider} data-testid="atlas-browse-machinery-divider">
+            <div
+              className={styles.pickDivider}
+              data-testid="atlas-browse-machinery-divider"
+            >
               Machinery
             </div>
           ) : null}
-          {options(grouped.machinery, 'machinery')}
+          {options(grouped.machinery, "machinery")}
           {grouped.ontology.length === 0 && grouped.machinery.length === 0 ? (
             <div className={styles.pickEmpty}>No tables match “{query}”.</div>
           ) : null}

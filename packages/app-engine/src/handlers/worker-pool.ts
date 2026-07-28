@@ -24,9 +24,12 @@
  * mid-run never poisons the spares.
  */
 
-import { Worker } from 'node:worker_threads';
+import { Worker } from "node:worker_threads";
 
-import { isConstrainedWorkerHost, type WorkerHostCapacity } from './worker-admission.js';
+import {
+  isConstrainedWorkerHost,
+  type WorkerHostCapacity,
+} from "./worker-admission.js";
 
 /** Resource caps mirrored from the pre-pool spawn (handler-runner.ts). */
 export interface WorkerResourceLimits {
@@ -41,25 +44,38 @@ const DEFAULT_LIMITS: WorkerResourceLimits = {
 
 export function workerResourceLimitsFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-  host?: WorkerHostCapacity,
+  host?: WorkerHostCapacity
 ): WorkerResourceLimits {
-  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const resolvedProfile =
+    env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
   const constrained =
-    resolvedProfile === 'constrained' ||
-    (resolvedProfile !== 'standard' && isConstrainedWorkerHost(host));
+    resolvedProfile === "constrained" ||
+    (resolvedProfile !== "standard" && isConstrainedWorkerHost(host));
   const fallbackOld = constrained ? 128 : DEFAULT_LIMITS.maxOldGenerationSizeMb;
-  const fallbackYoung = constrained ? 16 : DEFAULT_LIMITS.maxYoungGenerationSizeMb;
-  const parse = (raw: string | undefined, fallback: number, ceiling: number): number => {
-    if (raw === undefined || raw === '') return fallback;
+  const fallbackYoung = constrained
+    ? 16
+    : DEFAULT_LIMITS.maxYoungGenerationSizeMb;
+  const parse = (
+    raw: string | undefined,
+    fallback: number,
+    ceiling: number
+  ): number => {
+    if (raw === undefined || raw === "") return fallback;
     const value = Math.trunc(Number(raw));
-    return Number.isFinite(value) && value >= 8 ? Math.min(value, ceiling) : fallback;
+    return Number.isFinite(value) && value >= 8
+      ? Math.min(value, ceiling)
+      : fallback;
   };
   return {
-    maxOldGenerationSizeMb: parse(env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB, fallbackOld, 1024),
+    maxOldGenerationSizeMb: parse(
+      env.CENTRAID_WORKER_MAX_OLD_GENERATION_MB,
+      fallbackOld,
+      1024
+    ),
     maxYoungGenerationSizeMb: parse(
       env.CENTRAID_WORKER_MAX_YOUNG_GENERATION_MB,
       fallbackYoung,
-      128,
+      128
     ),
   };
 }
@@ -72,15 +88,18 @@ export const DEFAULT_WORKER_POOL_SIZE = 2;
  * sane band. `CENTRAID_WORKER_POOL_SIZE=0` disables warming (every acquire
  * spawns cold) — useful for memory-constrained hosts or debugging.
  */
-export function workerPoolSizeFromEnv(env: NodeJS.ProcessEnv = process.env): number {
+export function workerPoolSizeFromEnv(
+  env: NodeJS.ProcessEnv = process.env
+): number {
   const raw = env.CENTRAID_WORKER_POOL_SIZE;
-  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const resolvedProfile =
+    env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
   const fallback =
-    resolvedProfile === 'constrained' ||
-    (resolvedProfile !== 'standard' && isConstrainedWorkerHost())
+    resolvedProfile === "constrained" ||
+    (resolvedProfile !== "standard" && isConstrainedWorkerHost())
       ? 0
       : DEFAULT_WORKER_POOL_SIZE;
-  if (raw === undefined || raw === '') return fallback;
+  if (raw === undefined || raw === "") return fallback;
   const n = Math.trunc(Number(raw));
   if (!Number.isFinite(n) || n < 0) return fallback;
   // A very large pool defeats the point (idle memory) — cap it.
@@ -100,7 +119,7 @@ export class WorkerPool {
   constructor(
     private readonly workerFile: string,
     private readonly size: number = DEFAULT_WORKER_POOL_SIZE,
-    private readonly resourceLimits: WorkerResourceLimits = workerResourceLimitsFromEnv(),
+    private readonly resourceLimits: WorkerResourceLimits = workerResourceLimitsFromEnv()
   ) {}
 
   /** Live warm-spare count — for a health/metrics surface or tests. */
@@ -163,8 +182,8 @@ export class WorkerPool {
       const i = this.idle.indexOf(worker);
       if (i >= 0) this.idle.splice(i, 1);
     };
-    worker.once('error', drop);
-    worker.once('exit', drop);
+    worker.once("error", drop);
+    worker.once("exit", drop);
     return worker;
   }
 }

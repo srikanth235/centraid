@@ -1,24 +1,24 @@
-import { File } from 'expo-file-system';
+import { File } from "expo-file-system";
 
-import { Store } from '../../storage';
-import { authHeader } from '../gateway';
-import type { NativeReplicaSession } from '../replica/native-session';
-import { generateDeviceDerivatives } from './derivatives-native';
-import { withDrainLock } from './drain-lock';
-import { sha256OfFile } from './enqueue';
-import { expoFileSource } from './expo-native';
-import { replaySettledUploadFollowups } from './followup';
-import { UploadForegroundService } from './foreground-service';
-import { createNativeDigest } from './native-digest';
-import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from './native-policy';
-import { UploadQueue } from './native-queue';
+import { Store } from "../../storage";
+import { authHeader } from "../gateway";
+import type { NativeReplicaSession } from "../replica/native-session";
+import { generateDeviceDerivatives } from "./derivatives-native";
+import { withDrainLock } from "./drain-lock";
+import { sha256OfFile } from "./enqueue";
+import { expoFileSource } from "./expo-native";
+import { replaySettledUploadFollowups } from "./followup";
+import { UploadForegroundService } from "./foreground-service";
+import { createNativeDigest } from "./native-digest";
+import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from "./native-policy";
+import { UploadQueue } from "./native-queue";
 
 export interface DeviceMediaInput {
   localUri: string;
   filename?: string;
   mediaType: string;
   plaintextSize: number;
-  kind: 'photo' | 'video' | 'audio' | 'scan';
+  kind: "photo" | "video" | "audio" | "scan";
   capturedAt?: string;
   tzOffsetMin?: number;
   captureGroupId?: string;
@@ -49,7 +49,8 @@ function openQueue(gatewayBase: string): UploadQueue {
     gatewayBaseUrl: gatewayBase,
     headers: authHeader,
     policy: nativeUploadPolicy(),
-    onProgress: ({ completed, total }) => UploadForegroundService.update(completed, total),
+    onProgress: ({ completed, total }) =>
+      UploadForegroundService.update(completed, total),
   });
 }
 
@@ -65,7 +66,7 @@ async function drainToSettlement(
   gatewayBase: string,
   queue: UploadQueue,
   sha256: string,
-  source: { localUri: string; deleteAfterSettle: boolean },
+  source: { localUri: string; deleteAfterSettle: boolean }
 ): Promise<string> {
   await withDrainLock(async () => {
     // Own the foreground service only for the exclusive drain, so it reflects
@@ -82,10 +83,13 @@ async function drainToSettlement(
     }
   });
   const item = queue.bySha(sha256);
-  if (item?.state === 'failed') {
-    throw new Error(`backup of ${sha256} did not settle: ${item.lastError ?? 'unknown error'}`);
+  if (item?.state === "failed") {
+    throw new Error(
+      `backup of ${sha256} did not settle: ${item.lastError ?? "unknown error"}`
+    );
   }
-  if (source.deleteAfterSettle && item?.state === 'settled') deleteSource(source.localUri);
+  if (source.deleteAfterSettle && item?.state === "settled")
+    deleteSource(source.localUri);
   return sha256;
 }
 
@@ -107,7 +111,7 @@ function deleteSource(localUri: string): void {
 export async function backupDeviceMedia(
   session: NativeReplicaSession,
   gatewayBase: string,
-  input: DeviceMediaInput,
+  input: DeviceMediaInput
 ): Promise<string> {
   const queue = openQueue(gatewayBase);
   try {
@@ -115,10 +119,14 @@ export async function backupDeviceMedia(
     // seen keeps the derivatives it was first enqueued with, so re-scanning a
     // library of settled photos pays a hash and a lookup — not N resize/encode
     // pipelines.
-    const digest = await sha256OfFile(expoFileSource, input.localUri, createNativeDigest);
+    const digest = await sha256OfFile(
+      expoFileSource,
+      input.localUri,
+      createNativeDigest
+    );
     const isNew = queue.bySha(digest.sha256) === undefined;
     const derivatives =
-      isNew && input.kind !== 'audio'
+      isNew && input.kind !== "audio"
         ? await generateDeviceDerivatives(input.localUri, input.mediaType)
         : undefined;
     const item = await queue.enqueue(
@@ -133,25 +141,31 @@ export async function backupDeviceMedia(
       // carries its own, and re-adding one without derivatives would fork it.
       isNew
         ? (addressed) => ({
-            shape: 'photos',
-            action: 'upload',
+            shape: "photos",
+            action: "upload",
             input: {
               staged_sha: addressed.sha256,
               kind: input.kind,
               ...(input.capturedAt ? { captured_at: input.capturedAt } : {}),
-              ...(input.tzOffsetMin === undefined ? {} : { tz_offset_min: input.tzOffsetMin }),
-              ...(input.captureGroupId ? { capture_group_id: input.captureGroupId } : {}),
+              ...(input.tzOffsetMin === undefined
+                ? {}
+                : { tz_offset_min: input.tzOffsetMin }),
+              ...(input.captureGroupId
+                ? { capture_group_id: input.captureGroupId }
+                : {}),
               ...(input.filename ? { title: input.filename } : {}),
               ...(input.width ? { width: input.width } : {}),
               ...(input.height ? { height: input.height } : {}),
-              ...(input.durationS === undefined ? {} : { duration_s: input.durationS }),
+              ...(input.durationS === undefined
+                ? {}
+                : { duration_s: input.durationS }),
               ...(derivatives
                 ? { phash: derivatives.phash, thumbhash: derivatives.thumbhash }
                 : {}),
             },
             ...(derivatives ? { derivatives: derivatives.binary } : {}),
           })
-        : undefined,
+        : undefined
     );
     return await drainToSettlement(session, gatewayBase, queue, item.sha256, {
       localUri: input.localUri,
@@ -166,7 +180,7 @@ export async function backupDeviceMedia(
 export async function backupDocument(
   session: NativeReplicaSession,
   gatewayBase: string,
-  input: BackupDocumentInput,
+  input: BackupDocumentInput
 ): Promise<string> {
   const queue = openQueue(gatewayBase);
   try {
@@ -178,14 +192,14 @@ export async function backupDocument(
         plaintextSize: input.plaintextSize,
       },
       (addressed) => ({
-        shape: 'docs',
-        action: 'upload',
+        shape: "docs",
+        action: "upload",
         input: {
           staged_sha: addressed.sha256,
           title: input.title,
           ...(input.folderId ? { folder_id: input.folderId } : {}),
         },
-      }),
+      })
     );
     return await drainToSettlement(session, gatewayBase, queue, item.sha256, {
       localUri: input.localUri,

@@ -1,14 +1,14 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX } from "react";
 
-import { formatBytes } from '../../format.js';
-import type { StorageMetrics } from '../../storage-metrics.js';
-import { formatDuration } from '../shell/routes/gatewayData.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
+import { formatBytes } from "../../format.js";
+import type { StorageMetrics } from "../../storage-metrics.js";
+import { formatDuration } from "../shell/routes/gatewayData.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
 
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './BackupCard.module.css';
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./BackupCard.module.css";
 
 // The five-metric health surface (issue #436 §6) — the ONE story the Backups
 // page tells about your data's safety, in exactly five readouts and nothing
@@ -25,19 +25,25 @@ export interface BackupHealthMetricsProps {
 
 /** Freshness status → the status color token (there is no `red` token —
  *  `--danger` is the repo's danger hue; amber + success round out the set). */
-const STATUS_TONE: Record<StorageMetrics['freshness']['status'], string> = {
-  green: 'ok',
-  yellow: 'warn',
-  red: 'bad',
-  unknown: 'unknown',
+const STATUS_TONE: Record<StorageMetrics["freshness"]["status"], string> = {
+  green: "ok",
+  yellow: "warn",
+  red: "bad",
+  unknown: "unknown",
 };
 
-function FreshnessMetric({ metrics, now }: { metrics: StorageMetrics; now: number }): JSX.Element {
+function FreshnessMetric({
+  metrics,
+  now,
+}: {
+  metrics: StorageMetrics;
+  now: number;
+}): JSX.Element {
   const { status, tMs } = metrics.freshness;
   const tone = STATUS_TONE[status];
   const line =
-    status === 'unknown' || tMs === null
-      ? 'Not yet proven safe offsite'
+    status === "unknown" || tMs === null
+      ? "Not yet proven safe offsite"
       : `Everything safe as of ${formatDuration(Math.max(0, now - tMs))} ago`;
   return (
     <div className={styles.metric} data-testid="metric-freshness">
@@ -52,7 +58,11 @@ function FreshnessMetric({ metrics, now }: { metrics: StorageMetrics; now: numbe
   );
 }
 
-function RecoveryMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element | null {
+function RecoveryMetric({
+  metrics,
+}: {
+  metrics: StorageMetrics;
+}): JSX.Element | null {
   const { days } = metrics.recoveryWindow;
   if (days === null) return null;
   return (
@@ -61,7 +71,9 @@ function RecoveryMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element |
         <Icon name="History" size={15} />
       </span>
       <div className={styles.metricBody}>
-        <span className={styles.metricValue}>Undo anything from the last {days} days</span>
+        <span className={styles.metricValue}>
+          Undo anything from the last {days} days
+        </span>
         <span className={styles.metricLabel}>Recovery window</span>
       </div>
     </div>
@@ -75,13 +87,16 @@ function PrivacyMetric(): JSX.Element {
         <Icon name="Key" size={15} />
       </span>
       <div className={styles.metricBody}>
-        <span className={styles.metricValue}>Your provider cannot read your data</span>
+        <span className={styles.metricValue}>
+          Your provider cannot read your data
+        </span>
         <span className={styles.metricLabel}>Privacy</span>
         <details className={styles.metricHow}>
           <summary>How</summary>
           <p>
-            Every byte is sealed on your device before it leaves. The provider only ever stores
-            ciphertext, and the keys that decrypt it never leave your devices.
+            Every byte is sealed on your device before it leaves. The provider
+            only ever stores ciphertext, and the keys that decrypt it never
+            leave your devices.
           </p>
         </details>
       </div>
@@ -98,14 +113,16 @@ function CostMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element {
           <Icon name="Gauge" size={15} />
         </span>
         <div className={styles.metricBody}>
-          <span className={styles.metricValue}>{formatBytes(bytesStored)} stored</span>
+          <span className={styles.metricValue}>
+            {formatBytes(bytesStored)} stored
+          </span>
           <span className={styles.metricLabel}>Cost · unmetered</span>
         </div>
       </div>
     );
   }
   const pct = Math.min(100, Math.round(fractionUsed * 100));
-  const severity = pct >= 95 ? 'bad' : pct >= 80 ? 'warn' : 'ok';
+  const severity = pct >= 95 ? "bad" : pct >= 80 ? "warn" : "ok";
   return (
     <div className={styles.metric} data-testid="metric-cost">
       <span className={styles.metricIcon}>
@@ -115,7 +132,11 @@ function CostMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element {
         <span className={styles.metricValue}>
           {formatBytes(bytesStored)} of {formatBytes(quotaBytes)}
         </span>
-        <div className={styles.costTrack} data-severity={severity} data-testid="cost-bar">
+        <div
+          className={styles.costTrack}
+          data-severity={severity}
+          data-testid="cost-bar"
+        >
           <span className={styles.costFill} style={{ width: `${pct}%` }} />
         </div>
         <span className={styles.metricLabel}>Cost · {pct}% used</span>
@@ -126,7 +147,7 @@ function CostMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element {
 
 function ExitMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const metered = metrics.exit.restoreCostClass === 'metered-egress';
+  const metered = metrics.exit.restoreCostClass === "metered-egress";
   return (
     <div className={styles.metric} data-testid="metric-exit">
       <span className={styles.metricIcon}>
@@ -135,7 +156,12 @@ function ExitMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element {
       <div className={styles.metricBody}>
         <button
           type="button"
-          className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft, styles.exitBtn)}
+          className={cx(
+            buttonCss.btn,
+            buttonCss.sm,
+            controlsCss.soft,
+            styles.exitBtn
+          )}
           onClick={() => setOpen((v) => !v)}
           data-testid="export-everything"
         >
@@ -144,15 +170,20 @@ function ExitMetric({ metrics }: { metrics: StorageMetrics }): JSX.Element {
         </button>
         <span className={styles.metricLabel}>Exit</span>
         {metered ? (
-          <span className={styles.exitMeteredNote} data-testid="exit-metered-note">
-            Your provider charges for download bandwidth — a full export is priced before it starts.
+          <span
+            className={styles.exitMeteredNote}
+            data-testid="exit-metered-note"
+          >
+            Your provider charges for download bandwidth — a full export is
+            priced before it starts.
           </span>
         ) : null}
         {open ? (
           <p className={styles.exitHow}>
-            Your data is always yours to take. Originals stay sealed on your devices, and the
-            recovery kit plus the provider&rsquo;s object listing reconstruct everything offsite —
-            no provider approval, no lock-in.
+            Your data is always yours to take. Originals stay sealed on your
+            devices, and the recovery kit plus the provider&rsquo;s object
+            listing reconstruct everything offsite — no provider approval, no
+            lock-in.
           </p>
         ) : null}
       </div>
@@ -175,7 +206,9 @@ export function ClockLine({
   return (
     <div className={styles.clockLine}>
       <span>{label}</span>
-      <span>{at === null ? 'never' : `${formatDuration(Math.max(0, now - at))} ago`}</span>
+      <span>
+        {at === null ? "never" : `${formatDuration(Math.max(0, now - at))} ago`}
+      </span>
     </div>
   );
 }

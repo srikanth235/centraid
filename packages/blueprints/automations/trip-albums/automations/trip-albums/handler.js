@@ -18,9 +18,22 @@ const GAP_HOURS = 36;
 const MIN_PHOTOS = 5;
 const MIN_DAYS = 2;
 const WINDOW = 2000;
-const PURPOSE = 'dpv:ServiceProvision';
+const PURPOSE = "dpv:ServiceProvision";
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 function tripName(startIso, endIso) {
   const s = new Date(startIso);
@@ -36,17 +49,18 @@ function tripName(startIso, endIso) {
 
 export default async ({ ctx, log }) => {
   const read = await ctx.vault.read({
-    entity: 'media.media_asset',
+    entity: "media.media_asset",
     where: [
-      { column: 'deleted_at', op: 'is-null' },
-      { column: 'captured_at', op: 'not-null' },
+      { column: "deleted_at", op: "is-null" },
+      { column: "captured_at", op: "not-null" },
     ],
-    orderBy: { column: 'captured_at', dir: 'asc' },
+    orderBy: { column: "captured_at", dir: "asc" },
     limit: WINDOW,
     purpose: PURPOSE,
   });
-  const photos = (read.rows ?? []).filter((a) => a.kind === 'photo');
-  if (photos.length < MIN_PHOTOS) return { summary: 'not enough dated photos to cluster' };
+  const photos = (read.rows ?? []).filter((a) => a.kind === "photo");
+  if (photos.length < MIN_PHOTOS)
+    return { summary: "not enough dated photos to cluster" };
 
   // Single pass: a gap over GAP_HOURS closes the current run.
   const runs = [];
@@ -67,30 +81,33 @@ export default async ({ ctx, log }) => {
     if (cluster.length < MIN_PHOTOS) continue;
     const start = cluster[0].captured_at;
     const end = cluster[cluster.length - 1].captured_at;
-    const spanDays = (new Date(end).getTime() - new Date(start).getTime()) / 86400000;
+    const spanDays =
+      (new Date(end).getTime() - new Date(start).getTime()) / 86400000;
     if (spanDays < MIN_DAYS) continue;
     rows.push({
-      entity_type: 'core.collection',
+      entity_type: "core.collection",
       external_id: `trip:${String(start).slice(0, 10)}`,
       payload: {
         name: tripName(start, end),
         members: cluster.map((a) => ({
-          target_type: 'media.media_asset',
+          target_type: "media.media_asset",
           target_id: a.asset_id,
         })),
       },
     });
   }
 
-  if (rows.length === 0) return { summary: 'no trip-shaped clusters found' };
+  if (rows.length === 0) return { summary: "no trip-shaped clusters found" };
   // Album proposals ALWAYS stage — the review click publishes.
   const staged = await ctx.vault.invoke({
-    command: 'sync.stage_rows',
-    input: { kind: 'enrichment.cluster', label: 'trips', rows },
+    command: "sync.stage_rows",
+    input: { kind: "enrichment.cluster", label: "trips", rows },
     purpose: PURPOSE,
   });
   const counts = staged?.output?.staged;
-  log.info(`proposed ${rows.length} trip album(s)${counts ? ` (${counts.skip} unchanged)` : ''}`);
+  log.info(
+    `proposed ${rows.length} trip album(s)${counts ? ` (${counts.skip} unchanged)` : ""}`
+  );
   return {
     summary: `proposed ${rows.length} trip album(s) — awaiting your review`,
     output: { trips: rows.length },

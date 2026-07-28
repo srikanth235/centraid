@@ -3,12 +3,12 @@
 // device is the chicken-and-egg). In a full system enrollment and granting
 // graduate to typed commands themselves; the rows they write are identical.
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from "node:crypto";
 
-import type { VaultDb } from './db.js';
-import type { FilterClause, Risk } from './gateway/types.js';
-import { nowIso, uuidv7 } from './ids.js';
-import { ONTOLOGY_VERSION } from './schema/migrate.js';
+import type { VaultDb } from "./db.js";
+import type { FilterClause, Risk } from "./gateway/types.js";
+import { nowIso, uuidv7 } from "./ids.js";
+import { ONTOLOGY_VERSION } from "./schema/migrate.js";
 
 export interface BootstrapResult {
   vaultId: string;
@@ -30,58 +30,58 @@ interface SeedConcept {
 // SKOS seed vocabulary: DPV purposes, PROV/SKOS relations, AS2 activity kinds.
 const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
   purposes: {
-    uri: 'https://w3id.org/dpv#Purpose',
-    title: 'Consent purposes (DPV)',
+    uri: "https://w3id.org/dpv#Purpose",
+    title: "Consent purposes (DPV)",
   },
-  relations: { uri: 'urn:duaility:relations', title: 'Link relation types' },
-  'activity-kinds': {
-    uri: 'urn:duaility:activity-kinds',
-    title: 'Activity kinds',
+  relations: { uri: "urn:duaility:relations", title: "Link relation types" },
+  "activity-kinds": {
+    uri: "urn:duaility:activity-kinds",
+    title: "Activity kinds",
   },
-  'spend-categories': {
-    uri: 'urn:duaility:spend-categories',
-    title: 'Spend categories',
+  "spend-categories": {
+    uri: "urn:duaility:spend-categories",
+    title: "Spend categories",
   },
-  flags: { uri: 'urn:duaility:flags', title: 'Agent flags' },
+  flags: { uri: "urn:duaility:flags", title: "Agent flags" },
   // Machine-tag vocabularies (issue #299) — concepts arrive on demand from
   // the enrichment publishers; only the scheme rows seed. Pre-v10 vaults
   // get these from the guarded v10 backfill instead.
-  vision: { uri: 'urn:centraid:vision', title: 'Vision tags (machine)' },
-  doctype: { uri: 'urn:centraid:doctype', title: 'Document types (machine)' },
+  vision: { uri: "urn:centraid:vision", title: "Vision tags (machine)" },
+  doctype: { uri: "urn:centraid:doctype", title: "Document types (machine)" },
 };
 const SEED_CONCEPTS: SeedConcept[] = [
   {
-    scheme: 'purposes',
-    notation: 'dpv:ServiceProvision',
-    label: 'Service provision',
+    scheme: "purposes",
+    notation: "dpv:ServiceProvision",
+    label: "Service provision",
   },
-  { scheme: 'purposes', notation: 'dpv:Billing', label: 'Billing' },
+  { scheme: "purposes", notation: "dpv:Billing", label: "Billing" },
   {
-    scheme: 'purposes',
-    notation: 'dpv:HealthMonitoring',
-    label: 'Health monitoring',
+    scheme: "purposes",
+    notation: "dpv:HealthMonitoring",
+    label: "Health monitoring",
   },
-  { scheme: 'relations', notation: 'same-as', label: 'Same as' },
-  { scheme: 'relations', notation: 'about', label: 'About' },
-  { scheme: 'relations', notation: 'works-for', label: 'Works for' },
-  { scheme: 'relations', notation: 'duplicate-of', label: 'Duplicate of' },
+  { scheme: "relations", notation: "same-as", label: "Same as" },
+  { scheme: "relations", notation: "about", label: "About" },
+  { scheme: "relations", notation: "works-for", label: "Works for" },
+  { scheme: "relations", notation: "duplicate-of", label: "Duplicate of" },
   // Cross-referencing relations (issue #272) — also seeded into existing
   // vaults by the v3 migration, which must stay in step with these two.
-  { scheme: 'relations', notation: 'references', label: 'References' },
-  { scheme: 'relations', notation: 'attachment-of', label: 'Attachment of' },
+  { scheme: "relations", notation: "references", label: "References" },
+  { scheme: "relations", notation: "attachment-of", label: "Attachment of" },
   // Version lineage (issue #352): a newer content item revises an older one —
   // core.edit_document, core.replace_document_content,
   // core.restore_document_version, and knowledge.edit_note all assert it.
-  { scheme: 'relations', notation: 'revises', label: 'Revises' },
-  { scheme: 'activity-kinds', notation: 'meeting', label: 'Meeting' },
-  { scheme: 'activity-kinds', notation: 'run', label: 'Run' },
-  { scheme: 'activity-kinds', notation: 'sleep', label: 'Sleep' },
-  { scheme: 'activity-kinds', notation: 'work', label: 'Work session' },
-  { scheme: 'spend-categories', notation: 'groceries', label: 'Groceries' },
-  { scheme: 'spend-categories', notation: 'dining', label: 'Dining out' },
-  { scheme: 'spend-categories', notation: 'transport', label: 'Transport' },
-  { scheme: 'spend-categories', notation: 'gifts', label: 'Gifts' },
-  { scheme: 'flags', notation: 'anomaly', label: 'Anomaly' },
+  { scheme: "relations", notation: "revises", label: "Revises" },
+  { scheme: "activity-kinds", notation: "meeting", label: "Meeting" },
+  { scheme: "activity-kinds", notation: "run", label: "Run" },
+  { scheme: "activity-kinds", notation: "sleep", label: "Sleep" },
+  { scheme: "activity-kinds", notation: "work", label: "Work session" },
+  { scheme: "spend-categories", notation: "groceries", label: "Groceries" },
+  { scheme: "spend-categories", notation: "dining", label: "Dining out" },
+  { scheme: "spend-categories", notation: "transport", label: "Transport" },
+  { scheme: "spend-categories", notation: "gifts", label: "Gifts" },
+  { scheme: "flags", notation: "anomaly", label: "Anomaly" },
 ];
 
 export interface BootstrapVaultOptions {
@@ -100,7 +100,10 @@ export interface BootstrapVaultOptions {
 }
 
 /** Create the vault row, owner party, seed vocabulary and first device. */
-export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): BootstrapResult {
+export function bootstrapVault(
+  db: VaultDb,
+  options: BootstrapVaultOptions
+): BootstrapResult {
   const now = nowIso();
   const concepts: Record<string, string> = {};
   const schemeIds: Record<string, string> = {};
@@ -109,7 +112,7 @@ export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): Boo
     schemeIds[key] = schemeId;
     db.vault
       .prepare(
-        `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version) VALUES (?, ?, ?, 'duaility', '1')`,
+        `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version) VALUES (?, ?, ?, 'duaility', '1')`
       )
       .run(schemeId, scheme.uri, scheme.title);
   }
@@ -119,15 +122,15 @@ export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): Boo
     db.vault
       .prepare(
         `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL)`,
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL)`
       )
-      .run(conceptId, schemeIds[seed.scheme] ?? '', seed.notation, seed.label);
+      .run(conceptId, schemeIds[seed.scheme] ?? "", seed.notation, seed.label);
   }
   const ownerPartyId = uuidv7();
   db.vault
     .prepare(
       `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`,
+       VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`
     )
     .run(ownerPartyId, options.ownerName, now, now, ONTOLOGY_VERSION);
   const vaultId = options.vaultId ?? uuidv7();
@@ -135,15 +138,23 @@ export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): Boo
   db.vault
     .prepare(
       `INSERT INTO core_vault (vault_id, owner_party_id, display_name, status, base_currency, settings_json, created_at)
-       VALUES (?, ?, ?, 'active', ?, '{}', ?)`,
+       VALUES (?, ?, ?, 'active', ?, '{}', ?)`
     )
-    .run(vaultId, ownerPartyId, displayName, options.baseCurrency ?? 'INR', now);
+    .run(
+      vaultId,
+      ownerPartyId,
+      displayName,
+      options.baseCurrency ?? "INR",
+      now
+    );
   // The enrichment-policy mirror (issue #352 phase 3/4, host.ts
   // readEnrichSettings/updateEnrichSettings): `local` is the default on both
   // domains, same as the settings-bag default this table shadows.
-  for (const domain of ['photos', 'docs'] as const) {
+  for (const domain of ["photos", "docs"] as const) {
     db.vault
-      .prepare(`INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'local', ?)`)
+      .prepare(
+        `INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'local', ?)`
+      )
       .run(domain, now);
   }
   // Events require a calendar (schedule.propose_event's calendar_exists
@@ -155,19 +166,23 @@ export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): Boo
   db.vault
     .prepare(
       `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, color, default_tz, visibility, external_uri)
-       VALUES (?, ?, 'Personal', NULL, ?, 'private', NULL)`,
+       VALUES (?, ?, 'Personal', NULL, ?, 'private', NULL)`
     )
-    .run(uuidv7(), ownerPartyId, options.defaultTz ?? 'UTC');
+    .run(uuidv7(), ownerPartyId, options.defaultTz ?? "UTC");
   // §03/§07: condition is the highest-sensitivity table — excluded from
   // default grant scopes. A minimization policy makes schema-wide scopes skip
   // it; only a scope naming the table explicitly covers it.
   db.vault
     .prepare(
       `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, residency_region, effective_from, priority)
-       VALUES (?, 'minimization', 'health', 'condition', '{"require_explicit_scope":true}', NULL, NULL, ?, 1)`,
+       VALUES (?, 'minimization', 'health', 'condition', '{"require_explicit_scope":true}', NULL, NULL, ?, 1)`
     )
     .run(uuidv7(), now);
-  const device = enrollDevice(db, ownerPartyId, options.deviceName ?? 'first device');
+  const device = enrollDevice(
+    db,
+    ownerPartyId,
+    options.deviceName ?? "first device"
+  );
   return {
     vaultId,
     displayName,
@@ -182,14 +197,14 @@ export function enrollDevice(
   db: VaultDb,
   ownerPartyId: string,
   name: string,
-  trust: 'full' | 'readonly' = 'full',
+  trust: "full" | "readonly" = "full"
 ): { deviceId: string; deviceKey: string } {
   const deviceId = uuidv7();
-  const deviceKey = randomBytes(32).toString('hex');
+  const deviceKey = randomBytes(32).toString("hex");
   db.vault
     .prepare(
       `INSERT INTO consent_device (device_id, owner_party_id, name, platform, public_key, trust, enrolled_at, last_seen_at, sync_cursor)
-       VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, NULL)`,
+       VALUES (?, ?, ?, NULL, ?, ?, ?, NULL, NULL)`
     )
     .run(deviceId, ownerPartyId, name, deviceKey, trust, nowIso());
   return { deviceId, deviceKey };
@@ -199,26 +214,26 @@ export function enrollApp(
   db: VaultDb,
   options: {
     name: string;
-    origin?: 'installed' | 'generated';
+    origin?: "installed" | "generated";
     riskCeiling?: Risk;
     displayName?: string;
-  },
+  }
 ): { appId: string; signingKey: string } {
   const appId = uuidv7();
-  const signingKey = randomBytes(32).toString('hex');
+  const signingKey = randomBytes(32).toString("hex");
   db.vault
     .prepare(
       `INSERT INTO consent_app (app_id, name, display_name, publisher, manifest_uri, signing_key, status, origin, risk_ceiling, installed_at)
-       VALUES (?, ?, ?, NULL, NULL, ?, 'active', ?, ?, ?)`,
+       VALUES (?, ?, ?, NULL, NULL, ?, 'active', ?, ?, ?)`
     )
     .run(
       appId,
       options.name,
       options.displayName ?? null,
       signingKey,
-      options.origin ?? 'installed',
-      options.riskCeiling ?? 'low',
-      nowIso(),
+      options.origin ?? "installed",
+      options.riskCeiling ?? "low",
+      nowIso()
     );
   return { appId, signingKey };
 }
@@ -230,30 +245,43 @@ export function enrollAgent(
     modelRef: string;
     version?: string;
     displayName?: string;
-  },
+  }
 ): { agentId: string; partyId: string } {
   const now = nowIso();
   const partyId = uuidv7();
   db.vault
     .prepare(
       `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-       VALUES (?, 'agent', ?, NULL, NULL, NULL, ?, ?, ?)`,
+       VALUES (?, 'agent', ?, NULL, NULL, NULL, ?, ?, ?)`
     )
-    .run(partyId, options.displayName ?? options.name, now, now, ONTOLOGY_VERSION);
+    .run(
+      partyId,
+      options.displayName ?? options.name,
+      now,
+      now,
+      ONTOLOGY_VERSION
+    );
   const agentId = uuidv7();
   db.vault
     .prepare(
       `INSERT INTO agent_agent (agent_id, party_id, host_key, model_ref, version, enrolled_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+       VALUES (?, ?, ?, ?, ?, ?, 'active')`
     )
-    .run(agentId, partyId, options.name, options.modelRef, options.version ?? '0', now);
+    .run(
+      agentId,
+      partyId,
+      options.name,
+      options.modelRef,
+      options.version ?? "0",
+      now
+    );
   return { agentId, partyId };
 }
 
 export interface ScopeSpec {
   schema: string;
   table?: string;
-  verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  verbs: "read" | "read+act" | "act" | "reveal";
   rowFilter?: FilterClause[];
   fieldMask?: string[];
 }
@@ -268,14 +296,14 @@ export function createGrant(
     grantedByPartyId: string;
     scopes: ScopeSpec[];
     expiresAt?: string;
-  },
+  }
 ): string {
   const grantId = uuidv7();
   db.vault
     .prepare(
       `INSERT INTO consent_access_grant
          (grant_id, app_id, grantee_party_id, purpose_concept_id, granted_by_party_id, granted_at, expires_at, revoked_at, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'active')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'active')`
     )
     .run(
       grantId,
@@ -284,11 +312,11 @@ export function createGrant(
       options.purposeConceptId,
       options.grantedByPartyId,
       nowIso(),
-      options.expiresAt ?? null,
+      options.expiresAt ?? null
     );
   const stmt = db.vault.prepare(
     `INSERT INTO consent_grant_scope (scope_id, grant_id, schema_name, table_name, verbs, row_filter_json, field_mask_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   for (const scope of options.scopes) {
     stmt.run(
@@ -298,7 +326,7 @@ export function createGrant(
       scope.table ?? null,
       scope.verbs,
       scope.rowFilter ? JSON.stringify(scope.rowFilter) : null,
-      scope.fieldMask ? JSON.stringify(scope.fieldMask) : null,
+      scope.fieldMask ? JSON.stringify(scope.fieldMask) : null
     );
   }
   return grantId;

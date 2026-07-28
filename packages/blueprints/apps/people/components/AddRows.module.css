@@ -25,7 +25,7 @@
 .noteadd select {
   cursor: pointer;
 }
-.noteadd input[type='date'] {
+.noteadd input[type="date"] {
   color-scheme: light dark;
 }
 .noteadd input.narrow {

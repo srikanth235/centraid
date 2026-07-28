@@ -15,7 +15,11 @@
  * ThumbHash bytes. Throws when either edge exceeds 100 — callers downscale
  * first. Returns the compact hash (opaque images ~5-24 bytes, alpha larger).
  */
-export function rgbaToThumbHash(w: number, h: number, rgba: Uint8Array): Uint8Array {
+export function rgbaToThumbHash(
+  w: number,
+  h: number,
+  rgba: Uint8Array
+): Uint8Array {
   if (w > 100 || h > 100) throw new Error(`${w}x${h} doesn't fit in 100x100`);
   const { PI, round, max, cos, abs } = Math;
 
@@ -59,7 +63,11 @@ export function rgbaToThumbHash(w: number, h: number, rgba: Uint8Array): Uint8Ar
   }
 
   // Encode using the DCT into DC (constant) and normalized AC (varying) terms.
-  const encodeChannel = (channel: number[], nx: number, ny: number): [number, number[], number] => {
+  const encodeChannel = (
+    channel: number[],
+    nx: number,
+    ny: number
+  ): [number, number[], number] => {
     let dc = 0;
     const ac: number[] = [];
     let scale = 0;
@@ -70,7 +78,8 @@ export function rgbaToThumbHash(w: number, h: number, rgba: Uint8Array): Uint8Ar
         for (let x = 0; x < w; x++) fx[x] = cos((PI / w) * cx * (x + 0.5));
         for (let y = 0; y < h; y++) {
           const fy = cos((PI / h) * cy * (y + 0.5));
-          for (let x = 0; x < w; x++) f += (channel[x + y * w] ?? 0) * (fx[x] ?? 0) * fy;
+          for (let x = 0; x < w; x++)
+            f += (channel[x + y * w] ?? 0) * (fx[x] ?? 0) * fy;
         }
         f /= w * h;
         if (cx || cy) {
@@ -81,13 +90,17 @@ export function rgbaToThumbHash(w: number, h: number, rgba: Uint8Array): Uint8Ar
         }
       }
     }
-    if (scale) for (let i = 0; i < ac.length; i++) ac[i] = 0.5 + (0.5 / scale) * (ac[i] ?? 0);
+    if (scale)
+      for (let i = 0; i < ac.length; i++)
+        ac[i] = 0.5 + (0.5 / scale) * (ac[i] ?? 0);
     return [dc, ac, scale];
   };
   const [l_dc, l_ac, l_scale] = encodeChannel(l, max(3, lx), max(3, ly));
   const [p_dc, p_ac, p_scale] = encodeChannel(p, 3, 3);
   const [q_dc, q_ac, q_scale] = encodeChannel(q, 3, 3);
-  const [a_dc, a_ac, a_scale] = hasAlpha ? encodeChannel(a, 5, 5) : [0, [] as number[], 0];
+  const [a_dc, a_ac, a_scale] = hasAlpha
+    ? encodeChannel(a, 5, 5)
+    : [0, [] as number[], 0];
 
   // Write the constants bytes to the output.
   const isLandscape = w > h;

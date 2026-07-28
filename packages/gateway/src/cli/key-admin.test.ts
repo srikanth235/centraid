@@ -1,18 +1,18 @@
-import crypto from 'node:crypto';
+import crypto from "node:crypto";
 /*
  * Seal-key custody CLI: status + in-place rotation only. Recovery uses the
  * password-wrapped recovery-kit path and this surface never exports raw keys.
  */
-import { existsSync, readFileSync, rmSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import path from "node:path";
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { sealKeyFileFor } from '@centraid/vault';
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { sealKeyFileFor } from "@centraid/vault";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { commandKey } from './key-admin.ts';
-import { daemonLayoutFor } from './paths.ts';
-import { commandVault } from './vault-admin.ts';
+import { commandKey } from "./key-admin.ts";
+import { daemonLayoutFor } from "./paths.ts";
+import { commandVault } from "./vault-admin.ts";
 
 // See admin.test.ts: real vault/daemon bootstrap per test, so this file is
 // fsync-bound and needs an escalation above the 30s node-project default.
@@ -22,10 +22,10 @@ vi.setConfig({ testTimeout: 60_000 });
 class CliFailError extends Error {
   constructor(
     message: string,
-    readonly code: number,
+    readonly code: number
   ) {
     super(message);
-    this.name = 'CliFailError';
+    this.name = "CliFailError";
   }
 }
 const fail = (message: string, code = 1): never => {
@@ -46,10 +46,10 @@ async function capture(fn: () => Promise<void> | void): Promise<string> {
   } finally {
     process.stdout.write = original;
   }
-  return chunks.join('');
+  return chunks.join("");
 }
 
-describe('key-admin', () => {
+describe("key-admin", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`key-admin-${crypto.randomUUID()}-`);
   });
@@ -64,40 +64,40 @@ describe('key-admin', () => {
     keyFile: string;
   }> {
     const out = await capture(() =>
-      commandVault(['create', '--data-dir', dataDir, '--name', 'Test'], fail),
+      commandVault(["create", "--data-dir", dataDir, "--name", "Test"], fail)
     );
     const { vaultId } = JSON.parse(out) as { vaultId: string };
     const dir = path.join(daemonLayoutFor(dataDir).vaultDir, vaultId);
     return { vaultId, dir, keyFile: sealKeyFileFor(dir) };
   }
 
-  test('key status reports the key file, fingerprints and health', async () => {
+  test("key status reports the key file, fingerprints and health", async () => {
     const v = await createVault();
     const out = await capture(() =>
-      commandKey(['status', '--data-dir', dataDir, '--vault', v.vaultId], fail),
+      commandKey(["status", "--data-dir", dataDir, "--vault", v.vaultId], fail)
     );
     const status = JSON.parse(out) as Record<string, unknown>;
-    expect(status['keyPresent']).toBe(true);
-    expect(status['stampedFingerprint']).toBeNull(); // nothing sealed yet
-    expect(status['healthy']).toBe(true);
-    expect(status['keyFile']).toBe(v.keyFile);
+    expect(status["keyPresent"]).toBe(true);
+    expect(status["stampedFingerprint"]).toBeNull(); // nothing sealed yet
+    expect(status["healthy"]).toBe(true);
+    expect(status["keyFile"]).toBe(v.keyFile);
   });
 
-  test('raw export and restore subcommands do not exist', async () => {
+  test("raw export and restore subcommands do not exist", async () => {
     const v = await createVault();
     await expect(
-      commandKey(['export', '--data-dir', dataDir, '--vault', v.vaultId], fail),
+      commandKey(["export", "--data-dir", dataDir, "--vault", v.vaultId], fail)
     ).rejects.toThrow(/status, rotate/u);
     await expect(
-      commandKey(['restore', '--data-dir', dataDir, '--vault', v.vaultId], fail),
+      commandKey(["restore", "--data-dir", dataDir, "--vault", v.vaultId], fail)
     ).rejects.toThrow(/status, rotate/u);
   });
 
-  test('key rotate swaps the key file and reports fingerprints', async () => {
+  test("key rotate swaps the key file and reports fingerprints", async () => {
     const v = await createVault();
     const before = readFileSync(v.keyFile);
     const out = await capture(() =>
-      commandKey(['rotate', '--data-dir', dataDir, '--vault', v.vaultId], fail),
+      commandKey(["rotate", "--data-dir", dataDir, "--vault", v.vaultId], fail)
     );
     const result = JSON.parse(out) as {
       oldFingerprint: string;
@@ -108,14 +108,16 @@ describe('key-admin', () => {
     expect(existsSync(`${v.keyFile}.next`)).toBe(false); // sidecar promoted
   });
 
-  test('key resolves the vault by display name too, and fails on unknowns', async () => {
+  test("key resolves the vault by display name too, and fails on unknowns", async () => {
     const v = await createVault();
     const out = await capture(() =>
-      commandKey(['status', '--data-dir', dataDir, '--vault', 'Test'], fail),
+      commandKey(["status", "--data-dir", dataDir, "--vault", "Test"], fail)
     );
     expect((JSON.parse(out) as { vaultId: string }).vaultId).toBe(v.vaultId);
     await expect(
-      capture(() => commandKey(['status', '--data-dir', dataDir, '--vault', 'nope'], fail)),
+      capture(() =>
+        commandKey(["status", "--data-dir", dataDir, "--vault", "nope"], fail)
+      )
     ).rejects.toThrow(/no vault matches/u);
   });
 });

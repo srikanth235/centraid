@@ -1,9 +1,16 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- the orrery's clickable kind nodes are SVG <g> elements; <button> is not renderable inside <svg>, so the g carries role="button" + tabIndex + Enter/Space key handling instead */
-import { useEffect, useId, useRef, type CSSProperties, type JSX, type PointerEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  type CSSProperties,
+  type JSX,
+  type PointerEvent,
+} from "react";
 
-import type { AtlasFkEdge, AtlasGraphNode } from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import AtlasOrreryCore from './AtlasOrreryCore.js';
+import type { AtlasFkEdge, AtlasGraphNode } from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import AtlasOrreryCore from "./AtlasOrreryCore.js";
 import {
   ORRERY,
   type BearingLayout,
@@ -17,9 +24,9 @@ import {
   packHueVar,
   polar,
   sectorFlipped,
-} from './atlasOrreryGeometry.js';
+} from "./atlasOrreryGeometry.js";
 
-import styles from './AtlasRelationsTab.module.css';
+import styles from "./AtlasRelationsTab.module.css";
 
 // The orrery's inline-SVG chart body (issue #441 B2) — a presentational leaf of
 // AtlasRelationsTab. It draws the graticule, pack sectors, FK edge layer, the
@@ -31,9 +38,9 @@ import styles from './AtlasRelationsTab.module.css';
 /** The current hover/focus readout target — a discriminated union shared with
  *  the parent and the side panel so both light up the same element. */
 export type Readout =
-  | { kind: 'idle' }
-  | { kind: 'node'; node: AtlasGraphNode; hop: number | null }
-  | { kind: 'edge'; edge: AtlasFkEdge };
+  | { kind: "idle" }
+  | { kind: "node"; node: AtlasGraphNode; hop: number | null }
+  | { kind: "edge"; edge: AtlasFkEdge };
 
 /**
  * A question-chip highlight — a lens the parent computes ("what's connected
@@ -49,7 +56,8 @@ export interface AtlasHighlight {
   edgeLit: (edge: AtlasFkEdge) => boolean;
 }
 
-const CSSVar = (name: string, value: string): CSSProperties => ({ [name]: value }) as CSSProperties;
+const CSSVar = (name: string, value: string): CSSProperties =>
+  ({ [name]: value }) as CSSProperties;
 
 export interface AtlasOrreryChartProps {
   center: string;
@@ -129,7 +137,7 @@ export default function AtlasOrreryChart({
   // A question highlight only bites while nothing is hovered — a live readout
   // (hover/focus) overrides it, so the two lensing systems never fight over the
   // same node. When active, non-lit nodes/edges dim and lit ones read as `hot`.
-  const questionActive = highlight != null && readout.kind === 'idle';
+  const questionActive = highlight != null && readout.kind === "idle";
 
   // Wheel-to-zoom must call preventDefault to stop the page scrolling under a
   // zoom gesture, but React attaches `wheel` to the root as a PASSIVE listener,
@@ -140,8 +148,8 @@ export default function AtlasOrreryChart({
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
   }, [onWheel]);
 
   return (
@@ -170,14 +178,17 @@ export default function AtlasOrreryChart({
         {/* graticule — concentric hop rings, labelled at 12 o'clock */}
         <g className={styles.graticule}>
           {[
-            { r: ORRERY.ringHop1, label: 'hop 1', dashed: false },
-            { r: ORRERY.ringHop2, label: 'hop 2', dashed: false },
-            { r: ORRERY.ringHop3, label: 'hop 3+', dashed: false },
-            { r: ORRERY.ringUnreached, label: 'unreached', dashed: true },
+            { r: ORRERY.ringHop1, label: "hop 1", dashed: false },
+            { r: ORRERY.ringHop2, label: "hop 2", dashed: false },
+            { r: ORRERY.ringHop3, label: "hop 3+", dashed: false },
+            { r: ORRERY.ringUnreached, label: "unreached", dashed: true },
           ].map((ring) => (
             <g key={ring.label}>
               <circle
-                className={cx(styles.ringGuide, ring.dashed && styles.ringGuideDashed)}
+                className={cx(
+                  styles.ringGuide,
+                  ring.dashed && styles.ringGuideDashed
+                )}
                 cx={ORRERY.cx}
                 cy={ORRERY.cy}
                 r={ring.r}
@@ -209,14 +220,19 @@ export default function AtlasOrreryChart({
             // midDeg) so a long pack name over a one-kind sector isn't clipped
             // by textPath's path-length cutoff.
             const labelR = flip ? ORRERY.sectorLabelR + 7 : ORRERY.sectorLabelR;
-            const hot = readout.kind === 'node' && readout.node.pack === s.pack;
+            const hot = readout.kind === "node" && readout.node.pack === s.pack;
             const empty =
-              s.pack !== centerNode?.pack && !visibleNodes.some((n) => n.pack === s.pack);
+              s.pack !== centerNode?.pack &&
+              !visibleNodes.some((n) => n.pack === s.pack);
             return (
               <g
                 key={s.pack}
-                className={cx(styles.sector, hot && styles.sectorHot, empty && styles.sectorEmpty)}
-                style={CSSVar('--sector-c', packHueVar(s.pack, packs))}
+                className={cx(
+                  styles.sector,
+                  hot && styles.sectorHot,
+                  empty && styles.sectorEmpty
+                )}
+                style={CSSVar("--sector-c", packHueVar(s.pack, packs))}
               >
                 <path
                   className={styles.sectorArc}
@@ -224,7 +240,7 @@ export default function AtlasOrreryChart({
                     s.startDeg + pad,
                     s.startDeg + s.spanDeg - pad,
                     ORRERY.dialR,
-                    false,
+                    false
                   )}
                 />
                 <line
@@ -255,7 +271,7 @@ export default function AtlasOrreryChart({
         <g
           className={cx(
             styles.edges,
-            (readout.kind !== 'idle' || questionActive) && styles.edgesDimmed,
+            (readout.kind !== "idle" || questionActive) && styles.edgesDimmed
           )}
         >
           {drawEdges.map((e, ei) => {
@@ -271,12 +287,13 @@ export default function AtlasOrreryChart({
             const bow = aIsCenter || bIsCenter ? 1 : edgeBow(fromDeg, toDeg);
             const d = edgePath(aPos.x, aPos.y, bPos.x, bPos.y, bow);
             const hot =
-              (readout.kind === 'edge' &&
+              (readout.kind === "edge" &&
                 readout.edge.fromTable === e.fromTable &&
                 readout.edge.col === e.col &&
                 readout.edge.toTable === e.toTable) ||
-              (readout.kind === 'node' &&
-                (readout.node.physical === e.fromTable || readout.node.physical === e.toTable)) ||
+              (readout.kind === "node" &&
+                (readout.node.physical === e.fromTable ||
+                  readout.node.physical === e.toTable)) ||
               (questionActive && (highlight?.edgeLit(e) ?? false));
             return (
               <g key={`${e.fromTable}.${e.col}`}>
@@ -284,22 +301,26 @@ export default function AtlasOrreryChart({
                   className={cx(
                     styles.edge,
                     e.ghost ? styles.edgeGhost : styles.edgeLive,
-                    hot && styles.edgeHot,
+                    hot && styles.edgeHot
                   )}
                   d={d}
                   data-testid="atlas-edge"
-                  data-ghost={e.ghost ? 'true' : 'false'}
-                  data-notnull={e.notnull ? 'true' : 'false'}
+                  data-ghost={e.ghost ? "true" : "false"}
+                  data-notnull={e.notnull ? "true" : "false"}
                   data-from={e.fromTable}
                   data-to={e.toTable}
                   data-fill={e.fill}
                   style={{
-                    ...CSSVar('--dly', `${360 + (ei % 24) * 14}ms`),
+                    ...CSSVar("--dly", `${360 + (ei % 24) * 14}ms`),
                     ...(e.ghost
                       ? undefined
                       : {
                           strokeWidth: fillStrokeWidth(e.fill, maxFill),
-                          strokeOpacity: fillStrokeOpacity(e.fill, maxFill, e.notnull),
+                          strokeOpacity: fillStrokeOpacity(
+                            e.fill,
+                            maxFill,
+                            e.notnull
+                          ),
                         }),
                   }}
                 />
@@ -309,8 +330,8 @@ export default function AtlasOrreryChart({
                   data-testid="atlas-edge-hit"
                   data-from={e.fromTable}
                   data-to={e.toTable}
-                  onMouseOver={() => onReadout({ kind: 'edge', edge: e })}
-                  onMouseOut={() => onReadout({ kind: 'idle' })}
+                  onMouseOver={() => onReadout({ kind: "edge", edge: e })}
+                  onMouseOut={() => onReadout({ kind: "idle" })}
                 />
               </g>
             );
@@ -342,7 +363,10 @@ export default function AtlasOrreryChart({
         {/* the kinds */}
         {visibleNodes.map((n) => {
           const hop = hops.get(n.physical) ?? null;
-          const pos = polar(layout.bearing.get(n.physical) ?? 0, radiusOf(n.physical));
+          const pos = polar(
+            layout.bearing.get(n.physical) ?? 0,
+            radiusOf(n.physical)
+          );
           const nr = nodeRadius(rows.get(n.physical));
           const bearing = layout.bearing.get(n.physical) ?? 0;
           const b = ((bearing % 360) + 360) % 360;
@@ -350,15 +374,19 @@ export default function AtlasOrreryChart({
           const big = (rows.get(n.physical) ?? 0) > 4000;
           // Label stagger: adjacent kinds in a pack alternate between two radial
           // distances so dense sectors stay legible.
-          const labelGap = layout.labelTier.get(n.physical) === 1 ? nr + 14 : nr + 5;
+          const labelGap =
+            layout.labelTier.get(n.physical) === 1 ? nr + 14 : nr + 5;
           // Reveal choreography: rings bloom outward, sweeping clockwise from
           // 12 o'clock within each ring.
-          const dly = (hop === null ? 4 : hop) * 110 + (((b + 90) % 360) / 360) * 220;
-          const lit = questionActive && (highlight?.lit.has(n.physical) ?? false);
+          const dly =
+            (hop === null ? 4 : hop) * 110 + (((b + 90) % 360) / 360) * 220;
+          const lit =
+            questionActive && (highlight?.lit.has(n.physical) ?? false);
           const hot =
-            (readout.kind === 'node' && readout.node.physical === n.physical) ||
-            (readout.kind === 'edge' &&
-              (readout.edge.fromTable === n.physical || readout.edge.toTable === n.physical)) ||
+            (readout.kind === "node" && readout.node.physical === n.physical) ||
+            (readout.kind === "edge" &&
+              (readout.edge.fromTable === n.physical ||
+                readout.edge.toTable === n.physical)) ||
             lit;
           // A question dims every node it does not light; hover never dims nodes
           // (only its edge layer), so `nodeDim` is a question-only state.
@@ -368,10 +396,14 @@ export default function AtlasOrreryChart({
             <g
               role="button"
               key={n.physical}
-              className={cx(styles.node, hot && styles.nodeHot, dim && styles.nodeDim)}
+              className={cx(
+                styles.node,
+                hot && styles.nodeHot,
+                dim && styles.nodeDim
+              )}
               style={{
-                ...CSSVar('--node-c', packHueVar(n.pack, packs)),
-                ...CSSVar('--dly', `${Math.round(dly)}ms`),
+                ...CSSVar("--node-c", packHueVar(n.pack, packs)),
+                ...CSSVar("--dly", `${Math.round(dly)}ms`),
               }}
               transform={`translate(${pos.x.toFixed(1)} ${pos.y.toFixed(1)})`}
               tabIndex={0}
@@ -380,19 +412,19 @@ export default function AtlasOrreryChart({
               data-physical={n.physical}
               data-logical={n.logical}
               data-pack={n.pack}
-              data-hop={hop === null ? 'unreached' : String(hop)}
+              data-hop={hop === null ? "unreached" : String(hop)}
               data-bearing={bearing.toFixed(2)}
-              data-selfref={n.selfRef ? 'true' : 'false'}
+              data-selfref={n.selfRef ? "true" : "false"}
               onClick={() => onRecenter(n.physical)}
               onKeyDown={(ev) => {
-                if (ev.key === 'Enter' || ev.key === ' ') {
+                if (ev.key === "Enter" || ev.key === " ") {
                   ev.preventDefault();
                   onRecenter(n.physical);
                 }
               }}
-              onMouseOver={() => onReadout({ kind: 'node', node: n, hop })}
-              onMouseOut={() => onReadout({ kind: 'idle' })}
-              onFocus={() => onReadout({ kind: 'node', node: n, hop })}
+              onMouseOver={() => onReadout({ kind: "node", node: n, hop })}
+              onMouseOut={() => onReadout({ kind: "idle" })}
+              onFocus={() => onReadout({ kind: "node", node: n, hop })}
             >
               <circle className={styles.nodeHalo} r={nr + 4} />
               <circle className={styles.nodeBody} r={nr} />
@@ -410,7 +442,7 @@ export default function AtlasOrreryChart({
                 className={cx(styles.nodeLabel, big && styles.nodeLabelBig)}
                 x={flip ? -labelGap : labelGap}
                 y={showPhysical ? -3 : 0}
-                textAnchor={flip ? 'end' : 'start'}
+                textAnchor={flip ? "end" : "start"}
                 dominantBaseline="middle"
                 transform={`rotate(${flip ? bearing + 180 : bearing})`}
               >
@@ -425,7 +457,7 @@ export default function AtlasOrreryChart({
                   data-testid="atlas-node-physical"
                   x={flip ? -labelGap : labelGap}
                   y={6}
-                  textAnchor={flip ? 'end' : 'start'}
+                  textAnchor={flip ? "end" : "start"}
                   dominantBaseline="middle"
                   transform={`rotate(${flip ? bearing + 180 : bearing})`}
                 >

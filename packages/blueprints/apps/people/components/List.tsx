@@ -1,11 +1,17 @@
 // List view: each row (#list root's mapped children), the head row
 // (#listHead root) and the truncation footer (#windowFoot root).
-import { avatarColor, listName, daysSince, shortFmt, statusOf } from '../format.ts';
-import { I } from '../icons.ts';
-import type { AppData, Person } from '../types.ts';
-import { Icon, KitAvatar, Snippet } from './Shared.tsx';
+import {
+  avatarColor,
+  listName,
+  daysSince,
+  shortFmt,
+  statusOf,
+} from "../format.ts";
+import { I } from "../icons.ts";
+import type { AppData, Person } from "../types.ts";
+import { Icon, KitAvatar, Snippet } from "./Shared.tsx";
 
-import styles from './List.module.css';
+import styles from "./List.module.css";
 
 export function ListRow({
   p,
@@ -51,7 +57,7 @@ export function ListRow({
         {selected ? <Icon svg={I.check} /> : null}
       </button>
       <KitAvatar
-        style={{ cursor: 'pointer', position: 'relative' }}
+        style={{ cursor: "pointer", position: "relative" }}
         name={p.name}
         size="34px"
         color={color}
@@ -69,13 +75,17 @@ export function ListRow({
             </span>
           ) : null}
         </div>
-        <div className={styles.rowRole}>{p.role || ''}</div>
+        <div className={styles.rowRole}>{p.role || ""}</div>
         {search.trim() && p.snippet ? (
           <Snippet snippet={p.snippet} className={styles.rowRole} />
         ) : null}
       </div>
-      <span className={`${styles.cell} ${styles.list}`}>{listName(data, p.list_id ?? null)}</span>
-      <span className={`${styles.cell} ${styles.last}`}>{shortFmt(daysSince(p))}</span>
+      <span className={`${styles.cell} ${styles.list}`}>
+        {listName(data, p.list_id ?? null)}
+      </span>
+      <span className={`${styles.cell} ${styles.last}`}>
+        {shortFmt(daysSince(p))}
+      </span>
       <span className={`${styles.cell} ${styles.status}`}>
         <span className="kit-dotmini" style={{ background: st.color }} />
         {st.label}
@@ -107,19 +117,20 @@ export function ListHead({
   selectedIds: Set<string>;
   onToggleAll: (rows: Person[], allSelected: boolean) => void;
 }) {
-  const allSel = rows.length > 0 && rows.every((p) => selectedIds.has(p.party_id));
+  const allSel =
+    rows.length > 0 && rows.every((p) => selectedIds.has(p.party_id));
   return (
     <>
       <button
         type="button"
         className={styles.check}
         aria-pressed={allSel}
-        aria-label={allSel ? 'Deselect all' : 'Select all'}
+        aria-label={allSel ? "Deselect all" : "Select all"}
         onClick={() => onToggleAll(rows, allSel)}
       >
         {allSel ? <Icon svg={I.check} /> : null}
       </button>
-      <span style={{ width: '34px' }} />
+      <span style={{ width: "34px" }} />
       <span className={`${styles.col} ${styles.name}`}>Name</span>
       <span className={`${styles.col} ${styles.list}`}>List</span>
       <span className={`${styles.col} ${styles.last}`}>Last spoke</span>
@@ -138,7 +149,9 @@ export function WindowFoot({
 }) {
   return (
     <>
-      <span>Showing your first {peopleWindow} people — the rest are a search away.</span>
+      <span>
+        Showing your first {peopleWindow} people — the rest are a search away.
+      </span>
       <button
         type="button"
         onClick={async (e) => {

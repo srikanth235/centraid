@@ -5,17 +5,20 @@ import {
   GatewayClientError,
   VAULT_HEADER,
   type GatewayAuth,
-} from '../gateway-client-core.js';
-import { vaultStatus } from '../gateway-client-vault.js';
+} from "../gateway-client-core.js";
+import { vaultStatus } from "../gateway-client-vault.js";
 import {
   resumeVaultChanges,
   setVaultChangeShapeIds,
   subscribeVaultChanges,
   clearVaultChangeCursor,
-} from '../vault-change-feed.js';
-import { createReplicaCoordinator, type ReplicaWebCoordinatorOptions } from './coordinator-web.js';
-import { ReplicaProtocolError } from './errors.js';
-import { validateOptimisticMutation } from './query.js';
+} from "../vault-change-feed.js";
+import {
+  createReplicaCoordinator,
+  type ReplicaWebCoordinatorOptions,
+} from "./coordinator-web.js";
+import { ReplicaProtocolError } from "./errors.js";
+import { validateOptimisticMutation } from "./query.js";
 import {
   fetchReplicaBootstrap,
   fetchReplicaChanges,
@@ -24,7 +27,7 @@ import {
   postReplicaIntent,
   type ReplicaFetcher,
   ReplicaTransportError,
-} from './shell-transport.js';
+} from "./shell-transport.js";
 import {
   deferTerminalReplicaPurge,
   markReplicaIdentityTerminal,
@@ -33,8 +36,8 @@ import {
   purgeRememberedReplicaIdentities,
   unregisterRememberedReplicaIdentity,
   type ReplicaIdentityInventory,
-} from './storage-manifest.js';
-import { TerminalReplicaPurgeRetryLoop } from './terminal-purge-retry.js';
+} from "./storage-manifest.js";
+import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
 import {
   DEFAULT_REPLICA_PURPOSE,
   type EnqueueIntentInput,
@@ -52,7 +55,7 @@ import {
   type ReplicaShape,
   type ReplicaStatus,
   type ReplicaValue,
-} from './types.js';
+} from "./types.js";
 
 /**
  * Replica teardown mutates shared session and durable-storage ownership, so
@@ -60,28 +63,31 @@ import {
  */
 function applyScopeTeardownsInOrder<T>(
   values: Iterable<T>,
-  teardown: (value: T) => void | PromiseLike<void>,
+  teardown: (value: T) => void | PromiseLike<void>
 ): Promise<void> {
   return Array.from(values).reduce<Promise<void>>(
     (sequence, value) => sequence.then(() => teardown(value)),
-    Promise.resolve(),
+    Promise.resolve()
   );
 }
 
-export type ShellReplicaReadRequest = Omit<ReplicaReadRequest, 'shapeId'> & {
+export type ShellReplicaReadRequest = Omit<ReplicaReadRequest, "shapeId"> & {
   shapeId?: string;
 };
 
-export type ShellReplicaSearchRequest = Omit<ReplicaSearchRequest, 'shapeId'> & {
+export type ShellReplicaSearchRequest = Omit<
+  ReplicaSearchRequest,
+  "shapeId"
+> & {
   shapeId?: string;
 };
 
 export type ShellOptimisticMutation =
-  | (Omit<Extract<OptimisticMutation, { op: 'upsert' }>, 'shapeId'> & {
+  | (Omit<Extract<OptimisticMutation, { op: "upsert" }>, "shapeId"> & {
       shapeId?: string;
       purpose?: string;
     })
-  | (Omit<Extract<OptimisticMutation, { op: 'delete' }>, 'shapeId'> & {
+  | (Omit<Extract<OptimisticMutation, { op: "delete" }>, "shapeId"> & {
       shapeId?: string;
       purpose?: string;
     });
@@ -95,25 +101,32 @@ export interface ShellReplicaWriteInput {
 
 export type ShellReplicaWriteResult =
   | IntentOutcome
-  | { intentId: string; status: 'queued' | 'in-flight'; reason?: string };
+  | { intentId: string; status: "queued" | "in-flight"; reason?: string };
 
 export interface ShellReplicaCoordinator {
   bootstrap: (
-    snapshot: Awaited<ReturnType<typeof fetchReplicaBootstrap>>,
+    snapshot: Awaited<ReturnType<typeof fetchReplicaBootstrap>>
   ) => Promise<ReplicaCursor>;
   status: () => Promise<ReplicaStatus>;
   catalog: () => Promise<ReplicaShape[]>;
   readWire: (request: ReplicaReadRequest) => Promise<ReplicaReadWireResult>;
-  searchWire: (request: ReplicaSearchRequest) => Promise<ReplicaSearchWireResult>;
+  searchWire: (
+    request: ReplicaSearchRequest
+  ) => Promise<ReplicaSearchWireResult>;
   enqueue: (input: EnqueueIntentInput) => Promise<ReplicaIntent>;
   claimNextIntent: () => Promise<ReplicaIntent | undefined>;
-  markIntentTransportFailed: (intentId: string, reason?: string) => Promise<ReplicaIntent>;
+  markIntentTransportFailed: (
+    intentId: string,
+    reason?: string
+  ) => Promise<ReplicaIntent>;
   markIntentAwaitingChange: (intentId: string) => Promise<ReplicaIntent>;
-  applyIntentOutcome: (outcome: IntentOutcome) => Promise<ReplicaIntent | undefined>;
+  applyIntentOutcome: (
+    outcome: IntentOutcome
+  ) => Promise<ReplicaIntent | undefined>;
   recoverSending: () => Promise<ReplicaIntent[]>;
   pendingIntents: () => Promise<ReplicaIntent[]>;
   subscribeInvalidations: (
-    listener: (invalidations: readonly ReplicaInvalidation[]) => void,
+    listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
   close: () => Promise<void>;
   purge: () => Promise<void>;
@@ -121,7 +134,7 @@ export interface ShellReplicaCoordinator {
 
 export interface ReplicaShellSessionOptions {
   fetcher?: ReplicaFetcher;
-  eventTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
+  eventTarget?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
   isOnline?: () => boolean;
   retryDelayMs?: number;
   indexedDbFactory?: IDBFactory;
@@ -133,21 +146,26 @@ export interface ReplicaShellSessionOptions {
 }
 
 export interface OpenReplicaShellSessionOptions extends ReplicaShellSessionOptions {
-  workerFactory?: ReplicaWebCoordinatorOptions['workerFactory'];
-  intentStore?: ReplicaWebCoordinatorOptions['intentStore'];
+  workerFactory?: ReplicaWebCoordinatorOptions["workerFactory"];
+  intentStore?: ReplicaWebCoordinatorOptions["intentStore"];
   idFactory?: () => string;
 }
 
 /** One shell-owned replica + durable intent shipper for an authenticated scope. */
 export class ReplicaShellSession {
   readonly #fetcher: ReplicaFetcher;
-  readonly #eventTarget: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
+  readonly #eventTarget: Pick<
+    EventTarget,
+    "addEventListener" | "removeEventListener"
+  >;
   readonly #isOnline: () => boolean;
   readonly #retryDelayMs: number;
   readonly #indexedDbFactory: IDBFactory | undefined;
   readonly #rememberStorage: boolean;
   readonly #inventory: ReplicaIdentityInventory | undefined;
-  readonly #onAuthorizationRevoked: ((session: ReplicaShellSession) => void) | undefined;
+  readonly #onAuthorizationRevoked:
+    | ((session: ReplicaShellSession) => void)
+    | undefined;
   #catalog: ReplicaShape[] = [];
   #bootstrapPromise: Promise<void> | undefined;
   #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -171,7 +189,7 @@ export class ReplicaShellSession {
   constructor(
     readonly gatewayAuth: GatewayAuth,
     readonly coordinator: ShellReplicaCoordinator,
-    options: ReplicaShellSessionOptions = {},
+    options: ReplicaShellSessionOptions = {}
   ) {
     this.#fetcher = options.fetcher ?? fetchReplicaForScope(gatewayAuth);
     this.#eventTarget = options.eventTarget ?? window;
@@ -184,7 +202,7 @@ export class ReplicaShellSession {
   }
 
   async start(status: ReplicaStatus): Promise<this> {
-    this.#eventTarget.addEventListener('online', this.onOnline);
+    this.#eventTarget.addEventListener("online", this.onOnline);
     await this.coordinator.recoverSending();
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.coordinator.catalog();
@@ -193,24 +211,41 @@ export class ReplicaShellSession {
     return this;
   }
 
-  async read(appId: string, request: ShellReplicaReadRequest): Promise<ReplicaReadWireResult> {
+  async read(
+    appId: string,
+    request: ShellReplicaReadRequest
+  ): Promise<ReplicaReadWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId, request.purpose);
+    const shapeId = this.resolveShapeId(
+      appId,
+      request.entity,
+      request.shapeId,
+      request.purpose
+    );
     return this.coordinator.readWire({ ...request, shapeId });
   }
 
   async search(
     appId: string,
-    request: ShellReplicaSearchRequest,
+    request: ShellReplicaSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId, request.purpose);
+    const shapeId = this.resolveShapeId(
+      appId,
+      request.entity,
+      request.shapeId,
+      request.purpose
+    );
     return this.coordinator.searchWire({ ...request, shapeId });
   }
 
-  async write(appId: string, input: ShellReplicaWriteInput): Promise<ShellReplicaWriteResult> {
+  async write(
+    appId: string,
+    input: ShellReplicaWriteInput
+  ): Promise<ShellReplicaWriteResult> {
     this.assertOpen();
-    if (!input.action) throw new ReplicaProtocolError('Replica action is required');
+    if (!input.action)
+      throw new ReplicaProtocolError("Replica action is required");
     const optimistic = (input.optimistic ?? []).map((mutation) => {
       const { purpose, shapeId, ...core } = mutation;
       return {
@@ -219,11 +254,15 @@ export class ReplicaShellSession {
       };
     }) as OptimisticMutation[];
     for (const mutation of optimistic) {
-      const shape = this.#catalog.find((candidate) => candidate.shapeId === mutation.shapeId);
-      const schema = shape?.entities.find((candidate) => candidate.entity === mutation.entity);
+      const shape = this.#catalog.find(
+        (candidate) => candidate.shapeId === mutation.shapeId
+      );
+      const schema = shape?.entities.find(
+        (candidate) => candidate.entity === mutation.entity
+      );
       if (!schema) {
         throw new ReplicaProtocolError(
-          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`,
+          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`
         );
       }
       validateOptimisticMutation(mutation, schema);
@@ -234,7 +273,7 @@ export class ReplicaShellSession {
         shape.entities.map((entity) => ({
           shapeId: shape.shapeId,
           entity: entity.entity,
-        })),
+        }))
       );
     this.beginAdmissionRegistration();
     try {
@@ -252,15 +291,18 @@ export class ReplicaShellSession {
       if (!this.#isOnline()) {
         return {
           intentId: intent.intentId,
-          status: 'queued',
-          reason: 'waiting for a connection',
+          status: "queued",
+          reason: "waiting for a connection",
         };
       }
-      const admitted = new Promise<ShellReplicaWriteResult>((resolve, reject) => {
-        const waiters = this.#admissionWaiters.get(intent.intentId) ?? new Set();
-        waiters.add({ resolve, reject });
-        this.#admissionWaiters.set(intent.intentId, waiters);
-      });
+      const admitted = new Promise<ShellReplicaWriteResult>(
+        (resolve, reject) => {
+          const waiters =
+            this.#admissionWaiters.get(intent.intentId) ?? new Set();
+          waiters.add({ resolve, reject });
+          this.#admissionWaiters.set(intent.intentId, waiters);
+        }
+      );
       void this.flushIntents();
       return admitted;
     } finally {
@@ -271,29 +313,35 @@ export class ReplicaShellSession {
   subscribe(
     appId: string,
     dependencies: ShellReplicaReadRequest[] | ReplicaDependency[] | undefined,
-    listener: (invalidations: readonly ReplicaInvalidation[]) => void,
+    listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ): () => void {
     this.assertOpen();
     const requested = dependencies ?? [];
     const explicitShapes = new Set(
       requested.flatMap((dependency) =>
-        dependency.shapeId ? [`${dependency.shapeId}\u0000${dependency.entity}`] : [],
-      ),
+        dependency.shapeId
+          ? [`${dependency.shapeId}\u0000${dependency.entity}`]
+          : []
+      )
     );
     const wildcardEntities = new Set(
-      requested.flatMap((dependency) => (dependency.shapeId ? [] : [dependency.entity])),
+      requested.flatMap((dependency) =>
+        dependency.shapeId ? [] : [dependency.entity]
+      )
     );
     return this.coordinator.subscribeInvalidations((invalidations) => {
       const appShapes = new Set(
-        this.#catalog.filter((shape) => shape.appId === appId).map(shapeId),
+        this.#catalog.filter((shape) => shape.appId === appId).map(shapeId)
       );
       const relevant = invalidations.filter(
         (invalidation) =>
-          invalidation.source === 'purge' ||
+          invalidation.source === "purge" ||
           (appShapes.has(invalidation.shapeId) &&
             (requested.length === 0 ||
               wildcardEntities.has(invalidation.entity) ||
-              explicitShapes.has(`${invalidation.shapeId}\u0000${invalidation.entity}`))),
+              explicitShapes.has(
+                `${invalidation.shapeId}\u0000${invalidation.entity}`
+              )))
       );
       if (relevant.length > 0) listener(structuredClone(relevant));
     });
@@ -302,7 +350,9 @@ export class ReplicaShellSession {
   async flushIntents(): Promise<void> {
     if (this.#closed) return;
     if (!this.#isOnline()) {
-      this.resolveAdmissionWaitersAsQueued('saved locally; waiting for a connection');
+      this.resolveAdmissionWaitersAsQueued(
+        "saved locally; waiting for a connection"
+      );
       return;
     }
     if (this.#drainPromise) {
@@ -323,7 +373,9 @@ export class ReplicaShellSession {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
-    this.rejectAdmissionWaiters(new ReplicaProtocolError('Replica session closed'));
+    this.rejectAdmissionWaiters(
+      new ReplicaProtocolError("Replica session closed")
+    );
     this.detach();
     await this.coordinator.close();
   }
@@ -332,21 +384,31 @@ export class ReplicaShellSession {
     clearVaultChangeCursor(this.gatewayAuth);
     const identity = replicaIdentityForGatewayAuth(this.gatewayAuth);
     const inventoryOptions = {
-      ...(this.#indexedDbFactory ? { indexedDbFactory: this.#indexedDbFactory } : {}),
+      ...(this.#indexedDbFactory
+        ? { indexedDbFactory: this.#indexedDbFactory }
+        : {}),
       ...(this.#inventory ? { inventory: this.#inventory } : {}),
     };
     if (this.#closed) {
-      if (this.#rememberStorage) await purgeReplicaIdentityStorage(identity, inventoryOptions);
+      if (this.#rememberStorage)
+        await purgeReplicaIdentityStorage(identity, inventoryOptions);
       return;
     }
     this.#closed = true;
-    this.rejectAdmissionWaiters(new ReplicaProtocolError('Replica session purged'));
+    this.rejectAdmissionWaiters(
+      new ReplicaProtocolError("Replica session purged")
+    );
     this.detach();
     let terminalTracked = false;
     if (this.#rememberStorage) {
-      terminalTracked = await markReplicaIdentityTerminal(identity, inventoryOptions);
+      terminalTracked = await markReplicaIdentityTerminal(
+        identity,
+        inventoryOptions
+      );
       if (!terminalTracked) {
-        throw new ReplicaProtocolError('Could not durably schedule remembered replica purge');
+        throw new ReplicaProtocolError(
+          "Could not durably schedule remembered replica purge"
+        );
       }
     }
     try {
@@ -356,7 +418,9 @@ export class ReplicaShellSession {
       }
     } catch (error) {
       if (terminalTracked) {
-        await deferTerminalReplicaPurge(identity, inventoryOptions).catch(() => undefined);
+        await deferTerminalReplicaPurge(identity, inventoryOptions).catch(
+          () => undefined
+        );
       }
       terminalPurgeRetryLoop.wake();
       throw error;
@@ -369,7 +433,8 @@ export class ReplicaShellSession {
   }
 
   private async bootstrapWhenReachable(): Promise<void> {
-    if (this.#bootstrapPromise || this.#closed || !this.#isOnline()) return this.#bootstrapPromise;
+    if (this.#bootstrapPromise || this.#closed || !this.#isOnline())
+      return this.#bootstrapPromise;
     this.#bootstrapPromise = this.bootstrap().finally(() => {
       this.#bootstrapPromise = undefined;
     });
@@ -378,15 +443,21 @@ export class ReplicaShellSession {
 
   private async bootstrap(): Promise<void> {
     try {
-      const snapshot = await fetchReplicaBootstrap(this.gatewayAuth, this.#fetcher);
+      const snapshot = await fetchReplicaBootstrap(
+        this.gatewayAuth,
+        this.#fetcher
+      );
       const pending = await this.coordinator.pendingIntents();
       const exactOutcomes = await fetchReplicaIntentOutcomes(
         this.gatewayAuth,
         pending.map((intent) => intent.intentId),
         snapshot.cursor,
-        this.#fetcher,
+        this.#fetcher
       );
-      snapshot.outcomes = mergeIntentOutcomes(snapshot.outcomes ?? [], exactOutcomes);
+      snapshot.outcomes = mergeIntentOutcomes(
+        snapshot.outcomes ?? [],
+        exactOutcomes
+      );
       await this.coordinator.bootstrap(snapshot);
       this.#hasCursor = true;
       this.#catalog = await this.coordinator.catalog();
@@ -406,7 +477,9 @@ export class ReplicaShellSession {
     await this.waitForAdmissionRegistrations();
     if (this.#closed) return;
     if (!this.#isOnline()) {
-      this.resolveAdmissionWaitersAsQueued('saved locally; waiting for a connection');
+      this.resolveAdmissionWaitersAsQueued(
+        "saved locally; waiting for a connection"
+      );
       return;
     }
     let intent: ReplicaIntent | undefined;
@@ -418,8 +491,12 @@ export class ReplicaShellSession {
     }
     if (!intent) return;
     try {
-      const { outcome } = await postReplicaIntent(this.gatewayAuth, intent, this.#fetcher);
-      if (outcome.status === 'executed' || outcome.status === 'in-flight') {
+      const { outcome } = await postReplicaIntent(
+        this.gatewayAuth,
+        intent,
+        this.#fetcher
+      );
+      if (outcome.status === "executed" || outcome.status === "in-flight") {
         await this.coordinator.markIntentAwaitingChange(intent.intentId);
       } else {
         await this.coordinator.applyIntentOutcome(outcome);
@@ -437,7 +514,7 @@ export class ReplicaShellSession {
       if (isPermanentIntentRejection(error)) {
         const outcome: IntentOutcome = {
           intentId: intent.intentId,
-          status: error.status === 403 ? 'denied' : 'failed',
+          status: error.status === 403 ? "denied" : "failed",
           reason: error.message,
         };
         await this.coordinator.applyIntentOutcome(outcome);
@@ -451,8 +528,8 @@ export class ReplicaShellSession {
       await this.waitForAdmissionRegistrations();
       this.resolveAdmissionWaiter(intent.intentId, {
         intentId: intent.intentId,
-        status: 'queued',
-        reason: 'saved locally; retrying when the gateway is reachable',
+        status: "queued",
+        reason: "saved locally; retrying when the gateway is reachable",
       });
       this.scheduleRetry();
     }
@@ -462,29 +539,32 @@ export class ReplicaShellSession {
     appId: string,
     entity: string,
     requested?: string,
-    purpose?: string,
+    purpose?: string
   ): string {
-    const resolvedPurpose = purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
+    const resolvedPurpose =
+      purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
     const candidates = this.#catalog.filter(
       (shape) =>
         shape.appId === appId &&
         (resolvedPurpose === undefined || shape.purpose === resolvedPurpose) &&
-        shape.entities.some((item) => item.entity === entity),
+        shape.entities.some((item) => item.entity === entity)
     );
     if (requested) {
       if (!candidates.some((shape) => shape.shapeId === requested)) {
         throw new ReplicaProtocolError(
-          `Shape ${requested} is not available to app ${appId}${resolvedPurpose ? ` for purpose ${resolvedPurpose}` : ''}`,
+          `Shape ${requested} is not available to app ${appId}${resolvedPurpose ? ` for purpose ${resolvedPurpose}` : ""}`
         );
       }
       return requested;
     }
     if (candidates.length !== 1) {
-      const purposeLabel = resolvedPurpose ? ` at purpose ${resolvedPurpose}` : '';
+      const purposeLabel = resolvedPurpose
+        ? ` at purpose ${resolvedPurpose}`
+        : "";
       throw new ReplicaProtocolError(
         candidates.length === 0
           ? `No offline shape for ${appId}/${entity}${purposeLabel}`
-          : `Multiple offline shapes match ${appId}/${entity}${purposeLabel}; shapeId is required`,
+          : `Multiple offline shapes match ${appId}/${entity}${purposeLabel}; shapeId is required`
       );
     }
     return candidates[0]!.shapeId;
@@ -502,7 +582,7 @@ export class ReplicaShellSession {
     if (this.#bootstrapRetryTimer || this.#closed || !this.#isOnline()) return;
     const delay = Math.min(
       this.#retryDelayMs * 2 ** Math.min(this.#bootstrapRetryAttempt, 4),
-      30_000,
+      30_000
     );
     this.#bootstrapRetryAttempt += 1;
     this.#bootstrapRetryTimer = setTimeout(() => {
@@ -511,7 +591,10 @@ export class ReplicaShellSession {
     }, delay);
   }
 
-  private resolveAdmissionWaiter(intentId: string, result: ShellReplicaWriteResult): void {
+  private resolveAdmissionWaiter(
+    intentId: string,
+    result: ShellReplicaWriteResult
+  ): void {
     const waiters = this.#admissionWaiters.get(intentId);
     if (!waiters) return;
     this.#admissionWaiters.delete(intentId);
@@ -535,7 +618,7 @@ export class ReplicaShellSession {
     for (const intentId of this.#admissionWaiters.keys()) {
       this.resolveAdmissionWaiter(intentId, {
         intentId,
-        status: 'queued',
+        status: "queued",
         reason,
       });
     }
@@ -580,7 +663,7 @@ export class ReplicaShellSession {
   };
 
   private detach(): void {
-    this.#eventTarget.removeEventListener('online', this.onOnline);
+    this.#eventTarget.removeEventListener("online", this.onOnline);
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
     if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
@@ -589,73 +672,103 @@ export class ReplicaShellSession {
   }
 
   private assertOpen(): void {
-    if (this.#closed) throw new ReplicaProtocolError('Replica session is closed');
+    if (this.#closed)
+      throw new ReplicaProtocolError("Replica session is closed");
   }
 }
 
 export async function openReplicaShellSession(
   gatewayAuth: GatewayAuth,
-  options: OpenReplicaShellSessionOptions = {},
+  options: OpenReplicaShellSessionOptions = {}
 ): Promise<ReplicaShellSession> {
-  if (!gatewayAuth.vaultId) throw new ReplicaProtocolError('An addressed vault is required');
+  if (!gatewayAuth.vaultId)
+    throw new ReplicaProtocolError("An addressed vault is required");
   const identity = replicaIdentityForGatewayAuth(gatewayAuth);
   const rememberRequested = gatewayAuth.rememberDevice === true;
   const remember = rememberRequested
     ? await prepareRememberedReplicaIdentity(identity, {
-        ...(options.indexedDbFactory ? { indexedDbFactory: options.indexedDbFactory } : {}),
+        ...(options.indexedDbFactory
+          ? { indexedDbFactory: options.indexedDbFactory }
+          : {}),
         ...(options.inventory ? { inventory: options.inventory } : {}),
       })
     : false;
   if (!rememberRequested) {
-    await purgeRememberedReplicaIdentities((item) => sameIdentity(item, identity), {
-      ...(options.indexedDbFactory ? { indexedDbFactory: options.indexedDbFactory } : {}),
-      ...(options.inventory ? { inventory: options.inventory } : {}),
-      purgeSelector: { kind: 'identity', ...identity },
-    });
+    await purgeRememberedReplicaIdentities(
+      (item) => sameIdentity(item, identity),
+      {
+        ...(options.indexedDbFactory
+          ? { indexedDbFactory: options.indexedDbFactory }
+          : {}),
+        ...(options.inventory ? { inventory: options.inventory } : {}),
+        purgeSelector: { kind: "identity", ...identity },
+      }
+    );
   }
   let session: ReplicaShellSession | undefined;
   let pendingBootstrap = false;
   let persistedShapeIds: readonly string[] = [];
   const fetcher = options.fetcher ?? fetchReplicaForScope(gatewayAuth);
-  const { replica, status } = await createReplicaCoordinator(identity, remember, {
-    ...(options.workerFactory ? { workerFactory: options.workerFactory } : {}),
-    ...(options.intentStore ? { intentStore: options.intentStore } : {}),
-    ...(options.indexedDbFactory ? { indexedDbFactory: options.indexedDbFactory } : {}),
-    ...(options.idFactory ? { idFactory: options.idFactory } : {}),
-    // Every feed call names THIS session's scope explicitly (issue #599). The
-    // ambient overloads would bind all N mounted sessions to whichever vault is
-    // focused, so the non-focused scopes would silently stop seeing changes.
-    changeFeed: {
-      subscribe: (listener) => subscribeVaultChanges(listener, gatewayAuth),
-      setShapeIds: async (shapeIds) => {
-        persistedShapeIds = [...shapeIds];
-        await setVaultChangeShapeIds(persistedShapeIds, gatewayAuth);
+  const { replica, status } = await createReplicaCoordinator(
+    identity,
+    remember,
+    {
+      ...(options.workerFactory
+        ? { workerFactory: options.workerFactory }
+        : {}),
+      ...(options.intentStore ? { intentStore: options.intentStore } : {}),
+      ...(options.indexedDbFactory
+        ? { indexedDbFactory: options.indexedDbFactory }
+        : {}),
+      ...(options.idFactory ? { idFactory: options.idFactory } : {}),
+      // Every feed call names THIS session's scope explicitly (issue #599). The
+      // ambient overloads would bind all N mounted sessions to whichever vault is
+      // focused, so the non-focused scopes would silently stop seeing changes.
+      changeFeed: {
+        subscribe: (listener) => subscribeVaultChanges(listener, gatewayAuth),
+        setShapeIds: async (shapeIds) => {
+          persistedShapeIds = [...shapeIds];
+          await setVaultChangeShapeIds(persistedShapeIds, gatewayAuth);
+        },
+        resume: (cursor) => resumeVaultChanges(cursor, gatewayAuth),
       },
-      resume: (cursor) => resumeVaultChanges(cursor, gatewayAuth),
-    },
-    pullChanges: async (cursor, signal) => {
-      try {
-        return await fetchReplicaChanges(gatewayAuth, cursor, signal, persistedShapeIds, fetcher);
-      } catch (error) {
-        if (isAuthorizationError(error) && session) revokeAndPurge(session);
-        throw error;
-      }
-    },
-    onCursorAdvanced: (cursor, schemaEpoch) => {
-      void postReplicaCheckpoint(gatewayAuth, cursor, schemaEpoch, fetcher).catch((error) => {
-        if (isAuthorizationError(error) && session) revokeAndPurge(session);
-      });
-    },
-    onRebootstrapRequired: () => {
-      if (session) session.requireBootstrap();
-      else pendingBootstrap = true;
-    },
-  });
-  const rememberStorage = remember && status.mode === 'opfs-sahpool';
+      pullChanges: async (cursor, signal) => {
+        try {
+          return await fetchReplicaChanges(
+            gatewayAuth,
+            cursor,
+            signal,
+            persistedShapeIds,
+            fetcher
+          );
+        } catch (error) {
+          if (isAuthorizationError(error) && session) revokeAndPurge(session);
+          throw error;
+        }
+      },
+      onCursorAdvanced: (cursor, schemaEpoch) => {
+        void postReplicaCheckpoint(
+          gatewayAuth,
+          cursor,
+          schemaEpoch,
+          fetcher
+        ).catch((error) => {
+          if (isAuthorizationError(error) && session) revokeAndPurge(session);
+        });
+      },
+      onRebootstrapRequired: () => {
+        if (session) session.requireBootstrap();
+        else pendingBootstrap = true;
+      },
+    }
+  );
+  const rememberStorage = remember && status.mode === "opfs-sahpool";
   if (remember && !rememberStorage) {
     try {
       await unregisterRememberedReplicaIdentity(identity, {
-        ...(options.indexedDbFactory ? { indexedDbFactory: options.indexedDbFactory } : {}),
+        ...(options.indexedDbFactory
+          ? { indexedDbFactory: options.indexedDbFactory }
+          : {}),
         ...(options.inventory ? { inventory: options.inventory } : {}),
       });
     } catch (error) {
@@ -703,7 +816,9 @@ const sessions = new Map<string, SessionEntry>();
 const SESSION_IDLE_GRACE_MS = 30_000;
 // The gateway's answer to "which vault am I addressing?", per gateway. Held
 // across calls because `getReplicaShellSession` runs on every bridged read.
-let addressedFallback: { key: string; promise: Promise<string | undefined> } | undefined;
+let addressedFallback:
+  | { key: string; promise: Promise<string | undefined> }
+  | undefined;
 let lifecycleInstalled = false;
 let lifecyclePurge = Promise.resolve();
 const terminalPurgeRetryLoop = new TerminalReplicaPurgeRetryLoop();
@@ -731,11 +846,16 @@ function entryFor(gatewayAuth: GatewayAuth): SessionEntry {
  * Credentials for a scope on THIS gateway. A scope from another gateway has no
  * token here, so it is refused rather than opened against the wrong host.
  */
-async function gatewayAuthForIdentity(identity: ReplicaIdentity): Promise<GatewayAuth> {
+async function gatewayAuthForIdentity(
+  identity: ReplicaIdentity
+): Promise<GatewayAuth> {
   const base = await auth();
-  const gatewayId = base.gatewayId?.trim() || normalizedGatewayUrl(base.baseUrl);
+  const gatewayId =
+    base.gatewayId?.trim() || normalizedGatewayUrl(base.baseUrl);
   if (gatewayId !== identity.gatewayId) {
-    throw new ReplicaProtocolError(`Scope ${identity.vaultId} belongs to a different gateway`);
+    throw new ReplicaProtocolError(
+      `Scope ${identity.vaultId} belongs to a different gateway`
+    );
   }
   return { ...base, vaultId: identity.vaultId };
 }
@@ -745,35 +865,38 @@ function scheduleIdleClose(entry: SessionEntry): void {
   const timer = setTimeout(() => {
     entry.idleTimer = undefined;
     if (entry.refs > 0 || sessions.get(entry.key) !== entry) return;
-    void dropEntry(entry, 'close');
+    void dropEntry(entry, "close");
   }, SESSION_IDLE_GRACE_MS);
   // Node/vitest: a warm-scope timer must never hold the process open.
   (timer as unknown as { unref?: () => void }).unref?.();
   entry.idleTimer = timer;
 }
 
-async function dropEntry(entry: SessionEntry, mode: 'purge' | 'close'): Promise<void> {
+async function dropEntry(
+  entry: SessionEntry,
+  mode: "purge" | "close"
+): Promise<void> {
   if (sessions.get(entry.key) === entry) sessions.delete(entry.key);
   if (entry.idleTimer) clearTimeout(entry.idleTimer);
   entry.idleTimer = undefined;
   await entry.promise
-    .then((session) => (mode === 'purge' ? session.purge() : session.close()))
+    .then((session) => (mode === "purge" ? session.purge() : session.close()))
     .catch(() => undefined)
     .finally(() => {
-      if (mode === 'purge') terminalPurgeRetryLoop.wake();
+      if (mode === "purge") terminalPurgeRetryLoop.wake();
     });
 }
 
 /** The session for one explicit scope, opening it if this is its first mount. */
 export async function getReplicaShellSessionFor(
-  identity: ReplicaIdentity,
+  identity: ReplicaIdentity
 ): Promise<ReplicaShellSession> {
   return entryFor(await gatewayAuthForIdentity(identity)).promise;
 }
 
 /** Hold one scope open for as long as a mount needs it (issue #599). */
 export async function acquireReplicaShellSession(
-  identity: ReplicaIdentity,
+  identity: ReplicaIdentity
 ): Promise<ReplicaScopeLease> {
   const entry = entryFor(await gatewayAuthForIdentity(identity));
   entry.refs += 1;
@@ -799,7 +922,9 @@ export async function getReplicaShellSession(): Promise<ReplicaShellSession> {
 
 /** Purge EVERY mounted scope — the local half of losing this device's access. */
 export async function purgeReplicaShellSession(): Promise<void> {
-  await applyScopeTeardownsInOrder([...sessions.values()], (entry) => dropEntry(entry, 'purge'));
+  await applyScopeTeardownsInOrder([...sessions.values()], (entry) =>
+    dropEntry(entry, "purge")
+  );
 }
 
 /** Eager local half of revoking the device that owns this renderer. */
@@ -808,7 +933,7 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
   // Revoking THIS device revokes every scope it holds, so the sweep fans across
   // all mounted identities — not just the focused one (issue #599).
   const identities = new Map<string, ReplicaIdentity>(
-    [...sessions.values()].map((entry) => [entry.key, entry.identity]),
+    [...sessions.values()].map((entry) => [entry.key, entry.identity])
   );
   try {
     const gatewayAuth = await auth();
@@ -823,13 +948,14 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
   try {
     await applyScopeTeardownsInOrder(identities.values(), (identity) =>
       purgeRememberedReplicaIdentities((item) => sameIdentity(item, identity), {
-        purgeSelector: { kind: 'identity', ...identity },
-      }),
+        purgeSelector: { kind: "identity", ...identity },
+      })
     );
   } catch (error) {
     if (
       error instanceof Error &&
-      error.message === 'Could not durably schedule remembered replica discovery'
+      error.message ===
+        "Could not durably schedule remembered replica discovery"
     ) {
       throw error;
     }
@@ -842,7 +968,9 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
 
 /** Ordinary scope switches preserve remembered OPFS/IDB for a warm return. */
 export async function closeReplicaShellSession(): Promise<void> {
-  await applyScopeTeardownsInOrder([...sessions.values()], (entry) => dropEntry(entry, 'close'));
+  await applyScopeTeardownsInOrder([...sessions.values()], (entry) =>
+    dropEntry(entry, "close")
+  );
 }
 
 /**
@@ -872,21 +1000,29 @@ interface GatewayChangedDetail {
   purgeReplicaGatewayId?: string;
 }
 
-async function handleGatewayChanged(detail: GatewayChangedDetail): Promise<void> {
+async function handleGatewayChanged(
+  detail: GatewayChangedDetail
+): Promise<void> {
   const activeGatewayId = detail.gatewayId ?? detail.activeGatewayId;
   const purgeGatewayIds = new Set<string>();
   if (detail.removedGatewayId) purgeGatewayIds.add(detail.removedGatewayId);
-  if (detail.purgeReplicaGatewayId) purgeGatewayIds.add(detail.purgeReplicaGatewayId);
+  if (detail.purgeReplicaGatewayId)
+    purgeGatewayIds.add(detail.purgeReplicaGatewayId);
   // Every mounted scope of a removed gateway is terminal; scopes on a gateway
   // that merely lost focus close warm and keep their remembered storage.
   await applyScopeTeardownsInOrder([...sessions.values()], async (entry) => {
-    if (purgeGatewayIds.has(entry.identity.gatewayId)) await dropEntry(entry, 'purge');
-    else if (entry.identity.gatewayId !== activeGatewayId) await dropEntry(entry, 'close');
+    if (purgeGatewayIds.has(entry.identity.gatewayId))
+      await dropEntry(entry, "purge");
+    else if (entry.identity.gatewayId !== activeGatewayId)
+      await dropEntry(entry, "close");
   });
   await applyScopeTeardownsInOrder(purgeGatewayIds, (gatewayId) =>
-    purgeRememberedReplicaIdentities((identity) => identity.gatewayId === gatewayId, {
-      purgeSelector: { kind: 'gateway', gatewayId },
-    }),
+    purgeRememberedReplicaIdentities(
+      (identity) => identity.gatewayId === gatewayId,
+      {
+        purgeSelector: { kind: "gateway", gatewayId },
+      }
+    )
   );
 }
 
@@ -901,7 +1037,8 @@ function queueLifecyclePurge(task: () => Promise<void>): void {
 function forgetSession(session: ReplicaShellSession): void {
   for (const entry of sessions.values()) {
     void entry.promise.then((active) => {
-      if (active === session && sessions.get(entry.key) === entry) sessions.delete(entry.key);
+      if (active === session && sessions.get(entry.key) === entry)
+        sessions.delete(entry.key);
     });
   }
 }
@@ -912,13 +1049,15 @@ function revokeAndPurge(session: ReplicaShellSession): void {
   void purgeSessionTerminal(session);
 }
 
-async function purgeSessionTerminal(session: ReplicaShellSession): Promise<void> {
+async function purgeSessionTerminal(
+  session: ReplicaShellSession
+): Promise<void> {
   try {
     await session.purge();
   } catch {
-    await purgeReplicaIdentityStorage(replicaIdentityForGatewayAuth(session.gatewayAuth)).catch(
-      () => undefined,
-    );
+    await purgeReplicaIdentityStorage(
+      replicaIdentityForGatewayAuth(session.gatewayAuth)
+    ).catch(() => undefined);
   } finally {
     terminalPurgeRetryLoop.wake();
   }
@@ -928,13 +1067,13 @@ async function purgeSessionTerminal(session: ReplicaShellSession): Promise<void>
 function purgeBrowserReplicaCaches(): void {
   try {
     navigator.serviceWorker?.controller?.postMessage({
-      type: 'centraid:purge-tunnel-cache',
+      type: "centraid:purge-tunnel-cache",
     });
   } catch {
     /* Desktop and hardened browsers have no service-worker cache lane. */
   }
   try {
-    if (typeof caches !== 'undefined') {
+    if (typeof caches !== "undefined") {
       void caches
         .keys()
         .then((names) =>
@@ -942,11 +1081,11 @@ function purgeBrowserReplicaCaches(): void {
             names
               .filter(
                 (name) =>
-                  name.startsWith('centraid-tunnel-assets-') ||
-                  name.startsWith('centraid-tunnel-blobs-'),
+                  name.startsWith("centraid-tunnel-assets-") ||
+                  name.startsWith("centraid-tunnel-blobs-")
               )
-              .map((name) => caches.delete(name)),
-          ),
+              .map((name) => caches.delete(name))
+          )
         )
         .catch(() => undefined);
     }
@@ -971,7 +1110,8 @@ function purgeBrowserReplicaCaches(): void {
 export async function addressedGatewayAuth(): Promise<GatewayAuth> {
   const gatewayAuth = await auth();
   if (gatewayAuth.vaultId) return gatewayAuth;
-  const key = gatewayAuth.gatewayId?.trim() || normalizedGatewayUrl(gatewayAuth.baseUrl);
+  const key =
+    gatewayAuth.gatewayId?.trim() || normalizedGatewayUrl(gatewayAuth.baseUrl);
   let pending = addressedFallback?.key === key ? addressedFallback : undefined;
   if (!pending) {
     const promise = vaultStatus()
@@ -995,10 +1135,15 @@ export async function addressedGatewayAuth(): Promise<GatewayAuth> {
   return vaultId ? { ...gatewayAuth, vaultId } : gatewayAuth;
 }
 
-export function replicaIdentityForGatewayAuth(gatewayAuth: GatewayAuth): ReplicaIdentity {
-  if (!gatewayAuth.vaultId) throw new ReplicaProtocolError('An addressed vault is required');
+export function replicaIdentityForGatewayAuth(
+  gatewayAuth: GatewayAuth
+): ReplicaIdentity {
+  if (!gatewayAuth.vaultId)
+    throw new ReplicaProtocolError("An addressed vault is required");
   return {
-    gatewayId: gatewayAuth.gatewayId?.trim() || normalizedGatewayUrl(gatewayAuth.baseUrl),
+    gatewayId:
+      gatewayAuth.gatewayId?.trim() ||
+      normalizedGatewayUrl(gatewayAuth.baseUrl),
     vaultId: gatewayAuth.vaultId,
   };
 }
@@ -1006,12 +1151,12 @@ export function replicaIdentityForGatewayAuth(gatewayAuth: GatewayAuth): Replica
 function normalizedGatewayUrl(value: string): string {
   try {
     const url = new URL(value);
-    url.hash = '';
-    url.search = '';
-    url.pathname = url.pathname.replace(/\/+$/u, '') || '/';
+    url.hash = "";
+    url.search = "";
+    url.pathname = url.pathname.replace(/\/+$/u, "") || "/";
     return `url:${url.toString()}`;
   } catch {
-    return `url:${value.replace(/\/+$/u, '')}`;
+    return `url:${value.replace(/\/+$/u, "")}`;
   }
 }
 
@@ -1049,17 +1194,19 @@ export function fetchReplicaForScope(gatewayAuth: GatewayAuth): ReplicaFetcher {
 }
 
 function isAuthorizationError(error: unknown): boolean {
-  return error instanceof GatewayClientError && error.code === 'auth_required';
+  return error instanceof GatewayClientError && error.code === "auth_required";
 }
 
 function isTransientGatewayError(error: unknown): boolean {
   return (
     error instanceof GatewayClientError &&
-    (error.code === 'gateway_unreachable' || error.code === 'gateway_error')
+    (error.code === "gateway_unreachable" || error.code === "gateway_error")
   );
 }
 
-function isPermanentIntentRejection(error: unknown): error is ReplicaTransportError {
+function isPermanentIntentRejection(
+  error: unknown
+): error is ReplicaTransportError {
   return (
     error instanceof ReplicaTransportError &&
     error.status >= 400 &&
@@ -1075,22 +1222,24 @@ function errorMessage(error: unknown): string {
 
 function mergeIntentOutcomes(
   baseline: readonly IntentOutcome[],
-  exact: readonly IntentOutcome[],
+  exact: readonly IntentOutcome[]
 ): IntentOutcome[] {
   const byId = new Map(baseline.map((outcome) => [outcome.intentId, outcome]));
   for (const outcome of exact) byId.set(outcome.intentId, outcome);
   return [...byId.values()];
 }
 
-function admissionResult(intent: ReplicaIntent): ShellReplicaWriteResult | undefined {
-  if (intent.state === 'awaiting-change') {
-    return { intentId: intent.intentId, status: 'in-flight' };
+function admissionResult(
+  intent: ReplicaIntent
+): ShellReplicaWriteResult | undefined {
+  if (intent.state === "awaiting-change") {
+    return { intentId: intent.intentId, status: "in-flight" };
   }
   if (
-    intent.state !== 'parked' &&
-    intent.state !== 'executed' &&
-    intent.state !== 'denied' &&
-    intent.state !== 'failed'
+    intent.state !== "parked" &&
+    intent.state !== "executed" &&
+    intent.state !== "denied" &&
+    intent.state !== "failed"
   ) {
     return undefined;
   }

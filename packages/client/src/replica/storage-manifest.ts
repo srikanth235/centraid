@@ -1,21 +1,24 @@
-import { createIndexedDbReplicaIdentityInventory } from './identity-inventory.js';
-import { replicaIntentDatabaseName } from './key.js';
+import { createIndexedDbReplicaIdentityInventory } from "./identity-inventory.js";
+import { replicaIntentDatabaseName } from "./key.js";
 import {
   forgetReplicaPurgeSelector,
   listReplicaPurgeSelectors,
   rememberReplicaPurgeSelector,
   replicaPurgeSelectorMatches,
   type ReplicaPurgeSelector,
-} from './purge-selector.js';
-import type { ReplicaIdentity } from './types.js';
-import { ReplicaWorkerClient, type ReplicaWorkerFactory } from './worker-client.js';
+} from "./purge-selector.js";
+import type { ReplicaIdentity } from "./types.js";
+import {
+  ReplicaWorkerClient,
+  type ReplicaWorkerFactory,
+} from "./worker-client.js";
 
-const MANIFEST_KEY = 'centraid.replica.remembered.v1';
-const TERMINAL_MANIFEST_KEY = 'centraid.replica.terminal-pending.v1';
+const MANIFEST_KEY = "centraid.replica.remembered.v1";
+const TERMINAL_MANIFEST_KEY = "centraid.replica.terminal-pending.v1";
 const DEFAULT_PURGE_RETRY_BASE_MS = 5_000;
 const DEFAULT_PURGE_RETRY_MAX_MS = 5 * 60_000;
 
-type ManifestStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+type ManifestStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export interface ReplicaStoragePurgeOptions {
   storage?: ManifestStorage;
@@ -34,7 +37,7 @@ export interface ReplicaStoragePurgeOptions {
 }
 
 export interface ReplicaIdentityInventoryEntry extends ReplicaIdentity {
-  state: 'remembered' | 'terminal-pending';
+  state: "remembered" | "terminal-pending";
   purgeAttempts: number;
   retryAt: number;
 }
@@ -46,7 +49,7 @@ export interface ReplicaIdentityInventory {
     identity: ReplicaIdentity,
     failedAt: number,
     baseDelayMs: number,
-    maxDelayMs: number,
+    maxDelayMs: number
   ) => Promise<void>;
   remove: (identity: ReplicaIdentity) => Promise<void>;
   list: () => Promise<ReplicaIdentityInventoryEntry[]>;
@@ -54,11 +57,11 @@ export interface ReplicaIdentityInventory {
 
 /** Durable, non-secret inventory used to wipe replica scopes that are not open. */
 export function listRememberedReplicaIdentities(
-  storage: ManifestStorage | undefined = durableStorage(),
+  storage: ManifestStorage | undefined = durableStorage()
 ): ReplicaIdentity[] {
   if (!storage) return [];
   try {
-    const parsed = JSON.parse(storage.getItem(MANIFEST_KEY) ?? '[]') as unknown;
+    const parsed = JSON.parse(storage.getItem(MANIFEST_KEY) ?? "[]") as unknown;
     if (!Array.isArray(parsed)) return [];
     const unique = new Map<string, ReplicaIdentity>();
     for (const item of parsed) {
@@ -73,22 +76,25 @@ export function listRememberedReplicaIdentities(
 
 export function rememberReplicaIdentity(
   identity: ReplicaIdentity,
-  storage: ManifestStorage | undefined = durableStorage(),
+  storage: ManifestStorage | undefined = durableStorage()
 ): void {
   if (!storage) return;
   const identities = listRememberedReplicaIdentities(storage);
-  if (!identities.some((item) => sameIdentity(item, identity))) identities.push(identity);
+  if (!identities.some((item) => sameIdentity(item, identity)))
+    identities.push(identity);
   writeManifest(storage, identities);
 }
 
 export function forgetReplicaIdentity(
   identity: ReplicaIdentity,
-  storage: ManifestStorage | undefined = durableStorage(),
+  storage: ManifestStorage | undefined = durableStorage()
 ): void {
   if (!storage) return;
   writeManifest(
     storage,
-    listRememberedReplicaIdentities(storage).filter((item) => !sameIdentity(item, identity)),
+    listRememberedReplicaIdentities(storage).filter(
+      (item) => !sameIdentity(item, identity)
+    )
   );
 }
 
@@ -99,19 +105,26 @@ export function forgetReplicaIdentity(
  */
 export async function prepareRememberedReplicaIdentity(
   identity: ReplicaIdentity,
-  options: Pick<ReplicaStoragePurgeOptions, 'indexedDbFactory' | 'inventory' | 'storage'> = {},
+  options: Pick<
+    ReplicaStoragePurgeOptions,
+    "indexedDbFactory" | "inventory" | "storage"
+  > = {}
 ): Promise<boolean> {
   const inventory = inventoryFor(options);
   if (!inventory) return false;
   try {
     const storage = options.storage ?? durableStorage();
-    if (listTerminalPurgeHints(storage).some((item) => sameIdentity(item, identity))) {
+    if (
+      listTerminalPurgeHints(storage).some((item) =>
+        sameIdentity(item, identity)
+      )
+    ) {
       await inventory.markTerminal(identity);
       return false;
     }
     if (!(await inventory.activate(identity))) return false;
     const confirmed = (await inventory.list()).some(
-      (item) => sameIdentity(item, identity) && item.state === 'remembered',
+      (item) => sameIdentity(item, identity) && item.state === "remembered"
     );
     if (!confirmed) return false;
     rememberReplicaIdentity(identity, options.storage ?? durableStorage());
@@ -124,13 +137,18 @@ export async function prepareRememberedReplicaIdentity(
 /** Remove the authoritative row only after all per-scope storage is gone. */
 export async function unregisterRememberedReplicaIdentity(
   identity: ReplicaIdentity,
-  options: Pick<ReplicaStoragePurgeOptions, 'indexedDbFactory' | 'inventory' | 'storage'> = {},
+  options: Pick<
+    ReplicaStoragePurgeOptions,
+    "indexedDbFactory" | "inventory" | "storage"
+  > = {}
 ): Promise<void> {
   const inventory = inventoryFor(options);
   if (inventory) await inventory.remove(identity);
   const storage = options.storage ?? durableStorage();
   if (!forgetTerminalPurgeHint(identity, storage)) {
-    throw new Error('Could not confirm removal of the terminal replica retry marker');
+    throw new Error(
+      "Could not confirm removal of the terminal replica retry marker"
+    );
   }
   forgetReplicaIdentity(identity, storage);
 }
@@ -138,9 +156,15 @@ export async function unregisterRememberedReplicaIdentity(
 /** Persist terminal intent before any destructive storage operation starts. */
 export async function markReplicaIdentityTerminal(
   identity: ReplicaIdentity,
-  options: Pick<ReplicaStoragePurgeOptions, 'indexedDbFactory' | 'inventory' | 'storage'> = {},
+  options: Pick<
+    ReplicaStoragePurgeOptions,
+    "indexedDbFactory" | "inventory" | "storage"
+  > = {}
 ): Promise<boolean> {
-  const hintTracked = rememberTerminalPurgeHint(identity, options.storage ?? durableStorage());
+  const hintTracked = rememberTerminalPurgeHint(
+    identity,
+    options.storage ?? durableStorage()
+  );
   const inventory = inventoryFor(options);
   if (!inventory) return hintTracked;
   try {
@@ -157,8 +181,12 @@ export async function deferTerminalReplicaPurge(
   identity: ReplicaIdentity,
   options: Pick<
     ReplicaStoragePurgeOptions,
-    'indexedDbFactory' | 'inventory' | 'now' | 'retryBaseDelayMs' | 'retryMaxDelayMs'
-  > = {},
+    | "indexedDbFactory"
+    | "inventory"
+    | "now"
+    | "retryBaseDelayMs"
+    | "retryMaxDelayMs"
+  > = {}
 ): Promise<void> {
   const inventory = inventoryFor(options);
   if (!inventory) return;
@@ -166,7 +194,7 @@ export async function deferTerminalReplicaPurge(
     identity,
     (options.now ?? Date.now)(),
     positiveDelay(options.retryBaseDelayMs, DEFAULT_PURGE_RETRY_BASE_MS),
-    positiveDelay(options.retryMaxDelayMs, DEFAULT_PURGE_RETRY_MAX_MS),
+    positiveDelay(options.retryMaxDelayMs, DEFAULT_PURGE_RETRY_MAX_MS)
   );
 }
 
@@ -177,7 +205,7 @@ export async function deferTerminalReplicaPurge(
  */
 export async function purgeReplicaIdentityStorage(
   identity: ReplicaIdentity,
-  options: ReplicaStoragePurgeOptions = {},
+  options: ReplicaStoragePurgeOptions = {}
 ): Promise<void> {
   let terminalTracked = false;
   let terminalTrackingFailure: unknown;
@@ -189,7 +217,7 @@ export async function purgeReplicaIdentityStorage(
   if (!terminalTracked) {
     throw new AggregateError(
       terminalTrackingFailure ? [terminalTrackingFailure] : [],
-      `Could not durably schedule replica purge ${identity.gatewayId}/${identity.vaultId}`,
+      `Could not durably schedule replica purge ${identity.gatewayId}/${identity.vaultId}`
     );
   }
 
@@ -198,7 +226,10 @@ export async function purgeReplicaIdentityStorage(
     if (options.purgeIdentity) {
       await options.purgeIdentity(identity);
     } else {
-      const client = await ReplicaWorkerClient.createForPurge(identity, options.workerFactory);
+      const client = await ReplicaWorkerClient.createForPurge(
+        identity,
+        options.workerFactory
+      );
       await client.purge();
     }
   } catch (error) {
@@ -209,12 +240,17 @@ export async function purgeReplicaIdentityStorage(
   if (!options.purgeIdentity) {
     if (factory) {
       try {
-        await deleteIndexedDb(factory, await replicaIntentDatabaseName(identity));
+        await deleteIndexedDb(
+          factory,
+          await replicaIntentDatabaseName(identity)
+        );
       } catch (error) {
         failures.push(error);
       }
     } else {
-      failures.push(new Error('IndexedDB is unavailable for confirmed replica outbox purge'));
+      failures.push(
+        new Error("IndexedDB is unavailable for confirmed replica outbox purge")
+      );
     }
   }
 
@@ -237,7 +273,7 @@ export async function purgeReplicaIdentityStorage(
     }
     throw new AggregateError(
       failures,
-      `Could not purge replica ${identity.gatewayId}/${identity.vaultId}`,
+      `Could not purge replica ${identity.gatewayId}/${identity.vaultId}`
     );
   }
 }
@@ -248,7 +284,7 @@ export async function purgeReplicaIdentityStorage(
  * Returns the next absolute retry deadline, if any terminal rows remain.
  */
 export async function retryTerminalReplicaPurges(
-  options: ReplicaStoragePurgeOptions = {},
+  options: ReplicaStoragePurgeOptions = {}
 ): Promise<number | undefined> {
   const storage = options.storage ?? durableStorage();
   const discoveryFailures: unknown[] = [];
@@ -259,7 +295,7 @@ export async function retryTerminalReplicaPurges(
     try {
       await purgeRememberedReplicaIdentities(
         (identity) => replicaPurgeSelectorMatches(selector, identity),
-        { ...options, purgeSelector: selector },
+        { ...options, purgeSelector: selector }
       );
     } catch (error) {
       discoveryFailures.push(error);
@@ -275,7 +311,7 @@ export async function retryTerminalReplicaPurges(
       discoveryFailures.length > 0 ||
       listReplicaPurgeSelectors(storage).length > 0
     ) {
-      throw new Error('Replica terminal inventory is temporarily unavailable');
+      throw new Error("Replica terminal inventory is temporarily unavailable");
     }
     return undefined;
   }
@@ -288,18 +324,28 @@ export async function retryTerminalReplicaPurges(
   await markNextTerminalHint(0);
   const now = (options.now ?? Date.now)();
   const due = (await inventory.list()).filter(
-    (entry) => entry.state === 'terminal-pending' && entry.retryAt <= now,
+    (entry) => entry.state === "terminal-pending" && entry.retryAt <= now
   );
   const purgeNextDueReplica = async (index: number): Promise<void> => {
     const entry = due[index];
     if (!entry) return;
-    await purgeReplicaIdentityStorage(bareIdentity(entry), options).catch(() => undefined);
+    await purgeReplicaIdentityStorage(bareIdentity(entry), options).catch(
+      () => undefined
+    );
     return purgeNextDueReplica(index + 1);
   };
   await purgeNextDueReplica(0);
-  const remaining = (await inventory.list()).filter((entry) => entry.state === 'terminal-pending');
-  if (discoveryFailures.length > 0 || listReplicaPurgeSelectors(storage).length > 0) {
-    throw new AggregateError(discoveryFailures, 'Replica purge discovery remains pending');
+  const remaining = (await inventory.list()).filter(
+    (entry) => entry.state === "terminal-pending"
+  );
+  if (
+    discoveryFailures.length > 0 ||
+    listReplicaPurgeSelectors(storage).length > 0
+  ) {
+    throw new AggregateError(
+      discoveryFailures,
+      "Replica purge discovery remains pending"
+    );
   }
   if (remaining.length === 0) return undefined;
   return Math.min(...remaining.map((entry) => entry.retryAt));
@@ -308,14 +354,17 @@ export async function retryTerminalReplicaPurges(
 /** Purge every remembered identity selected from the durable manifest. */
 export async function purgeRememberedReplicaIdentities(
   matches: (identity: ReplicaIdentity) => boolean,
-  options: ReplicaStoragePurgeOptions = {},
+  options: ReplicaStoragePurgeOptions = {}
 ): Promise<void> {
   const storage = options.storage ?? durableStorage();
-  if (options.purgeSelector && !rememberReplicaPurgeSelector(options.purgeSelector, storage)) {
-    throw new Error('Could not durably schedule remembered replica discovery');
+  if (
+    options.purgeSelector &&
+    !rememberReplicaPurgeSelector(options.purgeSelector, storage)
+  ) {
+    throw new Error("Could not durably schedule remembered replica discovery");
   }
   if (options.purgeSelector && !inventoryFor(options)) {
-    throw new Error('Replica identity inventory is temporarily unavailable');
+    throw new Error("Replica identity inventory is temporarily unavailable");
   }
   const identities = (await durableReplicaIdentities(options)).filter(matches);
   const failures: unknown[] = [];
@@ -330,20 +379,30 @@ export async function purgeRememberedReplicaIdentities(
     return purgeNextIdentity(index + 1);
   };
   await purgeNextIdentity(0);
-  if (failures.length > 0) throw new AggregateError(failures, 'One or more replica scopes remain');
-  if (options.purgeSelector && !forgetReplicaPurgeSelector(options.purgeSelector, storage)) {
-    throw new Error('Could not confirm remembered replica discovery completion');
+  if (failures.length > 0)
+    throw new AggregateError(failures, "One or more replica scopes remain");
+  if (
+    options.purgeSelector &&
+    !forgetReplicaPurgeSelector(options.purgeSelector, storage)
+  ) {
+    throw new Error(
+      "Could not confirm remembered replica discovery completion"
+    );
   }
 }
 
 async function durableReplicaIdentities(
-  options: ReplicaStoragePurgeOptions,
+  options: ReplicaStoragePurgeOptions
 ): Promise<ReplicaIdentity[]> {
   const unique = new Map<string, ReplicaIdentity>();
-  for (const identity of listRememberedReplicaIdentities(options.storage ?? durableStorage())) {
+  for (const identity of listRememberedReplicaIdentities(
+    options.storage ?? durableStorage()
+  )) {
     unique.set(identityKey(identity), bareIdentity(identity));
   }
-  for (const identity of listTerminalPurgeHints(options.storage ?? durableStorage())) {
+  for (const identity of listTerminalPurgeHints(
+    options.storage ?? durableStorage()
+  )) {
     unique.set(identityKey(identity), bareIdentity(identity));
   }
   const inventory = inventoryFor(options);
@@ -358,7 +417,7 @@ async function durableReplicaIdentities(
 
 function durableStorage(): Storage | undefined {
   try {
-    return typeof localStorage === 'undefined' ? undefined : localStorage;
+    return typeof localStorage === "undefined" ? undefined : localStorage;
   } catch {
     return undefined;
   }
@@ -366,21 +425,24 @@ function durableStorage(): Storage | undefined {
 
 function availableIndexedDb(): IDBFactory | undefined {
   try {
-    return typeof indexedDB === 'undefined' ? undefined : indexedDB;
+    return typeof indexedDB === "undefined" ? undefined : indexedDB;
   } catch {
     return undefined;
   }
 }
 
 function inventoryFor(
-  options: Pick<ReplicaStoragePurgeOptions, 'indexedDbFactory' | 'inventory'>,
+  options: Pick<ReplicaStoragePurgeOptions, "indexedDbFactory" | "inventory">
 ): ReplicaIdentityInventory | undefined {
   if (options.inventory) return options.inventory;
   const factory = options.indexedDbFactory ?? availableIndexedDb();
   return factory ? createIndexedDbReplicaIdentityInventory(factory) : undefined;
 }
 
-function writeManifest(storage: ManifestStorage, identities: ReplicaIdentity[]): void {
+function writeManifest(
+  storage: ManifestStorage,
+  identities: ReplicaIdentity[]
+): void {
   try {
     if (identities.length === 0) storage.removeItem(MANIFEST_KEY);
     else storage.setItem(MANIFEST_KEY, JSON.stringify(identities));
@@ -389,14 +451,19 @@ function writeManifest(storage: ManifestStorage, identities: ReplicaIdentity[]):
   }
 }
 
-function listTerminalPurgeHints(storage: ManifestStorage | undefined): ReplicaIdentity[] {
+function listTerminalPurgeHints(
+  storage: ManifestStorage | undefined
+): ReplicaIdentity[] {
   if (!storage) return [];
   try {
-    const parsed = JSON.parse(storage.getItem(TERMINAL_MANIFEST_KEY) ?? '[]') as unknown;
+    const parsed = JSON.parse(
+      storage.getItem(TERMINAL_MANIFEST_KEY) ?? "[]"
+    ) as unknown;
     if (!Array.isArray(parsed)) return [];
     const unique = new Map<string, ReplicaIdentity>();
     for (const item of parsed) {
-      if (validIdentity(item)) unique.set(identityKey(item), bareIdentity(item));
+      if (validIdentity(item))
+        unique.set(identityKey(item), bareIdentity(item));
     }
     return [...unique.values()];
   } catch {
@@ -406,26 +473,36 @@ function listTerminalPurgeHints(storage: ManifestStorage | undefined): ReplicaId
 
 function rememberTerminalPurgeHint(
   identity: ReplicaIdentity,
-  storage: ManifestStorage | undefined,
+  storage: ManifestStorage | undefined
 ): boolean {
   if (!storage) return false;
   const pending = listTerminalPurgeHints(storage);
-  if (!pending.some((item) => sameIdentity(item, identity))) pending.push(bareIdentity(identity));
+  if (!pending.some((item) => sameIdentity(item, identity)))
+    pending.push(bareIdentity(identity));
   if (!writeTerminalPurgeHints(storage, pending)) return false;
-  return listTerminalPurgeHints(storage).some((item) => sameIdentity(item, identity));
+  return listTerminalPurgeHints(storage).some((item) =>
+    sameIdentity(item, identity)
+  );
 }
 
 function forgetTerminalPurgeHint(
   identity: ReplicaIdentity,
-  storage: ManifestStorage | undefined,
+  storage: ManifestStorage | undefined
 ): boolean {
   if (!storage) return true;
-  const remaining = listTerminalPurgeHints(storage).filter((item) => !sameIdentity(item, identity));
+  const remaining = listTerminalPurgeHints(storage).filter(
+    (item) => !sameIdentity(item, identity)
+  );
   if (!writeTerminalPurgeHints(storage, remaining)) return false;
-  return !listTerminalPurgeHints(storage).some((item) => sameIdentity(item, identity));
+  return !listTerminalPurgeHints(storage).some((item) =>
+    sameIdentity(item, identity)
+  );
 }
 
-function writeTerminalPurgeHints(storage: ManifestStorage, identities: ReplicaIdentity[]): boolean {
+function writeTerminalPurgeHints(
+  storage: ManifestStorage,
+  identities: ReplicaIdentity[]
+): boolean {
   try {
     if (identities.length === 0) storage.removeItem(TERMINAL_MANIFEST_KEY);
     else storage.setItem(TERMINAL_MANIFEST_KEY, JSON.stringify(identities));
@@ -438,31 +515,38 @@ function writeTerminalPurgeHints(storage: ManifestStorage, identities: ReplicaId
 function deleteIndexedDb(factory: IDBFactory, name: string): Promise<void> {
   const request = factory.deleteDatabase(name);
   return new Promise((resolve, reject) => {
-    request.addEventListener('success', () => resolve());
-    request.addEventListener('error', () =>
-      reject(request.error ?? new Error(`Could not delete IndexedDB ${name}`)),
+    request.addEventListener("success", () => resolve());
+    request.addEventListener("error", () =>
+      reject(request.error ?? new Error(`Could not delete IndexedDB ${name}`))
     );
-    request.addEventListener('blocked', () => reject(new Error(`IndexedDB ${name} is still open`)));
+    request.addEventListener("blocked", () =>
+      reject(new Error(`IndexedDB ${name} is still open`))
+    );
   });
 }
 
 function validIdentity(value: unknown): value is ReplicaIdentity {
-  if (!value || typeof value !== 'object') return false;
+  if (!value || typeof value !== "object") return false;
   const item = value as Partial<ReplicaIdentity>;
   return (
-    typeof item.gatewayId === 'string' &&
+    typeof item.gatewayId === "string" &&
     item.gatewayId.length > 0 &&
-    typeof item.vaultId === 'string' &&
+    typeof item.vaultId === "string" &&
     item.vaultId.length > 0
   );
 }
 
-function bareIdentity({ gatewayId, vaultId }: ReplicaIdentity): ReplicaIdentity {
+function bareIdentity({
+  gatewayId,
+  vaultId,
+}: ReplicaIdentity): ReplicaIdentity {
   return { gatewayId, vaultId };
 }
 
 function positiveDelay(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : fallback;
 }
 
 function sameIdentity(left: ReplicaIdentity, right: ReplicaIdentity): boolean {

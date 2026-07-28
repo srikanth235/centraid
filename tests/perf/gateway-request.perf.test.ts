@@ -1,11 +1,11 @@
-import { fork, type ChildProcess } from 'node:child_process';
-import path from 'node:path';
+import { fork, type ChildProcess } from "node:child_process";
+import path from "node:path";
 
-import { recordQualityResult } from '@centraid/test-kit/quality-result';
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { describe, expect, onTestFinished, test } from 'vitest';
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { describe, expect, onTestFinished, test } from "vitest";
 
-const OWNER = 'tests/perf/gateway-request.perf.test.ts';
+const OWNER = "tests/perf/gateway-request.perf.test.ts";
 
 // --- Budgets ---------------------------------------------------------------
 // Both measured 2026-07-19 (darwin arm64) against the gateway running in a
@@ -21,26 +21,30 @@ const REQUEST_P95_BUDGET_MS = 120;
 const IDLE_CPU_BUDGET_MS_PER_S = 25;
 const IDLE_WINDOW_MS = 5_000;
 
-describe('gateway-request.perf', () => {
-  test('gateway request latency and idle CPU stay within low-end budgets', async () => {
-    const root = await tempDir('gateway-perf-');
-    const child = fork(path.resolve('tests/perf/fixtures/gateway-idle-server.mjs'), [root], {
-      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-    });
-    let childError = '';
-    child.stderr?.on('data', (chunk) => {
+describe("gateway-request.perf", () => {
+  test("gateway request latency and idle CPU stay within low-end budgets", async () => {
+    const root = await tempDir("gateway-perf-");
+    const child = fork(
+      path.resolve("tests/perf/fixtures/gateway-idle-server.mjs"),
+      [root],
+      {
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+      }
+    );
+    let childError = "";
+    child.stderr?.on("data", (chunk) => {
       childError += String(chunk);
     });
     onTestFinished(() => {
-      if (child.connected) child.send({ type: 'close' });
+      if (child.connected) child.send({ type: "close" });
       child.kill();
     });
 
     const ready = await childMessage<{
-      type: 'ready';
+      type: "ready";
       url: string;
       token: string;
-    }>(child, 'ready', () => childError, 20_000);
+    }>(child, "ready", () => childError, 20_000);
 
     const samples: number[] = [];
     // This benchmark intentionally measures one request at a time, not a
@@ -58,35 +62,38 @@ describe('gateway-request.perf', () => {
     };
     await measureNext(0);
     samples.sort((left, right) => left - right);
-    const p95Ms = samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
+    const p95Ms =
+      samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
 
-    child.send({ type: 'measure-idle', windowMs: IDLE_WINDOW_MS });
+    child.send({ type: "measure-idle", windowMs: IDLE_WINDOW_MS });
     const idle = await childMessage<{
-      type: 'idle';
+      type: "idle";
       cpuUserUs: number;
       cpuSystemUs: number;
       wallMs: number;
-    }>(child, 'idle', () => childError, IDLE_WINDOW_MS + 15_000);
+    }>(child, "idle", () => childError, IDLE_WINDOW_MS + 15_000);
     const idleCpuMs = (idle.cpuUserUs + idle.cpuSystemUs) / 1_000;
     const idleCpuMsPerSecond = idleCpuMs / (idle.wallMs / 1_000);
 
-    const passed = p95Ms < REQUEST_P95_BUDGET_MS && idleCpuMsPerSecond < IDLE_CPU_BUDGET_MS_PER_S;
+    const passed =
+      p95Ms < REQUEST_P95_BUDGET_MS &&
+      idleCpuMsPerSecond < IDLE_CPU_BUDGET_MS_PER_S;
     await recordQualityResult({
-      lane: 'perf',
+      lane: "perf",
       owner: OWNER,
-      name: 'Gateway request p95 and idle CPU',
-      status: passed ? 'passed' : 'failed',
+      name: "Gateway request p95 and idle CPU",
+      status: passed ? "passed" : "failed",
       measurements: [
         {
-          name: 'request p95',
+          name: "request p95",
           value: p95Ms,
-          unit: 'ms',
+          unit: "ms",
           budget: REQUEST_P95_BUDGET_MS,
         },
         {
-          name: 'idle CPU per second',
+          name: "idle CPU per second",
           value: idleCpuMsPerSecond,
-          unit: 'ms/s',
+          unit: "ms/s",
           budget: IDLE_CPU_BUDGET_MS_PER_S,
         },
       ],
@@ -100,12 +107,15 @@ function childMessage<T>(
   child: ChildProcess,
   expectedType: string,
   stderr: () => string,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error(`gateway perf child timed out waiting for ${expectedType}`)),
-      timeoutMs,
+      () =>
+        reject(
+          new Error(`gateway perf child timed out waiting for ${expectedType}`)
+        ),
+      timeoutMs
     );
     const onMessage = (message: unknown) => {
       if ((message as { type?: string })?.type !== expectedType) return;
@@ -118,10 +128,10 @@ function childMessage<T>(
     };
     const cleanup = () => {
       clearTimeout(timer);
-      child.off('message', onMessage);
-      child.off('exit', onExit);
+      child.off("message", onMessage);
+      child.off("exit", onExit);
     };
-    child.on('message', onMessage);
-    child.once('exit', onExit);
+    child.on("message", onMessage);
+    child.once("exit", onExit);
   });
 }

@@ -1,19 +1,19 @@
-import type { Dispatch, JSX } from 'react';
+import type { Dispatch, JSX } from "react";
 
-import { cx } from '../../ui/cx.js';
-import Icon from '../../ui/Icon.js';
+import { cx } from "../../ui/cx.js";
+import Icon from "../../ui/Icon.js";
 import {
   canCommitConnectFlow,
   vaultCapability,
   type ConnectFlowEvent,
   type ConnectFlowState,
-} from './connectFlow-core.js';
-import { PROFILE_COLORS } from './SpaceModal.js';
+} from "./connectFlow-core.js";
+import { PROFILE_COLORS } from "./SpaceModal.js";
 
-import a11y from '../../styles/a11y.module.css';
-import controlsCss from '../../styles/controls.module.css';
-import buttonCss from '../../ui/Button.module.css';
-import styles from './ConnectFlow.module.css';
+import a11y from "../../styles/a11y.module.css";
+import controlsCss from "../../styles/controls.module.css";
+import buttonCss from "../../ui/Button.module.css";
+import styles from "./ConnectFlow.module.css";
 
 // The 'vault' step — split out of ConnectFlow.tsx (issue #382) purely to
 // keep that file under the repo's file-size cap.
@@ -25,7 +25,7 @@ export function VaultStep({
 }: {
   state: ConnectFlowState;
   dispatch: Dispatch<ConnectFlowEvent>;
-  context: 'onboarding' | 'switcher';
+  context: "onboarding" | "switcher";
 }): JSX.Element {
   const cap = vaultCapability(state);
   const loading = !state.report;
@@ -52,8 +52,8 @@ export function VaultStep({
           </span>
           <span className={styles.lockedName}>{cap.locked.vaultName}</span>
           <p className={styles.hint}>
-            Fixed by the pairing ticket — connecting to a different space on this gateway needs a
-            new ticket.
+            Fixed by the pairing ticket — connecting to a different space on
+            this gateway needs a new ticket.
           </p>
         </div>
       ) : (
@@ -62,7 +62,8 @@ export function VaultStep({
             <label
               key={v.vaultId}
               data-selected={
-                state.vaultChoice?.kind === 'existing' && state.vaultChoice.vaultId === v.vaultId
+                state.vaultChoice?.kind === "existing" &&
+                state.vaultChoice.vaultId === v.vaultId
               }
               className={styles.vaultRow}
             >
@@ -71,12 +72,13 @@ export function VaultStep({
                 className={a11y.srControl}
                 name="connect-flow-vault"
                 checked={
-                  state.vaultChoice?.kind === 'existing' && state.vaultChoice.vaultId === v.vaultId
+                  state.vaultChoice?.kind === "existing" &&
+                  state.vaultChoice.vaultId === v.vaultId
                 }
                 onChange={() =>
                   dispatch({
-                    choice: { kind: 'existing', vaultId: v.vaultId },
-                    type: 'selectVault',
+                    choice: { kind: "existing", vaultId: v.vaultId },
+                    type: "selectVault",
                   })
                 }
               />
@@ -86,7 +88,8 @@ export function VaultStep({
                 aria-hidden="true"
               />
               <span>{v.name}</span>
-              {state.vaultChoice?.kind === 'existing' && state.vaultChoice.vaultId === v.vaultId ? (
+              {state.vaultChoice?.kind === "existing" &&
+              state.vaultChoice.vaultId === v.vaultId ? (
                 <Icon name="Check" size={14} strokeWidth={2.4} />
               ) : null}
             </label>
@@ -94,27 +97,30 @@ export function VaultStep({
           {cap.canCreate ? (
             <div className={styles.createRow}>
               <label
-                data-selected={state.vaultChoice?.kind === 'create'}
+                data-selected={state.vaultChoice?.kind === "create"}
                 className={styles.vaultRow}
               >
                 <input
                   type="radio"
                   className={a11y.srControl}
                   name="connect-flow-vault"
-                  checked={state.vaultChoice?.kind === 'create'}
+                  checked={state.vaultChoice?.kind === "create"}
                   onChange={() =>
                     dispatch({
-                      choice: { kind: 'create' },
-                      type: 'selectVault',
+                      choice: { kind: "create" },
+                      type: "selectVault",
                     })
                   }
                 />
-                <span className={cx(styles.vaultDot, styles.vaultDotAdd)} aria-hidden="true">
+                <span
+                  className={cx(styles.vaultDot, styles.vaultDotAdd)}
+                  aria-hidden="true"
+                >
                   <Icon name="Plus" size={12} strokeWidth={2.4} />
                 </span>
                 <span>Create new space</span>
               </label>
-              {state.vaultChoice?.kind === 'create' ? (
+              {state.vaultChoice?.kind === "create" ? (
                 <input
                   className={styles.input}
                   type="text"
@@ -123,8 +129,8 @@ export function VaultStep({
                   value={state.newVaultName}
                   onChange={(e) =>
                     dispatch({
-                      field: 'newVaultName',
-                      type: 'setField',
+                      field: "newVaultName",
+                      type: "setField",
                       value: e.target.value,
                     })
                   }
@@ -132,7 +138,9 @@ export function VaultStep({
               ) : null}
             </div>
           ) : cap.options.length > 0 ? (
-            <p className={styles.hint}>Creating a new space here needs the gateway host's CLI.</p>
+            <p className={styles.hint}>
+              Creating a new space here needs the gateway host's CLI.
+            </p>
           ) : null}
         </div>
       )}
@@ -140,7 +148,7 @@ export function VaultStep({
         <button
           type="button"
           className={controlsCss.chip}
-          onClick={() => dispatch({ type: 'back' })}
+          onClick={() => dispatch({ type: "back" })}
         >
           Back
         </button>
@@ -149,9 +157,9 @@ export function VaultStep({
           type="button"
           className={cx(buttonCss.btn, buttonCss.primary, buttonCss.sm)}
           disabled={!canCommitConnectFlow(state)}
-          onClick={() => dispatch({ type: 'commit' })}
+          onClick={() => dispatch({ type: "commit" })}
         >
-          {context === 'onboarding' ? 'Enter Centraid' : 'Connect'}
+          {context === "onboarding" ? "Enter Centraid" : "Connect"}
         </button>
       </div>
     </div>

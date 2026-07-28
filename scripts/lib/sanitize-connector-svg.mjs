@@ -11,7 +11,7 @@ const XML_FEATURE = /<\?(?:xml)?|<!DOCTYPE|<!ENTITY/iu;
  * markup capable of navigation, scripting, external resource loading, CSS,
  * or animation before it reaches React's dangerouslySetInnerHTML constant.
  */
-export function assertSafeConnectorSvg(svg, source = 'SVG') {
+export function assertSafeConnectorSvg(svg, source = "SVG") {
   const refusal =
     XML_FEATURE.test(svg) ||
     FORBIDDEN_ELEMENT.test(svg) ||

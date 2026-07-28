@@ -3,7 +3,7 @@
 // node:zlib. No zip64, no encryption, no data descriptors beyond what the
 // central directory already records — Takeout archives satisfy all three.
 
-import { inflateRawSync } from 'node:zlib';
+import { inflateRawSync } from "node:zlib";
 
 export interface ZipEntry {
   name: string;
@@ -25,7 +25,7 @@ export function readZipEntries(buffer: Buffer): ZipEntry[] {
       break;
     }
   }
-  if (eocd < 0) throw new Error('not a zip file (no end-of-central-directory)');
+  if (eocd < 0) throw new Error("not a zip file (no end-of-central-directory)");
   const entryCount = buffer.readUInt16LE(eocd + 10);
   let offset = buffer.readUInt32LE(eocd + 16);
 
@@ -38,10 +38,12 @@ export function readZipEntries(buffer: Buffer): ZipEntry[] {
     const extraLength = buffer.readUInt16LE(offset + 30);
     const commentLength = buffer.readUInt16LE(offset + 32);
     const localOffset = buffer.readUInt32LE(offset + 42);
-    const name = buffer.subarray(offset + 46, offset + 46 + nameLength).toString('utf8');
+    const name = buffer
+      .subarray(offset + 46, offset + 46 + nameLength)
+      .toString("utf8");
     offset += 46 + nameLength + extraLength + commentLength;
 
-    if (name.endsWith('/')) continue; // directory
+    if (name.endsWith("/")) continue; // directory
     if (buffer.readUInt32LE(localOffset) !== LOCAL_SIG) continue;
     const localNameLength = buffer.readUInt16LE(localOffset + 26);
     const localExtraLength = buffer.readUInt16LE(localOffset + 28);

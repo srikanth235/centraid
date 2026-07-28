@@ -18,7 +18,7 @@ export function coerceAgentAnswer(text: string, json: unknown): unknown {
   } catch (err) {
     throw new Error(
       `ctx.agent expected JSON but got: ${trimmed.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-      { cause: err },
+      { cause: err }
     );
   }
 }

@@ -5,9 +5,9 @@
 // attachment rows CASCADE off `turns`; the digest already carries the range's
 // rollups, so Insights/Executions are unaffected.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import type { CustodyProven } from './types.js';
+import type { CustodyProven } from "./types.js";
 
 interface PendingArchiveRow {
   id: string;
@@ -27,20 +27,23 @@ interface PendingArchiveRow {
  * when there is anything to reclaim (`freelist_count > 0`).
  */
 export function reclaimJournalPages(journal: DatabaseSync): {
-  mode: 'incremental' | 'full' | 'none';
+  mode: "incremental" | "full" | "none";
   ranVacuum: boolean;
 } {
-  const freelist = (journal.prepare('PRAGMA freelist_count').get() as { freelist_count: number })
-    .freelist_count;
-  const av = (journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum;
-  const mode = av === 2 ? 'incremental' : av === 1 ? 'full' : 'none';
+  const freelist = (
+    journal.prepare("PRAGMA freelist_count").get() as { freelist_count: number }
+  ).freelist_count;
+  const av = (
+    journal.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
+  ).auto_vacuum;
+  const mode = av === 2 ? "incremental" : av === 1 ? "full" : "none";
   if (freelist === 0) return { mode, ranVacuum: false };
-  if (mode === 'incremental') {
-    journal.exec('PRAGMA incremental_vacuum');
+  if (mode === "incremental") {
+    journal.exec("PRAGMA incremental_vacuum");
     return { mode, ranVacuum: true };
   }
-  journal.exec('VACUUM');
-  return { mode: 'full', ranVacuum: true };
+  journal.exec("VACUUM");
+  return { mode: "full", ranVacuum: true };
 }
 
 /**
@@ -56,7 +59,7 @@ export function pruneCustodyProven(
   journal: DatabaseSync,
   custodyProven: CustodyProven,
   nowMs: number,
-  maxSegments: number,
+  maxSegments: number
 ): { turnsPruned: number; segmentsPruned: number } {
   const pending = journal
     .prepare(
@@ -64,7 +67,7 @@ export function pruneCustodyProven(
          FROM conversation_archive
         WHERE pruned_at IS NULL
         ORDER BY created_at ASC
-        LIMIT ?`,
+        LIMIT ?`
     )
     .all(maxSegments) as unknown as PendingArchiveRow[];
 
@@ -73,19 +76,21 @@ export function pruneCustodyProven(
   for (const row of pending) {
     // THE LATCH. No delete path exists outside this branch.
     if (!custodyProven(row.segment_sha256)) continue;
-    journal.exec('BEGIN IMMEDIATE');
+    journal.exec("BEGIN IMMEDIATE");
     try {
       const info = journal
-        .prepare(`DELETE FROM turns WHERE conversation_id = ? AND seq BETWEEN ? AND ?`)
+        .prepare(
+          `DELETE FROM turns WHERE conversation_id = ? AND seq BETWEEN ? AND ?`
+        )
         .run(row.conversation_id, row.seq_from, row.seq_to);
       journal
         .prepare(`UPDATE conversation_archive SET pruned_at = ? WHERE id = ?`)
         .run(nowMs, row.id);
-      journal.exec('COMMIT');
+      journal.exec("COMMIT");
       turnsPruned += Number(info.changes);
       segmentsPruned += 1;
     } catch (err) {
-      journal.exec('ROLLBACK');
+      journal.exec("ROLLBACK");
       throw err;
     }
   }

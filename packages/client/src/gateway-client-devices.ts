@@ -13,7 +13,10 @@
  * routes 404, which `listGatewayDevices` reports as an empty roster.
  */
 
-import { readDirectBlob, type DirectBlobDownloadPlan } from './device-blob-source.js';
+import {
+  readDirectBlob,
+  type DirectBlobDownloadPlan,
+} from "./device-blob-source.js";
 import {
   auth,
   authHeaders,
@@ -22,7 +25,7 @@ import {
   readJson,
   GatewayClientError,
   VAULT_HEADER,
-} from './gateway-client-core.js';
+} from "./gateway-client-core.js";
 
 export interface DeviceComputeCapabilities {
   previews: boolean;
@@ -53,9 +56,15 @@ export interface DeviceEnrichmentLease {
   requestId: string;
   entityType: string;
   entityId: string | null;
-  reason: 'search-miss' | 'on-view' | 'manual';
+  reason: "search-miss" | "on-view" | "manual";
   detail: string | null;
-  capability: 'previews' | 'poster' | 'pdfText' | 'ocr' | 'transcript' | 'embedding';
+  capability:
+    | "previews"
+    | "poster"
+    | "pdfText"
+    | "ocr"
+    | "transcript"
+    | "embedding";
   contributionVariant: string | null;
   deviceId: string;
   token: string;
@@ -68,7 +77,7 @@ export interface DeviceEnrichmentLease {
  * gateway's `GrantableRole` and of `centraid-gateway pair --role`. `revoked`
  * is a state a device is put INTO, never a role handed out, so it is not here.
  */
-export type GatewayDeviceRole = 'admin' | 'write' | 'read';
+export type GatewayDeviceRole = "admin" | "write" | "read";
 
 /**
  * One (space, role) pair — the unit authority is authored in since #599.
@@ -92,7 +101,7 @@ export interface CentraidGatewayDevice {
   memberLabel: string;
   label: string;
   platform?: string;
-  transport: 'iroh';
+  transport: "iroh";
   vaultId: string;
   vaultName?: string;
   addedAt?: string;
@@ -105,7 +114,7 @@ export interface CentraidGatewayDevice {
    * always holds it, so a roster type without it could not describe the one
    * device every gateway has. `revoked` is a tombstone, never a granted role.
    */
-  role: GatewayDeviceRole | 'revoked';
+  role: GatewayDeviceRole | "revoked";
   /** Whether this device consented to durable OPFS/IndexedDB state. */
   rememberDevice: boolean;
   /** Server-enforced app allow-list for a constrained Companion device. */
@@ -123,15 +132,19 @@ export interface CentraidGatewayDevice {
 export async function listGatewayDevices(): Promise<CentraidGatewayDevice[]> {
   const { baseUrl, token } = await auth();
   try {
-    const res = await doFetch(baseUrl, '/centraid/_gateway/devices', {
-      method: 'GET',
+    const res = await doFetch(baseUrl, "/centraid/_gateway/devices", {
+      method: "GET",
       headers: authHeaders(token),
     });
-    const out = await readJson<{ devices: CentraidGatewayDevice[] }>(res, 'list devices');
+    const out = await readJson<{ devices: CentraidGatewayDevice[] }>(
+      res,
+      "list devices"
+    );
     return out.devices ?? [];
   } catch (err) {
     // A gateway without a device plane (desktop embed) simply has none.
-    if (err instanceof GatewayClientError && err.code === 'not_found') return [];
+    if (err instanceof GatewayClientError && err.code === "not_found")
+      return [];
     throw err;
   }
 }
@@ -180,15 +193,18 @@ export interface GatewayDeviceTicketInput {
  * grants travel with it.
  */
 export async function createGatewayDeviceTicket(
-  input?: GatewayDeviceTicketInput,
+  input?: GatewayDeviceTicketInput
 ): Promise<GatewayDeviceTicket> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/devices/ticket', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+  const res = await doFetch(baseUrl, "/centraid/_gateway/devices/ticket", {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify(input ?? {}),
   });
-  return readJson<GatewayDeviceTicket & { ok: true }>(res, 'mint pairing ticket');
+  return readJson<GatewayDeviceTicket & { ok: true }>(
+    res,
+    "mint pairing ticket"
+  );
 }
 
 /**
@@ -202,17 +218,23 @@ export async function createGatewayDeviceTicket(
  */
 export async function revokeGatewayDevice(
   deviceId: string,
-  options?: { confirmLastAdmin?: string },
+  options?: { confirmLastAdmin?: string }
 ): Promise<{ removed: boolean }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_gateway/devices/${enc(deviceId)}`, {
-    method: 'DELETE',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(
-      options?.confirmLastAdmin ? { confirmLastAdmin: options.confirmLastAdmin } : {},
-    ),
-  });
-  return readJson<{ removed: boolean }>(res, 'revoke device');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/devices/${enc(deviceId)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(
+        options?.confirmLastAdmin
+          ? { confirmLastAdmin: options.confirmLastAdmin }
+          : {}
+      ),
+    }
+  );
+  return readJson<{ removed: boolean }>(res, "revoke device");
 }
 
 const BASIC_BROWSER_COMPUTE: DeviceComputeCapabilities = {
@@ -222,7 +244,7 @@ const BASIC_BROWSER_COMPUTE: DeviceComputeCapabilities = {
   ocr: false,
   embedding: false,
   transcript: false,
-  edgeSeal: typeof crypto !== 'undefined' && crypto.subtle !== undefined,
+  edgeSeal: typeof crypto !== "undefined" && crypto.subtle !== undefined,
   backgroundTransfer: false,
 };
 
@@ -240,33 +262,52 @@ const NO_COMPUTE: DeviceComputeCapabilities = {
 /** Toggle idle-device contribution and refresh the current device's capability advertisement. */
 export async function setGatewayDeviceCompute(
   device: CentraidGatewayDevice,
-  contributeWhileCharging: boolean,
+  contributeWhileCharging: boolean
 ): Promise<CentraidGatewayDevice> {
   const { baseUrl, token } = await auth();
-  const host = device.current ? await window.CentraidApi.getHostCapabilities?.() : undefined;
+  const host = device.current
+    ? await window.CentraidApi.getHostCapabilities?.()
+    : undefined;
   const capabilities = device.current
     ? (host?.compute ?? BASIC_BROWSER_COMPUTE)
     : (device.compute?.capabilities ?? NO_COMPUTE);
-  const res = await doFetch(baseUrl, `/centraid/_gateway/devices/${enc(device.deviceId)}/compute`, {
-    method: 'PUT',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ contributeWhileCharging, capabilities }),
-  });
-  const out = await readJson<{ device: CentraidGatewayDevice }>(res, 'update device compute');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/devices/${enc(device.deviceId)}/compute`,
+    {
+      method: "PUT",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ contributeWhileCharging, capabilities }),
+    }
+  );
+  const out = await readJson<{ device: CentraidGatewayDevice }>(
+    res,
+    "update device compute"
+  );
   return out.device;
 }
 
-export async function getGatewayDeviceWorkStatus(): Promise<GatewayDeviceWorkDepth[]> {
+export async function getGatewayDeviceWorkStatus(): Promise<
+  GatewayDeviceWorkDepth[]
+> {
   const { baseUrl, token } = await auth();
   try {
-    const res = await doFetch(baseUrl, '/centraid/_gateway/device-work/status', {
-      method: 'GET',
-      headers: authHeaders(token),
-    });
-    const out = await readJson<{ vaults: GatewayDeviceWorkDepth[] }>(res, 'device work status');
+    const res = await doFetch(
+      baseUrl,
+      "/centraid/_gateway/device-work/status",
+      {
+        method: "GET",
+        headers: authHeaders(token),
+      }
+    );
+    const out = await readJson<{ vaults: GatewayDeviceWorkDepth[] }>(
+      res,
+      "device work status"
+    );
     return out.vaults;
   } catch (error) {
-    if (error instanceof GatewayClientError && error.code === 'not_found') return [];
+    if (error instanceof GatewayClientError && error.code === "not_found")
+      return [];
     throw error;
   }
 }
@@ -274,18 +315,23 @@ export async function getGatewayDeviceWorkStatus(): Promise<GatewayDeviceWorkDep
 /** Pull one compatible job only while the caller proves charging + unmetered eligibility. */
 export async function leaseGatewayDeviceWork(input: {
   vaultId: string;
-  capabilities: DeviceEnrichmentLease['capability'][];
+  capabilities: DeviceEnrichmentLease["capability"][];
   charging: boolean;
   unmetered: boolean;
   ttlMs?: number;
 }): Promise<DeviceEnrichmentLease | null> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/device-work/lease', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+  const res = await doFetch(baseUrl, "/centraid/_gateway/device-work/lease", {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify(input),
   });
-  return (await readJson<{ lease: DeviceEnrichmentLease | null }>(res, 'lease device work')).lease;
+  return (
+    await readJson<{ lease: DeviceEnrichmentLease | null }>(
+      res,
+      "lease device work"
+    )
+  ).lease;
 }
 
 export async function finishGatewayDeviceWork(input: {
@@ -294,12 +340,17 @@ export async function finishGatewayDeviceWork(input: {
   token: string;
 }): Promise<boolean> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/device-work/complete', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(input),
-  });
-  return (await readJson<{ completed: boolean }>(res, 'complete device work')).completed;
+  const res = await doFetch(
+    baseUrl,
+    "/centraid/_gateway/device-work/complete",
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(input),
+    }
+  );
+  return (await readJson<{ completed: boolean }>(res, "complete device work"))
+    .completed;
 }
 
 export async function releaseGatewayDeviceWork(input: {
@@ -308,18 +359,19 @@ export async function releaseGatewayDeviceWork(input: {
   token: string;
 }): Promise<boolean> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/device-work/release', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+  const res = await doFetch(baseUrl, "/centraid/_gateway/device-work/release", {
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify(input),
   });
-  return (await readJson<{ released: boolean }>(res, 'release device work')).released;
+  return (await readJson<{ released: boolean }>(res, "release device work"))
+    .released;
 }
 
 function workVaultHeaders(
   token: string | undefined,
   vaultId: string,
-  contentType?: string,
+  contentType?: string
 ): Record<string, string> {
   return { ...authHeaders(token, contentType), [VAULT_HEADER]: vaultId };
 }
@@ -336,26 +388,36 @@ export async function readGatewayDeviceWorkSource(input: {
     baseUrl,
     `/centraid/_vault/blobs/direct/${enc(input.sha256)}/download`,
     {
-      method: 'GET',
+      method: "GET",
       headers: workVaultHeaders(token, input.vaultId),
-    },
+    }
   );
   if (direct.ok) {
-    const plan = await readJson<DirectBlobDownloadPlan>(direct, 'authorize direct device read');
+    const plan = await readJson<DirectBlobDownloadPlan>(
+      direct,
+      "authorize direct device read"
+    );
     return readDirectBlob(plan, input.sha256, input.mediaType);
   }
   if (direct.status === 401 || direct.status === 403) {
-    await readJson<never>(direct, 'authorize direct device read');
+    await readJson<never>(direct, "authorize direct device read");
   }
   // Local-primary vaults have no provider URL. Their permanent fallback is
   // the ordinary content-id route (never address this route by sha).
-  const res = await doFetch(baseUrl, `/centraid/_vault/blobs/${enc(input.contentId)}`, {
-    method: 'GET',
-    headers: workVaultHeaders(token, input.vaultId),
-  });
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/blobs/${enc(input.contentId)}`,
+    {
+      method: "GET",
+      headers: workVaultHeaders(token, input.vaultId),
+    }
+  );
   if (!res.ok) {
-    await readJson<never>(res, 'read device work source');
-    throw new GatewayClientError('gateway_error', 'read device work source failed');
+    await readJson<never>(res, "read device work source");
+    throw new GatewayClientError(
+      "gateway_error",
+      "read device work source failed"
+    );
   }
   return res.blob();
 }
@@ -375,9 +437,12 @@ export async function stageGatewayDeviceWorkDerivative(input: {
     media_type: input.mediaType,
   });
   const res = await doFetch(baseUrl, `/centraid/_vault/blobs?${query}`, {
-    method: 'POST',
+    method: "POST",
     headers: workVaultHeaders(token, input.vaultId, input.mediaType),
     body: input.body,
   });
-  await readJson<Record<string, unknown>>(res, `submit ${input.variant} derivative`);
+  await readJson<Record<string, unknown>>(
+    res,
+    `submit ${input.variant} derivative`
+  );
 }

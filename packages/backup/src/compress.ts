@@ -28,7 +28,7 @@
  * the one that wrote it. Feature-detection happens once at module load.
  */
 
-import zlib from 'node:zlib';
+import zlib from "node:zlib";
 
 /** Frame algorithm id bytes (format-normative — the byte IS the on-wire tag). */
 export const ALGO_STORE = 0x00;
@@ -50,12 +50,17 @@ const ZSTD_LEVEL = 3;
 // present (they predate zstd by a decade), so the fallback path never needs a
 // guard — only the preferred zstd path does.
 const zstdCompressSync: typeof zlib.zstdCompressSync | undefined =
-  typeof zlib.zstdCompressSync === 'function' ? zlib.zstdCompressSync : undefined;
+  typeof zlib.zstdCompressSync === "function"
+    ? zlib.zstdCompressSync
+    : undefined;
 const zstdDecompressSync: typeof zlib.zstdDecompressSync | undefined =
-  typeof zlib.zstdDecompressSync === 'function' ? zlib.zstdDecompressSync : undefined;
+  typeof zlib.zstdDecompressSync === "function"
+    ? zlib.zstdDecompressSync
+    : undefined;
 
 /** True when this runtime can emit AND read `0x01` zstd frames (Node ≥22.15 / Bun 1.3+). */
-export const zstdAvailable = zstdCompressSync !== undefined && zstdDecompressSync !== undefined;
+export const zstdAvailable =
+  zstdCompressSync !== undefined && zstdDecompressSync !== undefined;
 
 function compressBody(plain: Uint8Array): { algo: number; body: Buffer } {
   if (zstdCompressSync) {
@@ -71,7 +76,11 @@ function compressBody(plain: Uint8Array): { algo: number; body: Buffer } {
   return { algo: ALGO_DEFLATE, body: zlib.deflateRawSync(plain) };
 }
 
-function frameCompressed(plain: Uint8Array, algo: number, body: Buffer): Uint8Array {
+function frameCompressed(
+  plain: Uint8Array,
+  algo: number,
+  body: Buffer
+): Uint8Array {
   if (body.length < plain.length) {
     const framed = new Uint8Array(body.length + 1);
     framed[0] = algo;
@@ -106,11 +115,11 @@ export function frameChunkPayloadAsync(plain: Uint8Array): Promise<Uint8Array> {
         if (error) reject(error);
         else resolve(frameCompressed(plain, algo, body));
       };
-    if (zstdCompressSync && typeof zlib.zstdCompress === 'function') {
+    if (zstdCompressSync && typeof zlib.zstdCompress === "function") {
       zlib.zstdCompress(
         plain,
         { params: { [zlib.constants.ZSTD_c_compressionLevel]: ZSTD_LEVEL } },
-        done(ALGO_ZSTD),
+        done(ALGO_ZSTD)
       );
       return;
     }
@@ -125,7 +134,8 @@ export function frameChunkPayloadAsync(plain: Uint8Array): Promise<Uint8Array> {
  * read on a machine other than the one that wrote it (#405 §1).
  */
 export function unframeChunkPayload(framed: Uint8Array): Uint8Array {
-  if (framed.length < 1) throw new Error('unframeChunkPayload: empty frame (missing algo id byte)');
+  if (framed.length < 1)
+    throw new Error("unframeChunkPayload: empty frame (missing algo id byte)");
   const algo = framed[0]!; // length checked above; `!` satisfies noUncheckedIndexedAccess
   const body = framed.subarray(1);
   switch (algo) {
@@ -134,14 +144,16 @@ export function unframeChunkPayload(framed: Uint8Array): Uint8Array {
     case ALGO_ZSTD:
       if (!zstdDecompressSync) {
         throw new Error(
-          'unframeChunkPayload: object is zstd-framed (0x01) but this runtime has no ' +
-            'node:zlib zstd — restore on Node ≥22.15 or Bun ≥1.3',
+          "unframeChunkPayload: object is zstd-framed (0x01) but this runtime has no " +
+            "node:zlib zstd — restore on Node ≥22.15 or Bun ≥1.3"
         );
       }
       return new Uint8Array(zstdDecompressSync(body));
     case ALGO_DEFLATE:
       return new Uint8Array(zlib.inflateRawSync(body));
     default:
-      throw new Error(`unframeChunkPayload: unknown frame algorithm id 0x${algo.toString(16)}`);
+      throw new Error(
+        `unframeChunkPayload: unknown frame algorithm id 0x${algo.toString(16)}`
+      );
   }
 }

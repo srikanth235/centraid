@@ -14,26 +14,26 @@
  * remains the source of truth.
  */
 
-import type { PrefsStore } from '@centraid/app-engine';
+import type { PrefsStore } from "@centraid/app-engine";
 
-import type { DaemonConfig } from './config.js';
+import type { DaemonConfig } from "./config.js";
 
 const RUNNER_KEYS = [
-  'agent.runner.kind',
-  'agent.runner.binPath',
-  'agent.runner.extraArgs',
+  "agent.runner.kind",
+  "agent.runner.binPath",
+  "agent.runner.extraArgs",
 ] as const;
 
 export function buildPrefsPatch(config: DaemonConfig): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   for (const k of RUNNER_KEYS) patch[k] = null;
   if (config.runner) {
-    patch['agent.runner.kind'] = config.runner.kind;
+    patch["agent.runner.kind"] = config.runner.kind;
     if (config.runner.binPath !== undefined) {
-      patch['agent.runner.binPath'] = config.runner.binPath;
+      patch["agent.runner.binPath"] = config.runner.binPath;
     }
     if (config.runner.extraArgs !== undefined) {
-      patch['agent.runner.extraArgs'] = config.runner.extraArgs;
+      patch["agent.runner.extraArgs"] = config.runner.extraArgs;
     }
   }
   return patch;

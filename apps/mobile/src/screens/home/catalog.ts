@@ -11,19 +11,19 @@
 // This module is pure (no React / navigation imports) so the merge rule stays
 // unit-testable and the routing decision lives in exactly one place.
 
-import type { AppMetaResolved } from '@centraid/design-tokens';
+import type { AppMetaResolved } from "@centraid/design-tokens";
 
-import { resolveAppMeta } from '../../lib/gateway';
+import { resolveAppMeta } from "../../lib/gateway";
 
 // Where a launcher tile goes when tapped. The three native kinds map onto the
 // nested cover navigators; `app` opens a remote app's WebView cover; `pair`
 // diverts an uninstalled gateway app to Settings (pairing) instead.
 export type LauncherRoute =
-  | { kind: 'photos' }
-  | { kind: 'docs' }
-  | { kind: 'agenda' }
-  | { kind: 'app'; appId: string }
-  | { kind: 'pair' };
+  | { kind: "photos" }
+  | { kind: "docs" }
+  | { kind: "agenda" }
+  | { kind: "app"; appId: string }
+  | { kind: "pair" };
 
 export interface LauncherItem {
   /** Tile display metadata (emblem glyph, name). */
@@ -39,35 +39,37 @@ export interface LauncherItem {
 // metadata; the engraved AppIcon is monochrome, so the glyph is what reads.
 const NATIVE_APPS: readonly AppMetaResolved[] = [
   resolveAppMeta({
-    id: 'photos',
-    name: 'Photos',
-    description: 'Timeline, memories, albums and private backup.',
-    iconKey: 'Camera',
-    colorKey: 'ochre',
+    id: "photos",
+    name: "Photos",
+    description: "Timeline, memories, albums and private backup.",
+    iconKey: "Camera",
+    colorKey: "ochre",
   }),
   resolveAppMeta({
-    id: 'docs',
-    name: 'Docs',
-    description: 'Files, folders, offline search and secure custody.',
-    iconKey: 'Folder',
-    colorKey: 'slate',
+    id: "docs",
+    name: "Docs",
+    description: "Files, folders, offline search and secure custody.",
+    iconKey: "Folder",
+    colorKey: "slate",
   }),
   resolveAppMeta({
-    id: 'agenda',
-    name: 'Agenda',
-    description: 'Calendar, schedule, guests and reminders.',
-    iconKey: 'Calendar',
-    colorKey: 'indigo',
+    id: "agenda",
+    name: "Agenda",
+    description: "Calendar, schedule, guests and reminders.",
+    iconKey: "Calendar",
+    colorKey: "indigo",
   }),
 ];
 
 /** Native app ids — Home uses this to drop native rows out of the live listing. */
-export const NATIVE_APP_IDS: ReadonlySet<string> = new Set(NATIVE_APPS.map((a) => a.id));
+export const NATIVE_APP_IDS: ReadonlySet<string> = new Set(
+  NATIVE_APPS.map((a) => a.id)
+);
 
 const NATIVE_ROUTES: Record<string, LauncherRoute> = {
-  photos: { kind: 'photos' },
-  docs: { kind: 'docs' },
-  agenda: { kind: 'agenda' },
+  photos: { kind: "photos" },
+  docs: { kind: "docs" },
+  agenda: { kind: "agenda" },
 };
 
 // The five gateway apps the launcher always advertises. Glyphs are picked from
@@ -79,39 +81,39 @@ const NATIVE_ROUTES: Record<string, LauncherRoute> = {
 // merges over this entry by id (see buildLauncherItems).
 const GATEWAY_CATALOG: readonly AppMetaResolved[] = [
   resolveAppMeta({
-    id: 'tasks',
-    name: 'Tasks',
-    description: 'Lists, projects and what needs doing.',
-    iconKey: 'Todo',
-    colorKey: 'forest',
+    id: "tasks",
+    name: "Tasks",
+    description: "Lists, projects and what needs doing.",
+    iconKey: "Todo",
+    colorKey: "forest",
   }),
   resolveAppMeta({
-    id: 'notes',
-    name: 'Notes',
-    description: 'Quick capture and long-form writing.',
-    iconKey: 'Journal',
-    colorKey: 'amber',
+    id: "notes",
+    name: "Notes",
+    description: "Quick capture and long-form writing.",
+    iconKey: "Journal",
+    colorKey: "amber",
   }),
   resolveAppMeta({
-    id: 'people',
-    name: 'People',
-    description: 'Your personal CRM — contacts and circles.',
-    iconKey: 'Users',
-    colorKey: 'rose',
+    id: "people",
+    name: "People",
+    description: "Your personal CRM — contacts and circles.",
+    iconKey: "Users",
+    colorKey: "rose",
   }),
   resolveAppMeta({
-    id: 'locker',
-    name: 'Locker',
-    description: 'Passwords, codes and secrets under custody.',
-    iconKey: 'Key',
-    colorKey: 'slate',
+    id: "locker",
+    name: "Locker",
+    description: "Passwords, codes and secrets under custody.",
+    iconKey: "Key",
+    colorKey: "slate",
   }),
   resolveAppMeta({
-    id: 'tally',
-    name: 'Tally',
-    description: 'Money in, money out — a simple ledger.',
-    iconKey: 'Coin',
-    colorKey: 'violet',
+    id: "tally",
+    name: "Tally",
+    description: "Money in, money out — a simple ledger.",
+    iconKey: "Coin",
+    colorKey: "violet",
   }),
 ];
 
@@ -129,13 +131,15 @@ const GATEWAY_CATALOG: readonly AppMetaResolved[] = [
  *
  * `remoteApps` must already exclude the native ids (Home filters them out).
  */
-export function buildLauncherItems(remoteApps: readonly AppMetaResolved[]): LauncherItem[] {
+export function buildLauncherItems(
+  remoteApps: readonly AppMetaResolved[]
+): LauncherItem[] {
   const liveById = new Map(remoteApps.map((app) => [app.id, app]));
 
   const items: LauncherItem[] = NATIVE_APPS.map((meta) => ({
     installed: true,
     meta,
-    route: NATIVE_ROUTES[meta.id] ?? { kind: 'app', appId: meta.id },
+    route: NATIVE_ROUTES[meta.id] ?? { kind: "app", appId: meta.id },
   }));
 
   const catalogIds = new Set<string>();
@@ -147,9 +151,9 @@ export function buildLauncherItems(remoteApps: readonly AppMetaResolved[]): Laun
         ? {
             installed: true,
             meta: live,
-            route: { kind: 'app', appId: live.id },
+            route: { kind: "app", appId: live.id },
           }
-        : { installed: false, meta, route: { kind: 'pair' } },
+        : { installed: false, meta, route: { kind: "pair" } }
     );
   }
 
@@ -158,7 +162,7 @@ export function buildLauncherItems(remoteApps: readonly AppMetaResolved[]): Laun
     items.push({
       installed: true,
       meta: app,
-      route: { kind: 'app', appId: app.id },
+      route: { kind: "app", appId: app.id },
     });
   }
 
@@ -166,10 +170,15 @@ export function buildLauncherItems(remoteApps: readonly AppMetaResolved[]): Laun
 }
 
 /** Case-insensitive name/description filter for the search overlay. */
-export function filterLauncherItems(items: readonly LauncherItem[], query: string): LauncherItem[] {
+export function filterLauncherItems(
+  items: readonly LauncherItem[],
+  query: string
+): LauncherItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return [...items];
   return items.filter(
-    (it) => it.meta.name.toLowerCase().includes(q) || it.meta.desc.toLowerCase().includes(q),
+    (it) =>
+      it.meta.name.toLowerCase().includes(q) ||
+      it.meta.desc.toLowerCase().includes(q)
   );
 }

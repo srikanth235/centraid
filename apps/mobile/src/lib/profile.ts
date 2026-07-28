@@ -7,20 +7,20 @@
 // secure-storage via phone-link.ts). Callers `hydrateProfile()` once at boot,
 // then read synchronously on the render path.
 
-import { palette } from '@centraid/design-tokens';
+import { palette } from "@centraid/design-tokens";
 
-import { Store } from '../storage';
+import { Store } from "../storage";
 
-const PROFILE_NAME_KEY = 'profile.name';
-const PROFILE_COLOR_KEY = 'profile.color';
-const PROFILE_ONBOARDED_KEY = 'profile.onboarded';
+const PROFILE_NAME_KEY = "profile.name";
+const PROFILE_COLOR_KEY = "profile.color";
+const PROFILE_ONBOARDED_KEY = "profile.onboarded";
 
 // Brand teal — the mobile design's single primary. It is the theme `accent`
 // (buttons, links, Automations, Assistant, the Home key; see kit/theme/resolve
 // ts) and also the default profile colour used for the avatar + greeting
 // highlight. So out of the box the whole app is teal; personalising the profile
 // colour re-tints only the avatar + greeting, leaving the controls teal.
-export const BRAND_TEAL = '#128A78';
+export const BRAND_TEAL = "#128A78";
 
 // Swatch options offered in Settings → You for the avatar + greeting tint. Teal
 // (the brand default) leads; the rest are the shared design-tokens palette, so a
@@ -41,14 +41,14 @@ export const PROFILE_COLORS: readonly string[] = [
 /** Pull the profile prefs into the Store cache. Idempotent. */
 export async function hydrateProfile(): Promise<void> {
   await Promise.all([
-    Store.hydrate<string>(PROFILE_NAME_KEY, ''),
+    Store.hydrate<string>(PROFILE_NAME_KEY, ""),
     Store.hydrate<string>(PROFILE_COLOR_KEY, BRAND_TEAL),
     Store.hydrate<boolean>(PROFILE_ONBOARDED_KEY, false),
   ]);
 }
 
 export function getProfileName(): string {
-  return Store.get<string>(PROFILE_NAME_KEY, '');
+  return Store.get<string>(PROFILE_NAME_KEY, "");
 }
 
 export function setProfileName(name: string): void {
@@ -74,20 +74,22 @@ export function setOnboarded(value: boolean): void {
 /** Up-to-two-letter initials for an avatar. Falls back to a person glyph. */
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/u).filter(Boolean);
-  if (parts.length === 0) return '·';
+  if (parts.length === 0) return "·";
   if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
-  return (parts[0]!.slice(0, 1) + parts[parts.length - 1]!.slice(0, 1)).toUpperCase();
+  return (
+    parts[0]!.slice(0, 1) + parts[parts.length - 1]!.slice(0, 1)
+  ).toUpperCase();
 }
 
 /** First name only, for the greeting line. */
 export function firstNameOf(name: string): string {
-  return name.trim().split(/\s+/u).find(Boolean) ?? '';
+  return name.trim().split(/\s+/u).find(Boolean) ?? "";
 }
 
 /** Time-of-day greeting to match the home header. */
 export function greetingFor(date = new Date()): string {
   const hour = date.getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }

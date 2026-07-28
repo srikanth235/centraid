@@ -13,13 +13,17 @@
  * last-good disk table, or the bundled snapshot — a price is never invented.
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
-import { filterLiteLLM, setPricingCatalog, type PricingCatalog } from '@centraid/app-engine';
+import {
+  filterLiteLLM,
+  setPricingCatalog,
+  type PricingCatalog,
+} from "@centraid/app-engine";
 
 const LITELLM_URL =
-  'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
+  "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 /** Refresh the disk table once it's older than this. Coarse by design. */
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 10_000;
@@ -91,7 +95,7 @@ export class PricingWarmer {
     try {
       const models = await this.fetchFiltered();
       const count = Object.keys(models).length;
-      if (count === 0) throw new Error('filter produced zero entries');
+      if (count === 0) throw new Error("filter produced zero entries");
       setPricingCatalog(models);
       this.lastFetchedMs = this.now();
       await this.writeDisk({
@@ -102,7 +106,7 @@ export class PricingWarmer {
     } catch (err) {
       // Keep last-good (disk table) or the bundled snapshot — never a guess.
       this.logger?.warn(
-        `pricing catalog refresh failed: ${err instanceof Error ? err.message : String(err)}`,
+        `pricing catalog refresh failed: ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
       this.refreshing = false;
@@ -115,10 +119,11 @@ export class PricingWarmer {
     try {
       const res = await this.fetchImpl(LITELLM_URL, { signal: ctl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const declared = Number(res.headers.get('content-length') ?? 0);
-      if (declared > MAX_BYTES) throw new Error(`catalog too large: ${declared} bytes`);
+      const declared = Number(res.headers.get("content-length") ?? 0);
+      if (declared > MAX_BYTES)
+        throw new Error(`catalog too large: ${declared} bytes`);
       const text = await res.text();
-      if (text.length > MAX_BYTES) throw new Error('catalog too large');
+      if (text.length > MAX_BYTES) throw new Error("catalog too large");
       return filterLiteLLM(JSON.parse(text) as Record<string, unknown>);
     } finally {
       clearTimeout(timer);
@@ -128,8 +133,11 @@ export class PricingWarmer {
   private async readDisk(): Promise<DiskCache | undefined> {
     if (!this.cacheFile) return undefined;
     try {
-      const parsed = JSON.parse(await readFile(this.cacheFile, 'utf8')) as DiskCache;
-      if (parsed?.models && Object.keys(parsed.models).length > 0) return parsed;
+      const parsed = JSON.parse(
+        await readFile(this.cacheFile, "utf8")
+      ) as DiskCache;
+      if (parsed?.models && Object.keys(parsed.models).length > 0)
+        return parsed;
     } catch {
       // No cache yet / unreadable — fall through to the bundled snapshot.
     }
@@ -143,7 +151,7 @@ export class PricingWarmer {
       await writeFile(this.cacheFile, `${JSON.stringify(cache)}\n`);
     } catch (err) {
       this.logger?.warn(
-        `pricing catalog cache write failed: ${err instanceof Error ? err.message : String(err)}`,
+        `pricing catalog cache write failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }

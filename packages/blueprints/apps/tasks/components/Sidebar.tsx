@@ -1,19 +1,19 @@
 // Sidebar region: the focus-view nav (with live counts) and the footer
 // (today progress meter + the trust line). Chrome owns the shared nav/footer
 // containers; this component supplies only their app-specific contents.
-import { I } from '../icons.ts';
-import type { SidebarCountsShape, TodayProgress, View } from '../types.ts';
-import { Icon } from './Shared.tsx';
+import { I } from "../icons.ts";
+import type { SidebarCountsShape, TodayProgress, View } from "../types.ts";
+import { Icon } from "./Shared.tsx";
 
-import shared from './shared.module.css';
-import styles from './Sidebar.module.css';
+import shared from "./shared.module.css";
+import styles from "./Sidebar.module.css";
 
 const VIEWS: Array<{ key: View; label: string; icon: string }> = [
-  { key: 'today', label: 'Today', icon: I.today },
-  { key: 'upcoming', label: 'Upcoming', icon: I.upcoming },
-  { key: 'anytime', label: 'Anytime', icon: I.anytime },
-  { key: 'all', label: 'All open', icon: I.inbox },
-  { key: 'logbook', label: 'Logbook', icon: I.logbook },
+  { key: "today", label: "Today", icon: I.today },
+  { key: "upcoming", label: "Upcoming", icon: I.upcoming },
+  { key: "anytime", label: "Anytime", icon: I.anytime },
+  { key: "all", label: "All open", icon: I.inbox },
+  { key: "logbook", label: "Logbook", icon: I.logbook },
 ];
 
 export function SidebarNav({
@@ -53,7 +53,10 @@ export function SidebarFoot({ progress }: { progress: TodayProgress }) {
           <span className={styles.progressPct}>{progress.pct}%</span>
         </div>
         <div className={styles.progressTrack}>
-          <div className={styles.progressBar} style={{ width: `${progress.pct}%` }} />
+          <div
+            className={styles.progressBar}
+            style={{ width: `${progress.pct}%` }}
+          />
         </div>
         <div className={styles.progressLabel}>{progress.label}</div>
       </div>

@@ -5,22 +5,25 @@
 // Split from gateway.ts only for file size; the Gateway is still the sole
 // caller.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { promoteStagedBlob } from '../blob/promote.js';
-import { stagedInfoTx } from '../blob/staging.js';
-import type { VaultDb } from '../db.js';
-import { nowIso, uuidv7 } from '../ids.js';
-import { notifyReplicaCommit } from '../replica/doorbell.js';
+import { promoteStagedBlob } from "../blob/promote.js";
+import { stagedInfoTx } from "../blob/staging.js";
+import type { VaultDb } from "../db.js";
+import { nowIso, uuidv7 } from "../ids.js";
+import { notifyReplicaCommit } from "../replica/doorbell.js";
 import {
   finalizeReplicaInvocationCommit,
   finalizeOrdinaryInvocationCommit,
   readReplicaInvocationCommit,
   recordReplicaInvocationCommitInTransaction,
   type ReplicaInvocationAudit,
-} from '../replica/invocation-commits.js';
-import { readDurableParkedDenial, readDurableParkedPayload } from '../replica/parked.js';
-import { ONTOLOGY_VERSION } from '../schema/migrate.js';
+} from "../replica/invocation-commits.js";
+import {
+  readDurableParkedDenial,
+  readDurableParkedPayload,
+} from "../replica/parked.js";
+import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import {
   isSealedValue,
   redactCommandInput,
@@ -31,13 +34,22 @@ import {
   sealedValuesForCommand,
   stampSealKeyFingerprint,
   unsealValue,
-} from '../schema/sealed.js';
-import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
-import { resolveEntity } from '../schema/tables.js';
-import type { ConsentAllow } from './consent.js';
-import { evaluateConditions, judgmentVeto, type CommandRow } from './contract.js';
-import { actingMemberDetail, writeCheck, writeExplanation, writeReceipt } from './evidence.js';
-import { validateJson } from './json-schema.js';
+} from "../schema/sealed.js";
+import { SEED_DEMO_ACTIVITY } from "../schema/seed.js";
+import { resolveEntity } from "../schema/tables.js";
+import type { ConsentAllow } from "./consent.js";
+import {
+  evaluateConditions,
+  judgmentVeto,
+  type CommandRow,
+} from "./contract.js";
+import {
+  actingMemberDetail,
+  writeCheck,
+  writeExplanation,
+  writeReceipt,
+} from "./evidence.js";
+import { validateJson } from "./json-schema.js";
 import type {
   Citation,
   CommandDefinition,
@@ -46,8 +58,8 @@ import type {
   Identity,
   InvokeOutcome,
   InvokeRequest,
-} from './types.js';
-import { DEFAULT_PURPOSE, GatewayError } from './types.js';
+} from "./types.js";
+import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
 
 /**
  * A registered command as the gateway executes it: the handler plus the
@@ -55,7 +67,7 @@ import { DEFAULT_PURPOSE, GatewayError } from './types.js';
  * `sealedInput` drives journal redaction, `unseals` gates `ctx.unseal`.
  */
 export interface RegisteredCommand {
-  handler: CommandDefinition['handler'];
+  handler: CommandDefinition["handler"];
   sealedInput: readonly string[];
   unseals: readonly string[];
   transcriptSensitive: boolean;
@@ -68,25 +80,33 @@ interface InvocationTransaction {
 
 function beginInvocationTransaction(db: DatabaseSync): InvocationTransaction {
   if (db.isTransaction) {
-    db.exec('SAVEPOINT centraid_invocation');
-    return { savepoint: 'centraid_invocation', open: true };
+    db.exec("SAVEPOINT centraid_invocation");
+    return { savepoint: "centraid_invocation", open: true };
   }
-  db.exec('BEGIN');
+  db.exec("BEGIN");
   return { savepoint: null, open: true };
 }
 
-function commitInvocationTransaction(db: DatabaseSync, transaction: InvocationTransaction): void {
-  db.exec(transaction.savepoint ? `RELEASE ${transaction.savepoint}` : 'COMMIT');
+function commitInvocationTransaction(
+  db: DatabaseSync,
+  transaction: InvocationTransaction
+): void {
+  db.exec(
+    transaction.savepoint ? `RELEASE ${transaction.savepoint}` : "COMMIT"
+  );
   transaction.open = false;
 }
 
-function rollbackInvocationTransaction(db: DatabaseSync, transaction: InvocationTransaction): void {
+function rollbackInvocationTransaction(
+  db: DatabaseSync,
+  transaction: InvocationTransaction
+): void {
   if (!transaction.open) return;
   if (transaction.savepoint) {
     db.exec(`ROLLBACK TO ${transaction.savepoint}`);
     db.exec(`RELEASE ${transaction.savepoint}`);
   } else {
-    db.exec('ROLLBACK');
+    db.exec("ROLLBACK");
   }
   transaction.open = false;
 }
@@ -95,34 +115,36 @@ function rollbackInvocationTransaction(db: DatabaseSync, transaction: Invocation
 // Any row a command writes into these tables must point at live rows, or the
 // whole invocation rolls back.
 const POLY_RULES: Record<string, { pk: string; refs: [string, string][] }> = {
-  'core.link': {
-    pk: 'link_id',
+  "core.link": {
+    pk: "link_id",
     refs: [
-      ['from_type', 'from_id'],
-      ['to_type', 'to_id'],
+      ["from_type", "from_id"],
+      ["to_type", "to_id"],
     ],
   },
-  'core.attachment': {
-    pk: 'attachment_id',
-    refs: [['target_type', 'target_id']],
+  "core.attachment": {
+    pk: "attachment_id",
+    refs: [["target_type", "target_id"]],
   },
-  'core.tag': { pk: 'tag_id', refs: [['target_type', 'target_id']] },
-  'core.collection_entry': {
-    pk: 'entry_id',
-    refs: [['target_type', 'target_id']],
+  "core.tag": { pk: "tag_id", refs: [["target_type", "target_id"]] },
+  "core.collection_entry": {
+    pk: "entry_id",
+    refs: [["target_type", "target_id"]],
   },
-  'knowledge.annotation': {
-    pk: 'annotation_id',
-    refs: [['target_type', 'target_id']],
+  "knowledge.annotation": {
+    pk: "annotation_id",
+    refs: [["target_type", "target_id"]],
   },
 };
 
 export function pkColumn(vault: DatabaseSync, physical: string): string {
-  const rows = vault.prepare(`PRAGMA table_info(${JSON.stringify(physical)})`).all() as {
+  const rows = vault
+    .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
+    .all() as {
     name: string;
     pk: number;
   }[];
-  return rows.find((r) => r.pk === 1)?.name ?? 'rowid';
+  return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
 /**
@@ -137,16 +159,16 @@ export function pkColumn(vault: DatabaseSync, physical: string): string {
 export function sweepDanglingLinks(
   vault: DatabaseSync,
   writes: { entityType: string; entityId: string }[],
-  now: string,
+  now: string
 ): void {
   // Index over the handler's own writes only — the loop appends the swept
   // link ids to the same array, and those must not be re-scanned.
   const handlerWrites = writes.length;
   for (let i = 0; i < handlerWrites; i += 1) {
     const write = writes[i];
-    if (!write || write.entityType === 'core.link') continue;
+    if (!write || write.entityType === "core.link") continue;
     const ref = resolveEntity(write.entityType, vault);
-    if (!ref || ref.file !== 'vault') continue;
+    if (!ref || ref.file !== "vault") continue;
     const pk = pkColumn(vault, ref.physical);
     const live = vault
       .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
@@ -156,14 +178,21 @@ export function sweepDanglingLinks(
       .prepare(
         `SELECT link_id FROM core_link
           WHERE valid_to IS NULL
-            AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
+            AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`
       )
-      .all(write.entityType, write.entityId, write.entityType, write.entityId) as {
+      .all(
+        write.entityType,
+        write.entityId,
+        write.entityType,
+        write.entityId
+      ) as {
       link_id: string;
     }[];
     for (const row of dangling) {
-      vault.prepare('UPDATE core_link SET valid_to = ? WHERE link_id = ?').run(now, row.link_id);
-      writes.push({ entityType: 'core.link', entityId: row.link_id });
+      vault
+        .prepare("UPDATE core_link SET valid_to = ? WHERE link_id = ?")
+        .run(now, row.link_id);
+      writes.push({ entityType: "core.link", entityId: row.link_id });
     }
   }
 }
@@ -174,27 +203,39 @@ export function sweepDanglingLinks(
  * transaction may commit — even when the handler was careless. Values that
  * are already sealed (re-writes of untouched columns) pass through.
  */
-export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: string }[]): void {
+export function sealWrites(
+  db: VaultDb,
+  writes: { entityType: string; entityId: string }[]
+): void {
   let sealedAny = false;
   for (const write of writes) {
     const cols = sealedColumnsOf(write.entityType, db.vault);
     if (cols.length === 0) continue;
     const ref = resolveEntity(write.entityType, db.vault);
-    if (!ref || ref.file !== 'vault') continue;
+    if (!ref || ref.file !== "vault") continue;
     const pk = pkColumn(db.vault, ref.physical);
-    const select = cols.map((c) => `"${c}"`).join(', ');
+    const select = cols.map((c) => `"${c}"`).join(", ");
     const row = db.vault
       .prepare(`SELECT ${select} FROM "${ref.physical}" WHERE "${pk}" = ?`)
       .get(write.entityId) as Record<string, unknown> | undefined;
     if (!row) continue; // deleted within the same command
     for (const col of cols) {
       const value = row[col];
-      if (typeof value !== 'string' || value.length === 0 || isSealedValue(value)) continue;
+      if (
+        typeof value !== "string" ||
+        value.length === 0 ||
+        isSealedValue(value)
+      )
+        continue;
       db.vault
         .prepare(`UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`)
         .run(
-          sealValue(db.sealKey, sealAad(ref.physical, col, write.entityId), value),
-          write.entityId,
+          sealValue(
+            db.sealKey,
+            sealAad(ref.physical, col, write.entityId),
+            value
+          ),
+          write.entityId
         );
       sealedAny = true;
     }
@@ -209,7 +250,7 @@ export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: 
 /** Validate every polymorphic row this invocation wrote. Throws to roll back. */
 export function validatePolymorphicWrites(
   vault: DatabaseSync,
-  writes: { entityType: string; entityId: string }[],
+  writes: { entityType: string; entityId: string }[]
 ): void {
   for (const write of writes) {
     const rule = POLY_RULES[write.entityType];
@@ -224,8 +265,10 @@ export function validatePolymorphicWrites(
       const logical = String(row[typeCol]);
       const id = String(row[idCol]);
       const target = resolveEntity(logical, vault);
-      if (!target || target.file !== 'vault') {
-        throw new Error(`${write.entityType}.${typeCol} names unknown entity "${logical}"`);
+      if (!target || target.file !== "vault") {
+        throw new Error(
+          `${write.entityType}.${typeCol} names unknown entity "${logical}"`
+        );
       }
       const pk = pkColumn(vault, target.physical);
       const live = vault
@@ -233,7 +276,7 @@ export function validatePolymorphicWrites(
         .get(id);
       if (!live) {
         throw new Error(
-          `${write.entityType} ${write.entityId}: (${logical}, ${id}) does not resolve to a live row`,
+          `${write.entityType} ${write.entityId}: (${logical}, ${id}) does not resolve to a live row`
         );
       }
     }
@@ -248,13 +291,13 @@ export function insertInvocation(
   grantId: string | null,
   status: string,
   fixedId?: string,
-  sealedInput: readonly string[] = [],
+  sealedInput: readonly string[] = []
 ): string {
   const invocationId = fixedId ?? request.invocationId ?? uuidv7();
   db.journal
     .prepare(
       `INSERT INTO agent_command_invocation (invocation_id, command_id, agent_id, grant_id, input_json, status, requested_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       invocationId,
@@ -265,10 +308,16 @@ export function insertInvocation(
       // as keyed hash tokens, never as values — a leak here is permanent.
       // Command-aware so the ext trio's nested secrets redact too (#298 item 9).
       JSON.stringify(
-        redactCommandInput(db.sealKey, command.name, request.input, sealedInput, db.vault),
+        redactCommandInput(
+          db.sealKey,
+          command.name,
+          request.input,
+          sealedInput,
+          db.vault
+        )
       ),
       status,
-      nowIso(),
+      nowIso()
     );
   return invocationId;
 }
@@ -284,13 +333,13 @@ export function assertInvocationIdentity(
   invocationId: string,
   commandId: string,
   agentId: string,
-  grantId: string | null,
+  grantId: string | null
 ): boolean {
   const existing = db.journal
     .prepare(
       `SELECT command_id, agent_id, grant_id
          FROM agent_command_invocation
-        WHERE invocation_id = ?`,
+        WHERE invocation_id = ?`
     )
     .get(invocationId) as
     | { command_id: string; agent_id: string; grant_id: string | null }
@@ -302,52 +351,67 @@ export function assertInvocationIdentity(
     existing.grant_id !== grantId
   ) {
     throw new GatewayError(
-      'contract',
-      `invocation id ${invocationId} is already bound to another command, caller, or grant`,
+      "contract",
+      `invocation id ${invocationId} is already bound to another command, caller, or grant`
     );
   }
   return true;
 }
 
-export function setInvocationStatus(db: VaultDb, invocationId: string, status: string): void {
+export function setInvocationStatus(
+  db: VaultDb,
+  invocationId: string,
+  status: string
+): void {
   db.journal
-    .prepare('UPDATE agent_command_invocation SET status = ? WHERE invocation_id = ?')
+    .prepare(
+      "UPDATE agent_command_invocation SET status = ? WHERE invocation_id = ?"
+    )
     .run(status, invocationId);
 }
 
 /** Recursively scrub sealed values before crash-repair metadata becomes durable. */
-function scrubAuditValue(value: unknown, scrub: (text: string) => string): unknown {
-  if (typeof value === 'string') return scrub(value);
-  if (Array.isArray(value)) return value.map((item) => scrubAuditValue(item, scrub));
-  if (value && typeof value === 'object') {
+function scrubAuditValue(
+  value: unknown,
+  scrub: (text: string) => string
+): unknown {
+  if (typeof value === "string") return scrub(value);
+  if (Array.isArray(value))
+    return value.map((item) => scrubAuditValue(item, scrub));
+  if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
         key,
         scrubAuditValue(item, scrub),
-      ]),
+      ])
     );
   }
   return value;
 }
 
 /** Recover the ordinary online replay value from its allow receipt. */
-function receiptOutput(journal: DatabaseSync, receiptId: string | null): unknown {
+function receiptOutput(
+  journal: DatabaseSync,
+  receiptId: string | null
+): unknown {
   if (!receiptId) return null;
   const receipt = journal
-    .prepare('SELECT detail_json FROM consent_receipt WHERE receipt_id = ?')
+    .prepare("SELECT detail_json FROM consent_receipt WHERE receipt_id = ?")
     .get(receiptId) as { detail_json: string | null } | undefined;
   if (!receipt?.detail_json) return null;
-  return (JSON.parse(receipt.detail_json) as { output?: unknown }).output ?? null;
+  return (
+    (JSON.parse(receipt.detail_json) as { output?: unknown }).output ?? null
+  );
 }
 
 /** Idempotent replay (§10 S4): a re-sent invocation id never double-writes. */
 export function replayInvocation(
   db: VaultDb,
   invocationId: string,
-  options: { deferCommitSettlement?: boolean } = {},
+  options: { deferCommitSettlement?: boolean } = {}
 ): InvokeOutcome | null {
   const denied = readDurableParkedDenial(db, invocationId);
-  if (denied) return { status: 'denied', ...denied };
+  if (denied) return { status: "denied", ...denied };
   // Canonical commit proof takes precedence over journal status. It carries
   // the S5 material needed to atomically repair a crash-left audit prefix
   // before replay is allowed to return. Replica markers omit output, while
@@ -363,31 +427,37 @@ export function replayInvocation(
         });
     const output = receiptOutput(db.journal, finalized.receiptId);
     return {
-      status: 'replayed',
+      status: "replayed",
       invocationId,
       output,
     };
   }
   const row = db.journal
-    .prepare('SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?')
-    .get(invocationId) as { status: string; receipt_id: string | null } | undefined;
-  if (row?.status === 'executed') {
+    .prepare(
+      "SELECT status, receipt_id FROM agent_command_invocation WHERE invocation_id = ?"
+    )
+    .get(invocationId) as
+    | { status: string; receipt_id: string | null }
+    | undefined;
+  if (row?.status === "executed") {
     return {
-      status: 'replayed',
+      status: "replayed",
       invocationId,
       output: receiptOutput(db.journal, row.receipt_id),
     };
   }
-  if (row && (row.status === 'failed' || row.status === 'rolled_back')) {
+  if (row && (row.status === "failed" || row.status === "rolled_back")) {
     const receipt = db.journal
       .prepare(
         `SELECT receipt_id, detail_json
            FROM consent_receipt
           WHERE invocation_id = ? AND decision = 'deny'
           ORDER BY occurred_at DESC, receipt_id DESC
-          LIMIT 1`,
+          LIMIT 1`
       )
-      .get(invocationId) as { receipt_id: string; detail_json: string | null } | undefined;
+      .get(invocationId) as
+      | { receipt_id: string; detail_json: string | null }
+      | undefined;
     if (receipt) {
       const detail = receipt.detail_json
         ? (JSON.parse(receipt.detail_json) as {
@@ -397,10 +467,11 @@ export function replayInvocation(
           })
         : {};
       const reason = [detail.failing, detail.error, detail.predicate].find(
-        (value): value is string => typeof value === 'string' && value.length > 0,
+        (value): value is string =>
+          typeof value === "string" && value.length > 0
       );
       return {
-        status: 'failed',
+        status: "failed",
         invocationId,
         receiptId: receipt.receipt_id,
         reason: reason ?? `invocation ${row.status}`,
@@ -409,7 +480,9 @@ export function replayInvocation(
   }
   if (row) {
     const parked = readDurableParkedPayload(db, invocationId);
-    return parked ? { status: 'parked', invocationId, reason: parked.reason } : null;
+    return parked
+      ? { status: "parked", invocationId, reason: parked.reason }
+      : null;
   }
   return null;
 }
@@ -427,26 +500,33 @@ export function runContractAndExecute(
   options: {
     deferCommitSettlement?: boolean;
     deferReplicaNotify?: boolean;
-  } = {},
+  } = {}
 ): InvokeOutcome {
   // The purpose that applies (issue #306 decision 4) — journaled even when
   // the caller declared none.
   const purpose = request.purpose ?? DEFAULT_PURPOSE;
-  const denyContract = (predicate: string, detail: Record<string, unknown>): InvokeOutcome => {
-    setInvocationStatus(db, invocationId, 'failed');
+  const denyContract = (
+    predicate: string,
+    detail: Record<string, unknown>
+  ): InvokeOutcome => {
+    setInvocationStatus(db, invocationId, "failed");
     const receiptId = writeReceipt(db.journal, {
       grantId: consent.grantId,
       invocationId,
       action: `act ${command.name}`,
-      objectType: 'agent.command',
+      objectType: "agent.command",
       objectId: command.command_id,
       purpose,
-      decision: 'deny',
+      decision: "deny",
       detail: { ...detail, risk: command.risk },
     });
-    writeExplanation(db.journal, invocationId, `${command.name} did not run: ${predicate}.`);
+    writeExplanation(
+      db.journal,
+      invocationId,
+      `${command.name} did not run: ${predicate}.`
+    );
     return {
-      status: 'failed',
+      status: "failed",
       invocationId,
       receiptId,
       reason: predicate,
@@ -464,40 +544,57 @@ export function runContractAndExecute(
   // during migrations) return when v1 ships and the doc's promise becomes
   // load-bearing.
   if (command.ontology_version !== ONTOLOGY_VERSION) {
-    return denyContract(`contract version ${command.ontology_version} not served`, {
-      stage: 'contract',
-      commandVersion: command.ontology_version,
-      gatewayVersion: ONTOLOGY_VERSION,
-    });
+    return denyContract(
+      `contract version ${command.ontology_version} not served`,
+      {
+        stage: "contract",
+        commandVersion: command.ontology_version,
+        gatewayVersion: ONTOLOGY_VERSION,
+      }
+    );
   }
   const sealedInput = commands.get(command.name)?.sealedInput ?? [];
   // Error surfaces get the same discipline as input_json (issue #298 item
   // 7): any text derived from runtime values passes through the sealed
   // scrub before it reaches the journal, the receipt or the HTTP response.
   // Command-aware so the ext trio's nested secrets scrub too (#298 item 9).
-  const secretValues = sealedValuesForCommand(command.name, request.input, sealedInput, db.vault);
-  const scrub = (text: string): string => scrubSealedText(db.sealKey, text, secretValues);
-  const schemaErrors = validateJson(JSON.parse(command.input_schema_json), request.input).map(
-    scrub,
+  const secretValues = sealedValuesForCommand(
+    command.name,
+    request.input,
+    sealedInput,
+    db.vault
   );
+  const scrub = (text: string): string =>
+    scrubSealedText(db.sealKey, text, secretValues);
+  const schemaErrors = validateJson(
+    JSON.parse(command.input_schema_json),
+    request.input
+  ).map(scrub);
   if (schemaErrors.length > 0) {
     return denyContract(`input schema violation`, {
-      stage: 'contract',
+      stage: "contract",
       errors: schemaErrors,
     });
   }
   const veto = judgmentVeto(db.vault, command.name, command.owner_schema);
   if (veto) {
-    writeCheck(db.journal, invocationId, 'pre', `judgment:${veto}`, false);
+    writeCheck(db.journal, invocationId, "pre", `judgment:${veto}`, false);
     return denyContract(`vetoed by judgment ${veto}`, {
-      stage: 'contract',
+      stage: "contract",
       judgment: veto,
     });
   }
   const preSpecs = JSON.parse(command.preconditions_json) as ConditionSpec[];
   const preResults = evaluateConditions(db.vault, preSpecs, request.input);
   for (const result of preResults) {
-    writeCheck(db.journal, invocationId, 'pre', result.predicate, result.passed, result.observed);
+    writeCheck(
+      db.journal,
+      invocationId,
+      "pre",
+      result.predicate,
+      result.passed,
+      result.observed
+    );
   }
   const failedPre = preResults.find((r) => !r.passed);
   if (failedPre) {
@@ -506,17 +603,18 @@ export function runContractAndExecute(
     // there; the raw `name: column op value` string still goes into the
     // receipt detail and the checks-table audit trail via writeCheck above.
     return denyContract(failedPre.message ?? failedPre.predicate, {
-      stage: 'contract',
+      stage: "contract",
       predicate: failedPre.predicate,
     });
   }
-  setInvocationStatus(db, invocationId, 'checked');
+  setInvocationStatus(db, invocationId, "checked");
 
   // S4 — execution: the only writer in the system.
   const writes: { entityType: string; entityId: string }[] = [];
   const citations: Citation[] = [];
   const registered = commands.get(command.name);
-  if (!registered) return denyContract('handler missing', { stage: 'execution' });
+  if (!registered)
+    return denyContract("handler missing", { stage: "execution" });
   const handler = registered.handler;
   // Cells this command decrypted internally (issue #293) — receipted as
   // column names, never values.
@@ -536,16 +634,23 @@ export function runContractAndExecute(
         throw new Error(`${command.name} does not declare unseal of ${cell}`);
       }
       const ref = resolveEntity(entityType, db.vault);
-      if (!ref || ref.file !== 'vault') throw new Error(`unknown entity ${entityType}`);
+      if (!ref || ref.file !== "vault")
+        throw new Error(`unknown entity ${entityType}`);
       const pk = pkColumn(db.vault, ref.physical);
       const row = db.vault
-        .prepare(`SELECT "${column}" AS v FROM "${ref.physical}" WHERE "${pk}" = ?`)
+        .prepare(
+          `SELECT "${column}" AS v FROM "${ref.physical}" WHERE "${pk}" = ?`
+        )
         .get(entityId) as { v: unknown } | undefined;
       if (!row || row.v == null) return null;
       unsealed.add(cell);
       const value = String(row.v);
       return isSealedValue(value)
-        ? unsealValue(db.sealKey, sealAad(ref.physical, column, entityId), value)
+        ? unsealValue(
+            db.sealKey,
+            sealAad(ref.physical, column, entityId),
+            value
+          )
         : value;
     },
     // Blob custody inside the transaction (issue #296): claims and spills
@@ -570,11 +675,12 @@ export function runContractAndExecute(
             vault: db.vault,
             now: nowIso(),
             newId: uuidv7,
-            wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
+            wrote: (entityType, entityId) =>
+              writes.push({ entityType, entityId }),
             creatorPartyId: identity.partyId,
           },
           sha256,
-          options,
+          options
         ),
       spill: (bytes) => db.blobs.ingestSync(bytes).sha256,
       has: (sha256) => db.blobs.hasSync(sha256),
@@ -596,7 +702,9 @@ export function runContractAndExecute(
     // ciphertext inside the same transaction — no committed row ever holds a
     // clear secret, however the handler wrote it.
     sealWrites(db, writes);
-    const postSpecs = JSON.parse(command.postconditions_json) as ConditionSpec[];
+    const postSpecs = JSON.parse(
+      command.postconditions_json
+    ) as ConditionSpec[];
     postResults = evaluateConditions(db.vault, postSpecs, {
       ...request.input,
       ...output,
@@ -605,8 +713,15 @@ export function runContractAndExecute(
     if (failedPost) {
       rollbackInvocationTransaction(db.vault, vaultTransaction);
       for (const r of postResults)
-        writeCheck(db.journal, invocationId, 'post', r.predicate, r.passed, r.observed);
-      setInvocationStatus(db, invocationId, 'rolled_back');
+        writeCheck(
+          db.journal,
+          invocationId,
+          "post",
+          r.predicate,
+          r.passed,
+          r.observed
+        );
+      setInvocationStatus(db, invocationId, "rolled_back");
       // Same split as the precondition path above: friendly-or-raw for the
       // app-facing reason/predicate, raw always in the receipt detail.
       const friendly = failedPost.message ?? failedPost.predicate;
@@ -614,19 +729,23 @@ export function runContractAndExecute(
         grantId: consent.grantId,
         invocationId,
         action: `act ${command.name}`,
-        objectType: 'agent.command',
+        objectType: "agent.command",
         objectId: command.command_id,
         purpose,
-        decision: 'deny',
+        decision: "deny",
         detail: {
-          stage: 'execution',
+          stage: "execution",
           predicate: failedPost.predicate,
           risk: command.risk,
         },
       });
-      writeExplanation(db.journal, invocationId, `${command.name} rolled back: ${friendly}.`);
+      writeExplanation(
+        db.journal,
+        invocationId,
+        `${command.name} rolled back: ${friendly}.`
+      );
       return {
-        status: 'failed',
+        status: "failed",
         invocationId,
         receiptId,
         reason: friendly,
@@ -640,10 +759,16 @@ export function runContractAndExecute(
       const seedStmt = db.vault.prepare(
         `INSERT INTO consent_seed_row (seed_id, app_id, target_type, target_id, seeded_at)
          VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (target_type, target_id) DO NOTHING`,
+         ON CONFLICT (target_type, target_id) DO NOTHING`
       );
       for (const write of writes) {
-        seedStmt.run(uuidv7(), request.demo.appId, write.entityType, write.entityId, ctx.now);
+        seedStmt.run(
+          uuidv7(),
+          request.demo.appId,
+          write.entityType,
+          write.entityId,
+          ctx.now
+        );
       }
     }
 
@@ -662,7 +787,7 @@ export function runContractAndExecute(
     // Replica intents deliberately omit the field from both their marker and
     // receipt; their caller reconciles canonical rows and replay returns null.
     const durableOutput = registered.transcriptSensitive
-      ? { redacted: 'transcript-sensitive derivative (issue #298 item 6)' }
+      ? { redacted: "transcript-sensitive derivative (issue #298 item 6)" }
       : output;
     audit = {
       commandName: command.name,
@@ -674,7 +799,10 @@ export function runContractAndExecute(
       postChecks: postResults.map((result) => ({
         predicate: result.predicate,
         passed: result.passed,
-        observed: scrubAuditValue(result.observed, scrub) as Record<string, unknown>,
+        observed: scrubAuditValue(result.observed, scrub) as Record<
+          string,
+          unknown
+        >,
       })),
       writes: writes.map((write) => ({ ...write })),
       citations: citations.map((citation) => ({ ...citation })),
@@ -706,7 +834,7 @@ export function runContractAndExecute(
     if (!options.deferReplicaNotify) notifyReplicaCommit(db.vault);
   } catch (err) {
     rollbackInvocationTransaction(db.vault, vaultTransaction);
-    setInvocationStatus(db, invocationId, 'failed');
+    setInvocationStatus(db, invocationId, "failed");
     // A handler (or SQLite constraint message) that echoes its input would
     // put a submitted secret into the journal and the HTTP error — scrub
     // declared sealed inputs out of the text first (issue #298 item 7).
@@ -715,18 +843,18 @@ export function runContractAndExecute(
       grantId: consent.grantId,
       invocationId,
       action: `act ${command.name}`,
-      objectType: 'agent.command',
+      objectType: "agent.command",
       objectId: command.command_id,
       purpose,
-      decision: 'deny',
-      detail: { stage: 'execution', error: reason, risk: command.risk },
+      decision: "deny",
+      detail: { stage: "execution", error: reason, risk: command.risk },
     });
     writeExplanation(
       db.journal,
       invocationId,
-      `${command.name} failed during execution: ${reason}.`,
+      `${command.name} failed during execution: ${reason}.`
     );
-    return { status: 'failed', invocationId, receiptId, reason };
+    return { status: "failed", invocationId, receiptId, reason };
   }
 
   // Everything after the canonical COMMIT is one idempotent journal
@@ -745,12 +873,14 @@ export function runContractAndExecute(
   // host callback must never turn a committed vault write into an apparent
   // failure; the cron poll remains the correctness backstop.
   try {
-    onProvenanceCommitted?.([...new Set(writes.map((write) => write.entityType))]);
+    onProvenanceCommitted?.([
+      ...new Set(writes.map((write) => write.entityType)),
+    ]);
   } catch {
     // Hint only; the persisted cursor and poll backstop own correctness.
   }
   return {
-    status: 'executed',
+    status: "executed",
     invocationId,
     receiptId: finalized.receiptId,
     output,

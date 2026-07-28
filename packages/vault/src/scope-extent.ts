@@ -8,7 +8,7 @@
 // tombstone?") — so the answer lives here once. A second, drifting copy is how
 // the two planes come to disagree about what the owner said.
 
-import type { FilterClause } from './gateway/types.js';
+import type { FilterClause } from "./gateway/types.js";
 
 /**
  * One scope extent in whichever shape its store hands it over: SQLite rows
@@ -46,9 +46,11 @@ const unsetToNull = <T>(value: T | null | undefined): T | null => value ?? null;
  * @public
  */
 export function scopeCovers(outer: ScopeExtent, inner: ScopeExtent): boolean {
-  if (outer.schema !== inner.schema || outer.verbs !== inner.verbs) return false;
+  if (outer.schema !== inner.schema || outer.verbs !== inner.verbs)
+    return false;
   const outerTable = unsetToNull(outer.table);
-  if (outerTable !== null && outerTable !== unsetToNull(inner.table)) return false;
+  if (outerTable !== null && outerTable !== unsetToNull(inner.table))
+    return false;
   const outerRows = unsetToNull(outer.rowFilter);
   if (outerRows !== null) {
     const innerRows = unsetToNull(inner.rowFilter);

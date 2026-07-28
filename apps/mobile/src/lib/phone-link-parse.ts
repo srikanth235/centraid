@@ -6,18 +6,18 @@
  * from `centraid-gateway pair` / `pair --qr`.
  */
 
-import { base64ToBytes } from './upload/bytes';
+import { base64ToBytes } from "./upload/bytes";
 
 /** Desktop "Connect phone" QR payload (issue #263). */
 export type DesktopPairPayload = {
-  kind: 'centraid-pair';
+  kind: "centraid-pair";
   ticket: string;
   code: string;
 };
 
 /** Headless gateway ticket from `centraid-gateway pair` (issue #289 / #376). */
 export type GatewayPairPayload = {
-  kind: 'centraid-gw-pair';
+  kind: "centraid-gw-pair";
   /** Gateway iroh EndpointTicket (identity + relay hint). */
   gw: string;
   t: string;
@@ -32,9 +32,11 @@ export type PairingInput = DesktopPairPayload | GatewayPairPayload;
  * Parse the desktop's pairing QR payload. Local mirror of
  * `parsePairQrPayload` in packages/tunnel/src/protocol.ts.
  */
-export function parsePairQr(raw: string): { ticket: string; code: string } | undefined {
+export function parsePairQr(
+  raw: string
+): { ticket: string; code: string } | undefined {
   const parsed = parsePairingInput(raw);
-  if (!parsed || parsed.kind !== 'centraid-pair') return undefined;
+  if (!parsed || parsed.kind !== "centraid-pair") return undefined;
   return { ticket: parsed.ticket, code: parsed.code };
 }
 
@@ -56,9 +58,10 @@ export function parsePairingInput(raw: string): PairingInput | undefined {
       ticket: string;
       code: string;
     }>;
-    if (obj.v === 1 && obj.kind === 'centraid-pair') {
-      if (typeof obj.ticket !== 'string' || typeof obj.code !== 'string') return undefined;
-      return { kind: 'centraid-pair', ticket: obj.ticket, code: obj.code };
+    if (obj.v === 1 && obj.kind === "centraid-pair") {
+      if (typeof obj.ticket !== "string" || typeof obj.code !== "string")
+        return undefined;
+      return { kind: "centraid-pair", ticket: obj.ticket, code: obj.code };
     }
   } catch {
     /* not JSON — try gw-pair token */
@@ -76,12 +79,13 @@ export function parsePairingInput(raw: string): PairingInput | undefined {
       vaultName?: string;
       exp: number;
     }>;
-    if (obj.v !== 1 || obj.kind !== 'centraid-gw-pair') return undefined;
-    if (typeof obj.gw !== 'string' || obj.gw.length === 0) return undefined;
-    if (typeof obj.t !== 'string' || obj.t.length === 0) return undefined;
-    if (typeof obj.s !== 'string' || obj.s.length === 0) return undefined;
-    if (typeof obj.exp !== 'number' || !Number.isFinite(obj.exp)) return undefined;
-    if (typeof obj.vaultName !== 'string') return undefined;
+    if (obj.v !== 1 || obj.kind !== "centraid-gw-pair") return undefined;
+    if (typeof obj.gw !== "string" || obj.gw.length === 0) return undefined;
+    if (typeof obj.t !== "string" || obj.t.length === 0) return undefined;
+    if (typeof obj.s !== "string" || obj.s.length === 0) return undefined;
+    if (typeof obj.exp !== "number" || !Number.isFinite(obj.exp))
+      return undefined;
+    if (typeof obj.vaultName !== "string") return undefined;
     return {
       kind: obj.kind,
       gw: obj.gw,
@@ -96,7 +100,7 @@ export function parsePairingInput(raw: string): PairingInput | undefined {
 }
 
 function utf8FromBase64Url(raw: string): string {
-  const b64 = raw.replace(/-/gu, '+').replace(/_/gu, '/');
+  const b64 = raw.replace(/-/gu, "+").replace(/_/gu, "/");
   const bytes = base64ToBytes(b64);
   return new TextDecoder().decode(bytes);
 }

@@ -4,20 +4,22 @@
 // this file — the drainer takes both of these by injection (the M0.2 lesson:
 // a statically-imported native module breaks the vitest rig).
 
-import { File, Paths, UploadType } from 'expo-file-system';
+import { File, Paths, UploadType } from "expo-file-system";
 
 import {
   assertGatewayMintedUploadUrl,
   type BackgroundTransferScope,
-} from '../bridge/transfer-policy';
-import type { FileSource, FileSourceOpener } from './file-source';
-import type { PartPutter } from './uploader';
+} from "../bridge/transfer-policy";
+import type { FileSource, FileSourceOpener } from "./file-source";
+import type { PartPutter } from "./uploader";
 
 /**
  * Random-access reads over a local file. `FileHandle` seeks natively, so a
  * 4 GB video is hashed and sealed in 4 MiB windows without ever materializing.
  */
-export const expoFileSource: FileSourceOpener = async (localUri: string): Promise<FileSource> => {
+export const expoFileSource: FileSourceOpener = async (
+  localUri: string
+): Promise<FileSource> => {
   const file = new File(localUri);
   if (!file.exists) throw new Error(`local file not found: ${localUri}`);
   const handle = file.open();
@@ -56,13 +58,15 @@ export function expoPartPutter(scope: BackgroundTransferScope): PartPutter {
     spool.write(body);
     try {
       const response = await spool.upload(target.toString(), {
-        httpMethod: 'PUT',
+        httpMethod: "PUT",
         uploadType: UploadType.BINARY_CONTENT,
-        sessionType: 'background',
-        headers: { 'content-type': 'application/octet-stream' },
+        sessionType: "background",
+        headers: { "content-type": "application/octet-stream" },
       });
       if (response.status < 200 || response.status >= 300) {
-        throw new Error(`provider refused part ${transferId} (${response.status})`);
+        throw new Error(
+          `provider refused part ${transferId} (${response.status})`
+        );
       }
       return etagOf(response.headers);
     } finally {
@@ -78,7 +82,7 @@ export function expoPartPutter(scope: BackgroundTransferScope): PartPutter {
 function etagOf(headers: Record<string, string> | undefined): string | null {
   if (!headers) return null;
   for (const [key, value] of Object.entries(headers)) {
-    if (key.toLowerCase() === 'etag') return value;
+    if (key.toLowerCase() === "etag") return value;
   }
   return null;
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 // Fresh, standalone Electron+Playwright launcher for the REAL desktop app —
 // real in-process gateway, real dev vault, no mocked HTTP. Distinct from the
@@ -12,11 +12,11 @@ import path from 'node:path';
 // Prereq: `bun run build --filter=@centraid/desktop` from the repo root (or
 // `bun run build` inside apps/desktop) so `dist/main.js` + `dist/renderer/`
 // exist. Re-run after any renderer/main change.
-import { _electron } from 'playwright';
+import { _electron } from "playwright";
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
-export const DESKTOP_ROOT = path.resolve(__dirname, '..', '..');
+export const DESKTOP_ROOT = path.resolve(__dirname, "..", "..");
 
 /**
  * Seed `<userData>/centraid-settings.json` with just enough persisted state
@@ -33,7 +33,7 @@ export const DESKTOP_ROOT = path.resolve(__dirname, '..', '..');
  * launch left behind.
  */
 async function ensureSettingsSeed(userDataDir) {
-  const settingsPath = path.join(userDataDir, 'centraid-settings.json');
+  const settingsPath = path.join(userDataDir, "centraid-settings.json");
   const exists = await fs
     .access(settingsPath)
     .then(() => true)
@@ -44,13 +44,13 @@ async function ensureSettingsSeed(userDataDir) {
     settingsPath,
     JSON.stringify(
       {
-        activeGatewayId: 'local',
+        activeGatewayId: "local",
         onboardingCompletedAt: new Date().toISOString(),
       },
       null,
-      2,
+      2
     ),
-    { mode: 0o600 },
+    { mode: 0o600 }
   );
 }
 
@@ -73,15 +73,16 @@ async function ensureSettingsSeed(userDataDir) {
  */
 export async function launchApp(opts = {}) {
   const userDataDir =
-    opts.userDataDir ?? (await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-e2e-live-')));
+    opts.userDataDir ??
+    (await fs.mkdtemp(path.join(os.tmpdir(), "centraid-e2e-live-")));
   await ensureSettingsSeed(userDataDir);
 
   const app = await _electron.launch({
     args: [DESKTOP_ROOT, `--user-data-dir=${userDataDir}`],
-    env: { ...process.env, NODE_ENV: 'test', ...opts.env },
+    env: { ...process.env, NODE_ENV: "test", ...opts.env },
   });
   const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState("domcontentloaded");
 
   // Readiness: the real gateway boot (mint vault, run migrations, resolve
   // settings over IPC) races the renderer's first paint. The first stable
@@ -89,8 +90,8 @@ export async function launchApp(opts = {}) {
   // screen's composer heading, which only renders once App.tsx has read
   // `onboardingCompletedAt` back from getSettings() and mounted <App/>
   // instead of <OnboardingScreen/> (see src/renderer/react/boot.tsx).
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({
-    state: 'visible',
+  await page.getByRole("heading", { name: "What should we build?" }).waitFor({
+    state: "visible",
     // Bumped from 45s: under heavy concurrent load on a shared dev machine
     // (multiple Electron instances from parallel sessions), first paint can
     // take well past 45s even though the app itself isn't hung.
@@ -111,5 +112,5 @@ export async function launchApp(opts = {}) {
  *  label (see Sidebar.tsx — icon SVGs are aria-hidden, only the label text
  *  renders). Robust to the chrome.module.css hashed class names. */
 export function navTo(page, label) {
-  return page.getByRole('button', { name: label, exact: true }).first().click();
+  return page.getByRole("button", { name: label, exact: true }).first().click();
 }

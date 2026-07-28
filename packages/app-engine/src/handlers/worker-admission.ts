@@ -9,7 +9,7 @@
  * either hangs or piles on more workers.
  */
 
-import { availableParallelism, totalmem } from 'node:os';
+import { availableParallelism, totalmem } from "node:os";
 
 export interface WorkerHostCapacity {
   cores: number;
@@ -20,24 +20,29 @@ function currentHostCapacity(): WorkerHostCapacity {
   return { cores: availableParallelism(), totalMemoryBytes: totalmem() };
 }
 
-export function isConstrainedWorkerHost(host: WorkerHostCapacity = currentHostCapacity()): boolean {
+export function isConstrainedWorkerHost(
+  host: WorkerHostCapacity = currentHostCapacity()
+): boolean {
   return host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3;
 }
 
 /** Resolve the app-handler ceiling; explicit env always wins over host classification. */
 export function workerMaxConcurrentFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-  host: WorkerHostCapacity = currentHostCapacity(),
+  host: WorkerHostCapacity = currentHostCapacity()
 ): number {
-  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const resolvedProfile =
+    env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
   const constrained =
-    resolvedProfile === 'constrained' ||
-    (resolvedProfile !== 'standard' && isConstrainedWorkerHost(host));
+    resolvedProfile === "constrained" ||
+    (resolvedProfile !== "standard" && isConstrainedWorkerHost(host));
   const fallback = constrained ? 2 : 8;
   const raw = env.CENTRAID_WORKER_MAX_CONCURRENT;
-  if (raw === undefined || raw === '') return fallback;
+  if (raw === undefined || raw === "") return fallback;
   const parsed = Math.trunc(Number(raw));
-  return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 32) : fallback;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(parsed, 32)
+    : fallback;
 }
 
 /** Concurrent app-handler workers allowed at once. */
@@ -55,10 +60,10 @@ export const WORKER_MAX_QUEUE_WAIT_MS = 10_000;
  * mirrors `authDeadError` in the gateway's `connection-limiter.ts`.
  */
 export function gatewayBusyError(
-  message = 'gateway busy: too many concurrent app handlers, try again shortly',
+  message = "gateway busy: too many concurrent app handlers, try again shortly"
 ): Error {
   const err = new Error(message);
-  err.name = 'GatewayBusyError';
+  err.name = "GatewayBusyError";
   return err;
 }
 
@@ -92,7 +97,7 @@ export class WorkerAdmission {
     private readonly maxConcurrent: number = WORKER_MAX_CONCURRENT,
     private readonly maxQueue: number = WORKER_MAX_QUEUE,
     private readonly maxQueueWaitMs: number = WORKER_MAX_QUEUE_WAIT_MS,
-    private readonly now: () => number = Date.now,
+    private readonly now: () => number = Date.now
   ) {}
 
   /** Live counts + cumulative resource actuals for a health/metrics surface to poll. */
@@ -136,7 +141,11 @@ export class WorkerAdmission {
         timer: setTimeout(() => {
           const idx = this.queue.indexOf(entry);
           if (idx >= 0) this.queue.splice(idx, 1);
-          reject(gatewayBusyError('gateway busy: timed out waiting for a free worker slot'));
+          reject(
+            gatewayBusyError(
+              "gateway busy: timed out waiting for a free worker slot"
+            )
+          );
         }, this.maxQueueWaitMs),
       };
       entry.timer.unref?.();
@@ -148,7 +157,8 @@ export class WorkerAdmission {
   release(): void {
     this.inFlight = Math.max(0, this.inFlight - 1);
     const acquiredAt = this.acquiredAt.shift();
-    if (acquiredAt !== undefined) this.totalBusyMs += Math.max(0, this.now() - acquiredAt);
+    if (acquiredAt !== undefined)
+      this.totalBusyMs += Math.max(0, this.now() - acquiredAt);
     const next = this.queue.shift();
     next?.resolve();
   }
@@ -159,7 +169,9 @@ let sharedWorkerAdmissionInstance: WorkerAdmission | undefined;
 
 /** Lazily resolve the hardware profile after the gateway's boot fsync probe. */
 export function sharedWorkerAdmission(): WorkerAdmission {
-  sharedWorkerAdmissionInstance ??= new WorkerAdmission(workerMaxConcurrentFromEnv());
+  sharedWorkerAdmissionInstance ??= new WorkerAdmission(
+    workerMaxConcurrentFromEnv()
+  );
   return sharedWorkerAdmissionInstance;
 }
 

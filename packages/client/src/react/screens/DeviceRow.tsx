@@ -1,15 +1,15 @@
-import type { IconName } from '@centraid/design-tokens';
-import { useState, type JSX } from 'react';
+import type { IconName } from "@centraid/design-tokens";
+import { useState, type JSX } from "react";
 
-import type { CentraidGatewayDevice } from '../../gateway-client.js';
-import { formatDuration } from '../shell/routes/gatewayData.js';
-import { cx } from '../ui/cx.js';
-import Icon from '../ui/Icon.js';
-import { lastAdminSpace } from './device-roles.js';
+import type { CentraidGatewayDevice } from "../../gateway-client.js";
+import { formatDuration } from "../shell/routes/gatewayData.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { lastAdminSpace } from "./device-roles.js";
 
-import controlsCss from '../styles/controls.module.css';
-import buttonCss from '../ui/Button.module.css';
-import styles from './DevicesCard.module.css';
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./DevicesCard.module.css";
 
 /*
  * One hardware binding inside a person's group (issue #599).
@@ -24,23 +24,29 @@ export interface DeviceRowProps {
   device: CentraidGatewayDevice;
   /** Live clock (parent ticks it) — drives the humanized ages. */
   now: number;
-  onRevoke: (device: CentraidGatewayDevice, confirmLastAdmin?: string) => Promise<void>;
-  onUpdateCompute?: (device: CentraidGatewayDevice, enabled: boolean) => Promise<void>;
+  onRevoke: (
+    device: CentraidGatewayDevice,
+    confirmLastAdmin?: string
+  ) => Promise<void>;
+  onUpdateCompute?: (
+    device: CentraidGatewayDevice,
+    enabled: boolean
+  ) => Promise<void>;
 }
 
 export function platformGlyph(device: CentraidGatewayDevice): IconName {
-  const platform = (device.platform ?? '').toLowerCase();
-  if (/ios|android|iphone|ipad|mobile|phone/u.test(platform)) return 'Phone';
-  if (/web|browser|chrome|safari|firefox|edge/u.test(platform)) return 'Globe';
-  if (/mac|win|linux|desktop|electron/u.test(platform)) return 'Monitor';
+  const platform = (device.platform ?? "").toLowerCase();
+  if (/ios|android|iphone|ipad|mobile|phone/u.test(platform)) return "Phone";
+  if (/web|browser|chrome|safari|firefox|edge/u.test(platform)) return "Globe";
+  if (/mac|win|linux|desktop|electron/u.test(platform)) return "Monitor";
   // Every gateway device is admitted by its iroh identity.
-  return 'Globe';
+  return "Globe";
 }
 
 export function ageLabel(iso: string | undefined, now: number): string {
-  if (!iso) return '';
+  if (!iso) return "";
   const at = Date.parse(iso);
-  if (Number.isNaN(at)) return '';
+  if (Number.isNaN(at)) return "";
   return `${formatDuration(Math.max(0, now - at))} ago`;
 }
 
@@ -58,7 +64,9 @@ export default function DeviceRow({
   const [strandedSpace, setStrandedSpace] = useState<string | null>(null);
   const [computeBusy, setComputeBusy] = useState(false);
 
-  const lastSeen = device.lastUsedAt ? ageLabel(device.lastUsedAt, now) : undefined;
+  const lastSeen = device.lastUsedAt
+    ? ageLabel(device.lastUsedAt, now)
+    : undefined;
   const paired = ageLabel(device.addedAt, now);
 
   const revoke = async (confirmLastAdmin?: string): Promise<void> => {
@@ -106,7 +114,9 @@ export default function DeviceRow({
       <div className={styles.main}>
         <div className={styles.nameLine}>
           <span className={styles.name}>{device.label}</span>
-          {device.current ? <span className={styles.currentChip}>This device</span> : null}
+          {device.current ? (
+            <span className={styles.currentChip}>This device</span>
+          ) : null}
           <span
             className={styles.transportChip}
             data-transport={device.transport}
@@ -123,14 +133,23 @@ export default function DeviceRow({
               {device.vaultName ?? device.vaultId}
             </span>
           ) : null}
-          {lastSeen ? <span>active {lastSeen}</span> : <span data-quiet="true">never used</span>}
+          {lastSeen ? (
+            <span>active {lastSeen}</span>
+          ) : (
+            <span data-quiet="true">never used</span>
+          )}
           {paired ? <span data-quiet="true">paired {paired}</span> : null}
         </div>
         {device.grantProfile === undefined ? null : (
-          <div className={styles.grantProfile} aria-label="Companion module grants">
+          <div
+            className={styles.grantProfile}
+            aria-label="Companion module grants"
+          >
             <span>Companion</span>
             {device.grantProfile.length > 0 ? (
-              device.grantProfile.map((grant) => <span key={grant}>{grant}</span>)
+              device.grantProfile.map((grant) => (
+                <span key={grant}>{grant}</span>
+              ))
             ) : (
               <span>no modules</span>
             )}
@@ -159,8 +178,8 @@ export default function DeviceRow({
         ) : null}
         {strandedSpace ? (
           <div className={styles.rowWarn}>
-            This is the last owner device for {strandedSpace}. Getting back in would need the
-            gateway machine and its command line.
+            This is the last owner device for {strandedSpace}. Getting back in
+            would need the gateway machine and its command line.
           </div>
         ) : null}
         {error ? <div className={styles.rowError}>{error}</div> : null}
@@ -170,7 +189,7 @@ export default function DeviceRow({
         {confirming ? (
           <div className={styles.confirm}>
             <span className={styles.confirmAsk}>
-              {device.current ? 'Sign out this device?' : 'Revoke this device?'}
+              {device.current ? "Sign out this device?" : "Revoke this device?"}
             </span>
             <button
               type="button"
@@ -183,9 +202,9 @@ export default function DeviceRow({
                   <Icon name="Loader" size={13} />
                 </span>
               ) : strandedSpace ? (
-                'Revoke anyway'
+                "Revoke anyway"
               ) : (
-                'Revoke'
+                "Revoke"
               )}
             </button>
             <button
@@ -200,7 +219,12 @@ export default function DeviceRow({
         ) : (
           <button
             type="button"
-            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft, styles.revokeBtn)}
+            className={cx(
+              buttonCss.btn,
+              buttonCss.sm,
+              controlsCss.soft,
+              styles.revokeBtn
+            )}
             onClick={() => setConfirming(true)}
           >
             <Icon name="Trash" size={13} />

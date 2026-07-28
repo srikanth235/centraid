@@ -1,4 +1,10 @@
-import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  enc,
+  readJson,
+} from "./gateway-client-core.js";
 
 /** Start the hidden compile path; the returned run appears in the automation thread. */
 export async function compileAutomation(input: {
@@ -10,12 +16,12 @@ export async function compileAutomation(input: {
     baseUrl,
     `/centraid/_automations/compile?ref=${enc(input.automationId)}`,
     {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
       body: JSON.stringify({ enableOnSuccess: input.enableOnSuccess === true }),
-    },
+    }
   );
-  return readJson<{ compileTurnId: string }>(res, 'compile automation');
+  return readJson<{ compileTurnId: string }>(res, "compile automation");
 }
 
 /**
@@ -37,27 +43,31 @@ export async function reviseAutomation(input: {
     baseUrl,
     `/centraid/_automations/revise?ref=${enc(input.automationId)}`,
     {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
       body: JSON.stringify({ message: input.message }),
-    },
+    }
   );
-  return readJson<{ compileTurnId: string }>(res, 'revise automation');
+  return readJson<{ compileTurnId: string }>(res, "revise automation");
 }
 
 /** The compiled plan the headless compiler wrote for this automation — the
  *  deterministic `automation.json` + `handler.js` that actually run. Either
  *  field is null before a successful first compile. */
 export async function readAutomationSource(
-  automationId: string,
+  automationId: string
 ): Promise<{ manifest: string | null; handler: string | null }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_automations/source?ref=${enc(automationId)}`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/source?ref=${enc(automationId)}`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
   return readJson<{ manifest: string | null; handler: string | null }>(
     res,
-    'read automation source',
+    "read automation source"
   );
 }

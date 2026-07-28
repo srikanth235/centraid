@@ -15,15 +15,16 @@
 
 /** True for a raw filesystem ENOSPC or a node:sqlite SQLITE_FULL error. */
 export function isDiskFullError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
+  if (!err || typeof err !== "object") return false;
   const e = err as { code?: unknown; errcode?: unknown; errstr?: unknown };
-  if (e.code === 'ENOSPC') return true;
+  if (e.code === "ENOSPC") return true;
   // node:sqlite (DatabaseSync) wraps every sqlite error as `Error` with
   // `code: 'ERR_SQLITE_ERROR'` and the raw sqlite result code on `errcode`.
   // SQLITE_FULL is 13 (sqlite3.h) — probed directly against node 22's
   // node:sqlite via `PRAGMA max_page_count`, see db.test.ts.
-  if (e.code === 'ERR_SQLITE_ERROR' && e.errcode === 13) return true;
-  if (typeof e.errstr === 'string' && /disk.*full|SQLITE_FULL/iu.test(e.errstr)) return true;
+  if (e.code === "ERR_SQLITE_ERROR" && e.errcode === 13) return true;
+  if (typeof e.errstr === "string" && /disk.*full|SQLITE_FULL/iu.test(e.errstr))
+    return true;
   return false;
 }
 
@@ -31,10 +32,10 @@ export function isDiskFullError(err: unknown): boolean {
 export class VaultDiskFullError extends Error {
   constructor(
     readonly context: string,
-    message: string,
+    message: string
   ) {
     super(message);
-    this.name = 'VaultDiskFullError';
+    this.name = "VaultDiskFullError";
   }
 }
 
@@ -56,7 +57,10 @@ export function asVaultDiskFullError(context: string, err: unknown): Error {
   if (isDiskFullError(err)) {
     const detail = err instanceof Error ? err.message : String(err);
     sharedDiskFullTracker.report(err, context);
-    return new VaultDiskFullError(context, `disk full during ${context}: ${detail}`);
+    return new VaultDiskFullError(
+      context,
+      `disk full during ${context}: ${detail}`
+    );
   }
   return err instanceof Error ? err : new Error(String(err));
 }
@@ -76,7 +80,7 @@ export function asVaultDiskFullError(context: string, err: unknown): Error {
  * "evict-only-if-replicated enforced in the custody layer").
  */
 export class VaultBlobBackpressureError extends Error {
-  readonly code = 'blob_capacity_exceeded';
+  readonly code = "blob_capacity_exceeded";
 
   constructor(
     readonly context: string,
@@ -89,56 +93,58 @@ export class VaultBlobBackpressureError extends Error {
       outboxBudgetBytes?: number;
       /** True when a declared SHA unlocks the bounded stream-through path. */
       expectedShaRequired?: boolean;
-    },
+    }
   ) {
     super(message);
-    this.name = 'VaultBlobBackpressureError';
+    this.name = "VaultBlobBackpressureError";
   }
 }
 
 /** Declared client identity did not match the streamed plaintext bytes. */
 export class VaultBlobHashMismatchError extends Error {
-  readonly code = 'blob_hash_mismatch';
+  readonly code = "blob_hash_mismatch";
 
   constructor(
     readonly expectedSha256: string,
-    readonly actualSha256: string,
+    readonly actualSha256: string
   ) {
-    super(`blob SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}`);
-    this.name = 'VaultBlobHashMismatchError';
+    super(
+      `blob SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}`
+    );
+    this.name = "VaultBlobHashMismatchError";
   }
 }
 
 /** Resumable session state/offset errors, safe to surface as a 409. */
 export class VaultBlobSessionError extends Error {
-  readonly code = 'blob_session_conflict';
+  readonly code = "blob_session_conflict";
 
   constructor(
     message: string,
-    readonly expectedOffset?: number,
+    readonly expectedOffset?: number
   ) {
     super(message);
-    this.name = 'VaultBlobSessionError';
+    this.name = "VaultBlobSessionError";
   }
 }
 
 /** A direct-CAS key/session request was not made by its live paired device. */
 export class VaultBlobAuthorizationError extends Error {
-  readonly code = 'blob_device_forbidden';
+  readonly code = "blob_device_forbidden";
 
   constructor(message: string) {
     super(message);
-    this.name = 'VaultBlobAuthorizationError';
+    this.name = "VaultBlobAuthorizationError";
   }
 }
 
 /** Direct provider preflight is unavailable before any provider part exists. */
 export class VaultBlobRemoteUnavailableError extends Error {
-  readonly code = 'blob_remote_unavailable';
+  readonly code = "blob_remote_unavailable";
 
-  constructor(message = 'remote blob provider is unavailable') {
+  constructor(message = "remote blob provider is unavailable") {
     super(message);
-    this.name = 'VaultBlobRemoteUnavailableError';
+    this.name = "VaultBlobRemoteUnavailableError";
   }
 }
 
@@ -151,11 +157,11 @@ export class VaultBlobRemoteUnavailableError extends Error {
  * half-placed item.
  */
 export class VaultShareError extends Error {
-  readonly code = 'share_placement_failed';
+  readonly code = "share_placement_failed";
 
   constructor(message: string) {
     super(message);
-    this.name = 'VaultShareError';
+    this.name = "VaultShareError";
   }
 }
 

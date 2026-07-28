@@ -4,10 +4,10 @@
 // agent.invocation_check rows; agent.judgment rules are consulted as
 // constraints — never authored here.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
-import { nowIso } from '../ids.js';
-import type { ConditionSpec, Risk } from './types.js';
+import { nowIso } from "../ids.js";
+import type { ConditionSpec, Risk } from "./types.js";
 
 export interface CommandRow {
   command_id: string;
@@ -17,15 +17,18 @@ export interface CommandRow {
   output_schema_json: string;
   preconditions_json: string;
   postconditions_json: string;
-  idempotency: 'idempotent' | 'once' | 'retry-safe';
+  idempotency: "idempotent" | "once" | "retry-safe";
   risk: Risk;
   ontology_version: string;
 }
 
-export function lookupCommand(vault: DatabaseSync, name: string): CommandRow | undefined {
-  return vault.prepare('SELECT * FROM agent_command WHERE name = ?').get(name) as
-    | CommandRow
-    | undefined;
+export function lookupCommand(
+  vault: DatabaseSync,
+  name: string
+): CommandRow | undefined {
+  return vault
+    .prepare("SELECT * FROM agent_command WHERE name = ?")
+    .get(name) as CommandRow | undefined;
 }
 
 export interface ConditionResult {
@@ -37,21 +40,25 @@ export interface ConditionResult {
   observed: Record<string, unknown>;
 }
 
-function compare(op: ConditionSpec['op'], actual: unknown, expected: number | string): boolean {
+function compare(
+  op: ConditionSpec["op"],
+  actual: unknown,
+  expected: number | string
+): boolean {
   if (actual === null || actual === undefined) return false;
   const a = actual as number | string;
   switch (op) {
-    case 'eq':
+    case "eq":
       return a === expected;
-    case 'ne':
+    case "ne":
       return a !== expected;
-    case 'lt':
+    case "lt":
       return a < expected;
-    case 'lte':
+    case "lte":
       return a <= expected;
-    case 'gt':
+    case "gt":
       return a > expected;
-    case 'gte':
+    case "gte":
       return a >= expected;
     default:
       return false;
@@ -66,7 +73,7 @@ function compare(op: ConditionSpec['op'], actual: unknown, expected: number | st
 export function evaluateConditions(
   vault: DatabaseSync,
   specs: ConditionSpec[],
-  input: Record<string, unknown>,
+  input: Record<string, unknown>
 ): ConditionResult[] {
   return specs.map((spec) => {
     const predicate = `${spec.name}: ${spec.column} ${spec.op} ${JSON.stringify(spec.value)}`;
@@ -76,13 +83,16 @@ export function evaluateConditions(
         const key = match.groups?.param as string;
         const value = input[key];
         params[key] =
-          typeof value === 'string' || typeof value === 'number'
+          typeof value === "string" || typeof value === "number"
             ? value
             : value === null || value === undefined
               ? null // optional inputs bind as NULL, so conditions can branch on them
               : String(value);
       }
-      const row = (vault.prepare(spec.sql).get(params) ?? {}) as Record<string, unknown>;
+      const row = (vault.prepare(spec.sql).get(params) ?? {}) as Record<
+        string,
+        unknown
+      >;
       return {
         name: spec.name,
         predicate,
@@ -111,12 +121,12 @@ export function evaluateConditions(
 export function judgmentVeto(
   vault: DatabaseSync,
   commandName: string,
-  ownerSchema: string,
+  ownerSchema: string
 ): string | null {
   const rows = vault
     .prepare(
       `SELECT judgment_id, subject_scope, rule_json FROM agent_judgment
-        WHERE active = 1 AND (expires_at IS NULL OR expires_at > ?)`,
+        WHERE active = 1 AND (expires_at IS NULL OR expires_at > ?)`
     )
     .all(nowIso()) as {
     judgment_id: string;
@@ -124,7 +134,8 @@ export function judgmentVeto(
     rule_json: string;
   }[];
   for (const row of rows) {
-    if (row.subject_scope !== commandName && row.subject_scope !== ownerSchema) continue;
+    if (row.subject_scope !== commandName && row.subject_scope !== ownerSchema)
+      continue;
     const rule = JSON.parse(row.rule_json) as { veto_command?: string };
     if (rule.veto_command === commandName) return row.judgment_id;
   }

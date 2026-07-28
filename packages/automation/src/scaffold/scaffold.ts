@@ -16,11 +16,15 @@
  * / apps) and `handler.js` during the build conversation.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-import { isValidAppId } from '@centraid/app-engine';
-import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/blueprints';
+import { isValidAppId } from "@centraid/app-engine";
+import {
+  AppScaffoldError,
+  type ScaffoldFile,
+  type AppInfo,
+} from "@centraid/blueprints";
 
 import {
   HANDLER_FILE,
@@ -32,9 +36,9 @@ import {
   type ConnectionBinding,
   type ConnectorSpec,
   type ManifestVault,
-} from '../manifest/manifest.js';
-import { isValidId } from '../manifest/ref.js';
-import { APP_AUTOMATIONS_SUBDIR } from './app.js';
+} from "../manifest/manifest.js";
+import { isValidId } from "../manifest/ref.js";
+import { APP_AUTOMATIONS_SUBDIR } from "./app.js";
 
 export interface ScaffoldOptions {
   /** Display name. Defaults to the app id. */
@@ -97,25 +101,25 @@ export interface ScaffoldOptions {
 export function validateAppId(appId: string): void {
   if (!isValidAppId(appId)) {
     throw new AppScaffoldError(
-      'invalid_id',
-      `Invalid automation app id "${appId}". Use a filesystem-safe slug (letters / digits / "-" / "_").`,
+      "invalid_id",
+      `Invalid automation app id "${appId}". Use a filesystem-safe slug (letters / digits / "-" / "_").`
     );
   }
 }
 
 /** Validate an automation id (the directory slug under `automations/`). */
 export function validateId(id: string): void {
-  if (id.startsWith('_') || !isValidId(id)) {
+  if (id.startsWith("_") || !isValidId(id)) {
     throw new AppScaffoldError(
-      'invalid_id',
-      `Invalid automation id "${id}". Use A-Z / a-z / 0-9 / "-" / "_", no leading "_".`,
+      "invalid_id",
+      `Invalid automation id "${id}". Use A-Z / a-z / 0-9 / "-" / "_", no leading "_".`
     );
   }
 }
 
 /** Derive the inner automation id from the app id. */
 function defaultAutomationId(appId: string): string {
-  return isValidId(appId) ? appId : 'main';
+  return isValidId(appId) ? appId : "main";
 }
 
 const DEFAULT_HANDLER = `/**
@@ -180,7 +184,7 @@ export default async ({ ctx, log }) => {
 function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   const triggers: readonly Trigger[] =
     opts.triggers === undefined
-      ? [{ kind: 'cron', expr: opts.cronExpr?.trim() || '0 9 * * *' }]
+      ? [{ kind: "cron", expr: opts.cronExpr?.trim() || "0 9 * * *" }]
       : opts.triggers;
   // Emit the `requires` slots the builder may fill (issue #167): `model` is the
   // ctx.agent capability tier (`provider/model-id`) — picked for the cheapest
@@ -192,20 +196,21 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   if (opts.model?.trim()) requires.model = opts.model.trim();
   const raw: Record<string, unknown> = {
     name,
-    version: '0.1.0',
+    version: "0.1.0",
     enabled: opts.enabled ?? true,
-    prompt: opts.prompt?.trim() || 'Describe what this automation should do.',
+    prompt: opts.prompt?.trim() || "Describe what this automation should do.",
     triggers: [...triggers],
     requires,
     history: { keep: opts.historyKeep ?? { count: 100 } },
-    generated: { by: 'centraid-compiler', at: new Date().toISOString() },
+    generated: { by: "centraid-compiler", at: new Date().toISOString() },
   };
   if (opts.description?.trim()) raw.description = opts.description.trim();
   if (opts.apps && opts.apps.length > 0) raw.apps = [...opts.apps];
   if (opts.onFailure?.trim()) raw.onFailure = opts.onFailure.trim();
   if (opts.vault) raw.vault = opts.vault;
   if (opts.connector) raw.connector = opts.connector;
-  if (opts.connections && opts.connections.length > 0) raw.connections = [...opts.connections];
+  if (opts.connections && opts.connections.length > 0)
+    raw.connections = [...opts.connections];
   // Round-trip through the validator so a scaffold can never write a
   // manifest the runtime would later reject.
   return validateManifest(raw);
@@ -217,7 +222,10 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
  * `automations/<autoId>/` (manifest + handler). The caller PUTs these
  * into a git-store session and publishes.
  */
-export function scaffoldAppFiles(appId: string, opts: ScaffoldOptions = {}): ScaffoldFile[] {
+export function scaffoldAppFiles(
+  appId: string,
+  opts: ScaffoldOptions = {}
+): ScaffoldFile[] {
   validateAppId(appId);
   const automationId = opts.automationId ?? defaultAutomationId(appId);
   validateId(automationId);
@@ -232,8 +240,8 @@ export function scaffoldAppFiles(appId: string, opts: ScaffoldOptions = {}): Sca
     name,
     // Marks this as a UI-less automation app (replaces the legacy `auto.`
     // id prefix) — the desktop surfaces it on the Automations page.
-    kind: 'automation',
-    version: '0.1.0',
+    kind: "automation",
+    version: "0.1.0",
     actions: [],
     queries: [],
   };
@@ -241,10 +249,10 @@ export function scaffoldAppFiles(appId: string, opts: ScaffoldOptions = {}): Sca
   const manifest = starterManifest(name, opts);
   const base = `${APP_AUTOMATIONS_SUBDIR}/${automationId}`;
   return [
-    { path: 'app.json', content: JSON.stringify(appJson, null, 2) + '\n' },
+    { path: "app.json", content: JSON.stringify(appJson, null, 2) + "\n" },
     {
       path: `${base}/${MANIFEST_FILE}`,
-      content: JSON.stringify(manifest, null, 2) + '\n',
+      content: JSON.stringify(manifest, null, 2) + "\n",
     },
     { path: `${base}/${HANDLER_FILE}`, content: DEFAULT_HANDLER },
   ];
@@ -260,7 +268,7 @@ export function scaffoldAppFiles(appId: string, opts: ScaffoldOptions = {}): Sca
 export function setEnabledInFiles(
   current: ScaffoldFile[],
   automationId: string,
-  enabled: boolean,
+  enabled: boolean
 ): ScaffoldFile[] {
   const target = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/${MANIFEST_FILE}`;
   const file = current.find((f) => f.path === target);
@@ -273,7 +281,7 @@ export function setEnabledInFiles(
   }
   if (parsed.enabled === enabled) return [];
   const manifest = validateManifest({ ...parsed, enabled });
-  return [{ path: target, content: JSON.stringify(manifest, null, 2) + '\n' }];
+  return [{ path: target, content: JSON.stringify(manifest, null, 2) + "\n" }];
 }
 
 /**
@@ -284,7 +292,7 @@ export function setEnabledInFiles(
  */
 export function deleteFromFiles(
   current: ScaffoldFile[],
-  automationId: string,
+  automationId: string
 ): { keep: ScaffoldFile[]; removed: string[] } {
   const prefix = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/`;
   const keep: ScaffoldFile[] = [];
@@ -305,15 +313,15 @@ export function deleteFromFiles(
 export async function scaffoldApp(
   appsDir: string,
   appId: string,
-  opts: ScaffoldOptions = {},
+  opts: ScaffoldOptions = {}
 ): Promise<AppInfo> {
   const files = scaffoldAppFiles(appId, opts);
   const appDir = path.join(appsDir, appId);
   try {
     await fs.access(appDir);
     throw new AppScaffoldError(
-      'already_exists',
-      `Automation app "${appId}" already exists at ${appDir}.`,
+      "already_exists",
+      `Automation app "${appId}" already exists at ${appDir}.`
     );
   } catch (err) {
     if (err instanceof AppScaffoldError) throw err;
@@ -325,10 +333,12 @@ export async function scaffoldApp(
       const dest = path.join(appDir, file.path);
       await fs.mkdir(path.dirname(dest), { recursive: true });
       await fs.writeFile(dest, file.content);
-    }),
+    })
   );
 
-  const appJson = JSON.parse(files.find((f) => f.path === 'app.json')!.content) as {
+  const appJson = JSON.parse(
+    files.find((f) => f.path === "app.json")!.content
+  ) as {
     name?: string;
     description?: string;
   };
@@ -339,7 +349,9 @@ export async function scaffoldApp(
     built: true,
     modifiedAt: stat.mtime.toISOString(),
     name: appJson.name,
-    kind: 'automation',
-    ...(typeof appJson.description === 'string' ? { description: appJson.description } : {}),
+    kind: "automation",
+    ...(typeof appJson.description === "string"
+      ? { description: appJson.description }
+      : {}),
   };
 }

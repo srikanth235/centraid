@@ -1,4 +1,4 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface ReplicaIntentContext {
   intentId: string;
@@ -20,7 +20,10 @@ const storage = new AsyncLocalStorage<ReplicaIntentContext>();
  * `ctx.vault.invoke` call carry the durable intent id without trusting app
  * input or broadening the worker protocol.
  */
-export function runWithReplicaIntent<T>(context: ReplicaIntentContext, run: () => T): T {
+export function runWithReplicaIntent<T>(
+  context: ReplicaIntentContext,
+  run: () => T
+): T {
   return storage.run(context, run);
 }
 

@@ -33,7 +33,7 @@
     transform: translateX(-110%);
     transition: transform 0.26s var(--ease);
   }
-  .sidebar[data-open='true'] {
+  .sidebar[data-open="true"] {
     transform: translateX(0);
   }
   .sidebarClose {
@@ -125,7 +125,7 @@
 .navItem:hover {
   background: var(--bg-sunken);
 }
-.navItem[data-active='true'] {
+.navItem[data-active="true"] {
   background: var(--accent-soft);
   color: var(--accent-deep-fg);
   font-weight: 600;

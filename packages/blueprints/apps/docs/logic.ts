@@ -1,4 +1,4 @@
-import { fmtBytes, typeMeta } from './format.ts';
+import { fmtBytes, typeMeta } from "./format.ts";
 // Non-visual business logic: data/selection helpers, the plain-DOM popovers
 // (kebab / move-to), and every vault write (documents, folders, upload).
 //
@@ -11,12 +11,17 @@ import { fmtBytes, typeMeta } from './format.ts';
 // and `refresh`, that only app.tsx can define (they touch the JSX-rendering
 // roots). Everything returned here is then wired into app.tsx's render
 // functions as props/callbacks, exactly like any other value flowing down.
-import { isPendingOffsite, outcomeMessage, runBulk as runBulkBase, toast } from './kit.ts';
-import { createMetadata } from './metadata.ts';
-import { createPopovers } from './popovers.ts';
-import type { AppData, AppState, DriveDoc, Folder } from './types.ts';
-import { stageDocumentFile } from './upload.ts';
-import { createVersions } from './versions.ts';
+import {
+  isPendingOffsite,
+  outcomeMessage,
+  runBulk as runBulkBase,
+  toast,
+} from "./kit.ts";
+import { createMetadata } from "./metadata.ts";
+import { createPopovers } from "./popovers.ts";
+import type { AppData, AppState, DriveDoc, Folder } from "./types.ts";
+import { stageDocumentFile } from "./upload.ts";
+import { createVersions } from "./versions.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 // Bytes stream to the blob staging route (issue #296) — no base64 through
@@ -32,15 +37,15 @@ const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 // the raw predicate/SQL detail instead of this app's own copy.
 const FRIENDLY_PREDICATES: Record<string, string> = {
   not_rented_elsewhere:
-    'This file is in use elsewhere in your vault (an attachment, a note, an avatar…) — remove it there first.',
+    "This file is in use elsewhere in your vault (an attachment, a note, an avatar…) — remove it there first.",
   folder_is_empty:
-    'Empty the folder first — move or trash its documents (including trashed ones) and delete its subfolders.',
-  name_unused_among_siblings: 'A folder with that name already exists here.',
+    "Empty the folder first — move or trash its documents (including trashed ones) and delete its subfolders.",
+  name_unused_among_siblings: "A folder with that name already exists here.",
 };
 
 function predicateName(predicate: unknown): string {
-  const s = String(predicate ?? '');
-  const i = s.indexOf(':');
+  const s = String(predicate ?? "");
+  const i = s.indexOf(":");
   return i === -1 ? s : s.slice(0, i);
 }
 
@@ -52,40 +57,49 @@ interface LogicDeps {
   openQuick: (id: string) => void;
 }
 
-export function createLogic({ state, data, render, refresh, openQuick }: LogicDeps) {
+export function createLogic({
+  state,
+  data,
+  render,
+  refresh,
+  openQuick,
+}: LogicDeps) {
   function notice(text?: string) {
-    const b = $('noticeBanner');
-    b.textContent = text || '';
+    const b = $("noticeBanner");
+    b.textContent = text || "";
     b.hidden = !text;
   }
 
   function friendlyOutcome(outcome: VaultOutcome | undefined): string | null {
-    return FRIENDLY_PREDICATES[predicateName(outcome?.predicate)] ?? outcomeMessage(outcome);
+    return (
+      FRIENDLY_PREDICATES[predicateName(outcome?.predicate)] ??
+      outcomeMessage(outcome)
+    );
   }
 
   // Returns true when the write executed; otherwise narrates parked / failed
   // / denied honestly and returns false.
   function narrate(outcome: VaultOutcome | undefined): boolean {
-    if (outcome?.status === 'executed') {
-      notice('');
+    if (outcome?.status === "executed") {
+      notice("");
       return true;
     }
-    if (outcome?.status === 'parked') {
-      notice('Sent to the owner for confirmation — it lands once approved.');
-    } else if (outcome?.status === 'failed') {
+    if (outcome?.status === "parked") {
+      notice("Sent to the owner for confirmation — it lands once approved.");
+    } else if (outcome?.status === "failed") {
       notice(
         FRIENDLY_PREDICATES[predicateName(outcome.predicate)] ??
-          `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`,
+          `The vault refused: ${outcome.predicate ?? outcome.reason ?? "a precondition failed"}.`
       );
-    } else if (outcome?.status === 'denied') {
-      notice(`Denied by consent: ${outcome.reason ?? ''}`);
+    } else if (outcome?.status === "denied") {
+      notice(`Denied by consent: ${outcome.reason ?? ""}`);
     }
     return false;
   }
 
   async function act(
     action: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
@@ -104,7 +118,7 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   // component needs a folder's name (List rows, Details, QuickLook) instead
   // of each one re-deriving the folders map.
   function folderName(id: string | null | undefined): string {
-    return id == null ? 'Documents' : (folderById(id)?.name ?? 'a folder');
+    return id == null ? "Documents" : (folderById(id)?.name ?? "a folder");
   }
   function activeFiles(): DriveDoc[] {
     return data.documents.filter((f) => !f.trashed);
@@ -115,13 +129,18 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
 
   function compareDocs(a: DriveDoc, b: DriveDoc): number {
     let r = 0;
-    if (state.sortKey === 'size') r = (a.byte_size ?? 0) - (b.byte_size ?? 0);
-    else if (state.sortKey === 'name')
-      r = String(a.title ?? '').localeCompare(String(b.title ?? ''), undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      });
-    else r = String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''));
+    if (state.sortKey === "size") r = (a.byte_size ?? 0) - (b.byte_size ?? 0);
+    else if (state.sortKey === "name")
+      r = String(a.title ?? "").localeCompare(
+        String(b.title ?? ""),
+        undefined,
+        {
+          numeric: true,
+          sensitivity: "base",
+        }
+      );
+    else
+      r = String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""));
     return r * state.sortDir;
   }
 
@@ -132,23 +151,27 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
     let list: DriveDoc[];
     if (search.trim()) {
       list = state.searchResults ?? []; // flat vault FTS matches across every folder
-    } else if (nav.kind === 'trash') {
+    } else if (nav.kind === "trash") {
       list = trashedFiles();
     } else {
       list = activeFiles();
-      if (nav.kind === 'starred') list = list.filter((f) => f.starred);
-      if (nav.kind === 'folder') list = list.filter((f) => (f.folder_id ?? null) === nav.folderId);
+      if (nav.kind === "starred") list = list.filter((f) => f.starred);
+      if (nav.kind === "folder")
+        list = list.filter((f) => (f.folder_id ?? null) === nav.folderId);
     }
-    if (type !== 'all') list = list.filter((f) => typeMeta(f.media_type).cat === type);
+    if (type !== "all")
+      list = list.filter((f) => typeMeta(f.media_type).cat === type);
     // Free-form label filter (issue #352 phase 4) — same "all" escape hatch
     // and same idiom as the type chips above, alongside them rather than
     // replacing them (a document can be one type AND carry several labels).
-    if (tag && tag !== 'all')
+    if (tag && tag !== "all")
       list = list.filter((f) => (f.tags ?? []).some((t) => t.label === tag));
     if (search.trim()) return list; // keep the vault's rank order for search
-    if (nav.kind === 'recent') {
+    if (nav.kind === "recent") {
       return [...list]
-        .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
+        .sort((a, b) =>
+          String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
+        )
         .slice(0, 8);
     }
     return [...list].sort(compareDocs);
@@ -166,7 +189,10 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   function toggleSelect(id: string, index: number, shift: boolean) {
     const sel = state.selected;
     if (shift && state.anchorIndex != null) {
-      const [a, b] = [Math.min(state.anchorIndex, index), Math.max(state.anchorIndex, index)];
+      const [a, b] = [
+        Math.min(state.anchorIndex, index),
+        Math.max(state.anchorIndex, index),
+      ];
       const on = !sel.has(id);
       for (let i = a; i <= b; i += 1) {
         const rid = state.visibleRows[i]?.document_id;
@@ -191,13 +217,13 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   // ---------- Document writes ----------
 
   async function trashDoc(doc: DriveDoc) {
-    const outcome = await act('trash', { document_id: doc.document_id });
+    const outcome = await act("trash", { document_id: doc.document_id });
     if (!narrate(outcome)) return;
     if (state.detailsId === doc.document_id) state.detailsId = null;
     toast(`Moved to trash · receipted.`, {
-      undoLabel: 'Undo',
+      undoLabel: "Undo",
       onUndo: async () => {
-        const back = await act('restore', { document_id: doc.document_id });
+        const back = await act("restore", { document_id: doc.document_id });
         if (narrate(back)) await refresh();
       },
     });
@@ -205,9 +231,9 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   }
 
   async function restoreDoc(doc: DriveDoc) {
-    const outcome = await act('restore', { document_id: doc.document_id });
+    const outcome = await act("restore", { document_id: doc.document_id });
     if (narrate(outcome)) {
-      toast('Restored to its folder · receipted.');
+      toast("Restored to its folder · receipted.");
       await refresh();
     }
   }
@@ -216,46 +242,50 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   // wrapper, so favorites from Photos and stars from here are the same
   // judgment.
   async function toggleStar(doc: DriveDoc) {
-    const outcome = await act(doc.starred ? 'unstar' : 'star', {
+    const outcome = await act(doc.starred ? "unstar" : "star", {
       document_id: doc.document_id,
     });
     if (narrate(outcome)) {
-      toast(doc.starred ? 'Star removed · receipted.' : 'Starred · receipted.');
+      toast(doc.starred ? "Star removed · receipted." : "Starred · receipted.");
       await refresh();
     }
   }
 
-  async function moveDocs(ids: string[], folderId: string | null, name: string) {
+  async function moveDocs(
+    ids: string[],
+    folderId: string | null,
+    name: string
+  ) {
     const input = (id: string): Record<string, unknown> => ({
       document_id: id,
       ...(folderId == null ? {} : { folder_id: folderId }),
     });
     if (ids.length === 1) {
-      const outcome = await act('move', input(ids[0]!));
+      const outcome = await act("move", input(ids[0]!));
       if (!narrate(outcome)) return;
       toast(`Moved to ${name} · receipted.`);
       clearSelection();
       await refresh();
       return;
     }
-    await runBulk(ids, (id) => act('move', input(id)), {
-      progress: 'Moving',
-      done: 'Moved',
+    await runBulk(ids, (id) => act("move", input(id)), {
+      progress: "Moving",
+      done: "Moved",
       suffix: ` to ${name}`,
     });
   }
 
   async function startRenameDoc(doc: DriveDoc) {
-    const title = window.prompt?.('Rename document', doc.title ?? '');
+    const title = window.prompt?.("Rename document", doc.title ?? "");
     if (title == null) return;
     const trimmed = title.trim();
     if (!trimmed || trimmed === doc.title) return;
-    const outcome = await act('rename', {
+    const outcome = await act("rename", {
       document_id: doc.document_id,
       title: trimmed,
     });
     if (narrate(outcome)) {
-      toast('Renamed · receipted.');
+      toast("Renamed · receipted.");
       await refresh();
     }
   }
@@ -266,7 +296,7 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   const runBulk = (
     ids: string[],
     run: (id: string) => Promise<VaultOutcome | undefined>,
-    opts: { progress: string; done: string; suffix?: string },
+    opts: { progress: string; done: string; suffix?: string }
   ) =>
     runBulkBase(ids, run, {
       ...opts,
@@ -279,16 +309,24 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
     });
 
   function restoreSelected() {
-    return runBulk([...state.selected], (id) => act('restore', { document_id: id }), {
-      progress: 'Restoring',
-      done: 'Restored',
-    });
+    return runBulk(
+      [...state.selected],
+      (id) => act("restore", { document_id: id }),
+      {
+        progress: "Restoring",
+        done: "Restored",
+      }
+    );
   }
   function trashSelected() {
-    return runBulk([...state.selected], (id) => act('trash', { document_id: id }), {
-      progress: 'Trashing',
-      done: 'Trashed',
-    });
+    return runBulk(
+      [...state.selected],
+      (id) => act("trash", { document_id: id }),
+      {
+        progress: "Trashing",
+        done: "Trashed",
+      }
+    );
   }
   function moveSelected(anchor: HTMLElement) {
     openMovePopover(anchor, selectedDocs());
@@ -301,7 +339,7 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   // ---------- Folder writes ----------
 
   async function createFolder(name: string) {
-    const outcome = await act('create-folder', { name });
+    const outcome = await act("create-folder", { name });
     if (narrate(outcome)) {
       state.creatingFolder = false;
       toast(`Folder “${name}” created · receipted.`);
@@ -311,21 +349,24 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
     }
   }
   async function renameFolder(folderId: string, name: string) {
-    const outcome = await act('rename-folder', { folder_id: folderId, name });
+    const outcome = await act("rename-folder", { folder_id: folderId, name });
     if (narrate(outcome)) {
       state.renamingFolderId = null;
-      toast('Folder renamed · receipted.');
+      toast("Folder renamed · receipted.");
       await refresh();
     } else {
       render();
     }
   }
   async function deleteFolder(folder: Folder) {
-    const outcome = await act('delete-folder', { folder_id: folder.folder_id });
+    const outcome = await act("delete-folder", { folder_id: folder.folder_id });
     if (narrate(outcome)) {
-      if (state.nav.kind === 'folder' && state.nav.folderId === folder.folder_id)
-        state.nav = { kind: 'all' };
-      toast('Folder deleted · receipted.');
+      if (
+        state.nav.kind === "folder" &&
+        state.nav.folderId === folder.folder_id
+      )
+        state.nav = { kind: "all" };
+      toast("Folder deleted · receipted.");
       await refresh();
     }
   }
@@ -351,15 +392,17 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
     if (state.uploading) return;
     const files = [...fileList];
     if (files.length === 0) return;
-    const folderId = state.nav.kind === 'folder' ? (state.nav.folderId ?? null) : null;
+    const folderId =
+      state.nav.kind === "folder" ? (state.nav.folderId ?? null) : null;
     const skipped = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
     const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
     const failures: string[] = [];
     if (skipped.length === 1)
       failures.push(
-        `“${skipped[0]!.name}” is ${fmtBytes(skipped[0]!.size)} — files up to 512 MB travel well.`,
+        `“${skipped[0]!.name}” is ${fmtBytes(skipped[0]!.size)} — files up to 512 MB travel well.`
       );
-    else if (skipped.length > 1) failures.push(`Skipped ${skipped.length} files over 512 MB.`);
+    else if (skipped.length > 1)
+      failures.push(`Skipped ${skipped.length} files over 512 MB.`);
 
     state.uploading = true;
     let ok = 0;
@@ -378,26 +421,30 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
         failures.push(`Could not read “${file.name}”.`);
         return uploadNext(i + 1);
       }
-      const outcome = await act('upload', {
+      const outcome = await act("upload", {
         staged_sha: staged.sha256,
         title: file.name,
         ...(folderId == null ? {} : { folder_id: folderId }),
       });
-      if (outcome?.status === 'executed') {
+      if (outcome?.status === "executed") {
         if (isPendingOffsite(staged)) pendingOffsite += 1;
         else ok += 1;
-      } else if (outcome?.status === 'parked') parked += 1;
-      else failures.push(`“${file.name}”: ${friendlyOutcome(outcome) ?? 'the upload failed'}`);
+      } else if (outcome?.status === "parked") parked += 1;
+      else
+        failures.push(
+          `“${file.name}”: ${friendlyOutcome(outcome) ?? "the upload failed"}`
+        );
       return uploadNext(i + 1);
     };
     await uploadNext(0);
     state.uploading = false;
-    notice(failures.join(' '));
+    notice(failures.join(" "));
     if (accepted.length > 0) {
       const parts = [`Uploaded ${ok} of ${accepted.length} · receipted.`];
       if (parked > 0) parts.push(`${parked} waiting for approval.`);
-      if (pendingOffsite > 0) parts.push(`${pendingOffsite} attached locally · pending offsite.`);
-      toast(parts.join(' '));
+      if (pendingOffsite > 0)
+        parts.push(`${pendingOffsite} attached locally · pending offsite.`);
+      toast(parts.join(" "));
     }
     await refresh();
   }
@@ -407,13 +454,14 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
   // header for why. It closes over this factory's own act/narrate/notice
   // rather than re-implementing them, so every outcome still narrates in
   // this app's voice.
-  const { editDocument, replaceDocument, restoreVersion, loadHistory } = createVersions({
-    data,
-    refresh,
-    act,
-    narrate,
-    notice,
-  });
+  const { editDocument, replaceDocument, restoreVersion, loadHistory } =
+    createVersions({
+      data,
+      refresh,
+      act,
+      narrate,
+      notice,
+    });
 
   // ---------- Metadata (tags + real activity) ----------
   // Another file-size split (metadata.ts) — closes over this factory's own

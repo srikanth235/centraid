@@ -9,7 +9,7 @@
  * Drop this shim once upstream fixes the package fields.
  */
 
-import { createRequire } from 'node:module';
+import { createRequire } from "node:module";
 
 export interface EndpointId {
   equals: (other: EndpointId) => boolean;
@@ -127,7 +127,7 @@ export interface IrohApi {
   EndpointAddr: new (
     id: EndpointId,
     relayUrl?: string | null,
-    addresses?: Array<string> | null,
+    addresses?: Array<string> | null
   ) => EndpointAddr;
   SecretKey: {
     generate: () => SecretKey;
@@ -145,4 +145,4 @@ export interface IrohApi {
 
 const require = createRequire(import.meta.url);
 
-export const iroh = require('@number0/iroh/index.js') as IrohApi;
+export const iroh = require("@number0/iroh/index.js") as IrohApi;

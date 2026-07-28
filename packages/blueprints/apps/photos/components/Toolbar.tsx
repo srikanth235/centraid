@@ -6,11 +6,11 @@
 // The scope chips (issue #599) appear here, under the title, ONLY when this
 // mount actually spans scopes: a member with one library must see the toolbar
 // exactly as it was, so `scopes` arriving with a single entry renders nothing.
-import { ScopeChips } from '../../_shared/ScopeChips.tsx';
-import type { InlineScope } from '../../inline-types.ts';
-import { ChevronLeftIcon, PlusIcon } from '../icons.tsx';
+import { ScopeChips } from "../../_shared/ScopeChips.tsx";
+import type { InlineScope } from "../../inline-types.ts";
+import { ChevronLeftIcon, PlusIcon } from "../icons.tsx";
 
-import styles from './Toolbar.module.css';
+import styles from "./Toolbar.module.css";
 
 export function ToolbarView({
   title,
@@ -76,12 +76,20 @@ export function ToolbarView({
       </div>
       <div className={styles.toolbarActions}>
         {showAddPhotos ? (
-          <button type="button" className={`kit-btn ${styles.pillBtn}`} onClick={onAddPhotos}>
+          <button
+            type="button"
+            className={`kit-btn ${styles.pillBtn}`}
+            onClick={onAddPhotos}
+          >
             Add photos
           </button>
         ) : null}
         {showNewAlbum ? (
-          <button type="button" className={`kit-btn ${styles.pillBtn}`} onClick={onNewAlbum}>
+          <button
+            type="button"
+            className={`kit-btn ${styles.pillBtn}`}
+            onClick={onNewAlbum}
+          >
             <PlusIcon size={15} />
             New album
           </button>
@@ -90,10 +98,10 @@ export function ToolbarView({
           <button
             type="button"
             className={`kit-btn ${styles.pillBtn}`}
-            data-active={selectMode ? 'true' : 'false'}
+            data-active={selectMode ? "true" : "false"}
             onClick={onToggleSelect}
           >
-            {selectMode ? 'Cancel' : 'Select'}
+            {selectMode ? "Cancel" : "Select"}
           </button>
         ) : null}
       </div>

@@ -4,15 +4,15 @@
 // descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
 // wiring; there is deliberately no parallel served-system-app entry.
 
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import type { KeyboardEvent, ReactElement } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import type { KeyboardEvent, ReactElement } from "react";
 
-import type { InlineAppProps } from '../inline-types.ts';
-import { Chrome } from './Chrome.tsx';
-import { Editor } from './components/Editor.tsx';
-import { SidebarFoot, SidebarNav } from './components/Sidebar.tsx';
-import { Toolbar } from './components/Toolbar.tsx';
-import { Wall } from './components/Wall.tsx';
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome } from "./Chrome.tsx";
+import { Editor } from "./components/Editor.tsx";
+import { SidebarFoot, SidebarNav } from "./components/Sidebar.tsx";
+import { Toolbar } from "./components/Toolbar.tsx";
+import { Wall } from "./components/Wall.tsx";
 import {
   observeWidth,
   onDataChange,
@@ -20,39 +20,41 @@ import {
   readFailed,
   wireAttachInput,
   wireThemeToggle,
-} from './kit.ts';
+} from "./kit.ts";
 import {
   buildWall,
   createLogic,
   notebookNoteCounts,
   sidebarCounts,
   tagNoteCounts,
-} from './logic.ts';
-import type { AppData, AppState, Note, Notebook, SidebarTag } from './types.ts';
+} from "./logic.ts";
+import type { AppData, AppState, Note, Notebook, SidebarTag } from "./types.ts";
 
 export const CHANGE_TABLES = [
-  'knowledge.note',
-  'core.content_item',
-  'core.attachment',
-  'core.link',
-  'core.collection',
-  'core.collection_entry',
-  'core.tag',
-  'core.concept',
+  "knowledge.note",
+  "core.content_item",
+  "core.attachment",
+  "core.link",
+  "core.collection",
+  "core.collection_entry",
+  "core.tag",
+  "core.concept",
 ];
 
-const VALID_VIEWS = new Set<AppState['view']>(['masonry', 'list']);
+const VALID_VIEWS = new Set<AppState["view"]>(["masonry", "list"]);
 
-function initialView(rootEl: HTMLElement | null): AppState['view'] {
+function initialView(rootEl: HTMLElement | null): AppState["view"] {
   const knob = rootEl?.dataset.appDefaultView;
-  return knob && VALID_VIEWS.has(knob as AppState['view']) ? (knob as AppState['view']) : 'masonry';
+  return knob && VALID_VIEWS.has(knob as AppState["view"])
+    ? (knob as AppState["view"])
+    : "masonry";
 }
 
-function makeState(view: AppState['view']): AppState {
+function makeState(view: AppState["view"]): AppState {
   return {
-    nav: { kind: 'all' },
+    nav: { kind: "all" },
     view,
-    search: '',
+    search: "",
     searchResults: null,
     libraryWindow: 200,
     libraryTruncated: false,
@@ -102,21 +104,21 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     let res: LibraryPayload;
     try {
       res = await window.centraid.read<LibraryPayload>({
-        query: 'library',
+        query: "library",
         input: { limit: state.libraryWindow },
       });
     } catch {
       // A broken vault must not look like an empty one.
-      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
       return;
     }
     if (state.readFailedShown) {
       state.readFailedShown = false;
-      logic?.notice('');
+      logic?.notice("");
     }
     const denied = res?.vaultDenied;
-    consentRef.current = denied ? { message: denied.message ?? '' } : null;
+    consentRef.current = denied ? { message: denied.message ?? "" } : null;
     if (denied) {
       data.notes = [];
       data.notebooks = [];
@@ -130,13 +132,15 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     data.tags = res?.tags ?? [];
     data.window = res?.window ?? state.libraryWindow;
     state.libraryTruncated = Boolean(res?.truncated);
-    if (state.nav.kind === 'notebook') {
+    if (state.nav.kind === "notebook") {
       const notebookId = state.nav.notebookId;
-      if (!data.notebooks.some((nb) => nb.notebook_id === notebookId)) state.nav = { kind: 'all' };
+      if (!data.notebooks.some((nb) => nb.notebook_id === notebookId))
+        state.nav = { kind: "all" };
     }
-    if (state.nav.kind === 'tag') {
+    if (state.nav.kind === "tag") {
       const conceptId = state.nav.conceptId;
-      if (!data.tags.some((t) => t.concept_id === conceptId)) state.nav = { kind: 'all' };
+      if (!data.tags.some((t) => t.concept_id === conceptId))
+        state.nav = { kind: "all" };
     }
     if (
       state.editingNotebookId &&
@@ -144,7 +148,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     ) {
       state.editingNotebookId = null;
     }
-    if (state.editorId && !logic?.findNote(state.editorId)) state.editorId = null;
+    if (state.editorId && !logic?.findNote(state.editorId))
+      state.editorId = null;
     bump();
   }, []);
 
@@ -170,19 +175,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         }
       }
     },
-    [rootRef],
+    [rootRef]
   );
 
   const selectNav = useCallback(
-    (nav: AppState['nav']) => {
+    (nav: AppState["nav"]) => {
       logic.selectNav(nav);
       setSideOpen(false);
     },
-    [logic],
+    [logic]
   );
 
   const focusQuickAdd = useCallback(() => {
-    if (stateRef.current.nav.kind === 'pinned') logic.selectNav({ kind: 'all' });
+    if (stateRef.current.nav.kind === "pinned")
+      logic.selectNav({ kind: "all" });
     focusQuickAddRef.current?.();
   }, [logic]);
 
@@ -200,20 +206,22 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     await refresh();
   }, [refresh]);
 
-  const selectView = useCallback((view: AppState['view']) => {
+  const selectView = useCallback((view: AppState["view"]) => {
     stateRef.current.view = view;
     bump();
   }, []);
 
   const clearSearchInput = useCallback(() => {
-    if (searchInputRef.current) searchInputRef.current.value = '';
-    logic.applySearchInput('');
+    if (searchInputRef.current) searchInputRef.current.value = "";
+    logic.applySearchInput("");
   }, [logic]);
 
   // ---- chrome wiring: theme toggle, attach input, doorbell, focus, keys, width ----
   useEffect(() => {
     if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
-    const attachInput = document.querySelector('#attachInput') as HTMLInputElement | null;
+    const attachInput = document.querySelector(
+      "#attachInput"
+    ) as HTMLInputElement | null;
     if (attachInput) {
       wireAttachInput(attachInput, () => logic.getAttachTarget(), {
         act: logic.act,
@@ -232,22 +240,29 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
         e.target instanceof HTMLSelectElement;
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         if (stateRef.current.editorId) return void closeEditor();
         if (stateRef.current.search) return clearSearchInput();
         setSideOpen(false);
         return;
       }
-      if (typing || e.metaKey || e.ctrlKey || e.altKey || stateRef.current.editorId) return;
-      if (e.key === 'n') {
+      if (
+        typing ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        stateRef.current.editorId
+      )
+        return;
+      if (e.key === "n") {
         e.preventDefault();
         focusQuickAdd();
-      } else if (e.key === '/') {
+      } else if (e.key === "/") {
         e.preventDefault();
         searchInputRef.current?.focus();
       }
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
           stateRef.current.narrow = isNarrow;
@@ -257,7 +272,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       : () => {};
     void refresh();
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener("keydown", onKey);
       stopDoorbell();
       stopFocus();
       stopWidth();
@@ -273,27 +288,31 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const q = state.search.trim();
   const wall = buildWall(data, state);
   const rows = wall.pinned.length + wall.others.length;
-  const titles: Record<string, string> = { all: 'All notes', pinned: 'Pinned' };
+  const titles: Record<string, string> = { all: "All notes", pinned: "Pinned" };
   let activeTitle: string;
-  if (state.nav.kind === 'notebook') {
+  if (state.nav.kind === "notebook") {
     activeTitle = logic.notebookName(state.nav.notebookId);
-  } else if (state.nav.kind === 'tag') {
+  } else if (state.nav.kind === "tag") {
     const conceptId = state.nav.conceptId;
-    activeTitle = `#${(data.tags ?? []).find((t) => t.concept_id === conceptId)?.label ?? 'tag'}`;
+    activeTitle = `#${(data.tags ?? []).find((t) => t.concept_id === conceptId)?.label ?? "tag"}`;
   } else {
-    activeTitle = titles[state.nav.kind] ?? 'All notes';
+    activeTitle = titles[state.nav.kind] ?? "All notes";
   }
   const activeSub = q
-    ? `${rows} match${rows === 1 ? '' : 'es'} “${q}”`
-    : `${rows} ${rows === 1 ? 'note' : 'notes'}`;
+    ? `${rows} match${rows === 1 ? "" : "es"} “${q}”`
+    : `${rows} ${rows === 1 ? "note" : "notes"}`;
   const footer =
-    state.libraryTruncated && !q ? { windowSize: data.window ?? state.libraryWindow } : null;
+    state.libraryTruncated && !q
+      ? { windowSize: data.window ?? state.libraryWindow }
+      : null;
   const targetLabel =
-    state.nav.kind === 'notebook' ? `Into ${logic.notebookName(state.nav.notebookId)}` : 'Unfiled';
+    state.nav.kind === "notebook"
+      ? `Into ${logic.notebookName(state.nav.notebookId)}`
+      : "Unfiled";
   const editorNote = state.editorId ? logic.findNote(state.editorId) : null;
 
   const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== "Escape") return;
     e.preventDefault();
     if (!searchInputRef.current?.value && !state.search) return;
     clearSearchInput();
@@ -306,8 +325,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div
       ref={setRoot}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
         minWidth: 0,
         minHeight: 0,
@@ -364,17 +383,23 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           <Toolbar
             title={activeTitle}
             sub={activeSub}
-            showNotebookTools={state.nav.kind === 'notebook'}
+            showNotebookTools={state.nav.kind === "notebook"}
             renaming={
-              state.nav.kind === 'notebook' && state.editingNotebookId === state.nav.notebookId
+              state.nav.kind === "notebook" &&
+              state.editingNotebookId === state.nav.notebookId
             }
-            notebookId={state.nav.kind === 'notebook' ? state.nav.notebookId : null}
+            notebookId={
+              state.nav.kind === "notebook" ? state.nav.notebookId : null
+            }
             notebookName={activeTitle}
             onStartRename={() => {
-              if (state.nav.kind === 'notebook') state.editingNotebookId = state.nav.notebookId;
+              if (state.nav.kind === "notebook")
+                state.editingNotebookId = state.nav.notebookId;
               bump();
             }}
-            onCommitRename={(notebookId, name) => logic.renameNotebook(notebookId, name)}
+            onCommitRename={(notebookId, name) =>
+              logic.renameNotebook(notebookId, name)
+            }
             onCancelRename={() => {
               state.editingNotebookId = null;
               bump();
@@ -385,7 +410,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         wall={
           <Wall
             view={state.view}
-            showQuickAdd={state.nav.kind !== 'pinned' && !q}
+            showQuickAdd={state.nav.kind !== "pinned" && !q}
             quickAddProps={{
               targetLabel,
               onSubmit: (payload) => logic.submitQuickAdd(payload),
@@ -411,7 +436,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         editor={
           editorNote ? (
             <Editor
-              key={`${editorNote.note_id}:${typeof editorNote.body === 'string' ? 'full' : 'lite'}`}
+              key={`${editorNote.note_id}:${typeof editorNote.body === "string" ? "full" : "lite"}`}
               note={editorNote}
               notebooks={data.notebooks}
               pending={state.pendingNoteIds.has(editorNote.note_id)}
@@ -419,15 +444,25 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 editorFlushRef.current = fn;
               }}
               onClose={closeEditor}
-              onAutosave={(noteId, patch) => logic.editNoteAutosave(noteId, patch)}
+              onAutosave={(noteId, patch) =>
+                logic.editNoteAutosave(noteId, patch)
+              }
               onTogglePin={(n) => logic.togglePin(n)}
-              onMove={(noteId, notebookId) => logic.moveNote(noteId, notebookId)}
+              onMove={(noteId, notebookId) =>
+                logic.moveNote(noteId, notebookId)
+              }
               onDelete={(n) => logic.deleteNote(n)}
               onAttach={(noteId) => {
                 logic.setAttachTarget(noteId);
-                (document.querySelector('#attachInput') as HTMLInputElement | null)?.click();
+                (
+                  document.querySelector(
+                    "#attachInput"
+                  ) as HTMLInputElement | null
+                )?.click();
               }}
-              onRemoveAttachment={(attachmentId) => logic.removeAttachment(attachmentId)}
+              onRemoveAttachment={(attachmentId) =>
+                logic.removeAttachment(attachmentId)
+              }
               onAddTag={(noteId, label) => logic.addTag(noteId, label)}
               onRemoveTag={(tagId) => logic.removeTag(tagId)}
             />

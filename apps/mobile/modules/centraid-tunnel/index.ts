@@ -11,9 +11,9 @@
 // isTunnelAvailable() returns false and the async functions reject with a
 // clear error instead of crashing at import time.
 
-import { NativeModule, requireOptionalNativeModule } from 'expo-modules-core';
+import { NativeModule, requireOptionalNativeModule } from "expo-modules-core";
 
-export type TunnelState = 'stopped' | 'starting' | 'running' | 'error';
+export type TunnelState = "stopped" | "starting" | "running" | "error";
 
 export interface TunnelStatus {
   state: TunnelState;
@@ -73,13 +73,14 @@ declare class CentraidTunnelNativeModule extends NativeModule<CentraidTunnelEven
   getTunnelStatus(): Promise<TunnelStatus>;
 }
 
-const native = requireOptionalNativeModule<CentraidTunnelNativeModule>('CentraidTunnel');
+const native =
+  requireOptionalNativeModule<CentraidTunnelNativeModule>("CentraidTunnel");
 
 function requireTunnel(): CentraidTunnelNativeModule {
   if (!native) {
     throw new Error(
-      'CentraidTunnel native module is unavailable — it requires a dev build ' +
-        '(bunx expo prebuild, then expo run:ios / run:android); Expo Go cannot load it.',
+      "CentraidTunnel native module is unavailable — it requires a dev build " +
+        "(bunx expo prebuild, then expo run:ios / run:android); Expo Go cannot load it."
     );
   }
   return native;
@@ -100,7 +101,9 @@ export async function generateSecretKey(): Promise<string> {
  * code. Transport failures resolve as `{ ok: false, error }` — same shape
  * as a desktop-side rejection — so callers handle one error path.
  */
-export async function pairWithDesktop(args: TunnelPairArgs): Promise<TunnelPairResult> {
+export async function pairWithDesktop(
+  args: TunnelPairArgs
+): Promise<TunnelPairResult> {
   return requireTunnel().pairWithDesktop(args);
 }
 
@@ -108,7 +111,9 @@ export async function pairWithDesktop(args: TunnelPairArgs): Promise<TunnelPairR
  * Redeem a headless gateway pairing ticket on `centraid/gw-pair/1`
  * (VPS / `centraid-gateway pair --qr`).
  */
-export async function pairWithGateway(args: TunnelGatewayPairArgs): Promise<TunnelPairResult> {
+export async function pairWithGateway(
+  args: TunnelGatewayPairArgs
+): Promise<TunnelPairResult> {
   return requireTunnel().pairWithGateway(args);
 }
 
@@ -117,7 +122,9 @@ export async function pairWithGateway(args: TunnelGatewayPairArgs): Promise<Tunn
  * desktop on `centraid/tunnel/1`. Idempotent while running: returns the
  * already-bound port.
  */
-export async function startTunnel(args: TunnelStartArgs): Promise<{ port: number }> {
+export async function startTunnel(
+  args: TunnelStartArgs
+): Promise<{ port: number }> {
   return requireTunnel().startTunnel(args);
 }
 
@@ -134,6 +141,6 @@ export function addTunnelStatusListener(cb: (status: TunnelStatus) => void): {
   remove: () => void;
 } {
   if (!native) return { remove: () => {} };
-  const subscription = native.addListener('onStatusChange', cb);
+  const subscription = native.addListener("onStatusChange", cb);
   return { remove: () => subscription.remove() };
 }

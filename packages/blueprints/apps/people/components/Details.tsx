@@ -5,13 +5,13 @@
 // `logInteraction`; this component never calls the vault itself. Body
 // sections live in DetailSections.tsx (kept separate to stay under the
 // file-size cap); the "+ add" mini-forms live in AddRows.tsx.
-import { I } from '../icons.ts';
-import type { DetailPerson } from '../types.ts';
-import { Sections } from './DetailSections.tsx';
-import { Icon, KitAvatar } from './Shared.tsx';
+import { I } from "../icons.ts";
+import type { DetailPerson } from "../types.ts";
+import { Sections } from "./DetailSections.tsx";
+import { Icon, KitAvatar } from "./Shared.tsx";
 
-import styles from './Details.module.css';
-import shared from './shared.module.css';
+import styles from "./Details.module.css";
+import shared from "./shared.module.css";
 
 export interface DrawerCallbacks {
   onMessage: () => void;
@@ -55,25 +55,35 @@ export function Details({
         aria-label="Close"
         onClick={onClose}
       />
-      <dialog open className={styles.details} aria-modal="true" aria-label="Profile">
+      <dialog
+        open
+        className={styles.details}
+        aria-modal="true"
+        aria-label="Profile"
+      >
         <div className={styles.detailsHead}>
           <span className={styles.lbl}>Profile</span>
-          <button type="button" className={styles.detailsX} aria-label="Close" onClick={onClose}>
+          <button
+            type="button"
+            className={styles.detailsX}
+            aria-label="Close"
+            onClick={onClose}
+          >
             <Icon svg={I.close} />
           </button>
         </div>
         <div className={styles.detailsBody}>
           <div
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
             }}
           >
             <span
               style={{
-                display: 'inline-flex',
-                borderRadius: '999px',
+                display: "inline-flex",
+                borderRadius: "999px",
                 boxShadow: `0 8px 22px -6px color-mix(in oklab, ${color} 60%, transparent)`,
               }}
             >
@@ -81,8 +91,10 @@ export function Details({
             </span>
           </div>
           <div className={styles.detailName}>{nameGuess}</div>
-          <div className={styles.detailExt}>{dp?.role || ''}</div>
-          {dp ? <Sections dp={dp} color={color} adders={adders} {...callbacks} /> : null}
+          <div className={styles.detailExt}>{dp?.role || ""}</div>
+          {dp ? (
+            <Sections dp={dp} color={color} adders={adders} {...callbacks} />
+          ) : null}
         </div>
         <div className={styles.detailsFoot}>
           {dp ? (

@@ -4,23 +4,25 @@
  * substituted at the transport layer ({{connection:…}}), never in handler code.
  */
 
-const KIND = 'pull.todoist';
-const API = 'https://api.todoist.com/rest/v2';
-const AUTH = { authorization: 'Bearer {{connection:api_key}}' };
+const KIND = "pull.todoist";
+const API = "https://api.todoist.com/rest/v2";
+const AUTH = { authorization: "Bearer {{connection:api_key}}" };
 async function api(ctx, path, opts = {}) {
   const headers = { ...AUTH, ...(opts.headers || {}) };
   const res = await ctx.fetch({
-    url: path.startsWith('http') ? path : `${API}${path}`,
+    url: path.startsWith("http") ? path : `${API}${path}`,
     headers,
-    method: opts.method || 'GET',
+    method: opts.method || "GET",
     body: opts.body,
   });
   if (res.status === 401 || res.status === 403) {
-    throw new Error(`${KIND} auth failed (${res.status}): ${res.text.slice(0, 200)}`);
+    throw new Error(
+      `${KIND} auth failed (${res.status}): ${res.text.slice(0, 200)}`
+    );
   }
   if (res.status !== 200 && res.status !== 201) {
     throw new Error(
-      `${KIND} ${String(path).split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
+      `${KIND} ${String(path).split("?")[0]} answered ${res.status}: ${res.text.slice(0, 200)}`
     );
   }
   if (!res.text) return {};
@@ -28,42 +30,43 @@ async function api(ctx, path, opts = {}) {
 }
 
 function toRow(task) {
-  const sourceId = 'todoist:' + task.id;
+  const sourceId = "todoist:" + task.id;
   return {
-    entity_type: 'core.content_item',
+    entity_type: "core.content_item",
     external_id: sourceId,
     payload: {
       sourceId,
-      title: task.content || '(untitled task)',
-      mediaType: 'application/vnd.todoist.task',
+      title: task.content || "(untitled task)",
+      mediaType: "application/vnd.todoist.task",
       sourceUrl: task.url || sourceId,
       modifiedAt: task.created_at || null,
       owner: null,
       body: [
-        task.description || '',
-        task.due && task.due.date ? 'Due: ' + task.due.date : null,
-        task.priority ? 'Priority: ' + task.priority : null,
+        task.description || "",
+        task.due && task.due.date ? "Due: " + task.due.date : null,
+        task.priority ? "Priority: " + task.priority : null,
         task.url || null,
       ]
         .filter(Boolean)
-        .join('\n'),
+        .join("\n"),
     },
   };
 }
 
 export default {
-  protocol: 'centraid.pull/v1',
+  protocol: "centraid.pull/v1",
   async principal({ ctx }) {
     // Todoist's REST API has no user-profile GET. The immutable Inbox project
     // id is account-specific and always present, so it is a stable identity
     // pin that detects an API token being swapped to another account.
-    const projects = await api(ctx, '/projects');
+    const projects = await api(ctx, "/projects");
     const inbox = projects.find((project) => project.is_inbox_project);
-    if (!inbox || !inbox.id) throw new Error(`${KIND} account has no Inbox project identity`);
+    if (!inbox || !inbox.id)
+      throw new Error(`${KIND} account has no Inbox project identity`);
     return `todoist:${inbox.id}`;
   },
   async pull({ ctx }) {
-    const tasks = await api(ctx, '/tasks');
+    const tasks = await api(ctx, "/tasks");
     const rows = [];
     for (const task of tasks) {
       if (!task.is_completed) rows.push(toRow(task));

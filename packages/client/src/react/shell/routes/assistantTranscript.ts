@@ -4,14 +4,14 @@
 // that cohesive route stays under the file-size cap while gaining the Wave 1
 // transcript affordances (copy, feedback, regenerate/retry pager, timestamps).
 
-import type { AsstMsgDTO, AsstUsageDTO } from '../../screen-contracts.js';
-import { richAnswerHtml } from './assistantRich.js';
+import type { AsstMsgDTO, AsstUsageDTO } from "../../screen-contracts.js";
+import { richAnswerHtml } from "./assistantRich.js";
 
 export interface AsstToolCall {
   id: string;
   tool: string;
   sql?: string;
-  state: 'run' | 'ok' | 'error';
+  state: "run" | "ok" | "error";
   totalRows?: number;
   durationMs?: number;
   errorText?: string;
@@ -20,23 +20,24 @@ export interface AsstToolCall {
 }
 
 export function toolOutputText(result: unknown): string | undefined {
-  if (!result || typeof result !== 'object') {
-    return typeof result === 'string' && result.trim() ? result : undefined;
+  if (!result || typeof result !== "object") {
+    return typeof result === "string" && result.trim() ? result : undefined;
   }
   const content = (result as { content?: unknown }).content;
   if (!Array.isArray(content)) return undefined;
   const parts = content.flatMap((entry) => {
-    if (typeof entry === 'string') return [entry];
-    if (!entry || typeof entry !== 'object') return [];
+    if (typeof entry === "string") return [entry];
+    if (!entry || typeof entry !== "object") return [];
     const record = entry as Record<string, unknown>;
-    if (record.type === 'text' && typeof record.text === 'string') return [record.text];
-    if (record.type === 'terminal') {
-      if (typeof record.output === 'string') return [record.output];
-      if (typeof record.text === 'string') return [record.text];
+    if (record.type === "text" && typeof record.text === "string")
+      return [record.text];
+    if (record.type === "terminal") {
+      if (typeof record.output === "string") return [record.output];
+      if (typeof record.text === "string") return [record.text];
     }
     return [];
   });
-  return parts.length ? parts.join('\n') : undefined;
+  return parts.length ? parts.join("\n") : undefined;
 }
 export interface AsstAttachment {
   hash: string;
@@ -49,22 +50,22 @@ export interface Attempt {
   turnId: string;
   text: string;
   error?: boolean;
-  feedback: 'up' | 'down' | null;
+  feedback: "up" | "down" | null;
   usage?: AsstUsageDTO;
 }
 export type AsstMsg =
   | {
-      kind: 'user';
+      kind: "user";
       text: string;
       attachments?: AsstAttachment[];
       createdAt?: number;
     }
   /** Live-only streaming reasoning row (issue #420, Wave 2). */
-  | { kind: 'thinking'; text: string; streaming?: boolean }
+  | { kind: "thinking"; text: string; streaming?: boolean }
   /** Durable runner notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
-  | { kind: 'notice'; level: 'warn' | 'info'; text: string }
+  | { kind: "notice"; level: "warn" | "info"; text: string }
   | {
-      kind: 'ai';
+      kind: "ai";
       text: string;
       error?: boolean;
       streaming?: boolean;
@@ -73,7 +74,7 @@ export type AsstMsg =
       createdAt?: number;
       /** Turn id of the shown answer — feedback/regenerate target. */
       turnId?: string;
-      feedback?: 'up' | 'down' | null;
+      feedback?: "up" | "down" | null;
       /** Token/cost usage for the shown answer's turn (issue #420, Wave 2). */
       usage?: AsstUsageDTO;
       /** Retry siblings (oldest→newest); when set, `activeAttempt` selects one. */
@@ -91,7 +92,7 @@ export type AsstMsg =
        *  so its feedback/regenerate controls are suppressed. */
       fromArchive?: boolean;
     }
-  | { kind: 'tools'; calls: AsstToolCall[] };
+  | { kind: "tools"; calls: AsstToolCall[] };
 
 /** A file the composer has uploaded (or is uploading) ahead of the next send. */
 export interface PendingAttachment {
@@ -99,7 +100,7 @@ export interface PendingAttachment {
   filename: string;
   sizeBytes: number;
   mime: string;
-  state: 'uploading' | 'ready' | 'error';
+  state: "uploading" | "ready" | "error";
   errorText?: string;
   ref?: AsstAttachment;
   /** Local object-URL preview for an image attachment (issue #420, Wave 2). */
@@ -107,10 +108,15 @@ export interface PendingAttachment {
 }
 
 /** The active attempt of an AI message with a retry pager, or null when plain. */
-export function activeAttemptOf(msg: Extract<AsstMsg, { kind: 'ai' }>): Attempt | null {
+export function activeAttemptOf(
+  msg: Extract<AsstMsg, { kind: "ai" }>
+): Attempt | null {
   const attempts = msg.attempts;
   if (!attempts?.length) return null;
-  const i = Math.min(Math.max(msg.activeAttempt ?? attempts.length - 1, 0), attempts.length - 1);
+  const i = Math.min(
+    Math.max(msg.activeAttempt ?? attempts.length - 1, 0),
+    attempts.length - 1
+  );
   return attempts[i] ?? null;
 }
 
@@ -125,27 +131,27 @@ export function hydrateMessages(
     payload: CentraidConversationHistoryMessage;
     createdAt: number;
   }>,
-  opts: { hasArchivedHistory?: boolean; archiveUnavailable?: boolean } = {},
+  opts: { hasArchivedHistory?: boolean; archiveUnavailable?: boolean } = {}
 ): AsstMsg[] {
   const out: AsstMsg[] = [];
   if (opts.archiveUnavailable) {
     out.push({
-      kind: 'notice',
-      level: 'warn',
+      kind: "notice",
+      level: "warn",
       text: "Some older messages couldn't be loaded from the archive right now.",
     });
   } else if (opts.hasArchivedHistory) {
     out.push({
-      kind: 'notice',
-      level: 'info',
-      text: 'Older messages below are restored from the archive (read-only).',
+      kind: "notice",
+      level: "info",
+      text: "Older messages below are restored from the archive (read-only).",
     });
   }
   for (const { payload, createdAt } of rows) {
-    if (payload.kind === 'user') {
+    if (payload.kind === "user") {
       out.push({
-        kind: 'user',
-        text: payload.text ?? '',
+        kind: "user",
+        text: payload.text ?? "",
         createdAt,
         ...(payload.attachments?.length
           ? {
@@ -158,10 +164,10 @@ export function hydrateMessages(
             }
           : {}),
       });
-    } else if (payload.kind === 'ai') {
-      const msg: Extract<AsstMsg, { kind: 'ai' }> = {
-        kind: 'ai',
-        text: payload.text ?? '',
+    } else if (payload.kind === "ai") {
+      const msg: Extract<AsstMsg, { kind: "ai" }> = {
+        kind: "ai",
+        text: payload.text ?? "",
         createdAt,
         ...(payload.error ? { error: true } : {}),
         ...(payload.turnId ? { turnId: payload.turnId } : {}),
@@ -180,38 +186,49 @@ export function hydrateMessages(
         msg.activeAttempt = msg.attempts.length - 1;
       }
       out.push(msg);
-    } else if (payload.kind === 'notice') {
+    } else if (payload.kind === "notice") {
       out.push({
-        kind: 'notice',
+        kind: "notice",
         level: payload.level,
         text: payload.text,
       });
-    } else if (payload.kind === 'tool') {
+    } else if (payload.kind === "tool") {
       const call: AsstToolCall = {
         id: payload.id ?? String(out.length),
-        tool: payload.tool ?? 'vault_sql',
+        tool: payload.tool ?? "vault_sql",
         ...(payload.sql ? { sql: payload.sql } : {}),
-        state: payload.state === 'ok' ? 'ok' : 'error',
-        ...(payload.state !== 'ok' && payload.errorText ? { errorText: payload.errorText } : {}),
+        state: payload.state === "ok" ? "ok" : "error",
+        ...(payload.state !== "ok" && payload.errorText
+          ? { errorText: payload.errorText }
+          : {}),
         ...(payload.result && toolOutputText(payload.result)
           ? { outputText: toolOutputText(payload.result)! }
           : {}),
         ...(payload.artifacts?.length
           ? {
               artifacts: payload.artifacts.map((artifact) => ({
-                label: artifact.filename ?? artifact.workspacePath ?? 'Agent artifact',
+                label:
+                  artifact.filename ??
+                  artifact.workspacePath ??
+                  "Agent artifact",
                 ...(artifact.hash ? { hash: artifact.hash } : {}),
-                ...(artifact.workspacePath ? { workspacePath: artifact.workspacePath } : {}),
+                ...(artifact.workspacePath
+                  ? { workspacePath: artifact.workspacePath }
+                  : {}),
               })),
             }
           : {}),
       };
-      const result = payload.result as { totalRows?: number; durationMs?: number } | undefined;
-      if (result && typeof result.totalRows === 'number') call.totalRows = result.totalRows;
-      if (result && typeof result.durationMs === 'number') call.durationMs = result.durationMs;
+      const result = payload.result as
+        | { totalRows?: number; durationMs?: number }
+        | undefined;
+      if (result && typeof result.totalRows === "number")
+        call.totalRows = result.totalRows;
+      if (result && typeof result.durationMs === "number")
+        call.durationMs = result.durationMs;
       const last = out.at(-1);
-      if (last?.kind === 'tools') last.calls.push(call);
-      else out.push({ kind: 'tools', calls: [call] });
+      if (last?.kind === "tools") last.calls.push(call);
+      else out.push({ kind: "tools", calls: [call] });
     }
   }
   return out;
@@ -219,16 +236,16 @@ export function hydrateMessages(
 
 /** Derive the screen DTO for one model message. `isLastAi` gates regenerate. */
 export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
-  if (msg.kind === 'user') {
+  if (msg.kind === "user") {
     return {
-      kind: 'user',
+      kind: "user",
       text: msg.text,
       ...(msg.createdAt ? { createdAt: msg.createdAt } : {}),
       ...(msg.attachments?.length
         ? {
             attachments: msg.attachments.map((a) => ({
               hash: a.hash,
-              filename: a.filename ?? 'Attachment',
+              filename: a.filename ?? "Attachment",
               mime: a.mime,
               sizeBytes: a.sizeBytes,
             })),
@@ -236,42 +253,43 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
         : {}),
     };
   }
-  if (msg.kind === 'tools') {
+  if (msg.kind === "tools") {
     const n = msg.calls.length;
-    const running = msg.calls.some((c) => c.state === 'run');
-    const failed = msg.calls.filter((c) => c.state === 'error').length;
+    const running = msg.calls.some((c) => c.state === "run");
+    const failed = msg.calls.filter((c) => c.state === "error").length;
     const ms = msg.calls.reduce((a, c) => a + (c.durationMs ?? 0), 0);
     const label = running
-      ? 'querying the vault…'
-      : `${n} ${n === 1 ? 'query' : 'queries'}${ms ? ` · ${ms}ms` : ''}${failed ? ` · ${failed} failed` : ''}`;
+      ? "querying the vault…"
+      : `${n} ${n === 1 ? "query" : "queries"}${ms ? ` · ${ms}ms` : ""}${failed ? ` · ${failed} failed` : ""}`;
     return {
-      kind: 'tools',
+      kind: "tools",
       label,
       calls: msg.calls.map((c) => ({
         tool: c.tool,
         ...(c.sql ? { sql: c.sql } : {}),
         state: c.state,
         meta:
-          c.state === 'error'
-            ? (c.errorText ?? 'failed')
-            : c.state === 'ok'
-              ? `${c.totalRows ?? '?'} rows${c.durationMs ? ` · ${c.durationMs}ms` : ''}${
+          c.state === "error"
+            ? (c.errorText ?? "failed")
+            : c.state === "ok"
+              ? `${c.totalRows ?? "?"} rows${c.durationMs ? ` · ${c.durationMs}ms` : ""}${
                   c.artifacts?.length
-                    ? ` · ${c.artifacts.length} artifact${c.artifacts.length === 1 ? '' : 's'}`
-                    : ''
+                    ? ` · ${c.artifacts.length} artifact${c.artifacts.length === 1 ? "" : "s"}`
+                    : ""
                 }`
-              : 'running…',
+              : "running…",
         ...(c.outputText ? { outputText: c.outputText } : {}),
         ...(c.artifacts?.length ? { artifacts: c.artifacts } : {}),
       })),
     };
   }
-  if (msg.kind === 'thinking')
-    return { kind: 'thinking', text: msg.text, streaming: !!msg.streaming };
-  if (msg.kind === 'notice') return { kind: 'notice', level: msg.level, text: msg.text };
+  if (msg.kind === "thinking")
+    return { kind: "thinking", text: msg.text, streaming: !!msg.streaming };
+  if (msg.kind === "notice")
+    return { kind: "notice", level: msg.level, text: msg.text };
   if (msg.streaming)
     return {
-      kind: 'ai',
+      kind: "ai",
       streaming: true,
       text: msg.text,
       ...(msg.catchingUp ? { catchingUp: true } : {}),
@@ -283,11 +301,15 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
   // Archived (read-only) history (issue #438 wave 3): drop the feedback/
   // regenerate target so the surface renders no control the server would reject
   // — a mutation on a pruned turn no-ops (its raw row is gone).
-  const turnId = msg.fromArchive ? undefined : active ? active.turnId : msg.turnId;
+  const turnId = msg.fromArchive
+    ? undefined
+    : active
+      ? active.turnId
+      : msg.turnId;
   const feedback = active ? active.feedback : (msg.feedback ?? null);
   const usage = active ? active.usage : msg.usage;
   return {
-    kind: 'ai',
+    kind: "ai",
     streaming: false,
     html: richAnswerHtml(text),
     error,

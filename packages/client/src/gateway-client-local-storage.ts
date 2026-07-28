@@ -14,21 +14,21 @@
  * already near the repo's file-size cap.
  */
 
-import { auth, authHeaders, doFetch, readJson } from './gateway-client-core.js';
+import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
 /** Stable component vocabulary — mirrors `serve/local-usage.ts`'s
  *  `LocalComponentId`. Renaming one of these is a wire change. */
 export type LocalComponentId =
-  | 'ledger'
-  | 'vault-db'
-  | 'attachments'
-  | 'apps'
-  | 'code'
-  | 'backup'
-  | 'logs'
-  | 'cache'
-  | 'templates'
-  | 'storage';
+  | "ledger"
+  | "vault-db"
+  | "attachments"
+  | "apps"
+  | "code"
+  | "backup"
+  | "logs"
+  | "cache"
+  | "templates"
+  | "storage";
 
 export interface LocalComponentUsageDTO {
   component: LocalComponentId;
@@ -56,7 +56,7 @@ export interface StorageLimitsDTO {
 }
 
 export interface StorageLimitEvaluationDTO {
-  status: 'ok' | 'degraded' | 'error';
+  status: "ok" | "degraded" | "error";
   /** `null` when no budget is set — nothing to be a fraction of. */
   fractionUsed: number | null;
   usedBytes: number;
@@ -84,26 +84,29 @@ export interface LocalUsageReportDTO {
  * explicit owner action, never a poll — the walk covers the whole blob CAS.
  */
 export async function getLocalStorageUsage(
-  opts: { refresh?: boolean } = {},
+  opts: { refresh?: boolean } = {}
 ): Promise<LocalUsageReportDTO> {
   const { baseUrl, token } = await auth();
   const path = opts.refresh
-    ? '/centraid/_gateway/storage/local?refresh=1'
-    : '/centraid/_gateway/storage/local';
+    ? "/centraid/_gateway/storage/local?refresh=1"
+    : "/centraid/_gateway/storage/local";
   const res = await doFetch(baseUrl, path, {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<LocalUsageReportDTO>(res, 'local storage usage');
+  return readJson<LocalUsageReportDTO>(res, "local storage usage");
 }
 
 export async function getStorageLimits(): Promise<StorageLimitsDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/storage/limits', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_gateway/storage/limits", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const out = await readJson<{ limits: StorageLimitsDTO }>(res, 'storage limits');
+  const out = await readJson<{ limits: StorageLimitsDTO }>(
+    res,
+    "storage limits"
+  );
   return out.limits;
 }
 
@@ -115,13 +118,18 @@ export interface StorageLimitsPatchDTO {
   journalLimitBytes?: number | null;
 }
 
-export async function updateStorageLimits(patch: StorageLimitsPatchDTO): Promise<StorageLimitsDTO> {
+export async function updateStorageLimits(
+  patch: StorageLimitsPatchDTO
+): Promise<StorageLimitsDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/storage/limits', {
-    method: 'PUT',
-    headers: authHeaders(token, 'application/json'),
+  const res = await doFetch(baseUrl, "/centraid/_gateway/storage/limits", {
+    method: "PUT",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify(patch),
   });
-  const out = await readJson<{ limits: StorageLimitsDTO }>(res, 'update storage limits');
+  const out = await readJson<{ limits: StorageLimitsDTO }>(
+    res,
+    "update storage limits"
+  );
   return out.limits;
 }

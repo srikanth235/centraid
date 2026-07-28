@@ -25,18 +25,18 @@
 // fields ARE sent: the renderer's automation gallery filters on `kind` and
 // renders the card from emoji/category/trigger*/integrations.
 
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
 
 import {
   fetchRemoteTemplates,
   resolveTemplates,
   templateSourceDir,
   type ResolvedTemplate,
-} from '@centraid/blueprints';
+} from "@centraid/blueprints";
 
-import { sendJson } from './route-helpers.js';
+import { sendJson } from "./route-helpers.js";
 
 /** One requested scope of a template's `app.json` `vault` block. */
 interface TemplateVaultScope {
@@ -63,32 +63,34 @@ interface TemplateVault {
  */
 async function readTemplateVault(
   t: ResolvedTemplate,
-  cacheDir?: string,
+  cacheDir?: string
 ): Promise<TemplateVault | undefined> {
-  if ((t.kind ?? 'app') === 'automation') return undefined;
+  if ((t.kind ?? "app") === "automation") return undefined;
   try {
     const dir = templateSourceDir(t.id, {
-      kind: t.kind ?? 'app',
+      kind: t.kind ?? "app",
       source: t.source,
       ...(cacheDir ? { cacheDir } : {}),
     });
-    const parsed = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as {
+    const parsed = JSON.parse(
+      await fs.readFile(path.join(dir, "app.json"), "utf8")
+    ) as {
       vault?: { purpose?: unknown; why?: unknown; scopes?: unknown };
     };
     const vault = parsed.vault;
     if (!vault || !Array.isArray(vault.scopes)) return undefined;
     const scopes: TemplateVaultScope[] = vault.scopes
-      .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
+      .filter((s): s is Record<string, unknown> => !!s && typeof s === "object")
       .map((s) => ({
-        schema: String(s.schema ?? ''),
-        ...(typeof s.table === 'string' ? { table: s.table } : {}),
-        verbs: String(s.verbs ?? ''),
+        schema: String(s.schema ?? ""),
+        ...(typeof s.table === "string" ? { table: s.table } : {}),
+        verbs: String(s.verbs ?? ""),
       }))
       .filter((s) => s.schema && s.verbs);
     if (scopes.length === 0) return undefined;
     return {
-      ...(typeof vault.purpose === 'string' ? { purpose: vault.purpose } : {}),
-      ...(typeof vault.why === 'string' ? { why: vault.why } : {}),
+      ...(typeof vault.purpose === "string" ? { purpose: vault.purpose } : {}),
+      ...(typeof vault.why === "string" ? { why: vault.why } : {}),
       scopes,
     };
   } catch {
@@ -136,7 +138,7 @@ export interface TemplatesRouteOptions {
  * owned the request, `false` otherwise.
  */
 export function makeTemplatesRouteHandler(
-  opts: TemplatesRouteOptions = {},
+  opts: TemplatesRouteOptions = {}
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   // One-time remote refresh on construction (mirrors the desktop's old
   // startup fetch). Best-effort + non-throwing; the cache stays usable even
@@ -150,16 +152,20 @@ export function makeTemplatesRouteHandler(
     });
   }
   return async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    if (url.pathname !== '/centraid/_templates') return false;
-    if ((req.method ?? 'GET').toUpperCase() !== 'GET') return false;
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname !== "/centraid/_templates") return false;
+    if ((req.method ?? "GET").toUpperCase() !== "GET") return false;
 
-    const resolved = await resolveTemplates(opts.cacheDir ? { cacheDir: opts.cacheDir } : {});
+    const resolved = await resolveTemplates(
+      opts.cacheDir ? { cacheDir: opts.cacheDir } : {}
+    );
     // Install state is per-vault (issue #434) — resolve it once per request.
     const installed = opts.installedAppIds ? opts.installedAppIds() : undefined;
     // Requested-access blocks, read from each app template's app.json (#434,
     // Phase 2). Read in parallel; automations resolve to undefined.
-    const vaults = await Promise.all(resolved.map((t) => readTemplateVault(t, opts.cacheDir)));
+    const vaults = await Promise.all(
+      resolved.map((t) => readTemplateVault(t, opts.cacheDir))
+    );
     sendJson(
       res,
       200,
@@ -185,9 +191,13 @@ export function makeTemplatesRouteHandler(
         ...(t.emoji === undefined ? {} : { emoji: t.emoji }),
         ...(t.category === undefined ? {} : { category: t.category }),
         ...(t.triggerKind === undefined ? {} : { triggerKind: t.triggerKind }),
-        ...(t.triggerLabel === undefined ? {} : { triggerLabel: t.triggerLabel }),
-        ...(t.integrations === undefined ? {} : { integrations: t.integrations }),
-      })),
+        ...(t.triggerLabel === undefined
+          ? {}
+          : { triggerLabel: t.triggerLabel }),
+        ...(t.integrations === undefined
+          ? {}
+          : { integrations: t.integrations }),
+      }))
     );
     return true;
   };

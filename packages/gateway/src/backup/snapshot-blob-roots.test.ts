@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from "node:crypto";
 
 import {
   sealManifest,
@@ -6,12 +6,15 @@ import {
   type Keyring,
   type ManifestEntry,
   type SnapshotRow,
-} from '@centraid/backup';
-import { describe, expect, test } from 'vitest';
+} from "@centraid/backup";
+import { describe, expect, test } from "vitest";
 
-import { blobShasFromManifestEntries, snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
+import {
+  blobShasFromManifestEntries,
+  snapshotReferencedBlobShas,
+} from "./snapshot-blob-roots.js";
 
-const VAULT_ID = 'vault-roots';
+const VAULT_ID = "vault-roots";
 
 function keyring(): Keyring {
   return {
@@ -20,8 +23,8 @@ function keyring(): Keyring {
     epochs: [
       {
         epoch: 1,
-        key: randomBytes(32).toString('base64'),
-        createdAt: '2026-07-17T00:00:00.000Z',
+        key: randomBytes(32).toString("base64"),
+        createdAt: "2026-07-17T00:00:00.000Z",
       },
     ],
   };
@@ -31,7 +34,7 @@ function blobEntry(sha: string): ManifestEntry {
   // The content sha is the final path segment — mirrors the restore engine's parse.
   return {
     path: `blobs/sha256/${sha.slice(0, 2)}/${sha}`,
-    kind: 'blob',
+    kind: "blob",
     size: 1,
     mtimeMs: 0,
     chunks: [],
@@ -73,7 +76,7 @@ function fakeProvider(opts: {
       totalBytes: 1,
       objectCount: 0,
       generation: 1,
-      format: 'centraid-snapshot/2',
+      format: "centraid-snapshot/2",
       appMeta: {},
       createdAt: snap.seq,
       prunedAt: snap.prunedAt ?? null,
@@ -82,8 +85,10 @@ function fakeProvider(opts: {
   }
   const provider = {
     // Default listSnapshots returns only retained (unpruned) rows.
-    listSnapshots: async (_targetId: string, listOpts?: { includePruned?: boolean }) =>
-      listOpts?.includePruned ? unpruned : unpruned,
+    listSnapshots: async (
+      _targetId: string,
+      listOpts?: { includePruned?: boolean }
+    ) => (listOpts?.includePruned ? unpruned : unpruned),
     openDataPlane: async () => ({
       get: async (key: string) => {
         const bytes = store.get(key);
@@ -95,20 +100,20 @@ function fakeProvider(opts: {
   return { provider, unpruned };
 }
 
-describe('snapshot-blob-roots', () => {
-  test('blobShasFromManifestEntries returns only blob entries, keyed by their content sha', () => {
-    const blobSha = 'a'.repeat(64);
+describe("snapshot-blob-roots", () => {
+  test("blobShasFromManifestEntries returns only blob entries, keyed by their content sha", () => {
+    const blobSha = "a".repeat(64);
     const entries: ManifestEntry[] = [
       blobEntry(blobSha),
-      { path: 'vault.db', kind: 'db', size: 10, mtimeMs: 0, chunks: [] },
-      { path: 'journal.db', kind: 'db', size: 10, mtimeMs: 0, chunks: [] },
+      { path: "vault.db", kind: "db", size: 10, mtimeMs: 0, chunks: [] },
+      { path: "journal.db", kind: "db", size: 10, mtimeMs: 0, chunks: [] },
     ];
     expect(blobShasFromManifestEntries(entries)).toStrictEqual([blobSha]);
   });
 
-  test('a blob no longer live in the vault stays a retained-snapshot GC root', async () => {
+  test("a blob no longer live in the vault stays a retained-snapshot GC root", async () => {
     const kr = keyring();
-    const retainedSha = 'b'.repeat(64);
+    const retainedSha = "b".repeat(64);
     const { provider } = fakeProvider({
       kr,
       snapshots: [{ seq: 1, entries: [blobEntry(retainedSha)] }],
@@ -116,7 +121,7 @@ describe('snapshot-blob-roots', () => {
 
     const roots = await snapshotReferencedBlobShas({
       provider,
-      targetId: 't',
+      targetId: "t",
       keyring: kr,
       vaultId: VAULT_ID,
     });
@@ -126,9 +131,9 @@ describe('snapshot-blob-roots', () => {
     expect(roots.has(retainedSha)).toBe(true);
   });
 
-  test('the manifest-blob memo skips re-opening an already-seen manifest', async () => {
+  test("the manifest-blob memo skips re-opening an already-seen manifest", async () => {
     const kr = keyring();
-    const sha = 'c'.repeat(64);
+    const sha = "c".repeat(64);
     const { provider, unpruned } = fakeProvider({
       kr,
       snapshots: [{ seq: 1, entries: [blobEntry(sha)] }],
@@ -137,7 +142,7 @@ describe('snapshot-blob-roots', () => {
 
     await snapshotReferencedBlobShas({
       provider,
-      targetId: 't',
+      targetId: "t",
       keyring: kr,
       vaultId: VAULT_ID,
       manifestBlobCache: cache,
@@ -150,13 +155,13 @@ describe('snapshot-blob-roots', () => {
       listSnapshots: async () => unpruned,
       openDataPlane: async () => ({
         get: async () => {
-          throw new Error('should not re-open a cached manifest');
+          throw new Error("should not re-open a cached manifest");
         },
       }),
     } as unknown as BackupProvider;
     const roots = await snapshotReferencedBlobShas({
       provider: memoOnly,
-      targetId: 't',
+      targetId: "t",
       keyring: kr,
       vaultId: VAULT_ID,
       manifestBlobCache: cache,
@@ -164,36 +169,36 @@ describe('snapshot-blob-roots', () => {
     expect(roots.has(sha)).toBe(true);
   });
 
-  test('an unreadable retained manifest FAILS the root computation (never shrinks it)', async () => {
+  test("an unreadable retained manifest FAILS the root computation (never shrinks it)", async () => {
     const kr = keyring();
     const provider = {
       listSnapshots: async (): Promise<SnapshotRow[]> => [
         {
           seq: 7,
-          manifestKey: 'manifests/7.json',
-          manifestHash: 'f'.repeat(64),
+          manifestKey: "manifests/7.json",
+          manifestHash: "f".repeat(64),
           prevManifestHash: null,
           totalBytes: 1,
           objectCount: 0,
           generation: 1,
-          format: 'centraid-snapshot/2',
+          format: "centraid-snapshot/2",
           appMeta: {},
           createdAt: 7,
           prunedAt: null,
         },
       ],
       openDataPlane: async () => ({
-        get: async () => new TextEncoder().encode('not a manifest'),
+        get: async () => new TextEncoder().encode("not a manifest"),
       }),
     } as unknown as BackupProvider;
 
     await expect(
       snapshotReferencedBlobShas({
         provider,
-        targetId: 't',
+        targetId: "t",
         keyring: kr,
         vaultId: VAULT_ID,
-      }),
+      })
     ).rejects.toThrow(/cannot read manifest seq 7/u);
   });
 });

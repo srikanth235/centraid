@@ -1,9 +1,9 @@
-import type { IconName } from '@centraid/design-tokens';
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import type { IconName } from "@centraid/design-tokens";
+import React from "react";
+import { StyleSheet, View } from "react-native";
 
-import { useTheme } from '../theme/useTheme';
-import Icon from './Icon';
+import { useTheme } from "../theme/useTheme";
+import Icon from "./Icon";
 
 // The "Pressed Card" launcher icon: a monochrome engraved emblem stamped into a
 // translucent glass tile. There is no per-app colour — apps are told apart by
@@ -21,19 +21,19 @@ import Icon from './Icon';
 // (and a translucent tile must be rgba, which the opaque palette tokens are not).
 const ENGRAVED = {
   light: {
-    paper: 'rgba(231, 221, 202, 0.55)', // aged paper, translucent so canvas shows through
-    ink: '#5b4a2c',
-    deboss: 'rgba(255,251,243,0.9)', // light catches the bottom of the groove
-    border: 'rgba(255, 252, 245, 0.65)', // luminous hairline — the glass edge
-    sheen: 'rgba(255,252,245,0.7)',
+    paper: "rgba(231, 221, 202, 0.55)", // aged paper, translucent so canvas shows through
+    ink: "#5b4a2c",
+    deboss: "rgba(255,251,243,0.9)", // light catches the bottom of the groove
+    border: "rgba(255, 252, 245, 0.65)", // luminous hairline — the glass edge
+    sheen: "rgba(255,252,245,0.7)",
     shadowOpacity: 0.16,
   },
   dark: {
-    paper: 'rgba(32, 36, 44, 0.55)', // near-black card, translucent over the dark ground
-    ink: '#d8cfba',
-    deboss: 'rgba(0,0,0,0.55)', // a dark drop lifts the light ink off the card
-    border: 'rgba(255,255,255,0.12)', // faint light hairline — the glass edge
-    sheen: 'rgba(255,255,255,0.05)',
+    paper: "rgba(32, 36, 44, 0.55)", // near-black card, translucent over the dark ground
+    ink: "#d8cfba",
+    deboss: "rgba(0,0,0,0.55)", // a dark drop lifts the light ink off the card
+    border: "rgba(255,255,255,0.12)", // faint light hairline — the glass edge
+    sheen: "rgba(255,255,255,0.05)",
     shadowOpacity: 0.4,
   },
 } as const;
@@ -43,7 +43,10 @@ export interface AppIconProps {
   size?: number;
 }
 
-export default function AppIcon({ name, size = 62 }: AppIconProps): React.JSX.Element {
+export default function AppIcon({
+  name,
+  size = 62,
+}: AppIconProps): React.JSX.Element {
   const { scheme } = useTheme();
   const t = ENGRAVED[scheme];
   const glyph = Math.round(size * 0.48);
@@ -61,7 +64,10 @@ export default function AppIcon({ name, size = 62 }: AppIconProps): React.JSX.El
         },
       ]}
     >
-      <View pointerEvents="none" style={[styles.sheen, { backgroundColor: t.sheen }]} />
+      <View
+        pointerEvents="none"
+        style={[styles.sheen, { backgroundColor: t.sheen }]}
+      />
       <View pointerEvents="none" style={styles.debossLayer}>
         <View style={styles.debossOffset}>
           <Icon name={name} size={glyph} color={t.deboss} strokeWidth={1.9} />
@@ -75,25 +81,25 @@ export default function AppIcon({ name, size = 62 }: AppIconProps): React.JSX.El
 const styles = StyleSheet.create({
   debossLayer: {
     ...StyleSheet.absoluteFill,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   debossOffset: { transform: [{ translateY: 1 }] },
   sheen: {
     borderRadius: 1,
     height: 1.5,
     left: 8,
-    position: 'absolute',
+    position: "absolute",
     right: 8,
     top: 1,
   },
   tile: {
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: StyleSheet.hairlineWidth,
     elevation: 3,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    shadowColor: '#000',
+    justifyContent: "center",
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { height: 3, width: 0 },
     shadowRadius: 6,
   },
