@@ -73,7 +73,7 @@
     "@centraid/test-kit": "workspace:*",
     "@expo/fingerprint": "~0.20.6",
     "@types/jpeg-js": "^0.3.7",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@types/react": "~19.2.17",
     "@types/react-dom": "~19.2.3",
     "babel-preset-expo": "^57.0.4",
