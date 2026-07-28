@@ -214,6 +214,16 @@ binding procedure and checksum contract are recorded in
 maps configuration. The marker is now excluded for both platform fingerprints
 while the app configuration and installed package remain hashed.
 
+Two independent macOS hosted runs (30404358270 and 30407693912) stopped the
+154-target iOS cold build mid-ReactCodegen with zero compiler errors before
+Expo emitted exit 65 and a misleading package-dependency footer; the identical
+repository-script build completed locally. Hosted resource pressure is the
+leading diagnosis, not yet a proven cause. `.github/workflows/e2e.yml` now
+limits Xcode to two concurrent compile tasks on the three-core runner, and
+`TESTING.md` records the mitigation so it is not removed as an unexplained
+slowdown. A cache-miss hosted success remains required before checking the
+nightly acceptance items below.
+
 `.github/dependabot.yml` continues to propose all major upgrades, but leaves
 each production major in its own attributable PR while grouping patch/minor
 updates. The suite—not a version-ban policy—decides which major works.
@@ -439,6 +449,8 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785277234-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 158547 | 0 | 18686720 | 16161 | 174708 | 5.3105 | 1866798 | 0 | 124493824 | 190756 | fix(mobile): align iOS prebuilt React lock (#587) |
 | codex-019fa9f8-a97-1785277279-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 5554 | 0 | 251392 | 487 | 6041 | 0.0840 | 1872352 | 0 | 124745216 | 191243 | fix(mobile): align iOS prebuilt React lock (#587) |
 | codex-019fa9f8-a97-1785280747-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 389894 | 0 | 26411776 | 32143 | 422037 | 8.0598 | 2262246 | 0 | 151156992 | 223386 | fix(mobile): stabilize native fingerprint inputs (#587) |
+| codex-019fa9f8-a97-1785282371-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 176501 | 0 | 16274944 | 14348 | 190849 | 4.7252 | 2438747 | 0 | 167431936 | 237734 | ci(mobile): bound Xcode cold-build concurrency (#587) |
+| codex-019fa9f8-a97-1785282421-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 2139 | 0 | 628992 | 191 | 2330 | 0.1655 | 2440886 | 0 | 168060928 | 237925 | ci(mobile): bound Xcode cold-build concurrency (#587) -m governance: allow-toolc |
 
 ### Steering
 

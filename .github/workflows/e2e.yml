@@ -279,6 +279,13 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
+          # The macos-15-arm64 hosted runner exposes only 3 cores. Xcode's
+          # default scheduler twice vanished mid-ReactCodegen with zero compiler
+          # errors, then Expo surfaced exit 65 plus a misleading
+          # package-dependency footer. The same checkout builds locally, making
+          # hosted resource pressure the leading diagnosis. Keep two compile
+          # tasks live to reduce the cold build's peak memory pressure.
+          defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks -int 2
           bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
           # Copy the product out of derived data into the cached location. Fail
           # hard if it cannot be found: caching an empty directory would turn
