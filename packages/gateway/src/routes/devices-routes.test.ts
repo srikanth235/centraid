@@ -155,8 +155,8 @@ test('compute profile validates every capability and persists a valid update', a
  *
  * `devices-routes.test.ts` shrank from 18 tests to 5, leaving these live
  * branches unexercised: DELETE idempotency, the 405s, the foreign-vault 404,
- * peer-delete 403, self-unpair by a non-owner, `vault_required`, the
- * no-endpoint 409, and the `uninitialized` 409. Each is a refusal or a
+ * peer-delete 403, self-unpair by a non-owner, `vault_required`, and the
+ * no-endpoint 409. Each is a refusal or a
  * safe-default that would fail silently — every one returns a plausible-
  * looking status, so nothing downstream would notice a regression.
  */

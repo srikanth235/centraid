@@ -3,10 +3,10 @@
 import { runFlow } from '../lib/harness.mjs';
 
 await runFlow('device-pairing-lifecycle', async (ctx) => {
-  // 1. The harness explicitly initializes one named vault at daemon boot.
+  // 1. A fresh daemon auto-founds Shared + Personal (#603); tickets default to Shared.
   // Mint the pasteable ticket for it through the live daemon.
-  const { payload } = await ctx.mintTicket({ vault: 'Pairing E2E' });
-  if (payload.vaultName !== 'Pairing E2E') {
+  const { payload } = await ctx.mintTicket({ vault: 'Shared' });
+  if (payload.vaultName !== 'Shared') {
     throw new Error(`ticket names vault "${payload.vaultName}"`);
   }
   if (payload.exp <= Date.now()) throw new Error('ticket minted already expired');
@@ -22,7 +22,7 @@ await runFlow('device-pairing-lifecycle', async (ctx) => {
     platform: 'agent-e2e',
   });
   if (!paired.ok) throw new Error(`redeem failed: ${JSON.stringify(paired)}`);
-  if (!paired.vaultId || paired.vaultName !== 'Pairing E2E') {
+  if (!paired.vaultId || paired.vaultName !== 'Shared') {
     throw new Error(`pair response names the wrong vault: ${JSON.stringify(paired)}`);
   }
   if (!paired.version || typeof paired.schemaEpoch !== 'number') {

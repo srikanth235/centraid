@@ -13,13 +13,6 @@ function encodeGwPair(payload: {
   return Buffer.from(json, 'utf8').toString('base64url');
 }
 
-function encodeFounding(payload: { gw: string; t: string; s: string; exp: number }): string {
-  return Buffer.from(
-    JSON.stringify({ v: 1, kind: 'centraid-gw-found', ...payload }),
-    'utf8',
-  ).toString('base64url');
-}
-
 describe('parsePairingInput', () => {
   it('parses desktop centraid-pair JSON', () => {
     const raw = JSON.stringify({
@@ -66,21 +59,21 @@ describe('parsePairingInput', () => {
     expect(parsePairingInput(bad)).toBeUndefined();
   });
 
-  it('parses a founding ticket without treating it as ordinary pairing', () => {
-    const exp = Date.now() + 60_000;
-    const token = encodeFounding({
-      gw: 'refreshable-endpoint-hint',
-      t: 'one-time-id',
-      s: 'one-time-secret',
-      exp,
-    });
-    expect(parsePairingInput(token)).toEqual({
-      kind: 'centraid-gw-found',
-      gw: 'refreshable-endpoint-hint',
-      t: 'one-time-id',
-      s: 'one-time-secret',
-      exp,
-    });
+  it('rejects unknown gateway ticket kinds — the pair ticket is the only ticket (#603)', () => {
+    // The retired founding-ticket kind lands in this bucket too: the parser
+    // no longer special-cases it, so any non-pair kind is refused the same way.
+    const token = Buffer.from(
+      JSON.stringify({
+        v: 1,
+        kind: 'centraid-gw-legacy',
+        gw: 'refreshable-endpoint-hint',
+        t: 'one-time-id',
+        s: 'one-time-secret',
+        exp: Date.now() + 60_000,
+      }),
+      'utf8',
+    ).toString('base64url');
+    expect(parsePairingInput(token)).toBeUndefined();
     expect(parsePairQr(token)).toBeUndefined();
   });
 

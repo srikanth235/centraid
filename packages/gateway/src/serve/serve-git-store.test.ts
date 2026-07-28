@@ -75,7 +75,7 @@ afterEach(async () => {
 });
 
 test('serves an app from the git-store main worktree, not versions/', async () => {
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
 
   // The ACTIVE vault owns the code store (#280) — seed through it, then
   // re-settle the workspace so the registry syncs the published app.
@@ -109,7 +109,7 @@ test('serves an app from the git-store main worktree, not versions/', async () =
 });
 
 test('the code store lives inside the active vault directory (#280)', async () => {
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   const store = await handle.appsStore();
   const vaultId = handle.vaults.current().boot.vaultId;
   expect(

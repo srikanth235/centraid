@@ -204,16 +204,24 @@ export async function commandPair(
         1,
       );
     }
-    if (
-      handshake.info.endpointId !== endpointId ||
-      typeof handshake.info.endpointTicket !== 'string'
-    ) {
+    if (handshake.info.endpointId && handshake.info.endpointId !== endpointId) {
+      localFail(`daemon at ${baseUrl} owns a different data directory`, 1);
+    }
+    // `endpointTicket` is auth-gated, so an unauthenticated handshake drops it
+    // silently. Reporting that as "the endpoint is not ready" was a lie the
+    // owner could not act on (issue #603 C2): the real cause is that the
+    // daemon was started with a pinned bearer this CLI cannot derive.
+    if (handshake.info.authenticated === false) {
       localFail(
-        handshake.info.endpointId && handshake.info.endpointId !== endpointId
-          ? `daemon at ${baseUrl} owns a different data directory`
-          : 'daemon is running but its iroh endpoint is not ready',
+        `daemon at ${baseUrl} rejected this CLI's credential. It was started with a pinned ` +
+          'CENTRAID_GATEWAY_TOKEN (or another bearer), and the bearer derived from ' +
+          'keys/endpoint-key.bin does not match. Restart the daemon without the pin, or run ' +
+          'this command with CENTRAID_GATEWAY_TOKEN set to the same value.',
         1,
       );
+    }
+    if (typeof handshake.info.endpointTicket !== 'string') {
+      localFail('daemon is running but its iroh endpoint is not ready', 1);
     }
     let response: Response;
     try {

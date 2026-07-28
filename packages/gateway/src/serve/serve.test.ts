@@ -38,7 +38,7 @@ async function verifyCurrentRecoveryKit(
 
 beforeEach(async () => {
   dataDir = await tempDir(`gateway-runtime-${crypto.randomUUID()}-`);
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {
@@ -82,7 +82,6 @@ test('honors a caller-supplied token instead of minting one', async () => {
   await handle.close();
   const fixed = 'fixed-token-for-test-purposes-only-do-not-use-elsewhere';
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     token: fixed,
   });
@@ -96,7 +95,6 @@ test('honors a caller-supplied token instead of minting one', async () => {
 test('honors a caller-supplied host (loopback alias still resolves)', async () => {
   await handle.close();
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     host: '127.0.0.1',
     port: 0,
@@ -171,8 +169,8 @@ test('serves a diagnostics bundle when the bearer token matches', async () => {
   expect(body.runtime.nodeVersion).toBe(process.version);
   expect(body.health.status).toEqual(expect.any(String));
   expect(Array.isArray(body.logs)).toBe(true);
-  // The boot vault is mounted, sized off vault.db/journal.db statSync.
-  expect(body.vaults).toHaveLength(1);
+  // Both auto-founded vaults are mounted, sized off vault.db/journal.db.
+  expect(body.vaults).toHaveLength(2);
   expect(body.vaults[0]!.vaultId).toBe(handle.vaults.current().boot.vaultId);
   expect(typeof body.vaults[0]!.files.vaultDbBytes).toBe('number');
 });
@@ -203,7 +201,7 @@ test('reports an unconfigured destination for the default vault when no backup b
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
     configured: boolean;
-    vaults: unknown[];
+    vaults: Array<Record<string, unknown>>;
     recoveryKit: { confirmedAt: number | null };
   };
   // recoveryKit (issue #351 wave 4) reads "never confirmed" — there's no
@@ -213,15 +211,14 @@ test('reports an unconfigured destination for the default vault when no backup b
   expect(body).toMatchObject({
     configured: false,
     recoveryKit: { confirmedAt: null },
-    vaults: [
-      {
-        vaultId: handle.vaults.current().boot.vaultId,
-        name: "Owner's vault",
-        running: false,
-        destination: { kind: 'gateway-local' },
-        pendingOffsite: { count: 0, bytes: 0 },
-      },
-    ],
+  });
+  expect(body.vaults).toHaveLength(2);
+  expect(body.vaults[0]).toMatchObject({
+    vaultId: handle.vaults.current().boot.vaultId,
+    name: 'Shared',
+    running: false,
+    destination: { kind: 'gateway-local' },
+    pendingOffsite: { count: 0, bytes: 0 },
   });
 });
 
@@ -239,7 +236,6 @@ test('backup status/run round-trip when backup IS configured', async () => {
   await handle.close();
   const providerDir = await tempDir('backup-provider-');
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     backup: {
       enabled: true,
@@ -256,7 +252,7 @@ test('backup status/run round-trip when backup IS configured', async () => {
     vaults: Array<{ vaultId: string; name?: string; lastBackupAt?: string; running?: boolean }>;
   };
   expect(beforeBody.configured).toBe(true);
-  expect(beforeBody.vaults).toHaveLength(1);
+  expect(beforeBody.vaults).toHaveLength(2);
   expect(beforeBody.vaults[0]).toMatchObject({ vaultId, running: false });
   expect(beforeBody.vaults[0]?.lastBackupAt).toBeUndefined();
 
@@ -298,7 +294,6 @@ test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async ()
     provider: { kind: 'local' as const, dir: providerDir },
   };
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     backup: backupConfig,
   });
@@ -320,7 +315,6 @@ test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async ()
   // on-disk dataDir (same gateway.db recovery-kit row).
   await handle.close();
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     backup: backupConfig,
   });

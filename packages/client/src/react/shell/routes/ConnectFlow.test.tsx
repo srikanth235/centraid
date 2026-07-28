@@ -15,7 +15,6 @@ const createVault = vi.fn();
 const redeemGatewayPairing = vi.fn();
 const addGateway = vi.fn();
 const testGatewayConnection = vi.fn();
-const sshConnectGateway = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,7 +30,6 @@ beforeEach(() => {
     redeemGatewayPairing,
     setActiveGateway,
     setActiveVault,
-    sshConnectGateway,
     testGatewayConnection,
   };
 });
@@ -89,31 +87,52 @@ function radios(el: HTMLElement, name: string): HTMLInputElement[] {
 }
 
 describe('ConnectFlow', () => {
-  it('renders all three method cards by default', () => {
+  it('renders both surviving method cards by default — SSH is gone (#603)', () => {
     const el = mount({ context: 'onboarding', onDone: vi.fn() });
-    expect(el.querySelectorAll('input[type="radio"]').length).toBe(3);
+    expect(el.querySelectorAll('input[type="radio"]').length).toBe(2);
     expect(el.textContent).toContain('This Mac');
     expect(el.textContent).toContain('Existing gateway');
-    expect(el.textContent).toContain('Over SSH');
+    expect(el.textContent).not.toContain('Over SSH');
   });
 
   it('a switcher ConnectFlowModal-style caller can omit the "This Mac" card', () => {
-    const el = mount({ context: 'switcher', methods: ['gateway', 'ssh'], onDone: vi.fn() });
-    expect(el.querySelectorAll('input[type="radio"]').length).toBe(2);
+    const el = mount({ context: 'switcher', methods: ['gateway'], onDone: vi.fn() });
+    expect(el.querySelectorAll('input[type="radio"]').length).toBe(1);
     expect(el.textContent).not.toContain('This Mac');
   });
 
-  it('onboarding + "This Mac" with exactly one existing vault completes without another click', async () => {
-    const onDone = vi.fn();
-    const el = mount({ context: 'onboarding', onDone });
+  it('initialMethod skips the method grid entirely', () => {
+    const el = mount({
+      context: 'onboarding',
+      initialMethod: 'gateway',
+      methods: ['gateway'],
+      onDone: vi.fn(),
+    });
+    expect(el.querySelector('textarea')).toBeTruthy();
+    expect(el.textContent).not.toContain('Existing gateway');
+  });
+
+  // #603: a fresh gateway auto-founds TWO vaults, so onboarding no longer
+  // auto-commits a local connect — the pick is always an explicit act.
+  it('onboarding + "This Mac" shows the picker rather than auto-committing', async () => {
+    const el = mount({ context: 'onboarding', onDone: vi.fn() });
     click(radios(el, 'This Mac')[0]);
     await flush(4);
-    expect(setActiveVault).toHaveBeenCalledWith({ vaultId: 'a' });
-    expect(onDone).toHaveBeenCalledWith({
-      displayLabel: 'This Mac',
-      gatewayId: 'local',
-      vaultId: 'a',
-    });
+    expect(el.querySelector('[role="radiogroup"][aria-label="Space"]')).toBeTruthy();
+    expect(setActiveVault).not.toHaveBeenCalled();
+  });
+
+  it('a failed local vault read shows the honest error instead of offering a create', async () => {
+    listVaultsMock.mockRejectedValue(new Error('gateway is down'));
+    const el = mount({ context: 'onboarding', onDone: vi.fn() });
+    click(radios(el, 'This Mac')[0]);
+    await flush(4);
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain('gateway is down');
+    expect(el.textContent).not.toContain('Create new space');
+    const cta = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Enter Centraid',
+    ) as HTMLButtonElement;
+    expect(cta.disabled).toBe(true);
   });
 
   it('switcher + "This Mac" with one vault still shows the picker (no auto-commit)', async () => {
@@ -238,69 +257,24 @@ describe('ConnectFlow', () => {
     expect(testGatewayConnection).toHaveBeenCalledTimes(2);
   });
 
-  it('ssh happy path: test probes the host, existing vault picked, commit calls sshConnectGateway', async () => {
-    testGatewayConnection.mockResolvedValue({
-      ok: true,
-      stages: [{ id: 'ssh', label: 'Host reachable', status: 'pass' }],
-      vaults: [{ name: 'Remote space', vaultId: 'r1' }],
-    });
-    sshConnectGateway.mockResolvedValue({
-      gatewayId: 'gwssh',
-      ok: true,
-      vaultId: 'r1',
-      vaultName: 'Remote space',
-    });
-    const onDone = vi.fn();
-    const el = mount({ context: 'switcher', methods: ['gateway', 'ssh'], onDone });
-    click(radios(el, 'Over SSH')[0]);
-    await flush();
-    typeInto(el.querySelector('input[placeholder="user@host"]') as HTMLInputElement, 'me@box');
-    click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
-    await flush(3);
-    expect(testGatewayConnection).toHaveBeenCalledWith({
-      dataDir: undefined,
-      destination: 'me@box',
-      kind: 'ssh',
-    });
-
-    click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
-    await flush();
-    const remoteRow = radios(el, 'Remote space')[0];
-    click(remoteRow);
-    click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Connect'));
-    await flush(3);
-    expect(sshConnectGateway).toHaveBeenCalledWith({
-      dataDir: undefined,
-      destination: 'me@box',
-      label: undefined,
-      rememberDevice: false,
-      vault: { kind: 'existing', vaultId: 'r1' },
-    });
-    expect(onDone).toHaveBeenCalledWith({
-      displayLabel: 'Remote space',
-      gatewayId: 'gwssh',
-      vaultId: 'r1',
-    });
-  });
-
   it('a failed commit lands on the error step with a Retry that re-attempts', async () => {
-    testGatewayConnection.mockResolvedValue({
-      ok: true,
-      stages: [],
-      vaults: [{ name: 'A', vaultId: 'a' }],
-    });
-    sshConnectGateway.mockRejectedValueOnce(new Error('host unreachable'));
-    sshConnectGateway.mockResolvedValueOnce({
+    redeemGatewayPairing.mockRejectedValueOnce(new Error('host unreachable'));
+    redeemGatewayPairing.mockResolvedValueOnce({
       gatewayId: 'gw',
       ok: true,
       vaultId: 'a',
       vaultName: 'A',
     });
+    testGatewayConnection.mockResolvedValue({
+      ok: true,
+      stages: [],
+      ticket: { expiresAt: '', gatewayEndpointId: '', vaultName: 'A' },
+    });
     const onDone = vi.fn();
-    const el = mount({ context: 'switcher', methods: ['ssh'], onDone });
-    click(radios(el, 'Over SSH')[0]);
+    const el = mount({ context: 'switcher', methods: ['gateway'], onDone });
+    click(radios(el, 'Existing gateway')[0]);
     await flush();
-    typeInto(el.querySelector('input[placeholder="user@host"]') as HTMLInputElement, 'me@box');
+    typeInto(el.querySelector('textarea') as HTMLTextAreaElement, 'a-ticket');
     click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
     await flush(3);
     click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));

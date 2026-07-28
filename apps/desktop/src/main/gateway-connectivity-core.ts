@@ -1,12 +1,14 @@
 /*
  * Pure core for GATEWAY_TEST_CONNECTION (issue #382) — the ConnectFlow
- * "handshake ladder". Every raw signal (a fetch outcome, an ssh-host
- * result, a decoded ticket) is folded into `ConnectivityStage`s here;
- * `gateway-connectivity.ts` owns the actual network/ssh calls and threads
- * their results through these fold functions in sequence, skipping later
- * stages once an earlier one fails (the "ladder" never runs a step whose
- * precondition didn't pass). Same "electron-free pure core" split as
- * `gateway-pairing-core.ts` / `ssh-host-core.ts`.
+ * "handshake ladder". Every raw signal (a fetch outcome, a decoded ticket)
+ * is folded into `ConnectivityStage`s here; `gateway-connectivity.ts` owns
+ * the actual network calls and threads their results through these fold
+ * functions in sequence, skipping later stages once an earlier one fails
+ * (the "ladder" never runs a step whose precondition didn't pass). Same
+ * "electron-free pure core" split as `gateway-pairing-core.ts`.
+ *
+ * Issue #603 deleted the SSH-connect feature, and with it the
+ * `ssh`/`cli`/`daemon` rungs — those stage ids had no other producer.
  */
 
 import {
@@ -16,17 +18,8 @@ import {
 } from './gateway-pairing-core.js';
 import type { HandshakeResult } from './version-handshake.js';
 import type { ListGatewayVaultsResult } from './gateway-vaults-core.js';
-import type { SshCommandResult } from './ssh-host.js';
 
-export type ConnectivityStageId =
-  | 'reach'
-  | 'identify'
-  | 'auth'
-  | 'vaults'
-  | 'ssh'
-  | 'cli'
-  | 'daemon'
-  | 'decode';
+export type ConnectivityStageId = 'reach' | 'identify' | 'auth' | 'vaults' | 'decode';
 
 export type ConnectivityStageStatus = 'pass' | 'fail' | 'skip';
 
@@ -83,9 +76,6 @@ const STAGE_LABEL: Record<ConnectivityStageId, string> = {
   identify: 'Identify gateway',
   auth: 'Check credentials',
   vaults: 'List vaults',
-  ssh: 'Reach host',
-  cli: 'centraid-gateway CLI',
-  daemon: 'Daemon status',
   decode: 'Decode ticket',
 };
 
@@ -184,7 +174,7 @@ export function foldUrlIdentityStages(handshake: HandshakeResult): {
   };
 }
 
-/** The `vaults` stage — shared by `url`/`gateway`/`ssh` kinds. */
+/** The `vaults` stage — shared by the `url` and `gateway` kinds. */
 export function foldVaultsStageFromHttp(result: ListGatewayVaultsResult): {
   stage: ConnectivityStage;
   vaults?: ConnectivityVaultEntry[];
@@ -247,64 +237,4 @@ export function buildTicketReport(rawTicket: string, now = Date.now()): Connecti
       gatewayEndpointId: payload.gw,
     },
   });
-}
-
-// ── ssh kind: ssh → cli → daemon → vaults ───────────────────────────────
-
-/** Fold `sshVersion`'s result into the ssh-reachable + cli-present pair —
- *  one ssh round trip answers both ("command not found" still proves the
- *  HOST was reachable; only the remote CLI is missing). */
-export function foldSshVersionStages(result: SshCommandResult<string>): {
-  ssh: ConnectivityStage;
-  cli: ConnectivityStage;
-  errorCode?: string;
-} {
-  if (result.ok) {
-    return { ssh: s('ssh', 'pass'), cli: s('cli', 'pass', result.value) };
-  }
-  if (result.error === 'cli_not_found') {
-    return {
-      ssh: s('ssh', 'pass'),
-      cli: s('cli', 'fail', result.message),
-      errorCode: result.error,
-    };
-  }
-  return {
-    ssh: s('ssh', 'fail', result.message),
-    cli: s('cli', 'skip'),
-    errorCode: result.error,
-  };
-}
-
-export function foldSshStatusStage(result: SshCommandResult<Record<string, unknown>>): {
-  stage: ConnectivityStage;
-  errorCode?: string;
-} {
-  if (result.ok) return { stage: s('daemon', 'pass') };
-  return { stage: s('daemon', 'fail', result.message), errorCode: result.error };
-}
-
-export function foldSshVaultsStage(
-  result: SshCommandResult<{ vaults: Array<Record<string, unknown>> }>,
-): { stage: ConnectivityStage; vaults?: ConnectivityVaultEntry[]; errorCode?: string } {
-  if (!result.ok) return { stage: s('vaults', 'fail', result.message), errorCode: result.error };
-  const vaults: ConnectivityVaultEntry[] = [];
-  for (const row of result.value.vaults) {
-    if (typeof row.vaultId === 'string' && typeof row.name === 'string') {
-      vaults.push({
-        vaultId: row.vaultId,
-        name: row.name,
-        ...(typeof row.color === 'string' ? { color: row.color } : {}),
-        ...(typeof row.icon === 'string' ? { icon: row.icon } : {}),
-      });
-    }
-  }
-  return { stage: s('vaults', 'pass'), vaults };
-}
-
-/** `ssh`/`cli`/`daemon` stages that never ran because an earlier one in the
- *  ladder already failed (used by the orchestrator to fill in `skip`s
- *  without re-deriving the label/id boilerplate). */
-export function skippedSshStage(id: 'ssh' | 'cli' | 'daemon' | 'vaults'): ConnectivityStage {
-  return s(id, 'skip');
 }

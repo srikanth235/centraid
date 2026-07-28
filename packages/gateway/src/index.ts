@@ -137,6 +137,7 @@ export { platformDefaultDataDir, type DefaultDataDirOptions } from './cli/data-d
 // derives its loopback bearer from custody rather than an env pin (#568 F).
 export { landlordBearerForDataDir } from './cli/landlord-auth.js';
 // Host-only capability gate (issue #568 items A/B). Embedders wire this into
-// `serve({canMintFoundingTicket})` so the founding ceremony refuses anything a
-// forwarder delivered to loopback.
+// `serve({isHostCustody})` so the host-only lanes — pairing-ticket mint,
+// member administration, share, scopes — refuse anything a forwarder
+// delivered to loopback.
 export { isDirectHostRequest } from './routes/route-helpers.js';

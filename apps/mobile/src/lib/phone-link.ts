@@ -48,8 +48,6 @@ import {
 import { Store } from '../storage';
 import { parsePairingInput } from './phone-link-parse';
 
-export { parsePairingInput } from './phone-link-parse';
-
 // The active-slot keys now live in their new owner, lib/spaces (the Spaces
 // registry projects the active (gateway, vault) tuple into them); imported above
 // for this module's own tunnel/link reads.
@@ -94,7 +92,7 @@ export async function pair(
   deviceName: string,
 ): Promise<{ desktopName: string; deviceId: string }> {
   const parsed = parsePairingInput(qrPayloadString);
-  if (!parsed || parsed.kind === 'centraid-gw-found') {
+  if (!parsed) {
     throw new PhoneLinkError(
       'invalid_qr',
       'That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from `centraid-gateway pair`.',

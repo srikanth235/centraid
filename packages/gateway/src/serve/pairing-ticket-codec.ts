@@ -8,16 +8,7 @@ export interface PairingTicketPayload {
   exp: number;
 }
 
-export interface FoundingTicketPayload {
-  v: 1;
-  kind: 'centraid-gw-found';
-  gw: string;
-  t: string;
-  s: string;
-  exp: number;
-}
-
-export function encodePairingTicket(payload: PairingTicketPayload | FoundingTicketPayload): string {
+export function encodePairingTicket(payload: PairingTicketPayload): string {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
 
@@ -32,22 +23,6 @@ export function parsePairingTicket(raw: string): PairingTicketPayload | undefine
     }
     if (typeof obj.vaultName !== 'string' || typeof obj.exp !== 'number') return undefined;
     return obj as PairingTicketPayload;
-  } catch {
-    return undefined;
-  }
-}
-
-export function parseFoundingTicket(raw: string): FoundingTicketPayload | undefined {
-  try {
-    const obj = JSON.parse(
-      Buffer.from(raw.trim(), 'base64url').toString('utf8'),
-    ) as Partial<FoundingTicketPayload>;
-    if (obj.v !== 1 || obj.kind !== 'centraid-gw-found') return undefined;
-    if (typeof obj.gw !== 'string' || typeof obj.t !== 'string' || typeof obj.s !== 'string') {
-      return undefined;
-    }
-    if (typeof obj.exp !== 'number') return undefined;
-    return obj as FoundingTicketPayload;
   } catch {
     return undefined;
   }

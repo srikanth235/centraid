@@ -40,12 +40,15 @@ afterEach(() => {
   container = null;
 });
 
-function mount(props: OnboardingScreenProps): HTMLDivElement {
+function mount(
+  props: Partial<OnboardingScreenProps> & Pick<OnboardingScreenProps, 'onComplete'>,
+): HTMLDivElement {
+  const full: OnboardingScreenProps = { path: 'ticket', ...props };
   container = document.createElement('div');
   document.body.appendChild(container);
   act(() => {
     root = createRoot(container as HTMLDivElement);
-    root.render(<OnboardingScreen {...props} />);
+    root.render(<OnboardingScreen {...full} />);
   });
   return container;
 }
@@ -69,10 +72,6 @@ function click(el: Element | null | undefined): void {
 // carries the visible text / state attributes (issue #573).
 function radioIn(el: Element | null | undefined): HTMLInputElement | null {
   return el?.querySelector<HTMLInputElement>('input[type="radio"]') ?? null;
-}
-
-function radioLabelled(el: HTMLElement, text: string): HTMLInputElement | null {
-  return radioIn([...el.querySelectorAll('label')].find((l) => l.textContent?.includes(text)));
 }
 
 async function flush(times = 3): Promise<void> {
@@ -103,16 +102,54 @@ describe('OnboardingScreen', () => {
     expect(el.querySelectorAll('[data-selected="true"]').length).toBe(1);
   });
 
-  it('Continue moves to step 2, showing the three method cards', () => {
+  it('the ticket path goes from identity straight into the ticket paste', () => {
     const el = mount({ onComplete: vi.fn() });
     typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
     click(el.querySelector('.cta'));
-    expect(el.textContent).toContain('Where does your');
-    expect(el.querySelectorAll('input[type="radio"]').length).toBe(3);
+    expect(el.textContent).toContain('Connect your');
+    // No method grid at all — the host already chose (issue #603).
+    expect(el.querySelectorAll('input[type="radio"]').length).toBe(0);
+    expect(el.querySelector('textarea')).toBeTruthy();
     expect(el.querySelector('.cta')).toBeNull();
   });
 
-  it('"Start over" from step 2 returns to the identity step', () => {
+  it('the fresh path skips connect entirely and completes on the local Personal vault', async () => {
+    listVaultsMock.mockResolvedValue([
+      { vaultId: 'shared', name: 'Shared' },
+      { vaultId: 'personal', name: 'Personal' },
+    ]);
+    const onComplete = vi.fn().mockResolvedValue(undefined);
+    const el = mount({ path: 'fresh', onComplete });
+    typeName(el.querySelector('.input') as HTMLInputElement, 'Grace');
+    click(el.querySelector('.cta'));
+    await flush(4);
+    expect(setActiveVault).toHaveBeenCalledWith({ vaultId: 'personal' });
+    expect(onComplete).toHaveBeenCalledWith({
+      avatarColor: expect.any(String),
+      displayName: 'Grace',
+      gatewayId: 'local',
+      path: 'fresh',
+      vaultId: 'personal',
+    });
+  });
+
+  it('the fresh path surfaces an unreachable local gateway inline', async () => {
+    listVaultsMock.mockRejectedValue(new Error('ECONNREFUSED'));
+    const el = mount({ path: 'fresh', onComplete: vi.fn() });
+    typeName(el.querySelector('.input') as HTMLInputElement, 'Grace');
+    click(el.querySelector('.cta'));
+    await flush(4);
+    expect(el.querySelector('.error')?.textContent).toContain('ECONNREFUSED');
+  });
+
+  it('renders a Back affordance only when the host supplies one', () => {
+    const withBack = mount({ onBack: vi.fn(), onComplete: vi.fn() });
+    expect([...withBack.querySelectorAll('button')].some((b) => b.textContent === 'Back')).toBe(
+      true,
+    );
+  });
+
+  it('"Start over" from the connect step returns to the identity step', () => {
     const el = mount({ onComplete: vi.fn() });
     typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
     click(el.querySelector('.cta'));
@@ -121,19 +158,20 @@ describe('OnboardingScreen', () => {
     expect(el.querySelector('.cta')).toBeTruthy();
   });
 
-  it('picking "This Mac" with exactly one existing vault completes onboarding automatically', async () => {
+  it('trims the name and carries the chosen swatch through', async () => {
+    listVaultsMock.mockResolvedValue([{ vaultId: 'personal', name: 'Personal' }]);
     const onComplete = vi.fn().mockResolvedValue(undefined);
-    const el = mount({ onComplete });
+    const el = mount({ path: 'fresh', onComplete });
     typeName(el.querySelector('.input') as HTMLInputElement, '  Grace  ');
-    const swatch = el.querySelectorAll('.swatch')[2] as HTMLLabelElement;
-    click(radioIn(swatch));
+    click(radioIn(el.querySelectorAll('.swatch')[2] as HTMLLabelElement));
     click(el.querySelector('.cta'));
-    click(radioLabelled(el, 'This Mac'));
     await flush(4);
     expect(onComplete).toHaveBeenCalledWith({
       avatarColor: '#E36AD2',
       displayName: 'Grace',
       gatewayId: 'local',
+      path: 'fresh',
+      vaultId: 'personal',
     });
   });
 
@@ -156,7 +194,6 @@ describe('OnboardingScreen', () => {
     typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
     click(el.querySelector('.cta'));
 
-    click(radioLabelled(el, 'Existing gateway'));
     await flush();
     const textarea = el.querySelector('textarea') as HTMLTextAreaElement;
     const setter = Object.getOwnPropertyDescriptor(
@@ -182,15 +219,17 @@ describe('OnboardingScreen', () => {
       avatarColor: expect.any(String),
       displayName: 'Ada',
       gatewayId: 'gw1',
+      path: 'ticket',
+      vaultId: 'v1',
     });
   });
 
   it('surfaces an error inline when onComplete rejects', async () => {
+    listVaultsMock.mockResolvedValue([{ vaultId: 'personal', name: 'Personal' }]);
     const onComplete = vi.fn().mockRejectedValue(new Error('nope'));
-    const el = mount({ onComplete });
+    const el = mount({ path: 'fresh', onComplete });
     typeName(el.querySelector('.input') as HTMLInputElement, 'X');
     click(el.querySelector('.cta'));
-    click(radioLabelled(el, 'This Mac'));
     await flush(4);
     expect(el.querySelector('.error')?.textContent).toContain('nope');
   });

@@ -24,21 +24,27 @@ describe('connectFlowReducer', () => {
     expect(s.method).toBe('local');
   });
 
-  it('selectMethod(gateway|ssh) lands on details', () => {
-    for (const method of ['gateway', 'ssh'] as const) {
-      const s = connectFlowReducer(createInitialConnectFlowState(), {
-        method,
-        type: 'selectMethod',
-      });
-      expect(s.step).toBe('details');
-    }
+  it('selectMethod(gateway) lands on details', () => {
+    const s = connectFlowReducer(createInitialConnectFlowState(), {
+      method: 'gateway',
+      type: 'selectMethod',
+    });
+    expect(s.step).toBe('details');
   });
 
   it('selectMethod resets any state left over from a prior method', () => {
     const dirty = at({ method: 'gateway', step: 'test', ticket: 'stale' });
-    const s = connectFlowReducer(dirty, { method: 'ssh', type: 'selectMethod' });
+    const s = connectFlowReducer(dirty, { method: 'local', type: 'selectMethod' });
     expect(s.ticket).toBe('');
-    expect(s.step).toBe('details');
+    expect(s.step).toBe('vault');
+  });
+
+  it('createInitialConnectFlowState(method) opens straight into that method', () => {
+    expect(createInitialConnectFlowState('gateway')).toMatchObject({
+      method: 'gateway',
+      step: 'details',
+    });
+    expect(createInitialConnectFlowState()).toMatchObject({ method: null, step: 'method' });
   });
 
   it('setField updates the named field only', () => {
@@ -88,9 +94,31 @@ describe('connectFlowReducer', () => {
   });
 
   it('continueToVault defaults to "create" for a create-capable method with no reported vaults', () => {
-    const sshNoVaults = at({ method: 'ssh', report: { ok: true, stages: [] }, step: 'test' });
-    const s = connectFlowReducer(sshNoVaults, { type: 'continueToVault' });
+    const localNoVaults = at({ method: 'local', report: { ok: true, stages: [] }, step: 'test' });
+    const s = connectFlowReducer(localNoVaults, { type: 'continueToVault' });
     expect(s.vaultChoice).toEqual({ kind: 'create' });
+  });
+
+  it('localVaultsLoaded records a successful read as options with no error', () => {
+    const s = connectFlowReducer(at({ method: 'local', step: 'vault' }), {
+      result: { ok: true, vaults: [{ name: 'Personal', vaultId: 'p' }] },
+      type: 'localVaultsLoaded',
+    });
+    expect(s.report?.vaults).toEqual([{ name: 'Personal', vaultId: 'p' }]);
+    expect(s.vaultsError).toBeNull();
+  });
+
+  it('localVaultsLoaded records a FAILED read as an error, not an empty registry', () => {
+    const s = connectFlowReducer(at({ method: 'local', step: 'vault' }), {
+      result: { ok: false, message: 'gateway is down' },
+      type: 'localVaultsLoaded',
+    });
+    // Settled (so the step leaves "Loading spaces…") but unhappy.
+    expect(s.report).not.toBeNull();
+    expect(s.vaultsError).toBe('gateway is down');
+    expect(canCommitConnectFlow({ ...s, vaultChoice: { kind: 'create' }, newVaultName: 'X' })).toBe(
+      false,
+    );
   });
 
   it('continueToVault leaves vaultChoice null for a ticket connect (locked, not a real choice)', () => {
@@ -136,7 +164,7 @@ describe('connectFlowReducer', () => {
   });
 
   it('back from the error step returns to vault so the user can retry', () => {
-    const s = connectFlowReducer(at({ commitError: 'boom', method: 'ssh', step: 'error' }), {
+    const s = connectFlowReducer(at({ commitError: 'boom', method: 'local', step: 'error' }), {
       type: 'back',
     });
     expect(s.step).toBe('vault');
@@ -166,7 +194,7 @@ describe('connectFlowReducer', () => {
   });
 
   it('reset returns to the initial state', () => {
-    const dirty = at({ method: 'ssh', step: 'vault', ticket: 'x' });
+    const dirty = at({ method: 'local', step: 'vault', ticket: 'x' });
     expect(connectFlowReducer(dirty, { type: 'reset' })).toEqual(createInitialConnectFlowState());
   });
 });
@@ -182,19 +210,9 @@ describe('buildTestInput / canStartTest', () => {
     expect(buildTestInput(s)).toEqual({ kind: 'ticket', ticket: 't.icket' });
   });
 
-  it('ssh: destination required, dataDir optional', () => {
-    const s = at({ method: 'ssh', sshDestination: 'user@host' });
-    expect(buildTestInput(s)).toEqual({
-      dataDir: undefined,
-      destination: 'user@host',
-      kind: 'ssh',
-    });
-    const withDir = at({ method: 'ssh', sshDataDir: '/data', sshDestination: 'user@host' });
-    expect(buildTestInput(withDir)).toEqual({
-      dataDir: '/data',
-      destination: 'user@host',
-      kind: 'ssh',
-    });
+  it('local never has a testable input — the embedded gateway is always reachable', () => {
+    expect(buildTestInput(at({ method: 'local' }))).toBeNull();
+    expect(canStartTest(at({ method: 'local' }))).toBe(false);
   });
 });
 
@@ -204,10 +222,10 @@ describe('vaultCapability', () => {
     expect(cap).toEqual({ canCreate: true, locked: null, options: [] });
   });
 
-  it('ssh: create-capable, options come from the report', () => {
+  it('local: options come from the loaded vault list', () => {
     const cap = vaultCapability(
       at({
-        method: 'ssh',
+        method: 'local',
         report: { ok: true, stages: [], vaults: [{ name: 'A', vaultId: 'a' }] },
       }),
     );
@@ -250,34 +268,5 @@ describe('canCommitConnectFlow', () => {
   it('gateway/ticket requires a non-empty ticket', () => {
     expect(canCommitConnectFlow(at({ method: 'gateway' }))).toBe(false);
     expect(canCommitConnectFlow(at({ method: 'gateway', ticket: 't' }))).toBe(true);
-  });
-
-  it('ssh requires a destination and a resolved vault choice', () => {
-    expect(canCommitConnectFlow(at({ method: 'ssh' }))).toBe(false);
-    expect(canCommitConnectFlow(at({ method: 'ssh', sshDestination: 'user@host' }))).toBe(false);
-    expect(
-      canCommitConnectFlow(
-        at({
-          method: 'ssh',
-          sshDestination: 'user@host',
-          vaultChoice: { kind: 'existing', vaultId: 'a' },
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      canCommitConnectFlow(
-        at({ method: 'ssh', sshDestination: 'user@host', vaultChoice: { kind: 'create' } }),
-      ),
-    ).toBe(false);
-    expect(
-      canCommitConnectFlow(
-        at({
-          method: 'ssh',
-          newVaultName: 'Mine',
-          sshDestination: 'user@host',
-          vaultChoice: { kind: 'create' },
-        }),
-      ),
-    ).toBe(true);
   });
 });

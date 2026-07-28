@@ -26,18 +26,7 @@ export type GatewayPairPayload = {
   exp: number;
 };
 
-/** Zero-vault capability from `centraid-gateway init-ticket` (issue #555). */
-export type GatewayFoundingPayload = {
-  kind: 'centraid-gw-found';
-  /** Gateway EndpointTicket: refreshable dial hint, not durable identity. */
-  gw: string;
-  /** One-time capability id and secret. Never persisted by the phone. */
-  t: string;
-  s: string;
-  exp: number;
-};
-
-export type PairingInput = DesktopPairPayload | GatewayPairPayload | GatewayFoundingPayload;
+export type PairingInput = DesktopPairPayload | GatewayPairPayload;
 
 /**
  * Parse the desktop's pairing QR payload. Local mirror of
@@ -50,8 +39,10 @@ export function parsePairQr(raw: string): { ticket: string; code: string } | und
 }
 
 /**
- * Accept a desktop QR JSON string, an ordinary headless pairing ticket, or a
- * zero-vault founding ticket (scan or paste). Whitespace-tolerant.
+ * Accept a desktop QR JSON string or a headless pairing ticket (scan or paste).
+ * The pair ticket is the only ticket shape there is (issue #603) — gateways
+ * found themselves on first start, so nothing else is redeemable here.
+ * Whitespace-tolerant.
  */
 export function parsePairingInput(raw: string): PairingInput | undefined {
   const trimmed = raw.trim();
@@ -85,22 +76,11 @@ export function parsePairingInput(raw: string): PairingInput | undefined {
       vaultName?: string;
       exp: number;
     }>;
-    if (obj.v !== 1 || (obj.kind !== 'centraid-gw-pair' && obj.kind !== 'centraid-gw-found')) {
-      return undefined;
-    }
+    if (obj.v !== 1 || obj.kind !== 'centraid-gw-pair') return undefined;
     if (typeof obj.gw !== 'string' || obj.gw.length === 0) return undefined;
     if (typeof obj.t !== 'string' || obj.t.length === 0) return undefined;
     if (typeof obj.s !== 'string' || obj.s.length === 0) return undefined;
     if (typeof obj.exp !== 'number' || !Number.isFinite(obj.exp)) return undefined;
-    if (obj.kind === 'centraid-gw-found') {
-      return {
-        kind: obj.kind,
-        gw: obj.gw,
-        t: obj.t,
-        s: obj.s,
-        exp: obj.exp,
-      };
-    }
     if (typeof obj.vaultName !== 'string') return undefined;
     return {
       kind: obj.kind,

@@ -107,6 +107,7 @@ test.skipIf(servicePlatform)(
           instanceId: 'daemon',
           startedAt: Date.now(),
           uptimeMs: 1,
+          authenticated: authorized,
           endpointId,
           ...(authorized ? { endpointTicket: 'gw-ticket-base32' } : {}),
         }),

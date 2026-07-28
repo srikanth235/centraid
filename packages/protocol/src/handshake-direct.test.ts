@@ -148,7 +148,13 @@ describe('handshakeGateway network branches', () => {
       return {
         ok: true,
         status: 200,
-        json: async () => buildGatewayInfoPayload({ instanceId: 'i', startedAt: 1, uptimeMs: 2 }),
+        json: async () =>
+          buildGatewayInfoPayload({
+            instanceId: 'i',
+            startedAt: 1,
+            uptimeMs: 2,
+            authenticated: true,
+          }),
       };
     });
     const result = await handshakeGateway('http://gw', 'tok', good as never);

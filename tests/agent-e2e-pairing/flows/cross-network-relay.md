@@ -199,7 +199,8 @@ hosts without any external VPS or persistent infrastructure:
    this flow ran, defeating the whole point. Forcing IPv4-only removes
    that escape hatch instead of trying to firewall an address range that
    varies by host and ISP.
-4. The gateway daemon (`centraid-gateway serve --init-vault "Pairing E2E"`)
+4. The gateway daemon (`centraid-gateway serve`, on a fresh data dir that
+   auto-founds `Shared` + `Personal` — issue #603 removed `--init-vault`)
    runs in a container on `netA`; `pair` runs via `docker exec`
    into that same container. `lib/device-redeem.mjs` runs the device role —
    `createTunnelClient()` with **no** `relays: 'disabled'` override — in a
@@ -392,8 +393,9 @@ hazard is specific to the host-originated control leg, which only UDP has.
    sibling flows) if `dist/` is missing.
 2. `ensureNativeAddon()` — see above.
 3. Two isolated networks + isolation proof (see above).
-4. Start the gateway container with explicit `--init-vault "Pairing E2E"`.
-5. `pair --vault "Pairing E2E"` inside the gateway container — parse the
+4. Start the gateway container on a fresh data dir; it auto-founds `Shared` +
+   `Personal` at construction.
+5. `pair --vault "Shared"` inside the gateway container — parse the
    pasteable ticket.
 6. `lib/device-redeem.mjs` in a fresh container on the device network:
    redeem, one tunneled `GET /centraid/_vault/vaults`, then attempt the same

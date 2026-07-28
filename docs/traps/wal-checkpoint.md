@@ -23,7 +23,7 @@ Copying `vault.db` (and `journal.db`) with `cp` while SQLite is in WAL mode, or 
 | Goal | Do |
 | --- | --- |
 | Product backup | Backup policy + provider / CLI backup verbs |
-| Blank-machine recovery | `recover` + recovery kit ([recovery/backup-restore.md](../recovery/backup-restore.md)) |
+| Blank-machine recovery | `centraid-gateway recover` + a recovery kit you exported **in advance** with `backup kit` — nothing mints one for you (#603). Daemon stopped; do not boot it against the empty data dir first or it auto-founds `Shared` + `Personal` over it ([recovery/backup-restore.md](../recovery/backup-restore.md)) |
 | Dev fixture | Stop gateway; use backup export or test-kit helpers; or copy only from a **closed** DB after checkpoint |
 | Tests | `@centraid/test-kit` temp vaults — never the developer's live vault |
 

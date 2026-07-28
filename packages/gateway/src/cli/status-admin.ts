@@ -26,7 +26,7 @@ import { daemonLayoutFor } from './paths.js';
 import { daemonKeyStore } from './key-store.js';
 import { landlordBearerForEndpointSecret } from './landlord-auth.js';
 import { resolveDaemonConfig } from './resolve-config.js';
-import { openVaultRegistry } from '../serve/vault-registry.js';
+import { openVaultRegistry, type FailedMount } from '../serve/vault-registry.js';
 import { queryServiceStatus, type ServiceStatusInfo } from './service-admin.js';
 import { jsonFail, runJson, type Fail } from './json-cli.js';
 
@@ -82,6 +82,10 @@ interface DataDirSummary {
   endpointTicket?: string;
   daemonRunning?: boolean;
   vaultCount?: number;
+  /** Vault directories present on disk that would not open (issue #603 X1). */
+  failedMounts?: FailedMount[];
+  /** Why the vault root could not be read at all; `vaultCount` is absent then. */
+  vaultReadError?: string;
 }
 
 function buildDataDirSummary(dataDir: string): DataDirSummary {
@@ -93,6 +97,8 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   const endpointId = secret ? endpointIdForSecret(secret) : undefined;
 
   let vaultCount: number | undefined;
+  let failedMounts: FailedMount[] = [];
+  let vaultReadError: string | undefined;
   try {
     const registry = openVaultRegistry({
       // Same custody the daemon uses, or every vault fails to mount and
@@ -104,12 +110,15 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
     });
     try {
       vaultCount = registry.list().length;
+      failedMounts = registry.failedMounts();
     } finally {
       registry.stop();
     }
-  } catch {
-    // Vault dir missing/unreadable — leave undefined rather than fail the
-    // whole status read over a directory that may just not exist yet.
+  } catch (error) {
+    // The vault root may legitimately not exist yet, so this does not fail
+    // the whole status read — but it is REPORTED rather than swallowed: a
+    // status that quietly omits the vault count reads as "no vaults".
+    vaultReadError = error instanceof Error ? error.message : String(error);
   }
 
   return {
@@ -117,6 +126,8 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
     exists: true,
     ...(endpointId !== undefined ? { endpointId } : {}),
     ...(vaultCount !== undefined ? { vaultCount } : {}),
+    ...(failedMounts.length > 0 ? { failedMounts } : {}),
+    ...(vaultReadError !== undefined ? { vaultReadError } : {}),
   };
 }
 
@@ -179,6 +190,15 @@ export async function commandStatus(
     if (dataDir.endpointId) lines.push(`endpoint: ${dataDir.endpointId}`);
     lines.push(`daemon: ${dataDir.daemonRunning ? 'running' : 'not running'}`);
     if (dataDir.vaultCount !== undefined) lines.push(`vaults: ${dataDir.vaultCount}`);
+    if (dataDir.failedMounts?.length) {
+      lines.push(`vaults that failed to mount: ${dataDir.failedMounts.length}`);
+      for (const failure of dataDir.failedMounts) {
+        lines.push(`  ${failure.dir} — ${failure.message}`);
+      }
+    }
+    if (dataDir.vaultReadError !== undefined) {
+      lines.push(`vaults: unreadable — ${dataDir.vaultReadError}`);
+    }
     process.stdout.write(`${lines.join('\n')}\n`);
   });
 }

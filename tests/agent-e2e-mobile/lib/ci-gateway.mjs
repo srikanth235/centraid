@@ -19,7 +19,7 @@ const gateway = await buildGateway({
   paths: {
     vaultDir: path.join(dataDir, 'vault'),
   },
-  initVaultName: 'Mobile E2E',
+  // A fresh vaultDir auto-founds Shared + Personal at construction (#603).
 });
 await gateway.start(`http://127.0.0.1:${port}`);
 

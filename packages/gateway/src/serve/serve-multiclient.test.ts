@@ -50,7 +50,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 
 beforeEach(async () => {
   dataDir = await tempDir(`mc-gateway-${crypto.randomUUID()}-`);
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   await seedApp(await handle.appsStore(), 'multiclient-test');
   await handle.syncApps();
 });

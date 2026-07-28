@@ -221,8 +221,38 @@ test('a gateway with no iroh endpoint refuses to mint a dud ticket', async () =>
   expect(await response.json()).toMatchObject({ error: 'no_iroh_endpoint' });
 });
 
-test('a pre-founding gateway refuses ordinary pairing with uninitialized', async () => {
-  const f = await harness({ isUninitialized: () => true });
+test('an unnamed target mints against the registry default vault (Shared)', async () => {
+  const f = await harness({
+    vaultName: (vaultId) =>
+      vaultId === 'vault-shared' ? 'Shared' : vaultId === 'vault-a' ? 'Personal' : undefined,
+    defaultVaultId: () => 'vault-shared',
+  });
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    role: 'admin',
+  });
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-shared',
+    label: 'Owner',
+    role: 'admin',
+  });
+  const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: deviceHeaders('owner-key'),
+    // An INVITE (not a self-pair, which grants everything the caller holds),
+    // so the single grant lands on whichever vault the fallback picks.
+    body: JSON.stringify({ newMemberLabel: 'Rhea' }),
+  });
+  expect(response.status).toBe(200);
+  // Not `vault-a`, which sorts first among the caller's enrollments.
+  expect(await response.json()).toMatchObject({ vaultId: 'vault-shared', vaultName: 'Shared' });
+});
+
+test('a default the caller cannot address falls back to a vault it holds', async () => {
+  const f = await harness({ defaultVaultId: () => 'vault-someone-else' });
   f.enrollments.enroll({
     endpointId: 'owner-key',
     vaultId: 'vault-a',
@@ -232,8 +262,8 @@ test('a pre-founding gateway refuses ordinary pairing with uninitialized', async
   const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
     method: 'POST',
     headers: deviceHeaders('owner-key'),
-    body: JSON.stringify({ vaultId: 'vault-a' }),
+    body: JSON.stringify({ newMemberLabel: 'Rhea' }),
   });
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({ error: 'uninitialized' });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ vaultId: 'vault-a' });
 });

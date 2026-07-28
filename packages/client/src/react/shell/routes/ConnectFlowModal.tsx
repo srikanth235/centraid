@@ -14,11 +14,11 @@ export interface ConnectFlowModalProps extends Omit<ConnectFlowProps, 'onCancel'
 }
 
 /** The switcher's "Add gateway…" modal (issue #382) — dialog chrome around
- *  the shared ConnectFlow wizard, offering "Existing gateway" and "Over SSH"
- *  only ('local' is always already registered, so re-offering it here would
- *  be a dead end rather than a new connection). */
+ *  the shared ConnectFlow wizard, offering "Existing gateway" only ('local'
+ *  is always already registered, so re-offering it here would be a dead end
+ *  rather than a new connection). */
 export default function ConnectFlowModal({
-  methods = ['gateway', 'ssh'],
+  methods = ['gateway'],
   onCancel,
   onDone,
   context,

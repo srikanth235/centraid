@@ -1,7 +1,6 @@
 import {
   assistOAuthFromEnvironment,
   createWasmImagePreviewCodec,
-  isDirectHostRequest,
   serve,
   type GatewayPaths,
   type GatewayServeHandle,
@@ -15,7 +14,6 @@ export interface DesktopEmbeddedGatewayOptions {
   token: string;
   ownerEndpointId: string;
   remoteTemplatesUrl?: string;
-  initVaultName?: string;
   sessionIdFor?: (appId: string) => string;
   logTag?: string;
 }
@@ -38,11 +36,9 @@ export async function startDesktopEmbeddedGateway(
     keyStore: options.keyStore,
     token: options.token,
     hostDeviceEndpointId: options.ownerEndpointId,
-    // The desktop runs a phone tunnel against this same loopback listener
-    // (issue #568 item B), so the founding gate must be the hardened
-    // predicate rather than `buildGateway`'s bare-loopback fallback.
-    canMintFoundingTicket: isDirectHostRequest,
-    ...(options.initVaultName ? { initVaultName: options.initVaultName } : {}),
+    // No founding options (issue #603): the gateway founds its own Shared +
+    // Personal vaults synchronously when it sees a fresh data dir, and the
+    // founding-ticket plane is gone entirely.
     ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
     ...(options.logTag ? { logTag: options.logTag } : {}),
   });

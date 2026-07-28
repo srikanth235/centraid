@@ -32,60 +32,26 @@ export class RecoveryKitStateStore {
     };
   }
 
-  /**
-   * Synchronous request gate for the founding ceremony. A missing row means
-   * no ceremony is active; only an issued-but-unverified kit blocks use.
-   */
-  ceremonyIncomplete(): boolean {
-    if (!(this.source instanceof GatewayDatabase)) {
-      throw new Error('ceremonyIncomplete requires the live gateway database');
-    }
-    const row = this.source.db
-      .prepare('SELECT founding_pending FROM recovery_kit WHERE singleton = 1')
-      .get() as { founding_pending: number } | undefined;
-    return row?.founding_pending === 1;
-  }
-
-  async begin(
-    fingerprint: string,
-    options: { founding?: boolean } = {},
-  ): Promise<RecoveryKitState> {
+  async begin(fingerprint: string): Promise<RecoveryKitState> {
     if (!(this.source instanceof GatewayDatabase)) {
       const database = GatewayDatabase.open(this.source);
       try {
-        return await new RecoveryKitStateStore(database, this.now).begin(fingerprint, options);
+        return await new RecoveryKitStateStore(database, this.now).begin(fingerprint);
       } finally {
         database.close();
       }
     }
-    return this.beginWithinTransaction(fingerprint, options);
-  }
-
-  /**
-   * Write the pending-kit state on the live gateway handle. Founding calls
-   * this from the same gateway.db transaction that consumes the capability
-   * and enrolls the first owner, so a crash cannot commit only half of that
-   * durable transition.
-   */
-  beginWithinTransaction(
-    fingerprint: string,
-    options: { founding?: boolean } = {},
-  ): RecoveryKitState {
-    if (!(this.source instanceof GatewayDatabase)) {
-      throw new Error('beginWithinTransaction requires the live gateway database');
-    }
     this.source.db
       .prepare(
         `INSERT INTO recovery_kit (
-           singleton, confirmed_at, kit_fingerprint, kit_confirmed, founding_pending
-         ) VALUES (1, NULL, ?, 0, ?)
+           singleton, confirmed_at, kit_fingerprint, kit_confirmed
+         ) VALUES (1, NULL, ?, 0)
          ON CONFLICT(singleton) DO UPDATE SET
            confirmed_at = NULL,
            kit_fingerprint = excluded.kit_fingerprint,
-           kit_confirmed = 0,
-           founding_pending = excluded.founding_pending`,
+           kit_confirmed = 0`,
       )
-      .run(fingerprint, options.founding === true ? 1 : 0);
+      .run(fingerprint);
     return { confirmedAt: null, kitFingerprint: fingerprint };
   }
 
@@ -102,7 +68,7 @@ export class RecoveryKitStateStore {
     const result = this.source.db
       .prepare(
         `UPDATE recovery_kit
-            SET confirmed_at = ?, kit_confirmed = 1, founding_pending = 0
+            SET confirmed_at = ?, kit_confirmed = 1
           WHERE singleton = 1 AND kit_fingerprint = ?`,
       )
       .run(confirmedAt, fingerprint);

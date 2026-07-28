@@ -108,10 +108,18 @@ export async function commandVault(
       switch (action) {
         case 'list': {
           const vaults = registry.list();
+          // A vault dir that would not mount is absent from `list()`, so a
+          // silent listing reads as "you have fewer vaults" instead of "one
+          // of them is broken" (issue #603 X1). The listing itself succeeded,
+          // so the exit code stays 0 — the failures are reported, not raised.
+          const failedMounts = registry.failedMounts();
           if (json) {
-            process.stdout.write(`${JSON.stringify({ ok: true, vaults })}\n`);
+            process.stdout.write(`${JSON.stringify({ ok: true, vaults, failedMounts })}\n`);
           } else {
             for (const v of vaults) printVault(v);
+            for (const failure of failedMounts) {
+              process.stderr.write(`failed to mount: ${failure.dir} — ${failure.message}\n`);
+            }
           }
           return;
         }

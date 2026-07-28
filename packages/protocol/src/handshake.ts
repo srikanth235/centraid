@@ -46,10 +46,15 @@ export interface GatewayInfo {
   /** Process uptime ms — additive runtime clock. */
   uptimeMs?: number;
   /**
-   * COMPAT(#555): additive boot state. Older peers omit it and are treated
-   * as ready because they always bootstrapped a vault.
+   * Did the gateway resolve a credential for THIS request (issue #603)?
+   *
+   * `/centraid/_gateway/info` is public so a client can read the version
+   * handshake before it holds anything, but the auth-gated fields below
+   * (`endpointTicket`) are then silently absent for an anonymous caller.
+   * Without this flag a bearer mismatch is indistinguishable from "the iroh
+   * endpoint is not ready yet", which is the exact lie the CLI used to tell.
    */
-  status?: 'uninitialized' | 'ready';
+  authenticated?: boolean;
   /** COMPAT(#555): stable gateway transport identity, independent of its address. */
   endpointId?: string;
   /**
@@ -58,13 +63,6 @@ export interface GatewayInfo {
    * authentication factor); clients must never persist it as gateway identity.
    */
   endpointTicket?: string;
-  /**
-   * COMPAT(#568): the founding ceremony created its vault but the recovery
-   * kit is not verified yet, so `status` still reads `uninitialized` while
-   * create and restore would both 409. Clients offer "I already have my kit
-   * — verify it" instead of a dead-end choice screen. Older gateways omit it.
-   */
-  foundingPending?: boolean;
 }
 
 export type HandshakeResult =
@@ -165,9 +163,7 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
       ...(typeof info.instanceId === 'string' ? { instanceId: info.instanceId } : {}),
       ...(typeof info.startedAt === 'number' ? { startedAt: info.startedAt } : {}),
       ...(typeof info.uptimeMs === 'number' ? { uptimeMs: info.uptimeMs } : {}),
-      ...(info.status === 'uninitialized' || info.status === 'ready'
-        ? { status: info.status }
-        : { status: 'ready' as const }),
+      ...(typeof info.authenticated === 'boolean' ? { authenticated: info.authenticated } : {}),
       ...(typeof info.endpointId === 'string' ? { endpointId: info.endpointId } : {}),
       ...(typeof info.endpointTicket === 'string' ? { endpointTicket: info.endpointTicket } : {}),
     },
@@ -217,10 +213,10 @@ export function buildGatewayInfoPayload(input: {
   instanceId: string;
   startedAt: number;
   uptimeMs: number;
-  status?: 'uninitialized' | 'ready';
+  /** Did this request carry a credential the gateway accepted? */
+  authenticated: boolean;
   endpointId?: string;
   endpointTicket?: string;
-  foundingPending?: boolean;
   capabilities?: GatewayCapabilities;
 }): GatewayInfo {
   return {
@@ -231,10 +227,9 @@ export function buildGatewayInfoPayload(input: {
     instanceId: input.instanceId,
     startedAt: input.startedAt,
     uptimeMs: input.uptimeMs,
-    status: input.status ?? 'ready',
+    authenticated: input.authenticated,
     ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
     ...(input.endpointTicket !== undefined ? { endpointTicket: input.endpointTicket } : {}),
-    ...(input.foundingPending ? { foundingPending: true } : {}),
     capabilities: input.capabilities ?? { ...DEFAULT_GATEWAY_CAPABILITIES },
   };
 }

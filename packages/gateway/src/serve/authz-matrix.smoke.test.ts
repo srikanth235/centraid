@@ -23,7 +23,6 @@ function pathsUnder(dir: string): GatewayPaths {
 beforeEach(async () => {
   dataDir = await tempDir(`authz-smoke-${crypto.randomUUID()}-`);
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     token: ADMIN,
   });
@@ -97,32 +96,13 @@ const CASES: Array<{
   },
   /*
    * `publicPaths` regression guard (issue #568 item L). Only the handshake
-   * route is bearer-free; the founding verbs and the pairing-ticket mint are
-   * capability-granting and must 401 without a credential. Re-adding any of
-   * them to `serve()`'s `publicPaths` now fails CI here rather than shipping
-   * an anonymous path to a founding ticket.
+   * route is bearer-free; every capability-granting verb must 401 without a
+   * credential. Re-adding one to `serve()`'s `publicPaths` fails CI here
+   * rather than shipping an anonymous path to a capability.
    */
   {
-    name: 'no bearer → 401 on founding ticket mint',
-    route: '/centraid/_gateway/founding/ticket',
-    method: 'POST',
-    expect: 401,
-  },
-  {
-    name: 'no bearer → 401 on vaults:initialize',
-    route: '/centraid/_vault/vaults:initialize',
-    method: 'POST',
-    expect: 401,
-  },
-  {
-    name: 'no bearer → 401 on vaults:initialize/verify',
-    route: '/centraid/_vault/vaults:initialize/verify',
-    method: 'POST',
-    expect: 401,
-  },
-  {
-    name: 'no bearer → 401 on vaults:restore',
-    route: '/centraid/_vault/vaults:restore',
+    name: 'no bearer → 401 on the vault erase ceremony',
+    route: '/centraid/_vault/vaults:erase',
     method: 'POST',
     expect: 401,
   },
@@ -154,8 +134,7 @@ test.each(CASES)('authz smoke: $name', async (c) => {
 /*
  * Issue #568 item C. `/centraid/_gateway/info` is public so a client can read
  * the version/schema handshake before it can pair — but `endpointTicket` is
- * this gateway's iroh DIAL ticket, and the founding window admits an
- * unenrolled EndpointId. A browser fetch to `http://127.0.0.1:<port>` from any
+ * this gateway's iroh DIAL ticket. A browser fetch to `http://127.0.0.1:<port>` from any
  * page the owner visits IS a loopback socket, a plain GET needs no preflight,
  * and `decideCors` answers a foreign origin `*` — so loopback cannot be the
  * gate. Only a presented credential may see it.

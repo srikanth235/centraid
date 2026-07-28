@@ -51,7 +51,6 @@ const DEVICE_HEADER = 'x-test-device';
 beforeEach(async () => {
   dataDir = await tempDir(`addr-gateway-${crypto.randomUUID()}-`);
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     // A fake device transport: the test names its device in a header the
     // way the iroh forwarder stamps the QUIC-proved EndpointId.

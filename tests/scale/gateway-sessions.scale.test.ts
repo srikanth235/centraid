@@ -20,8 +20,9 @@ let handle: GatewayServeHandle;
 beforeEach(async () => {
   dataDir = await tempDir(`gw-scale-${crypto.randomUUID()}-`);
   handle = await serve({
+    // A fresh vaultDir auto-founds Shared + Personal at construction (#603),
+    // which is all the fixture needs — no named init vault any more.
     paths: { vaultDir: path.join(dataDir, 'vault') },
-    initVaultName: 'Scale fixture',
     token: 'scale-admin-token',
   });
 });

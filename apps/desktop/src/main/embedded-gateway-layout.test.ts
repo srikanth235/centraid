@@ -87,13 +87,11 @@ test('actual Electron embed and headless daemon produce identical complete trees
     keyStore: new KeyStore(path.join(desktopRoot, 'keys'), { protector }),
     token: 'desktop-layout-token',
     ownerEndpointId: 'desktop-device',
-    initVaultName: 'Family',
   });
   desktop.vaults.current().walShipper?.tick();
   await desktop.close();
 
   const headless = await serve({
-    initVaultName: 'Family',
     paths: { ...pathsFor(headlessRoot), dataDir: headlessRoot },
     keyStore: new KeyStore(path.join(headlessRoot, 'keys'), { protector }),
     token: 'headless-layout-token',
@@ -107,8 +105,12 @@ test('actual Electron embed and headless daemon produce identical complete trees
   );
 }, 15_000);
 
-test('actual Electron embed can complete the direct-host founding ceremony', async () => {
-  const root = await tempDir('desktop-embedded-founding-');
+test('actual Electron embed auto-founds Shared + Personal on a fresh data dir', async () => {
+  // Issue #603: the desktop passes no founding options at all — a fresh data
+  // dir is founded by the gateway itself at construction. This is the desktop
+  // half of that contract: start the real embed, ask it for its vault list,
+  // and expect the two auto-founded vaults with no ceremony in between.
+  const root = await tempDir('desktop-embedded-autofound-');
   roots.push(root);
   await seedFreshPricingCache(root);
   const gateway = await startDesktopEmbeddedGateway({
@@ -117,56 +119,16 @@ test('actual Electron embed can complete the direct-host founding ceremony', asy
     keyStore: new KeyStore(path.join(root, 'keys'), {
       protector: aesGcmKeyProtector(Buffer.alloc(32, 0x43)),
     }),
-    token: 'desktop-founding-token',
+    token: 'desktop-autofound-token',
     ownerEndpointId: 'a'.repeat(64),
   });
   try {
-    const headers = { Authorization: 'Bearer desktop-founding-token' };
-    const mintedResponse = await fetch(`${gateway.url}/centraid/_gateway/founding/ticket`, {
-      method: 'POST',
-      headers,
+    const response = await fetch(`${gateway.url}/centraid/_vault/vaults`, {
+      headers: { Authorization: 'Bearer desktop-autofound-token' },
     });
-    const minted = (await mintedResponse.json()) as {
-      ticket?: string;
-      error?: string;
-      message?: string;
-    };
-    expect({
-      status: mintedResponse.status,
-      ticket: typeof minted.ticket,
-      error: minted.error,
-      message: minted.message,
-    }).toEqual({
-      status: 200,
-      ticket: 'string',
-      error: undefined,
-      message: undefined,
-    });
-
-    const initializedResponse = await fetch(`${gateway.url}/centraid/_vault/vaults:initialize`, {
-      method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ticket: minted.ticket,
-        name: 'Personal',
-        password: 'correct horse battery staple',
-        deviceName: 'Desktop host',
-        platform: 'desktop',
-      }),
-    });
-    const initialized = (await initializedResponse.json()) as { kit?: unknown };
-    expect(initializedResponse.status).toBe(201);
-
-    const verified = await fetch(`${gateway.url}/centraid/_vault/vaults:initialize/verify`, {
-      method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        kit: initialized.kit,
-        password: 'correct horse battery staple',
-        lossConsent: true,
-      }),
-    });
-    expect(verified.status).toBe(200);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { vaults?: Array<{ name?: string }> };
+    expect((body.vaults ?? []).map((vault) => vault.name).sort()).toEqual(['Personal', 'Shared']);
   } finally {
     await gateway.close();
   }

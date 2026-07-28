@@ -8,21 +8,13 @@ import Onboarding from './Onboarding';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  initializeMobileVault: vi.fn(),
   notificationAsync: vi.fn(),
   onDone: vi.fn(),
   pair: vi.fn(),
-  pickRecoveryKit: vi.fn(),
-  prepareMobileFounding: vi.fn(),
-  rememberInitializedVault: vi.fn(),
-  rememberRestoredVaults: vi.fn(),
   requestPermission: vi.fn(),
-  restoreMobileVaults: vi.fn(),
   setOnboarded: vi.fn(),
   setProfileColor: vi.fn(),
   setProfileName: vi.fn(),
-  shareRecoveryKit: vi.fn(),
-  verifyMobileFoundingKit: vi.fn(),
 }));
 
 vi.mock('react-native', async () => {
@@ -37,6 +29,7 @@ vi.mock('react-native', async () => {
   return {
     Platform: { OS: 'ios' },
     Pressable: ({
+      accessibilityLabel,
       accessibilityRole,
       accessibilityState,
       children,
@@ -44,8 +37,9 @@ vi.mock('react-native', async () => {
       onPress,
       style,
     }: {
+      accessibilityLabel?: string;
       accessibilityRole?: string;
-      accessibilityState?: { checked?: boolean };
+      accessibilityState?: { checked?: boolean; selected?: boolean };
       children?: React.ReactNode;
       disabled?: boolean;
       onPress?: () => void;
@@ -53,6 +47,8 @@ vi.mock('react-native', async () => {
     }) =>
       element('button', {
         'aria-checked': accessibilityState?.checked,
+        'aria-label': accessibilityLabel,
+        'aria-selected': accessibilityState?.selected,
         children,
         disabled,
         onClick: onPress,
@@ -72,7 +68,9 @@ vi.mock('react-native', async () => {
       autoCorrect: _autoCorrect,
       multiline,
       onChangeText,
+      onSubmitEditing: _onSubmitEditing,
       placeholderTextColor: _placeholderTextColor,
+      returnKeyType: _returnKeyType,
       secureTextEntry,
       textAlignVertical: _textAlignVertical,
       ...props
@@ -129,7 +127,7 @@ vi.mock('expo-camera', async () => {
         'button',
         {
           'data-testid': 'camera',
-          onClick: () => onBarcodeScanned({ data: 'ordinary-from-camera' }),
+          onClick: () => onBarcodeScanned({ data: 'ticket-from-camera' }),
           type: 'button',
         },
         'camera',
@@ -150,12 +148,15 @@ vi.mock('../kit/theme', () => ({
     monoMedium: 'mono-medium',
     monoRegular: 'mono',
     sansBold: 'sans-bold',
+    sansMedium: 'sans-medium',
     sansRegular: 'sans',
   },
 }));
 
 vi.mock('../lib/profile', () => ({
   BRAND_TEAL: '#22a78f',
+  PROFILE_COLORS: ['#22a78f', '#4e68dd', '#e55772'],
+  initialsOf: (name: string) => (name.trim() ? name.trim().slice(0, 1).toUpperCase() : '·'),
   setOnboarded: mocks.setOnboarded,
   setProfileColor: mocks.setProfileColor,
   setProfileName: mocks.setProfileName,
@@ -164,22 +165,6 @@ vi.mock('../lib/profile', () => ({
 vi.mock('../lib/phone-link', () => ({
   isTunnelAvailable: () => true,
   pair: mocks.pair,
-  parsePairingInput: (payload: string) =>
-    payload.startsWith('founding') ? { kind: 'centraid-gw-found' } : { kind: 'centraid-gw-pair' },
-}));
-
-vi.mock('../lib/recovery-kit-files', () => ({
-  pickRecoveryKit: mocks.pickRecoveryKit,
-  shareRecoveryKit: mocks.shareRecoveryKit,
-}));
-
-vi.mock('../lib/vault-founding', () => ({
-  initializeMobileVault: mocks.initializeMobileVault,
-  prepareMobileFounding: mocks.prepareMobileFounding,
-  rememberInitializedVault: mocks.rememberInitializedVault,
-  rememberRestoredVaults: mocks.rememberRestoredVaults,
-  restoreMobileVaults: mocks.restoreMobileVaults,
-  verifyMobileFoundingKit: mocks.verifyMobileFoundingKit,
 }));
 
 let root: Root | undefined;
@@ -187,27 +172,8 @@ let container: HTMLDivElement | undefined;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.initializeMobileVault.mockResolvedValue({
-    fingerprint: 'fingerprint',
-    kit: { wrapped: true },
-    vault: { name: 'Family', vaultId: 'vault-1' },
-  });
   mocks.notificationAsync.mockResolvedValue(undefined);
   mocks.pair.mockResolvedValue(undefined);
-  mocks.pickRecoveryKit.mockResolvedValue({ wrapped: true });
-  mocks.prepareMobileFounding.mockResolvedValue({
-    endpointId: 'gateway-1',
-    endpointTicket: 'endpoint-ticket',
-    foundingTicket: 'founding-ticket',
-  });
-  mocks.rememberInitializedVault.mockResolvedValue(undefined);
-  mocks.rememberRestoredVaults.mockResolvedValue(undefined);
-  mocks.restoreMobileVaults.mockResolvedValue({
-    enrollments: [],
-    reports: [{ vaultId: 'restored-1' }],
-  });
-  mocks.shareRecoveryKit.mockResolvedValue(undefined);
-  mocks.verifyMobileFoundingKit.mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.appendChild(container);
   const handleDone = mocks.onDone;
@@ -229,6 +195,12 @@ function button(label: string): HTMLButtonElement {
     candidate.textContent?.includes(label),
   );
   if (!match) throw new Error(`button not found: ${label}`);
+  return match;
+}
+
+function swatch(hex: string): HTMLButtonElement {
+  const match = container!.querySelector<HTMLButtonElement>(`button[aria-label="Colour ${hex}"]`);
+  if (!match) throw new Error(`swatch not found: ${hex}`);
   return match;
 }
 
@@ -256,129 +228,71 @@ async function flush(times = 4): Promise<void> {
   }
 }
 
-async function openFoundingChoice(): Promise<void> {
-  typeValue(container!.querySelector('textarea')!, 'founding-ticket');
+/** Paste a pair ticket and land on the profile step. */
+async function pairWithPastedTicket(deviceName?: string): Promise<void> {
+  if (deviceName !== undefined) typeValue(container!.querySelector('input')!, deviceName);
+  typeValue(container!.querySelector('textarea')!, 'pair-ticket');
   click(button('Continue with pasted code'));
   await flush();
-  expect(container!.textContent).toContain('Starting fresh');
+  expect(container!.textContent).toContain("Who's using");
 }
 
-describe('mobile founding onboarding', () => {
-  it('completes ordinary pasted pairing and persists the first-device profile', async () => {
-    typeValue(container!.querySelector('input')!, 'Ada Phone');
-    typeValue(container!.querySelector('textarea')!, 'ordinary-ticket');
-    click(button('Continue with pasted code'));
-    await flush();
+describe('mobile ticket-only onboarding', () => {
+  it('pairs from a pasted ticket, then persists the profile from the unified step', async () => {
+    await pairWithPastedTicket('Ada Phone');
+    expect(mocks.pair).toHaveBeenCalledWith('pair-ticket', 'Ada Phone');
 
-    expect(mocks.pair).toHaveBeenCalledWith('ordinary-ticket', 'Ada Phone');
-    expect(container!.textContent).toContain("You're all set");
-    click(button('Enter Centraid'));
+    // Name is required — an empty profile cannot be saved.
+    click(button('Continue'));
+    expect(mocks.setProfileName).not.toHaveBeenCalled();
+    expect(container!.textContent).toContain('Enter a name');
 
-    expect(mocks.setProfileName).toHaveBeenCalledWith('Ada Phone');
-    expect(mocks.setProfileColor).toHaveBeenCalledWith('#22a78f');
+    typeValue(container!.querySelector('input')!, '  Ada Lovelace  ');
+    click(swatch('#e55772'));
+    click(button('Continue'));
+
+    expect(mocks.setProfileName).toHaveBeenCalledWith('Ada Lovelace');
+    expect(mocks.setProfileColor).toHaveBeenCalledWith('#e55772');
     expect(mocks.setOnboarded).toHaveBeenCalledWith(true);
+    expect(container!.textContent).toContain("You're all set, Ada");
+
+    click(button('Enter Centraid'));
     expect(mocks.notificationAsync).toHaveBeenCalledWith('success');
     expect(mocks.onDone).toHaveBeenCalledOnce();
   });
 
-  it('scans an ordinary ticket through the camera path', async () => {
+  it('defaults the profile colour to the brand teal when no swatch is tapped', async () => {
+    await pairWithPastedTicket();
+    typeValue(container!.querySelector('input')!, 'Grace');
+    click(button('Continue'));
+
+    expect(mocks.pair).toHaveBeenCalledWith('pair-ticket', 'iPhone');
+    expect(mocks.setProfileColor).toHaveBeenCalledWith('#22a78f');
+    expect(mocks.setProfileName).toHaveBeenCalledWith('Grace');
+  });
+
+  it('scans a pair ticket through the camera path', async () => {
     click(button('Scan QR instead'));
     expect(container!.textContent).toContain('Point at the code');
     click(container!.querySelector('[data-testid="camera"]')!);
     await flush();
 
-    expect(mocks.pair).toHaveBeenCalledWith('ordinary-from-camera', 'iPhone');
-    expect(container!.textContent).toContain("You're all set");
+    expect(mocks.pair).toHaveBeenCalledWith('ticket-from-camera', 'iPhone');
+    expect(container!.textContent).toContain("Who's using");
   });
 
-  it('creates a vault, shares and reselects its kit, verifies it, and enters', async () => {
-    await openFoundingChoice();
-    click(button('Create vault'));
-    expect(container!.textContent).toContain('Choose a password');
-
-    click(button('Create and share wrapped kit'));
-    expect(mocks.initializeMobileVault).not.toHaveBeenCalled();
-
-    const inputs = Array.from(container!.querySelectorAll('input'));
-    typeValue(inputs[0]!, 'Family');
-    typeValue(inputs[1]!, 'correct horse battery staple');
-    click(button('Create and share wrapped kit'));
-    await flush();
-
-    expect(mocks.initializeMobileVault).toHaveBeenCalledWith(
-      expect.objectContaining({ foundingTicket: 'founding-ticket' }),
-      {
-        deviceName: 'iPhone',
-        name: 'Family',
-        password: 'correct horse battery staple',
-      },
-    );
-    expect(mocks.shareRecoveryKit).toHaveBeenCalledWith({ wrapped: true });
-    expect(container!.textContent).toContain('Re-select the exact file');
-
-    click(button('Select saved recovery kit'));
-    await flush();
-    click(container!.querySelector('[role="checkbox"]')!);
-    click(button('Verify and enter'));
-    await flush();
-
-    expect(mocks.verifyMobileFoundingKit).toHaveBeenCalledWith(
-      expect.objectContaining({ foundingTicket: 'founding-ticket' }),
-      {
-        kit: { wrapped: true },
-        lossConsent: true,
-        password: 'correct horse battery staple',
-      },
-    );
-    expect(mocks.rememberInitializedVault).toHaveBeenCalled();
-    expect(container!.textContent).toContain("You're all set");
-  });
-
-  it('surfaces a restore failure, retries, and remembers every restored vault', async () => {
-    mocks.restoreMobileVaults
-      .mockRejectedValueOnce(new Error('provider unavailable'))
-      .mockResolvedValueOnce({ enrollments: [], reports: [{ vaultId: 'restored-1' }] });
-    await openFoundingChoice();
-    click(button('Restore vault'));
-    expect(container!.textContent).toContain('storage-provider key');
-
-    click(button('Select recovery kit'));
-    await flush();
-    const inputs = Array.from(container!.querySelectorAll('input'));
-    typeValue(inputs[0]!, 'kit password');
-    typeValue(inputs[1]!, 'provider key');
-    click(button('Restore vault'));
-    await flush();
-    expect(container!.textContent).toContain('provider unavailable');
-
-    click(button('Restore vault'));
-    await flush();
-    expect(mocks.restoreMobileVaults).toHaveBeenLastCalledWith(
-      expect.objectContaining({ foundingTicket: 'founding-ticket' }),
-      {
-        apiKey: 'provider key',
-        deviceName: 'iPhone',
-        kit: { wrapped: true },
-        password: 'kit password',
-      },
-    );
-    expect(mocks.rememberRestoredVaults).toHaveBeenCalled();
-    expect(container!.textContent).toContain("You're all set");
-  });
-
-  it('can abandon a founding ticket and reports pairing errors for retry', async () => {
-    await openFoundingChoice();
-    click(button('Use another code'));
-    expect(container!.textContent).toContain('PAIRING OR FOUNDING CODE');
-
-    mocks.pair.mockRejectedValueOnce('pairing failed');
-    typeValue(container!.querySelector('textarea')!, 'ordinary-ticket');
+  it('reports a pairing failure honestly and allows a retry', async () => {
+    mocks.pair.mockRejectedValueOnce(new Error('gateway refused the ticket'));
+    typeValue(container!.querySelector('textarea')!, 'pair-ticket');
     click(button('Continue with pasted code'));
     await flush();
-    expect(container!.textContent).toContain('pairing failed');
+
+    expect(container!.textContent).toContain('gateway refused the ticket');
+    expect(container!.textContent).toContain('PAIRING CODE');
+    expect(mocks.setOnboarded).not.toHaveBeenCalled();
 
     click(button('Continue with pasted code'));
     await flush();
-    expect(container!.textContent).toContain("You're all set");
+    expect(container!.textContent).toContain("Who's using");
   });
 });

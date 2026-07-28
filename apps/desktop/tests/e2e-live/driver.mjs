@@ -66,7 +66,7 @@ async function ensureSettingsSeed(userDataDir) {
  *     on macOS (no headless mode either way) — present for parity with the
  *     stale suite's E2E_SHOW_WINDOW convention; unused today.
  *   - env: extra env vars merged in on top of `process.env` (e.g.
- *     `CENTRAID_SSH_BIN` for the "Over SSH" ConnectFlow rig, issue #382).
+ *     `CENTRAID_EMBEDDED_GATEWAY=1` to force the in-process gateway).
  * @returns {Promise<{ app: import('playwright').ElectronApplication, page: import('playwright').Page, userDataDir: string, close: () => Promise<void> }>}
  *   The launched Electron app/page handles, the resolved userDataDir, and a
  *   close() to tear the app down.

@@ -57,9 +57,15 @@ export function loadSettingsPatch(): Record<string, unknown> {
   }
 }
 
+/** Fired after every settings write, carrying the merged result. The chrome
+ *  listens so surfaces gated on onboarding state react the moment it flips,
+ *  without polling (issue #603 W6). */
+export const SETTINGS_EVENT = 'settings-saved';
+
 export function saveSettingsPatch(patch: Record<string, unknown>): Record<string, unknown> {
   const next = { ...loadSettingsPatch(), ...patch };
   localStorage.setItem(`${PREFIX}settings`, JSON.stringify(next));
+  publish(SETTINGS_EVENT, next);
   return next;
 }
 

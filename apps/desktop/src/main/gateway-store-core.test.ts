@@ -4,7 +4,6 @@ import {
   defaultAvatarColor,
   isValidAvatarColor,
   isValidGatewayId,
-  isValidSshBlock,
   normalizeProfile,
   sortGatewayProfiles,
   validateAddGatewayFields,
@@ -29,20 +28,6 @@ describe('isValidAvatarColor', () => {
     expect(isValidAvatarColor('5B8DEF')).toBe(false);
     expect(isValidAvatarColor('#GGGGGG')).toBe(false);
     expect(isValidAvatarColor(null)).toBe(false);
-  });
-});
-
-describe('isValidSshBlock', () => {
-  it('requires a non-empty destination string', () => {
-    expect(isValidSshBlock({ destination: 'user@host' })).toBe(true);
-    expect(isValidSshBlock({ destination: 'user@host', dataDir: '/data', remoteCli: 'c' })).toBe(
-      true,
-    );
-    expect(isValidSshBlock(null)).toBe(false);
-    expect(isValidSshBlock({})).toBe(false);
-    expect(isValidSshBlock({ destination: '' })).toBe(false);
-    expect(isValidSshBlock({ destination: 'h', dataDir: 1 })).toBe(false);
-    expect(isValidSshBlock({ destination: 'h', remoteCli: 1 })).toBe(false);
   });
 });
 
@@ -80,14 +65,13 @@ describe('normalizeProfile', () => {
     expect(p?.avatarColor).toBe(defaultAvatarColor(endpointId));
   });
 
-  it('preserves valid optional fields and drops invalid ssh', () => {
+  it('preserves valid optional fields and falls back on an invalid avatar color', () => {
     const p = normalizeProfile(endpointId, {
       ...base,
       displayName: 'Family',
       avatarColor: '#E5734A',
       relayHint: 'https://relay.example',
       rememberDevice: true,
-      ssh: { destination: 'box' },
     });
     expect(p).toMatchObject({
       displayName: 'Family',
@@ -95,15 +79,9 @@ describe('normalizeProfile', () => {
       endpointId,
       relayHint: 'https://relay.example',
       rememberDevice: true,
-      ssh: { destination: 'box' },
     });
 
-    const bad = normalizeProfile(endpointId, {
-      ...base,
-      ssh: { destination: '' },
-      avatarColor: 'nope',
-    });
-    expect(bad?.ssh).toBeUndefined();
+    const bad = normalizeProfile(endpointId, { ...base, avatarColor: 'nope' });
     expect(bad?.avatarColor).toBe(defaultAvatarColor(endpointId));
   });
 

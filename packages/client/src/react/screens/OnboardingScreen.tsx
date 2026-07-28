@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import ConnectFlow from '../shell/routes/ConnectFlow.js';
+import { connectFreshLocalGateway } from '../shell/routes/connectFlowIO.js';
 import type { ConnectFlowResult } from '../shell/routes/connectFlow-core.js';
 import a11y from '../styles/a11y.module.css';
 import styles from './OnboardingScreen.module.css';
+
+/**
+ * Which gateway this first run is landing on (issue #603). `fresh` is the
+ * desktop's own embedded gateway, which auto-founds its vaults — there is
+ * nothing to connect, so the connect step is skipped entirely. `ticket`
+ * joins an existing gateway and is the ONLY path a browser can take.
+ */
+export type OnboardingPath = 'fresh' | 'ticket';
 
 export interface OnboardingCompleteInput {
   displayName: string;
@@ -12,9 +21,17 @@ export interface OnboardingCompleteInput {
    *  the prior always-writes-'local' bug: pairing a remote gateway during
    *  onboarding used to leave that profile's name/color blank). */
   gatewayId: string;
+  /** The vault this run addressed. On the `fresh` path it is the owner's
+   *  auto-founded "Personal" vault, which the host renames to their name. */
+  vaultId: string;
+  path: OnboardingPath;
 }
 export interface OnboardingScreenProps {
+  path: OnboardingPath;
   onComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
+  /** Rendered as a "Back" affordance on the identity step — the desktop
+   *  chooser passes it so its two options are not a one-way door. */
+  onBack?: () => void;
 }
 
 // Mirror of gateway-store.ts#AVATAR_PALETTE (values round-trip through
@@ -42,10 +59,15 @@ function initials(name: string): string {
 }
 
 /**
- * First-run onboarding — identity → connect → (local only) H5 OS service
- * offer → complete. Styles in `OnboardingScreen.module.css`.
+ * First-run onboarding — identity → (ticket path only) connect → (local only)
+ * H5 OS service offer → complete. Every path collects identity (issue #603
+ * D2). Styles in `OnboardingScreen.module.css`.
  */
-export default function OnboardingScreen({ onComplete }: OnboardingScreenProps): JSX.Element {
+export default function OnboardingScreen({
+  path,
+  onComplete,
+  onBack,
+}: OnboardingScreenProps): JSX.Element {
   const [step, setStep] = useState<'identity' | 'connect' | 'service'>('identity');
   const [displayName, setDisplayName] = useState('');
   const [avatarColor, setAvatarColor] = useState<string>(
@@ -54,7 +76,30 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingResult, setPendingResult] = useState<ConnectFlowResult | null>(null);
+  const [keychainNote, setKeychainNote] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  // Where the OS keychain will prompt on the first secret write (dev/unsigned
+  // builds, some Linux keyrings — issue #603), say so before triggering it.
+  // The bridge method is desktop-only; a missing method means no prompt.
+  useEffect(() => {
+    const probe = window.CentraidApi.keychainPromptExpected;
+    if (!probe) return;
+    let cancelled = false;
+    probe().then(
+      (expected) => {
+        if (!cancelled) setKeychainNote(expected);
+      },
+      (err: unknown) => {
+        // A broken probe must not block onboarding, but losing the note means
+        // the OS dialog arrives unannounced — leave a trace for debugging.
+        console.error('keychainPromptExpected probe failed', err);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (step !== 'identity') return;
@@ -64,10 +109,29 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
 
   const ready = displayName.trim().length > 0 && !submitting;
 
-  const goToConnect = (): void => {
+  /**
+   * Identity is done. The `ticket` path still has a gateway to join; the
+   * `fresh` path only has to point this client at the auto-founded local
+   * gateway, which happens without a single question.
+   */
+  const continueFromIdentity = (): void => {
     if (!displayName.trim() || submitting) return;
     setError(null);
-    setStep('connect');
+    if (path === 'ticket') {
+      setStep('connect');
+      return;
+    }
+    setSubmitting(true);
+    void (async () => {
+      try {
+        const result = await connectFreshLocalGateway();
+        setSubmitting(false);
+        afterConnect(result);
+      } catch (err) {
+        setSubmitting(false);
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
   };
 
   const finish = (result: ConnectFlowResult): void => {
@@ -79,6 +143,8 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
           avatarColor,
           displayName: displayName.trim(),
           gatewayId: result.gatewayId,
+          vaultId: result.vaultId,
+          path,
         });
       } catch (err) {
         setSubmitting(false);
@@ -159,11 +225,11 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
         ) : step === 'connect' ? (
           <>
             <h1 className={styles.title}>
-              Where does your <em>data live</em>?
+              Connect your <em>gateway</em>.
             </h1>
             <p className={styles.sub}>
-              Everything you do happens inside one space. Keep it on this Mac, or connect to a
-              gateway running elsewhere.
+              Paste or scan the pair ticket from the gateway you already run. It decides which space
+              you land in.
             </p>
           </>
         ) : (
@@ -191,7 +257,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
             className={styles.form}
             onSubmit={(e) => {
               e.preventDefault();
-              goToConnect();
+              continueFromIdentity();
             }}
           >
             <label className={styles.fieldLabel} htmlFor="cd-onb-name">
@@ -213,7 +279,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  goToConnect();
+                  continueFromIdentity();
                 }
               }}
             />
@@ -245,7 +311,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
               className={styles.cta}
               disabled={!ready}
               data-state={submitting ? 'submitting' : ready ? 'ready' : 'idle'}
-              onClick={goToConnect}
+              onClick={continueFromIdentity}
             >
               <span>Continue</span>
               <span className={styles.ctaArrow}>
@@ -263,14 +329,43 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
                 </svg>
               </span>
             </button>
+            {keychainNote && path === 'fresh' ? (
+              <p className={styles.keychainNote}>
+                Continuing stores this device&rsquo;s keys in your system keychain — your OS may ask
+                once to allow it.
+              </p>
+            ) : null}
+            {error ? (
+              <div className={styles.error} role="alert">
+                {error}
+              </div>
+            ) : null}
+            {onBack ? (
+              <button
+                type="button"
+                className={styles.backBtn}
+                disabled={submitting}
+                onClick={onBack}
+              >
+                Back
+              </button>
+            ) : null}
           </form>
         ) : step === 'connect' ? (
           <div className={styles.connectPanel} data-theme="dark">
             <ConnectFlow
               context="onboarding"
+              methods={['gateway']}
+              initialMethod="gateway"
               onCancel={() => setStep('identity')}
               onDone={afterConnect}
             />
+            {keychainNote ? (
+              <p className={styles.keychainNote}>
+                Connecting stores this device&rsquo;s keys in your system keychain — your OS may ask
+                once to allow it.
+              </p>
+            ) : null}
             {error ? (
               <div className={styles.error} role="alert">
                 {error}

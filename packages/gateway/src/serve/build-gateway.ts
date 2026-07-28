@@ -77,7 +77,6 @@ import {
 import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import { ROUTES } from '@centraid/protocol';
-import { endpointTicketFor } from '@centraid/tunnel';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
 import {
@@ -134,7 +133,7 @@ import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
 import { EnrollmentStore } from './enrollment-store.js';
-import { PairingTicketStore } from './pairing-store.js';
+import type { PairingTicketStore } from './pairing-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
 import { makeMembersRouteHandler } from '../routes/members-routes.js';
@@ -234,11 +233,9 @@ import { StorageUsagePoller } from '../backup/storage-usage.js';
 import { PricingWarmer } from './pricing-warmer.js';
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { recoverPendingVaultErases } from './erase-recovery.js';
-import { recoverPendingFoundingVaults } from './founding-recovery.js';
 import { kitlessHostIdentity } from './host-identity.js';
 import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
 import { makeStorageRouteHandler } from '../routes/storage-routes.js';
-import { makeFoundingRouteHandler } from '../routes/founding-routes.js';
 import { WebAppSessions } from './web-app-sessions.js';
 import { WebControlSessionStore } from './web-session-store.js';
 
@@ -249,11 +246,6 @@ export interface BuildGatewayOptions {
   paths: GatewayPaths;
   /** Shared gateway.db handle when the host opened the process lock before constructing transports. */
   gatewayDatabase?: GatewayDatabase;
-  /**
-   * Explicit kit-less bootstrap for tests and automation. Human first-run
-   * uses the founding ceremony; omission leaves a legal zero-vault gateway.
-   */
-  initVaultName?: string;
   /**
    * Optional shared-client OAuth courier coordinates. Hosts inject only
    * public values; confidential Google/HMAC secrets remain Worker-only.
@@ -301,15 +293,17 @@ export interface BuildGatewayOptions {
   keyStore?: KeyStore;
   /**
    * A host device EndpointId whose loopback requests are resolved by the
-   * supplied deviceAccess seam. Existing vaults receive explicit persisted
-   * owner enrollments; newly founded vaults enroll through their ceremony.
+   * supplied deviceAccess seam. It is enrolled as `admin` on the vaults a
+   * fresh data dir auto-creates at construction (issue #603).
    */
   hostDeviceEndpointId?: string;
   /**
-   * Host-authenticated founding-ticket mint check. The daemon rejects iroh
-   * forwarded requests here even though their upstream socket is loopback.
+   * Direct host-custody check — an authenticated caller on this box that is
+   * NOT an iroh-forwarded request (whose upstream socket is loopback too).
+   * Gates the host-only lanes: pairing-ticket mint, member administration,
+   * the share plane, and the cross-vault scopes listing.
    */
-  canMintFoundingTicket?: (req: IncomingMessage) => boolean;
+  isHostCustody?: (req: IncomingMessage) => boolean;
   /** Optional Rust byte-plane X-Sendfile handoff (issue #456 N3). */
   dataPlaneHttp?: DataPlaneHttpOptions;
   /** Auth callback used only by the native iroh relay on loopback. */
@@ -518,34 +512,6 @@ export function replicaDispatchOutcome(result: ToolResult): ReplicaIntentDispatc
 const CONVERSATIONS_PREFIX = '/_centraid-conversations';
 const USER_STORE_PREFIX = '/_centraid-user';
 
-/**
- * The gateway-scope surface a FRESH gateway answers, before any vault or
- * device enrollment exists (issue #568 item C).
- *
- * This is a closed allowlist on purpose, not an accident of dispatch order:
- * during the founding window the QUIC listener admits an unknown EndpointId
- * (see `PairingTicketStore.hasOpenFoundingWindow`), so everything reachable
- * here is reachable by whoever holds the founding QR.
- *
- *  - `_gateway/health` — the installer/first-run shell polls readiness.
- *  - `_logs`           — a failed founding is undiagnosable without them.
- *  - `_templates`      — the create flow picks a starting blueprint.
- *  - `_agents`         — the create flow reads the runner catalog.
- *
- * Anything not listed 409s `uninitialized`. Adding a prefix here publishes
- * it to the founding window; do it deliberately or not at all.
- */
-const FRESH_GATEWAY_SCOPE_PREFIXES = [
-  '/centraid/_gateway/health',
-  '/centraid/_logs',
-  '/centraid/_templates',
-  '/centraid/_agents',
-] as const;
-
-function isFreshGatewayScopePath(pathname: string): boolean {
-  return FRESH_GATEWAY_SCOPE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
 /** Shared device-role gate, before any owner/app/action route can dispatch. */
 function readRoleRequestAllowed(req: IncomingMessage): boolean {
   const method = (req.method ?? 'GET').toUpperCase();
@@ -663,8 +629,6 @@ export interface BuiltGateway {
    * URL so the host can fall through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
-  /** Zero-vault possession plane: ticket mint, initialize, and kit verification. */
-  foundingHandler: RouteHandler;
   /**
    * The gateway's log ring buffer + live fan-out (realtime Logs surface).
    * Every `logger.*` line lands here before the console. Hosts may
@@ -821,13 +785,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     keys: gatewayKeys,
     logger,
   });
-  recoverPendingFoundingVaults({
-    gatewayDatabase,
-    vaultRoot: paths.vaultDir,
-    cacheRoot: paths.cacheDir ?? path.join(dataDir, 'cache'),
-    keys: gatewayKeys,
-    logger,
-  });
   const storageConnections = await openStorageConnectionStore({
     database: gatewayDatabase,
     keyStore: gatewayKeys,
@@ -966,10 +923,38 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // a file read inside its synchronous block.
     journalLimitBytes: () => storageLimits.current().journalLimitBytes,
   });
-  const kitlessCreated =
-    options.initVaultName !== undefined && vaultRegistry.isFresh()
-      ? vaultRegistry.create(options.initVaultName)
-      : undefined;
+  /*
+   * Auto-found (issue #603). A gateway whose data dir carries no vault is
+   * not a state a human should have to resolve: there is no ceremony, no
+   * ticket, and no first-run wall. Constructing over a fresh dir creates the
+   * two vaults every household starts with, synchronously, before any route
+   * can observe a zero-vault gateway.
+   *
+   * ORDER IS LOAD-BEARING: ids are UUIDv7, so `defaultVaultId()` returns the
+   * OLDEST. Creating "Shared" first makes it the default vault for unscoped
+   * requests and for a pair ticket minted without an explicit target.
+   *
+   * `isFresh()` reads the filesystem registry, which counts a vault dir that
+   * FAILED to mount — so corruption never re-founds over existing data. A
+   * non-fresh data dir is left exactly as it was found.
+   *
+   * The members guard covers the other resurrection path: erasing every
+   * vault leaves the filesystem fresh but keeps `members`/`devices` rows in
+   * gateway.db (only that vault's `member_roles` go). A data dir that has
+   * EVER enrolled a member is an inhabited gateway awaiting restore, not a
+   * new household — auto-founding over it would silently bury
+   * restore-after-erase under a brand-new Shared + Personal.
+   */
+  const neverInhabited = (): boolean => {
+    const row = gatewayDatabase.db.prepare('SELECT COUNT(*) AS n FROM members').get() as {
+      n: number;
+    };
+    return row.n === 0;
+  };
+  const autoFoundedVaults =
+    vaultRegistry.isFresh() && neverInhabited()
+      ? [vaultRegistry.create('Shared'), vaultRegistry.create('Personal')]
+      : [];
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
@@ -1016,9 +1001,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         .join('; ');
       return { status: 'error', detail: `restored from backup — ${detail}` };
     }
+    // Zero mounted planes is not a legal steady state since #603 — a fresh
+    // data dir auto-founds, so an empty registry means every vault dir on
+    // disk was deleted out from under the process.
     return planes.length > 0
       ? { status: 'ok', detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted` }
-      : { status: 'ok', detail: 'uninitialized — no vaults founded' };
+      : { status: 'error', detail: 'no vault is mounted' };
   });
 
   // Disk watermark (issue #351): free space on the vault volume, plus a
@@ -1303,67 +1291,47 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     },
   });
 
-  const foundingEnrollments =
+  const enrollmentStore =
     options.devicePairing?.enrollments ?? EnrollmentStore.open(gatewayDatabase);
-  const foundingTickets =
-    options.devicePairing?.tickets ?? PairingTicketStore.open(gatewayDatabase);
+  /*
+   * The host's own device identity. A gateway the owner runs on their own
+   * box is reachable over loopback with no iroh pairing, so it needs a
+   * device key of its own to be enrolled under. The daemon injects one
+   * (`hostDeviceEndpointId`); a loopback-only embed derives one from the
+   * KeyStore-custodied endpoint key. Only a caller that supplies its own
+   * `deviceAccess` resolver opts out — it answers "who is this" itself.
+   */
   const embeddedEndpointId = options.deviceAccess
     ? undefined
     : (options.hostDeviceEndpointId ??
-      (options.initVaultName
-        ? kitlessHostIdentity(gatewayKeys.loadOrCreate('endpoint-key.bin'))
-        : undefined));
+      kitlessHostIdentity(gatewayKeys.loadOrCreate('endpoint-key.bin')));
   const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
     ? {
         // Deliberately `isLoopbackRequest`, not `isDirectHostRequest`: the
         // desktop phone tunnel forwards a paired phone under the host bearer
         // and has no device key of its own, so tightening this would sever
         // phone-link entirely. Host-ONLY capabilities use the stricter gate
-        // (`canMintFoundingTicket` below); ordinary vault access does not.
+        // (`isHostCustody` below); ordinary vault access does not.
         deviceKeyFor: (req) => (isLoopbackRequest(req) ? embeddedEndpointId : undefined),
-        vaultsFor: (endpointId) => foundingEnrollments.vaultsFor(endpointId),
+        vaultsFor: (endpointId) => enrollmentStore.vaultsFor(endpointId),
       }
     : undefined;
   const effectiveDeviceAccess = options.deviceAccess ?? embeddedAccess;
-  const kitlessHostEndpointId = options.hostDeviceEndpointId ?? embeddedEndpointId;
-  if (kitlessCreated && kitlessHostEndpointId) {
-    foundingEnrollments.enroll({
-      endpointId: kitlessHostEndpointId,
-      vaultId: kitlessCreated.vaultId,
-      label: options.hostDeviceEndpointId ? 'desktop host' : 'kitless gateway host',
-      platform: 'loopback',
-      role: 'admin',
-    });
+  const hostOwnerEndpointId = options.hostDeviceEndpointId ?? embeddedEndpointId;
+  if (autoFoundedVaults.length > 0 && hostOwnerEndpointId) {
+    // One owner member, admin of BOTH auto-founded vaults, in ONE transaction
+    // (issue #603): the host that just founded them is their owner, and a
+    // fresh install has exactly one member with zero unassigned bindings.
+    gatewayDatabase.transaction(() =>
+      enrollmentStore.enrollWithinTransaction({
+        endpointId: hostOwnerEndpointId,
+        memberLabel: 'You',
+        grants: autoFoundedVaults.map((vault) => ({ vaultId: vault.vaultId, role: 'admin' })),
+        label: options.hostDeviceEndpointId ? 'desktop host' : 'gateway host',
+        platform: 'loopback',
+      }),
+    );
   }
-  const directHostEndpointId = options.hostDeviceEndpointId;
-  const foundingHandler = makeFoundingRouteHandler({
-    vaults: vaultRegistry,
-    enrollments: foundingEnrollments,
-    tickets: foundingTickets,
-    keys: gatewayKeys,
-    recoveryKit,
-    sourceInstanceId,
-    ...(options.canMintFoundingTicket
-      ? { canMintFoundingTicket: options.canMintFoundingTicket }
-      : options.hostDeviceEndpointId
-        ? // Loopback is not an identity (issue #568 item B): a bare
-          // `isLoopbackRequest` admits anything a forwarder delivered to
-          // 127.0.0.1, which is exactly the pre-#566 gate this replaced.
-          { canMintFoundingTicket: isDirectHostRequest }
-        : {}),
-    ...(effectiveDeviceAccess ? { deviceAccess: effectiveDeviceAccess } : {}),
-    ...(options.devicePairing?.endpointTicket
-      ? { endpointTicket: options.devicePairing.endpointTicket }
-      : directHostEndpointId
-        ? {
-            // A loopback-only embed has no daemon-owned iroh endpoint, but
-            // its host EndpointId still gives the direct founding ceremony a
-            // well-formed ticket envelope. The ticket never leaves the host;
-            // remote founding remains daemon/iroh-only.
-            endpointTicket: () => endpointTicketFor(directHostEndpointId),
-          }
-        : {}),
-  });
 
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
 
@@ -3275,12 +3243,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       '/centraid/_gateway/info',
       makeGatewayInfoRouteHandler({
         instanceId,
-        status: () =>
-          vaultRegistry.isFresh() || recoveryKit.ceremonyIncomplete() ? 'uninitialized' : 'ready',
-        // Tells an interrupted ceremony apart from a never-started one, so the
-        // first-run screen can offer "verify my kit" instead of a Create /
-        // Restore choice where both branches 409 (issue #568 item G).
-        foundingPending: () => !vaultRegistry.isFresh() && recoveryKit.ceremonyIncomplete(),
         ...(options.devicePairing?.endpointId
           ? { endpointId: options.devicePairing.endpointId }
           : {}),
@@ -3316,10 +3278,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               enrollments: options.devicePairing.enrollments,
               tickets: options.devicePairing.tickets,
               endpointTicket: options.devicePairing.endpointTicket,
-              isUninitialized: () => vaultRegistry.isFresh(),
-              ...(options.canMintFoundingTicket
-                ? { canMintPairingTicket: options.canMintFoundingTicket }
-                : {}),
+              ...(options.isHostCustody ? { canMintPairingTicket: options.isHostCustody } : {}),
+              // The mint target when the caller names no vault: Shared, the
+              // oldest auto-founded vault (issue #603). `list()` is
+              // oldest-first, same order as `defaultVaultId()`, but total —
+              // this seam must not throw when every vault has been deleted.
+              defaultVaultId: () => vaultRegistry.list()[0]?.vaultId,
               vaultIds: () => vaultRegistry.list().map((vault) => vault.vaultId),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               vaultName: (id) => vaultRegistry.get(id)?.name,
@@ -3339,9 +3303,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             makeMembersRouteHandler({
               enrollments: options.devicePairing.enrollments,
               vaultName: (id) => vaultRegistry.get(id)?.name,
-              ...(options.canMintFoundingTicket
-                ? { isHostCustody: options.canMintFoundingTicket }
-                : {}),
+              ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               onRevoked: (rows) => {
                 for (const row of rows) {
@@ -3385,7 +3347,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       '/centraid/_gateway/backup',
       makeBackupRouteHandler({
         vaults: vaultRegistry,
-        enrollments: foundingEnrollments,
+        enrollments: enrollmentStore,
         recoveryKitStore: recoveryKit,
         backupService,
       }),
@@ -3488,7 +3450,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // `blob_store.connectionId` and gates on the recovery-kit nudge.
         storageConnections,
         recoveryKit,
-        enrollments: foundingEnrollments,
+        enrollments: enrollmentStore,
         gatewayDatabase,
         keys: gatewayKeys,
         fenceVaultForErase: (vaultId) => backupService.fenceVaultForErase(vaultId),
@@ -3670,20 +3632,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `composedHandler` outside the per-vault scope (see its call site), so it
   // must not also be reachable through the in-scope chain.
   const shareHandler = makeShareRouteHandler({
-    enrollments: foundingEnrollments,
+    enrollments: enrollmentStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    ...(options.canMintFoundingTicket ? { isHostCustody: options.canMintFoundingTicket } : {}),
+    ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
   });
 
   // Deliberately NOT in `routeEntries` either, for the same reason as the
   // share plane: the scopes listing spans every vault the caller holds a role
   // in, so it is dispatched outside the per-vault scope (see its call site).
   const scopesHandler = makeScopesRouteHandler({
-    enrollments: foundingEnrollments,
+    enrollments: enrollmentStore,
     listVaults: () => vaultRegistry.list(),
     installedApps: (vaultId) => vaultRegistry.get(vaultId)?.installedAppIds(),
     ensureAppInstalled: ensureBundledAppInstalled,
-    ...(options.canMintFoundingTicket ? { isHostCustody: options.canMintFoundingTicket } : {}),
+    ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
   });
 
   const composedHandler: RouteHandler = async (req, res) => {
@@ -3705,9 +3667,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // device identity — which is precisely what the route's own host-custody
     // check (`canMintPairingTicket` → `isDirectHostRequest`) exists to
     // authorize. Demanding a proved device HERE made that hatch unreachable,
-    // so after founding a headless daemon could never enroll a SECOND device
-    // from the CLI. (The FIRST device never came through here — founding runs
-    // on `foundingHandler`, mounted outside this handler entirely.)
+    // so a headless daemon could never enroll its FIRST device from the CLI.
     //
     // Skipping ahead grants nothing. The bearer was already enforced upstream
     // by `startRuntimeHttpServer` (this path is not in `publicPaths`), and the
@@ -3720,29 +3680,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       (await prefixDispatch(req, res))
     ) {
       return true;
-    }
-    if (vaultRegistry.isFresh()) {
-      const method = req.method ?? 'GET';
-      if (method === 'GET' && url.pathname === '/centraid/_vault/vaults') {
-        return sendJson(res, 200, { vaults: [] });
-      }
-      // A fresh gateway has no vault, so a member holds a role in none: the
-      // honest answer is an empty scope list, not a 409 (same reasoning as
-      // `/centraid/_vault/vaults` above).
-      if (method === 'GET' && url.pathname === SCOPES_PATH) {
-        return sendJson(res, 200, { scopes: [] });
-      }
-      if (method === 'GET' && url.pathname === '/centraid/_apps') {
-        return sendJson(res, 200, []);
-      }
-      if (method === 'GET' && url.pathname === '/centraid/_automations') {
-        return sendJson(res, 200, { rows: [], errors: [] });
-      }
-      if (isFreshGatewayScopePath(url.pathname) && (await prefixDispatch(req, res))) return true;
-      return sendJson(res, 409, {
-        error: 'uninitialized',
-        message: 'this gateway has no vault; initialize or restore one first',
-      });
     }
     // Resolve the request's vault (issue #289): a proved device enrollment
     // scopes what it may address; the header picks within it. No identity is a
@@ -3766,7 +3703,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     req.headers[AUTHED_DEVICE_HEADER] = deviceKey;
     let vaultId: string;
     const enrolled =
-      effectiveDeviceAccess?.vaultsFor(deviceKey) ?? foundingEnrollments.vaultsFor(deviceKey);
+      effectiveDeviceAccess?.vaultsFor(deviceKey) ?? enrollmentStore.vaultsFor(deviceKey);
     if (enrolled.length === 0) {
       return sendJson(res, 403, {
         error: 'device_not_enrolled',
@@ -3798,7 +3735,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         message: `unknown vault "${vaultId}"`,
       });
     }
-    const enrollment = foundingEnrollments.get(deviceKey, vaultId);
+    const enrollment = enrollmentStore.get(deviceKey, vaultId);
     if (enrollment?.role === 'read' && !readRoleRequestAllowed(req)) {
       return sendJson(res, 403, {
         error: 'read_role_device',
@@ -3968,7 +3905,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     extraHandlers,
     composedHandler,
     webhookHandler,
-    foundingHandler,
     logs: logStore,
     start,
     stop,

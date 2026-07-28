@@ -1,9 +1,8 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Stopped-daemon filesystem maintenance (issue #289):
- * `centraid-gateway vault|devices|pair` plus the daemon device plane. The
- * tests call the command functions the CLI dispatches to and assert on their
- * stdout and gateway.db rows.
+ * `centraid-gateway vault|devices|pair` plus the daemon device plane. Tests
+ * call the dispatched command functions, asserting stdout + gateway.db rows.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -104,6 +103,7 @@ async function fakePairDaemon(): Promise<typeof fetch> {
           instanceId: 'test-daemon',
           startedAt: Date.now(),
           uptimeMs: 1,
+          authenticated: authorized,
           endpointId,
           ...(authorized ? { endpointTicket: 'gw-ticket-base32' } : {}),
         }),
@@ -135,9 +135,8 @@ async function fakePairDaemon(): Promise<typeof fetch> {
       if (!vault) {
         return Response.json(
           {
-            error: 'uninitialized',
-            message:
-              'gateway has no vault yet — run `centraid-gateway init-ticket` and complete founding first',
+            error: 'vault_required',
+            message: 'this gateway has no vault to invite into',
           },
           { status: 409 },
         );
@@ -377,8 +376,8 @@ test('ordinary pair grants write even for the first device and refuses admin esc
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
   const daemon = await fakePairDaemon();
 
-  // Founding is the only path to owner. Ordinary pairing is never sensitive
-  // to whether this happens to be the first enrollment row.
+  // Ordinary pairing is never sensitive to whether this happens to be the
+  // first enrollment row.
   const first = lastJson(
     await capture(() =>
       commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
@@ -481,9 +480,10 @@ test('device plane: an unenrolled endpoint derives identity from the custody key
     logger: silentLogger,
     relays: 'disabled',
   });
-  plane.pairing.tickets.mintFounding();
   expect(registry.isFresh()).toBe(true);
-  expect(plane.dataPlaneControl.authorize('first-device')).toMatchObject({ allowed: true });
+  // #603 retired the admit-anyone founding window: an enrollment is now the
+  // ONLY admission, so an unknown EndpointId is refused even on a fresh dir.
+  expect(plane.dataPlaneControl.authorize('first-device')).toMatchObject({ allowed: false });
   // Relays disabled keeps the endpoint offline; identity remains derivable
   // from the custody key without a stale address cache.
   const handle = await plane.startEndpoint({ baseUrl: 'http://127.0.0.1:1', token: 't' });

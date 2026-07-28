@@ -57,7 +57,8 @@ Every refusal is deliberate; none is a bug to route around.
 ## Symptoms
 
 - The erase request returned 5xx and the vault is partly gone
-- The gateway restarted mid-erase and now reports `uninitialized`
+- The erase response reported `remainingVaults: 0` and the gateway's vault
+  health component is `error: no vault is mounted`
 - Devices lost access to a vault that still appears on disk
 - Restore-after-erase fails with `restore_failed`
 
@@ -76,27 +77,42 @@ Every refusal is deliberate; none is a bug to route around.
    [logs.md](../logs.md) to confirm.
 4. Verify the end state: `centraid-gateway vault list --data-dir "$DATA_DIR"`
    no longer shows the vault, and `keys/<vaultId>.sealkey` is gone.
-5. If the gateway now has zero vaults it is legally `uninitialized` and the
-   first-run screen offers Create / Restore. That is correct, not a fault.
+5. Zero vaults is **not** a legal steady state since issue #603. The vault
+   health component reports `error: no vault is mounted`, and there is no
+   first-run Create / Restore screen to fall back to — restore is a backup-plane
+   act (below).
+
+> **Do not restart the daemon with an empty `vault/` if you intend to restore.**
+> Auto-founding fires at construction on a data dir with no vault directory, so
+> the next boot creates a brand-new `Shared` + `Personal` and the data dir is no
+> longer vault-free. Keep the daemon **stopped** between the erase and the
+> restore.
 
 ## Steps — restore after an erase, on the same box
 
-The gateway keeps its identity, so this is a founding **restore**, not a new
-gateway.
+The gateway keeps its identity and its `keyring.key`, so this is a **backup**
+restore into the surviving data dir, not a new gateway. There is no founding
+ticket and no founding restore route any more (issue #603).
 
-1. Have both in hand: the **password-wrapped recovery kit** file and its
-   **password**, plus the **provider API key**. The key is deliberately not in
+1. Have all three in hand: the **password-wrapped recovery kit** file, its
+   **password**, and the **provider API key**. The key is deliberately not in
    the kit (`FORMAT.md`). Without all three, stop — there is nothing else to
    try.
-2. Confirm the gateway is genuinely vault-free
-   (`centraid-gateway status --data-dir "$DATA_DIR" --json` reports
-   `vaultCount: 0`).
-3. From the host itself, mint a founding ticket and run the restore through the
-   first-run screen (Restore vault), or `POST
-   /centraid/_vault/vaults:restore`. The restore reuses the surviving
-   `keyring.key`; a kit whose keyring differs is **refused** rather than
-   overwriting live key material.
-4. Expect the previous enrollments to be gone. Erase deleted `devices`, so
+2. Keep the daemon **stopped** (see the warning above) and confirm the data dir
+   is genuinely vault-free:
+   `centraid-gateway status --data-dir "$DATA_DIR" --json` reports
+   `vaultCount: 0` with no `failedMounts`.
+3. Run the offline recover verb from the host:
+   ```sh
+   centraid-gateway recover --kit <file> --password-file <file> \
+     --api-key <key> --data-dir "$DATA_DIR"
+   ```
+   It takes `gateway.db`'s exclusive lock, so it refuses while the daemon runs.
+   The restore reuses the surviving `keyring.key`; a kit whose keyring differs
+   is **refused** rather than overwriting live key material.
+4. Start the daemon. The recovered vault directory is already on disk, so
+   `isFresh()` is false and nothing is auto-founded over it.
+5. Expect the previous enrollments to be gone. Erase deleted `devices`, so
    every device re-pairs. The gateway's EndpointId is unchanged, so the
    gateway itself does not need re-adding.
 
@@ -104,11 +120,11 @@ gateway.
 
 | Message | Meaning |
 | --- | --- |
-| `recovery kit: expected a password-wrapped kit` | An unwrapped kit was supplied. Unwrapped kits are not accepted (issue #568) — use the file the ceremony downloaded |
+| `recovery kit: expected a password-wrapped kit` | An unwrapped kit was supplied. Unwrapped kits are not accepted (issue #568) — use the file `backup kit` wrote |
 | `recovery kit: wrong password or corrupt file` | Wrong password, or the file was edited. Neither is recoverable by retrying with the same inputs |
 | `gateway custody contains a different backup keyring` | This kit belongs to a different gateway. Restore it onto a blank data dir instead of over this one |
-| `409 restore_target_conflict` | A vault directory with that id already exists locally. Resolve the directory first; never merge trees by hand |
-| `409 founding_in_progress` | Another founding ceremony holds the single founding slot. Wait for it to finish or fail — replacing its ticket would roll back an in-flight restore |
+| `restore_target_conflict` | A vault directory with that id already exists locally. Resolve the directory first; never merge trees by hand |
+| `the running daemon holds gateway.db — stop it before recovering into this data dir` | `recover` is an offline verb. Stop the daemon (and see the warning above about restarting it into an empty `vault/`) |
 
 ## Escalation
 

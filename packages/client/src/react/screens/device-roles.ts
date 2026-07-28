@@ -68,7 +68,6 @@ const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   ['member_not_found', 'That person is no longer in the household. Reload and try again.'],
   ['invalid_grants', 'Each space needs a role. Remove any blank row and try again.'],
   ['grants_required', 'Choose at least one space this device may reach.'],
-  ['uninitialized', 'This gateway has no space yet — finish setting it up first.'],
   ['no_iroh_endpoint', 'The gateway has no network identity yet. Start it and try again.'],
   ['vault_required', 'Choose at least one space this device may reach.'],
   ['device_identity_required', 'This device is not allowed to pair others.'],

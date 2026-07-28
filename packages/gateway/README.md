@@ -29,13 +29,19 @@ const handle = await serve({
     cacheDir: '/var/lib/centraid/cache',
     modelCatalogFile: '/var/lib/centraid/cache/model-catalog.json',
   },
-  // Explicit automation/test bootstrap. Omit for the Create/Restore ceremony.
-  initVaultName: 'Automation vault',
   host: '127.0.0.1',
   port: 8765,
 });
 console.log(handle.url, handle.token);
 ```
+
+There is no bootstrap option to pass (issue #603 removed `initVaultName`). If
+`vaultDir` holds no vault, `buildGateway()` **auto-founds** two — `Shared`
+(created first, so it is the registry default) and `Personal` — synchronously at
+construction, and enrols the host device as `admin` on both. If it already holds
+vault directories, nothing is created and the data dir is left exactly as found;
+a directory that fails to mount still counts, so corruption can never make an
+existing gateway look fresh.
 
 `paths` is the only required option (see `GatewayPaths` in `src/paths.ts`);
 `vaultDir` is its required field. Post-#280 the vault is
@@ -54,18 +60,29 @@ tarball-upload backend (what the standalone CLI below uses).
 ## `centraid-gateway` CLI — standalone daemon
 
 ```sh
-# Boot. The loopback bearer is an ephemeral per-boot secret (issue #505 phase 7)
-# — never written to disk, never printed. Pin a known value if a co-located
-# client (e.g. the `centraid` product CLI) needs to reach the loopback listener.
-CENTRAID_GATEWAY_TOKEN=$(openssl rand -hex 32) \
-  centraid-gateway serve --data-dir /var/lib/centraid --port 8765
+# Boot. A fresh --data-dir auto-founds `Shared` + `Personal` (issue #603);
+# an existing one is never modified.
+centraid-gateway serve --data-dir /var/lib/centraid --port 8765
 
-# Found a virgin gateway from a phone or desktop (one-time, ten-minute capability):
-centraid-gateway init-ticket --data-dir /var/lib/centraid
-
-# After founding, mint a pairing ticket from the running daemon:
+# Mint a pair ticket from the running daemon. No --vault → the registry
+# default, which is `Shared`.
+centraid-gateway pair --data-dir /var/lib/centraid
 centraid-gateway pair --data-dir /var/lib/centraid --vault <name>
 ```
+
+The loopback bearer is **derived from custody, not minted per boot** (issue #568
+item J corrects the earlier #505 description): it is
+`HMAC(endpoint-key.bin, "centraid/landlord-http/v1")`, stable for the life of the
+gateway's endpoint identity, never written to disk as a token and never printed.
+Any local process that can open the gateway's `KeyStore` — the admin CLI
+included — derives the same value, so **nothing needs to be pinned**.
+
+`CENTRAID_GATEWAY_TOKEN` exists for a parent process that **spawns** the daemon
+and must know the bearer without deriving it (the desktop does this). Pinning it
+and then running `centraid-gateway pair` from a shell without the same value
+makes the daemon reject the CLI's derived bearer; `pair` reports that as an
+explicit bearer-mismatch error (issue #603). See
+[docs/dev-environment.md](../../docs/dev-environment.md).
 
 Bind defaults to loopback. Remote devices use the iroh endpoint; the HTTP
 listener is host-local control/data plumbing. `serve` flags override the config
@@ -163,7 +180,7 @@ bun run test
 
 Covers:
 
-- `serve.test.ts` — boot, loopback bind + token mint, bearer auth, the
+- `serve.test.ts` — boot, loopback bind + derived bearer auth, the
   `GET /centraid/_turn/runner-status` and `GET /centraid/_agents/status` routes.
 - `cli.test.ts` — config validation, prefs-patch shape, and an end-to-end CLI
   spawn that authenticates with a parent-supplied `CENTRAID_GATEWAY_TOKEN`

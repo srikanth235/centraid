@@ -592,7 +592,7 @@ export class VaultPlane {
     } else {
       this.db.close();
       throw new Error(
-        `vault at ${options.dir} is uninitialized; creation requires the gateway founding gate`,
+        `vault at ${options.dir} holds no vault; creating one is an admin act through VaultRegistry.create`,
       );
     }
     this.displayName = this.boot.displayName;
