@@ -415,17 +415,16 @@ export async function startRuntimeHttpServer(
         // the listener open forever. Stop accepting, hurry the idle sockets
         // along, then destroy whatever is left after the grace window — see
         // GATEWAY_SHUTDOWN_GRACE_MS.
-        let force: ReturnType<typeof setTimeout> | undefined;
+        const force = setTimeout(
+          () => server.closeAllConnections(),
+          GATEWAY_SHUTDOWN_GRACE_MS
+        );
         server.close((err) => {
-          if (force) clearTimeout(force);
+          clearTimeout(force);
           if (err) reject(err);
           else resolve();
         });
         server.closeIdleConnections();
-        force = setTimeout(
-          () => server.closeAllConnections(),
-          GATEWAY_SHUTDOWN_GRACE_MS
-        );
       }),
   };
 }

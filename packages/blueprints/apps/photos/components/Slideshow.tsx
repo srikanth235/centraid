@@ -9,7 +9,7 @@
 // CSS split: the fixed dark `.slideshow` container stays global (static
 // index.html element); this view's own bits live in Slideshow.module.css,
 // while `kit-viewer-nav`/`prev`/`next` are kit.css vocabulary (global).
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FC } from "react";
 
 import { isRenderableUri, isVideoAsset } from "../format.ts";
@@ -46,13 +46,19 @@ export function SlideshowView({
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | 0>(0);
 
-  function step(delta: number) {
-    setIdx((i) => {
-      const n = photos.length;
-      if (n === 0) return i;
-      return (i + delta + n) % n;
-    });
-  }
+  // Memoized on the only thing it reads — the photo count — so it is a stable
+  // identity for the effects below (`list` is a snapshot passed in at open
+  // time, so the count only moves if the host reopens the slideshow).
+  const step = useCallback(
+    (delta: number) => {
+      setIdx((i) => {
+        const n = photos.length;
+        if (n === 0) return i;
+        return (i + delta + n) % n;
+      });
+    },
+    [photos.length]
+  );
 
   // Re-arms the 4s clock on every idx/paused change — a manual step (arrow
   // key or nav button) resets the wait, which is the behavior a slideshow

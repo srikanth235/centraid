@@ -381,12 +381,12 @@ export async function serveStatic(
   // {@link cssModuleVariantCache}. `appDir` is the compilation root so hashed
   // class names stay deterministic and path-prefix-free.
   if (isCssModuleFile(file)) {
-    const stat = await fs.stat(file);
+    const cssStat = await fs.stat(file);
     let cachedCss = cssModuleCache.get(file);
-    if (!cachedCss || cachedCss.mtimeMs !== stat.mtimeMs) {
+    if (!cachedCss || cachedCss.mtimeMs !== cssStat.mtimeMs) {
       const compiled = await compileCssModule(file, appDir);
       cachedCss = {
-        mtimeMs: stat.mtimeMs,
+        mtimeMs: cssStat.mtimeMs,
         code: compiled.js,
         etag: compiled.etag,
       };

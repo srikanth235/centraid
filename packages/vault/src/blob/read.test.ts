@@ -19,7 +19,7 @@ describe("read", () => {
   /** Insert a bare content item and (optionally) one binary rung for it. */
   function seed(
     contentId: string,
-    sha: string,
+    contentSha: string,
     variant?: "thumb" | "preview"
   ): void {
     db.vault
@@ -28,7 +28,7 @@ describe("read", () => {
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
        VALUES (?, 'image/jpeg', ?, ?, 10, ?)`
       )
-      .run(contentId, `blob:sha256:${sha}`, sha, nowIso());
+      .run(contentId, `blob:sha256:${contentSha}`, contentSha, nowIso());
     if (variant) {
       db.vault
         .prepare(
@@ -40,7 +40,7 @@ describe("read", () => {
           uuidv7(),
           contentId,
           variant,
-          `d${sha}`.slice(0, 64).padEnd(64, "0"),
+          `d${contentSha}`.slice(0, 64).padEnd(64, "0"),
           nowIso()
         );
     }

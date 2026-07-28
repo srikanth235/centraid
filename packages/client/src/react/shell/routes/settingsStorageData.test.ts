@@ -18,17 +18,17 @@ const {
   RecoveryKitNotConfirmedError,
   ProviderNotHomeProfileError,
 } = vi.hoisted(() => {
-  class RecoveryKitNotConfirmedError extends Error {
+  class MockRecoveryKitNotConfirmedError extends Error {
     constructor(message: string) {
       super(message);
-      this.name = "RecoveryKitNotConfirmedError";
+      this.name = "MockRecoveryKitNotConfirmedError";
     }
   }
-  class ProviderNotHomeProfileError extends Error {
+  class MockProviderNotHomeProfileError extends Error {
     readonly missingCapabilities: string[];
     constructor(message: string, missingCapabilities: string[]) {
       super(message);
-      this.name = "ProviderNotHomeProfileError";
+      this.name = "MockProviderNotHomeProfileError";
       this.missingCapabilities = missingCapabilities;
     }
   }
@@ -63,8 +63,8 @@ const {
       vi.fn<
         typeof import("../../../gateway-client.js").detachVaultStorageConnection
       >(),
-    RecoveryKitNotConfirmedError,
-    ProviderNotHomeProfileError,
+    RecoveryKitNotConfirmedError: MockRecoveryKitNotConfirmedError,
+    ProviderNotHomeProfileError: MockProviderNotHomeProfileError,
   };
 });
 

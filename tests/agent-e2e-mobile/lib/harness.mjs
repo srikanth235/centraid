@@ -317,21 +317,18 @@ export async function runFlow(slug, fn) {
   };
 
   const notes = [];
-  const ctx = {
-    state,
-    note(m) {
-      notes.push(m);
-      console.log(`  note    : ${m}`);
-    },
+  const note = (m) => {
+    notes.push(m);
+    console.log(`  note    : ${m}`);
   };
 
-  ctx.run = async (yaml, hint) => {
+  const run = async (yaml, hint) => {
     const label = nextLabel(hint);
     console.log(`  run     : ${label}`);
     await runMaestroChunk(yaml, { state, label });
   };
 
-  ctx.configureGateway = async (
+  const configureGateway = async (
     gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
     gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
   ) => {
@@ -375,7 +372,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
     //     but 'Apps' is the *route* name and the tab renders as "Home". Assert on
     //     what a user sees, and prove the setting actually took by requiring the
     //     no-gateway card to be gone.
-    await ctx.run(
+    await run(
       `appId: ${state.appId}
 ---
 - launchApp:
@@ -434,17 +431,17 @@ ${tokenSteps}- hideKeyboard
 `,
       "configure-gateway"
     );
-    ctx.note(`configured the journey gateway at ${gatewayUrl}`);
+    note(`configured the journey gateway at ${gatewayUrl}`);
   };
 
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage
   // flushes, then relaunch without clearing state. The 300ms delay before
   // stopApp gives RN's AsyncStorage time to enter its persistence pipeline
   // (analogous to the desktop harness's flushMs before SIGTERM).
-  ctx.restart = async () => {
+  const restart = async () => {
     console.log("  restart …");
     await new Promise((resolve) => setTimeout(resolve, 300));
-    await ctx.run(
+    await run(
       `appId: ${state.appId}
 ---
 - stopApp
@@ -454,6 +451,8 @@ ${tokenSteps}- hideKeyboard
       "restart"
     );
   };
+
+  const ctx = { state, note, run, configureGateway, restart };
 
   let error;
   let result;

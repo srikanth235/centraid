@@ -330,7 +330,7 @@ export function browseRows(
   const cmp = dir === "desc" ? "<" : ">";
 
   // orderBy is a real column only (registry/PRAGMA whitelist) or the key.
-  let orderBy = params.orderBy ?? key.column;
+  const orderBy = params.orderBy ?? key.column;
   if (
     orderBy !== key.column &&
     orderBy !== "rowid" &&

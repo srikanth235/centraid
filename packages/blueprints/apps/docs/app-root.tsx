@@ -153,9 +153,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       closePopover();
       bump();
     };
-    const core = {} as Core;
-
-    core.refresh = async (): Promise<void> => {
+    // The four pieces are wired circularly (nav needs logic.clearSelection,
+    // logic needs nav.openQuick), so each is declared on its own and the
+    // cross-references live inside closures that only run after all four
+    // bindings are initialized. Assembled into `Core` at the end.
+    const refresh = async (): Promise<void> => {
       let next: DriveResult;
       try {
         next = await window.centraid.read<DriveResult>({
@@ -170,7 +172,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       }
       if (readFailedRef.current) {
         readFailedRef.current = false;
-        core.logic.notice("");
+        coreLogic.notice("");
       }
       const denied = next?.vaultDenied;
       setConsent(denied ? { message: denied.message ?? "" } : null);
@@ -206,13 +208,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       bump();
     };
 
-    core.applySearch = debounce(async () => {
+    const applySearch = debounce(async () => {
       const q = (
         document.querySelector("#searchInput") as HTMLInputElement
       ).value.trim();
       if (q === state.search) return;
       state.search = q;
-      core.logic.clearSelection();
+      coreLogic.clearSelection();
       if (!q) {
         state.searchResults = null;
         render();
@@ -234,23 +236,29 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       render();
     }, 150);
 
-    core.nav = createNav({
+    const coreNav = createNav({
       state,
       render,
-      refresh: core.refresh,
+      refresh,
       renderDetails: bump,
       renderQuick: bump,
       renderNewMenu: bump,
       renderEditor: bump,
-      clearSelection: () => core.logic.clearSelection(),
+      clearSelection: () => coreLogic.clearSelection(),
     });
-    core.logic = createLogic({
+    const coreLogic = createLogic({
       state,
       data,
       render,
-      refresh: core.refresh,
-      openQuick: (id: string) => core.nav.openQuick(id),
+      refresh,
+      openQuick: (id: string) => coreNav.openQuick(id),
     });
+    const core: Core = {
+      logic: coreLogic,
+      nav: coreNav,
+      refresh,
+      applySearch,
+    };
     coreRef.current = core;
   }
 

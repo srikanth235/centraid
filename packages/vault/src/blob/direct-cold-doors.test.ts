@@ -64,7 +64,7 @@ describe("direct-cold-doors", () => {
     close: () => Promise<void>;
   }
 
-  function startFakeS3(): Promise<FakeS3> {
+  async function startFakeS3(): Promise<FakeS3> {
     const requests: {
       method: string;
       storageClass: string | null;
@@ -85,17 +85,16 @@ describe("direct-cold-doors", () => {
       req.on("data", () => undefined);
       req.on("end", () => void res.writeHead(200).end());
     });
-    return new Promise((resolve) => {
-      server.listen(0, "127.0.0.1", () => {
-        const addr = server.address() as { port: number };
-        resolve({
-          url: `http://127.0.0.1:${addr.port}`,
-          requests,
-          close: () =>
-            new Promise<void>((resolve) => server.close(() => resolve())),
-        });
-      });
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve());
     });
+    const addr = server.address() as { port: number };
+    return {
+      url: `http://127.0.0.1:${addr.port}`,
+      requests,
+      close: () =>
+        new Promise<void>((resolve) => server.close(() => resolve())),
+    };
   }
 
   test("CopyObject door: copyTemporaryToSha rides the override onto the object-creating copy", async () => {

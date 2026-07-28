@@ -293,8 +293,10 @@ function validateStoredManifest(value: unknown): StoredManifest {
       throw new Error("manifest: duplicate chunk id");
     chunkIds.add(c["id"] as string);
   }
-  for (const value of Object.values(v["appMeta"] as Record<string, unknown>)) {
-    if (typeof value !== "string")
+  for (const appMetaValue of Object.values(
+    v["appMeta"] as Record<string, unknown>
+  )) {
+    if (typeof appMetaValue !== "string")
       throw new Error("manifest: appMeta values must be strings");
   }
   return value as StoredManifest;

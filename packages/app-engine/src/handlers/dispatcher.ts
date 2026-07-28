@@ -73,10 +73,12 @@ export type ToolResult = ToolErrorResult | ToolSuccessResult;
 function errorResult(
   code: ToolErrorCode,
   message: string,
-  path?: string
+  errorPath?: string
 ): ToolErrorResult {
   const structured: ToolErrorContent =
-    path === undefined ? { code, message } : { code, message, path };
+    errorPath === undefined
+      ? { code, message }
+      : { code, message, path: errorPath };
   return {
     isError: true,
     content: [{ type: "text", text: JSON.stringify(structured) }],
@@ -531,12 +533,12 @@ export class Dispatcher {
     if (validate(data)) return undefined;
     const errs = validate.errors ?? [];
     const first = errs[0];
-    const path = first?.instancePath || "";
+    const instancePath = first?.instancePath || "";
     const msg = first?.message ?? "input validation failed";
     return errorResult(
       "INVALID_INPUT",
       `${kind} "${entry.name}" rejected input: ${msg}`,
-      path || undefined
+      instancePath || undefined
     );
   }
 }

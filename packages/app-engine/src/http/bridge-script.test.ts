@@ -56,8 +56,6 @@ function testMessageChannel(): { parent: TestPort; child: TestPort } {
     Array<(event: { data: unknown }) => void>
   >();
   const closed = new WeakSet<TestPort>();
-  let parent: TestPort;
-  let child: TestPort;
   const make = (peer: () => TestPort): TestPort => {
     const port: TestPort = {
       postMessage(data) {
@@ -79,8 +77,10 @@ function testMessageChannel(): { parent: TestPort; child: TestPort } {
     };
     return port;
   };
-  parent = make(() => child);
-  child = make(() => parent);
+  // Mutually referential, so each peer is reached through a thunk that only
+  // runs at postMessage time — after both bindings exist.
+  const parent = make(() => child);
+  const child = make(() => parent);
   return { parent, child };
 }
 
@@ -442,7 +442,9 @@ describe("bridge-script", () => {
       },
     ];
     let replicaError: { code: string; message: string } | undefined;
-    let fetchError: Error | undefined;
+    // Only the message crosses the vm realm boundary; the sandbox rethrows it
+    // as its own Error so nothing but a real Error is ever thrown in there.
+    let fetchErrorMessage: string | undefined;
     let parentPort: TestPort | undefined;
     let changesRequested = false;
     const reply = (payload: unknown): void => {
@@ -547,7 +549,7 @@ describe("bridge-script", () => {
           url,
           body: JSON.parse(init.body) as Record<string, unknown>,
         });
-        if (fetchError) throw fetchError;
+        if (fetchErrorMessage !== undefined) throw new Error(fetchErrorMessage);
         return {
           ok: true,
           status: 200,
@@ -575,7 +577,7 @@ describe("bridge-script", () => {
         replicaError = next;
       },
       setFetchError(next) {
-        fetchError = next;
+        fetchErrorMessage = next?.message;
       },
       sendFromParent(data) {
         reply(data);

@@ -669,7 +669,7 @@ export function runContractAndExecute(
             }
           : null;
       },
-      claimStaged: (sha256, options) =>
+      claimStaged: (sha256, claimOptions) =>
         promoteStagedBlob(
           {
             vault: db.vault,
@@ -680,7 +680,7 @@ export function runContractAndExecute(
             creatorPartyId: identity.partyId,
           },
           sha256,
-          options
+          claimOptions
         ),
       spill: (bytes) => db.blobs.ingestSync(bytes).sha256,
       has: (sha256) => db.blobs.hasSync(sha256),

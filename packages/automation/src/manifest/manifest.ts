@@ -573,16 +573,20 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
           `${field}.where`
         );
       }
-      where = t.where.map((raw, i) => {
+      where = t.where.map((rawClause, i) => {
         const cf = `${field}.where[${i}]`;
-        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        if (
+          rawClause === null ||
+          typeof rawClause !== "object" ||
+          Array.isArray(rawClause)
+        ) {
           throw new ManifestError(
             "invalid_trigger",
             `manifest.${cf} must be an object`,
             cf
           );
         }
-        const c = raw as Record<string, unknown>;
+        const c = rawClause as Record<string, unknown>;
         const column = requireString(c.column, `${cf}.column`);
         if (
           typeof c.op !== "string" ||
@@ -616,9 +620,9 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         `${field}.entities`
       );
     }
-    const entities = t.entities.map((raw, i) => {
+    const entities = t.entities.map((rawEntity, i) => {
       const ef = `${field}.entities[${i}]`;
-      const entity = requireString(raw, ef);
+      const entity = requireString(rawEntity, ef);
       if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
         throw new ManifestError(
           "invalid_trigger",
@@ -956,16 +960,20 @@ function validateVault(raw: unknown): ManifestVault | undefined {
       "vault.scopes"
     );
   }
-  const scopes = v.scopes.map((raw, i) => {
+  const scopes = v.scopes.map((rawScope, i) => {
     const field = `vault.scopes[${i}]`;
-    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    if (
+      rawScope === null ||
+      typeof rawScope !== "object" ||
+      Array.isArray(rawScope)
+    ) {
       throw new ManifestError(
         "invalid_field",
         `manifest.${field} must be an object`,
         field
       );
     }
-    const s = raw as Record<string, unknown>;
+    const s = rawScope as Record<string, unknown>;
     const schema = requireString(s.schema, `${field}.schema`);
     if (typeof s.verbs !== "string" || !VAULT_VERBS.has(s.verbs)) {
       throw new ManifestError(

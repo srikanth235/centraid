@@ -276,8 +276,7 @@ export class RemoteStreamIngress {
     }
     const byNumber = new Map(
       parseParts(row.remote_parts_json).map((part) => [part.partNumber, part])
-    );
-    byNumber.set(partNumber, { partNumber, etag });
+    ).set(partNumber, { partNumber, etag });
     this.deps.state.recordRemoteAppend({
       sessionId,
       receivedBytes: nextOffset,

@@ -46,13 +46,26 @@ export default defineConfig({
     // or unbounded concurrency as its resource contract permits. #573
     "no-await-in-loop": "error",
 
+    // Adopted in #619 (measured cost at adoption: 0 findings — the whole
+    // suite already used strict equality except the `== null` idiom, which
+    // the option keeps legal as the intentional null-or-undefined check).
+    eqeqeq: ["error", "always", { null: "ignore" }],
+
+    // Adoption-ready but deliberately deferred (#619): four rules below are
+    // pure-autofix batches measured at ~2,800 mechanical sites total —
+    // typescript/consistent-type-imports (404), import/
+    // consistent-type-specifier-style (1775), typescript/
+    // no-import-type-side-effects (16), unicorn/catch-error-name (644).
+    // Adopt them as ONE dedicated change: flip to "error", run
+    // `bun run lint:fix`, review nothing by hand. Keeping them out of #619's
+    // PR keeps that diff reviewable.
+
     // Repo profile (#210).
     "arrow-body-style": "off",
     "class-methods-use-this": "off",
     complexity: "off",
     curly: "off",
     "default-case": "off",
-    eqeqeq: "off",
     "func-names": "off",
     "func-style": "off",
     "import/consistent-type-specifier-style": "off",
@@ -83,14 +96,14 @@ export default defineConfig({
         ],
       },
     ],
-    "no-shadow": "off",
-    "no-throw-literal": "off",
-    "no-unmodified-loop-condition": "off",
+    "no-shadow": "error",
+    "no-throw-literal": "error",
+    "no-unmodified-loop-condition": "error",
     "no-use-before-define": "off",
     "no-useless-constructor": "off",
     "no-void": "off",
     "no-warning-comments": "off",
-    "prefer-const": "off",
+    "prefer-const": "error",
     "prefer-destructuring": "off",
     "prefer-object-spread": "off",
     "prefer-template": "off",
@@ -100,7 +113,7 @@ export default defineConfig({
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
     "react-perf/jsx-no-new-function-as-prop": "off",
-    "react/exhaustive-deps": "warn",
+    "react/exhaustive-deps": "error",
     "react/jsx-curly-brace-presence": "off",
     "react/jsx-no-constructed-context-values": "off",
     "react/jsx-no-useless-fragment": "off",
@@ -133,10 +146,10 @@ export default defineConfig({
     "unicorn/no-array-sort": "off",
     "unicorn/no-await-expression-member": "off",
     "unicorn/no-hex-escape": "off",
-    "unicorn/no-immediate-mutation": "off",
+    "unicorn/no-immediate-mutation": "error",
     "unicorn/no-lonely-if": "off",
     "unicorn/no-nested-ternary": "off",
-    "unicorn/no-object-as-default-parameter": "off",
+    "unicorn/no-object-as-default-parameter": "error",
     "unicorn/no-typeof-undefined": "off",
     "unicorn/no-useless-undefined": "off",
     "unicorn/number-literal-case": "off",

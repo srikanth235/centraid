@@ -1030,8 +1030,13 @@ export default function SettingsConnectionsScreen({
         .then(setOauthCallbackUri)
         .catch(() => setOauthCallbackUri(null));
     }
+    // Bind the ref *cell* (not its value) into the effect scope. The pending
+    // timeout id is written by `schedulePoll` long after this effect runs, so
+    // cleanup has to read the live `.current` — snapshotting the id here would
+    // capture `null` and leak the poll timer past unmount.
+    const timerCell = pollTimer;
     return () => {
-      if (pollTimer.current) clearTimeout(pollTimer.current);
+      if (timerCell.current) clearTimeout(timerCell.current);
     };
   }, [
     loadConnections,
@@ -1187,14 +1192,19 @@ export default function SettingsConnectionsScreen({
       return;
     }
     // api_key: re-open credential form without delete/recreate.
-    const featured = featuredForRow(row);
-    if (!featured) {
+    const rowFeatured = featuredForRow(row);
+    if (!rowFeatured) {
       showToast(
         "No provider preset for this connection — reconfigure from Featured."
       );
       return;
     }
-    setSheet({ kind: "connection", row, featured, reconnecting: true });
+    setSheet({
+      kind: "connection",
+      row,
+      featured: rowFeatured,
+      reconnecting: true,
+    });
   };
 
   const onManualAssistHandoff = (rawUrl: string): void => {

@@ -615,10 +615,13 @@ export async function runHandler(
   const executeFetch = async (
     rawSpec: FetchSpecWire
   ): Promise<FetchWireResult> => {
-    let { spec, injected } = await substituteSecrets(
+    const substituted = await substituteSecrets(
       rawSpec,
       opts.connectionAuth?.values ?? {}
     );
+    const { injected } = substituted;
+    // `spec` is re-substituted after a credential refresh (see the 401 branch).
+    let spec = substituted.spec;
     if (!injected) return fetchOnce(spec, false);
     assertInjectable(spec.url, spec.method ?? "GET", spec.body);
     const auth = opts.connectionAuth!;

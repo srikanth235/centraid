@@ -42,12 +42,12 @@ type IngressStore = Pick<
 
 /** Minimal `listIngressAfter` / `pruneIngress` over an in-memory ingress table. */
 function storeOf(
-  rows: readonly Row[],
+  ingressRows: readonly Row[],
   prune?: PruneIngressResult
 ): IngressStore {
   return {
     listIngressAfter: (_sourceKey: string, afterId: number, limit: number) =>
-      rows
+      ingressRows
         .filter((row) => row.id > afterId)
         .slice(0, limit)
         .map(record),

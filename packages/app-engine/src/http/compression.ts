@@ -114,18 +114,20 @@ export const DYNAMIC_QUALITY: CompressQuality = { brotli: 4, gzip: 6 };
 export const STATIC_QUALITY: CompressQuality = { brotli: 10, gzip: 9 };
 
 export function staticQualityForHost(
-  host = {
-    cores: availableParallelism(),
-    totalMemoryBytes: totalmem(),
-  },
+  host?: { cores: number; totalMemoryBytes: number },
   env: NodeJS.ProcessEnv = process.env
 ): CompressQuality {
+  const resolvedHost = host ?? {
+    cores: availableParallelism(),
+    totalMemoryBytes: totalmem(),
+  };
   const resolvedProfile =
     env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
   const constrained =
     resolvedProfile === "constrained" ||
     (resolvedProfile !== "standard" &&
-      (host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3));
+      (resolvedHost.cores <= 4 ||
+        resolvedHost.totalMemoryBytes <= 4 * 1024 ** 3));
   const parse = (
     raw: string | undefined,
     fallback: number,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // The leaf-route data pattern, ported from the vanilla render fns: each screen
 // fetches its data over IPC, shows a loading line, then the screen (or an error
@@ -28,17 +28,38 @@ export function useAsyncData<T>(
     deps: readonly unknown[];
     state: AsyncState<T>;
   } | null>(null);
-  // `deps` is a caller-provided array by contract — re-fetch when it changes.
+  // `deps` is a caller-provided array of arbitrary length, so it can never be a
+  // literal dependency list at the `useEffect` call site below. Fold it into a
+  // single value instead: `tracked` is re-boxed exactly when the caller's array
+  // changes element-wise — the same comparison React would apply to a literal
+  // list — so `[tracked]` re-fetches on precisely the same transitions as
+  // `deps` did, and is statically checkable.
+  const [tracked, setTracked] = useState<{ deps: readonly unknown[] }>({
+    deps,
+  });
+  if (!sameDeps(tracked.deps, deps)) setTracked({ deps });
+  // `load` is a fresh closure on nearly every call site, so it must NOT be a
+  // dependency (that would re-fetch every render). A latest-value ref, synced in
+  // its own effect — never during render — hands the effect the current one.
+  const loadRef = useRef(load);
   useEffect(() => {
+    loadRef.current = load;
+  });
+
+  useEffect(() => {
+    const fetchedFor = tracked.deps;
     let alive = true;
-    load()
+    loadRef
+      .current()
       .then((data) => {
-        if (alive) setSettled({ deps, state: { status: "ready", data } });
+        if (alive) {
+          setSettled({ deps: fetchedFor, state: { status: "ready", data } });
+        }
       })
       .catch((err: unknown) => {
         if (alive) {
           setSettled({
-            deps,
+            deps: fetchedFor,
             state: {
               status: "error",
               error: err instanceof Error ? err.message : String(err),
@@ -49,7 +70,7 @@ export function useAsyncData<T>(
     return () => {
       alive = false;
     };
-  }, deps);
+  }, [tracked]);
   return settled !== null && sameDeps(settled.deps, deps)
     ? settled.state
     : LOADING;

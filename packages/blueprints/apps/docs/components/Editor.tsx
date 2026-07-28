@@ -144,11 +144,24 @@ export function Editor({
     await performSave();
   };
 
+  // `flush` closes over this render's props and `registerFlush` is a fresh
+  // inline arrow from the host, so neither may be an effect dependency: the
+  // registration effect below would then re-run on every render and its
+  // cleanup would clear the pending autosave timer on every keystroke, which
+  // is exactly the debounce it is supposed to leave alone. Latest-value refs
+  // keep the registered callback current without re-running the effect.
+  const flushRef = useRef(flush);
+  const registerFlushRef = useRef(registerFlush);
   useEffect(() => {
-    registerFlush?.(flush);
+    flushRef.current = flush;
+    registerFlushRef.current = registerFlush;
+  });
+
+  useEffect(() => {
+    registerFlushRef.current?.(() => flushRef.current());
     return () => clearTimeout(saveTimerRef.current);
     // (#360) registered once; this component remounts on document_id change (see file header), so the closed-over doc/onSave props flush() reads can never go stale without a fresh registration
-  }, [flush, registerFlush]);
+  }, []);
 
   const updateBody = (v: string): void => {
     bodyRef.current = v;

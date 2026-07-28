@@ -72,8 +72,9 @@ describe(ChangeBus, () => {
   it("listener that unsubscribes itself during dispatch does not break iteration", () => {
     const bus = new ChangeBus();
     const order: string[] = [];
-    let unsubA: () => void;
-    unsubA = bus.subscribe("app1", () => {
+    // The listener unsubscribes ITSELF, so it closes over its own binding. The
+    // callback only runs on emit, well after `unsubA` is bound.
+    const unsubA = bus.subscribe("app1", () => {
       order.push("a");
       unsubA();
     });

@@ -138,7 +138,10 @@ jobs:
       - run: bun run lockfile:lint
       - run: bun run format:check
       # `--format github` emits inline PR annotations on the offending lines.
-      - run: bunx oxlint -c oxlint.config.mjs --format github .
+      # `--deny-warnings` makes warn-severity findings fail the job — without
+      # it a "warn" rule is decorative, which is how 19 exhaustive-deps
+      # findings sat invisible on main (#619).
+      - run: bunx oxlint -c oxlint.config.mjs --format github --deny-warnings .
       # Monorepo package.json hygiene: unused/undeclared deps, version drift
       # across workspaces, misplaced @types (sherif). Fast, offline.
       - run: bun run lint:packages
@@ -159,6 +162,11 @@ jobs:
       # Type-aware pass (oxlint --type-aware); deps' dist is built by the
       # typecheck step's upstream `^build`.
       - run: bun run lint:types
+      # Workspace tsconfig invariants (#619): every config extends a base, no
+      # TS7-removed options (they silently disable the type-aware pass), emit
+      # configs exclude tests (published packages shipped compiled tests), and
+      # every package's tests are in some TS program.
+      - run: bun run lint:tsconfigs
       # Dead-code / unused-dependency scan (knip). Tuned as a files + dependency
       # hygiene gate: unused files, unused deps, undeclared (unlisted) deps.
       # Export/type dimensions are excluded (public-API monorepo makes them

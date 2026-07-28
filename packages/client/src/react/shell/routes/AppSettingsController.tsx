@@ -149,6 +149,17 @@ export default function AppSettingsController({
     if (alive.current) updater.current?.(buildSnapshot());
   };
 
+  // `push` rebuilds the whole snapshot from this render's props and refs, so it
+  // is a fresh function every render and must NOT be a dependency of the
+  // open-once effect below: that effect would then re-run on every render,
+  // re-fetching the manifest and — through its cleanup — unmounting every live
+  // sub-root. A latest-value ref keeps the async continuations pushing the
+  // current snapshot while the effect stays keyed on `appId` alone.
+  const pushRef = useRef(push);
+  useEffect(() => {
+    pushRef.current = push;
+  });
+
   // Resolve knobs, vault visibility, and linked automations once on open.
   useEffect(() => {
     alive.current = true;
@@ -163,14 +174,14 @@ export default function AppSettingsController({
           knobs.current = manifest.knobs;
           Object.assign(knobValues.current, stored);
         }
-        push();
+        pushRef.current();
       }
     );
     void manifestRaw.then((raw) => {
       if (!alive.current) return;
       if (manifestVaultBlock(raw)) {
         vaultVisible.current = true;
-        push();
+        pushRef.current();
       }
     });
     void listAutomations().then((all) => {
@@ -178,7 +189,7 @@ export default function AppSettingsController({
       orders.current = all.filter((r) => r.manifest.apps?.includes(appId));
       automationsBadge.current =
         orders.current.length === 0 ? null : orders.current.length;
-      push();
+      pushRef.current();
     });
 
     return () => {
@@ -186,7 +197,7 @@ export default function AppSettingsController({
       roots.forEach((r) => r.unmount());
       roots.clear();
     };
-  }, [appId, push]);
+  }, [appId]);
 
   const pushKnob = (key: string, value: string): void => {
     if (inlineRoot) pushKnobToInlineRoot(inlineRoot, key, value);

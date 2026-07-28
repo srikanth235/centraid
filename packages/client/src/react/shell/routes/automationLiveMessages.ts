@@ -264,8 +264,7 @@ export function startAutomationLiveItem(
   }
 ): AutomationLiveTraceState {
   if (state.items.has(input.itemId)) return state;
-  const items = new Map(state.items);
-  items.set(
+  const items = new Map(state.items).set(
     input.itemId,
     createLiveItem(
       input.itemId,

@@ -190,8 +190,14 @@ function sealedSize(plainSize, frameCount) {
   return plainSize + 94 + 33 * frameCount;
 }
 
-async function sealedDirectory(key, sha, fileSize, frameCount, frameLengths) {
-  const plain = encodeCbsfDirectory(FRAME_BYTES, fileSize, frameLengths);
+async function sealedDirectory(
+  key,
+  sha,
+  fileSize,
+  frameCount,
+  sealedFrameLengths
+) {
+  const plain = encodeCbsfDirectory(FRAME_BYTES, fileSize, sealedFrameLengths);
   return seal(key, plain, directoryAad(sha, frameCount));
 }
 

@@ -216,13 +216,13 @@ export class ReplicaShellSession {
     request: ShellReplicaReadRequest
   ): Promise<ReplicaReadWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
+    const resolvedShapeId = this.resolveShapeId(
       appId,
       request.entity,
       request.shapeId,
       request.purpose
     );
-    return this.coordinator.readWire({ ...request, shapeId });
+    return this.coordinator.readWire({ ...request, shapeId: resolvedShapeId });
   }
 
   async search(
@@ -230,13 +230,16 @@ export class ReplicaShellSession {
     request: ShellReplicaSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
+    const resolvedShapeId = this.resolveShapeId(
       appId,
       request.entity,
       request.shapeId,
       request.purpose
     );
-    return this.coordinator.searchWire({ ...request, shapeId });
+    return this.coordinator.searchWire({
+      ...request,
+      shapeId: resolvedShapeId,
+    });
   }
 
   async write(
@@ -247,10 +250,15 @@ export class ReplicaShellSession {
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
     const optimistic = (input.optimistic ?? []).map((mutation) => {
-      const { purpose, shapeId, ...core } = mutation;
+      const { purpose, shapeId: requestedShapeId, ...core } = mutation;
       return {
         ...core,
-        shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose),
+        shapeId: this.resolveShapeId(
+          appId,
+          mutation.entity,
+          requestedShapeId,
+          purpose
+        ),
       };
     }) as OptimisticMutation[];
     for (const mutation of optimistic) {
@@ -705,7 +713,11 @@ export async function openReplicaShellSession(
       }
     );
   }
-  let session: ReplicaShellSession | undefined;
+  // The coordinator callbacks close over the session that is built *with*
+  // the coordinator — a ref cell ties the knot without a reassignable binding.
+  const sessionRef: { current: ReplicaShellSession | undefined } = {
+    current: undefined,
+  };
   let pendingBootstrap = false;
   let persistedShapeIds: readonly string[] = [];
   const fetcher = options.fetcher ?? fetchReplicaForScope(gatewayAuth);
@@ -742,7 +754,8 @@ export async function openReplicaShellSession(
             fetcher
           );
         } catch (error) {
-          if (isAuthorizationError(error) && session) revokeAndPurge(session);
+          if (isAuthorizationError(error) && sessionRef.current)
+            revokeAndPurge(sessionRef.current);
           throw error;
         }
       },
@@ -753,11 +766,12 @@ export async function openReplicaShellSession(
           schemaEpoch,
           fetcher
         ).catch((error) => {
-          if (isAuthorizationError(error) && session) revokeAndPurge(session);
+          if (isAuthorizationError(error) && sessionRef.current)
+            revokeAndPurge(sessionRef.current);
         });
       },
       onRebootstrapRequired: () => {
-        if (session) session.requireBootstrap();
+        if (sessionRef.current) sessionRef.current.requireBootstrap();
         else pendingBootstrap = true;
       },
     }
@@ -776,12 +790,13 @@ export async function openReplicaShellSession(
       throw error;
     }
   }
-  session = new ReplicaShellSession(gatewayAuth, replica, {
+  const session = new ReplicaShellSession(gatewayAuth, replica, {
     ...options,
     fetcher,
     rememberStorage,
     onAuthorizationRevoked: options.onAuthorizationRevoked ?? forgetSession,
   });
+  sessionRef.current = session;
   await session.start(status);
   if (pendingBootstrap) session.requireBootstrap();
   return session;

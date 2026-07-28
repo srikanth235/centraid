@@ -44,10 +44,10 @@ function meta(id: string, name: string, description = ""): AppMetaResolved {
 describe(buildLauncherItems, () => {
   it("always includes native covers as installed", () => {
     const items = buildLauncherItems([]);
-    const natives = items.filter((it) => NATIVE_APP_IDS.has(it.meta.id));
+    const natives = items.filter((item) => NATIVE_APP_IDS.has(item.meta.id));
     expect(natives).toHaveLength(3);
-    expect(natives.every((it) => it.installed)).toBe(true);
-    expect(natives.map((it) => it.route.kind).sort()).toStrictEqual([
+    expect(natives.every((item) => item.installed)).toBe(true);
+    expect(natives.map((item) => item.route.kind).sort()).toStrictEqual([
       "agenda",
       "docs",
       "photos",
@@ -56,7 +56,7 @@ describe(buildLauncherItems, () => {
 
   it("dims uninstalled gateway catalog apps and routes them to pair", () => {
     const items = buildLauncherItems([]);
-    const tasks = items.find((it) => it.meta.id === "tasks");
+    const tasks = items.find((item) => item.meta.id === "tasks");
     expect(tasks).toMatchObject({ installed: false, route: { kind: "pair" } });
   });
 
@@ -66,13 +66,13 @@ describe(buildLauncherItems, () => {
       meta("custom-app", "Custom", "user built"),
     ];
     const items = buildLauncherItems(remote);
-    const tasks = items.find((it) => it.meta.id === "tasks");
+    const tasks = items.find((item) => item.meta.id === "tasks");
     expect(tasks).toMatchObject({
       installed: true,
       meta: expect.objectContaining({ name: "My Tasks" }),
       route: { kind: "app", appId: "tasks" },
     });
-    const custom = items.find((it) => it.meta.id === "custom-app");
+    const custom = items.find((item) => item.meta.id === "custom-app");
     expect(custom).toMatchObject({
       installed: true,
       route: { kind: "app", appId: "custom-app" },
@@ -88,7 +88,7 @@ describe(filterLauncherItems, () => {
     expect(copy).not.toBe(items);
     const photos = filterLauncherItems(items, "PHOTO");
     expect(
-      photos.every((it) => it.meta.name.toLowerCase().includes("photo"))
+      photos.every((item) => item.meta.name.toLowerCase().includes("photo"))
     ).toBe(true);
     expect(photos.length).toBeGreaterThan(0);
   });

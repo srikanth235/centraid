@@ -306,8 +306,7 @@ export default function AtlasRelationsTab({
 
   // Rendered edges: both endpoints visible, self-refs dropped (a glyph, not a
   // loop), and — at Simple only — ghost edges nothing fills yet are hidden.
-  const visibleSet = new Set(visibleNodes.map((n) => n.physical));
-  visibleSet.add(center);
+  const visibleSet = new Set(visibleNodes.map((n) => n.physical)).add(center);
   const drawEdges = edges.filter((e) =>
     edgeVisibleAtLevel(level, e, visibleSet)
   );

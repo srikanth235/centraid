@@ -68,8 +68,8 @@ const templates = await Promise.all(
     // reads manifest.json, so this rides along for free.
     let appKnobs;
     try {
-      const raw = await fs.readFile(path.join(dir, "app.json"), "utf8");
-      const parsed = JSON.parse(raw);
+      const appJsonRaw = await fs.readFile(path.join(dir, "app.json"), "utf8");
+      const parsed = JSON.parse(appJsonRaw);
       if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
     } catch {
       /* template has no parseable app.json or no knobs — fine, the popover

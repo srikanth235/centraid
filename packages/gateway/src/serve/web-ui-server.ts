@@ -234,9 +234,12 @@ export async function startWebUiServer(
         // awaits this during teardown, so that wedges a gateway switch or
         // quit. Stop accepting, hurry the idle sockets along, then destroy
         // whatever is left after the grace window.
-        let force: ReturnType<typeof setTimeout> | undefined;
+        const force = setTimeout(
+          () => server.closeAllConnections(),
+          GATEWAY_SHUTDOWN_GRACE_MS
+        );
         server.close((error) => {
-          if (force) clearTimeout(force);
+          clearTimeout(force);
           if (error) {
             reject(error);
             return;
@@ -244,10 +247,6 @@ export async function startWebUiServer(
           resolve();
         });
         server.closeIdleConnections();
-        force = setTimeout(
-          () => server.closeAllConnections(),
-          GATEWAY_SHUTDOWN_GRACE_MS
-        );
       }),
   };
 }

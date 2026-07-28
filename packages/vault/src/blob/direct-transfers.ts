@@ -347,8 +347,7 @@ export class DirectBlobTransfers {
     if (!etag) throw new VaultBlobSessionError("multipart ETag is required");
     const byNumber = new Map(
       this.parts(row.remote_parts_json).map((part) => [part.partNumber, part])
-    );
-    byNumber.set(partNumber, { partNumber, etag });
+    ).set(partNumber, { partNumber, etag });
     const parts = [...byNumber.values()].sort(
       (a, b) => a.partNumber - b.partNumber
     );

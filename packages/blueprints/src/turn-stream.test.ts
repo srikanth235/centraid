@@ -128,7 +128,7 @@ describe("consumeSseFrames", () => {
     const frames: string[] = [];
     await consumeSseFrames(
       streamOf(["data: first\n\nda", "ta: second\n\n"]),
-      (frame: string) => frames.push(frame)
+      (received: string) => frames.push(received)
     );
     expect(frames).toStrictEqual(["data: first", "data: second"]);
   });

@@ -205,11 +205,11 @@ export const flush = async (): Promise<void> => {
 };
 
 export const fire = async (
-  node: Element | null | undefined,
+  target: Element | null | undefined,
   type: string
 ): Promise<void> => {
   await act(async () =>
-    node?.dispatchEvent(new MouseEvent(type, { bubbles: true }))
+    target?.dispatchEvent(new MouseEvent(type, { bubbles: true }))
   );
   await act(async () => {
     await Promise.resolve();

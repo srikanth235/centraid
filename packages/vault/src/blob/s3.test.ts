@@ -43,7 +43,7 @@ function signedHeadersOf(authorization: string): string[] {
   return m ? (m[1] ?? "").split(";") : [];
 }
 
-function startFakeS3(): Promise<FakeS3> {
+async function startFakeS3(): Promise<FakeS3> {
   const objects = new Map<string, Buffer>();
   const requests: FakeRequest[] = [];
   const state = { failNext: 0, failStatus: 503 };
@@ -126,31 +126,29 @@ function startFakeS3(): Promise<FakeS3> {
       res.writeHead(400).end();
     });
   });
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as { port: number };
-      const fake: FakeS3 = {
-        url: `http://127.0.0.1:${addr.port}`,
-        objects,
-        requests,
-        get failNext() {
-          return state.failNext;
-        },
-        set failNext(n: number) {
-          state.failNext = n;
-        },
-        get failStatus() {
-          return state.failStatus;
-        },
-        set failStatus(s: number) {
-          state.failStatus = s;
-        },
-        close: () =>
-          new Promise<void>((resolve) => server.close(() => resolve())),
-      };
-      resolve(fake);
-    });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
   });
+  const addr = server.address() as { port: number };
+  const fake: FakeS3 = {
+    url: `http://127.0.0.1:${addr.port}`,
+    objects,
+    requests,
+    get failNext() {
+      return state.failNext;
+    },
+    set failNext(n: number) {
+      state.failNext = n;
+    },
+    get failStatus() {
+      return state.failStatus;
+    },
+    set failStatus(s: number) {
+      state.failStatus = s;
+    },
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+  return fake;
 }
 
 const CREDS = () =>

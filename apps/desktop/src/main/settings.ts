@@ -318,8 +318,12 @@ async function resolveEffective(
   const deferLocalStart =
     p.onboardingCompletedAt === undefined && !localGatewayStartRequested;
   if (resolved.profile.kind === "local" && !resolved.url && !deferLocalStart) {
-    const { ensureLocalGateway } = await import("./local-gateway.js");
-    const handle = await ensureLocalGateway(resolved.profile.id);
+    // Distinct from the `gateway-store` import of the same name above: that
+    // one materializes the local *profile*, this one starts the in-process
+    // gateway *runtime* and hands back its loopback URL/token.
+    const { ensureLocalGateway: ensureLocalGatewayRuntime } =
+      await import("./local-gateway.js");
+    const handle = await ensureLocalGatewayRuntime(resolved.profile.id);
     resolved = {
       ...resolved,
       url: handle.url,

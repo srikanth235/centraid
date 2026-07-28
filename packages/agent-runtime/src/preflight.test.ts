@@ -420,7 +420,7 @@ describe("preflight suite", () => {
   });
 
   test("agentSpawnEnv defaults baseEnv to process.env", () => {
-    const savedPath = process.env.PATH;
+    const priorPath = process.env.PATH;
     try {
       process.env.PATH = ["/Users/x/node_modules/.bin", "/usr/bin"].join(
         path.delimiter
@@ -428,7 +428,7 @@ describe("preflight suite", () => {
       const env = agentSpawnEnv();
       expect(env.PATH).toBe("/usr/bin");
     } finally {
-      process.env.PATH = savedPath;
+      process.env.PATH = priorPath;
     }
   });
 

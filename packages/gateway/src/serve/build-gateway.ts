@@ -1742,9 +1742,9 @@ export async function buildGateway(
   // Cycle break: the chat runner needs the Runtime's dispatcher, but
   // the Runtime is constructed *with* the chat runner. The runtimeRef
   // holder resolves at call time, after the assignment below.
-  let runtimeRef: Runtime | undefined;
+  const runtimeRef: { current: Runtime | undefined } = { current: undefined };
   const getDispatcher = (): Runtime["dispatcher"] => {
-    const rt = runtimeRef;
+    const rt = runtimeRef.current;
     if (!rt)
       throw new Error("chat runner invoked before runtime was constructed");
     return rt.dispatcher;
@@ -2201,8 +2201,9 @@ export async function buildGateway(
   };
 
   const requireRuntime = (): Runtime => {
-    if (!runtimeRef) throw new Error("gateway: runtime not constructed yet");
-    return runtimeRef;
+    if (!runtimeRef.current)
+      throw new Error("gateway: runtime not constructed yet");
+    return runtimeRef.current;
   };
 
   async function buildHost(plane: VaultPlane): Promise<VaultHost> {
@@ -3502,7 +3503,7 @@ export async function buildGateway(
     turnLimiter: turnLimiterForCurrentVault,
   });
 
-  runtimeRef = runtime;
+  runtimeRef.current = runtime;
 
   // The vault assistant (shell-level Q&A over the whole vault): one
   // runner for the gateway's lifetime — every turn resolves the request's
@@ -4169,7 +4170,6 @@ export async function buildGateway(
       });
     }
     req.headers[AUTHED_DEVICE_HEADER] = deviceKey;
-    let vaultId: string;
     const enrolled =
       effectiveDeviceAccess?.vaultsFor(deviceKey) ??
       enrollmentStore.vaultsFor(deviceKey);
@@ -4199,7 +4199,7 @@ export async function buildGateway(
         message: "this device is not enrolled in the requested vault",
       });
     }
-    vaultId = requested ?? enrolled[0]!;
+    const vaultId = requested ?? enrolled[0]!;
     if (!vaultRegistry.get(vaultId)) {
       return sendJson(res, 404, {
         error: "vault_not_found",

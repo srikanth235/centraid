@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 
 // Crop/rotate editor (issue #352 phase 3/4). Non-destructive by design: the
@@ -61,12 +61,15 @@ export function EditorView({
   const [alsoTrash, setAlsoTrash] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const imgRef = useRef<HTMLImageElement | null>(null);
+  // The decoded source lives in state, not a ref: the load handler runs outside
+  // React, so a ref would leave the redraw effect below with nothing to key off
+  // and force the loader itself to call draw() — which would in turn make the
+  // loader depend on `rotation` and re-fetch the image on every rotate.
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const noteRef = useRef<HTMLParagraphElement | null>(null);
 
-  function draw() {
-    const img = imgRef.current;
+  const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!img || !canvas) return;
     const swapped = rotation % 180 !== 0;
@@ -80,33 +83,32 @@ export function EditorView({
     ctx.rotate((rotation * Math.PI) / 180);
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     ctx.restore();
-  }
+  }, [img, rotation]);
 
   // One source Image per mount — content_uri never changes under an open
   // editor (the lightbox mints a fresh EditorView per asset via its own
   // remount contract), so this loads exactly once.
   useEffect(() => {
     let cancelled = false;
-    const img = new Image();
-    img.addEventListener("load", () => {
-      if (cancelled) return;
-      imgRef.current = img;
-      draw();
+    const source = new Image();
+    source.addEventListener("load", () => {
+      if (!cancelled) setImg(source);
     });
-    img.addEventListener("error", () => {
+    source.addEventListener("error", () => {
       if (!cancelled) setLoadError(true);
     });
-    img.src = asset.content_uri ?? "";
+    source.src = asset.content_uri ?? "";
     return () => {
       cancelled = true;
     };
     // (#360) one-shot load; the rotation-driven redraw is the effect below
-  }, [draw, asset.content_uri]);
+  }, [asset.content_uri]);
 
+  // Redraws whenever the source or the rotation changes — `draw` is memoized on
+  // exactly those two, so its identity IS the redraw trigger.
   useEffect(() => {
     draw();
-    // (#360) draw() closes over the current rotation/refs each render
-  }, [rotation, draw]);
+  }, [draw]);
 
   function fractionAt(e: { clientX: number; clientY: number }) {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -143,7 +145,7 @@ export function EditorView({
 
   async function handleSave() {
     const canvas = canvasRef.current;
-    if (!canvas || !imgRef.current) return;
+    if (!canvas || !img) return;
     setBusy(true);
     try {
       const source = crop ? cropCanvas(canvas, crop) : canvas;

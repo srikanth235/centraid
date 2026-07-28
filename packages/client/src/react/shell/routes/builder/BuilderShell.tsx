@@ -1,4 +1,11 @@
-import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type JSX,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import type { AppearancePrefs } from "../../../../app-shell-context.js";
@@ -121,14 +128,17 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   // Chat pane only exists on Preview (app) or every automation tab; ⌘\ toggles.
   const chatEligible = vm.isAutomation || vm.tab === "preview";
   const chatVisible = chatEligible && chatOpenPref;
-  const toggleChat = (): void => {
+  // Memoized on `chatEligible` alone: the updater form reads the live pref, so
+  // the identity only has to change when eligibility flips. A fresh function
+  // every render would re-bind the ⌘\ keydown listener on every render.
+  const toggleChat = useCallback((): void => {
     if (!chatEligible) return;
     setChatOpenPref((open) => {
       const next = !open;
       Store.set(CHAT_PANE_PREF, next);
       return next;
     });
-  };
+  }, [chatEligible]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (!(e.metaKey || e.ctrlKey) || e.key !== "\\") return;

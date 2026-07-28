@@ -763,7 +763,7 @@ describe("wal", () => {
       let maxLocal = 0;
       await forEachSequentially(
         Array.from({ length: TICKS_PER_DAY }),
-        async (_, t) => {
+        async (_tick, t) => {
           const title = `outage-d${day}-t${t}`;
           invoke(f.plane, "schedule.add_task", { title });
           written.push(title);
@@ -1678,11 +1678,10 @@ describe("wal", () => {
     // The proxy resolves its inner provider LAZILY: `fx` mints the provider dir,
     // and every read helper in this file (walObjectFiles, openNewestManifest)
     // reads that same dir — a second root would be a different world.
-    let inner: BackupProvider | undefined;
     const f = await fx({
-      provider: markerBlockingProvider(() => inner!, blocked),
+      provider: markerBlockingProvider(() => innerProvider, blocked),
     });
-    inner = openLocalBackupProvider({ rootDir: f.providerDir });
+    const innerProvider = openLocalBackupProvider({ rootDir: f.providerDir });
 
     invoke(f.plane, "schedule.add_task", { title: "drain-interrupt" });
     await f.service.runBackup(f.vaultId);

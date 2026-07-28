@@ -28,7 +28,7 @@ describe("storage-usage", () => {
   });
 
   /** Minimal fake provider — one route, PROTOCOL.md's exact envelope + shape. */
-  function startFakeUsageServer(opts: {
+  async function startFakeUsageServer(opts: {
     apiKey: string;
     targetId: string;
     usage: { backup?: unknown; cas?: unknown };
@@ -73,20 +73,18 @@ describe("storage-usage", () => {
         })
       );
     });
-    return new Promise((resolve) => {
-      server.listen(0, "127.0.0.1", () => {
-        const { port } = server.address() as AddressInfo;
-        cleanups.push(
-          () => new Promise<void>((resolve) => server.close(() => resolve()))
-        );
-        resolve({
-          url: `http://127.0.0.1:${port}`,
-          requestCount: () => requests,
-          close: () =>
-            new Promise<void>((resolve) => server.close(() => resolve())),
-        });
-      });
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve());
     });
+    const { port } = server.address() as AddressInfo;
+    const close = () =>
+      new Promise<void>((resolve) => server.close(() => resolve()));
+    cleanups.push(close);
+    return {
+      url: `http://127.0.0.1:${port}`,
+      requestCount: () => requests,
+      close,
+    };
   }
 
   async function makeProviderConnection(

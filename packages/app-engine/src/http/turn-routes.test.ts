@@ -67,7 +67,7 @@ describe("turn-routes", () => {
     // `journalFor`) — a fresh `makeJournalDbProvider` per `workspace()` call
     // opens a second handle onto the same sqlite file and the turn hangs.
     const journal = makeJournalDbProvider(path.join(dir, "journal.db"));
-    const workspace: WorkspaceProvider = () => ({
+    const workspaceProvider: WorkspaceProvider = () => ({
       vaultId: "vault-test",
       ownerPartyId: "test-user",
       appsDir: path.join(dir, "apps"),
@@ -75,7 +75,7 @@ describe("turn-routes", () => {
       journalDbFile: path.join(dir, "journal.db"),
       runnerSessionDir: path.join(dir, "runner-sessions"),
     });
-    return new ConversationHistoryStore(workspace);
+    return new ConversationHistoryStore(workspaceProvider);
   }
 
   async function bootstrapWithStore(

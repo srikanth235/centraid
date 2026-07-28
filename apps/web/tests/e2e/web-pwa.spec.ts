@@ -148,13 +148,13 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
     .frames()
     .find((candidate) => candidate.url().includes("/centraid/web-e2e/"))!;
   const confinement = await frame.evaluate(async () => {
-    const [apps, control] = await Promise.all([
+    const [apps, controlFromApp] = await Promise.all([
       fetch("/centraid/_apps"),
       fetch("/centraid/_web/control?path=%2Fcentraid%2F_apps", {
         credentials: "include",
       }),
     ]);
-    return { apps: apps.status, control: control.status };
+    return { apps: apps.status, control: controlFromApp.status };
   });
   expect(confinement).toEqual({ apps: 401, control: 401 });
 });

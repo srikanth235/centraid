@@ -25,7 +25,7 @@ interface FakeS3 {
   close: () => Promise<void>;
 }
 
-function startFakeS3(): Promise<FakeS3> {
+async function startFakeS3(): Promise<FakeS3> {
   const objects = new Map<string, Buffer>();
   const requests: { method: string; key: string }[] = [];
   const server = http.createServer((req, res) => {
@@ -80,18 +80,16 @@ function startFakeS3(): Promise<FakeS3> {
       res.writeHead(400).end();
     });
   });
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address() as { port: number };
-      resolve({
-        url: `http://127.0.0.1:${addr.port}`,
-        objects,
-        requests,
-        close: () =>
-          new Promise<void>((resolve) => server.close(() => resolve())),
-      });
-    });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
   });
+  const addr = server.address() as { port: number };
+  return {
+    url: `http://127.0.0.1:${addr.port}`,
+    objects,
+    requests,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
 }
 
 const CREDS = () =>

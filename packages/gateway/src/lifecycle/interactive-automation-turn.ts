@@ -269,14 +269,14 @@ export async function runInteractiveAutomationTurn(
         const hydrationMessages = hydrationMessagesFromLedger(
           turnsBeforeCurrent,
           (turnId) => store.listItems(turnId),
-          (itemId) => store.listAttachmentsForItem(itemId),
+          (ledgerItemId) => store.listAttachmentsForItem(ledgerItemId),
           binding?.hydratedThroughSeq ?? -1
         );
         const recoveryMessages = binding
           ? hydrationMessagesFromLedger(
               turnsBeforeCurrent,
               (turnId) => store.listItems(turnId),
-              (itemId) => store.listAttachmentsForItem(itemId)
+              (ledgerItemId) => store.listAttachmentsForItem(ledgerItemId)
             )
           : [];
         const hydrationPlan =
@@ -777,10 +777,10 @@ export async function runInteractiveAutomationTurn(
           ...(stopReason ? { stopReason } : {}),
         };
         store.runInTransaction(() => {
-          for (const [itemId, artifacts] of artifactsByItem) {
+          for (const [attachedItemId, artifacts] of artifactsByItem) {
             for (const artifact of artifacts) {
               store.insertAttachment({
-                itemId,
+                itemId: attachedItemId,
                 hash: artifact.hash,
                 mime: artifact.mime,
                 sizeBytes: artifact.sizeBytes,

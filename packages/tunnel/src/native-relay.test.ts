@@ -128,9 +128,9 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== "1")(
       expect(response.status).toBe(200);
       expect(response.headers["x-seen-device"]).toBe(client.endpointId);
       expect(response.body).toStrictEqual(body);
-      expect(controlCalls.map(({ path }) => path)).toContain(
-        "/centraid/_gateway/tunnel/pair"
-      );
+      expect(
+        controlCalls.map(({ path: controlPath }) => controlPath)
+      ).toContain("/centraid/_gateway/tunnel/pair");
       expect(boxedAuthorize).not.toHaveBeenCalled();
       expect(boxedPair).not.toHaveBeenCalled();
 

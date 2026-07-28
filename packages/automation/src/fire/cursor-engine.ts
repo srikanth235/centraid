@@ -282,11 +282,16 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       active.dirty = true;
       return active.promise;
     }
-    const state = { promise: Promise.resolve(), dirty: false };
-    state.promise = (async () => {
+    // The drain loop and the in-flight record are the same object, but the
+    // record cannot be built in one literal: the async body below starts
+    // running synchronously and already touches the flag. So the flag is
+    // allocated first and the promise is grafted onto it once it exists —
+    // `flag === state`, so callers still see one flat `{promise, dirty}`.
+    const flag = { dirty: false };
+    const promise = (async () => {
       let failure: { error: unknown } | undefined;
       const drainDirtyWork = async (): Promise<void> => {
-        state.dirty = false;
+        flag.dirty = false;
         try {
           await this.process(registration, at);
         } catch (error) {
@@ -296,13 +301,14 @@ export class VaultCursorEngine implements LocalCursorScheduler {
           // POST or a restart. Drain it, then surface the first failure.
           failure ??= { error };
         }
-        if (state.dirty) return drainDirtyWork();
+        if (flag.dirty) return drainDirtyWork();
         if (failure) throw failure.error;
       };
       await drainDirtyWork();
     })().finally(() => {
-      if (this.inFlight.get(key) === state) this.inFlight.delete(key);
+      if (this.inFlight.get(key) === flag) this.inFlight.delete(key);
     });
+    const state = Object.assign(flag, { promise });
     this.inFlight.set(key, state);
     return state.promise;
   }

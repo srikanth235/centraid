@@ -933,8 +933,8 @@ export default function App(): JSX.Element {
       {paletteOpen ? (
         <PaletteScreen
           onClose={closePalette}
-          onReady={(refresh) => {
-            paletteConversationSearch.setOnResults(refresh);
+          onReady={(refreshPalette) => {
+            paletteConversationSearch.setOnResults(refreshPalette);
           }}
           buildGroups={(query) =>
             buildPaletteGroups(query, {

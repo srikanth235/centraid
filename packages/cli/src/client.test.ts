@@ -9,7 +9,7 @@ import { describe, expect, test } from "vitest";
 
 import { getHealth, handshake, listApps } from "./client.ts";
 
-function startMockGateway(): Promise<{
+async function startMockGateway(): Promise<{
   url: string;
   token: string;
   close: () => Promise<void>;
@@ -53,26 +53,22 @@ function startMockGateway(): Promise<{
     res.writeHead(404);
     res.end();
   });
-  return new Promise((resolve, reject) => {
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      if (!addr || typeof addr === "string") {
-        reject(new Error("no address"));
-        return;
-      }
-      resolve({
-        url: `http://127.0.0.1:${addr.port}`,
-        token,
-        close: () =>
-          new Promise<void>((resolve, reject) => {
-            server.close((err) => {
-              if (err) reject(err);
-              else resolve();
-            });
-          }),
-      });
-    });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve());
   });
+  const addr = server.address();
+  if (!addr || typeof addr === "string") throw new Error("no address");
+  return {
+    url: `http://127.0.0.1:${addr.port}`,
+    token,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) reject(err instanceof Error ? err : new Error(String(err)));
+          else resolve();
+        });
+      }),
+  };
 }
 
 describe("client", () => {

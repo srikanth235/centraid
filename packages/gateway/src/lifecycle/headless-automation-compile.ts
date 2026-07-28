@@ -596,7 +596,8 @@ export async function runHeadlessAutomationCompile(
         );
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const failureMessage =
+        error instanceof Error ? error.message : String(error);
       const endedAt = Date.now();
       store.runInTransaction(() => {
         store.insertItem({
@@ -605,13 +606,13 @@ export async function runHeadlessAutomationCompile(
           ordinal: opts.failoverNotice ? 2 : 1,
           kind: "step",
           outputJson: JSON.stringify({
-            error: message,
+            error: failureMessage,
             ...(finalText ? { text: finalText } : {}),
             ...(stopReason === undefined ? {} : { stopReason }),
           }),
           ...(rawJson === undefined ? {} : { rawJson }),
           ok: false,
-          error: message,
+          error: failureMessage,
           startedAt,
           endedAt,
           durationMs: endedAt - startedAt,
@@ -621,11 +622,16 @@ export async function runHeadlessAutomationCompile(
           turnId: runId,
           endedAt,
           ok: false,
-          error: message,
+          error: failureMessage,
           summary: "Compile failed",
           ...(stopReason === undefined
             ? {}
-            : { outputJson: JSON.stringify({ stopReason, error: message }) }),
+            : {
+                outputJson: JSON.stringify({
+                  stopReason,
+                  error: failureMessage,
+                }),
+              }),
         });
         if (adapter?.hydrationTokens !== undefined) {
           store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
@@ -645,9 +651,9 @@ export async function runHeadlessAutomationCompile(
         store.noteFailedTurn(conversationId, "", observedAdapter);
       });
       if (failureClass === undefined) {
-        await opts.onFailure?.(message);
+        await opts.onFailure?.(failureMessage);
       } else {
-        await opts.onFailure?.(message, failureClass);
+        await opts.onFailure?.(failureMessage, failureClass);
       }
     }
   } finally {

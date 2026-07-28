@@ -604,11 +604,17 @@ export async function createNativeReplicaSession(
     idFactory ??= nativeReplicaIdFactory;
   }
   const intents = new IntentQueue(intentStore, { digest, idFactory });
-  let session: NativeReplicaSession | undefined;
+  // The coordinator closes over the session that is built *with* it — a ref
+  // cell ties the knot without a reassignable binding.
+  const sessionRef: { current: NativeReplicaSession | undefined } = {
+    current: undefined,
+  };
   const coordinator = new ReplicaCoordinator(store, intents, {
     changeFeed: feed,
     pullChanges: (cursor, signal) => {
-      const shapeIds = (session?.catalog() ?? []).map((shape) => shape.shapeId);
+      const shapeIds = (sessionRef.current?.catalog() ?? []).map(
+        (shape) => shape.shapeId
+      );
       return fetchReplicaChanges(
         options.gatewayAuth,
         cursor,
@@ -625,9 +631,10 @@ export async function createNativeReplicaSession(
         options.fetcher
       ).catch(() => undefined);
     },
-    onRebootstrapRequired: () => session?.requireBootstrap(),
+    onRebootstrapRequired: () => sessionRef.current?.requireBootstrap(),
   });
-  session = new NativeReplicaSession(coordinator, options);
+  const session = new NativeReplicaSession(coordinator, options);
+  sessionRef.current = session;
   await session.start();
   return session;
 }

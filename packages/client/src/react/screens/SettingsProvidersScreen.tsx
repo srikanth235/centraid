@@ -339,9 +339,15 @@ export default function SettingsProvidersScreen({
       apply(s);
       if (s.anyLoading) poll();
     });
+    // Bind the ref *cells* (not their values) into the effect scope. Both
+    // timeout ids are written after this effect runs — by `schedulePoll` and by
+    // the copy-to-clipboard handler — so cleanup has to read the live
+    // `.current`; snapshotting the ids here would capture `null` and leak them.
+    const pollCell = timerRef;
+    const copiedCell = copiedTimerRef;
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      if (pollCell.current) clearTimeout(pollCell.current);
+      if (copiedCell.current) clearTimeout(copiedCell.current);
     };
   }, [loadStatus, apply, poll]);
 

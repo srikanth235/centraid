@@ -33,7 +33,7 @@ function clampToDisplay(state: WindowState): WindowState {
   const width = Math.max(400, state.width);
   const height = Math.max(300, state.height);
   // Prefer the display that contains the saved origin; fall back to primary.
-  let display =
+  const display =
     displays.find((d) => {
       const b = d.workArea;
       return (

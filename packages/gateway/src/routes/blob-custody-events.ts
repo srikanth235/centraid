@@ -28,11 +28,17 @@ export async function openBlobCustodyEvents(input: {
   let again = false;
   let last = "";
   let unsubscribe = (): void => undefined;
-  let heartbeat: NodeJS.Timeout | undefined;
+  // Armed before `close` so the timer handle is a plain `const` the teardown
+  // path can clear unconditionally; it is unref'd, so an early return never
+  // pins the process.
+  const heartbeat = setInterval(() => {
+    if (!closed) res.write(": keepalive\n\n");
+  }, 15_000);
+  heartbeat.unref();
   const close = (): void => {
     if (closed) return;
     closed = true;
-    if (heartbeat) clearInterval(heartbeat);
+    clearInterval(heartbeat);
     unsubscribe();
   };
   const publish = async (): Promise<void> => {
@@ -71,10 +77,6 @@ export async function openBlobCustodyEvents(input: {
     });
   };
   unsubscribe = transfers.subscribe(safePublish);
-  heartbeat = setInterval(() => {
-    if (!closed) res.write(": keepalive\n\n");
-  }, 15_000);
-  heartbeat.unref();
   req.once("close", close);
   res.once("close", close);
   await publish();

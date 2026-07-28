@@ -241,10 +241,10 @@ describe("locker", () => {
         connection_id: "conn-gh",
       })
     ).item_id;
-    const row = db.vault
+    const storedRow = db.vault
       .prepare("SELECT connection_id FROM locker_item WHERE item_id = ?")
       .get(id) as { connection_id: string | null };
-    expect(row.connection_id).toBe("conn-gh");
+    expect(storedRow.connection_id).toBe("conn-gh");
 
     // '' clears; a ghost connection refuses.
     out(invoke("locker.edit_item", { item_id: id, connection_id: "" }));

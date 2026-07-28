@@ -2132,12 +2132,18 @@ export class VaultPlane {
         deviceKey: this.boot.deviceKey,
         ...(block
           ? {
-              scopeClamp: block.scopes.map((scope) => ({
-                schema: scope.schema,
-                ...(scope.table === undefined ? {} : { table: scope.table }),
-                verbs: scope.verbs,
-                ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
-                ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+              scopeClamp: block.scopes.map((declaredScope) => ({
+                schema: declaredScope.schema,
+                ...(declaredScope.table === undefined
+                  ? {}
+                  : { table: declaredScope.table }),
+                verbs: declaredScope.verbs,
+                ...(declaredScope.rowFilter
+                  ? { rowFilter: [...declaredScope.rowFilter] }
+                  : {}),
+                ...(declaredScope.fieldMask
+                  ? { fieldMask: [...declaredScope.fieldMask] }
+                  : {}),
               })),
             }
           : {}),

@@ -196,10 +196,10 @@ export async function commandStatus(
       return;
     }
 
-    const lines = [`service: ${describeService(service)}`];
-    lines.push(
-      `data dir: ${dataDir.dataDir} (${dataDir.exists ? "exists" : "missing"})`
-    );
+    const lines = [
+      `service: ${describeService(service)}`,
+      `data dir: ${dataDir.dataDir} (${dataDir.exists ? "exists" : "missing"})`,
+    ];
     if (dataDir.endpointId) lines.push(`endpoint: ${dataDir.endpointId}`);
     lines.push(`daemon: ${dataDir.daemonRunning ? "running" : "not running"}`);
     if (dataDir.vaultCount !== undefined)

@@ -118,8 +118,8 @@ async function appendSeries({
   summary,
   slug,
   date,
-  runId,
-  runUrl,
+  runId: entryRunId,
+  runUrl: entryRunUrl,
   reportPath,
 }) {
   await mkdir(historyDir, { recursive: true });
@@ -127,8 +127,8 @@ async function appendSeries({
   const record = {
     slug,
     date,
-    runId: runId || null,
-    runUrl: runUrl || null,
+    runId: entryRunId || null,
+    runUrl: entryRunUrl || null,
     reportPath,
     summary: summary ?? null,
   };
@@ -173,10 +173,10 @@ function summarizeEntry(record) {
 }
 
 /** Series entries whose archived HTML is still on disk (the rest were pruned). */
-async function retainedSlugs(series) {
+async function retainedSlugs(historySeries) {
   const kept = new Set();
   await Promise.all(
-    (Array.isArray(series) ? series : []).map(async (entry) => {
+    (Array.isArray(historySeries) ? historySeries : []).map(async (entry) => {
       if (!entry?.reportPath) return;
       try {
         await stat(path.join(siteDir, entry.reportPath, "index.html"));
@@ -189,8 +189,8 @@ async function retainedSlugs(series) {
   return kept;
 }
 
-/** Keep the `keep` newest dated slots; older HTML is dropped (JSON series stays). */
-async function pruneRuns(runsDir, keep) {
+/** Keep the `keepCount` newest dated slots; older HTML is dropped (JSON series stays). */
+async function pruneRuns(runsDir, keepCount) {
   const entries = (
     await readdir(runsDir, { withFileTypes: true }).catch(() => [])
   )
@@ -198,7 +198,7 @@ async function pruneRuns(runsDir, keep) {
     .map((entry) => entry.name)
     .sort()
     .toReversed();
-  const stale = entries.slice(keep);
+  const stale = entries.slice(keepCount);
   await Promise.all(
     stale.map((name) =>
       rm(path.join(runsDir, name), { recursive: true, force: true })
@@ -238,10 +238,10 @@ async function listSlots(base) {
 }
 
 function renderLanding(
-  slots,
-  { repo, generatedAt, highlight, series, retained }
+  slotPaths,
+  { repo, generatedAt, highlight, series: historySeries, retained }
 ) {
-  const items = slots
+  const items = slotPaths
     .map((s) => {
       const href = `test-report/${s}/`;
       const label = s === highlight ? `${s} (this deploy)` : s;
@@ -283,14 +283,14 @@ function renderLanding(
   <ul>
 ${items || "    <li><em>No reports published yet.</em></li>"}
   </ul>
-${renderHistory(series, retained)}
+${renderHistory(historySeries, retained)}
 </body>
 </html>
 `;
 }
 
-function renderHistory(series, retained) {
-  const entries = Array.isArray(series) ? series : [];
+function renderHistory(historySeries, retained) {
+  const entries = Array.isArray(historySeries) ? historySeries : [];
   if (!entries.length) return "";
   const groups = new Map();
   for (const entry of entries) {

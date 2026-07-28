@@ -1404,15 +1404,13 @@ export default function AutomationEditorScreen({
             )
           : cat?.connection;
         if (connection) {
-          setConnectionBindings((m) => {
-            const copy = new Map(m);
-            copy.set(kind, {
+          setConnectionBindings((m) =>
+            new Map(m).set(kind, {
               connectionId: connection.connectionId,
               kind,
               label: connection.label,
-            });
-            return copy;
-          });
+            })
+          );
         }
       }
       return next;
@@ -1426,11 +1424,7 @@ export default function AutomationEditorScreen({
     label: string;
   }): void => {
     setSelectedConnectors((prev) => new Set(prev).add(binding.kind));
-    setConnectionBindings((m) => {
-      const copy = new Map(m);
-      copy.set(binding.kind, binding);
-      return copy;
-    });
+    setConnectionBindings((m) => new Map(m).set(binding.kind, binding));
   };
 
   const selectedConnectorItems = catalog.filter((c) =>

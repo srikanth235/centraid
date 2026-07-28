@@ -254,16 +254,24 @@ describe("cloneTemplate index.html <title> rewrite", () => {
 
   it("rewrites automation.json#name + stamps generated for automation templates", async () => {
     // Lay down an automation-template-shaped source: app.json + automations/<id>/...
-    const templateDir = await tempDir("centraid-auto-tmpl-");
+    const automationTemplateDir = await tempDir("centraid-auto-tmpl-");
     await fs.writeFile(
-      path.join(templateDir, "app.json"),
+      path.join(automationTemplateDir, "app.json"),
       JSON.stringify({ name: "Briefing", version: "0.1.0" }, null, 2)
     );
-    await fs.mkdir(path.join(templateDir, "automations", "briefing"), {
-      recursive: true,
-    });
+    await fs.mkdir(
+      path.join(automationTemplateDir, "automations", "briefing"),
+      {
+        recursive: true,
+      }
+    );
     await fs.writeFile(
-      path.join(templateDir, "automations", "briefing", "automation.json"),
+      path.join(
+        automationTemplateDir,
+        "automations",
+        "briefing",
+        "automation.json"
+      ),
       JSON.stringify(
         {
           name: "Briefing",
@@ -283,14 +291,14 @@ describe("cloneTemplate index.html <title> rewrite", () => {
       )
     );
     await fs.writeFile(
-      path.join(templateDir, "automations", "briefing", "handler.js"),
+      path.join(automationTemplateDir, "automations", "briefing", "handler.js"),
       'export default async () => ({ summary: "ok" });'
     );
 
     await cloneTemplate({
       appsDir,
       newAppId: "briefing-2",
-      templateDir,
+      templateDir: automationTemplateDir,
       newName: "Briefing 2",
     });
 
@@ -313,7 +321,7 @@ describe("cloneTemplate index.html <title> rewrite", () => {
     expect(mf.prompt).toBe("do the thing");
     expect(mf.triggers).toStrictEqual([{ kind: "cron", expr: "0 18 * * 1-5" }]);
 
-    await fs.rm(templateDir, { recursive: true, force: true });
+    await fs.rm(automationTemplateDir, { recursive: true, force: true });
   });
 
   it("skips silently when the template has no index.html", async () => {

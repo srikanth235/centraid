@@ -199,8 +199,8 @@ process.on("SIGTERM", () => {});
 const send = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");
 const respond = (id, result) => send({ jsonrpc: "2.0", id, result });
 const notify = (method, params) => send({ jsonrpc: "2.0", method, params });
-const update = (sessionId, update) =>
-  notify("session/update", { sessionId, update });
+const update = (sessionId, updatePayload) =>
+  notify("session/update", { sessionId, update: updatePayload });
 
 let nextClientReqId = 1000;
 const pendingClient = new Map();

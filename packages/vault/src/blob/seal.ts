@@ -95,11 +95,13 @@ export function sealBlobStream(
     headerSent = true;
     return [encodeHeader(sha)];
   };
-  const emitFrame = (out: Buffer[], frame: Buffer): void => {
+  // Returns the next frame index; callers assign it back to `index` so the
+  // loop below advances visibly rather than through this closure.
+  const emitFrame = (out: Buffer[], frame: Buffer): number => {
     const sealed = sealFrame(key, sha, index, frameCount, frame);
     sealedLens.push(sealed.length);
-    index += 1;
     out.push(...header(), sealed);
+    return index + 1;
   };
 
   return new Transform({
@@ -110,7 +112,7 @@ export function sealBlobStream(
       // Only carve full frames here; the trailing partial waits for flush.
       while (pendingLen >= frameSize && index < frameCount) {
         const joined = Buffer.concat(pending, pendingLen);
-        emitFrame(out, joined.subarray(0, frameSize));
+        index = emitFrame(out, joined.subarray(0, frameSize));
         const rest = joined.subarray(frameSize);
         pending = rest.length ? [rest] : [];
         pendingLen = rest.length;
@@ -120,7 +122,7 @@ export function sealBlobStream(
     flush(callback) {
       const out: Buffer[] = [];
       if (pendingLen > 0 && index < frameCount) {
-        emitFrame(out, Buffer.concat(pending, pendingLen));
+        index = emitFrame(out, Buffer.concat(pending, pendingLen));
         pending = [];
         pendingLen = 0;
       }

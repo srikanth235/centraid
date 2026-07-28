@@ -262,7 +262,9 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         bump();
       }
     },
-    [logic]
+    // `logic` appears only in the payload's TYPE position above; the body reads
+    // the (mount-stable) logicRef, so there is nothing here to re-memoize on.
+    []
   );
 
   // Seed the narrow layout BEFORE the first paint. The served app sets

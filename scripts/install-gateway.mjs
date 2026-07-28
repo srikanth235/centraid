@@ -92,7 +92,7 @@ function main(argv) {
 
   const home = process.env.HOME || "";
   let prefix = args.prefix;
-  let useGlobal = args.global && !prefix;
+  const useGlobal = args.global && !prefix;
   if (!useGlobal && !prefix) {
     prefix = defaultInstallPrefix(home);
   }

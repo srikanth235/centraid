@@ -175,7 +175,10 @@ function cleanupDatabase(
     await new Promise<void>((resolve, reject) => {
       const request = factory.deleteDatabase(name);
       request.addEventListener("success", () => resolve());
-      request.addEventListener("error", () => reject(request.error));
+      // DOMException is not an Error subclass — carry its text on a real one.
+      request.addEventListener("error", () =>
+        reject(new Error(request.error?.message ?? "deleteDatabase failed"))
+      );
     });
   });
 }

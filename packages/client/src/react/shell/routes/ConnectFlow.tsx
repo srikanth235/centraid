@@ -94,11 +94,24 @@ export default function ConnectFlow({
   );
   const ticketRef = useRef<HTMLTextAreaElement>(null);
 
+  // Latest-value refs. The test/commit effects need the *whole* reducer state,
+  // but they must only fire on the transitions below (`testing`, `committing`);
+  // depending on `state` itself would re-fire the network call for any
+  // unrelated field edit made while the flow sits in that step. Same for
+  // `onDone`, whose identity the host is free to change every render.
+  // Declared before the effects that read them so this sync runs first.
+  const stateRef = useRef(state);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    stateRef.current = state;
+    onDoneRef.current = onDone;
+  });
+
   // Run the connectivity test whenever `startTest` puts us in `testing`.
   useEffect(() => {
     if (state.step !== "test" || !state.testing) return;
     let alive = true;
-    const input = buildTestInput(state);
+    const input = buildTestInput(stateRef.current);
     if (!input) {
       dispatch({
         report: { error: "invalid_input", ok: false, stages: [] },
@@ -133,7 +146,7 @@ export default function ConnectFlow({
   useEffect(() => {
     if (state.step !== "committing") return;
     let alive = true;
-    void commitConnectFlow(state).then(
+    void commitConnectFlow(stateRef.current).then(
       (result) => {
         if (alive) dispatch({ result, type: "commitSettled" });
       },
@@ -151,7 +164,7 @@ export default function ConnectFlow({
   }, [state.step]);
 
   useEffect(() => {
-    if (state.step === "done" && state.result) onDone(state.result);
+    if (state.step === "done" && state.result) onDoneRef.current(state.result);
   }, [state.step, state.result]);
 
   useEffect(() => {

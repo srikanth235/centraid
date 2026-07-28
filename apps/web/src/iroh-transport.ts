@@ -275,16 +275,19 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
   if (!connection.endpointId || !connection.endpointTicket) {
     throw new Error("No Iroh gateway is connected.");
   }
-  const headers = { ...message.headers };
-  // Every request on this path originates from a generated app in the SW
-  // bridge, so the auth mode is fixed by PROVENANCE, not by whether a cookie
-  // happens to be in memory. The marker must be set unconditionally: the
-  // desktop tunnel keys off it to STRIP the device bearer. Gating it on the
-  // cookie (which the browser wipes when it kills an idle service worker)
-  // would let an idle app's requests fall through to the full device bearer —
-  // a privilege escalation. No cookie means the gateway rejects with 401,
-  // never an escalation. Do not "optimize" this back behind the cookie check.
-  headers["x-centraid-tunnel-auth-mode"] = "web-session";
+  const headers: Record<string, string> = {
+    ...message.headers,
+    // Every request on this path originates from a generated app in the SW
+    // bridge, so the auth mode is fixed by PROVENANCE, not by whether a cookie
+    // happens to be in memory. The marker must be set unconditionally (it sits
+    // AFTER the spread so an incoming header can never win): the desktop tunnel
+    // keys off it to STRIP the device bearer. Gating it on the cookie (which the
+    // browser wipes when it kills an idle service worker) would let an idle
+    // app's requests fall through to the full device bearer — a privilege
+    // escalation. No cookie means the gateway rejects with 401, never an
+    // escalation. Do not "optimize" this back behind the cookie check.
+    "x-centraid-tunnel-auth-mode": "web-session",
+  };
   if (message.sessionCookie) {
     headers["cookie"] = message.sessionCookie;
   }

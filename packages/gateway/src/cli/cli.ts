@@ -240,11 +240,13 @@ async function commandServe(args: string[]): Promise<void> {
   const hostEndpointId =
     desktopEndpointId ??
     kitlessHostIdentity(keyStore.loadOrCreate("endpoint-key.bin"));
-  let vaultsRef: import("../serve/vault-registry.js").VaultRegistry | undefined;
+  const vaultsRef: {
+    current: import("../serve/vault-registry.js").VaultRegistry | undefined;
+  } = { current: undefined };
   const devicePlane = makeDaemonDevicePlane({
     layout,
     gatewayDatabase,
-    vaults: () => vaultsRef,
+    vaults: () => vaultsRef.current,
     logger,
     keyStore,
     ...(dataPlaneSecret ? { controlSecret: dataPlaneSecret } : {}),
@@ -255,7 +257,9 @@ async function commandServe(args: string[]): Promise<void> {
   // authorization still resolves through a real EndpointId enrollment: iroh
   // proof normally, or the spawning desktop's OS-custodied identity.
   const webRoot = await bundledWebRoot();
-  let endpoint: GatewayEndpointHandle | undefined;
+  const endpointRef: { current: GatewayEndpointHandle | undefined } = {
+    current: undefined,
+  };
   const allowedHosts = mergeAllowedHosts(parsed.allowedHosts);
   const handle = await serve({
     assistOAuth: assistOAuthFromEnvironment(process.env),
@@ -286,9 +290,10 @@ async function commandServe(args: string[]): Promise<void> {
       : {}),
     devicePairing: {
       ...devicePlane.pairing,
-      endpointId: () => endpoint?.endpointId,
-      endpointTicket: () => endpoint?.ticket(),
-      onEndpointRevoked: (endpointId) => endpoint?.revokeEndpoint(endpointId),
+      endpointId: () => endpointRef.current?.endpointId,
+      endpointTicket: () => endpointRef.current?.ticket(),
+      onEndpointRevoked: (endpointId) =>
+        endpointRef.current?.revokeEndpoint(endpointId),
     },
     // Durable PWA control sessions (issue #376): persist control cookies so
     // a web pairing survives a restart, and propagate `devices revoke` to
@@ -314,21 +319,21 @@ async function commandServe(args: string[]): Promise<void> {
         }
       : {}),
   });
-  vaultsRef = handle.vaults;
+  vaultsRef.current = handle.vaults;
 
   // The iroh endpoint (issue #289 phase 3): the gateway's permanent
   // identity + the only remote transport. Best-effort so the loopback
   // maintenance surface can still start when iroh is temporarily unavailable.
-  endpoint =
+  endpointRef.current =
     config.endpoint === false
       ? undefined
       : await devicePlane.startEndpoint({
           baseUrl: handle.url,
           token: loopbackSecret,
         });
-  if (endpoint) {
+  if (endpointRef.current) {
     process.stdout.write(
-      `[centraid-gateway] endpoint: ${endpoint.endpointId}\n`
+      `[centraid-gateway] endpoint: ${endpointRef.current.endpointId}\n`
     );
   }
 
@@ -352,7 +357,7 @@ async function commandServe(args: string[]): Promise<void> {
     process.stderr.write(
       `[centraid-gateway] ${signal} received — shutting down\n`
     );
-    await endpoint?.close().catch(() => undefined);
+    await endpointRef.current?.close().catch(() => undefined);
     await handle.close().catch((err) => {
       process.stderr.write(
         `[centraid-gateway] close error: ${err instanceof Error ? err.message : String(err)}\n`

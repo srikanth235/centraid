@@ -1,5 +1,4 @@
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
-import { toBlueprintCss } from "@centraid/design-tokens";
 
 // The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
 // banners, ask panel) that blueprint component modules reference. Loaded once,
@@ -38,6 +37,12 @@ import ShellFrame from "../ShellFrame.js";
 import { useAsyncData } from "../useAsyncData.js";
 import AppSettingsController from "./AppSettingsController.js";
 import { fetchAppKnobValues, pushKnobToInlineRoot } from "./appSettingsData.js";
+import {
+  dropDescriptor,
+  ensureInlineScopeTokens,
+  INLINE_SCOPE_CLASS,
+  loadDescriptor,
+} from "./inlineAppRuntime.js";
 import { loadAppTemplates } from "./templatesData.js";
 import {
   scopeSetKey,
@@ -58,55 +63,6 @@ export interface InlineAppRouteProps {
   onToggleSidebar: () => void;
 }
 
-const INLINE_SCOPE_CLASS = "centraid-inline-scope";
-
-// The blueprint token layer (--mono/--surface/--_accent/--ease/type scale …),
-// rescoped from `:root` to the inline app subtree so it never restyles the
-// shell chrome. Injected once; the shell's own `data-theme` on <html> still
-// drives the dark block. Kept synchronous so inline theming needs no paint gap.
-let inlineTokensInjected = false;
-function ensureInlineScopeTokens(): void {
-  if (inlineTokensInjected || typeof document === "undefined") return;
-  inlineTokensInjected = true;
-  const scoped = toBlueprintCss()
-    .replace(
-      /:root\[data-theme='dark'\]/gu,
-      `:root[data-theme='dark'] .${INLINE_SCOPE_CLASS}`
-    )
-    .replace(
-      /:root:not\(\[data-theme\]\)/gu,
-      `:root:not([data-theme]) .${INLINE_SCOPE_CLASS}`
-    )
-    .replace(
-      /(?<lineStart>^|\n):root\s*\{/gu,
-      `$<lineStart>.${INLINE_SCOPE_CLASS} {`
-    );
-  const style = document.createElement("style");
-  style.dataset.centraidInlineTokens = "true";
-  style.textContent = scoped;
-  document.head.appendChild(style);
-}
-
-// One cached descriptor promise per (appId, attempt) so React `use()` reads a
-// stable promise across renders. A rejection is cached too — otherwise the
-// Suspense remount would re-run the loader forever on a persistent chunk
-// failure instead of surfacing the error boundary. Retry bumps `attempt` to a
-// fresh key (and drops the old one) to re-import.
-const descriptorCache = new Map<
-  string,
-  Promise<{ default: InlineAppModule }>
->();
-function loadDescriptor(
-  key: string,
-  loader: () => Promise<{ default: InlineAppModule }>
-): Promise<{ default: InlineAppModule }> {
-  let promise = descriptorCache.get(key);
-  if (!promise) {
-    promise = loader();
-    descriptorCache.set(key, promise);
-  }
-  return promise;
-}
 interface InlineAppMountProps {
   appId: string;
   cacheKey: string;
@@ -156,21 +112,48 @@ function InlineAppMount({
   void setInstallation;
   const installed = installation.client;
 
+  // Mount-once capture. Both effects below are lifecycle effects for *this*
+  // component instance — the parent remounts the subtree on `cacheKey`, which
+  // is the only thing that may restart them. They must never re-run because one
+  // of the values they read changed identity: that would tear the live bridge
+  // down and release the replica leases out from under a mounted app. A ref
+  // initializer freezes exactly the first-render values the `[]` closures
+  // captured before, so the dependency lists stay empty by construction.
+  const mounted = useRef({
+    descriptor,
+    installation,
+    installed,
+    lease,
+    onDescriptor,
+    scopes,
+  });
+
   useEffect(() => {
-    onDescriptor(descriptor);
+    const {
+      descriptor: mountedDescriptor,
+      installation: mountedInstallation,
+      lease: mountedLease,
+      onDescriptor: notifyDescriptor,
+    } = mounted.current;
+    notifyDescriptor(mountedDescriptor);
     return () => {
-      installation.teardown();
-      lease.release();
+      mountedInstallation.teardown();
+      mountedLease.release();
     };
   }, []);
 
   // Secondary scopes stream in. Each is an independent replica session, so one
   // slow or failing audience never holds up the others — or the app.
   useEffect(() => {
-    if (!descriptor.multiScope) return undefined;
+    const {
+      descriptor: mountedDescriptor,
+      installed: mountedInstalled,
+      scopes: mountedScopes,
+    } = mounted.current;
+    if (!mountedDescriptor.multiScope) return undefined;
     let alive = true;
     const leases: ReplicaScopeLease[] = [];
-    for (const entry of scopes.slice(1)) {
+    for (const entry of mountedScopes.slice(1)) {
       void acquireReplicaShellSession(entry.identity)
         .then((secondary) => {
           if (!alive) {
@@ -178,7 +161,7 @@ function InlineAppMount({
             return;
           }
           leases.push(secondary);
-          addInlineScope(installed, {
+          addInlineScope(mountedInstalled, {
             scope: entry.scope,
             session: secondary.session,
           });
@@ -432,7 +415,7 @@ export default function InlineAppRoute({
             key={attempt}
             title={`${app.name} hit a problem`}
             onReset={() => {
-              descriptorCache.delete(cacheKey);
+              dropDescriptor(cacheKey);
               setAttempt((a) => a + 1);
             }}
           >
