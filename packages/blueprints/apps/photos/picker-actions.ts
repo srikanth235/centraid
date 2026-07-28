@@ -2,7 +2,7 @@
 // (the same `btn.textContent = …` progress-mutation pattern as upload.ts and
 // selection-actions.ts) and hands `refresh`/`closePicker` back to app.tsx.
 import { toast } from './kit.ts';
-import { act } from './outcomes.ts';
+import { act, writeTarget } from './outcomes.ts';
 import type { Album } from './types.ts';
 
 export async function submitPicker(
@@ -13,13 +13,21 @@ export async function submitPicker(
 ): Promise<void> {
   const btn = e.currentTarget;
   btn.disabled = true;
+  // Album membership lives in the album's own scope, and this app only authors
+  // albums in the member's own (issue #599) — so does adding to one.
+  const target = writeTarget('own');
+  const scope = target.disabled ? null : target.scopeId;
   let ok = 0;
   let parked = 0;
   let queued = 0;
   let skipped = 0;
   for (let i = 0; i < ids.length; i += 1) {
     btn.textContent = `Adding ${i + 1} of ${ids.length}…`;
-    const outcome = await act('add-to-album', { album_id: album.album_id, asset_id: ids[i] });
+    const outcome = await act(
+      'add-to-album',
+      { album_id: album.album_id, asset_id: ids[i] },
+      scope,
+    );
     if (outcome?.status === 'executed') ok += 1;
     else if (outcome?.status === 'parked') parked += 1;
     else if (outcome?.status === 'queued' || outcome?.status === 'in-flight') queued += 1;

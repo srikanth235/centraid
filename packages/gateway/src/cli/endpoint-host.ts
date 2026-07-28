@@ -195,34 +195,50 @@ export function makeDaemonDevicePlane(input: {
     }
     const registry = input.vaults();
     if (!registry) return { ok: false, error: 'gateway_not_ready' };
-    const enrollment = tickets.redeemAndEnroll(request.ticketId, request.secret, enrollments, {
+    const enrolled = tickets.redeemAndEnroll(request.ticketId, request.secret, enrollments, {
       endpointId,
       label: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
       platform: request.platform,
       ...(request.rememberDevice !== undefined ? { rememberDevice: request.rememberDevice } : {}),
       ...(grantProfile !== undefined ? { grantProfile } : {}),
     });
-    if (!enrollment) return { ok: false, error: 'invalid_ticket' };
-    const plane = registry.get(enrollment.vaultId);
+    const primary = enrolled?.[0];
+    if (!enrolled || !primary) return { ok: false, error: 'invalid_ticket' };
+    const plane = registry.get(primary.vaultId);
     if (!plane) return { ok: false, error: 'vault_gone' };
     knownEndpointIds.add(endpointId);
-    plane.db.blobTransfers.enrollPairedDevice({
-      identity: endpointId,
-      ownerPartyId: plane.boot.ownerPartyId,
-      name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
-      ...(request.platform ? { platform: request.platform } : {}),
-      trust: enrollment.trust === 'readonly' ? 'readonly' : 'full',
-    });
+    // One scan can enrol a device into several vaults, so mirror the device
+    // into EVERY granted vault's capability table — not just the first.
+    for (const enrollment of enrolled) {
+      const granted = registry.get(enrollment.vaultId);
+      if (!granted) continue;
+      granted.db.blobTransfers.enrollPairedDevice({
+        identity: endpointId,
+        ownerPartyId: granted.boot.ownerPartyId,
+        name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
+        ...(request.platform ? { platform: request.platform } : {}),
+        // Vocabulary boundary: the gateway's ROLE (admin/write/read) collapses
+        // to the vault's capability mirror (`consent_device.trust`, full/readonly),
+        // which only asks "may this device act". Admin's extra powers — minting
+        // tickets, revoking peers — are gateway-plane concerns the vault has no
+        // opinion about, so `admin` and `write` both land on `full`.
+        trust: enrollment.role === 'read' ? 'readonly' : 'full',
+      });
+    }
     logger.info(
-      `device plane: enrolled ${endpointId.slice(0, 10)}… into vault ${enrollment.vaultId}`,
+      `device plane: enrolled ${endpointId.slice(0, 10)}… as member ${primary.memberLabel} into ` +
+        `vault${enrolled.length === 1 ? '' : 's'} ${enrolled.map((row) => row.vaultId).join(', ')}`,
     );
     return {
       ok: true,
-      enrollmentId: enrollment.enrollmentId,
+      enrollmentId: primary.enrollmentId,
+      memberId: primary.memberId,
+      memberLabel: primary.memberLabel,
       gatewayId: liveEndpointId,
       gatewayName: os.hostname().replace(/\.local$/, ''),
-      vaultId: enrollment.vaultId,
+      vaultId: primary.vaultId,
       vaultName: plane.name,
+      vaultIds: enrolled.map((row) => row.vaultId),
       version: GATEWAY_VERSION,
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,

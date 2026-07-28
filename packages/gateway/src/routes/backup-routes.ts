@@ -100,11 +100,11 @@ function ownerRequired(req: IncomingMessage, deps: BackupRouteDeps, res: ServerR
   if (
     typeof endpointId !== 'string' ||
     !deps.enrollments ||
-    deps.enrollments.get(endpointId, vaultId)?.trust !== 'owner'
+    deps.enrollments.get(endpointId, vaultId)?.role !== 'admin'
   ) {
     sendJson(res, 403, {
-      error: 'owner_required',
-      message: 'only an owner device can export or verify live recovery key material',
+      error: 'admin_required',
+      message: 'only an admin device can export or verify live recovery key material',
     });
     return false;
   }

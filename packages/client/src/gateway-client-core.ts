@@ -29,6 +29,7 @@ export {
   enc,
   GatewayClientError,
   href,
+  scopedAuthHeaders,
   VAULT_HEADER,
   type GatewayAuth,
 } from './gateway-auth.js';

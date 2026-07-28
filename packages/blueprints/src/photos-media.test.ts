@@ -154,4 +154,67 @@ describe('Photos next-screen media loading', () => {
     expect(audio.querySelector('.ph-tile-audio-badge')).not.toBeNull();
     expect(audio.querySelector('.ph-tile-duration')?.textContent).toBe('1:01:01');
   });
+
+  // Issue #599. The shell's blob authorizer resolves a `/centraid/_vault/blobs/…`
+  // reference in the scope named by the element's own `data-scope` or its
+  // nearest ancestor's. Content ids are minted per scope and collide across
+  // scopes by design, so a tile painted for an audience WITHOUT the attribute
+  // does not 404 — it renders a different photo. The stamp therefore has to
+  // land on the tile before the media element exists, which is also what makes
+  // it cover the `data-prefetch-src` the lazy loader stages there.
+  test('stamps the owning scope on every tile it paints for an audience', async () => {
+    const { fillTileMedia } = await importFixture('../apps/photos/media.js');
+
+    const shared = document.createElement('div');
+    fillTileMedia(shared, {
+      asset_id: 'a1',
+      scope_id: 'family',
+      thumb_uri: '/centraid/_vault/blobs/abc?variant=thumb',
+    });
+    expect(shared.dataset.scope).toBe('family');
+    // The staged reference the observer will promote sits INSIDE the stamp.
+    const image = shared.querySelector('img')!;
+    expect(image.dataset.prefetchSrc).toBe('/centraid/_vault/blobs/abc?variant=thumb');
+    expect(image.closest('[data-scope]')).toBe(shared);
+
+    // A placeholder tile (no renderable source) is stamped just the same — the
+    // branch that paints no <img> must not be the one that forgets.
+    const placeholder = document.createElement('div');
+    fillTileMedia(placeholder, { asset_id: 'a2', scope_id: 'family', kind: 'audio' });
+    expect(placeholder.dataset.scope).toBe('family');
+
+    // A solo mount has no scope to name, and stamping an empty one would make
+    // the authorizer address a scope called "" instead of the ambient one.
+    const solo = document.createElement('div');
+    fillTileMedia(solo, { asset_id: 'a3', thumb_uri: '/centraid/_vault/blobs/def' });
+    expect(solo.hasAttribute('data-scope')).toBe(false);
+  });
+
+  // Asset ids are per-scope too, so the same id can arrive from two scopes.
+  // The once-per-mount guard must not read that as "already painted".
+  test('repaints a tile when the same asset id arrives from another scope', async () => {
+    const { mountMedia } = await importFixture('../apps/photos/media.js');
+    const tile = document.createElement('div');
+
+    mountMedia(tile, { asset_id: 'shared-id', thumb_uri: '/centraid/_vault/blobs/mine' });
+    expect(tile.hasAttribute('data-scope')).toBe(false);
+    expect(tile.querySelectorAll('img')).toHaveLength(1);
+
+    mountMedia(tile, {
+      asset_id: 'shared-id',
+      scope_id: 'family',
+      thumb_uri: '/centraid/_vault/blobs/theirs',
+    });
+    expect(tile.dataset.scope).toBe('family');
+
+    // A second call for the SAME scope and id is still the no-op it has to be
+    // (React invokes the callback ref on every render).
+    const painted = tile.querySelectorAll('img').length;
+    mountMedia(tile, {
+      asset_id: 'shared-id',
+      scope_id: 'family',
+      thumb_uri: '/centraid/_vault/blobs/theirs',
+    });
+    expect(tile.querySelectorAll('img')).toHaveLength(painted);
+  });
 });

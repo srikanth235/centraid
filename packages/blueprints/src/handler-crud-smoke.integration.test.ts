@@ -17,9 +17,11 @@ import { describe, expect, test } from 'vitest';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appsRoot = path.resolve(here, '../apps');
 
+// Underscore-prefixed dirs under `apps/` are shared modules imported by several
+// apps (issue #599's `apps/_shared`), not templates: no app.json, no handlers.
 function listBlueprintApps(): string[] {
   return readdirSync(appsRoot, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
+    .filter((d) => d.isDirectory() && !d.name.startsWith('_'))
     .map((d) => d.name)
     .sort();
 }

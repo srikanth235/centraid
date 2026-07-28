@@ -431,7 +431,7 @@
   "queries": [
     {
       "name": "library",
-      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window. Issue #352 phase 3/4: each asset also carries `place`, `tags` and `custody_state`; `places` is the full known place list.",
+      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window. Issue #352 phase 3/4: each asset also carries `place`, `tags` and `custody_state`; `places` is the full known place list. Issue #599: `before` is a keyset cursor (only assets captured strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.",
       "input": {
         "type": "object",
         "properties": {
@@ -439,6 +439,10 @@
             "type": "integer",
             "minimum": 20,
             "maximum": 2000
+          },
+          "before": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "additionalProperties": false
@@ -452,6 +456,7 @@
           "trash": { "type": "array" },
           "truncated": { "type": "boolean" },
           "window": { "type": "integer" },
+          "tail": { "type": ["string", "null"] },
           "vaultDenied": { "type": "object" }
         }
       }

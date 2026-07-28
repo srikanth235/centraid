@@ -7,6 +7,8 @@ import type { ReplicaShapeAccess } from './replica-shape.js';
 export interface ReplicaRequestAccess extends ReplicaShapeAccess {
   deviceId: string;
   deviceKey?: string;
+  /** The acting member behind the device (issue #599 L2/L4). */
+  memberId?: string;
   enrollment?: DeviceEnrollment;
 }
 
@@ -50,7 +52,7 @@ export function resolveReplicaAccess(
     };
   }
   const enrollment = enrollments?.get(deviceKey, vaultId);
-  if (!enrollment || enrollment.trust === 'revoked') {
+  if (!enrollment || enrollment.role === 'revoked') {
     return {
       ok: false,
       status: 403,
@@ -63,10 +65,11 @@ export function resolveReplicaAccess(
   return {
     ok: true,
     access: {
-      trust: enrollment.trust,
+      role: enrollment.role,
       rememberDevice: enrollment.rememberDevice,
       deviceId: deviceKey,
       deviceKey,
+      memberId: enrollment.memberId,
       enrollment,
       ...(appId ? { appId } : {}),
     },

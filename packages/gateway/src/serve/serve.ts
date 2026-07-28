@@ -87,10 +87,12 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     // the auth, checked by `webhookHandler` itself; requiring the gateway
     // owner's bearer as well would defeat the point of a webhook (the
     // caller is a third-party service, not the owner).
-    // The pairing-redemption route (issue #376) is public for the same
-    // reason: its own one-time ticket secret IS the auth, checked by
-    // `makePairRouteHandler` itself. Only present when the daemon wired
-    // `devicePairing` — the desktop embed never adds this path.
+    // There is deliberately NO public pairing-redemption path here: issue
+    // #555 removed HTTP ticket redemption entirely. A ticket redeems only
+    // over the iroh `centraid/gw-pair/1` ceremony, where the joining device
+    // proves the EndpointId that gets persisted in its enrollment. Minting
+    // (`_gateway/devices/ticket`) is NOT public either — it sits behind the
+    // bearer, and behind host custody or a proved vault owner on top.
     publicPaths: [OAUTH_CALLBACK_PATH, WEB_SESSION_REDEEM_PATH, ROUTES.gatewayInfo],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };

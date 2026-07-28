@@ -86,6 +86,16 @@ Until H2–H7 land, the code may still embed the gateway in-process; this file i
 
 Human residual checklist (no secrets in git): [enrollment.md](enrollment.md).
 
+## #599 — household members, sharing, and the no-credential invariant
+
+Settled **2026-07-27** in [#599](https://github.com/srikanth235/centraid/issues/599). The standing invariants:
+
+- **Authentication is the transport.** Devices prove iroh EndpointIds in the QUIC handshake; the host proves custody of the data dir (landlord bearer derived from the endpoint key). There is **no password/session/OIDC plane by design** — identity-proofing for a new member is an owner handing them a ticket. Any future feature that wants a login screen is re-opening this decision, not extending it.
+- **Model A over Model B.** Vault-per-person plus additional shared vaults on one household gateway — never one vault with many member principals and row-level visibility. Rationale: 46/122 FK edges in the ontology point at `core_party`; per-member ACLs would put an "as whom?" filter into every query, agent turn, and automation, break the sovereignty story, and reintroduce OIDC pressure.
+- **Authority is authored on `(member, vault)`;** devices are bindings that inherit. No per-device roles, no attenuation. Roles are ownership words (Owner / Member / Viewer over `admin`/`write`/`read`).
+- **Sharing is placement, not filtering.** Selective sharing projects rows/blobs into an audience vault (hardlinked CAS, `core_share_origin` provenance sidecar, single-DB transaction in the audience vault). Row-level ACLs are rejected as fail-open; **narrower vaults over finer roles** is the fence.
+- **v0 encryption posture: the local gateway is not an adversary.** Local blobs stay plaintext (`packages/vault/src/blob/local.ts`); sealing exists for untrusted remote storage and activates exactly when a storage/CAS provider is configured. Stolen-disk is the OS full-disk-encryption's job. Accepted, deferred loss: remote dedup of shared blobs (each vault seals under its own keys); local dedup is kept because the filesystem link count is the cross-vault refcount.
+
 ## Related docs
 
 | Doc | Covers |

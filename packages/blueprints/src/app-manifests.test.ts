@@ -14,9 +14,15 @@ import { validateAppManifest, type AppManifest } from '@centraid/app-engine';
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+// A directory under `apps/` is a template UNLESS its name starts with `_`:
+// underscore-prefixed dirs are shared modules several apps import (issue #599's
+// `apps/_shared`), the same convention `queries/_shared.ts` already uses. They
+// carry no app.json and never ship as a gallery entry.
+const isTemplateDir = (name: string) => !name.startsWith('_');
+
 function templateDirs(kind: 'apps' | 'automations'): string[] {
   return readdirSync(path.join(PACKAGE_ROOT, kind), { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() && isTemplateDir(e.name))
     .map((e) => e.name)
     .toSorted();
 }

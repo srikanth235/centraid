@@ -300,3 +300,42 @@ CREATE TABLE IF NOT EXISTS core_link_anchor (
   created_at    TEXT NOT NULL
 ) STRICT;
 `;
+
+// Share-by-placement provenance (issue #599 decision 11). Sharing is
+// PLACEMENT, not filtering: an item is projected into the audience vault and
+// its bytes are hardlinked into that vault's CAS, so what another member sees
+// is only what was placed where they are. This sidecar is the AUDIENCE vault's
+// record of where a projected row came from.
+//
+// Deliberately NOT a `core_link` change: `core_link.from_id`/`to_id` are
+// vault-local with no vault dimension, and giving them one would bend
+// intra-vault semantics everywhere. Sharing is a vault-BOUNDARY concept and
+// gets its own record.
+//
+// `(item_type, item_id)` is the projected row in THIS vault, registered in the
+// polymorphic-reference registry (schema/poly-refs.ts) so a purge of the
+// projected row takes the provenance with it. `origin_item_id` is the same
+// uuidv7 whenever the audience did not already hold the bytes — projected rows
+// reuse the origin id (ids are globally unique), and the two columns diverge
+// only when an idempotent re-share dedupes onto a row the audience already had
+// under a different id.
+//
+// `shared_at` is epoch ms (INTEGER), not the ontology's ISO-8601 TEXT: this is
+// gateway-plane boundary machinery on the same clock as `blob_orphan.
+// first_orphaned_at`, not owner-facing life data. One share record per
+// projected row — a re-share by a second member keeps the FIRST placement.
+//
+// Ships in its own DDL constant so the step stays re-runnable (IF NOT EXISTS),
+// matching LINK_ANCHOR_DDL's style.
+export const SHARE_ORIGIN_DDL = `
+CREATE TABLE IF NOT EXISTS core_share_origin (
+  item_type        TEXT NOT NULL,
+  item_id          TEXT NOT NULL,
+  origin_vault_id  TEXT NOT NULL,
+  origin_item_id   TEXT NOT NULL,
+  shared_by_member TEXT NOT NULL,
+  shared_at        INTEGER NOT NULL,
+  PRIMARY KEY (item_type, item_id)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_share_origin_vault ON core_share_origin(origin_vault_id);
+`;

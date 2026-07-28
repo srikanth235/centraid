@@ -21,6 +21,7 @@ import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
 import { serve, type GatewayServeHandle } from '../serve/serve.js';
 import { BackupService } from './backup-service.js';
+import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import {
   encodePairingTicket,
@@ -275,12 +276,12 @@ test('a zero-vault gateway restores through one founding capability and enrolls 
       vaultId: string;
       previews: { warmed: boolean; timeToUsableGridMs?: number };
     };
-    enrollment: { endpointId: string; trust: string };
+    enrollment: { endpointId: string; role: string };
   };
   expect(response.report.vaultId).toBe(a.vaultId);
   expect(response.enrollment).toMatchObject({
     endpointId: 'founder-device',
-    trust: 'owner',
+    role: 'admin',
   });
 
   // LIVE integration: the recovered vault is the only mounted vault and the
@@ -363,7 +364,7 @@ test('one founding restore adopts every backed-up vault and enrolls the owner in
   expect(restored.status).toBe(201);
   const body = (await restored.json()) as {
     reports: Array<{ vaultId: string }>;
-    enrollments: Array<{ vaultId: string; endpointId: string; trust: string }>;
+    enrollments: Array<{ vaultId: string; endpointId: string; role: string }>;
   };
   expect(body.reports.map((report) => report.vaultId).sort()).toEqual(a.vaultIds.toSorted());
   expect(body.enrollments).toHaveLength(2);
@@ -373,7 +374,7 @@ test('one founding restore adopts every backed-up vault and enrolls the owner in
         expect.objectContaining({
           vaultId,
           endpointId: 'multi-founder',
-          trust: 'owner',
+          role: 'admin',
         }),
       ),
     ),
@@ -432,7 +433,13 @@ test('erase then restore on the same box preserves gateway identity and drops pr
   await handle.close();
 
   const database = GatewayDatabase.open(dataDir);
-  expect(database.db.prepare('SELECT COUNT(*) AS count FROM devices').get()).toEqual({ count: 0 });
+  // Authority is authored on `member_roles` since #599, so erase drops the
+  // grants: the old binding survives as a row that reaches nothing, and
+  // `EnrollmentStore` — the only view anything authorizes against — is empty.
+  expect(database.db.prepare('SELECT COUNT(*) AS count FROM member_roles').get()).toEqual({
+    count: 0,
+  });
+  expect(EnrollmentStore.open(database).list()).toEqual([]);
   const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS)!;
   database.close();
   const ticket = encodePairingTicket({

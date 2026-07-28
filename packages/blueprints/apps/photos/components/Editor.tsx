@@ -151,17 +151,25 @@ export function EditorView({
       if (!blob) throw new Error('Could not render the edit.');
       const baseName = (asset.title || 'photo').replace(/\.[a-z0-9]+$/i, '');
       const file = new File([blob], `${baseName}-edited.jpg`, { type: 'image/jpeg' });
-      const staged = await stageFileBytes(file);
-      const outcome = await act('upload', {
-        staged_sha: staged.sha256,
-        kind: 'photo',
-        captured_at: asset.captured_at || asset.taken_at || new Date().toISOString(),
-        title: asset.title || 'Edited photo',
-        width: source.width,
-        height: source.height,
-      });
+      // An edit is a NEW asset beside the original, so it lands in the
+      // original's scope (issue #599) — never in the chip selection, which
+      // could be a different audience entirely.
+      const scope = asset.scope_id ?? undefined;
+      const staged = await stageFileBytes(file, '', { ...(scope ? { scope } : {}) });
+      const outcome = await act(
+        'upload',
+        {
+          staged_sha: staged.sha256,
+          kind: 'photo',
+          captured_at: asset.captured_at || asset.taken_at || new Date().toISOString(),
+          title: asset.title || 'Edited photo',
+          width: source.width,
+          height: source.height,
+        },
+        scope,
+      );
       if (!narrate(outcome, noteRef.current)) return;
-      if (alsoTrash) await act('delete-asset', { asset_id: asset.asset_id });
+      if (alsoTrash) await act('delete-asset', { asset_id: asset.asset_id }, scope);
       toast(
         isPendingOffsite(staged)
           ? 'Saved locally as a new photo · pending offsite.'

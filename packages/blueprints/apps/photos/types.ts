@@ -25,6 +25,15 @@ export interface Place {
 /** One decorated library/search/trash row (queries/library.js `join()`). */
 export interface Asset {
   asset_id: string;
+  /**
+   * Which mounted scope this row is shown FROM (issue #599) — stamped by the
+   * merge (merge.ts), absent on a single-scope surface. Two things depend on
+   * it: every blob reference painted for this asset carries it as `data-scope`
+   * (content ids are per-scope and collide across scopes by design, so an
+   * unscoped reference renders the WRONG image), and every write about this
+   * asset is addressed at it.
+   */
+  scope_id?: string | null;
   content_id?: string | null;
   favorite?: number | boolean | null;
   content_uri?: string | null;
@@ -77,6 +86,8 @@ export interface MemoryCard {
   title: string;
   sub: string;
   coverUri: string | null;
+  /** The scope the cover's bytes live in (issue #599) — see `Asset.scope_id`. */
+  coverScopeId?: string | null;
   newestAt: string;
   onOpen: () => void;
 }
@@ -107,6 +118,8 @@ export interface LibraryData {
   places?: Place[];
   trash?: Asset[];
   truncated?: boolean;
+  /** The page's oldest `taken_at` — the next `before` cursor (issue #599). */
+  tail?: string | null;
   window?: number;
   vaultDenied?: { code?: string; message?: string } | null;
   error?: string;

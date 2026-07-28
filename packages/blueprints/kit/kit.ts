@@ -647,15 +647,26 @@ export function isPendingOffsite(staged: StagedBlob | null | undefined): boolean
  * With `{hash: true}`, preflight a client-declared sha and ship zero bytes
  * when another device already established custody; the gateway still hashes
  * and verifies every POST authoritatively.
+ *
+ * `scope` (issue #599) names WHICH mounted scope the bytes land in — a
+ * multi-scope app adding to a shared audience must not stage into the member's
+ * own CAS. It rides as the vault header on every request this function issues.
+ * Two deliberate consequences on this served path: the resumable session and
+ * direct-upload routes are skipped when a scope is named (their handshakes
+ * address the request's ambient vault, so a scoped upload would silently land
+ * in the wrong one), leaving the authoritative POST, which does carry the
+ * header. Inline hosts substitute their own implementation (packages/client
+ * kit-inline.ts) where every route is scope-addressed.
  */
 export async function stageFileBytes(
   file: File,
   extra = '',
-  { hash = true }: { hash?: boolean } = {},
+  { hash = true, scope }: { hash?: boolean; scope?: string } = {},
 ): Promise<StagedBlob> {
   const q = new URLSearchParams();
   if (file.name) q.set('filename', file.name);
   if (file.type) q.set('media_type', file.type);
+  const scopeHeader = scope ? { 'x-centraid-vault': scope } : {};
   let declaredSha = null;
   if (hash) {
     try {
@@ -672,6 +683,7 @@ export async function stageFileBytes(
       if (file.name) preflight.set('filename', file.name);
       const have = await fetch(`${BLOB_ROUTE}/_sha/${declaredSha}?${preflight}`, {
         method: 'HEAD',
+        headers: scopeHeader,
       });
       if (have.ok) {
         return {
@@ -687,10 +699,12 @@ export async function stageFileBytes(
     } catch {
       // Older/offline gateways simply take the normal authoritative POST.
     }
-    const direct = await stageDirectFile(file, declaredSha);
-    if (direct) return direct;
-    const fallback = await stageFallbackFile(file, declaredSha);
-    if (fallback) return fallback;
+    if (!scope) {
+      const direct = await stageDirectFile(file, declaredSha);
+      if (direct) return direct;
+      const fallback = await stageFallbackFile(file, declaredSha);
+      if (fallback) return fallback;
+    }
     // Session/direct routes are optional protocol extensions. The permanent
     // authoritative POST remains the compatibility and backpressure fallback.
     const legacy = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
@@ -698,6 +712,7 @@ export async function stageFileBytes(
       headers: {
         'content-type': file.type || 'application/octet-stream',
         'x-content-sha256': declaredSha,
+        ...scopeHeader,
       },
       body: file,
     });
@@ -709,6 +724,7 @@ export async function stageFileBytes(
     headers: {
       'content-type': file.type || 'application/octet-stream',
       ...(declaredSha ? { 'x-content-sha256': declaredSha } : {}),
+      ...scopeHeader,
     },
     body: file,
   });

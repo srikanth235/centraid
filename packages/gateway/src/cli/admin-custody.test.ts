@@ -116,7 +116,7 @@ test('devices add --vault resolves a daemon-created vault by name', async () => 
   const { dataDir, vaultId } = await daemonDataDir('Family');
   const output = await capture(() =>
     commandDevices(
-      ['add', '--data-dir', dataDir, 'ep-laptop', '--vault', 'Family', '--trust', 'owner'],
+      ['add', '--data-dir', dataDir, 'ep-laptop', '--vault', 'Family', '--role', 'admin'],
       fail,
     ),
   );
@@ -127,7 +127,7 @@ test('devices revoke performs the vault-local data erasure, not a silent skip', 
   const { dataDir, vaultId, layout } = await daemonDataDir('Family');
   await capture(() =>
     commandDevices(
-      ['add', '--data-dir', dataDir, 'ep-owner', '--vault', 'Family', '--trust', 'owner'],
+      ['add', '--data-dir', dataDir, 'ep-owner', '--vault', 'Family', '--role', 'admin'],
       fail,
     ),
   );
@@ -183,7 +183,7 @@ test('the CLI leaves no unprotected key material behind', async () => {
   const { dataDir, layout } = await daemonDataDir('Family');
   await capture(() =>
     commandDevices(
-      ['add', '--data-dir', dataDir, 'ep-laptop', '--vault', 'Family', '--trust', 'owner'],
+      ['add', '--data-dir', dataDir, 'ep-laptop', '--vault', 'Family', '--role', 'admin'],
       fail,
     ),
   );

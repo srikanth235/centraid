@@ -25,6 +25,12 @@
   color: var(--ink-2);
   margin-top: 1px;
 }
+/* The scope chips (issue #599) sit under the subtitle, inside the title block,
+   so they read as "what this view is showing" rather than as another action.
+   Layout only — the chips themselves are kit.css's `.kit-chip`. */
+.toolbarScopes {
+  margin-top: 6px;
+}
 .toolbarActions {
   margin-left: auto;
   display: flex;

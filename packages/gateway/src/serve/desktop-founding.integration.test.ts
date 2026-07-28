@@ -103,13 +103,13 @@ test('desktop founds through the shared gate and re-adopts its protected owner o
   expect(verify.status).toBe(200);
 
   const devicesBefore = (await (await fetch(`${server.url}/centraid/_gateway/devices`)).json()) as {
-    devices: Array<{ endpointId: string; vaultId: string; trust: string }>;
+    devices: Array<{ endpointId: string; vaultId: string; role: string }>;
   };
   expect(devicesBefore.devices).toContainEqual(
     expect.objectContaining({
       endpointId: hostEndpointId,
       vaultId: initialized.vault.vaultId,
-      trust: 'owner',
+      role: 'admin',
     }),
   );
   await server.close();
@@ -134,13 +134,13 @@ test('desktop founds through the shared gate and re-adopts its protected owner o
     expect.objectContaining({ vaultId: initialized.vault.vaultId }),
   );
   const devicesAfter = (await (await fetch(`${server.url}/centraid/_gateway/devices`)).json()) as {
-    devices: Array<{ endpointId: string; vaultId: string; trust: string }>;
+    devices: Array<{ endpointId: string; vaultId: string; role: string }>;
   };
   expect(devicesAfter.devices).toContainEqual(
     expect.objectContaining({
       endpointId: hostEndpointId,
       vaultId: initialized.vault.vaultId,
-      trust: 'owner',
+      role: 'admin',
     }),
   );
 });

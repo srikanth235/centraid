@@ -1,8 +1,10 @@
-import { type JSX, type ReactNode } from 'react';
+import { type JSX, type ReactNode, useState } from 'react';
 import type { AppearancePrefs, ShellRoute } from '../../../app-shell-context.js';
 import { useShellActions } from '../actions.js';
 import type { ShellNav } from '../ShellApp.js';
 import BuilderShell from './builder/BuilderShell.js';
+import BuilderTargetGate from './BuilderTargetGate.js';
+import { useMemberScopes } from '../useMemberScopes.js';
 
 // React-owned builder route — the full-bleed conversational app/automation
 // builder (issue #325, R5-B). Replaces the vanilla `window.openBuilder`
@@ -32,6 +34,11 @@ export default function BuilderRoute({
   onToggleSidebar,
 }: BuilderRouteProps): JSX.Element {
   const { showToast } = useShellActions();
+  // Where a NEW app lands (issue #599, Decision 14). The builder creates its
+  // app on mount, so the target is chosen on a gate BEFORE the builder mounts —
+  // and only when there is genuinely a choice to make.
+  const memberScopes = useMemberScopes();
+  const [chosenScope, setChosenScope] = useState<string | undefined>(undefined);
 
   const onAddToHome = (input: {
     prompt?: string;
@@ -84,6 +91,21 @@ export default function BuilderRoute({
   };
 
   const automation = route.kind === 'automation-builder';
+  // A fresh from-a-prompt build is the only flow that creates an app; editing
+  // an existing one already knows where it lives.
+  const isNewBuild = !automation && !route.appContext && Boolean(route.initialPrompt);
+  const writableScopes = memberScopes.scopes.filter((s) => s.canWrite);
+  const targetScopeId = chosenScope ?? memberScopes.primary?.id;
+  if (isNewBuild && !chosenScope && writableScopes.length > 1) {
+    return (
+      <BuilderTargetGate
+        scopes={memberScopes.scopes}
+        defaultScopeId={memberScopes.primary?.id}
+        onConfirm={setChosenScope}
+        onCancel={() => nav.replace({ kind: 'home' })}
+      />
+    );
+  }
 
   return (
     <BuilderShell
@@ -96,6 +118,7 @@ export default function BuilderRoute({
       showToast={showToast}
       onAddToHome={onAddToHome}
       onMetaChange={onMetaChange}
+      {...(isNewBuild && targetScopeId ? { targetScopeId } : {})}
       {...(automation
         ? {
             initialAppId: route.automationId,

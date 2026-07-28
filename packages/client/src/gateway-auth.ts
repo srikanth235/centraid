@@ -53,4 +53,24 @@ export function href(baseUrl: string, pathname: string): string {
 /** The canonical vault-addressing header (mirrors the gateway's constant). */
 export const VAULT_HEADER = 'x-centraid-vault';
 
+/**
+ * Bearer headers that name their target space EXPLICITLY (issue #599).
+ *
+ * `doFetch`'s `withVaultHeader` only fills {@link VAULT_HEADER} when the caller
+ * left it unset, so a header stamped here wins over the shell's internal
+ * default-scope pointer. Every flow that must be pinned to one space for its
+ * whole life — a conversation, an app creation, an install — builds its headers
+ * through this rather than relying on whatever the shell happens to point at.
+ * `scopeId` omitted degrades to plain {@link authHeaders} (the ambient default).
+ */
+export function scopedAuthHeaders(
+  token: string | undefined,
+  scopeId: string | undefined,
+  contentType?: string,
+): Record<string, string> {
+  const h = authHeaders(token, contentType);
+  if (scopeId) h[VAULT_HEADER] = scopeId;
+  return h;
+}
+
 export const enc = encodeURIComponent;

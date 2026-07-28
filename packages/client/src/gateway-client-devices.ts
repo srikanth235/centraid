@@ -63,12 +63,33 @@ export interface DeviceEnrichmentLease {
   attempt: number;
 }
 
+/**
+ * The roles the owner may grant when minting a ticket — the wire twin of the
+ * gateway's `GrantableRole` and of `centraid-gateway pair --role`. `revoked`
+ * is a state a device is put INTO, never a role handed out, so it is not here.
+ */
+export type GatewayDeviceRole = 'admin' | 'write' | 'read';
+
+/**
+ * One (space, role) pair — the unit authority is authored in since #599.
+ * Roles hang off the MEMBER; a device only inherits its member's grants.
+ */
+export interface GatewayVaultGrant {
+  vaultId: string;
+  vaultName?: string;
+  role: GatewayDeviceRole;
+}
+
 /** One paired device (mirrors the gateway route's `DeviceDTO`). */
 export interface CentraidGatewayDevice {
   /** The revocation handle (the enrollment row id). */
   deviceId: string;
   /** The device's key (iroh EndpointId, or a synthetic `http:<uuid>`). */
   endpointId: string;
+  /** The person this device acts as (#599 L2). The roster groups on it. */
+  memberId: string;
+  /** That person's display label, denormalized so a roster needs one call. */
+  memberLabel: string;
   label: string;
   platform?: string;
   transport: 'iroh';
@@ -78,8 +99,13 @@ export interface CentraidGatewayDevice {
   lastUsedAt?: string;
   /** True for the device making the request (never set for the admin caller). */
   current?: boolean;
-  /** Server-enforced device tier used to clamp replica shapes and intents. */
-  trust: 'full' | 'readonly' | 'revoked';
+  /**
+   * Server-enforced device role used to clamp replica shapes and intents.
+   * `admin` is `write` plus pairing/revocation authority — the founding device
+   * always holds it, so a roster type without it could not describe the one
+   * device every gateway has. `revoked` is a tombstone, never a granted role.
+   */
+  role: GatewayDeviceRole | 'revoked';
   /** Whether this device consented to durable OPFS/IndexedDB state. */
   rememberDevice: boolean;
   /** Server-enforced app allow-list for a constrained Companion device. */
@@ -114,22 +140,48 @@ export async function listGatewayDevices(): Promise<CentraidGatewayDevice[]> {
 export interface GatewayDeviceTicket {
   /** The pasteable one-line token for the client's "Add gateway" dialog. */
   ticket: string;
+  /** The person the redeeming device will act as. */
+  memberId: string;
+  memberLabel: string;
+  /** Every (space, role) the ticket carries. The first is echoed flat below. */
+  grants: GatewayVaultGrant[];
   vaultId: string;
   vaultName?: string;
   /** Ticket expiry, ISO-8601. */
   expiresAt: string;
+  /** The tier the redeeming device will be enrolled at. Echoed by the gateway. */
+  role: GatewayDeviceRole;
+}
+
+/** What the panel sends to mint — a person plus what they may reach. */
+export interface GatewayDeviceTicketInput {
+  vaultId?: string;
+  ttlMinutes?: number;
+  label?: string;
+  role?: GatewayDeviceRole;
+  /** An EXISTING person: member id (or exact label, for CLI parity). */
+  memberId?: string;
+  /** A NEW person, created by this mint. Never combine with `memberId`. */
+  newMemberLabel?: string;
+  /** Per-space roles. Omitted with no member = self-pair at your own roles. */
+  grants?: { vaultId: string; role: GatewayDeviceRole }[];
 }
 
 /**
  * Mint a device-pairing ticket from the app (the operator twin of
  * `centraid-gateway pair`). The gateway scopes it to the caller's plane and
  * defaults the target vault to the active `x-centraid-vault` when none is given.
+ *
+ * Naming NO member is a SELF-PAIR — the ticket lands on the caller's own
+ * member at the roles they already hold (#599 Decision 5), which is why a
+ * bare `{ttlMinutes}` call is safe. Naming another person (`memberId`, or
+ * `newMemberLabel` to create one) is an invite, and requires the caller hold
+ * `admin` in every granted space: the ticket leaves this machine, so the
+ * grants travel with it.
  */
-export async function createGatewayDeviceTicket(input?: {
-  vaultId?: string;
-  ttlMinutes?: number;
-  label?: string;
-}): Promise<GatewayDeviceTicket> {
+export async function createGatewayDeviceTicket(
+  input?: GatewayDeviceTicketInput,
+): Promise<GatewayDeviceTicket> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, '/centraid/_gateway/devices/ticket', {
     method: 'POST',
@@ -139,12 +191,26 @@ export async function createGatewayDeviceTicket(input?: {
   return readJson<GatewayDeviceTicket & { ok: true }>(res, 'mint pairing ticket');
 }
 
-/** Revoke one paired device (cascades its HTTP token). Idempotent — `removed:false` when already gone. */
-export async function revokeGatewayDevice(deviceId: string): Promise<{ removed: boolean }> {
+/**
+ * Revoke one paired DEVICE — "this phone was stolen". The person and their
+ * other devices are untouched (removing a person is `removeGatewayMember`).
+ * Idempotent — `removed:false` when already gone.
+ *
+ * The row survives as a tombstone at role `revoked`, so prior attribution
+ * still resolves. Revoking the last live device of a space's last owner 409s
+ * until `confirmLastAdmin` echoes that space's name back.
+ */
+export async function revokeGatewayDevice(
+  deviceId: string,
+  options?: { confirmLastAdmin?: string },
+): Promise<{ removed: boolean }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_gateway/devices/${enc(deviceId)}`, {
     method: 'DELETE',
-    headers: authHeaders(token),
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify(
+      options?.confirmLastAdmin ? { confirmLastAdmin: options.confirmLastAdmin } : {},
+    ),
   });
   return readJson<{ removed: boolean }>(res, 'revoke device');
 }

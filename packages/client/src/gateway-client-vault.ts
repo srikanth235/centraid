@@ -38,6 +38,45 @@ export interface VaultListEntry {
   blurb?: string;
 }
 
+/**
+ * One SCOPE an app may be mounted over, from `GET /_vault/scopes?app=<id>`
+ * (issue #599). A scope is a vault the CALLING MEMBER holds a role in — their
+ * own plus every audience they belong to — so this is the household-aware
+ * successor to `listVaults`, which answers per DEVICE enrollment and carries
+ * neither the member's role nor whether the app is installed there.
+ *
+ * Order is the gateway's: oldest vault first, which puts the member's own
+ * (primary) scope first. `installed` is present only when `app` was named.
+ */
+export interface AppScopeEntry {
+  vaultId: string;
+  label: string;
+  color?: string;
+  icon?: string;
+  /** The calling member's role in this scope. `read` cannot write. */
+  role: string;
+  installed?: boolean;
+}
+
+/**
+ * The scopes one app may mount for the calling member. `undefined` when the
+ * gateway mounts no scopes plane (route 404s) — an older gateway, not an error;
+ * callers fall back to the single ambient scope.
+ */
+export async function listAppScopes(appId?: string): Promise<AppScopeEntry[] | undefined> {
+  const { baseUrl, token } = await auth();
+  const path = appId
+    ? `/centraid/_vault/scopes?app=${encodeURIComponent(appId)}`
+    : '/centraid/_vault/scopes';
+  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
+  if (res.status === 404) {
+    await res.body?.cancel().catch(() => {});
+    return undefined;
+  }
+  const body = await readJson<{ scopes: AppScopeEntry[] }>(res, 'list app scopes');
+  return body.scopes;
+}
+
 /** One scope of a grant or a manifest request: schema-wide or one table. */
 export interface VaultScope {
   schema: string;

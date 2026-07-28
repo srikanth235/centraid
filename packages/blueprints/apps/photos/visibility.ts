@@ -5,13 +5,15 @@
 // and passes them in as getters — same split toolbar/picker use for
 // their own regions — so this stays pure, DOM-free, and easy to reason about
 // on its own.
+import { assetKey } from './asset-key.ts';
 import { TRASH } from './constants.ts';
 import { dayKey, fmtDay, fmtMonth } from './format.ts';
 import type { Asset } from './types.ts';
 
 export interface Visibility {
   visibleAssets: () => Asset[];
-  findAsset: (assetId: string) => Asset | undefined;
+  /** By COMPOSITE key (see asset-key.ts), never a bare `asset_id`. */
+  findAsset: (key: string) => Asset | undefined;
 }
 
 export function createVisibility({
@@ -70,12 +72,15 @@ export function createVisibility({
     if (!query) return getAlbumAssets();
     if (selectedAlbum === TRASH) return getTrash().filter(matchesSearchLocal);
     const scoped = getAlbumAssets();
-    const scopedIds = selectedAlbum ? new Set(scoped.map((a) => a.asset_id)) : null;
+    // Keyed by (scope, asset) throughout: on a merged timeline a bare
+    // `asset_id` is not an identity, so a colliding id across two scopes would
+    // otherwise collapse two different photos into one row here (issue #599).
+    const scopedKeys = selectedAlbum ? new Set(scoped.map(assetKey)) : null;
     const merged = new Map<string, Asset>();
-    for (const a of scoped.filter(matchesSearchLocal)) merged.set(a.asset_id, a);
+    for (const a of scoped.filter(matchesSearchLocal)) merged.set(assetKey(a), a);
     for (const a of getSearchResults() ?? []) {
-      if (scopedIds && !scopedIds.has(a.asset_id)) continue;
-      merged.set(a.asset_id, a);
+      if (scopedKeys && !scopedKeys.has(assetKey(a))) continue;
+      merged.set(assetKey(a), a);
     }
     return [...merged.values()];
   }
@@ -84,11 +89,10 @@ export function createVisibility({
   // an off-window server search hit (queries/search.ts can surface a photo
   // this session never loaded into `assets`) — the lightbox needs this reach
   // too, to open a tile that a search surfaced from outside the window.
-  function findAsset(assetId: string): Asset | undefined {
+  function findAsset(key: string): Asset | undefined {
+    const match = (a: Asset): boolean => assetKey(a) === key;
     return (
-      getAssets().find((a) => a.asset_id === assetId) ??
-      getTrash().find((a) => a.asset_id === assetId) ??
-      (getSearchResults() ?? []).find((a) => a.asset_id === assetId)
+      getAssets().find(match) ?? getTrash().find(match) ?? (getSearchResults() ?? []).find(match)
     );
   }
 

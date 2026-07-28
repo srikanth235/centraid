@@ -19,6 +19,25 @@ export interface ReceiptInput {
   detail?: Record<string, unknown>;
 }
 
+/**
+ * The L4 attribution fragment for one invocation's receipt detail (issue #599
+ * decisions 7–8): the household member the write is attributable to, spread
+ * into `detail` beside the app/agent that carried it — so an agent turn
+ * journals as "agent, for <member>".
+ *
+ * The member arrives two ways and they agree: `InvokeRequest.actingMemberId`
+ * is the host-resolved device→member binding, and `Identity.onBehalfOfMember`
+ * is the agent turn's authenticated on-behalf-of principal. Empty when neither
+ * is known (a scheduler-fired automation), never guessed.
+ */
+export function actingMemberDetail(
+  identity: Pick<Identity, 'onBehalfOfMember'>,
+  request: { actingMemberId?: string },
+): Record<string, string> {
+  const memberId = request.actingMemberId ?? identity.onBehalfOfMember?.memberId;
+  return memberId === undefined ? {} : { actingMember: memberId };
+}
+
 /** Append a consent.receipt, chaining its hash to the previous receipt. */
 export function writeReceipt(journal: DatabaseSync, input: ReceiptInput): string {
   const receiptId = uuidv7();

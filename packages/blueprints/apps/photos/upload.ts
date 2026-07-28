@@ -5,7 +5,7 @@
 // via `$`, exactly like the pre-split code did.
 import { isPendingOffsite, stageDerivative, stageFileBytes, toast } from './kit.ts';
 import { captureVideoFrames, VIDEO_POSTER_EDGE, VIDEO_THUMB_EDGE } from './video-frame.js';
-import { act, narrate } from './outcomes.ts';
+import { act, narrate, writeTarget } from './outcomes.ts';
 import { thumbHashFromImage } from './thumbhash.ts';
 import { $ } from './dom.ts';
 
@@ -83,6 +83,14 @@ async function stageRung(
   await stageDerivative(parentSha, variant, blob, 'image/jpeg');
 }
 
+// SCOPE NOTE (issue #599): the derivative door (`stageDerivative`) is not
+// scope-addressed on either the served or the inline kit, so these rungs land
+// in the mount's primary scope even when the original was staged into an
+// audience. The consequence is a missing thumb/preview variant for an audience
+// upload (the grid falls back to a placeholder until the gateway backstop fills
+// it), never a wrong or leaked image — the rungs are keyed by the parent sha,
+// which the audience scope does not have.
+//
 // Both preview-ladder rungs (issue #405 §2), produced at upload time on this
 // device (the canvas is the one raster codec every client has) and staged as
 // the `thumb` (~256 px, the grid) and `preview` (~2048 px, the lightbox)
@@ -202,6 +210,17 @@ export async function runUpload(
   files: File[],
   { refresh, setUploading }: { refresh: () => Promise<void>; setUploading: (v: boolean) => void },
 ): Promise<void> {
+  // WHERE the new photos land (issue #599): whatever the chip selection makes
+  // the write target — the member's own library under "All", or the audience
+  // they are looking at. A read-only audience never gets here (wireUpload
+  // disables the entry points and says why), but the check is repeated because
+  // a drop or paste can race the shell revoking write access.
+  const target = writeTarget('new');
+  if (target.disabled) {
+    toast(target.reason);
+    return;
+  }
+  const scope = target.scopeId;
   const oversized = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
   const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
   if (accepted.length === 0) {
@@ -235,7 +254,12 @@ export async function runUpload(
     // mints and the library learns about the asset.
     let staged;
     try {
-      staged = await stageFileBytes(file, '', { hash: true });
+      // The bytes go into the SAME scope as the command that claims them:
+      // staging into the member's own CAS and then claiming the sha in an
+      // audience would claim a sha that scope has never seen. (The preview
+      // rungs below still ride the unscoped derivative door — see the note on
+      // stageClientPreviews.)
+      staged = await stageFileBytes(file, '', { hash: true, ...(scope ? { scope } : {}) });
     } catch (error) {
       const e = error as { resumable?: boolean };
       if (e?.resumable) retryable += 1;
@@ -254,16 +278,20 @@ export async function runUpload(
         : kind === 'video'
           ? await stageVideoPoster(file, staged.sha256)
           : await probeAudio(file);
-    const outcome = await act('upload', {
-      staged_sha: staged.sha256,
-      kind,
-      captured_at: new Date(file.lastModified || Date.now()).toISOString(),
-      ...(file.name ? { title: file.name } : {}),
-      ...(mediaMeta?.width ? { width: mediaMeta.width, height: mediaMeta.height } : {}),
-      ...(mediaMeta?.duration_s != null ? { duration_s: mediaMeta.duration_s } : {}),
-      ...(mediaMeta?.phash ? { phash: mediaMeta.phash } : {}),
-      ...(mediaMeta?.thumbhash ? { thumbhash: mediaMeta.thumbhash } : {}),
-    });
+    const outcome = await act(
+      'upload',
+      {
+        staged_sha: staged.sha256,
+        kind,
+        captured_at: new Date(file.lastModified || Date.now()).toISOString(),
+        ...(file.name ? { title: file.name } : {}),
+        ...(mediaMeta?.width ? { width: mediaMeta.width, height: mediaMeta.height } : {}),
+        ...(mediaMeta?.duration_s != null ? { duration_s: mediaMeta.duration_s } : {}),
+        ...(mediaMeta?.phash ? { phash: mediaMeta.phash } : {}),
+        ...(mediaMeta?.thumbhash ? { thumbhash: mediaMeta.thumbhash } : {}),
+      },
+      scope,
+    );
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === 'executed') {
       if (isPendingOffsite(staged)) pendingOffsite += 1;
@@ -280,9 +308,10 @@ export async function runUpload(
   }
 
   setUploading(false);
-  btn.disabled = false;
   btn.textContent = '＋ Add media';
-  $<HTMLButtonElement>('emptyUpload').disabled = false;
+  // Re-enable through the target, not blindly: the chip selection may have
+  // moved to a read-only audience while the batch ran.
+  applyUploadTarget();
 
   const parts: string[] = [];
   if (added > 0) {
@@ -314,6 +343,27 @@ function dragHasFiles(e: DragEvent): boolean {
 // paste. Wired once at boot from app.tsx; `dragDepth` is pure drop-overlay
 // bookkeeping that no component or app.tsx orchestrator ever reads, so it
 // lives here rather than among app.tsx's domain state.
+/**
+ * Reflect the current write target onto the two disk-upload buttons (issue
+ * #599): looking at an audience this member may only read, "Add media" is
+ * disabled and says why, instead of accepting files and narrating a refusal
+ * after the upload has already started. Called by app-root.tsx on every
+ * toolbar render, so it tracks the chip selection.
+ */
+export function applyUploadTarget(): void {
+  const target = writeTarget('new');
+  const reason = target.disabled ? target.reason : '';
+  for (const id of ['uploadBtn', 'emptyUpload']) {
+    // `uploadBtn` lives in the React-owned sidebar and `emptyUpload` in the
+    // empty state, so either can be absent on any given render — unlike the
+    // static ids `$` is otherwise asserted non-null for.
+    const btn = $<HTMLButtonElement>(id) as HTMLButtonElement | null;
+    if (!btn) continue;
+    btn.disabled = target.disabled;
+    btn.title = reason;
+  }
+}
+
 export function wireUpload({
   uploadFiles,
   isAlbumSelected,

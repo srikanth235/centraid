@@ -1,0 +1,95 @@
+/* Sidebar identity row (issue #599, Decision 14). Where the space switcher
+   used to sit: an avatar + the member's own space name + the gateway it lives
+   on, opening Household rather than a space menu. The trailing switch button
+   appears only when more than one gateway is registered. */
+
+.row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+  border-radius: 9px;
+}
+.row:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.head:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.avatar svg {
+  display: block;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+.name {
+  display: block;
+  font: var(--t-title);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  display: block;
+  margin-top: 1px;
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.switch {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  margin-right: 6px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: pointer;
+  transition: background 120ms;
+}
+.switch:hover,
+.switch:focus-visible {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-2);
+  outline: none;
+}
+.switch[data-open='true'] {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}

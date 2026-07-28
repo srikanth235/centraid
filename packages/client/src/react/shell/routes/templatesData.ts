@@ -101,9 +101,15 @@ export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
  *  pin is built the same whether this was a fresh install or an already-
  *  installed no-op. Unlike automations (which still clone into the code
  *  store), app templates never fork. Throws on failure. */
-export async function installAppTemplate(tmpl: TemplateEntry): Promise<UserAppMeta> {
+export async function installAppTemplate(
+  tmpl: TemplateEntry,
+  scopeId?: string,
+): Promise<UserAppMeta> {
   const pal = palette as unknown as Record<string, string>;
-  const result = await gwInstallTemplate({ templateId: tmpl.id });
+  const result = await gwInstallTemplate({
+    templateId: tmpl.id,
+    ...(scopeId ? { scopeId } : {}),
+  });
   const app = result.app;
   const colorKey = (app.colorKey ?? tmpl.colorKey) as UserAppMeta['colorKey'];
   const color = (pal[colorKey] ?? pal[tmpl.colorKey] ?? '#5847e0') as UserAppMeta['color'];

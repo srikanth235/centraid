@@ -13,6 +13,10 @@ import { restoreAsset } from '../assets-actions.ts';
 import { buildActivity } from '../activity.ts';
 import { renderFaces } from '../faces.ts';
 import { custodyMeta, exifRows, toLocalInputValue } from '../format.ts';
+// Every command on this panel edits the OPEN asset, so each is addressed at
+// the scope that asset is shown from (issue #599) rather than the chip
+// selection — including the album/tag/place ones, whose collection ids are only
+// meaningful inside that same scope.
 import { act, narrate } from '../outcomes.ts';
 import { useEffect, useRef, useState } from 'react';
 import type { Album, Asset, CustodyMeta, Place } from '../types.ts';
@@ -95,7 +99,11 @@ export function LightboxInfo({
         onChange={async (e) => {
           const title = e.currentTarget.value.trim();
           if (title === (asset.title ?? '')) return;
-          const outcome = await act('update-asset', { asset_id: asset.asset_id, title });
+          const outcome = await act(
+            'update-asset',
+            { asset_id: asset.asset_id, title },
+            asset.scope_id,
+          );
           if (narrate(outcome, noteRef.current)) await refresh();
         }}
       />
@@ -111,10 +119,11 @@ export function LightboxInfo({
             if (!e.currentTarget.value) return;
             const d = new Date(e.currentTarget.value);
             if (Number.isNaN(d.getTime())) return;
-            const outcome = await act('update-asset', {
-              asset_id: asset.asset_id,
-              captured_at: d.toISOString(),
-            });
+            const outcome = await act(
+              'update-asset',
+              { asset_id: asset.asset_id, captured_at: d.toISOString() },
+              asset.scope_id,
+            );
             if (narrate(outcome, noteRef.current)) await refresh();
           }}
         />
@@ -135,6 +144,7 @@ export function LightboxInfo({
                 placeId
                   ? { asset_id: asset.asset_id, place_id: placeId }
                   : { asset_id: asset.asset_id },
+                asset.scope_id,
               );
               setPlaceEditorOpen(false);
               if (narrate(outcome, noteRef.current)) await refresh();
@@ -185,10 +195,11 @@ export function LightboxInfo({
                   className={styles.albumChip}
                   data-active={member ? 'true' : 'false'}
                   onClick={async () => {
-                    const outcome = await act(member ? 'remove-from-album' : 'add-to-album', {
-                      album_id: album.album_id,
-                      asset_id: asset.asset_id,
-                    });
+                    const outcome = await act(
+                      member ? 'remove-from-album' : 'add-to-album',
+                      { album_id: album.album_id, asset_id: asset.asset_id },
+                      asset.scope_id,
+                    );
                     if (narrate(outcome, noteRef.current)) await refresh();
                   }}
                 >
@@ -209,7 +220,7 @@ export function LightboxInfo({
             className={styles.tagChipX}
             aria-label={`Remove tag ${tag.label}`}
             onClick={async () => {
-              const outcome = await act('untag-asset', { tag_id: tag.tag_id });
+              const outcome = await act('untag-asset', { tag_id: tag.tag_id }, asset.scope_id);
               if (narrate(outcome, noteRef.current)) await refresh();
             }}
           >
@@ -237,7 +248,11 @@ export function LightboxInfo({
                 setAddingTag(false);
                 return;
               }
-              const outcome = await act('tag-asset', { asset_id: asset.asset_id, label });
+              const outcome = await act(
+                'tag-asset',
+                { asset_id: asset.asset_id, label },
+                asset.scope_id,
+              );
               setAddingTag(false);
               setTagText('');
               if (narrate(outcome, noteRef.current)) await refresh();
@@ -275,12 +290,12 @@ export function LightboxInfo({
         className={styles.deleteLink}
         onClick={async (e) => {
           if (!armConfirm(e.currentTarget, { armedLabel: 'Delete photo?' })) return;
-          const outcome = await act('delete-asset', { asset_id: asset.asset_id });
+          const outcome = await act('delete-asset', { asset_id: asset.asset_id }, asset.scope_id);
           if (narrate(outcome, noteRef.current)) {
             onClose();
             toast('Moved to trash — it leaves every album it was in.', {
               undoLabel: 'Undo',
-              onUndo: () => restoreAsset(asset.asset_id, refresh),
+              onUndo: () => restoreAsset(asset.asset_id, refresh, { scope: asset.scope_id }),
             });
             await refresh();
           }

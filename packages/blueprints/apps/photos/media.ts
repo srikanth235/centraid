@@ -4,6 +4,7 @@
 // (Timeline.tsx, Picker.tsx, Duplicates.tsx).
 import { isAudioAsset, isVideoAsset } from './format.ts';
 import { observeNextScreen, stopNextScreenObservation } from './media-observer.ts';
+import { scopeAttr } from './scopes.ts';
 import type { Asset } from './types.ts';
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
@@ -103,6 +104,15 @@ function renderDuration(tile: HTMLElement, asset: Asset): void {
 // it to run once per mounted element, exactly like the old code's one-time
 // build.
 export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
+  // WHICH scope owns these bytes (issue #599). The shell's blob authorizer
+  // reads `data-scope` off the element carrying a `/centraid/_vault/blobs/…`
+  // reference or its nearest ancestor, and fetches the bytes in that scope.
+  // Content ids are minted per scope and collide across scopes BY DESIGN, so an
+  // unstamped tile in a shared audience renders the wrong photo — not a 404.
+  // Stamped on the tile itself, before any child exists, so it covers the
+  // `<img>` below AND the `data-prefetch-src` media-observer.ts stages on it.
+  const scope = scopeAttr(asset.scope_id);
+  if (scope) tile.dataset.scope = scope;
   const src = gridSrc(asset);
   if (src == null) {
     renderPlaceholder(tile, asset);
@@ -154,7 +164,13 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
 // underlying `<img>` node — and therefore its already loaded bytes — alive
 // across refreshes.
 export function mountMedia(el: HTMLElement | null, asset: Asset): void {
-  if (!el || el.dataset.mediaFor === asset.asset_id) return;
-  el.dataset.mediaFor = asset.asset_id;
+  // Keyed by SCOPE + asset id (issue #599). Asset ids are minted per scope and
+  // collide across scopes exactly like content ids do, so an id-only guard
+  // would treat a Family photo as "already painted" because the member's own
+  // library happens to hold that id — and leave the previous scope's bytes and
+  // `data-scope` in place. That is the wrong-image failure, not a missing one.
+  const key = `${asset.scope_id ?? ''}:${asset.asset_id}`;
+  if (!el || el.dataset.mediaFor === key) return;
+  el.dataset.mediaFor = key;
   fillTileMedia(el, asset);
 }

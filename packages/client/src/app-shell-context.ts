@@ -65,6 +65,11 @@ export type ShellRoute =
   | { kind: 'connectors' }
   | { kind: 'approvals' }
   | { kind: 'gateway' }
+  // The people side of this installation (issue #599, Decision 14): the member
+  // roster, the devices acting for each person, and every space this member can
+  // reach. Sits under the sidebar's Operations section beside Gateway — which
+  // it took People & devices from, leaving Gateway purely about runtime health.
+  | { kind: 'household' }
   // Local disk footprint by component, the owner's disk budget, and the
   // offsite snapshot custody that used to be the whole page (issue #544 —
   // this was `backups`). Sits under the sidebar's Operations section beside

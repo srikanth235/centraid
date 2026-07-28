@@ -1,12 +1,12 @@
 // governance: allow-repo-hygiene file-size-limit (#406) consent selection, temporal membership, and opaque row identity form one security boundary
 // Server-derived replica shapes (issue #406): existing app consent scopes
-// intersected with the ambient device trust tier. There is no replica field
+// intersected with the ambient device role. There is no replica field
 // in app manifests; this module projects the grants already enforced by the
 // vault gateway into a row/column-minimized offline shape.
 
 import crypto from 'node:crypto';
 import type { DatabaseSync, SQLInputValue, StatementSync } from 'node:sqlite';
-import { actingTrust, type GrantableTrust } from '../serve/enrollment-store.js';
+import { canWrite, type GrantableRole } from '../serve/enrollment-store.js';
 import {
   compileFilters,
   compileReplicaHistoricalFilters,
@@ -26,7 +26,7 @@ export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;
 export const REPLICA_SYNTHETIC_PRIMARY_KEY = '__centraid_row_id';
 
 export interface ReplicaShapeAccess {
-  trust: GrantableTrust;
+  role: GrantableRole;
   rememberDevice: boolean;
   /** Trusted web-app session header or an explicit shell selection. */
   appId?: string;
@@ -335,7 +335,7 @@ export function buildReplicaShapes(
             callerId: grantee.app_id,
             provAgentKind: 'app',
             partyId: null,
-            mayAct: actingTrust(access.trust),
+            mayAct: canWrite(access.role),
           },
           ref.schema,
           ref.table,
@@ -388,7 +388,7 @@ export function buildReplicaShapes(
       protocolVersion: REPLICA_PROTOCOL_VERSION,
       appId,
       purpose,
-      trust: access.trust,
+      role: access.role,
       maxValueBytes: REPLICA_MAX_VALUE_BYTES,
       entities: entities.map((entity) => ({
         entity: entity.entity,

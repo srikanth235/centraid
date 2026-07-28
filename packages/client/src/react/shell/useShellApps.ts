@@ -6,7 +6,7 @@ import { listApps, listVaults } from '../../gateway-client.js';
 // Pins are per-vault state: the reconcile below prunes them against the
 // active vault's listing, so pins carried across a vault switch would all
 // look orphaned and be destroyed (then persisted). Resolve which vault the
-// client currently addresses the same way useActiveVault does — the auth
+// client currently addresses the same way useMemberScopes does — the auth
 // pointer, falling back to the registry's first (the gateway's default) so
 // the implicit-default and explicit-id spellings of the same vault agree.
 async function activeVaultKey(): Promise<string> {
