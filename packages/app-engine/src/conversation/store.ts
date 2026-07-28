@@ -535,10 +535,13 @@ export class ConversationStore {
     const hydrated = adapter?.hydrated === true ? 1 : 0;
     let res;
     if (adapter && adapter.sessionId !== undefined) {
+      // `turns.seq` starts at 0, so -1 — not 0 — is the "nothing hydrated yet"
+      // sentinel. A 0 here would silently exclude the first turn from every
+      // later delta hydration (`seq > afterSeq`).
       const maxSeq = Number(
         (
           db
-            .prepare(`SELECT COALESCE(MAX(seq), 0) AS seq FROM turns WHERE conversation_id = ?`)
+            .prepare(`SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`)
             .get(id) as { seq: number }
         ).seq,
       );
@@ -622,7 +625,7 @@ export class ConversationStore {
         `UPDATE conversation_harness_sessions
             SET hydrated_through_seq = MAX(
               hydrated_through_seq,
-              (SELECT COALESCE(MAX(seq), 0) FROM turns WHERE conversation_id = ?)
+              (SELECT COALESCE(MAX(seq), -1) FROM turns WHERE conversation_id = ?)
             )
           WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?`,
       ).run(id, id, adapter.kind, adapter.sessionId);
@@ -638,10 +641,14 @@ export class ConversationStore {
    * Commit a completed failed turn without changing the active provider.
    *
    * If the failed prompt ran against an already-known exact session, advance
-   * only that binding's cumulative accounting/watermark. A new target session
-   * is deliberately not inserted: failure must never replace the prior active
+   * only that binding's cumulative accounting. A new target session is
+   * deliberately not inserted: failure must never replace the prior active
    * binding, while an existing session must not double-book cumulative usage
    * on its next resume.
+   *
+   * The hydration watermark is deliberately NOT advanced: the failed turn's
+   * user message never reached the model, so it must stay inside the next
+   * delta hydration rather than being marked as already-delivered context.
    */
   noteFailedTurn(
     id: string,
@@ -661,16 +668,11 @@ export class ConversationStore {
       db.prepare(
         `UPDATE conversation_harness_sessions
             SET usage_snapshot_json = COALESCE(?, usage_snapshot_json),
-                hydrated_through_seq = MAX(
-                  hydrated_through_seq,
-                  (SELECT COALESCE(MAX(seq), 0) FROM turns WHERE conversation_id = ?)
-                ),
                 last_used_at = ?
           WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?
             AND status <> 'stale'`,
       ).run(
         adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
-        id,
         now,
         id,
         adapter.kind,

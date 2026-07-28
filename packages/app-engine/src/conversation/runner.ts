@@ -219,8 +219,13 @@ export interface ConversationTurnInput {
   model?: string;
   /** Optional category-keyed ACP pins (`model`, `thought_level`, future categories). */
   configPins?: Readonly<Record<string, string>>;
-  /** Provider explicitly approved by the owner for this request. */
-  providerConsent?: RunnerKind;
+  /**
+   * Providers explicitly approved by the owner for this request. A client
+   * accumulates consents across a conversation and re-sends the whole set, so
+   * a second cross-provider switch does not silently revoke the first. A bare
+   * string stays wire-valid and means a one-element set.
+   */
+  providerConsent?: RunnerKind | readonly RunnerKind[];
   /** Explicitly owner-selected extra workspace roots for this conversation. */
   additionalDirectories?: string[];
   /** Host-resolved Centraid workspace root selected for this conversation. */
@@ -281,7 +286,37 @@ export interface ConversationTurnInput {
   };
   /** Full-ledger counterpart to `hydrationAttachments`. */
   recoveryHydrationAttachments?: import('./turn.js').TurnAttachment[];
+  /**
+   * Per-rung resume + hydration planner, injected by the turn driver (which
+   * owns the conversation store). The failover ladder can land on a provider
+   * other than the one the route targeted, and every rung has its OWN binding
+   * and its OWN hydration watermark. Resolving the plan once against the
+   * primary target and reusing it down the ladder loses the whole
+   * conversation: a fallback rung would start with no resume handle AND no
+   * hydration.
+   *
+   * Absent on hosts with no conversation store (automation dispatch paths) —
+   * the spine then falls back to the precomputed `prevAdapter*` /
+   * `hydration*` fields above, which is exactly the pre-existing behavior.
+   */
+  resumeForKind?: (kind: RunnerKind) => TurnResumePlan | undefined;
   onEvent: (event: TurnStreamEvent) => void;
+}
+
+/** One runner kind's resume handle plus the hydration it would need. */
+export interface TurnResumePlan {
+  /** That runner's own resumable opaque session id, when it has a binding. */
+  sessionId?: string;
+  /** Durable binding row that supplied `sessionId`. */
+  bindingId?: string;
+  /** Cumulative counters stored with `sessionId`. */
+  usageSnapshot?: AdapterUsageSnapshot;
+  /** Ledger delta past THIS binding's watermark (the full ledger when cold). */
+  hydrationContext?: ConversationTurnInput['hydrationContext'];
+  hydrationAttachments?: import('./turn.js').TurnAttachment[];
+  /** Full-ledger plan used only if `sessionId` turns out to be expired. */
+  recoveryHydrationContext?: ConversationTurnInput['recoveryHydrationContext'];
+  recoveryHydrationAttachments?: import('./turn.js').TurnAttachment[];
 }
 
 export interface ConversationTurnResult {
@@ -298,6 +333,12 @@ export interface ConversationTurnResult {
   adapterUsageSnapshot?: AdapterUsageSnapshot;
   /** True when a fresh runner/session consumed canonical ledger hydration. */
   hydrated?: boolean;
+  /**
+   * Which hydration the adapter actually consumed. `'recovery'` means the
+   * resume handle we supplied was rejected and the adapter self-healed onto a
+   * fresh session — the signal the driver uses to retire the dead binding.
+   */
+  hydrationKind?: 'handoff' | 'recovery';
   /**
    * Estimated tokens of the hydration prompt actually consumed. Present only
    * when `hydrated` is true; persisted separately from ordinary ACP usage.

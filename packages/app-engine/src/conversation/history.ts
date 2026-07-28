@@ -687,8 +687,10 @@ export class ConversationHistoryStore {
     }
     // A targeted lookup asks only for that provider's resumable binding.
     // Falling back to the conversation's different active provider would
-    // pair the wrong opaque session id with the requested runner.
-    if (runnerKind) return {};
+    // pair the wrong opaque session id with the requested runner. A miss is
+    // `undefined` — an empty object reads as "state found, all fields absent"
+    // at every call site that only truthiness-tests the result.
+    if (runnerKind) return undefined;
     return {
       ...(meta.adapterKind ? { kind: meta.adapterKind } : {}),
       ...(meta.adapterSessionId ? { sessionId: meta.adapterSessionId } : {}),
@@ -715,7 +717,9 @@ export class ConversationHistoryStore {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, conversationId)) return undefined;
     const all = store.listTurns(conversationId);
-    const throughSeq = all.at(-1)?.seq ?? 0;
+    // `seq` starts at 0, so the empty-ledger watermark is -1 — 0 would claim
+    // the first turn was already hydrated.
+    const throughSeq = all.at(-1)?.seq ?? -1;
     const turns = all.filter((turn) => turn.seq > afterSeq);
     const itemsByTurn = new Map<string, Item[]>();
     for (const turn of turns) itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));

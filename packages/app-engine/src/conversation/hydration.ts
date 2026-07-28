@@ -122,6 +122,13 @@ export function hydrationMessagesFromLedger(
 
 const estimateTokens = (text: string): number => Math.max(1, Math.ceil(text.length / 4));
 
+/**
+ * Content each still-owed mandatory turn is guaranteed, so the `minTurns`
+ * floor delivers turns with substance rather than truncation markers.
+ * Scaled down when `tokenBudget` cannot fund `minTurns` shares of it.
+ */
+const MANDATORY_TURN_MIN_TOKENS = 200;
+
 function truncateTurn(turn: TurnExcerpt, maxTokens: number): TurnExcerpt {
   if (turn.estimatedTokens <= maxTokens) return turn;
   const marker = '\n[turn truncated to hydration budget]';
@@ -189,7 +196,17 @@ function compileTurns(
         typeof payload.sql === 'string'
           ? ` — ${payload.sql.replace(/\s+/g, ' ').trim().slice(0, 240)}`
           : '';
-      const status = payload.ok === true ? 'ok' : payload.ok === false ? 'failed' : 'unknown';
+      // Two producers feed this compiler and they spell tool status
+      // differently: `hydrationMessagesFromLedger` projects the raw item's
+      // boolean `ok`, while the chat path's `foldTranscript` rows carry the
+      // renderer's `state: 'ok' | 'error'`. Read both, or every real chat
+      // hydration renders "→ unknown".
+      const status =
+        payload.ok === true || payload.state === 'ok'
+          ? 'ok'
+          : payload.ok === false || payload.state === 'error'
+            ? 'failed'
+            : 'unknown';
       lines.push(`Tool call: ${tool}${sql} → ${status}`);
       if (Array.isArray(payload.artifacts)) {
         const references = payload.artifacts.flatMap((artifact) => {
@@ -241,6 +258,15 @@ export function compileHydrationPlan(
       .join('\n');
   const headerTokens = estimateTokens(headerFor(omittedPrefix));
   const bodyBudget = Math.max(1, tokenBudget - headerTokens - 2);
+  // The minimum-turn floor only means something if each mandatory turn keeps
+  // real content. Reserving a single token per still-owed mandatory turn let
+  // the first turn eat the whole body budget and left the rest as nothing but
+  // the truncation marker — a floor of turns, not of context. Reserve a real
+  // per-turn share instead, shrinking it only when the budget cannot fund it.
+  const mandatoryFloor = Math.max(
+    1,
+    Math.min(MANDATORY_TURN_MIN_TOKENS, Math.floor(bodyBudget / minTurns)),
+  );
   const selected: TurnExcerpt[] = [];
   let estimatedTokens = 0;
 
@@ -251,7 +277,7 @@ export function compileHydrationPlan(
     const remaining = Math.max(1, bodyBudget - estimatedTokens);
     const allocation =
       selected.length < minTurns
-        ? Math.max(1, remaining - mandatoryRemaining)
+        ? Math.max(mandatoryFloor, remaining - mandatoryRemaining * mandatoryFloor)
         : Math.min(remaining, turn.estimatedTokens);
     const fitted = truncateTurn(turn, allocation);
     selected.push(fitted);

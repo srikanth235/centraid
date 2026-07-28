@@ -48,6 +48,26 @@ workspace/artifact/shared-composer/mobile surfaces.
 | D12 | Assistant, Builder, and Automation Q&A consume `ChatComposer` and `SessionStatusStrip`; answers-only run screens stay input-free; mobile uses native runner/model/effort/context/attachment/stop/consent controls; shared glyphs live in design tokens. |
 | D13 | Ladders are owner-authored and never auto-populated; membership auto-grants unattended use with source `ladder` plus its authorizing subsystem; removal revokes only that subsystem's forward grants across mounted vaults without touching direct grants or another ladder. |
 
+### Post-review fixes (2026-07-28)
+
+A four-area review of the umbrella PR (agent-runtime ACP core, app-engine
+bindings/hydration, gateway/automation failover, client/mobile surfaces)
+surfaced two blockers and a set of majors/minors; all were fixed in this
+branch in one follow-up round:
+
+- **Per-rung continuity (blocker).** Resume and hydration are now planned per
+  ladder rung via `ConversationTurnInput.resumeForKind`: a failover rung
+  resumes its own binding and hydrates against its own watermark (full-ledger
+  handoff when it has none), instead of inheriting the primary's empty plan —
+  a breaker-skipped primary no longer silently strips the fallback of all
+  conversation history. Hydration tokens are billed to the rung that ran.
+- **Ledger/watermark correctness.** Failed turns no longer advance the
+  hydration watermark; the empty-watermark sentinel is `-1` everywhere; the
+  hydration tool line understands the real chat-path payload shape (`state`)
+  and its test drives the real producer; each mandatory hydrated turn retains
+  real content; dead resume handles are marked stale after a failed recovery;
+  workspace artifacts stat-then-read under the shared 25 MiB cap and surface
+  drops as durable notices.
 ### Package-level changes
 
 - ACP runtime: bounded lifecycle/watchdog behavior, classified failures, safe
@@ -351,7 +371,6 @@ Observed live results:
 - Governance run
   [30299535212](https://github.com/srikanth235/centraid/actions/runs/30299535212)
   passed all 25 directives.
-
 ## Audit
 
 PASS — A fresh-context adversarial audit found no acceptance, D1–D13,
@@ -387,6 +406,9 @@ and records no non-steering event.
 | codex-019fa35f-701-1785180193-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 14704 | 0 | 426752 | 712 | 15416 | 0.1541 | 5774296 | 0 | 288144896 | 615239 | chore(test): remove generated fixture apps (#567) |
 | codex-019fa35f-701-1785181382-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 188115 | 0 | 12551936 | 13881 | 201996 | 3.8165 | 5962411 | 0 | 300696832 | 629120 | test(runtime): cover ACP and health branches (#567) |
 | codex-019fa35f-701-1785182227-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 61593 | 0 | 9561600 | 6712 | 68305 | 2.6451 | 6024004 | 0 | 310258432 | 635832 | test(runtime): cover ACP and health branches (#567) |
+| claude-code-fceae513-7f3-1785209819-1 | claude-code | fceae513-7f3c-4cbb-8ab3-327fdd04b456 | #567 | claude-fable-5 | 288 | 407949 | 20435137 | 202284 | 610521 | 35.6516 | 288 | 407949 | 20435137 | 202284 | fix(app-engine): plan failover resume and hydration per ladder rung (#567)A brea |
+| claude-code-fceae513-7f3-1785209864-1 | claude-code | fceae513-7f3c-4cbb-8ab3-327fdd04b456 | #567 | claude-fable-5 | 6 | 12582 | 583038 | 843 | 13431 | 0.7825 | 294 | 420531 | 21018175 | 203127 | fix(app-engine): plan failover resume and hydration per ladder rung (#567)Co-Aut |
+| claude-code-fceae513-7f3-1785210103-1 | claude-code | fceae513-7f3c-4cbb-8ab3-327fdd04b456 | #567 | claude-fable-5 | 80 | 34101 | 8306775 | 21970 | 56151 | 9.8323 | 374 | 454632 | 29324950 | 225097 | fix(app-engine): plan failover resume and hydration per ladder rung (#567)A brea |
 
 ### Steering
 

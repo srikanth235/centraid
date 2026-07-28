@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
+import { promises as fs } from 'node:fs';
+import { tempDir } from '@centraid/test-kit/temp-dir';
 import { compileHydrationPlan, hydrationMessagesFromLedger } from './hydration.js';
+import { ConversationHistoryStore } from './history.js';
+import { makeJournalDbProvider } from '../stores/gateway-db.js';
+
+/** A real history store on a fresh temp vault — the actual hydration producer. */
+async function newHistory(): Promise<ConversationHistoryStore> {
+  const dir = await tempDir('centraid-hydration-');
+  const appsDir = path.join(dir, 'apps');
+  await fs.mkdir(path.join(appsDir, 'notes'), { recursive: true });
+  const journalDbFile = path.join(dir, 'journal.db');
+  const journal = makeJournalDbProvider(journalDbFile);
+  return new ConversationHistoryStore(() => ({
+    vaultId: 'vault-test',
+    ownerPartyId: 'owner',
+    appsDir,
+    journal,
+    journalDbFile,
+    runnerSessionDir: path.join(dir, 'runner-sessions'),
+  }));
+}
 
 describe('compileHydrationPlan', () => {
   it('keeps prose, summarizes tool calls, and drops tool outputs', () => {
@@ -26,21 +48,40 @@ describe('compileHydrationPlan', () => {
     expect(plan.prompt).not.toContain('must not cross');
   });
 
-  it('preserves terminal tool status without carrying tool output', () => {
-    const plan = compileHydrationPlan([
-      { payload: { kind: 'user', text: 'Try it' } },
-      {
-        payload: {
+  it('preserves terminal tool status without carrying tool output', async () => {
+    // Fed by the REAL producer: the chat path hydrates from `getHydrationDelta`,
+    // whose rows spell tool status `state: 'ok' | 'error'` — not the ledger
+    // projection's boolean `ok`. A hand-built payload hid that mismatch.
+    const history = await newHistory();
+    const conversation = history.createSession('notes');
+    history.recordTurn('notes', {
+      conversationId: conversation.id,
+      userMessage: 'Try it',
+      startedAt: 1,
+      endedAt: 4,
+      ok: true,
+      finalText: 'It failed.',
+      nodes: [
+        {
           kind: 'tool',
-          tool: 'vault_sql',
+          toolName: 'vault_sql',
           sql: 'SELECT 1',
           ok: false,
           result: 'private output',
+          errorText: 'boom',
+          appId: 'notes',
+          startedAt: 2,
+          endedAt: 3,
         },
-      },
-      { payload: { kind: 'ai', text: 'It failed.' } },
-    ]);
+        { kind: 'step', text: 'It failed.', startedAt: 3, endedAt: 4 },
+      ],
+    });
+    const delta = history.getHydrationDelta('notes', conversation.id, -1);
+    const plan = compileHydrationPlan(delta!.messages);
+    expect(plan.prompt).toContain('User: Try it');
     expect(plan.prompt).toContain('Tool call: vault_sql — SELECT 1 → failed');
+    expect(plan.prompt).toContain('Assistant: It failed.');
+    expect(plan.prompt).not.toContain('unknown');
     expect(plan.prompt).not.toContain('private output');
   });
 
@@ -57,6 +98,10 @@ describe('compileHydrationPlan', () => {
     expect(plan.prompt).toContain('[turn truncated to hydration budget]');
     expect(plan.prompt).toContain('[End session handoff]');
     expect(plan.estimatedTokens).toBeLessThanOrEqual(256);
+    // The floor is a floor of CONTEXT, not merely of turn count: each turn the
+    // floor forced in must still carry real content, not just the marker.
+    expect(plan.prompt).toContain(`u3 ${'x'.repeat(100)}`);
+    expect(plan.prompt).toContain(`u4 ${'x'.repeat(100)}`);
   });
 
   it('cites workspace and CAS artifact locations without embedding their output', () => {

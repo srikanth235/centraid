@@ -205,7 +205,7 @@ interface PostBody {
   retryOf?: string;
   /** Attachments uploaded ahead of this turn (issue #190). */
   attachments?: TurnAttachmentRef[];
-  providerConsent?: string;
+  providerConsent?: unknown;
   workspaceKind?: unknown;
   additionalDirectories?: unknown;
 }
@@ -314,8 +314,16 @@ async function handlePostTurn(
     sendError(res, 400, 'bad_request', 'Invalid conversationId.');
     return;
   }
-  if (body.providerConsent !== undefined && !isRunnerKind(body.providerConsent)) {
-    sendError(res, 400, 'bad_request', 'providerConsent must name a registered runner.');
+  // A client accumulates provider consents over a conversation and re-sends
+  // the whole set, so a second cross-provider switch cannot revoke the first.
+  // A bare string stays wire-valid and means a one-element set (issue #567).
+  const providerConsent = Array.isArray(body.providerConsent)
+    ? body.providerConsent
+    : body.providerConsent === undefined
+      ? []
+      : [body.providerConsent];
+  if (!providerConsent.every((kind) => isRunnerKind(kind))) {
+    sendError(res, 400, 'bad_request', 'providerConsent must name registered runners.');
     return;
   }
   if (body.runnerKind !== undefined && !isRunnerKind(body.runnerKind)) {
@@ -429,7 +437,7 @@ async function handlePostTurn(
     model: body.model,
     ...(isRunnerKind(body.runnerKind) ? { runnerKind: body.runnerKind } : {}),
     thinking: body.thinking,
-    ...(body.providerConsent ? { providerConsent: body.providerConsent } : {}),
+    ...(providerConsent.length > 0 ? { providerConsent } : {}),
     ...(additionalDirectories.length ? { additionalDirectories } : {}),
     idempotencyKey: body.idempotencyKey,
     ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),

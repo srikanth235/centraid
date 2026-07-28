@@ -271,7 +271,7 @@ export const CONVERSATION_LEDGER_DDL = `
       runner_kind           TEXT NOT NULL,
       acp_session_id        TEXT NOT NULL,
       usage_snapshot_json   TEXT,
-      hydrated_through_seq  INTEGER NOT NULL DEFAULT 0,
+      hydrated_through_seq  INTEGER NOT NULL DEFAULT -1,
       status                TEXT NOT NULL DEFAULT 'warm',
       last_used_at          INTEGER NOT NULL,
       created_at            INTEGER NOT NULL,
@@ -728,7 +728,7 @@ export function ensureConversationLedger(db: DatabaseSync): void {
       usage_snapshot_json, hydrated_through_seq, status, last_used_at, created_at
     )
     SELECT lower(hex(randomblob(16))), c.id, c.adapter_kind, c.adapter_session_id,
-           c.adapter_usage_json, COALESCE(MAX(t.seq), 0), 'active',
+           c.adapter_usage_json, COALESCE(MAX(t.seq), -1), 'active',
            c.updated_at, c.created_at
       FROM conversations c
       LEFT JOIN turns t ON t.conversation_id = c.id

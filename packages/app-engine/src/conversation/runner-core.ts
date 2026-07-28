@@ -229,10 +229,23 @@ export function makeConversationRunnerCore(
       let lastError: Extract<TurnStreamEvent, { type: 'error' }> | undefined;
       let lastResult: TurnResult | undefined;
       let completedCtx: TurnContext | undefined;
+      let consumedHydrationTokens: number | undefined;
       const activeAdapterKind = input.activeAdapterKind ?? input.prevAdapterKind;
+      // Kinds this turn actually consulted, and why the last one was refused —
+      // so an all-rungs-unavailable turn can name them instead of blaming
+      // "every configured agent" with an anonymous 'unknown' failure class.
+      const consulted: RunnerKind[] = [];
+      let lastBreakerClass: AgentFailureClass | undefined;
+      const consented: readonly RunnerKind[] =
+        input.providerConsent === undefined
+          ? []
+          : typeof input.providerConsent === 'string'
+            ? [input.providerConsent]
+            : input.providerConsent;
 
       for (let rung = 0; rung < ladder.length; rung += 1) {
         const kind = ladder[rung]!;
+        consulted.push(kind);
         const consentSource = rung === 0 ? 'direct' : 'ladder';
         if (
           opts.providerEgressConsent &&
@@ -242,7 +255,7 @@ export function makeConversationRunnerCore(
             consentSource === 'ladder' ||
             activeAdapterKind === undefined ||
             activeAdapterKind === kind ||
-            input.providerConsent === kind
+            consented.includes(kind)
           ) {
             // Initial use is implicit in choosing the surface. A ladder rung
             // is authorized by its explicit Settings membership (D13).
@@ -273,6 +286,7 @@ export function makeConversationRunnerCore(
         }
         const breaker = opts.runnerHealth?.canAttempt(healthContext, kind);
         if (breaker && !breaker.allowed) {
+          if (breaker.failureClass) lastBreakerClass = breaker.failureClass;
           input.onEvent({
             type: 'notice',
             level: 'warn',
@@ -310,17 +324,37 @@ export function makeConversationRunnerCore(
           ? await opts.buildExtraSystemPrompt(turnCtx)
           : input.extraSystemPrompt;
 
+        // Resume and hydration are PER RUNG. This rung may be a failover the
+        // route never planned for: it has its own (possibly cold) binding and
+        // its own watermark, so the primary target's plan is both the wrong
+        // session id and the wrong delta. Ask the driver for THIS kind's plan;
+        // hosts without a conversation store keep the precomputed fields.
+        const plan = input.resumeForKind?.(kind);
         // Resume only against the backend that minted the opaque session id.
-        const resumeId =
-          input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
-        const resumeUsage =
-          resumeId && input.prevAdapterKind === prefs.kind
+        const resumeId = plan
+          ? plan.sessionId
+          : input.prevAdapterKind === prefs.kind
+            ? input.prevAdapterSessionId
+            : undefined;
+        const resumeUsage = plan
+          ? plan.sessionId
+            ? plan.usageSnapshot
+            : undefined
+          : resumeId
             ? input.prevAdapterUsageSnapshot
             : undefined;
+        const hydrationContext = plan ? plan.hydrationContext : input.hydrationContext;
+        const hydrationAttachments = plan ? plan.hydrationAttachments : input.hydrationAttachments;
+        const recoveryHydrationContext = plan
+          ? plan.recoveryHydrationContext
+          : input.recoveryHydrationContext;
+        const recoveryHydrationAttachments = plan
+          ? plan.recoveryHydrationAttachments
+          : input.recoveryHydrationAttachments;
         // The ledger may carry a delta even when this runner resumes its own
         // ACP session (A → B → A). A supplied hydration plan is therefore an
         // explicit instruction, not merely a runner-kind mismatch heuristic.
-        const forceHydration = input.hydrationContext !== undefined;
+        const forceHydration = hydrationContext !== undefined;
 
         // Explicit model/config pins belong to the selected provider. A
         // failover rung gets only its own persisted defaults; carrying a Codex
@@ -357,21 +391,17 @@ export function makeConversationRunnerCore(
             : {}),
           ...(resumeId ? { prevSessionId: resumeId } : {}),
           ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
-          ...(input.hydrationContext
+          ...(hydrationContext
             ? {
-                hydrationContext: input.hydrationContext.prompt,
+                hydrationContext: hydrationContext.prompt,
                 ...(forceHydration ? { forceHydration: true } : {}),
               }
             : {}),
-          ...(input.hydrationAttachments?.length
-            ? { hydrationAttachments: input.hydrationAttachments }
+          ...(hydrationAttachments?.length ? { hydrationAttachments } : {}),
+          ...(recoveryHydrationContext
+            ? { recoveryHydrationContext: recoveryHydrationContext.prompt }
             : {}),
-          ...(input.recoveryHydrationContext
-            ? { recoveryHydrationContext: input.recoveryHydrationContext.prompt }
-            : {}),
-          ...(input.recoveryHydrationAttachments?.length
-            ? { recoveryHydrationAttachments: input.recoveryHydrationAttachments }
-            : {}),
+          ...(recoveryHydrationAttachments?.length ? { recoveryHydrationAttachments } : {}),
         };
 
         try {
@@ -387,6 +417,14 @@ export function makeConversationRunnerCore(
         if (!failure) {
           opts.runnerHealth?.reportOk(healthContext, kind);
           completedCtx = turnCtx;
+          // Bill the hydration THIS rung was handed, not the route's original
+          // plan — a failover rung carries a different prompt and cost.
+          if (lastResult?.hydrated) {
+            consumedHydrationTokens =
+              lastResult.hydrationKind === 'recovery'
+                ? recoveryHydrationContext?.estimatedTokens
+                : hydrationContext?.estimatedTokens;
+          }
           break;
         }
 
@@ -401,10 +439,16 @@ export function makeConversationRunnerCore(
       }
 
       if (!completedCtx && !lastResult) {
+        // Name the agents actually consulted and carry the breaker's own
+        // failure class. "Every configured agent" reads as a fleet-wide
+        // outage when the ladder was one rung, and 'unknown' hides the
+        // auth/quota reason the breaker already knows.
         const unavailable: Extract<TurnStreamEvent, { type: 'error' }> = lastError ?? {
           type: 'error',
-          message: 'Every configured agent is temporarily unavailable for this workspace.',
-          failureClass: 'unknown',
+          message:
+            `${consulted.join(', ')} ${consulted.length === 1 ? 'is' : 'are'} temporarily ` +
+            'paused for this workspace after a recent failure.',
+          failureClass: lastBreakerClass ?? 'unknown',
         };
         if (!lastError) input.onEvent(unavailable);
         return { adapterKind: primaryPrefs.kind };
@@ -419,17 +463,17 @@ export function makeConversationRunnerCore(
       }
 
       const result = lastResult ?? { adapterKind: completedCtx?.prefs.kind ?? primaryPrefs.kind };
-      const hydrationTokens = result.hydrated
-        ? result.hydrationKind === 'recovery'
-          ? input.recoveryHydrationContext?.estimatedTokens
-          : input.hydrationContext?.estimatedTokens
-        : undefined;
       return {
         adapterKind: result.adapterKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
         ...(result.usageSnapshot ? { adapterUsageSnapshot: result.usageSnapshot } : {}),
         ...(result.hydrated ? { hydrated: true } : {}),
-        ...(hydrationTokens !== undefined ? { hydrationTokens } : {}),
+        // Surfaced so the driver can retire a binding whose resume handle the
+        // adapter had to abandon (`'recovery'`).
+        ...(result.hydrationKind ? { hydrationKind: result.hydrationKind } : {}),
+        ...(consumedHydrationTokens !== undefined
+          ? { hydrationTokens: consumedHydrationTokens }
+          : {}),
       };
     },
   };

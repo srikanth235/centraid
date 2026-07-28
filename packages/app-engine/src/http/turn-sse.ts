@@ -25,6 +25,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   ConversationTurnInput,
   ConversationRunner,
+  TurnResumePlan,
   TurnStreamEvent,
 } from '../conversation/runner.js';
 import type {
@@ -36,6 +37,7 @@ import { buildReplayEvents } from './turn-replay.js';
 import { writeTurnBusy, type TurnLimiter } from './turn-limiter.js';
 import { costForUsage } from '../model-pricing.js';
 import { withConversationLock, type TurnAttachmentRef } from './turn-sse-support.js';
+import type { TurnAttachment } from '../conversation/turn.js';
 import { compileHydrationPlan } from '../conversation/hydration.js';
 
 type ToolTurnNode = Extract<TurnNode, { kind: 'tool' }>;
@@ -45,9 +47,14 @@ function pathInside(candidate: string, root: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+/** Same ceiling the inline-artifact path enforces — an agent-reported
+ *  workspace file is no more trusted than an inline one. */
+const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
+
 async function workspaceArtifact(
   reportedPath: string,
   roots: readonly string[],
+  onSkipped: (workspacePath: string, reason: string) => void,
 ): Promise<
   | {
       hash: string;
@@ -59,19 +66,33 @@ async function workspaceArtifact(
     }
   | undefined
 > {
+  const decoded = reportedPath.startsWith('file:') ? fileURLToPath(reportedPath) : reportedPath;
+  const base = roots[0] ?? process.cwd();
+  const requested = path.isAbsolute(decoded) ? decoded : path.resolve(base, decoded);
+  // Containment first, and silently: a path outside the turn's roots is a
+  // boundary decision, not a failure the owner needs told about.
+  let candidate: string;
   try {
-    const decoded = reportedPath.startsWith('file:') ? fileURLToPath(reportedPath) : reportedPath;
-    const base = roots[0] ?? process.cwd();
-    const candidate = await fs.realpath(
-      path.isAbsolute(decoded) ? decoded : path.resolve(base, decoded),
-    );
+    candidate = await fs.realpath(requested);
     const allowedRoots = await Promise.all(
       roots.map((root) => fs.realpath(root).catch(() => path.resolve(root))),
     );
     if (!allowedRoots.some((root) => pathInside(candidate, root))) return undefined;
-    const bytes = await fs.readFile(candidate);
+  } catch {
+    return undefined;
+  }
+  // Past containment the file was meant to be captured, so a miss is a real
+  // dropped artifact — surface it rather than swallowing it. Stat BEFORE
+  // reading: the old order slurped whole directories' worth of bytes into
+  // memory (and any size at all) before deciding it wanted them.
+  try {
     const stat = await fs.stat(candidate);
     if (!stat.isFile()) return undefined;
+    if (stat.size > MAX_ARTIFACT_BYTES) {
+      onSkipped(candidate, `it is larger than the ${MAX_ARTIFACT_BYTES / (1024 * 1024)} MiB cap`);
+      return undefined;
+    }
+    const bytes = await fs.readFile(candidate);
     return {
       hash: createHash('sha256').update(bytes).digest('hex'),
       mime: 'application/octet-stream',
@@ -80,7 +101,8 @@ async function workspaceArtifact(
       filename: path.basename(candidate),
       workspacePath: candidate,
     };
-  } catch {
+  } catch (error) {
+    onSkipped(candidate, error instanceof Error ? error.message : String(error));
     return undefined;
   }
 }
@@ -121,7 +143,11 @@ export interface DriveTurnOptions {
   model?: string | undefined;
   thinking?: string | undefined;
   runnerKind?: import('../conversation/turn.js').RunnerKind | undefined;
-  providerConsent?: import('../conversation/turn.js').RunnerKind | undefined;
+  /** One provider, or the whole set the client has accumulated (issue #567). */
+  providerConsent?:
+    | import('../conversation/turn.js').RunnerKind
+    | readonly import('../conversation/turn.js').RunnerKind[]
+    | undefined;
   additionalDirectories?: string[];
   idempotencyKey?: string | undefined;
   /**
@@ -409,58 +435,81 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
       }
       const conversationMeta = conversationStore?.getSessionMeta(appId, conversationId);
       const targetRunnerKind = opts.runnerKind ?? (await runner.resolveRunnerKind?.());
-      const resume =
-        conversationStore && targetRunnerKind
-          ? conversationStore.getAdapterResumeState(appId, conversationId, targetRunnerKind)
-          : conversationStore
-            ? conversationStore.getAdapterResumeState(appId, conversationId)
-            : undefined;
-      const delta =
-        conversationStore && resume
-          ? conversationStore.getHydrationDelta(
-              appId,
-              conversationId,
-              resume.hydratedThroughSeq ?? -1,
-            )
-          : conversationStore && targetRunnerKind
-            ? conversationStore.getHydrationDelta(appId, conversationId, -1)
-            : undefined;
-      const hydrationPlan =
-        delta && delta.messages.length > 0
-          ? compileHydrationPlan(delta.messages, {
-              tokenBudget: 8_000,
-              minTurns: 2,
-              includeAttachmentReferences: true,
-            })
-          : undefined;
-      const recoveryDelta =
-        conversationStore && resume?.sessionId
-          ? conversationStore.getHydrationDelta(appId, conversationId, -1)
-          : undefined;
-      const recoveryHydrationPlan =
-        recoveryDelta && recoveryDelta.messages.length > 0
-          ? compileHydrationPlan(recoveryDelta.messages, {
-              tokenBudget: 8_000,
-              minTurns: 2,
-              includeAttachmentReferences: true,
-            })
-          : undefined;
-      const hydrationAttachments =
-        conversationStore && hydrationPlan
-          ? hydrationPlan.attachments.map((attachment) => ({
-              path: conversationStore.blobPathFor(appId, attachment.hash),
+      // The runner's failover ladder can land on a provider this route never
+      // targeted, and every provider has its OWN binding and its OWN hydration
+      // watermark. So resume + hydration are resolved PER RUNG, on demand,
+      // through `resumeForKind` — one planned-once-per-kind memo. Resolving it
+      // eagerly against the primary target and reusing that plan down the
+      // ladder silently dropped the whole conversation whenever rung 0 was
+      // skipped (breaker open), and folded the full ledger on every turn even
+      // when no rung ever needed it.
+      const resumeStates = new Map<
+        string,
+        ReturnType<ConversationHistoryStore['getAdapterResumeState']>
+      >();
+      const resumeStateFor = (
+        kind: string | undefined,
+      ): ReturnType<ConversationHistoryStore['getAdapterResumeState']> => {
+        if (!conversationStore) return undefined;
+        const key = kind ?? '';
+        if (resumeStates.has(key)) return resumeStates.get(key);
+        const state = kind
+          ? conversationStore.getAdapterResumeState(appId, conversationId, kind)
+          : conversationStore.getAdapterResumeState(appId, conversationId);
+        resumeStates.set(key, state);
+        return state;
+      };
+      const resume = resumeStateFor(targetRunnerKind);
+      const plans = new Map<string, TurnResumePlan>();
+      const planFor = (kind: string): TurnResumePlan => {
+        const cached = plans.get(kind);
+        if (cached) return cached;
+        const store = conversationStore!;
+        const state = resumeStateFor(kind);
+        const compile = (
+          afterSeq: number,
+        ): { context?: TurnResumePlan['hydrationContext']; attachments: TurnAttachment[] } => {
+          const delta = store.getHydrationDelta(appId, conversationId, afterSeq);
+          if (!delta || delta.messages.length === 0) return { attachments: [] };
+          const compiled = compileHydrationPlan(delta.messages, {
+            tokenBudget: 8_000,
+            minTurns: 2,
+            includeAttachmentReferences: true,
+          });
+          if (compiled.includedTurns === 0) return { attachments: [] };
+          return {
+            context: {
+              prompt: compiled.prompt,
+              includedTurns: compiled.includedTurns,
+              omittedTurns: compiled.omittedTurns,
+              estimatedTokens: compiled.estimatedTokens,
+            },
+            attachments: compiled.attachments.map((attachment) => ({
+              path: store.blobPathFor(appId, attachment.hash),
               mime: attachment.mime,
               ...(attachment.filename ? { filename: attachment.filename } : {}),
-            }))
-          : [];
-      const recoveryHydrationAttachments =
-        conversationStore && recoveryHydrationPlan
-          ? recoveryHydrationPlan.attachments.map((attachment) => ({
-              path: conversationStore.blobPathFor(appId, attachment.hash),
-              mime: attachment.mime,
-              ...(attachment.filename ? { filename: attachment.filename } : {}),
-            }))
-          : [];
+            })),
+          };
+        };
+        // Without a resumable session id this rung starts cold, so its delta is
+        // the whole ledger — and the recovery plan would be that same fold.
+        const watermark = state?.sessionId ? (state.hydratedThroughSeq ?? -1) : -1;
+        const handoff = compile(watermark);
+        const recovery = !state?.sessionId ? undefined : watermark === -1 ? handoff : compile(-1);
+        const plan: TurnResumePlan = {
+          ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
+          ...(state?.bindingId ? { bindingId: state.bindingId } : {}),
+          ...(state?.usageSnapshot ? { usageSnapshot: state.usageSnapshot } : {}),
+          ...(handoff.context ? { hydrationContext: handoff.context } : {}),
+          ...(handoff.attachments.length > 0 ? { hydrationAttachments: handoff.attachments } : {}),
+          ...(recovery?.context ? { recoveryHydrationContext: recovery.context } : {}),
+          ...(recovery && recovery.attachments.length > 0
+            ? { recoveryHydrationAttachments: recovery.attachments }
+            : {}),
+        };
+        plans.set(kind, plan);
+        return plan;
+      };
       const input: ConversationTurnInput = {
         appId,
         dataDir: opts.dataDir,
@@ -475,7 +524,9 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         ...(targetRunnerKind ? { runnerKind: targetRunnerKind } : {}),
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.thinking ? { thinking: opts.thinking } : {}),
-        ...(opts.providerConsent ? { providerConsent: opts.providerConsent } : {}),
+        ...(opts.providerConsent && opts.providerConsent.length > 0
+          ? { providerConsent: opts.providerConsent }
+          : {}),
         ...(opts.additionalDirectories?.length
           ? { additionalDirectories: opts.additionalDirectories }
           : {}),
@@ -500,28 +551,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           : opts.prevAdapterUsageSnapshot
             ? { prevAdapterUsageSnapshot: opts.prevAdapterUsageSnapshot }
             : {}),
-        ...(hydrationPlan && hydrationPlan.includedTurns > 0
-          ? {
-              hydrationContext: {
-                prompt: hydrationPlan.prompt,
-                includedTurns: hydrationPlan.includedTurns,
-                omittedTurns: hydrationPlan.omittedTurns,
-                estimatedTokens: hydrationPlan.estimatedTokens,
-              },
-            }
-          : {}),
-        ...(hydrationAttachments.length > 0 ? { hydrationAttachments } : {}),
-        ...(recoveryHydrationPlan && recoveryHydrationPlan.includedTurns > 0
-          ? {
-              recoveryHydrationContext: {
-                prompt: recoveryHydrationPlan.prompt,
-                includedTurns: recoveryHydrationPlan.includedTurns,
-                omittedTurns: recoveryHydrationPlan.omittedTurns,
-                estimatedTokens: recoveryHydrationPlan.estimatedTokens,
-              },
-            }
-          : {}),
-        ...(recoveryHydrationAttachments.length > 0 ? { recoveryHydrationAttachments } : {}),
+        ...(conversationStore ? { resumeForKind: planFor } : {}),
       };
       let runResult:
         | {
@@ -529,6 +559,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             adapterKind?: string;
             adapterUsageSnapshot?: import('../conversation/turn.js').AdapterUsageSnapshot;
             hydrated?: boolean;
+            hydrationKind?: 'handoff' | 'recovery';
             hydrationTokens?: number;
           }
         | undefined;
@@ -543,6 +574,17 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         req.off('close', onClientClose);
         req.off('error', onClientClose);
         if (conversationStore && !acc.consentRequired) {
+          // Retire a binding the adapter had to abandon (D9). `hydrationKind:
+          // 'recovery'` means the resume handle we handed this runner was
+          // rejected and it self-healed onto a fresh session. Left `active`,
+          // that dead handle would be re-offered on every subsequent turn,
+          // paying a failed resume + a full-ledger recovery fold each time.
+          if (runResult?.hydrationKind === 'recovery' && runResult.adapterKind) {
+            const dead = plans.get(runResult.adapterKind);
+            if (dead?.bindingId && dead.sessionId !== runResult.adapterSessionId) {
+              conversationStore.markAdapterBindingStale(appId, conversationId, dead.bindingId);
+            }
+          }
           // Whether this conversation is still unnamed BEFORE we record — an
           // empty title is the "first turn of a new thread" signal (recordTurn
           // sets the derived truncation below). Read once here so the auto-title
@@ -561,7 +603,16 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
             for (const candidate of acc.artifactCandidates) {
               const artifacts: ConversationTurnAttachment[] = (
                 await Promise.all(
-                  candidate.locations.map((location) => workspaceArtifact(location.path, roots)),
+                  candidate.locations.map((location) =>
+                    workspaceArtifact(location.path, roots, (workspacePath, reason) =>
+                      onEvent({
+                        type: 'notice',
+                        level: 'warn',
+                        code: 'artifact_unavailable',
+                        message: `Could not attach ${path.basename(workspacePath)} to this turn: ${reason}.`,
+                      }),
+                    ),
+                  ),
                 )
               ).filter((artifact) => artifact !== undefined);
               for (const inline of candidate.inline) {

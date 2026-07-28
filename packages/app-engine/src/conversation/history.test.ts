@@ -366,6 +366,55 @@ describe('ConversationHistoryStore', () => {
     }
   });
 
+  it('hydrates turn seq 0 into a binding minted before the conversation had turns', () => {
+    // `seq` starts at 0, so an empty conversation's watermark must be -1. A 0
+    // sentinel would read as "turn 0 already delivered" and silently drop the
+    // very first exchange from the binding's next delta hydration.
+    const dir = freshVaultDir();
+    const durable = new ConversationHistoryStore(workspaceFor(dir));
+    const session = durable.createSession(APP);
+    durable.noteTurn(APP, session.id, { kind: 'codex', sessionId: 'codex-session' });
+    const fresh = durable.getAdapterResumeState(APP, session.id, 'codex');
+    expect(fresh).toMatchObject({ sessionId: 'codex-session', hydratedThroughSeq: -1 });
+
+    durable.recordTurn(APP, turn(session.id, 'first ever question', 'first ever answer'));
+    const delta = durable.getHydrationDelta(APP, session.id, fresh!.hydratedThroughSeq!);
+    expect(delta?.messages.map((message) => (message.payload as { text?: string }).text)).toEqual([
+      'first ever question',
+      'first ever answer',
+    ]);
+  });
+
+  it('keeps a failed turn inside the next delta instead of advancing the watermark', () => {
+    // The failed prompt never reached the model, so marking it "hydrated"
+    // would erase that user message from every later handoff.
+    const dir = freshVaultDir();
+    const durable = new ConversationHistoryStore(workspaceFor(dir));
+    const session = durable.createSession(APP);
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'ask A', 'answer A'),
+      adapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'codex')).toMatchObject({
+      hydratedThroughSeq: 0,
+    });
+
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'ask B while codex is down', ''),
+      ok: false,
+      error: 'runner unavailable',
+      finalText: undefined,
+      nodes: [],
+      failedAdapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+    const resume = durable.getAdapterResumeState(APP, session.id, 'codex');
+    expect(resume).toMatchObject({ hydratedThroughSeq: 0 });
+    const delta = durable.getHydrationDelta(APP, session.id, resume!.hydratedThroughSeq!);
+    expect(delta?.messages.map((message) => (message.payload as { text?: string }).text)).toContain(
+      'ask B while codex is down',
+    );
+  });
+
   it('keeps one active/one warm process while A→B→C retains every runner resume handle', () => {
     const dir = freshVaultDir();
     const durable = new ConversationHistoryStore(workspaceFor(dir));

@@ -9,7 +9,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { ConversationHistoryStore } from '../conversation/history.js';
-import type { ConversationRunner, ConversationTurnInput } from '../conversation/runner.js';
+import type { ConversationRunner, TurnResumePlan } from '../conversation/runner.js';
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
 import {
   driveTurnOverSse,
@@ -125,6 +125,31 @@ describe('withConversationLock', () => {
   });
 });
 
+/** A minimal req/res pair for the SSE driver — no live socket. */
+function harness(): { req: IncomingMessage; res: ServerResponse } {
+  const requestListeners = new Map<string, (...args: unknown[]) => void>();
+  const req = {
+    on(event: string, listener: (...args: unknown[]) => void) {
+      requestListeners.set(event, listener);
+      return this;
+    },
+    off(event: string, listener: (...args: unknown[]) => void) {
+      if (requestListeners.get(event) === listener) requestListeners.delete(event);
+      return this;
+    },
+  } as unknown as IncomingMessage;
+  const res = {
+    writableEnded: false,
+    writeHead: vi.fn(),
+    write: vi.fn(() => true),
+    end(this: { writableEnded: boolean }) {
+      this.writableEnded = true;
+      return this;
+    },
+  } as unknown as ServerResponse;
+  return { req, res };
+}
+
 describe('driveTurnOverSse recovery hydration', () => {
   it('includes the sequence-zero turn when an existing runner handle self-heals', async () => {
     const dir = await tempDir('centraid-turn-recovery-');
@@ -161,38 +186,18 @@ describe('driveTurnOverSse recovery hydration', () => {
       adapter: { kind: 'codex', sessionId: 'codex-session' },
     });
 
-    let captured: ConversationTurnInput | undefined;
+    // Read the plan DURING the turn: that is when the ladder resolves it, and
+    // before this turn's own rows land in the ledger.
+    let codex: TurnResumePlan | undefined;
     const runner: ConversationRunner = {
       async run(input) {
-        captured = input;
+        codex = input.resumeForKind?.('codex');
         input.onEvent({ type: 'final', text: 'next answer' });
         return { adapterKind: 'codex', adapterSessionId: 'codex-session' };
       },
     };
-    const requestListeners = new Map<string, (...args: unknown[]) => void>();
-    const req = {
-      on(event: string, listener: (...args: unknown[]) => void) {
-        requestListeners.set(event, listener);
-        return this;
-      },
-      off(event: string, listener: (...args: unknown[]) => void) {
-        if (requestListeners.get(event) === listener) requestListeners.delete(event);
-        return this;
-      },
-    } as unknown as IncomingMessage;
-    const res = {
-      writableEnded: false,
-      writeHead: vi.fn(),
-      write: vi.fn(() => true),
-      end(this: { writableEnded: boolean }) {
-        this.writableEnded = true;
-        return this;
-      },
-    } as unknown as ServerResponse;
-
     await driveTurnOverSse({
-      req,
-      res,
+      ...harness(),
       appId: 'notes',
       conversationId: conversation.id,
       message: 'next question',
@@ -206,9 +211,202 @@ describe('driveTurnOverSse recovery hydration', () => {
       banner: 'test',
     });
 
-    expect(captured?.hydrationContext).toBeUndefined();
-    expect(captured?.recoveryHydrationContext).toMatchObject({ includedTurns: 1 });
-    expect(captured?.recoveryHydrationContext?.prompt).toContain('sequence-zero question');
-    expect(captured?.recoveryHydrationContext?.prompt).toContain('sequence-zero answer');
+    // Resume + hydration are planned PER RUNG now, so the driver hands the
+    // runner a planner instead of one precomputed plan; the codex rung's own
+    // plan is what must carry the seq-zero recovery context.
+    expect(codex?.sessionId).toBe('codex-session');
+    expect(codex?.hydrationContext).toBeUndefined();
+    expect(codex?.recoveryHydrationContext).toMatchObject({ includedTurns: 1 });
+    expect(codex?.recoveryHydrationContext?.prompt).toContain('sequence-zero question');
+    expect(codex?.recoveryHydrationContext?.prompt).toContain('sequence-zero answer');
+  });
+
+  it('plans a failover rung against its OWN binding and the full ledger', async () => {
+    // Regression for the review blocker: the ladder rung the runner actually
+    // reaches may be a provider the route never targeted. Planned once against
+    // the primary target, a fallback rung started with no session id AND no
+    // hydration — the entire conversation silently lost.
+    const dir = await tempDir('centraid-turn-perrung-');
+    const appsDir = path.join(dir, 'apps');
+    const appDir = path.join(appsDir, 'notes');
+    const journalDbFile = path.join(dir, 'journal.db');
+    const runnerSessionDir = path.join(dir, 'runner-sessions');
+    await fs.mkdir(appDir, { recursive: true });
+    const journal = makeJournalDbProvider(journalDbFile);
+    const history = new ConversationHistoryStore(() => ({
+      vaultId: 'vault-test',
+      ownerPartyId: 'owner',
+      appsDir,
+      journal,
+      journalDbFile,
+      runnerSessionDir,
+    }));
+    const conversation = history.createSession('notes');
+    history.recordTurn('notes', {
+      conversationId: conversation.id,
+      userMessage: 'earlier question',
+      startedAt: 1,
+      endedAt: 2,
+      ok: true,
+      finalText: 'earlier answer',
+      nodes: [{ kind: 'step', text: 'earlier answer', startedAt: 1, endedAt: 2 }],
+      adapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+
+    // Plans must be read DURING the turn — that is when the ladder resolves
+    // them, and before this turn lands in the ledger.
+    let codex: TurnResumePlan | undefined;
+    let claude: TurnResumePlan | undefined;
+    const runner: ConversationRunner = {
+      async run(input) {
+        codex = input.resumeForKind?.('codex');
+        claude = input.resumeForKind?.('claude-code');
+        input.onEvent({ type: 'final', text: 'ok' });
+        return { adapterKind: 'claude-code' };
+      },
+    };
+    await driveTurnOverSse({
+      ...harness(),
+      appId: 'notes',
+      conversationId: conversation.id,
+      message: 'next question',
+      dataDir: appDir,
+      extraSystemPrompt: 'app context',
+      runner,
+      runnerKind: 'codex',
+      conversationStore: history,
+      conversationRunnerSessionDir: runnerSessionDir,
+      conversationLocks: new Map(),
+      banner: 'test',
+    });
+
+    // codex owns the binding: watermark is at seq 0, so no delta to replay.
+    expect(codex?.sessionId).toBe('codex-session');
+    expect(codex?.hydrationContext).toBeUndefined();
+    // claude-code has never seen this conversation: no session id, and the
+    // FULL ledger as its hydration — not codex's empty delta.
+    expect(claude?.sessionId).toBeUndefined();
+    expect(claude?.hydrationContext?.includedTurns).toBe(1);
+    expect(claude?.hydrationContext?.prompt).toContain('earlier question');
+    expect(claude?.hydrationContext?.prompt).toContain('earlier answer');
+  });
+
+  it('retires a binding whose resume handle the adapter had to abandon', async () => {
+    const dir = await tempDir('centraid-turn-stale-');
+    const appsDir = path.join(dir, 'apps');
+    const appDir = path.join(appsDir, 'notes');
+    const journalDbFile = path.join(dir, 'journal.db');
+    const runnerSessionDir = path.join(dir, 'runner-sessions');
+    await fs.mkdir(appDir, { recursive: true });
+    const journal = makeJournalDbProvider(journalDbFile);
+    const history = new ConversationHistoryStore(() => ({
+      vaultId: 'vault-test',
+      ownerPartyId: 'owner',
+      appsDir,
+      journal,
+      journalDbFile,
+      runnerSessionDir,
+    }));
+    const conversation = history.createSession('notes');
+    history.recordTurn('notes', {
+      conversationId: conversation.id,
+      userMessage: 'earlier question',
+      startedAt: 1,
+      endedAt: 2,
+      ok: true,
+      finalText: 'earlier answer',
+      nodes: [{ kind: 'step', text: 'earlier answer', startedAt: 1, endedAt: 2 }],
+      adapter: { kind: 'codex', sessionId: 'dead-session' },
+    });
+    const deadBinding = history.getAdapterResumeState('notes', conversation.id, 'codex')!.bindingId;
+
+    // The adapter rejects the handle we passed and self-heals onto a fresh
+    // session, but the turn itself fails — so nothing else retires the row.
+    const runner: ConversationRunner = {
+      async run(input) {
+        input.resumeForKind?.('codex');
+        input.onEvent({ type: 'error', message: 'model overloaded' });
+        return { adapterKind: 'codex', hydrated: true, hydrationKind: 'recovery' };
+      },
+    };
+    await driveTurnOverSse({
+      ...harness(),
+      appId: 'notes',
+      conversationId: conversation.id,
+      message: 'next question',
+      dataDir: appDir,
+      extraSystemPrompt: 'app context',
+      runner,
+      runnerKind: 'codex',
+      conversationStore: history,
+      conversationRunnerSessionDir: runnerSessionDir,
+      conversationLocks: new Map(),
+      banner: 'test',
+    });
+
+    expect(deadBinding).toBeDefined();
+    // The dead handle is gone, so the next turn never re-offers it.
+    expect(history.getAdapterResumeState('notes', conversation.id, 'codex')).toBeUndefined();
+  });
+
+  it('skips a directory location and surfaces an oversize workspace file', async () => {
+    const dir = await tempDir('centraid-turn-artifacts-');
+    const appsDir = path.join(dir, 'apps');
+    const appDir = path.join(appsDir, 'notes');
+    const journalDbFile = path.join(dir, 'journal.db');
+    const runnerSessionDir = path.join(dir, 'runner-sessions');
+    await fs.mkdir(path.join(appDir, 'subdir'), { recursive: true });
+    const huge = path.join(appDir, 'huge.bin');
+    const handle = await fs.open(huge, 'w');
+    await handle.truncate(26 * 1024 * 1024); // sparse — over the 25 MiB cap
+    await handle.close();
+    const journal = makeJournalDbProvider(journalDbFile);
+    const history = new ConversationHistoryStore(() => ({
+      vaultId: 'vault-test',
+      ownerPartyId: 'owner',
+      appsDir,
+      journal,
+      journalDbFile,
+      runnerSessionDir,
+    }));
+    const conversation = history.createSession('notes');
+
+    const runner: ConversationRunner = {
+      async run(input) {
+        input.onEvent({ type: 'tool.start', toolCallId: 't1', toolName: 'write' });
+        input.onEvent({
+          type: 'tool.result',
+          toolCallId: 't1',
+          toolName: 'write',
+          ok: true,
+          locations: [{ path: path.join(appDir, 'subdir') }, { path: huge }],
+        });
+        input.onEvent({ type: 'final', text: 'done' });
+        return { adapterKind: 'codex' };
+      },
+    };
+    await driveTurnOverSse({
+      ...harness(),
+      appId: 'notes',
+      conversationId: conversation.id,
+      message: 'write it',
+      dataDir: appDir,
+      extraSystemPrompt: 'app context',
+      runner,
+      runnerKind: 'codex',
+      conversationStore: history,
+      conversationRunnerSessionDir: runnerSessionDir,
+      conversationLocks: new Map(),
+      banner: 'test',
+    });
+
+    const messages = history.getSession('notes', conversation.id)!.messages;
+    // The directory is skipped silently; the oversize file is a real dropped
+    // artifact, so it is surfaced rather than swallowed.
+    const tool = messages.find((m) => (m.payload as { kind: string }).kind === 'tool')!;
+    expect((tool.payload as { artifacts?: unknown[] }).artifacts).toBeUndefined();
+    const notice = messages.find((m) => (m.payload as { kind: string }).kind === 'notice')!;
+    expect((notice.payload as { text?: string }).text).toContain('huge.bin');
+    expect((notice.payload as { text?: string }).text).toContain('25 MiB cap');
   });
 });
