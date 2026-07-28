@@ -40,7 +40,7 @@ import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import { assistantCwd } from '../runs/assistant-conversation-runner.js';
 import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
-import { readJson, sendJson } from './route-helpers.js';
+import { parseProviderConsent, readJson, sendJson } from './route-helpers.js';
 
 const PREFIX = '/centraid/_vault/assistant';
 
@@ -152,13 +152,11 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
             message: 'runnerKind must name a registered runner.',
           });
         }
-        const providerConsent = isRunnerKind(body.providerConsent)
-          ? body.providerConsent
-          : undefined;
-        if (body.providerConsent !== undefined && !providerConsent) {
+        const providerConsent = parseProviderConsent(body.providerConsent);
+        if (providerConsent === 'invalid') {
           return sendJson(res, 400, {
             error: 'bad_request',
-            message: 'providerConsent must name a registered runner.',
+            message: 'providerConsent must name registered runners.',
           });
         }
         const requestedWorkspaceKind = parseWorkspaceKind(body.workspaceKind);
@@ -194,12 +192,22 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         additionalDirectories = additionalDirectories.filter(
           (directory) => directory !== workspaceDirectory,
         );
-        opts.conversationStore.setWorkspaceSelection(
-          ASSISTANT_APP_ID,
-          conversationId,
-          workspaceKind,
-          additionalDirectories,
-        );
+        // Every turn used to rewrite this row even when nothing changed. The
+        // selection is per conversation and rarely moves, so compare first.
+        const selectionUnchanged =
+          savedWorkspace?.primaryKind === workspaceKind &&
+          savedWorkspace.additionalDirectories.length === additionalDirectories.length &&
+          savedWorkspace.additionalDirectories.every(
+            (directory, index) => directory === additionalDirectories[index],
+          );
+        if (!selectionUnchanged) {
+          opts.conversationStore.setWorkspaceSelection(
+            ASSISTANT_APP_ID,
+            conversationId,
+            workspaceKind,
+            additionalDirectories,
+          );
+        }
         const model = opts.resolveModel
           ? await opts.resolveModel('assistant', explicitModel, runnerKind)
           : explicitModel;

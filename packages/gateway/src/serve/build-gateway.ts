@@ -46,6 +46,7 @@ import {
   PrefsStore,
   ProviderEgressConsentStore,
   RunnerHealthStore,
+  type RunnerHealthController,
   RUNNER_KINDS,
   Runtime,
   changesSubscriberCount,
@@ -114,7 +115,11 @@ import { createEnrichmentHealthProbe } from './enrichment-health.js';
 import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
 import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
 import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
-import { removedRunnerLadderMembers, resolveGatewayRunnerPrefs } from './runner-prefs.js';
+import {
+  removedRunnerLadderMembers,
+  resolveGatewayRunnerPrefs,
+  resolveStrictGatewayRunnerPrefs,
+} from './runner-prefs.js';
 import { GatewayDatabase } from './gateway-db.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { pollProviderEventSource } from './automation-event-sources.js';
@@ -177,6 +182,7 @@ import {
 import {
   resolveAutomationAgentSelection,
   resolveAutomationRewriteModel,
+  type AutomationAgentSelection,
 } from '../lifecycle/automation-agent-selection.js';
 import { runInteractiveAutomationTurn } from '../lifecycle/interactive-automation-turn.js';
 import { rewriteAutomationInstructions } from '../lifecycle/rewrite-automation-instructions.js';
@@ -1364,7 +1370,38 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // handle opened for Resource mode so we don't re-read the same file.
   const prefs = prefsEarly;
   const journalProvider = () => currentWorkspace().journal();
-  const runnerHealth = new RunnerHealthStore(journalProvider);
+  const runnerHealthStore = new RunnerHealthStore(journalProvider);
+  // `agent-failover` is reported degraded when a rung hands off. Nothing used
+  // to report it healthy again, so a single failover left `/health` degraded
+  // forever. A later runner turn that actually succeeded is the honest signal
+  // that the component recovered, so it is cleared here — and only when it was
+  // degraded, so a healthy gateway never registers the component at all.
+  let failoverDegraded = false;
+  const reportFailoverError = (detail: string): void => {
+    failoverDegraded = true;
+    health.reportError('agent-failover', detail);
+    logger.warn(`Agent failover: ${detail}`);
+  };
+  const runnerHealth: RunnerHealthController = {
+    canAttempt: (context, kind, now) => runnerHealthStore.canAttempt(context, kind, now),
+    reportFailure: (context, kind, failureClass, error, now) =>
+      runnerHealthStore.reportFailure(context, kind, failureClass, error, now),
+    reportOk: (context, kind, now) => {
+      runnerHealthStore.reportOk(context, kind, now);
+      // A completed turn is stronger evidence than a capability probe: the
+      // agent authenticated and answered. Auth breakers are otherwise
+      // indefinite and only ever closed by the agents route's explicit
+      // refresh, so a working runner could stay condemned indefinitely.
+      runnerHealthStore.reportPreflightOk(context, kind, now);
+      if (failoverDegraded) {
+        failoverDegraded = false;
+        health.reportOk('agent-failover', `${kind} completed a turn in ${context}`);
+      }
+    },
+    reportPreflightOk: (context, kind, now) =>
+      runnerHealthStore.reportPreflightOk(context, kind, now),
+    list: (context, now) => runnerHealthStore.list(context, now),
+  };
   const providerEgressConsent = new ProviderEgressConsentStore(
     journalProvider,
     (runnerKind, subsystem) => {
@@ -1416,11 +1453,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     from: RunnerKind;
     to: RunnerKind;
   }): void => {
-    const detail =
+    reportFailoverError(
       `${event.subsystem ?? 'conversation'} ${event.conversationId}: ` +
-      `${event.from} → ${event.to}`;
-    health.reportError('agent-failover', detail);
-    logger.warn(`Agent failover: ${detail}`);
+        `${event.from} → ${event.to}`,
+    );
   };
 
   // Per-subsystem model resolution (shared prefs contract): explicit
@@ -1445,11 +1481,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   const resolveAutomationAgent = async (
     requires: automation.ManifestRequires,
-  ): Promise<{
-    runner: RunnerKind;
-    model?: string;
-    configPins?: Readonly<Record<string, string>>;
-  }> => {
+  ): Promise<AutomationAgentSelection> => {
     const fallbackRunner = (await prefsLoader('automations'))?.kind ?? 'codex';
     return resolveAutomationAgentSelection(requires, prefs.getAllPrefs(), fallbackRunner);
   };
@@ -1457,11 +1489,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const resolveAutomationAgentForRef = async (
     automationRef: string,
     codeAppsDir: string,
-  ): Promise<{
-    runner: RunnerKind;
-    model?: string;
-    configPins?: Readonly<Record<string, string>>;
-  }> => {
+  ): Promise<AutomationAgentSelection> => {
     const parsed = automation.parseRef(automationRef);
     const row = parsed
       ? await automation.readAppOwned(codeAppsDir, parsed.appId, parsed.automationId)
@@ -1810,6 +1838,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           };
         },
         runner: agent.runner,
+        // Manifests are agent-writable, so a `requires.runner` pin that names
+        // a provider the user never chose is NOT consent for egress (#567 D13).
+        runnerSelectionSource: agent.selectionSource,
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
         ...(opts.input !== undefined ? { input: opts.input } : {}),
@@ -1827,11 +1858,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           return conversationHistoryStore.blobPathFor(parsed.appId, hash);
         },
         onFailover: (event) => {
-          const detail =
+          reportFailoverError(
             `automation ${event.automationRef}: ${event.from} → ${event.to} ` +
-            `after ${event.failureClass} (${event.failedRunId})`;
-          health.reportError('agent-failover', detail);
-          logger.warn(`Agent failover: ${detail}`);
+              `after ${event.failureClass} (${event.failedRunId})`,
+          );
         },
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
@@ -2103,7 +2133,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           ...(selection.model ? { model: selection.model } : {}),
           ...(selection.configPins ? { configPins: selection.configPins } : {}),
           providerEgressConsent,
-          consentSource: index === 0 ? 'direct' : 'ladder',
+          // Rung 0 is the user's automations primary unless the manifest
+          // pinned a different provider, in which case the pin only counts if
+          // that runner is a live ladder member. Later rungs ARE the ladder.
+          consentSource:
+            index === 0 && selection.selectionSource !== 'manifest' ? 'direct' : 'ladder',
           hydrationAttachmentPath: (hash) =>
             conversationHistoryStore.blobPathFor(parsed.appId, hash),
           ...(failoverNotice ? { failoverNotice } : {}),
@@ -3031,6 +3065,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     },
     draftCodeDir: async (appId: string, sessionId: string) =>
       (await currentVaultHost()).draftCodeDir(appId, sessionId),
+    // Despite the plural name this is not a listing: `turn-routes` calls it
+    // per turn and then RUNS in the root it picks, defaulting builder turns to
+    // `draft`. Opening the editing session here is therefore load-bearing —
+    // deferring it would make the first builder turn silently run in the
+    // published `app` dir instead of the user's worktree.
     conversationWorkspaceRoots: async (appId: string) => {
       const plane = vaultRegistry.current();
       const host = await currentVaultHost();
@@ -3432,9 +3471,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       makeAgentsRouteHandler({
         ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
         resolveCapabilities: async (kind, refresh) => {
+          const extraArgs = extraArgsForKind(kind);
           const caps = await resolveAcpCapabilities(kind, {
             binPath: binPathForKind(kind),
-            ...(extraArgsForKind(kind) ? { extraArgs: extraArgsForKind(kind) } : {}),
+            ...(extraArgs ? { extraArgs } : {}),
             cacheDir: path.join(
               paths.cacheDir ?? path.join(dataDir, 'cache'),
               'agent-capabilities',
@@ -3525,7 +3565,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           if (Object.hasOwn(patch, `runner.${subsystem}`)) switches.push(subsystem);
         }
         for (const subsystem of switches) {
-          const candidate = resolveGatewayRunnerPrefs(next, subsystem);
+          const candidate = resolveStrictGatewayRunnerPrefs(next, subsystem);
           if (!candidate)
             return `Cannot switch ${subsystem ?? 'the default lane'}: no valid agent is configured.`;
           const status = await runPreflight(candidate, {

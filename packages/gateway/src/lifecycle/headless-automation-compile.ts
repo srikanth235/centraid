@@ -37,7 +37,12 @@ export interface HeadlessCompileOptions {
   configPins?: Readonly<Record<string, string>>;
   /** Durable egress grant controller; compile attempts are unattended. */
   providerEgressConsent?: ProviderEgressConsentController;
-  /** Primary selection is direct; outer-boundary fallback is ladder-derived. */
+  /**
+   * How the user authored this attempt's runner: `direct` = their automations
+   * primary, `ladder` = current failover membership. Omit when the runner came
+   * from a manifest pin the user never authored — the compile is then denied
+   * unless a real grant already exists (#567 D13).
+   */
   consentSource?: ProviderConsentSource;
   /** Resolve historical upload hashes into this automation app's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
@@ -317,7 +322,9 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
         turnId: runId,
         ordinal: 1,
         kind: 'step',
-        name: 'Failover notice',
+        // Machine-keyed like every other notice item (`notice:<level>:<code>`)
+        // so readers key off the code, not a human string.
+        name: 'notice:warn:failover',
         outputJson: JSON.stringify({ text: opts.failoverNotice }),
         ok: true,
         startedAt,
@@ -369,17 +376,33 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
 
     try {
       if (opts.preflightError) throw new Error(opts.preflightError);
+      // A compile is unattended: no owner is present to answer an egress
+      // prompt, so consent must already exist or be derivable from what the
+      // user authored in Settings. Deriving must never resurrect a revocation
+      // or invent a lane for a provider absent from the ladder (#567 D5/D13).
+      const consent = opts.providerEgressConsent;
       if (
         opts.runnerKind &&
-        opts.providerEgressConsent &&
-        !opts.providerEgressConsent.has(conversationId, opts.runnerKind, 'automations')
+        consent &&
+        !consent.has(conversationId, opts.runnerKind, 'automations')
       ) {
-        opts.providerEgressConsent.grant(
-          conversationId,
-          opts.runnerKind,
-          opts.consentSource ?? 'direct',
-          'automations',
-        );
+        const derived =
+          opts.consentSource === undefined
+            ? false
+            : (consent.recordDerived?.(
+                conversationId,
+                opts.runnerKind,
+                opts.consentSource,
+                'automations',
+              ) ?? false);
+        if (!derived) {
+          throw new Error(
+            `Unattended compile cannot send this automation to ${opts.runnerKind}: ` +
+              `no consent is recorded for it. Add ${opts.runnerKind} to the automations ` +
+              `agent or its failover ladder in Settings, or approve the provider in a ` +
+              `conversation with this automation.`,
+          );
+        }
       }
       // The injected unified gateway runner is intrinsically headless: its
       // Claude adapter pins bypassPermissions and its Codex adapter pins

@@ -532,4 +532,44 @@ describe('runFire', () => {
     store.close();
     expect(closes.n).toBe(2);
   });
+
+  it('settles the turn and keeps a successful outcome when finalization fails', async () => {
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'settle',
+      manifest({ name: 'Settle' }),
+      'export default async () => ({ summary: "handler did its work" });',
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async () => '',
+        finalizeTurn() {
+          throw new Error('harness binding write failed');
+        },
+        async close() {},
+      });
+
+    const { outcome, record } = await runFire(
+      { automationRef: 'notes/settle', appsDir, journalDbFile, runnerKind: 'codex' },
+      { openDispatch: dispatch },
+    );
+
+    // The handler succeeded; a host-side binding write did not. The outcome
+    // must not be rewritten to failed (that would cascade onFailure).
+    expect(outcome.ok).toBe(true);
+
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const turn = store.getTurn(record.runId);
+    // The failed transaction rolled its own finishTurn back; the turn is still
+    // settled durably rather than left running forever.
+    expect(turn?.endedAt).toBeTypeOf('number');
+    expect(turn?.ok).toBe(true);
+    expect(turn?.error).toContain('harness binding write failed');
+    const notice = store
+      .listItems(record.runId)
+      .find((i) => i.name === 'notice:error:finalization');
+    expect(notice?.ok).toBe(false);
+    store.close();
+  });
 });

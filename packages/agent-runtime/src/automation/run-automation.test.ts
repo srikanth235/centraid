@@ -145,4 +145,109 @@ describe('runAutomation', () => {
       expect.objectContaining({ from: 'codex', to: 'claude-code' }),
     );
   });
+
+  it('keeps the caller trigger note alongside the failover notice', async () => {
+    const failure =
+      'centraid-agent-failure:{"runner":"codex","failureClass":"quota","message":"limit"}';
+    runFire
+      .mockResolvedValueOnce({
+        outcome: { ok: false, error: failure },
+        record: { runId: 'run-fire', ok: false },
+      })
+      .mockResolvedValueOnce({
+        outcome: { ok: true, value: 'done' },
+        record: { runId: 'run-fire:failover:1:claude-code', ok: true },
+      });
+
+    await runAutomation({
+      automationRef: 'app/digest',
+      appsDir: '/apps',
+      journalDbFile: '/j.db',
+      runId: 'run-fire',
+      runner: 'codex',
+      runnerLadder: ['codex', 'claude-code'],
+      note: 'Catching up 3 missed cron ticks.',
+    });
+
+    const secondNote = String((runFire.mock.calls[1]![0] as { note?: unknown }).note ?? '');
+    expect(secondNote).toContain('Catching up 3 missed cron ticks.');
+    expect(secondNote).toContain('codex failed at the automation fire boundary (quota)');
+  });
+
+  it('never runs the handler of a rung whose breaker is already open', async () => {
+    runFire.mockResolvedValue({
+      outcome: { ok: true, value: 'done' },
+      record: { runId: 'run-fire:failover:1:claude-code', ok: true },
+    });
+    const onFailover = vi.fn();
+
+    await runAutomation({
+      automationRef: 'app/digest',
+      appsDir: '/apps',
+      journalDbFile: '/j.db',
+      runId: 'run-fire',
+      runner: 'codex',
+      runnerLadder: ['codex', 'claude-code'],
+      runnerHealthContext: 'vault-1',
+      runnerHealth: {
+        canAttempt: (_context, kind) =>
+          kind === 'codex'
+            ? { allowed: false, failureClass: 'quota', breakerUntil: 5_000 }
+            : { allowed: true },
+        reportFailure: () => undefined,
+        reportOk: () => undefined,
+        reportPreflightOk: () => undefined,
+        list: () => [],
+      },
+      onFailover,
+    });
+
+    // Exactly one fire: the condemned primary's handler never executed, so its
+    // ctx.fetch / vault writes cannot be replayed by the fallback rung.
+    expect(runFire).toHaveBeenCalledTimes(1);
+    expect(runFire.mock.calls[0]![0]).toMatchObject({
+      runId: 'run-fire:failover:1:claude-code',
+      runnerKind: 'claude-code',
+    });
+    expect(onFailover).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'codex', to: 'claude-code', failureClass: 'quota' }),
+    );
+  });
+
+  it('refuses the fire when every rung is circuit-broken instead of running a handler', async () => {
+    await expect(
+      runAutomation({
+        automationRef: 'app/digest',
+        appsDir: '/apps',
+        journalDbFile: '/j.db',
+        runner: 'codex',
+        runnerHealthContext: 'vault-1',
+        runnerHealth: {
+          canAttempt: () => ({ allowed: false, failureClass: 'auth' }),
+          reportFailure: () => undefined,
+          reportOk: () => undefined,
+          reportPreflightOk: () => undefined,
+          list: () => [],
+        },
+      }),
+    ).rejects.toThrow('no runner available');
+    expect(runFire).not.toHaveBeenCalled();
+  });
+
+  it('marks a manifest-pinned runner as ladder-derived consent, not a direct grant', async () => {
+    await runAutomation({
+      automationRef: 'app/digest',
+      appsDir: '/apps',
+      journalDbFile: '/j.db',
+      runner: 'gemini',
+      runnerSelectionSource: 'manifest',
+    });
+    const deps = runFire.mock.calls[0]![1] as {
+      openDispatch: (a: { workdir: string; runId: string }) => unknown;
+    };
+    deps.openDispatch({ workdir: '/w', runId: 'r' });
+    expect(startLiveDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ runner: 'gemini', consentSource: 'ladder' }),
+    );
+  });
 });

@@ -68,6 +68,75 @@ test('ladder consent requires the authorizing subsystem', () => {
   );
 });
 
+test('an unattended derivation never resurrects a revoked provider', () => {
+  const provider = newProvider();
+  const conversations = new ConversationStore(provider);
+  const conversation = conversations.createConversation({
+    kind: 'chat',
+    userId: 'u1',
+    appId: 'app-one',
+  });
+  const consent = new ProviderEgressConsentStore(provider);
+
+  expect(consent.recordDerived(conversation.id, 'codex', 'ladder', 'automations', 1_000)).toBe(
+    true,
+  );
+  expect(consent.has(conversation.id, 'codex', 'automations')).toBe(true);
+
+  consent.revoke(conversation.id, 'codex', 1_001);
+  expect(consent.recordDerived(conversation.id, 'codex', 'ladder', 'automations', 1_002)).toBe(
+    false,
+  );
+  expect(consent.recordDerived(conversation.id, 'codex', 'direct', undefined, 1_003)).toBe(false);
+  expect(consent.has(conversation.id, 'codex', 'automations')).toBe(false);
+
+  // Only an attended grant re-opens the lane the user closed.
+  consent.grant(conversation.id, 'codex', 'direct', undefined, 1_004);
+  expect(consent.has(conversation.id, 'codex', 'automations')).toBe(true);
+});
+
+test('revoking a provider never granted in this conversation still blocks later derivation', () => {
+  const provider = newProvider();
+  const conversations = new ConversationStore(provider);
+  const conversation = conversations.createConversation({
+    kind: 'chat',
+    userId: 'u1',
+    appId: 'app-one',
+  });
+  const consent = new ProviderEgressConsentStore(provider);
+
+  consent.revoke(conversation.id, 'claude-code', 1_000);
+  expect(consent.recordDerived(conversation.id, 'claude-code', 'direct', undefined, 1_001)).toBe(
+    false,
+  );
+});
+
+test('ladder-membership removal is re-derivable once the user re-adds the runner', () => {
+  const provider = newProvider();
+  const conversations = new ConversationStore(provider);
+  const conversation = conversations.createConversation({
+    kind: 'chat',
+    userId: 'u1',
+    appId: 'app-one',
+  });
+  let member = true;
+  const consent = new ProviderEgressConsentStore(provider, () => member);
+
+  expect(consent.recordDerived(conversation.id, 'codex', 'ladder', 'automations', 1_000)).toBe(
+    true,
+  );
+  member = false;
+  consent.revokeLadderProvider('codex', 'automations', 1_001);
+  expect(consent.has(conversation.id, 'codex', 'automations')).toBe(false);
+
+  // Re-authoring the ladder is re-consent (D13): membership IS the record.
+  member = true;
+  expect(consent.recordDerived(conversation.id, 'codex', 'ladder', 'automations', 1_002)).toBe(
+    true,
+  );
+  expect(consent.has(conversation.id, 'codex', 'automations')).toBe(true);
+});
+
 test('a stale ladder row cannot authorize a runner removed while its vault was dormant', () => {
   const provider = newProvider();
   const conversations = new ConversationStore(provider);

@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   ConversationStore,
+  ProviderEgressConsentStore,
   makeJournalDbProvider,
   type ConversationRunner,
 } from '@centraid/app-engine';
@@ -340,5 +341,80 @@ describe('finalizeCompiledManifest', () => {
       ANCHOR.scope,
       { schema: 'schedule', table: 'event', verbs: 'read' },
     ]);
+  });
+
+  it('denies an unattended compile whose runner the user never authored', async () => {
+    const dir = await tempDir('centraid-headless-compile-consent-');
+    dirs.push(dir);
+    const journalDbFile = path.join(dir, 'journal.db');
+    const run = vi.fn();
+    // The live automations ladder does not contain claude-code, so a manifest
+    // pin naming it is not consent for unattended egress (#567 D13).
+    const consent = new ProviderEgressConsentStore(
+      makeJournalDbProvider(journalDbFile),
+      () => false,
+    );
+    const onFailure = vi.fn().mockResolvedValue(undefined);
+    await runHeadlessAutomationCompile({
+      runner: { run },
+      journalDbFile,
+      runnerSessionDir: path.join(dir, 'sessions'),
+      dataDir: path.join(dir, 'apps'),
+      appId: 'digest',
+      draftSessionId: 'compile-digest-consent',
+      automationRef: 'digest/main',
+      automationName: 'Daily digest',
+      instructions: 'Summarize mail.',
+      runnerKind: 'claude-code',
+      providerEgressConsent: consent,
+      consentSource: 'ladder',
+      onSuccess: vi.fn().mockResolvedValue(undefined),
+      onFailure,
+      runId: 'compile-consent',
+    });
+
+    expect(run).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith(expect.stringContaining('claude-code'));
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const turn = store.getTurn('compile-consent');
+    expect(turn?.ok).toBe(false);
+    expect(turn?.error).toContain('no consent is recorded');
+    store.close();
+  });
+
+  it('lets a ladder-member runner compile unattended without a prompt', async () => {
+    const dir = await tempDir('centraid-headless-compile-consented-');
+    dirs.push(dir);
+    const journalDbFile = path.join(dir, 'journal.db');
+    const run = vi.fn(async (input: Parameters<ConversationRunner['run']>[0]) => {
+      input.onEvent({ type: 'final', text: 'Files ready.' });
+      return { adapterKind: 'claude-code' };
+    });
+    const consent = new ProviderEgressConsentStore(
+      makeJournalDbProvider(journalDbFile),
+      () => true,
+    );
+    await runHeadlessAutomationCompile({
+      runner: { run },
+      journalDbFile,
+      runnerSessionDir: path.join(dir, 'sessions'),
+      dataDir: path.join(dir, 'apps'),
+      appId: 'digest',
+      draftSessionId: 'compile-digest-consented',
+      automationRef: 'digest/main',
+      automationName: 'Daily digest',
+      instructions: 'Summarize mail.',
+      runnerKind: 'claude-code',
+      providerEgressConsent: consent,
+      consentSource: 'ladder',
+      onSuccess: vi.fn().mockResolvedValue(undefined),
+      runId: 'compile-consented',
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.getTurn('compile-consented')?.ok).toBe(true);
+    store.close();
+    expect(consent.has('digest/main', 'claude-code', 'automations')).toBe(true);
   });
 });

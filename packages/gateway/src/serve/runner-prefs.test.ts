@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { removedRunnerLadderMembers, resolveGatewayRunnerPrefs } from './runner-prefs.js';
+import {
+  removedRunnerLadderMembers,
+  resolveGatewayRunnerPrefs,
+  resolveStrictGatewayRunnerPrefs,
+} from './runner-prefs.js';
 
 describe('resolveGatewayRunnerPrefs', () => {
   const prefs = {
@@ -68,5 +72,25 @@ describe('removedRunnerLadderMembers', () => {
       { subsystem: 'builder', kind: 'claude-code' },
       { subsystem: 'automations', kind: 'claude-code' },
     ]);
+  });
+
+  it('rejects an unregistered runner instead of coercing it to the default', () => {
+    // The live-turn resolver must still hand back a usable harness…
+    expect(
+      resolveGatewayRunnerPrefs({ 'runner.automations': 'future-runner' }, 'automations').kind,
+    ).toBe('codex');
+    // …but the Settings patch path must not persist a choice this host cannot
+    // execute under a name that silently means `codex`.
+    expect(
+      resolveStrictGatewayRunnerPrefs({ 'runner.automations': 'future-runner' }, 'automations'),
+    ).toBeUndefined();
+    expect(
+      resolveStrictGatewayRunnerPrefs({ 'agent.runner.kind': 'future-runner' }),
+    ).toBeUndefined();
+    // Unset means "the default agent" and stays valid.
+    expect(resolveStrictGatewayRunnerPrefs({}, 'automations')?.kind).toBe('codex');
+    expect(
+      resolveStrictGatewayRunnerPrefs({ 'runner.automations': 'claude-code' }, 'automations')?.kind,
+    ).toBe('claude-code');
   });
 });

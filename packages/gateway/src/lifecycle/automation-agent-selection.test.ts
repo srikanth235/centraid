@@ -22,6 +22,9 @@ describe('resolveAutomationAgentSelection', () => {
       ),
     ).toEqual({
       runner: 'claude-code',
+      // The manifest named a provider the user's automations lane does not
+      // use, so this selection is not consent for unattended egress (#567).
+      selectionSource: 'manifest',
       model: 'claude-explicit',
       configPins: { thought_level: 'high' },
     });
@@ -30,6 +33,8 @@ describe('resolveAutomationAgentSelection', () => {
   it('falls back from an unregistered open key and scopes model prefs to that fallback', () => {
     expect(resolveAutomationAgentSelection({ runner: 'future-runner' }, prefs, 'codex')).toEqual({
       runner: 'codex',
+      // Falling back lands on the user's own automations runner.
+      selectionSource: 'prefs',
       model: 'codex-auto',
     });
   });
@@ -37,9 +42,16 @@ describe('resolveAutomationAgentSelection', () => {
   it('uses the pinned runner subsystem model when no model is explicit', () => {
     expect(resolveAutomationAgentSelection({ runner: 'claude-code' }, prefs, 'codex')).toEqual({
       runner: 'claude-code',
+      selectionSource: 'manifest',
       model: 'claude-auto',
       configPins: { thought_level: 'high' },
     });
+  });
+
+  it('reports a manifest pin that names the user own runner as prefs-authored', () => {
+    expect(
+      resolveAutomationAgentSelection({ runner: 'claude-code' }, prefs, 'claude-code'),
+    ).toMatchObject({ runner: 'claude-code', selectionSource: 'prefs' });
   });
 
   it('gives a manifest thought-level pin priority over prefs', () => {

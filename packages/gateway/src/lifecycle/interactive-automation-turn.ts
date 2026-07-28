@@ -100,7 +100,9 @@ export interface InteractiveAutomationTurnOptions {
   runnerKind: RunnerKind;
   model?: string;
   configPins?: Readonly<Record<string, string>>;
-  providerConsent?: RunnerKind;
+  /** Egress consent answered by the user for this turn — one runner, or the
+   *  set a ladder attempt asked about. */
+  providerConsent?: RunnerKind | readonly RunnerKind[];
   attachmentRefs?: ConversationTurnAttachment[];
   turnAttachments?: TurnAttachment[];
   /** Resolve historical upload hashes into this automation app's blob CAS. */
@@ -128,32 +130,77 @@ function pathInside(candidate: string, root: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+/**
+ * Inline artifacts and workspace-located ones share one ceiling — a reported
+ * file is read fully into memory to hash it, so the cap has to apply to both.
+ */
+const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Resolve one agent-reported file location into a durable attachment.
+ *
+ * A path that does not resolve, resolves outside the trusted roots, or is not
+ * a regular file is a normal negative — agents name build outputs and scratch
+ * paths that were never written. A file that IS inside the workspace but
+ * cannot be persisted is a real failure and is reported to the caller, which
+ * records it as a turn notice rather than swallowing it.
+ */
 async function workspaceArtifact(
   reportedPath: string,
   roots: readonly string[],
+  onProblem: (message: string) => void,
 ): Promise<ConversationTurnAttachment | undefined> {
+  const decoded = decodeReportedPath(reportedPath);
+  if (decoded === undefined) return undefined;
+  const base = roots[0] ?? process.cwd();
+  const candidate = await fs
+    .realpath(path.isAbsolute(decoded) ? decoded : path.resolve(base, decoded))
+    .catch(() => undefined);
+  if (candidate === undefined) return undefined;
+  const allowedRoots = await Promise.all(
+    roots.map((root) => fs.realpath(root).catch(() => path.resolve(root))),
+  );
+  if (!allowedRoots.some((root) => pathInside(candidate, root))) return undefined;
+  // Stat first: an oversized or non-regular file must never be read into
+  // memory just to be discarded.
+  const stat = await fs.stat(candidate).catch(() => undefined);
+  if (!stat?.isFile()) return undefined;
+  if (stat.size === 0 || stat.size > MAX_ARTIFACT_BYTES) {
+    if (stat.size > MAX_ARTIFACT_BYTES) {
+      onProblem(
+        `Skipped workspace artifact ${path.basename(candidate)}: ` +
+          `${stat.size} bytes exceeds the ${MAX_ARTIFACT_BYTES}-byte attachment limit.`,
+      );
+    }
+    return undefined;
+  }
+  const bytes = await fs.readFile(candidate).catch((error: unknown) => {
+    onProblem(
+      `Could not persist workspace artifact ${path.basename(candidate)}: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  });
+  if (bytes === undefined) return undefined;
+  return {
+    hash: createHash('sha256').update(bytes).digest('hex'),
+    // ACP reports no content type for file locations, and sniffing bytes is a
+    // separate concern; the generic type is the honest answer here.
+    mime: 'application/octet-stream',
+    sizeBytes: stat.size,
+    source: 'agent',
+    filename: path.basename(candidate),
+    workspacePath: candidate,
+  };
+}
+
+/** `file:` URLs from a runner are foreign input and may be malformed. */
+function decodeReportedPath(reportedPath: string): string | undefined {
+  if (!reportedPath.startsWith('file:')) return reportedPath;
   try {
-    const decoded = reportedPath.startsWith('file:') ? fileURLToPath(reportedPath) : reportedPath;
-    const base = roots[0] ?? process.cwd();
-    const candidate = await fs.realpath(
-      path.isAbsolute(decoded) ? decoded : path.resolve(base, decoded),
-    );
-    const allowedRoots = await Promise.all(
-      roots.map((root) => fs.realpath(root).catch(() => path.resolve(root))),
-    );
-    if (!allowedRoots.some((root) => pathInside(candidate, root))) return undefined;
-    const stat = await fs.stat(candidate);
-    if (!stat.isFile()) return undefined;
-    const bytes = await fs.readFile(candidate);
-    return {
-      hash: createHash('sha256').update(bytes).digest('hex'),
-      mime: 'application/octet-stream',
-      sizeBytes: stat.size,
-      source: 'agent',
-      filename: path.basename(candidate),
-      workspacePath: candidate,
-    };
+    return fileURLToPath(reportedPath);
   } catch {
+    // Not a decodable file URL — a typed translation to "no artifact here".
     return undefined;
   }
 }
@@ -515,7 +562,40 @@ export async function runInteractiveAutomationTurn(
       }
 
       if (consentRequired) {
-        store.deleteTurn(opts.turnId);
+        // The user's message is already durable and `turn.start`/`item.start`
+        // already streamed. Deleting the turn destroys what they typed and
+        // makes them retype it after granting consent. Settle it as a failed
+        // turn instead — the same shape the headless compile path records.
+        const consentEndedAt = Date.now();
+        const consentOutput = { stopReason: 'consent_required' };
+        store.runInTransaction(() => {
+          store.closeItem({
+            itemId: agentItemId,
+            ok: false,
+            error: 'consent_required',
+            outputJson: safeJson(consentOutput),
+            endedAt: consentEndedAt,
+            durationMs: consentEndedAt - startedAt,
+          });
+          store.finishTurn({
+            turnId: opts.turnId,
+            endedAt: consentEndedAt,
+            ok: false,
+            error: 'consent_required',
+            summary: 'Provider consent required',
+            outputJson: safeJson(consentOutput),
+          });
+          store.noteFailedTurn(conversationId, '');
+        });
+        emitTurn({
+          type: 'item.end',
+          itemId: agentItemId,
+          ordinal: agentOrdinal,
+          ok: false,
+          result: consentOutput,
+          error: 'consent_required',
+          durationMs: consentEndedAt - startedAt,
+        });
         emitTurn({ type: 'turn.end', turnId: opts.turnId, ok: false, error: 'consent_required' });
         return { turnId: opts.turnId, ok: false, error: 'consent_required' };
       }
@@ -532,11 +612,23 @@ export async function runInteractiveAutomationTurn(
       const answer = finalText ?? text;
       const ok = failure === undefined && !opts.abortSignal.aborted;
       const artifactsByItem = new Map<string, ConversationTurnAttachment[]>();
+      // An artifact that could not be persisted is user-visible evidence, not
+      // a silent drop (docs/coding-standards.md — fallible-action contract).
+      const noteArtifactProblem = (message: string): void => {
+        notices.push({
+          itemId: itemId(opts.turnId, nextOrdinal),
+          ordinal: nextOrdinal++,
+          level: 'warn',
+          code: 'artifact',
+          message,
+          at: Date.now(),
+        });
+      };
       for (const candidate of artifactCandidates) {
         const artifacts: ConversationTurnAttachment[] = (
           await Promise.all(
             candidate.locations.map((location) =>
-              workspaceArtifact(location.path, opts.artifactRoots ?? []),
+              workspaceArtifact(location.path, opts.artifactRoots ?? [], noteArtifactProblem),
             ),
           )
         ).filter((artifact) => artifact !== undefined);
@@ -544,7 +636,7 @@ export async function runInteractiveAutomationTurn(
           for (const inline of candidate.inline) {
             try {
               const bytes = Buffer.from(inline.dataBase64, 'base64');
-              if (bytes.byteLength === 0 || bytes.byteLength > 25 * 1024 * 1024) continue;
+              if (bytes.byteLength === 0 || bytes.byteLength > MAX_ARTIFACT_BYTES) continue;
               const stored = await opts.uploadInlineArtifact(bytes);
               artifacts.push({
                 hash: stored.hash,

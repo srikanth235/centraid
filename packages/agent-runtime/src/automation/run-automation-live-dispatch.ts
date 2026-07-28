@@ -67,6 +67,14 @@ export interface LiveDispatchOptions {
   runnerHealth?: RunnerHealthController;
   runnerHealthContext?: string;
   providerEgressConsent?: ProviderEgressConsentController;
+  /**
+   * How the user authored this rung's runner: `direct` = their automations
+   * primary, `ladder` = current failover membership (validated against the
+   * live ladder before anything egresses). Both are user-authored consent
+   * (#567 D13). Omit when the runner came from a source the user did not
+   * author — a manifest `requires.runner` pin naming a provider absent from
+   * their settings — so the fire is denied unless a real grant already exists.
+   */
   consentSource?: ProviderConsentSource;
   /** Resolve historical upload hashes into the owning automation's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
@@ -205,16 +213,32 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // event, raised below.
   const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
     const runner = opts.runner;
-    if (
-      opts.providerEgressConsent &&
-      !opts.providerEgressConsent.has(opts.automationRef, runner, 'automations')
-    ) {
-      opts.providerEgressConsent.grant(
-        opts.automationRef,
-        runner,
-        opts.consentSource ?? 'direct',
-        'automations',
-      );
+    // Unattended egress is never prompted (#567 D5) — it is authorized at
+    // authoring time. So derive the grant honestly rather than minting one:
+    // `recordDerived` refuses to resurrect a revoked provider and refuses a
+    // ladder source the user's live settings do not contain. A controller
+    // without the derived-consent seam denies rather than assumes.
+    const consent = opts.providerEgressConsent;
+    if (consent && !consent.has(opts.automationRef, runner, 'automations')) {
+      const derived =
+        opts.consentSource === undefined
+          ? false
+          : (consent.recordDerived?.(
+              opts.automationRef,
+              runner,
+              opts.consentSource,
+              'automations',
+            ) ?? false);
+      if (!derived) {
+        throw agentFailureError({
+          runner,
+          failureClass: 'unknown',
+          message:
+            `Unattended egress to ${runner} is not consented for ${opts.automationRef}. ` +
+            `Add ${runner} to the automations agent or its failover ladder in Settings, ` +
+            `or run this automation interactively and approve the provider.`,
+        });
+      }
     }
     const effectivePrompt = await stageAttachments(call);
     const scope = opts.runnerHealthContext ?? opts.workdir;

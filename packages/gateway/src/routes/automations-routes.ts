@@ -47,7 +47,7 @@ import {
 import * as automation from '@centraid/automation';
 import { journalConversationStore } from '../journal-stores.js';
 import type { WorktreeStore } from '../worktree-store/index.js';
-import { readJson, sendError, sendJson } from './route-helpers.js';
+import { parseProviderConsent, readJson, sendError, sendJson } from './route-helpers.js';
 import { SseSubscriberCap } from './sse-cap.js';
 
 /**
@@ -98,7 +98,9 @@ export interface AutomationsRouteOptions {
     message: string;
     abortSignal: AbortSignal;
     onEvent: (event: TurnStreamEvent) => void;
-    providerConsent?: import('@centraid/app-engine').RunnerKind;
+    providerConsent?:
+      | import('@centraid/app-engine').RunnerKind
+      | readonly import('@centraid/app-engine').RunnerKind[];
     runnerKind?: import('@centraid/app-engine').RunnerKind;
     model?: string;
     thinking?: string;
@@ -437,13 +439,11 @@ export function makeAutomationsRouteHandler(
             message: 'turn body needs a non-empty {message}',
           });
         }
-        const providerConsent = isRunnerKind(body.providerConsent)
-          ? body.providerConsent
-          : undefined;
-        if (body.providerConsent !== undefined && !providerConsent) {
+        const providerConsent = parseProviderConsent(body.providerConsent);
+        if (providerConsent === 'invalid') {
           return sendJson(res, 400, {
             error: 'bad_request',
-            message: 'providerConsent must name a registered runner.',
+            message: 'providerConsent must name registered runners.',
           });
         }
         const runnerKind = isRunnerKind(body.runnerKind) ? body.runnerKind : undefined;

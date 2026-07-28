@@ -820,29 +820,67 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         outcome.logs = outcome.logs.map((l) => ({ ...l, msg: scrub(l.msg) }));
         for (const entry of persistedEntries) entry.msg = scrub(entry.msg);
       }
+      const settleTurn = (finalizationError?: string): void => {
+        audit.store.finishTurn({
+          turnId: audit.runId,
+          endedAt: Date.now(),
+          ok: outcome.ok,
+          // A finalization failure is the host's, not the handler's. It is
+          // recorded on the turn so it is visible, but it never rewrites a
+          // handler outcome — the handler's own error still wins the column.
+          ...(outcome.error
+            ? { error: outcome.error }
+            : finalizationError
+              ? { error: `turn finalization failed: ${finalizationError}` }
+              : {}),
+          ...(outcome.summary ? { summary: outcome.summary } : {}),
+          ...(outcome.output !== undefined
+            ? { outputJson: truncateForAudit(outcome.output) ?? '' }
+            : {}),
+        });
+      };
       try {
         audit.store.runInTransaction(() => {
-          audit.store.finishTurn({
-            turnId: audit.runId,
-            endedAt: Date.now(),
-            ok: outcome.ok,
-            ...(outcome.error ? { error: outcome.error } : {}),
-            ...(outcome.summary ? { summary: outcome.summary } : {}),
-            ...(outcome.output !== undefined
-              ? { outputJson: truncateForAudit(outcome.output) ?? '' }
-              : {}),
-          });
+          settleTurn();
           opts.finalizeTurn?.(audit.store, execConversationId, audit.runId, outcome.ok);
         });
       } catch (error) {
-        outcome = {
-          ...outcome,
-          ok: false,
-          error:
-            error instanceof Error
-              ? `turn finalization failed: ${error.message}`
-              : `turn finalization failed: ${String(error)}`,
-        };
+        // The rollback took the `finishTurn` with it, so without a second,
+        // non-transactional write this turn would stay `running` forever while
+        // the handler had in fact completed. Binding/watermark finalization is
+        // what failed; the run itself is settled honestly.
+        const finalizationError = error instanceof Error ? error.message : String(error);
+        try {
+          const at = Date.now();
+          audit.store.insertItem({
+            itemId: randomUUID(),
+            turnId: audit.runId,
+            ordinal: audit.ordinal,
+            kind: 'step',
+            name: 'notice:error:finalization',
+            outputJson: JSON.stringify({
+              text: `Turn finalization failed after the handler completed: ${finalizationError}`,
+            }),
+            ok: false,
+            error: finalizationError,
+            startedAt: at,
+            endedAt: at,
+            durationMs: 0,
+          });
+          audit.ordinal += 1;
+          settleTurn(finalizationError);
+        } catch (settleError) {
+          // The ledger itself is unreachable — there is nothing durable left
+          // to write, so surface it on the returned outcome instead.
+          outcome = {
+            ...outcome,
+            ok: false,
+            error:
+              `turn finalization failed: ${finalizationError}; ` +
+              `settling the turn also failed: ` +
+              `${settleError instanceof Error ? settleError.message : String(settleError)}`,
+          };
+        }
       }
       try {
         emit({

@@ -68,6 +68,13 @@ export interface RunAutomationOptions {
   /** Which CLI to drive. Defaults to codex. */
   runner?: RunnerKind;
   /**
+   * Whether `runner` came from the user's own settings (`prefs`) or from the
+   * automation's agent-writable manifest (`manifest`). Only the former is
+   * consent for unattended egress; a manifest pin must still be a live ladder
+   * member or carry an existing grant (#567 D13).
+   */
+  runnerSelectionSource?: 'prefs' | 'manifest';
+  /**
    * Fallback model id/alias for this fire's `ctx.agent` calls, applied only
    * when the automation's manifest doesn't set `requires.model` (that always
    * wins — see `runFire`'s `OpenDispatchArgs.model`). The caller resolves
@@ -153,10 +160,46 @@ export async function runAutomation(
   const baseRunId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   let last: { outcome: automation.HandlerOutcome; record: automation.RunRecord } | undefined;
   let failoverNotice: string | undefined;
+  const condemned: string[] = [];
 
   for (let index = 0; index < ladder.length; index += 1) {
     const runner = ladder[index]!;
     const isPrimary = index === 0;
+    // A known-open breaker is decided BEFORE the handler runs. `ctx.agent`
+    // checks it too, but by then the handler's earlier side effects
+    // (`ctx.fetch`, vault writes) have already landed and the next rung would
+    // replay them. Scoped only when the caller supplied the same health
+    // context the dispatcher uses — otherwise the keys would not match and the
+    // dispatcher's check stays the only honest one.
+    if (opts.runnerHealthContext && opts.runnerHealth) {
+      const breaker = opts.runnerHealth.canAttempt(opts.runnerHealthContext, runner);
+      if (!breaker.allowed) {
+        const reason =
+          `${runner} is circuit-broken (${breaker.failureClass ?? 'unknown'})` +
+          `${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ''}`;
+        condemned.push(reason);
+        const next = ladder[index + 1];
+        opts.onLog?.(
+          'warn',
+          `${reason}; skipping it for ${opts.automationRef}` +
+            `${next ? ` and continuing with ${next}` : ''}`,
+        );
+        failoverNotice = next
+          ? `${reason}. Skipped without running the handler; continuing with ${next}.`
+          : undefined;
+        if (next) {
+          opts.onFailover?.({
+            automationRef: opts.automationRef,
+            from: runner,
+            to: next,
+            failureClass: breaker.failureClass ?? 'unknown',
+            failedRunId: index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`,
+            nextRunId: `${baseRunId}:failover:${index + 1}:${next}`,
+          });
+        }
+        continue;
+      }
+    }
     const prefs = await opts.runnerPrefsFor?.(runner);
     const model = isPrimary ? opts.model : undefined;
     const configPins = isPrimary ? opts.configPins : prefs?.configPins;
@@ -181,9 +224,14 @@ export async function runAutomation(
         ...(opts.hydrationAttachmentPath
           ? { hydrationAttachmentPath: opts.hydrationAttachmentPath }
           : {}),
-        consentSource: isPrimary ? 'direct' : 'ladder',
+        // A manifest-pinned primary is not user-authored consent; it may still
+        // egress if the user's live failover ladder contains that runner, which
+        // is exactly what `recordDerived('ladder', …)` verifies.
+        consentSource: isPrimary && opts.runnerSelectionSource !== 'manifest' ? 'direct' : 'ladder',
         onLog: args.onLog,
       });
+
+    const turnNote = [failoverNotice, opts.note].filter((part) => !!part).join(' ');
 
     last = await automation.runFire(
       {
@@ -202,7 +250,9 @@ export async function runAutomation(
         ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
         ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
         ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-        ...(failoverNotice || opts.note ? { note: failoverNotice ?? opts.note } : {}),
+        // The caller's trigger-gap/cursor note stays on every rung; a failover
+        // notice is additive evidence, not a replacement for it.
+        ...(turnNote ? { note: turnNote } : {}),
         ...(failoverNotice ? { failoverNotice } : {}),
         ...(opts.input !== undefined ? { input: opts.input } : {}),
         ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
@@ -237,6 +287,14 @@ export async function runAutomation(
     });
   }
 
-  // The ladder is always non-empty because the primary is inserted above.
-  return last!;
+  if (!last) {
+    // Every rung was condemned before its handler could run. Surfacing this as
+    // a throw keeps the caller's "failed before the ledger opened" path — which
+    // closes the run stream and records the health error — instead of inventing
+    // a run record for work that never started.
+    throw new Error(
+      `automation ${opts.automationRef}: no runner available — ${condemned.join('; ')}`,
+    );
+  }
+  return last;
 }

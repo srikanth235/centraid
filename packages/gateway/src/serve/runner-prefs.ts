@@ -50,6 +50,25 @@ export function resolveGatewayRunnerPrefs(
 }
 
 /**
+ * Same resolution, but reject a runner this host cannot execute instead of
+ * coercing it. `resolveGatewayRunnerPrefs` deliberately degrades to `codex` so
+ * a live turn always has a harness; the Settings patch path must not, or an
+ * unregistered `runner.<subsystem>` value silently persists as `codex` and the
+ * user's saved choice quietly means something else.
+ */
+export function resolveStrictGatewayRunnerPrefs(
+  allPrefs: Record<string, unknown>,
+  subsystem?: ModelSubsystem,
+): RunnerPrefs | undefined {
+  const kindRaw = subsystem
+    ? resolveSubsystemRunner(allPrefs, subsystem)
+    : allPrefs['agent.runner.kind'];
+  // Unset is legitimate — it means "the historical default agent".
+  if (kindRaw !== undefined && kindRaw !== null && !isRunnerKind(kindRaw)) return undefined;
+  return resolveGatewayRunnerPrefs(allPrefs, subsystem);
+}
+
+/**
  * Return every fallback membership removed by a Settings patch. Membership is
  * subsystem-scoped: retaining a runner in one ladder must not preserve consent
  * derived from a different ladder.

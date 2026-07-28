@@ -14,6 +14,7 @@ import { afterEach, expect, test } from 'vitest';
 import {
   ConversationStore,
   makeJournalDbProvider,
+  ProviderEgressConsentStore,
   type TurnConfig,
   type TurnInput,
   type TurnResult,
@@ -294,4 +295,105 @@ test('scheduled A→B→A reuses A and hydrates only B ledger turns', async () =
   expect(finalStore.getHarnessBinding(ref, 'codex')?.acpSessionId).toBe('session-a');
   expect(finalStore.getHarnessBinding(ref, 'claude-code')?.acpSessionId).toBe('session-b');
   finalStore.close();
+});
+
+// ---- unattended provider-egress consent (#567 D5/D13) ---------------------
+
+/**
+ * Open a dispatch surface wired to a real consent store over the fire's own
+ * journal, so these tests exercise the durable rows rather than a fake.
+ */
+async function openConsentedDispatch(opts: {
+  runner: RunnerKind;
+  ladderMembers: readonly RunnerKind[];
+  consentSource?: 'direct' | 'ladder';
+  seed?: (consent: ProviderEgressConsentStore) => void;
+}): Promise<{ dispatch: LiveDispatch; consent: ProviderEgressConsentStore }> {
+  const workdir = await tempDir('centraid-automation-consent-');
+  const journalDbFile = `${workdir}/journal.db`;
+  const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+  store.ensureAutomationConversation('demo/nightly', 'demo', 'Nightly', opts.runner);
+  store.close();
+  const consent = new ProviderEgressConsentStore(makeJournalDbProvider(journalDbFile), (kind) =>
+    opts.ladderMembers.includes(kind),
+  );
+  opts.seed?.(consent);
+  const dispatch = await startLiveDispatch({
+    workdir,
+    runId: 'run-1',
+    automationRef: 'demo/nightly',
+    journalDbFile,
+    runner: opts.runner,
+    providerEgressConsent: consent,
+    ...(opts.consentSource ? { consentSource: opts.consentSource } : {}),
+    onLog: () => undefined,
+  });
+  openDispatches.push(dispatch);
+  return { dispatch, consent };
+}
+
+test('an unattended fire on the prefs primary egresses without a prompt', async () => {
+  const stub = stubBackendRunTurn('codex', (input) => {
+    input.onEvent({ type: 'final', text: 'ok' });
+  });
+  const { dispatch, consent } = await openConsentedDispatch({
+    runner: 'codex',
+    ladderMembers: [],
+    consentSource: 'direct',
+  });
+
+  await expect(dispatch.agentDispatcher({ prompt: 'go' }, dispatchCtx)).resolves.toBe('ok');
+  expect(stub.calls).toHaveLength(1);
+  expect(consent.has('demo/nightly', 'codex', 'automations')).toBe(true);
+});
+
+test('an unattended fire on a current ladder member egresses without a prompt', async () => {
+  const stub = stubBackendRunTurn('claude-code', (input) => {
+    input.onEvent({ type: 'final', text: 'ok' });
+  });
+  const { dispatch } = await openConsentedDispatch({
+    runner: 'claude-code',
+    ladderMembers: ['claude-code'],
+    consentSource: 'ladder',
+  });
+
+  await expect(dispatch.agentDispatcher({ prompt: 'go' }, dispatchCtx)).resolves.toBe('ok');
+  expect(stub.calls).toHaveLength(1);
+});
+
+test('a revoked provider stays revoked across a later unattended fire', async () => {
+  const stub = stubBackendRunTurn('codex', (input) => {
+    input.onEvent({ type: 'final', text: 'ok' });
+  });
+  const { dispatch } = await openConsentedDispatch({
+    runner: 'codex',
+    ladderMembers: ['codex'],
+    consentSource: 'direct',
+    seed: (consent) => {
+      consent.grant('demo/nightly', 'codex', 'direct');
+      consent.revoke('demo/nightly', 'codex');
+    },
+  });
+
+  await expect(dispatch.agentDispatcher({ prompt: 'go' }, dispatchCtx)).rejects.toThrow(
+    /not consented/,
+  );
+  expect(stub.calls).toHaveLength(0);
+});
+
+test('a manifest-pinned runner the user never authored is denied, not auto-granted', async () => {
+  const stub = stubBackendRunTurn('gemini', (input) => {
+    input.onEvent({ type: 'final', text: 'ok' });
+  });
+  // The manifest pin arrives as a ladder-sourced derivation; the live ladder
+  // does not contain gemini, so nothing may leave the device.
+  const { dispatch, consent } = await openConsentedDispatch({
+    runner: 'gemini',
+    ladderMembers: ['claude-code'],
+    consentSource: 'ladder',
+  });
+
+  await expect(dispatch.agentDispatcher({ prompt: 'go' }, dispatchCtx)).rejects.toThrow(/gemini/);
+  expect(stub.calls).toHaveLength(0);
+  expect(consent.has('demo/nightly', 'gemini', 'automations')).toBe(false);
 });

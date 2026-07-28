@@ -61,6 +61,20 @@ branch in one follow-up round:
   handoff when it has none), instead of inheriting the primary's empty plan —
   a breaker-skipped primary no longer silently strips the fallback of all
   conversation history. Hydration tokens are billed to the rung that ran.
+- **Enforced unattended consent (blocker).** `ProviderEgressConsentStore`
+  splits attended `grant()` from unattended `recordDerived()`, which never
+  resurrects a revoked provider (`revoke()` now writes a durable direct
+  tombstone) and re-checks live ladder membership. Automation fire/compile
+  deny with a typed, user-actionable failure instead of minting consent;
+  a manifest-pinned runner outside the user's prefs/ladder cannot
+  self-authorize. Ladder removal still re-authorizes on re-add (D13).
+- **Failover honesty.** Fire ladders consult breakers before running the
+  handler (no duplicated pre-`ctx.agent` side effects on a condemned rung);
+  turn-finalization failure no longer flips a successful outcome or strands
+  the turn in-flight; the interactive consent gate keeps the user's message
+  durable instead of deleting the turn; compile failover notices use the
+  machine-keyed `notice:warn:failover`; the `agent-failover` health component
+  recovers on the next successful turn, which also closes auth breakers.
 - **Ledger/watermark correctness.** Failed turns no longer advance the
   hydration watermark; the empty-watermark sentinel is `-1` everywhere; the
   hydration tool line understands the real chat-path payload shape (`state`)
