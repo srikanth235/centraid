@@ -11,9 +11,11 @@ import buttonCss from '../ui/Button.module.css';
 import { cx } from '../ui/cx.js';
 import tgCss from '../styles/toolGroup.module.css';
 import chatCss from '../styles/chatMessage.module.css';
+import ChatComposer from './ChatComposer.js';
+import { EffortPicker, ModelPicker, RunnerPicker } from './AssistantScreen.js';
+import { workspaceKindLabel } from './workspaceKindLabel.js';
 
-// Builder-specific glyphs not in the shared icon set (mirrors the inline SVGs
-// in builder.ts), as small components so the React pane paints identically.
+// Builder-specific status glyphs not yet in the shared icon set.
 function BoltGlyph(): JSX.Element {
   return (
     <svg
@@ -46,41 +48,6 @@ function ChevronDownGlyph(): JSX.Element {
     </svg>
   );
 }
-function FileEditGlyph(): JSX.Element {
-  return (
-    <svg
-      width={14}
-      height={14}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
-      <polyline points="14 3 14 9 20 9" />
-      <path d="M18 13l3 3-5 5h-3v-3z" />
-    </svg>
-  );
-}
-function PaperclipGlyph(): JSX.Element {
-  return (
-    <svg
-      width={14}
-      height={14}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-    </svg>
-  );
-}
-
 function ToolGroup({
   m,
   onToggleGroup,
@@ -119,7 +86,7 @@ function ToolGroup({
           onClick={() => onToggleGroup(m.id)}
         >
           <span className={styles.tgCardIcon}>
-            <FileEditGlyph />
+            <Icon name="FileEdit" size={14} strokeWidth={1.7} />
           </span>
           <span className={styles.tgCardMeta}>
             <span className={styles.tgCardTitle}>
@@ -237,6 +204,10 @@ export default function BuilderChatPane({
   onCancel,
   onToggleGroup,
   onSetView,
+  onSetWorkspaceKind,
+  onSetRunner,
+  onSetModel,
+  onSetEffort,
   onMountHistory,
   onUploadAttachment,
 }: BuilderChatBridgeProps): JSX.Element {
@@ -248,12 +219,15 @@ export default function BuilderChatPane({
     suggestions: [],
     composerDisabled: true,
     historyNonce: 0,
+    workspaceKind: 'draft',
+    workspaceKinds: ['draft', 'app', 'vault-data'],
   });
   const [draft, setDraft] = useState('');
   const [pending, setPending] = useState<PendingBuilderAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pickerLoaded, setPickerLoaded] = useState(true);
 
   const attachFiles = (files: File[]): void => {
     if (!onUploadAttachment) return;
@@ -380,80 +354,140 @@ export default function BuilderChatPane({
             </div>
           </div>
         )}
-        <div className={styles.chatInput}>
-          {pending.length > 0 && (
-            <div className={styles.attachRow}>
-              {pending.map((a) => (
-                <div
-                  key={a.localId}
-                  className={styles.attachChip}
-                  data-state={a.state}
-                  title={a.state === 'error' ? (a.errorText ?? 'Upload failed') : a.filename}
-                >
-                  <span className={styles.attachName}>{a.filename}</span>
-                  <span className={styles.attachSize}>
-                    {a.state === 'error'
-                      ? 'failed'
-                      : a.state === 'uploading'
-                        ? '…'
-                        : formatBytes(a.sizeBytes)}
-                  </span>
+        <ChatComposer
+          value={draft}
+          onChange={setDraft}
+          onSend={send}
+          onStop={onCancel}
+          busy={snap.generating}
+          disabled={snap.composerDisabled && !snap.generating}
+          canSend={
+            (draft.trim().length > 0 || ready.length > 0) &&
+            !pending.some((a) => a.state === 'uploading')
+          }
+          placeholder="Describe a change…"
+          ariaLabel="Describe a builder change"
+          context={snap.runnerConfig?.supportsContext ? snap.context : undefined}
+          above={
+            pending.length > 0 ? (
+              <div className={styles.attachRow}>
+                {pending.map((a) => (
+                  <div
+                    key={a.localId}
+                    className={styles.attachChip}
+                    data-state={a.state}
+                    title={a.state === 'error' ? (a.errorText ?? 'Upload failed') : a.filename}
+                  >
+                    <span className={styles.attachName}>{a.filename}</span>
+                    <span className={styles.attachSize}>
+                      {a.state === 'error'
+                        ? 'failed'
+                        : a.state === 'uploading'
+                          ? '…'
+                          : formatBytes(a.sizeBytes)}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.attachRemove}
+                      aria-label={`Remove ${a.filename}`}
+                      onClick={() => setPending((p) => p.filter((x) => x.localId !== a.localId))}
+                    >
+                      <Icon name="X" size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null
+          }
+          leading={
+            <>
+              {onUploadAttachment && snap.runnerConfig?.supportsAttachments ? (
+                <>
                   <button
                     type="button"
-                    className={styles.attachRemove}
-                    aria-label={`Remove ${a.filename}`}
-                    onClick={() => setPending((p) => p.filter((x) => x.localId !== a.localId))}
+                    className={cx(styles.inputPill, styles.inputPillIcon)}
+                    aria-label="Attach"
+                    title="Attach"
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    <Icon name="X" size={10} />
+                    <Icon name="Paperclip" size={14} strokeWidth={1.7} />
                   </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <textarea
-            placeholder="Describe a change…"
-            rows={1}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-          />
-          <div className={styles.chatInputControls}>
-            {onUploadAttachment ? (
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []);
+                      if (files.length) attachFiles(files);
+                      e.target.value = '';
+                    }}
+                  />
+                </>
+              ) : null}
+              <select
+                className={styles.inputPill}
+                aria-label="Workspace"
+                value={snap.workspaceKind}
+                onChange={(event) =>
+                  onSetWorkspaceKind(event.target.value as BuilderChatSnapshot['workspaceKind'])
+                }
+              >
+                {snap.workspaceKinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {workspaceKindLabel(kind)}
+                  </option>
+                ))}
+              </select>
+            </>
+          }
+          model={
+            snap.runnerConfig ? (
               <>
-                <button
-                  type="button"
-                  className={cx(styles.inputPill, styles.inputPillIcon)}
-                  aria-label="Attach"
-                  title="Attach"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <PaperclipGlyph />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    if (files.length) attachFiles(files);
-                    e.target.value = '';
+                <RunnerPicker
+                  picker={snap.runnerConfig}
+                  loaded={pickerLoaded}
+                  busy={snap.generating}
+                  onSelect={(runnerKind) => {
+                    setPickerLoaded(false);
+                    void onSetRunner(runnerKind)
+                      .then((next) => {
+                        if (!next.supportsAttachments) setPending([]);
+                      })
+                      .catch(() => {
+                        // Same as the assistant composer: the route reports the
+                        // failure, the pane only has to re-enable its controls.
+                      })
+                      .finally(() => setPickerLoaded(true));
                   }}
                 />
+                <ModelPicker
+                  picker={snap.runnerConfig}
+                  loaded={pickerLoaded}
+                  busy={snap.generating}
+                  onSelect={onSetModel}
+                />
               </>
-            ) : null}
-            <div className={styles.spacer} />
-            <span className={styles.chatInputKbd}>⌘↵</span>
-            <button type="button" className={styles.sendBtn} aria-label="Send" onClick={send}>
-              <Icon name="ArrowRight" size={14} strokeWidth={2.5} />
-            </button>
-          </div>
-        </div>
+            ) : undefined
+          }
+          effort={
+            snap.runnerConfig ? (
+              <EffortPicker
+                picker={snap.runnerConfig}
+                loaded={pickerLoaded}
+                busy={snap.generating}
+                onSelect={onSetEffort}
+              />
+            ) : undefined
+          }
+          // The hint explains the runner picker, so it only makes sense once
+          // that picker exists (the runner config arrives with the snapshot).
+          {...(snap.runnerConfig
+            ? {
+                hint: 'Switching agents creates a bounded context handoff and may require provider consent.',
+              }
+            : {})}
+        />
       </div>
     </div>
   );

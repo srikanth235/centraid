@@ -28,6 +28,8 @@ import {
   type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
+  type RunnerHealthController,
+  type ProviderEgressConsentController,
   type VaultInvokeRunner,
   type VaultContentRunner,
   type VaultSqlRunner,
@@ -58,6 +60,14 @@ export interface AssistantConversationRunnerOptions {
   buildPrompt?: (input: ConversationTurnInput) => Promise<string> | string;
   /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
+  runnerLadder?: (
+    subsystem: ModelSubsystem | undefined,
+    primary: RunnerKind,
+  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
+  runnerHealth?: RunnerHealthController;
+  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+  providerEgressConsent?: ProviderEgressConsentController;
+  onFailover?: Parameters<typeof makeConversationRunnerCore>[0]['onFailover'];
 }
 
 /** The active vault's scratch cwd for assistant turns. */
@@ -110,14 +120,19 @@ export function makeAssistantConversationRunner(
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     runTurn: opts.runTurn ?? runTurn,
+    ...(opts.runnerLadder ? { runnerLadder: opts.runnerLadder } : {}),
+    ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
+    ...(opts.runnerHealthContext ? { runnerHealthContext: opts.runnerHealthContext } : {}),
+    ...(opts.providerEgressConsent ? { providerEgressConsent: opts.providerEgressConsent } : {}),
+    ...(opts.onFailover ? { onFailover: opts.onFailover } : {}),
     vaultSql,
     vaultInvoke,
     vaultContent,
     ...(opts.buildPrompt
       ? { buildExtraSystemPrompt: ({ input }) => opts.buildPrompt!(input) }
       : {}),
-    resolveCwd: async () => {
-      const cwd = assistantCwd(opts.vaults);
+    resolveCwd: async (input) => {
+      const cwd = input.workspaceDirectory ?? assistantCwd(opts.vaults);
       await fs.mkdir(cwd, { recursive: true }).catch(() => undefined);
       return cwd;
     },

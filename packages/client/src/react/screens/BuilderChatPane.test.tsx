@@ -13,6 +13,8 @@ function snap(over: Partial<BuilderChatSnapshot> = {}): BuilderChatSnapshot {
     suggestions: ['Improve the layout', 'Prepare to publish'],
     composerDisabled: false,
     historyNonce: 0,
+    workspaceKind: 'draft',
+    workspaceKinds: ['draft', 'app', 'vault-data'],
     ...over,
   };
 }
@@ -24,6 +26,10 @@ function makeProps(over: Partial<BuilderChatBridgeProps> = {}): BuilderChatBridg
     onCancel: vi.fn(),
     onToggleGroup: vi.fn(),
     onSetView: vi.fn(),
+    onSetWorkspaceKind: vi.fn(),
+    onSetRunner: vi.fn(),
+    onSetModel: vi.fn(),
+    onSetEffort: vi.fn(),
     onMountHistory: vi.fn(),
     ...over,
   };
@@ -164,7 +170,9 @@ describe('BuilderChatPane', () => {
     const props = makeProps();
     const el = mount(props);
     push(snap());
-    const ta = el.querySelector('.chatInput textarea') as HTMLTextAreaElement;
+    const ta = el.querySelector(
+      'textarea[aria-label="Describe a builder change"]',
+    ) as HTMLTextAreaElement;
     setValue(ta, 'Add a footer');
     void act(() => ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     // No attachments staged → the optional attachments arg is undefined (#420).
@@ -176,10 +184,12 @@ describe('BuilderChatPane', () => {
     const props = makeProps();
     const el = mount(props);
     push(snap({ composerDisabled: true }));
-    const ta = el.querySelector('.chatInput textarea') as HTMLTextAreaElement;
+    const ta = el.querySelector(
+      'textarea[aria-label="Describe a builder change"]',
+    ) as HTMLTextAreaElement;
     setValue(ta, 'hi');
     void act(() =>
-      (el.querySelector('.sendBtn') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('button[aria-label="Send"]') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -193,9 +203,28 @@ describe('BuilderChatPane', () => {
       (b) => b.textContent === 'Prepare to publish',
     )!;
     void act(() => chip.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect((el.querySelector('.chatInput textarea') as HTMLTextAreaElement).value).toBe(
-      'Prepare to publish',
-    );
+    expect(
+      (el.querySelector('textarea[aria-label="Describe a builder change"]') as HTMLTextAreaElement)
+        .value,
+    ).toBe('Prepare to publish');
+  });
+
+  it('shows the durable primary workspace choices and reports a change', () => {
+    const props = makeProps();
+    const el = mount(props);
+    push(snap({ workspaceKind: 'app' }));
+    const picker = el.querySelector('select[aria-label="Workspace"]') as HTMLSelectElement;
+    expect(picker.value).toBe('app');
+    expect([...picker.options].map((option) => option.value)).toEqual([
+      'draft',
+      'app',
+      'vault-data',
+    ]);
+    act(() => {
+      picker.value = 'vault-data';
+      picker.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(props.onSetWorkspaceKind).toHaveBeenCalledWith('vault-data');
   });
 
   it('switches to the history view and mounts the vanilla renderer', () => {

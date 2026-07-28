@@ -15,6 +15,11 @@ export interface RunOptions {
   extraArgs: string[];
   prevSessionId?: string;
   prevUsageSnapshot?: AdapterUsageSnapshot;
+  hydrationContext?: string;
+  hydrationAttachments?: { path: string; mime: string; filename?: string }[];
+  recoveryHydrationContext?: string;
+  recoveryHydrationAttachments?: { path: string; mime: string; filename?: string }[];
+  forceHydration?: boolean;
   model?: string;
   attachments?: { path: string; mime: string; filename?: string }[];
   resolveModel?: (model: string) => string;
@@ -22,13 +27,14 @@ export interface RunOptions {
   label?: string;
   installHint?: string;
   permissionPolicy?: 'auto-allow' | 'deny';
+  config?: Pick<AcpTurnConfig, 'stageTimeoutMs' | 'promptIdleTimeoutMs'>;
   /** Called with each event as it arrives — return true to abort the turn. */
   abortOn?: (event: TurnStreamEvent) => boolean;
 }
 
 export async function runFake(opts: RunOptions): Promise<{
   events: TurnStreamEvent[];
-  result: { sessionId?: string; usageSnapshot?: AdapterUsageSnapshot };
+  result: { sessionId?: string; usageSnapshot?: AdapterUsageSnapshot; hydrated?: boolean };
 }> {
   const cwd = await tempDir('acp-backend-');
   const events: TurnStreamEvent[] = [];
@@ -41,6 +47,7 @@ export async function runFake(opts: RunOptions): Promise<{
     ...(opts.label ? { label: opts.label } : {}),
     ...(opts.installHint ? { installHint: opts.installHint } : {}),
     ...(opts.resolveModel ? { resolveModel: opts.resolveModel } : {}),
+    ...opts.config,
   };
   const result = await runAcpTurn(
     {
@@ -49,6 +56,15 @@ export async function runFake(opts: RunOptions): Promise<{
       extraSystemPrompt: 'SYSTEM_CONTEXT',
       ...(opts.prevSessionId ? { prevSessionId: opts.prevSessionId } : {}),
       ...(opts.prevUsageSnapshot ? { prevUsageSnapshot: opts.prevUsageSnapshot } : {}),
+      ...(opts.hydrationContext ? { hydrationContext: opts.hydrationContext } : {}),
+      ...(opts.hydrationAttachments ? { hydrationAttachments: opts.hydrationAttachments } : {}),
+      ...(opts.recoveryHydrationContext
+        ? { recoveryHydrationContext: opts.recoveryHydrationContext }
+        : {}),
+      ...(opts.recoveryHydrationAttachments
+        ? { recoveryHydrationAttachments: opts.recoveryHydrationAttachments }
+        : {}),
+      ...(opts.forceHydration ? { forceHydration: true } : {}),
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.attachments ? { attachments: opts.attachments } : {}),
       ...(opts.toolContext ? { toolContext: opts.toolContext } : {}),

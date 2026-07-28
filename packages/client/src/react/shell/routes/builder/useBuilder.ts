@@ -6,6 +6,7 @@ import {
   listAutomations,
   listConversations,
   listVersions,
+  loadConversation,
   publish,
   setAutomationEnabled,
   streamTurn,
@@ -17,7 +18,14 @@ import {
 import { generateAppId, shortVersionTitle } from '../../../../format.js';
 import { inferAppVisual } from '../../../../app-format.js';
 import { describeCron } from '../../../../cron.js';
-import type { BuilderChatSnapshot } from '../../../screen-contracts.js';
+import type {
+  AgentsStatusDTO,
+  AsstModelPickerDTO,
+  BuilderChatSnapshot,
+} from '../../../screen-contracts.js';
+import { loadProviders, resolveReportedRunnerKind } from '../settingsProvidersData.js';
+import { openConfirm } from '../../confirm.js';
+import { providerConsentWire, withProviderConsent } from '../../../providerConsent.js';
 import {
   BUILDER_SUGGESTIONS,
   type ChatView,
@@ -112,6 +120,62 @@ function deriveStatus(f: StatusFacts, now: number): StatusView {
   };
 }
 
+async function streamBuilderWithConsent(input: {
+  appId: string;
+  conversationId: string;
+  text: string;
+  idempotencyKey: string;
+  attachments?: ConversationAttachmentRef[];
+  signal: AbortSignal;
+  onEvent: (event: TurnStreamEvent) => void;
+  onDeclined: (provider: string) => void;
+  workspaceKind: 'vault-data' | 'app' | 'draft';
+  runnerKind?: string;
+  model?: string;
+  thinking?: string;
+  /** Space the builder conversation is pinned to (#599) — explicit, never ambient. */
+  scopeId?: string;
+}): Promise<void> {
+  // Every provider approved during THIS send — a consent-gated failover asks
+  // twice, and resending only the newest approval loops forever (#567).
+  let approvedProviders: string[] = [];
+  for (;;) {
+    let requiredProvider: string | undefined;
+    const providerConsent = providerConsentWire(approvedProviders);
+    await streamTurn(
+      input.appId,
+      {
+        conversationId: input.conversationId,
+        message: input.text,
+        idempotencyKey: input.idempotencyKey,
+        workspaceKind: input.workspaceKind,
+        ...(input.scopeId ? { scopeId: input.scopeId } : {}),
+        ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
+        ...(input.model ? { model: input.model } : {}),
+        ...(input.thinking ? { thinking: input.thinking } : {}),
+        ...(providerConsent !== undefined ? { providerConsent } : {}),
+        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      },
+      (event) => {
+        if (event.type === 'consent.required') requiredProvider = event.provider;
+        else input.onEvent(event);
+      },
+      input.signal,
+    );
+    if (!requiredProvider) return;
+    const approved = await openConfirm({
+      confirmLabel: 'Allow provider',
+      title: `Send to ${requiredProvider}?`,
+      message: `Allow this builder conversation to be sent to ${requiredProvider}? This can include the prompt, attachments, handoff context, and vault tool results.`,
+    });
+    if (!approved) {
+      input.onDeclined(requiredProvider);
+      return;
+    }
+    approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
+  }
+}
+
 /** The part of the view model that mirrors the mutable model; refreshed by
  *  `bump()` because render may not read the refs that hold it. */
 type BuilderSnapshot = StatusView &
@@ -146,6 +210,62 @@ const configSectionSignatures = (
   apps: JSON.stringify(m.apps ?? []),
 });
 
+function builderModelPicker(status: AgentsStatusDTO, requestedRunner?: string): AsstModelPickerDTO {
+  const runnerKind = resolveReportedRunnerKind(status, requestedRunner, 'builder');
+  const card = status.cards.find((entry) => entry.kind === runnerKind);
+  const models = card?.modelConfigurable ? card.models : [];
+  const defaultId = status.savedModelByKind[runnerKind] ?? '';
+  const defaultModel =
+    models.find((model) => model.id === defaultId) ??
+    models.find((model) => model.default) ??
+    models[0];
+  const effortOption = card?.configOptions?.find((option) => option.category === 'thought_level');
+  const defaultEffort =
+    status.defaultConfigPinsByKind[runnerKind]?.thought_level ?? effortOption?.currentValue ?? '';
+  return {
+    runners: status.cards.map((runner) => ({
+      kind: runner.kind,
+      title: runner.title,
+      connected: runner.connected,
+      sessionReady: runner.sessionReady,
+      hint: [
+        runner.subtitle,
+        ...(runner.breakerStates ?? []).map((state) => `${state.failureClass} ${state.state}`),
+      ].join(' · '),
+    })),
+    selectedRunnerKind: runnerKind,
+    workspaceKinds: ['draft', 'app', 'vault-data'],
+    connected: card?.connected ?? false,
+    models: models.map((model) => ({
+      id: model.id,
+      ...(model.name ? { name: model.name } : {}),
+      ...(model.default ? { default: true } : {}),
+    })),
+    defaultModelName: defaultModel?.name ?? defaultModel?.id ?? 'gateway default',
+    selectedModelId: status.subsystemModelByKind[runnerKind]?.builder ?? '',
+    efforts: effortOption?.values ?? [],
+    defaultEffortName:
+      effortOption?.values.find((value) => value.value === defaultEffort)?.name ?? defaultEffort,
+    selectedEffortId: status.subsystemConfigPinsByKind[runnerKind]?.builder?.thought_level ?? '',
+    supportsAdditionalDirectories: card?.additionalDirectories === true,
+    supportsAttachments: card?.supportsAttachments === true,
+    supportsContext: card?.supportsContext === true,
+  };
+}
+
+/**
+ * Restore an existing conversation's durable runner binding ahead of the
+ * subsystem default/current in-memory picker. A reload must never silently
+ * send the next turn back through a different provider.
+ */
+export function builderPickerForConversation(
+  status: AgentsStatusDTO,
+  conversationAdapterKind?: string,
+  selectedRunnerKind?: string,
+): AsstModelPickerDTO {
+  return builderModelPicker(status, conversationAdapterKind ?? selectedRunnerKind);
+}
+
 export interface BuilderViewModel {
   appId: string | undefined;
   projName: string;
@@ -176,6 +296,10 @@ export interface BuilderViewModel {
   cancelTurn: () => void;
   toggleGroup: (id: string) => void;
   setChatView: (v: ChatView) => void;
+  setChatWorkspaceKind: (kind: 'vault-data' | 'app' | 'draft') => void;
+  setChatRunner: (runnerKind: string) => Promise<AsstModelPickerDTO>;
+  setChatModel: (modelId: string) => void;
+  setChatEffort: (effort: string) => void;
   setTab: (t: Tab) => void;
   setPreviewDevice: (d: DeviceKey) => void;
   commitRename: (next: string) => void;
@@ -227,6 +351,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       suggestions: BUILDER_SUGGESTIONS,
       composerDisabled: !input.initialAppId,
       historyNonce: 0,
+      workspaceKind: 'draft',
+      workspaceKinds: ['draft', 'app', 'vault-data'],
     },
     ...deriveStatus(
       {
@@ -271,6 +397,12 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const flashSections = useRef<Set<string>>(new Set());
   const automationBusy = useRef(false);
   const historyNonce = useRef(0);
+  const sessionContext = useRef<{ used: number; size: number } | undefined>(undefined);
+  const sessionConfig = useRef<{ model?: string; effort?: string }>({});
+  const runnerConfig = useRef<AsstModelPickerDTO | undefined>(undefined);
+  const providersStatus = useRef<AgentsStatusDTO | undefined>(undefined);
+  const conversationRunnerKind = useRef<string | undefined>(undefined);
+  const workspaceKind = useRef<'vault-data' | 'app' | 'draft'>('draft');
 
   // ── Snapshot funnel ───────────────────────────────────────────────────────
   const buildChatSnapshot = useCallback((): BuilderChatSnapshot => {
@@ -282,6 +414,11 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       suggestions: BUILDER_SUGGESTIONS,
       composerDisabled: generating.current || !appId.current,
       historyNonce: historyNonce.current,
+      ...(sessionContext.current ? { context: sessionContext.current } : {}),
+      ...sessionConfig.current,
+      ...(runnerConfig.current ? { runnerConfig: runnerConfig.current } : {}),
+      workspaceKind: workspaceKind.current,
+      workspaceKinds: ['draft', 'app', 'vault-data'],
     };
   }, []);
 
@@ -325,6 +462,23 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     chatUpdater.current?.(buildChatSnapshot());
     bump();
   }, [buildChatSnapshot, bump]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadProviders().then((status) => {
+      if (cancelled) return;
+      providersStatus.current = status;
+      runnerConfig.current = builderPickerForConversation(
+        status,
+        conversationRunnerKind.current,
+        runnerConfig.current?.selectedRunnerKind,
+      );
+      renderChat();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [renderChat]);
 
   const pushMessage = useCallback(
     (m: ConversationMsg): number => {
@@ -515,6 +669,19 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         case 'webhooks':
           announceMintedWebhooks(event.minted);
           return;
+        case 'context':
+          if (event.used !== undefined && event.size !== undefined) {
+            sessionContext.current = { used: event.used, size: event.size };
+            renderChat();
+          }
+          return;
+        case 'usage':
+          sessionConfig.current = {
+            ...(event.model ? { model: event.model } : {}),
+            ...(event.effort ? { effort: event.effort } : {}),
+          };
+          renderChat();
+          return;
         case 'final':
         case 'aborted':
           finishAgentTurn();
@@ -526,7 +693,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           pushMessage({ kind: 'status', text: `Agent error: ${event.message}` });
           return;
         case 'phase':
-        case 'usage':
+        case 'consent.required':
+        case 'notice':
           break;
       }
     },
@@ -548,6 +716,20 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         const sessions = await listConversations(id).catch(() => []);
         if (sessions[0]) {
           conversationId.current = sessions[0].id;
+          const transcript = await loadConversation(id, sessions[0].id).catch(() => undefined);
+          if (transcript?.adapterKind) {
+            conversationRunnerKind.current = transcript.adapterKind;
+            if (providersStatus.current) {
+              runnerConfig.current = builderPickerForConversation(
+                providersStatus.current,
+                transcript.adapterKind,
+              );
+              renderChat();
+            }
+          }
+          if (transcript?.workspace?.primaryKind) {
+            workspaceKind.current = transcript.workspace.primaryKind;
+          }
           return conversationId.current;
         }
       }
@@ -556,7 +738,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       ).id;
       return conversationId.current;
     },
-    [],
+    [renderChat],
   );
 
   // Upload one file to the builder app's blob CAS ahead of a turn — the same
@@ -589,20 +771,35 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         try {
           const sessionId = await ensureConversation(appId.current, 'continue');
           agentAbort.current = new AbortController();
-          await streamTurn(
-            appId.current,
-            {
-              conversationId: sessionId,
-              message: text,
-              ...(targetScope.current ? { scopeId: targetScope.current } : {}),
-              // Fresh idempotency key per builder send (issue #420) — a re-POST
-              // after a network blip replays instead of double-running.
-              idempotencyKey: crypto.randomUUID(),
-              ...(attachments?.length ? { attachments } : {}),
-            },
-            handleStreamEvent,
-            agentAbort.current.signal,
-          );
+          await streamBuilderWithConsent({
+            appId: appId.current,
+            conversationId: sessionId,
+            text,
+            // Reuse across consent-gated retries: the first request is not
+            // recorded, while a transport retry still replays exactly once.
+            idempotencyKey: crypto.randomUUID(),
+            workspaceKind: workspaceKind.current,
+            // Explicit, never ambient: the turn lands in the space the
+            // conversation was created in (issue #599).
+            ...(targetScope.current ? { scopeId: targetScope.current } : {}),
+            ...(runnerConfig.current?.selectedRunnerKind
+              ? { runnerKind: runnerConfig.current.selectedRunnerKind }
+              : {}),
+            ...(runnerConfig.current?.selectedModelId
+              ? { model: runnerConfig.current.selectedModelId }
+              : {}),
+            ...(runnerConfig.current?.selectedEffortId
+              ? { thinking: runnerConfig.current.selectedEffortId }
+              : {}),
+            ...(attachments?.length ? { attachments } : {}),
+            signal: agentAbort.current.signal,
+            onEvent: handleStreamEvent,
+            onDeclined: (provider) =>
+              pushMessage({
+                kind: 'status',
+                text: `Nothing was sent to ${provider}.`,
+              }),
+          });
           if (generating.current) finishAgentTurn();
         } catch (err) {
           if (agentAbort.current?.signal.aborted) {
@@ -841,6 +1038,56 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     [bump],
   );
 
+  const setChatWorkspaceKind = useCallback(
+    (kind: 'vault-data' | 'app' | 'draft'): void => {
+      workspaceKind.current = kind;
+      renderChat();
+    },
+    [renderChat],
+  );
+
+  const setChatRunner = useCallback(
+    async (runnerKind: string): Promise<AsstModelPickerDTO> => {
+      const previous = runnerConfig.current?.selectedRunnerKind;
+      const status = await loadProviders({ refresh: true });
+      const target = status.cards.find((card) => card.kind === runnerKind);
+      if (!target?.sessionReady) {
+        showToast(target?.subtitle ?? `${runnerKind} did not complete its session preflight.`);
+        const unchanged = builderModelPicker(status, previous);
+        runnerConfig.current = unchanged;
+        renderChat();
+        return unchanged;
+      }
+      const next = builderModelPicker(status, runnerKind);
+      providersStatus.current = status;
+      conversationRunnerKind.current = runnerKind;
+      runnerConfig.current = next;
+      sessionContext.current = undefined;
+      sessionConfig.current = {};
+      renderChat();
+      return next;
+    },
+    [renderChat, showToast],
+  );
+
+  const setChatModel = useCallback(
+    (modelId: string): void => {
+      if (!runnerConfig.current) return;
+      runnerConfig.current = { ...runnerConfig.current, selectedModelId: modelId };
+      renderChat();
+    },
+    [renderChat],
+  );
+
+  const setChatEffort = useCallback(
+    (effort: string): void => {
+      if (!runnerConfig.current) return;
+      runnerConfig.current = { ...runnerConfig.current, selectedEffortId: effort };
+      renderChat();
+    },
+    [renderChat],
+  );
+
   const commitRename = useCallback(
     (raw: string): void => {
       const next = raw.trim();
@@ -890,6 +1137,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     cancelTurn: () => agentAbort.current?.abort(),
     toggleGroup,
     setChatView: setChatViewCb,
+    setChatWorkspaceKind,
+    setChatRunner,
+    setChatModel,
+    setChatEffort,
     setTab: setTabCb,
     setPreviewDevice: setPreviewDeviceCb,
     commitRename,

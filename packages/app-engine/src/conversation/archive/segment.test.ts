@@ -37,10 +37,12 @@ describe('archiveRange + readArchivedConversationSegment', () => {
       startedAt: daysAgo(120),
       inputTokens: 100,
       outputTokens: 50,
+      hydrationTokens: 24,
       costUsd: 0.02,
       stepCount: 2,
       toolCount: 1,
       model: 'gpt-test',
+      effort: 'high',
       ok: true,
     });
     seedTurn(journal, {
@@ -54,6 +56,7 @@ describe('archiveRange + readArchivedConversationSegment', () => {
       stepCount: 1,
       toolCount: 0,
       model: 'gpt-test',
+      effort: 'high',
       ok: false,
     });
 
@@ -105,7 +108,8 @@ describe('archiveRange + readArchivedConversationSegment', () => {
     const digest = journal
       .prepare(
         `SELECT run_count, ok_count, err_count, total_input_tokens, total_output_tokens,
-                total_cost_usd, step_count, tool_count, app_id, automation_ref, models_json
+                total_hydration_tokens, total_cost_usd, step_count, tool_count, app_id, automation_ref, models_json,
+                efforts_json
            FROM conversation_digest WHERE conversation_id = ?`,
       )
       .get('app/digest') as {
@@ -114,18 +118,21 @@ describe('archiveRange + readArchivedConversationSegment', () => {
       err_count: number;
       total_input_tokens: number;
       total_output_tokens: number;
+      total_hydration_tokens: number;
       total_cost_usd: number;
       step_count: number;
       tool_count: number;
       app_id: string;
       automation_ref: string;
       models_json: string;
+      efforts_json: string;
     };
     expect(digest.run_count).toBe(2);
     expect(digest.ok_count).toBe(1);
     expect(digest.err_count).toBe(1);
     expect(digest.total_input_tokens).toBe(110);
     expect(digest.total_output_tokens).toBe(55);
+    expect(digest.total_hydration_tokens).toBe(24);
     expect(digest.total_cost_usd).toBeCloseTo(0.03, 8);
     expect(digest.step_count).toBe(3);
     expect(digest.tool_count).toBe(1);
@@ -133,6 +140,15 @@ describe('archiveRange + readArchivedConversationSegment', () => {
     expect(digest.automation_ref).toBe('app/digest');
     const models = JSON.parse(digest.models_json) as { model: string; runs: number }[];
     expect(models.some((m) => m.model === 'gpt-test' && m.runs === 2)).toBe(true);
+    const efforts = JSON.parse(digest.efforts_json) as {
+      effort: string;
+      runs: number;
+      tokens: number;
+      cost: number;
+    }[];
+    expect(efforts).toHaveLength(1);
+    expect(efforts[0]).toMatchObject({ effort: 'high', runs: 2, tokens: 165 });
+    expect(efforts[0]!.cost).toBeCloseTo(0.03, 8);
 
     journal.close();
   });

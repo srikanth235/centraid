@@ -38,11 +38,119 @@ export interface SessionUpdateMapper {
   /** Merge a token breakdown read elsewhere (the `session/prompt` result). */
   foldTokenUsage: (source: Record<string, unknown>) => void;
   /** Everything folded so far, for the single end-of-turn `usage` event. */
-  usage: () => { tokens: TokenUsage; cost: UsageCost | undefined };
+  usage: () => {
+    tokens: TokenUsage;
+    cost: UsageCost | undefined;
+    context: { used?: number; size?: number } | undefined;
+  };
 }
 
 type ToolDiff = { path?: string; oldText?: string; newText?: string };
 type PlanEntry = { content: string; status?: string; priority?: string };
+type ToolLocation = { path: string; line?: number };
+type InlineArtifact = { dataBase64: string; mime: string; filename?: string };
+
+function normalizeLocations(value: unknown): ToolLocation[] {
+  if (!Array.isArray(value)) return [];
+  const out: ToolLocation[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.path !== 'string' || rec.path.length === 0) continue;
+    out.push({
+      path: rec.path,
+      ...(typeof rec.line === 'number' && Number.isFinite(rec.line) ? { line: rec.line } : {}),
+    });
+  }
+  return out;
+}
+
+/** ACP blocks with bytes but no workspace location become CAS artifacts. */
+function extractInlineArtifacts(value: unknown): InlineArtifact[] {
+  const content = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { content?: unknown }).content)
+      ? (value as { content: unknown[] }).content
+      : [];
+  const out: InlineArtifact[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const rec = block as Record<string, unknown>;
+    if (rec.type === 'content') {
+      const text = textOf(rec.content);
+      if (text) {
+        out.push({
+          dataBase64: Buffer.from(text).toString('base64'),
+          mime: 'text/plain',
+          filename: 'tool-output.txt',
+        });
+      }
+      continue;
+    }
+    if (rec.type === 'terminal') {
+      const text = firstString(rec.output, rec.text);
+      if (text) {
+        out.push({
+          dataBase64: Buffer.from(text).toString('base64'),
+          mime: 'text/plain',
+          filename: 'terminal-output.txt',
+        });
+      }
+      continue;
+    }
+    if (
+      (rec.type === 'image' || rec.type === 'audio') &&
+      typeof rec.data === 'string' &&
+      rec.data.length > 0
+    ) {
+      out.push({
+        dataBase64: rec.data,
+        mime: typeof rec.mimeType === 'string' ? rec.mimeType : 'application/octet-stream',
+      });
+      continue;
+    }
+    if (rec.type !== 'resource' || !rec.resource || typeof rec.resource !== 'object') continue;
+    const resource = rec.resource as Record<string, unknown>;
+    const blob =
+      typeof resource.blob === 'string'
+        ? resource.blob
+        : typeof resource.text === 'string'
+          ? Buffer.from(resource.text).toString('base64')
+          : undefined;
+    if (!blob) continue;
+    const uri = typeof resource.uri === 'string' ? resource.uri : undefined;
+    out.push({
+      dataBase64: blob,
+      mime: typeof resource.mimeType === 'string' ? resource.mimeType : 'application/octet-stream',
+      ...(uri ? { filename: uri.split('/').at(-1) || 'artifact' } : {}),
+    });
+  }
+  return out;
+}
+
+function renderableToolContent(value: unknown): unknown[] {
+  const content = Array.isArray(value)
+    ? value
+    : value && typeof value === 'object' && Array.isArray((value as { content?: unknown }).content)
+      ? (value as { content: unknown[] }).content
+      : [];
+  return content.flatMap((block) => {
+    if (!block || typeof block !== 'object') return [];
+    const rec = block as Record<string, unknown>;
+    if (rec.type === 'content') return [rec.content];
+    if (rec.type === 'terminal') {
+      return [
+        {
+          type: 'terminal',
+          ...(typeof rec.terminalId === 'string' ? { terminalId: rec.terminalId } : {}),
+          ...(typeof rec.output === 'string' ? { output: rec.output } : {}),
+          ...(typeof rec.text === 'string' ? { text: rec.text } : {}),
+        },
+      ];
+    }
+    return [];
+  });
+}
 
 /** Pull `type: "diff"` content blocks out of ACP tool content arrays. */
 export function extractToolDiffs(content: unknown): ToolDiff[] {
@@ -111,6 +219,7 @@ export function createSessionUpdateMapper(
   const toolDone = new Set<string>();
   let usageTokens: TokenUsage = {};
   let usageCost: UsageCost | undefined;
+  let contextUsage: { used?: number; size?: number } | undefined;
 
   const ensureStarted = (): void => {
     if (sentAssistantStart) return;
@@ -134,12 +243,59 @@ export function createSessionUpdateMapper(
     if (toolDone.has(id)) return;
     toolDone.add(id);
     const ok = status === 'completed';
-    const result = update.rawOutput ?? update.content ?? null;
+    const renderableContent = renderableToolContent(update.content);
+    const result =
+      update.rawOutput && typeof update.rawOutput === 'object' && !Array.isArray(update.rawOutput)
+        ? {
+            ...(update.rawOutput as Record<string, unknown>),
+            ...(renderableContent.length
+              ? {
+                  content: renderableContent,
+                  // The agent's own `rawOutput.content` is its payload, not
+                  // our renderable projection — overwriting the key would
+                  // silently drop tool output the agent chose to return.
+                  ...((update.rawOutput as Record<string, unknown>).content !== undefined
+                    ? { rawOutputContent: (update.rawOutput as Record<string, unknown>).content }
+                    : {}),
+                }
+              : {}),
+          }
+        : renderableContent.length
+          ? { rawOutput: update.rawOutput ?? null, content: renderableContent }
+          : (update.rawOutput ?? update.content ?? null);
     const errorText = ok ? undefined : textOf(update.content) || 'tool call failed';
     let diffs = extractToolDiffs(update.content);
     // Also scan rawOutput for nested content blocks.
     if (diffs.length === 0 && update.rawOutput !== undefined) {
       diffs = extractToolDiffs(update.rawOutput);
+    }
+    const locations = normalizeLocations(update.locations);
+    const artifacts = extractInlineArtifacts(update.content);
+    const hasTerminal = Array.isArray(update.content)
+      ? update.content.some(
+          (block) =>
+            !!block &&
+            typeof block === 'object' &&
+            (block as Record<string, unknown>).type === 'terminal',
+        )
+      : false;
+    if (
+      hasTerminal &&
+      !artifacts.some((artifact) => artifact.filename === 'terminal-output.txt') &&
+      update.rawOutput !== undefined
+    ) {
+      const raw =
+        typeof update.rawOutput === 'string'
+          ? update.rawOutput
+          : JSON.stringify(update.rawOutput, null, 2);
+      if (raw) {
+        artifacts.push({
+          dataBase64: Buffer.from(raw).toString('base64'),
+          mime: typeof update.rawOutput === 'string' ? 'text/plain' : 'application/json',
+          filename:
+            typeof update.rawOutput === 'string' ? 'terminal-output.txt' : 'terminal-output.json',
+        });
+      }
     }
     emit({
       type: 'tool.result',
@@ -150,6 +306,8 @@ export function createSessionUpdateMapper(
       rawJson: JSON.stringify(update),
       ...(errorText ? { errorText } : {}),
       ...(diffs.length ? { diffs } : {}),
+      ...(locations.length ? { locations } : {}),
+      ...(artifacts.length ? { artifacts } : {}),
     });
     // Builder-friendly parallel signal: each file change as a phase so UIs
     // that only listen for `phase` still see diffs.
@@ -221,8 +379,28 @@ export function createSessionUpdateMapper(
       usageTokens = { ...usageTokens, ...readTokenUsage(update) };
       const cost = readCost(update.cost);
       if (cost) usageCost = cost;
+      const used =
+        typeof update.used === 'number' && Number.isFinite(update.used) && update.used >= 0
+          ? update.used
+          : undefined;
+      const size =
+        typeof update.size === 'number' && Number.isFinite(update.size) && update.size > 0
+          ? update.size
+          : undefined;
+      if (used !== undefined || size !== undefined) {
+        // ACP sessions may self-compact, so `used` is deliberately a latest
+        // snapshot rather than a monotonic max.
+        contextUsage = {
+          ...(used !== undefined ? { used } : {}),
+          ...(size !== undefined ? { size } : {}),
+        };
+        emit({ type: 'context', ...contextUsage });
+      }
+      return;
     }
-    // user_message_chunk / available_commands_update / current_mode_update:
+    // user_message_chunk / available_commands_update / current_mode_update /
+    // config_option_update: product owns slash commands; config updates are
+    // consumed by the backend's pin state.
     // product owns slash commands; agent command lists are ignored for now.
   };
 
@@ -233,6 +411,6 @@ export function createSessionUpdateMapper(
     foldTokenUsage: (source) => {
       usageTokens = { ...usageTokens, ...readTokenUsage(source) };
     },
-    usage: () => ({ tokens: usageTokens, cost: usageCost }),
+    usage: () => ({ tokens: usageTokens, cost: usageCost, context: contextUsage }),
   };
 }

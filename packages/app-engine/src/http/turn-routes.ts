@@ -31,15 +31,20 @@ import type { ConversationRunner } from '../conversation/runner.js';
 import type { ConversationHistoryStore } from '../conversation/history.js';
 import {
   driveTurnOverSse,
+  parseAdditionalDirectories,
+  parseWorkspaceKind,
   parseTurnAttachmentRefs,
   resolveTurnAttachments,
+  validateTurnAttachmentRefs,
   type TurnAttachmentRef,
 } from './turn-sse.js';
 import type { TurnLimiter } from './turn-limiter.js';
 import type { Registry } from '../registry/registry.js';
 import { appDataDir } from '../registry/app-paths.js';
 import type { RegistryEntry } from '../types.js';
+import { isRunnerKind } from '../conversation/turn.js';
 import { APP_MANIFEST_FILE, parseManifest, type Manifest } from '../registry/manifest.js';
+import type { ConversationWorkspaceKind } from '../conversation/schema.js';
 
 /**
  * Validate a chat-session id. Reject anything that could escape a
@@ -103,6 +108,14 @@ export interface TurnRouteContext {
    * system prompt. Returns undefined when the app has no live code.
    */
   resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>;
+  /**
+   * Resolve the only primary workspace roots the client may choose. The host
+   * owns these paths; the wire carries enum values, never primary paths.
+   */
+  workspaceRoots?: (
+    entry: RegistryEntry,
+    conversationId: string,
+  ) => Promise<Partial<Record<ConversationWorkspaceKind, string>>>;
   runner?: ConversationRunner;
   /**
    * Optional central chat store. When set, the route reads the session's
@@ -185,12 +198,16 @@ interface PostBody {
   /** Chat register: 'ask' = the app copilot; absent/'build' = builder chat. */
   register?: string;
   model?: string;
+  runnerKind?: string;
   thinking?: string;
   idempotencyKey?: string;
   /** Regenerate: the turn id this turn re-runs (issue #420). */
   retryOf?: string;
   /** Attachments uploaded ahead of this turn (issue #190). */
   attachments?: TurnAttachmentRef[];
+  providerConsent?: unknown;
+  workspaceKind?: unknown;
+  additionalDirectories?: unknown;
 }
 
 /**
@@ -297,6 +314,27 @@ async function handlePostTurn(
     sendError(res, 400, 'bad_request', 'Invalid conversationId.');
     return;
   }
+  // A client accumulates provider consents over a conversation and re-sends
+  // the whole set, so a second cross-provider switch cannot revoke the first.
+  // A bare string stays wire-valid and means a one-element set (issue #567).
+  const providerConsent = Array.isArray(body.providerConsent)
+    ? body.providerConsent
+    : body.providerConsent === undefined
+      ? []
+      : [body.providerConsent];
+  if (!providerConsent.every((kind) => isRunnerKind(kind))) {
+    sendError(res, 400, 'bad_request', 'providerConsent must name registered runners.');
+    return;
+  }
+  if (body.runnerKind !== undefined && !isRunnerKind(body.runnerKind)) {
+    sendError(res, 400, 'bad_request', 'runnerKind must name a registered runner.');
+    return;
+  }
+  const requestedWorkspaceKind = parseWorkspaceKind(body.workspaceKind);
+  if (body.workspaceKind !== undefined && !requestedWorkspaceKind) {
+    sendError(res, 400, 'bad_request', 'workspaceKind must be one of vault-data, app, or draft.');
+    return;
+  }
 
   // Resolve runner-resume handles from the central session row when a
   // chat store is wired. The chat surface is one mode — no per-session
@@ -310,7 +348,11 @@ async function handlePostTurn(
       sendError(res, 404, 'not_found', 'No such chat session.');
       return;
     }
-    const resume = ctx.conversationStore.getAdapterResumeState(entry.id, conversationId);
+    const resume = ctx.conversationStore.getAdapterResumeState(
+      entry.id,
+      conversationId,
+      isRunnerKind(body.runnerKind) ? body.runnerKind : undefined,
+    );
     prevAdapterSessionId = resume?.sessionId;
     prevAdapterKind = resume?.kind;
     prevAdapterUsageSnapshot = resume?.usageSnapshot;
@@ -320,8 +362,52 @@ async function handlePostTurn(
   // live in the per-app blob CAS, keyed by sha256. We resolve each to its
   // on-disk path so the adapter can build an image/document content block, and
   // keep the refs to record `attachments` rows on the turn's `message_in` item.
-  const attachmentRefs: TurnAttachmentRef[] = parseTurnAttachmentRefs(body.attachments);
+  const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
+    ctx.conversationStore,
+    entry.id,
+    parseTurnAttachmentRefs(body.attachments),
+  );
   const turnAttachments = resolveTurnAttachments(ctx.conversationStore, entry.id, attachmentRefs);
+  const savedWorkspace = ctx.conversationStore?.getWorkspaceSelection(entry.id, conversationId);
+  const workspaceRoots = ctx.workspaceRoots
+    ? await ctx.workspaceRoots(entry, conversationId)
+    : { app: appDataDir(entry) };
+  const defaultWorkspaceKind: ConversationWorkspaceKind =
+    body.register !== 'ask' && workspaceRoots.draft ? 'draft' : 'app';
+  const workspaceKind =
+    requestedWorkspaceKind ?? savedWorkspace?.primaryKind ?? defaultWorkspaceKind;
+  const unresolvedWorkspaceDirectory = workspaceRoots[workspaceKind];
+  if (!unresolvedWorkspaceDirectory) {
+    sendError(res, 400, 'bad_request', `The ${workspaceKind} workspace is unavailable here.`);
+    return;
+  }
+  let workspaceDirectory: string;
+  let additionalDirectories = savedWorkspace?.additionalDirectories ?? [];
+  try {
+    workspaceDirectory = await fs.realpath(unresolvedWorkspaceDirectory);
+    if (body.additionalDirectories !== undefined) {
+      additionalDirectories = await parseAdditionalDirectories(body.additionalDirectories);
+    }
+  } catch (err) {
+    sendError(
+      res,
+      400,
+      'bad_request',
+      err instanceof Error ? err.message : 'Invalid workspace selection.',
+    );
+    return;
+  }
+  additionalDirectories = additionalDirectories.filter(
+    (directory) => directory !== workspaceDirectory,
+  );
+  if (ctx.conversationStore) {
+    ctx.conversationStore.setWorkspaceSelection(
+      entry.id,
+      conversationId,
+      workspaceKind,
+      additionalDirectories,
+    );
+  }
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
   const manifest = await safeReadManifest(entry, ctx.resolveCodeDir);
@@ -339,6 +425,8 @@ async function handlePostTurn(
     conversationId,
     message,
     dataDir: appDataDir(entry),
+    workspaceKind,
+    workspaceDirectory,
     extraSystemPrompt,
     runner: ctx.runner,
     conversationStore: ctx.conversationStore,
@@ -347,7 +435,10 @@ async function handlePostTurn(
     banner: `chat ${entry.id} session ${conversationId}`,
     register: body.register === 'ask' ? 'ask' : body.register === 'build' ? 'build' : undefined,
     model: body.model,
+    ...(isRunnerKind(body.runnerKind) ? { runnerKind: body.runnerKind } : {}),
     thinking: body.thinking,
+    ...(providerConsent.length > 0 ? { providerConsent } : {}),
+    ...(additionalDirectories.length ? { additionalDirectories } : {}),
     idempotencyKey: body.idempotencyKey,
     ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
     ...(ctx.turnLimiter ? { limiter: ctx.turnLimiter() } : {}),

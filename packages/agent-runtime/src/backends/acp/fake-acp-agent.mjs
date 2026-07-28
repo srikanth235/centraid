@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#567) one scripted JSON-RPC fixture covers the shared ACP lifecycle; splitting modes would duplicate protocol state and weaken cross-mode parity
 /*
  * Scripted fake ACP agent — a test fixture, not shipped code.
  *
@@ -19,6 +20,12 @@
  *                   `mcpServers` — unauthenticated probe, initialize,
  *                   tools/list, tools/call — and report what happened
  *   --mode=auth     reject session/new with ACP's AUTH_REQUIRED (-32000)
+ *   --mode=auth-prompt accept session/new, then reject the diagnostic prompt
+ *                   with an auth-ish Internal error (real Claude failure shape)
+ *   --mode=quota    reject session/new with a rate-limit error
+ *   --mode=timeout  never answer initialize/session setup
+ *   --mode=wedge    start a prompt and emit no events or result
+ *   --mode=crash    exit abnormally after accepting a prompt
  *   --mode=refusal  complete session/prompt with stopReason=refusal
  *   --mode=max_tokens complete with stopReason=max_tokens after some text
  *   --mode=resume-cap  like resume but via session/resume (no history replay)
@@ -40,6 +47,16 @@
  *   --config-marker=<path>  write `<configId>=<value>` on session/set_config_option
  *   --mode-marker=<path>    write the modeId on session/set_mode
  *   --no-model-option       advertise NO model selector (config-option-less agent)
+ *   --no-effort-option      advertise model but no thought_level selector
+ *   --no-usage-update       omit the optional usage_update notification
+ *   --no-locations          omit tool-call workspace locations
+ *   --no-config-update      omit config_option_update notifications
+ *   --midturn-model=<value> mid-prompt, switch the active model and announce
+ *                           the new full config set (config_option_update)
+ *   --midturn-drop-effort   mid-prompt, announce a config set with NO
+ *                           thought_level option (the agent withdrew it)
+ *   --ignore-stdin-end      survive stdin end AND SIGTERM (teardown escalation
+ *                           probe — only SIGKILL stops this process)
  *   --pid-marker=<path>     write this process's pid at startup (liveness probe)
  *   --cost=<amount>         emit a usage_update carrying this cumulative cost
  *   --currency=<code>       ISO 4217 code for --cost (default USD)
@@ -54,6 +71,10 @@
 import { writeFileSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
+if (argv.includes('--version')) {
+  process.stdout.write('fake-acp 1.0.0\n');
+  process.exit(0);
+}
 const flag = (name) => {
   const hit = argv.find((a) => a.startsWith(`--${name}=`));
   return hit ? hit.slice(name.length + 3) : undefined;
@@ -66,6 +87,13 @@ const configMarker = flag('config-marker');
 const modeMarker = flag('mode-marker');
 const envMarker = flag('env-marker');
 const noModelOption = has('no-model-option');
+const noEffortOption = has('no-effort-option');
+const noUsageUpdate = has('no-usage-update');
+const noLocations = has('no-locations');
+const noConfigUpdate = has('no-config-update');
+const midturnModel = flag('midturn-model');
+const midturnDropEffort = has('midturn-drop-effort');
+const ignoreStdinEnd = has('ignore-stdin-end');
 const cost = flag('cost');
 const currency = flag('currency') ?? 'USD';
 const mcpMarker = flag('mcp-marker');
@@ -74,6 +102,7 @@ const vaultMarker = flag('vault-marker');
 const mcpAnnounce = has('mcp-announce');
 const mcpHttp = has('mcp-http');
 const sessionResume = has('session-resume') || mode === 'resume-cap';
+const failResume = has('fail-resume');
 const sessionClose = has('session-close');
 const sessionAddlDirs = has('session-addl-dirs');
 const pidMarker = flag('pid-marker');
@@ -105,23 +134,52 @@ if (pidMarker) writeFileSync(pidMarker, String(process.pid));
 
 if (mode === 'exit') process.exit(1);
 
-/** A `session/new`/`session/load` config-option set shaped like the real schema. */
-const configOptions = () =>
-  noModelOption
-    ? []
+let activeModel = 'fake-model-default';
+let activeEffort = 'default';
+
+const effortValues = () =>
+  activeModel === 'fake-opus-9-1'
+    ? [
+        { value: 'default', name: 'Default' },
+        { value: 'medium', name: 'Medium' },
+        { value: 'high', name: 'High' },
+      ]
     : [
+        { value: 'default', name: 'Default' },
+        { value: 'low', name: 'Low' },
+        { value: 'medium', name: 'Medium' },
+      ];
+
+/** A `session/new`/`session/load` config-option set shaped like the real schema. */
+const configOptions = () => [
+  ...(!noModelOption
+    ? [
         {
           id: 'model',
           name: 'Model',
           category: 'model',
           type: 'select',
-          currentValue: 'fake-model-default',
+          currentValue: activeModel,
           options: [
             { value: 'fake-model-default', name: 'Default' },
             { value: 'fake-opus-9-1', name: 'Most capable' },
           ],
         },
-      ];
+      ]
+    : []),
+  ...(!noEffortOption
+    ? [
+        {
+          id: 'effort',
+          name: 'Effort',
+          category: 'thought_level',
+          type: 'select',
+          currentValue: activeEffort,
+          options: effortValues(),
+        },
+      ]
+    : []),
+];
 
 const sessionModes = () => ({
   currentModeId: 'default',
@@ -240,6 +298,8 @@ async function runVaultPrompt(reqId, sessionId) {
 
 async function runPrompt(reqId, sessionId) {
   if (mode === 'vault') return runVaultPrompt(reqId, sessionId);
+  if (mode === 'wedge') return;
+  if (mode === 'crash') process.exit(2);
 
   if (mode === 'cancel') {
     update(sessionId, {
@@ -311,7 +371,16 @@ async function runPrompt(reqId, sessionId) {
         oldText: 'a',
         newText: 'b',
       },
+      {
+        type: 'content',
+        content: { type: 'text', text: 'notes updated' },
+      },
+      {
+        type: 'terminal',
+        terminalId: 'term-1',
+      },
     ],
+    ...(!noLocations ? { locations: [{ path: 'notes.txt', line: 1 }] } : {}),
     rawOutput: { ok: true },
   });
   update(sessionId, {
@@ -319,13 +388,27 @@ async function runPrompt(reqId, sessionId) {
     content: { type: 'text', text: 'world' },
   });
 
+  // A mid-turn configuration change, announced the way the schema defines it:
+  // `configOptions` is the FULL set, so anything absent has been withdrawn.
+  if (midturnModel !== undefined || midturnDropEffort) {
+    if (midturnModel !== undefined) activeModel = midturnModel;
+    update(sessionId, {
+      sessionUpdate: 'config_option_update',
+      configOptions: midturnDropEffort
+        ? configOptions().filter((option) => option.category !== 'thought_level')
+        : configOptions(),
+    });
+  }
+
   // Per schema: context used/size, plus a CUMULATIVE cost. No tokens here.
-  update(sessionId, {
-    sessionUpdate: 'usage_update',
-    used: 1234,
-    size: 200000,
-    ...(cost !== undefined ? { cost: { amount: Number(cost), currency } } : {}),
-  });
+  if (!noUsageUpdate) {
+    update(sessionId, {
+      sessionUpdate: 'usage_update',
+      used: 1234,
+      size: 200000,
+      ...(cost !== undefined ? { cost: { amount: Number(cost), currency } } : {}),
+    });
+  }
 
   // The authoritative token breakdown rides on the prompt RESULT.
   respond(reqId, {
@@ -346,17 +429,28 @@ let promptSessionId;
 
 function handle(msg) {
   // Response to our client→agent request (permission).
-  if (typeof msg.id === 'number' && msg.result !== undefined && !msg.method) {
+  if (
+    typeof msg.id === 'number' &&
+    (msg.result !== undefined || msg.error !== undefined) &&
+    !msg.method
+  ) {
     const resolve = pendingClient.get(msg.id);
     if (resolve) {
       pendingClient.delete(msg.id);
-      resolve(msg.result && msg.result.outcome ? msg.result.outcome : msg.result);
+      resolve(
+        msg.error !== undefined
+          ? { outcome: 'cancelled' }
+          : msg.result && msg.result.outcome
+            ? msg.result.outcome
+            : msg.result,
+      );
     }
     return;
   }
 
   const { id, method, params } = msg;
   if (method === 'initialize') {
+    if (mode === 'timeout') return;
     const sessionCapabilities = {};
     if (sessionResume) sessionCapabilities.resume = {};
     if (sessionClose) sessionCapabilities.close = {};
@@ -387,11 +481,31 @@ function handle(msg) {
       });
       return;
     }
+    if (mode === 'quota') {
+      send({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32029, message: 'Rate limit exceeded; quota resets later' },
+      });
+      return;
+    }
     respond(id, { sessionId: 'sess-1', configOptions: configOptions(), modes: sessionModes() });
     return;
   }
   if (method === 'session/set_config_option') {
+    if (params?.configId === 'model') {
+      activeModel = String(params?.value);
+      if (!effortValues().some((entry) => entry.value === activeEffort)) activeEffort = 'default';
+    } else if (params?.configId === 'effort') {
+      activeEffort = String(params?.value);
+    }
     if (configMarker) writeFileSync(configMarker, `${params?.configId}=${params?.value}`);
+    if (!noConfigUpdate) {
+      update(params?.sessionId ?? 'sess-1', {
+        sessionUpdate: 'config_option_update',
+        configOptions: configOptions(),
+      });
+    }
     respond(id, { configOptions: configOptions() });
     return;
   }
@@ -401,6 +515,10 @@ function handle(msg) {
     return;
   }
   if (method === 'session/resume') {
+    if (failResume) {
+      send({ jsonrpc: '2.0', id, error: { code: -32001, message: 'resume handle expired' } });
+      return;
+    }
     if (mcpMarker) writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
     mcpServer = pickMcpServer(params?.mcpServers);
     // No history replay — that is the whole point of resume vs load.
@@ -412,6 +530,10 @@ function handle(msg) {
     return;
   }
   if (method === 'session/load') {
+    if (failResume) {
+      send({ jsonrpc: '2.0', id, error: { code: -32001, message: 'load handle expired' } });
+      return;
+    }
     if (mcpMarker) writeFileSync(mcpMarker, JSON.stringify(params?.mcpServers ?? null));
     mcpServer = pickMcpServer(params?.mcpServers);
     const sid = params?.sessionId ?? 'sess-1';
@@ -429,6 +551,14 @@ function handle(msg) {
   }
   if (method === 'session/prompt') {
     if (promptMarker) writeFileSync(promptMarker, JSON.stringify(params?.prompt ?? null));
+    if (mode === 'auth-prompt') {
+      send({
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32603, message: 'Failed to authenticate: OAuth session expired' },
+      });
+      return;
+    }
     promptReqId = id;
     promptSessionId = params?.sessionId;
     void runPrompt(id, params?.sessionId);
@@ -466,7 +596,13 @@ process.stdin.on('data', (chunk) => {
     nl = buffer.indexOf('\n');
   }
 });
-// Client closed stdin → teardown. Exit cleanly so the parent's exit wait resolves.
-process.stdin.on('end', () => process.exit(0));
-process.stdin.on('close', () => process.exit(0));
+// Client closed stdin → teardown. Exit cleanly so the parent's exit wait
+// resolves. `--ignore-stdin-end` models the agent that honours NEITHER stdin
+// close nor SIGTERM: only SIGKILL ends it.
+if (!ignoreStdinEnd) {
+  process.stdin.on('end', () => process.exit(0));
+  process.stdin.on('close', () => process.exit(0));
+} else {
+  setInterval(() => {}, 1000);
+}
 void promptSessionId;

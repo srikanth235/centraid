@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#567) one fire-spine suite shares the real worker, stable automation conversation, audit store, failover notice, and onFailure fixtures
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Automation fire spine (issue #147, Concern 2). The per-fire orchestration
@@ -12,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
+  ConversationHistoryStore,
   ConversationStore,
   makeJournalDbProvider,
   setPricingCatalog,
@@ -94,6 +96,52 @@ describe('runFire', () => {
     expect(opened[0]!.automationRef).toBe('notes/digest');
     expect(opened[0]!.workdir).toMatch(/notes[/\\]automations[/\\]digest$/);
     expect(closes.n).toBe(1);
+  });
+
+  it('persists a failover boundary as a transcript notice that survives reload', async () => {
+    await writeAutomation(appsDir, 'notes', 'digest', manifest());
+    const notice = 'codex failed at the automation fire boundary (quota). Continuing with copilot.';
+    const { record } = await runFire(
+      {
+        automationRef: 'notes/digest',
+        appsDir,
+        journalDbFile,
+        runId: 'failover-attempt',
+        runnerKind: 'copilot',
+        note: notice,
+        failoverNotice: notice,
+      },
+      { openDispatch: stubDispatch([], { n: 0 }) },
+    );
+
+    const journal = makeJournalDbProvider(journalDbFile);
+    const store = new ConversationStore(journal);
+    expect(store.listItems(record.runId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'step',
+          name: 'notice:warn:failover',
+          outputJson: JSON.stringify({ text: notice }),
+        }),
+      ]),
+    );
+    store.close();
+
+    const history = new ConversationHistoryStore(() => ({
+      vaultId: 'vault-test',
+      ownerPartyId: '',
+      appsDir,
+      journal,
+      journalDbFile,
+      runnerSessionDir: path.join(appsDir, 'runner-sessions'),
+    }));
+    expect(history.getSession('notes', 'notes/digest')?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({ kind: 'notice', level: 'warn', text: notice }),
+        }),
+      ]),
+    );
   });
 
   it('injects one fire-start instant as deterministic ctx.now', async () => {
@@ -237,7 +285,7 @@ describe('runFire', () => {
     expect(agentNode!.costUsd).toBe(0.005);
     expect(agentNode!.costSource).toBe('agent');
     const run = store.getTurn(record.runId);
-    expect(run?.conversationId).toBe('notes/ask::runner:codex');
+    expect(run?.conversationId).toBe('notes/ask');
     expect(run?.totalInputTokens).toBe(12);
     expect(run?.totalOutputTokens).toBe(3);
     store.close();
@@ -479,11 +527,49 @@ describe('runFire', () => {
       ['notes/recover', 'claude-code', 'recovery-model'],
     ]);
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
-    expect(store.getConversation('notes/main::runner:codex')?.adapterKind).toBe('codex');
-    expect(store.getConversation('notes/recover::runner:claude-code')?.adapterKind).toBe(
-      'claude-code',
-    );
+    expect(store.getConversation('notes/main')?.adapterKind).toBe('codex');
+    expect(store.getConversation('notes/recover')?.adapterKind).toBe('claude-code');
     store.close();
     expect(closes.n).toBe(2);
+  });
+
+  it('settles the turn and keeps a successful outcome when finalization fails', async () => {
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'settle',
+      manifest({ name: 'Settle' }),
+      'export default async () => ({ summary: "handler did its work" });',
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async () => '',
+        finalizeTurn() {
+          throw new Error('harness binding write failed');
+        },
+        async close() {},
+      });
+
+    const { outcome, record } = await runFire(
+      { automationRef: 'notes/settle', appsDir, journalDbFile, runnerKind: 'codex' },
+      { openDispatch: dispatch },
+    );
+
+    // The handler succeeded; a host-side binding write did not. The outcome
+    // must not be rewritten to failed (that would cascade onFailure).
+    expect(outcome.ok).toBe(true);
+
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const turn = store.getTurn(record.runId);
+    // The failed transaction rolled its own finishTurn back; the turn is still
+    // settled durably rather than left running forever.
+    expect(turn?.endedAt).toBeTypeOf('number');
+    expect(turn?.ok).toBe(true);
+    expect(turn?.error).toContain('harness binding write failed');
+    const notice = store
+      .listItems(record.runId)
+      .find((i) => i.name === 'notice:error:finalization');
+    expect(notice?.ok).toBe(false);
+    store.close();
   });
 });

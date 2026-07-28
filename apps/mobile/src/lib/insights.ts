@@ -64,6 +64,7 @@ export interface GatewayHealth {
 
 export interface InsightsKpis {
   totalTokens: number;
+  hydrationTokens: number;
   totalCostUsd: number;
   forecastCostUsd: number;
   generations: number;
@@ -87,6 +88,13 @@ export interface InsightsModelRow {
   costUsd: number;
 }
 
+export interface InsightsEffortRow {
+  effort: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
 export interface InsightsActivityRow {
   runId: string;
   kind: string;
@@ -94,7 +102,9 @@ export interface InsightsActivityRow {
   ok: boolean;
   startedAt: number;
   tokens: number;
+  hydrationTokens: number;
   costUsd: number;
+  effort?: string;
 }
 
 export interface InsightsSummary {
@@ -103,6 +113,7 @@ export interface InsightsSummary {
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
   byModel: InsightsModelRow[];
+  byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];
 }
 

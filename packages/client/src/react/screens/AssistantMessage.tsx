@@ -10,8 +10,7 @@ import Icon from '../ui/Icon.js';
 import asstPreCss from '../styles/asstPre.module.css';
 import { formatUsageLabel, formatUsageTitle } from './assistantUsage.js';
 
-// Thumbs glyphs — not in the design-tokens icon set, so small local SVGs
-// (mirrors AssistantScreen's PaperclipGlyph pattern).
+// Thumbs glyphs — not in the design-tokens icon set, so small local SVGs.
 function ThumbUpGlyph(): JSX.Element {
   return (
     <svg
@@ -146,7 +145,14 @@ function ToolsMsg({
   calls,
 }: {
   label: string;
-  calls: { tool: string; sql?: string; state: string; meta: string }[];
+  calls: {
+    tool: string;
+    sql?: string;
+    state: string;
+    meta: string;
+    outputText?: string;
+    artifacts?: Array<{ label: string; hash?: string; workspacePath?: string }>;
+  }[];
 }): JSX.Element {
   return (
     <div className={styles.msg}>
@@ -156,6 +162,24 @@ function ToolsMsg({
           {calls.map((c, i) => (
             <div key={i} className={styles.tool} data-state={c.state}>
               {c.sql ? <pre className={asstPreCss.asstPre}>{c.sql}</pre> : <span>{c.tool}</span>}
+              {c.outputText ? <pre className={asstPreCss.asstPre}>{c.outputText}</pre> : null}
+              {c.artifacts?.length ? (
+                <div className={styles.toolArtifacts}>
+                  {c.artifacts.map((artifact, artifactIndex) => (
+                    <span
+                      key={`${artifact.label}-${artifactIndex}`}
+                      className={styles.toolArtifact}
+                      title={
+                        artifact.workspacePath ??
+                        (artifact.hash ? `sha256 ${artifact.hash}` : artifact.label)
+                      }
+                    >
+                      <Icon name="FileEdit" size={12} />
+                      {artifact.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <div className={styles.toolMeta}>{c.meta}</div>
             </div>
           ))}

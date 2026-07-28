@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { createBrotliCompress, createGzip, constants } from 'node:zlib';
-import { negotiateEncoding } from '@centraid/app-engine';
+import { isRunnerKind, negotiateEncoding, type RunnerKind } from '@centraid/app-engine';
 import {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
@@ -192,4 +192,20 @@ export async function fileExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Parse a turn body's `providerConsent`. Clients answer an egress prompt with
+ * one runner or, when a ladder attempt names several, an array of them — both
+ * shapes reach every gateway turn route, so both are accepted here.
+ *
+ * Returns `undefined` for an absent field and `'invalid'` when any entry is not
+ * a registered runner, so the caller can answer 400 rather than dropping it.
+ */
+export function parseProviderConsent(value: unknown): RunnerKind[] | undefined | 'invalid' {
+  if (value === undefined) return undefined;
+  const values = Array.isArray(value) ? value : [value];
+  if (values.length === 0) return undefined;
+  if (!values.every((entry): entry is RunnerKind => isRunnerKind(entry))) return 'invalid';
+  return values;
 }

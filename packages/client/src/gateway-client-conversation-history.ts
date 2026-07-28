@@ -104,6 +104,16 @@ export async function loadConversation(
     hasArchivedHistory?: boolean;
     archivedTurnCount?: number;
     archiveUnavailable?: boolean;
+    /**
+     * The conversation's persisted workspace selection (#567): the Centraid-owned
+     * primary root plus any owner-approved extra directories. Absent on
+     * conversations created before the selector existed.
+     */
+    workspace?: {
+      primaryKind: 'vault-data' | 'app' | 'draft';
+      additionalDirectories: string[];
+      updatedAt: number;
+    };
   }
 > {
   const { baseUrl, token } = await auth();

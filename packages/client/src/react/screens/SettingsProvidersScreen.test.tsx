@@ -4,13 +4,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentsStatusDTO, SettingsProvidersBridgeProps } from '../screen-contracts.js';
 import SettingsProvidersScreen from './SettingsProvidersScreen.js';
 
+// Ladder membership is a consent decision, so it goes through the shell's own
+// confirm dialog (not `window.confirm`) — mocked here to drive the answer.
+const dialog = vi.hoisted(() => ({ openConfirm: vi.fn() }));
+vi.mock('../shell/confirm.js', () => dialog);
+
+/** `makeStatusBothConnected`, but Claude Code is also past its session preflight. */
+function withSessionReady(status: AgentsStatusDTO): AgentsStatusDTO {
+  return {
+    ...status,
+    cards: status.cards.map((card) =>
+      card.kind === 'claude-code' ? { ...card, sessionReady: true } : card,
+    ),
+  };
+}
+
 function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
   return {
     selectedKind: 'codex',
     anyLoading: false,
     savedModelByKind: { codex: 'gpt-5' },
     subsystemModelByKind: { codex: { assistant: 'gpt-5-mini' } },
+    defaultConfigPinsByKind: {},
+    subsystemConfigPinsByKind: {},
+    diagnosticsJson: '{}',
     subsystemRunnerByKey: {},
+    subsystemRunnerLadders: {},
     cards: [
       {
         kind: 'codex',
@@ -18,6 +37,7 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
         accent: '#10b981',
         subtitle: 'codex 1.2.3',
         connected: true,
+        sessionReady: true,
         modelsLoading: false,
         models: [
           { id: 'gpt-5', name: 'GPT-5', tier: 'smart', default: true },
@@ -30,6 +50,7 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
         accent: '#a855f7',
         subtitle: 'claude CLI not found on PATH',
         connected: false,
+        sessionReady: false,
         modelsLoading: false,
         models: [],
       },
@@ -63,8 +84,11 @@ function makeProps(over: Partial<SettingsProvidersBridgeProps> = {}): SettingsPr
     refreshModels: vi.fn().mockResolvedValue(makeStatus()),
     activateRunner: vi.fn().mockResolvedValue(true),
     setAgentModel: vi.fn(),
+    setAgentConfigPin: vi.fn(),
     setSubsystemModel: vi.fn(),
-    setSubsystemRunner: vi.fn(),
+    setSubsystemConfigPin: vi.fn(),
+    setSubsystemRunner: vi.fn().mockResolvedValue(true),
+    setSubsystemRunnerLadder: vi.fn(),
     ...over,
   };
 }
@@ -77,6 +101,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 async function mount(props: SettingsProvidersBridgeProps): Promise<HTMLDivElement> {
   container = document.createElement('div');
@@ -165,6 +190,57 @@ describe('SettingsProvidersScreen', () => {
     expect(props.setSubsystemRunner).toHaveBeenCalledWith('builder', '');
   });
 
+  it('requires explicit confirmation before adding ordered failover membership', async () => {
+    dialog.openConfirm.mockReset().mockResolvedValue(true);
+    const props = makeProps({
+      loadStatus: vi.fn().mockResolvedValue(withSessionReady(makeStatusBothConnected())),
+    });
+    const el = await mount(props);
+    await act(async () => {
+      await pick(sel(el, 'Add fallback agent for Assistant'), 'claude-code');
+    });
+    expect(dialog.openConfirm).toHaveBeenCalledOnce();
+    expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith('assistant', ['claude-code']);
+  });
+
+  it('will not offer an agent that has not passed its session preflight as a fallback', async () => {
+    // Unattended failover has nobody to answer an auth prompt, so `connected`
+    // alone is not enough to join the ladder.
+    const props = makeProps({
+      loadStatus: vi.fn().mockResolvedValue(makeStatusBothConnected()),
+    });
+    const el = await mount(props);
+    const add = sel(el, 'Add fallback agent for Assistant');
+    expect([...add.querySelectorAll('option')].map((option) => option.value)).toEqual(['']);
+    expect(add.disabled).toBe(true);
+  });
+
+  it('shows the stored ladder in full, including a member that is now the lane primary', async () => {
+    // D13: membership IS the consent record — filtering the resolved primary
+    // out of the display made the UI disagree with what the gateway holds.
+    const props = makeProps({
+      loadStatus: vi.fn().mockResolvedValue(
+        withSessionReady(
+          makeStatusBothConnected({
+            subsystemRunnerLadders: { assistant: ['codex', 'claude-code'] },
+          }),
+        ),
+      ),
+    });
+    const el = await mount(props);
+    expect(el.querySelector('[aria-label="Remove Codex from Assistant failover"]')).toBeTruthy();
+    // …and an edit re-saves the same membership rather than silently pruning it.
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>(
+        '[aria-label="Move Claude Code earlier for Assistant"]',
+      )?.click();
+    });
+    expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith('assistant', [
+      'claude-code',
+      'codex',
+    ]);
+  });
+
   it('names what an inheriting lane resolves to rather than saying "use default"', async () => {
     const el = await mount(makeProps());
     // Agent inherit option names the default agent…
@@ -246,6 +322,41 @@ describe('SettingsProvidersScreen', () => {
     expect(props.setAgentModel).toHaveBeenCalledWith('codex', 'gpt-5-mini');
   });
 
+  it('shows and saves effort only when the capability probe offers it', async () => {
+    const withEffort = makeStatus({
+      cards: makeStatus().cards.map((card) =>
+        card.kind === 'codex'
+          ? {
+              ...card,
+              configOptions: [
+                {
+                  id: 'thought',
+                  category: 'thought_level',
+                  type: 'select',
+                  currentValue: 'medium',
+                  values: [
+                    { value: 'medium', name: 'Medium' },
+                    { value: 'high', name: 'High' },
+                  ],
+                },
+              ],
+            }
+          : card,
+      ),
+    });
+    const props = makeProps({ loadStatus: vi.fn().mockResolvedValue(withEffort) });
+    const el = await mount(props);
+    await pick(sel(el, 'Effort for Assistant'), 'high');
+    expect(props.setSubsystemConfigPin).toHaveBeenCalledWith(
+      'codex',
+      'assistant',
+      'thought_level',
+      'high',
+    );
+    await pick(sel(el, 'Default effort for Codex'), 'high');
+    expect(props.setAgentConfigPin).toHaveBeenCalledWith('codex', 'thought_level', 'high');
+  });
+
   it('no longer exposes a per-agent tool listing — Connections owns that', async () => {
     const el = await mount(makeProps());
     expect(el.querySelector('.toolsToggle')).toBeNull();
@@ -257,7 +368,7 @@ describe('SettingsProvidersScreen', () => {
     const props = makeProps();
     const el = await mount(props);
     const buttons = [...el.querySelectorAll('.actionsRow .btn')] as HTMLButtonElement[];
-    expect(buttons.length).toBe(1);
+    expect(buttons.length).toBe(2);
     await act(async () => buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.refreshModels).toHaveBeenCalledTimes(1);
   });

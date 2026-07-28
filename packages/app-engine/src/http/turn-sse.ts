@@ -1,4 +1,6 @@
 /*
+ * governance: allow-repo-hygiene file-size-limit (#567) the SSE transport, durable lock, hydration, artifact fold, and atomic ledger settlement form one turn transaction whose cleanup ordering must remain visible together
+ *
  * The SSE turn driver — the transport-and-ledger half of a chat turn,
  * shared by every `_turn`-shaped route. Extracted from `turn-routes.ts`
  * (the per-app surface keeps its app lookups, manifest reads and prompt
@@ -17,21 +19,100 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type {
   ConversationTurnInput,
   ConversationRunner,
+  TurnResumePlan,
   TurnStreamEvent,
 } from '../conversation/runner.js';
-import type { ConversationHistoryStore, TurnNode } from '../conversation/history.js';
+import type {
+  ConversationHistoryStore,
+  ConversationTurnAttachment,
+  TurnNode,
+} from '../conversation/history.js';
 import { buildReplayEvents } from './turn-replay.js';
 import { writeTurnBusy, type TurnLimiter } from './turn-limiter.js';
 import { costForUsage } from '../model-pricing.js';
 import { withConversationLock, type TurnAttachmentRef } from './turn-sse-support.js';
+import type { TurnAttachment } from '../conversation/turn.js';
+import { compileHydrationPlan } from '../conversation/hydration.js';
+
+type ToolTurnNode = Extract<TurnNode, { kind: 'tool' }>;
+
+function pathInside(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+/** Same ceiling the inline-artifact path enforces — an agent-reported
+ *  workspace file is no more trusted than an inline one. */
+const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
+
+async function workspaceArtifact(
+  reportedPath: string,
+  roots: readonly string[],
+  onSkipped: (workspacePath: string, reason: string) => void,
+): Promise<
+  | {
+      hash: string;
+      mime: string;
+      sizeBytes: number;
+      source: 'agent';
+      filename: string;
+      workspacePath: string;
+    }
+  | undefined
+> {
+  const decoded = reportedPath.startsWith('file:') ? fileURLToPath(reportedPath) : reportedPath;
+  const base = roots[0] ?? process.cwd();
+  const requested = path.isAbsolute(decoded) ? decoded : path.resolve(base, decoded);
+  // Containment first, and silently: a path outside the turn's roots is a
+  // boundary decision, not a failure the owner needs told about.
+  let candidate: string;
+  try {
+    candidate = await fs.realpath(requested);
+    const allowedRoots = await Promise.all(
+      roots.map((root) => fs.realpath(root).catch(() => path.resolve(root))),
+    );
+    if (!allowedRoots.some((root) => pathInside(candidate, root))) return undefined;
+  } catch {
+    return undefined;
+  }
+  // Past containment the file was meant to be captured, so a miss is a real
+  // dropped artifact — surface it rather than swallowing it. Stat BEFORE
+  // reading: the old order slurped whole directories' worth of bytes into
+  // memory (and any size at all) before deciding it wanted them.
+  try {
+    const stat = await fs.stat(candidate);
+    if (!stat.isFile()) return undefined;
+    if (stat.size > MAX_ARTIFACT_BYTES) {
+      onSkipped(candidate, `it is larger than the ${MAX_ARTIFACT_BYTES / (1024 * 1024)} MiB cap`);
+      return undefined;
+    }
+    const bytes = await fs.readFile(candidate);
+    return {
+      hash: createHash('sha256').update(bytes).digest('hex'),
+      mime: 'application/octet-stream',
+      sizeBytes: stat.size,
+      source: 'agent',
+      filename: path.basename(candidate),
+      workspacePath: candidate,
+    };
+  } catch (error) {
+    onSkipped(candidate, error instanceof Error ? error.message : String(error));
+    return undefined;
+  }
+}
 
 export {
+  parseAdditionalDirectories,
+  parseWorkspaceKind,
   parseTurnAttachmentRefs,
   resolveTurnAttachments,
+  validateTurnAttachmentRefs,
   withConversationLock,
 } from './turn-sse-support.js';
 export type { TurnAttachmentRef } from './turn-sse-support.js';
@@ -45,6 +126,9 @@ export interface DriveTurnOptions {
   message: string;
   /** Working dir handed to the runner as `dataDir`. */
   dataDir: string;
+  /** Canonical host-resolved root chosen from the Centraid workspace selector. */
+  workspaceDirectory?: string;
+  workspaceKind?: import('../conversation/schema.js').ConversationWorkspaceKind;
   /** The route-assembled system-prompt preamble. */
   extraSystemPrompt: string;
   runner: ConversationRunner;
@@ -58,6 +142,13 @@ export interface DriveTurnOptions {
   register?: 'ask' | 'build' | undefined;
   model?: string | undefined;
   thinking?: string | undefined;
+  runnerKind?: import('../conversation/turn.js').RunnerKind | undefined;
+  /** One provider, or the whole set the client has accumulated (issue #567). */
+  providerConsent?:
+    | import('../conversation/turn.js').RunnerKind
+    | readonly import('../conversation/turn.js').RunnerKind[]
+    | undefined;
+  additionalDirectories?: string[];
   idempotencyKey?: string | undefined;
   /**
    * Modest per-vault turn-concurrency gate (issue #420). When set and already
@@ -149,15 +240,22 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
     aiText: '',
     finalText: undefined as string | undefined,
     errorMessage: undefined as string | undefined,
+    consentRequired: false,
     pending: new Map<
       string,
       { toolName: string; sql?: string; args?: unknown; startedAt: number }
     >(),
     toolNodes: [] as TurnNode[],
+    artifactCandidates: [] as Array<{
+      node: ToolTurnNode;
+      locations: Array<{ path: string; line?: number }>;
+      inline: Array<{ dataBase64: string; mime: string; filename?: string }>;
+    }>,
     usage: undefined as
       | {
           model?: string;
           provider?: string;
+          effort?: string;
           inputTokens?: number;
           outputTokens?: number;
           cacheReadTokens?: number;
@@ -183,7 +281,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
       case 'tool.result': {
         const pending = acc.pending.get(event.toolCallId);
         acc.pending.delete(event.toolCallId);
-        acc.toolNodes.push({
+        const node: ToolTurnNode = {
           kind: 'tool',
           toolName: event.toolName || pending?.toolName || 'tool',
           ...(pending?.sql !== undefined ? { sql: pending.sql } : {}),
@@ -194,7 +292,15 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           appId,
           startedAt: pending?.startedAt ?? Date.now(),
           endedAt: Date.now(),
-        });
+        };
+        acc.toolNodes.push(node);
+        if (event.locations?.length || event.artifacts?.length) {
+          acc.artifactCandidates.push({
+            node,
+            locations: event.locations ?? [],
+            inline: event.artifacts ?? [],
+          });
+        }
         return;
       }
       case 'final':
@@ -205,6 +311,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         acc.usage = {
           ...(event.model !== undefined ? { model: event.model } : {}),
           ...(event.provider !== undefined ? { provider: event.provider } : {}),
+          ...(event.effort !== undefined ? { effort: event.effort } : {}),
           ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
           ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
           ...(event.cacheReadTokens !== undefined
@@ -220,14 +327,31 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
       case 'error':
         acc.errorMessage = event.message;
         break;
+      case 'consent.required':
+        acc.consentRequired = true;
+        break;
+      case 'notice': {
+        const at = Date.now();
+        acc.toolNodes.push({
+          kind: 'step',
+          text: event.message,
+          notice: {
+            level: event.level,
+            ...(event.code ? { code: event.code } : {}),
+          },
+          startedAt: at,
+          endedAt: at,
+        });
+        break;
+      }
       // No ledger state to fold for these; the SSE write still happens via
       // `writeEvent`. Listed explicitly (not a default) so a newly added
       // event type fails the exhaustiveness check instead of slipping through.
       case 'assistant.start':
       case 'reasoning.delta':
+      case 'context':
       case 'phase':
       case 'aborted':
-      case 'notice':
       case 'webhooks':
         break;
     }
@@ -260,179 +384,368 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
   // parent dir exists before any runner writes to it.
   const sessionFile = path.join(opts.conversationRunnerSessionDir, `${conversationId}.jsonl`);
   await fs.mkdir(opts.conversationRunnerSessionDir, { recursive: true }).catch(() => undefined);
-
-  const input: ConversationTurnInput = {
-    appId,
-    dataDir: opts.dataDir,
-    conversationId,
-    sessionFile,
-    message,
-    ...(opts.register ? { register: opts.register } : {}),
-    ...(opts.turnAttachments?.length ? { attachments: opts.turnAttachments } : {}),
-    extraSystemPrompt: opts.extraSystemPrompt,
-    abortSignal: abortController.signal,
-    onEvent,
-    ...(opts.model ? { model: opts.model } : {}),
-    ...(opts.thinking ? { thinking: opts.thinking } : {}),
-    ...(opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
-    ...(opts.prevAdapterSessionId ? { prevAdapterSessionId: opts.prevAdapterSessionId } : {}),
-    ...(opts.prevAdapterKind ? { prevAdapterKind: opts.prevAdapterKind } : {}),
-    ...(opts.prevAdapterUsageSnapshot
-      ? { prevAdapterUsageSnapshot: opts.prevAdapterUsageSnapshot }
-      : {}),
-  };
-
   await withConversationLock(opts.conversationLocks, appId, conversationId, async () => {
-    // Idempotency (issue #420): a duplicate POST with a key that already names a
-    // recorded turn on this conversation replays the recorded answer instead of
-    // re-running the model. The per-conversation lock makes the in-flight case
-    // fall out for free — a duplicate that arrives while the first turn is still
-    // running QUEUES behind this same lock, so by the time it acquires the lock
-    // the first turn has recorded and this branch replays it (no 409 needed, no
-    // double-run). Replay skips the runner AND recordTurn, so no duplicate row.
-    if (opts.idempotencyKey && conversationStore) {
-      const recorded = conversationStore.findRecordedTurn(
+    const lockToken = randomUUID();
+    if (conversationStore && !conversationStore.acquireTurnLock(appId, conversationId, lockToken)) {
+      onEvent({
+        type: 'error',
+        message: 'This conversation is already running a turn in another process.',
+      });
+      clearInterval(heartbeat);
+      req.off('close', onClientClose);
+      req.off('error', onClientClose);
+      if (!res.writableEnded) {
+        res.write(`event: end\ndata: {}\n\n`);
+        res.end();
+      }
+      return;
+    }
+    const lockLeaseHeartbeat = conversationStore
+      ? setInterval(
+          () => conversationStore.refreshTurnLock(appId, conversationId, lockToken),
+          60_000,
+        )
+      : undefined;
+    lockLeaseHeartbeat?.unref?.();
+    try {
+      // Idempotency (issue #420): a duplicate POST with a key that already names a
+      // recorded turn on this conversation replays the recorded answer instead of
+      // re-running the model. The per-conversation lock makes the in-flight case
+      // fall out for free — a duplicate that arrives while the first turn is still
+      // running QUEUES behind this same lock, so by the time it acquires the lock
+      // the first turn has recorded and this branch replays it (no 409 needed, no
+      // double-run). Replay skips the runner AND recordTurn, so no duplicate row.
+      if (opts.idempotencyKey && conversationStore) {
+        const recorded = conversationStore.findRecordedTurn(
+          appId,
+          conversationId,
+          opts.idempotencyKey,
+        );
+        if (recorded) {
+          for (const ev of buildReplayEvents(recorded)) writeEvent(ev);
+          clearInterval(heartbeat);
+          req.off('close', onClientClose);
+          req.off('error', onClientClose);
+          if (!res.writableEnded) {
+            res.write(`event: end\ndata: {}\n\n`);
+            res.end();
+          }
+          return;
+        }
+      }
+      const conversationMeta = conversationStore?.getSessionMeta(appId, conversationId);
+      const targetRunnerKind = opts.runnerKind ?? (await runner.resolveRunnerKind?.());
+      // The runner's failover ladder can land on a provider this route never
+      // targeted, and every provider has its OWN binding and its OWN hydration
+      // watermark. So resume + hydration are resolved PER RUNG, on demand,
+      // through `resumeForKind` — one planned-once-per-kind memo. Resolving it
+      // eagerly against the primary target and reusing that plan down the
+      // ladder silently dropped the whole conversation whenever rung 0 was
+      // skipped (breaker open), and folded the full ledger on every turn even
+      // when no rung ever needed it.
+      const resumeStates = new Map<
+        string,
+        ReturnType<ConversationHistoryStore['getAdapterResumeState']>
+      >();
+      const resumeStateFor = (
+        kind: string | undefined,
+      ): ReturnType<ConversationHistoryStore['getAdapterResumeState']> => {
+        if (!conversationStore) return undefined;
+        const key = kind ?? '';
+        if (resumeStates.has(key)) return resumeStates.get(key);
+        const state = kind
+          ? conversationStore.getAdapterResumeState(appId, conversationId, kind)
+          : conversationStore.getAdapterResumeState(appId, conversationId);
+        resumeStates.set(key, state);
+        return state;
+      };
+      const resume = resumeStateFor(targetRunnerKind);
+      const plans = new Map<string, TurnResumePlan>();
+      const planFor = (kind: string): TurnResumePlan => {
+        const cached = plans.get(kind);
+        if (cached) return cached;
+        const store = conversationStore!;
+        const state = resumeStateFor(kind);
+        const compile = (
+          afterSeq: number,
+        ): { context?: TurnResumePlan['hydrationContext']; attachments: TurnAttachment[] } => {
+          const delta = store.getHydrationDelta(appId, conversationId, afterSeq);
+          if (!delta || delta.messages.length === 0) return { attachments: [] };
+          const compiled = compileHydrationPlan(delta.messages, {
+            tokenBudget: 8_000,
+            minTurns: 2,
+            includeAttachmentReferences: true,
+          });
+          if (compiled.includedTurns === 0) return { attachments: [] };
+          return {
+            context: {
+              prompt: compiled.prompt,
+              includedTurns: compiled.includedTurns,
+              omittedTurns: compiled.omittedTurns,
+              estimatedTokens: compiled.estimatedTokens,
+            },
+            attachments: compiled.attachments.map((attachment) => ({
+              path: store.blobPathFor(appId, attachment.hash),
+              mime: attachment.mime,
+              ...(attachment.filename ? { filename: attachment.filename } : {}),
+            })),
+          };
+        };
+        // Without a resumable session id this rung starts cold, so its delta is
+        // the whole ledger — and the recovery plan would be that same fold.
+        const watermark = state?.sessionId ? (state.hydratedThroughSeq ?? -1) : -1;
+        const handoff = compile(watermark);
+        const recovery = !state?.sessionId ? undefined : watermark === -1 ? handoff : compile(-1);
+        const plan: TurnResumePlan = {
+          ...(state?.sessionId ? { sessionId: state.sessionId } : {}),
+          ...(state?.bindingId ? { bindingId: state.bindingId } : {}),
+          ...(state?.usageSnapshot ? { usageSnapshot: state.usageSnapshot } : {}),
+          ...(handoff.context ? { hydrationContext: handoff.context } : {}),
+          ...(handoff.attachments.length > 0 ? { hydrationAttachments: handoff.attachments } : {}),
+          ...(recovery?.context ? { recoveryHydrationContext: recovery.context } : {}),
+          ...(recovery && recovery.attachments.length > 0
+            ? { recoveryHydrationAttachments: recovery.attachments }
+            : {}),
+        };
+        plans.set(kind, plan);
+        return plan;
+      };
+      const input: ConversationTurnInput = {
         appId,
+        dataDir: opts.dataDir,
         conversationId,
-        opts.idempotencyKey,
-      );
-      if (recorded) {
-        for (const ev of buildReplayEvents(recorded)) writeEvent(ev);
+        sessionFile,
+        message,
+        ...(opts.register ? { register: opts.register } : {}),
+        ...(opts.turnAttachments?.length ? { attachments: opts.turnAttachments } : {}),
+        extraSystemPrompt: opts.extraSystemPrompt,
+        abortSignal: abortController.signal,
+        onEvent,
+        ...(targetRunnerKind ? { runnerKind: targetRunnerKind } : {}),
+        ...(opts.model ? { model: opts.model } : {}),
+        ...(opts.thinking ? { thinking: opts.thinking } : {}),
+        ...(opts.providerConsent && opts.providerConsent.length > 0
+          ? { providerConsent: opts.providerConsent }
+          : {}),
+        ...(opts.additionalDirectories?.length
+          ? { additionalDirectories: opts.additionalDirectories }
+          : {}),
+        ...(opts.workspaceDirectory ? { workspaceDirectory: opts.workspaceDirectory } : {}),
+        ...(opts.workspaceKind ? { workspaceKind: opts.workspaceKind } : {}),
+        ...(opts.idempotencyKey ? { idempotencyKey: opts.idempotencyKey } : {}),
+        ...(conversationMeta?.adapterKind
+          ? { activeAdapterKind: conversationMeta.adapterKind }
+          : {}),
+        ...(resume?.sessionId
+          ? { prevAdapterSessionId: resume.sessionId, prevBindingId: resume.bindingId }
+          : opts.prevAdapterSessionId
+            ? { prevAdapterSessionId: opts.prevAdapterSessionId }
+            : {}),
+        ...(resume?.kind
+          ? { prevAdapterKind: resume.kind }
+          : opts.prevAdapterKind
+            ? { prevAdapterKind: opts.prevAdapterKind }
+            : {}),
+        ...(resume?.usageSnapshot
+          ? { prevAdapterUsageSnapshot: resume.usageSnapshot }
+          : opts.prevAdapterUsageSnapshot
+            ? { prevAdapterUsageSnapshot: opts.prevAdapterUsageSnapshot }
+            : {}),
+        ...(conversationStore ? { resumeForKind: planFor } : {}),
+      };
+      let runResult:
+        | {
+            adapterSessionId?: string;
+            adapterKind?: string;
+            adapterUsageSnapshot?: import('../conversation/turn.js').AdapterUsageSnapshot;
+            hydrated?: boolean;
+            hydrationKind?: 'handoff' | 'recovery';
+            hydrationTokens?: number;
+          }
+        | undefined;
+      try {
+        const out = await runner.run(input);
+        runResult = out ?? undefined;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        onEvent({ type: 'error', message: msg });
+      } finally {
         clearInterval(heartbeat);
         req.off('close', onClientClose);
         req.off('error', onClientClose);
+        if (conversationStore && !acc.consentRequired) {
+          // Retire a binding the adapter had to abandon (D9). `hydrationKind:
+          // 'recovery'` means the resume handle we handed this runner was
+          // rejected and it self-healed onto a fresh session. Left `active`,
+          // that dead handle would be re-offered on every subsequent turn,
+          // paying a failed resume + a full-ledger recovery fold each time.
+          if (runResult?.hydrationKind === 'recovery' && runResult.adapterKind) {
+            const dead = plans.get(runResult.adapterKind);
+            if (dead?.bindingId && dead.sessionId !== runResult.adapterSessionId) {
+              conversationStore.markAdapterBindingStale(appId, conversationId, dead.bindingId);
+            }
+          }
+          // Whether this conversation is still unnamed BEFORE we record — an
+          // empty title is the "first turn of a new thread" signal (recordTurn
+          // sets the derived truncation below). Read once here so the auto-title
+          // hook fires exactly on the naming turn (issue #420).
+          const wasUnnamed = conversationStore.getSessionMeta(appId, conversationId)?.title === '';
+          // Persist the turn as a `runs` row + its `run_nodes` trace. The
+          // assistant reply (or the turn error) is one `step` node ordered
+          // after the turn's `tool` nodes — matching the transcript shape
+          // `getSession` reconstructs.
+          try {
+            const endedAt = Date.now();
+            const roots = [
+              opts.workspaceDirectory ?? opts.dataDir,
+              ...(opts.additionalDirectories ?? []),
+            ];
+            for (const candidate of acc.artifactCandidates) {
+              const artifacts: ConversationTurnAttachment[] = (
+                await Promise.all(
+                  candidate.locations.map((location) =>
+                    workspaceArtifact(location.path, roots, (workspacePath, reason) =>
+                      onEvent({
+                        type: 'notice',
+                        level: 'warn',
+                        code: 'artifact_unavailable',
+                        message: `Could not attach ${path.basename(workspacePath)} to this turn: ${reason}.`,
+                      }),
+                    ),
+                  ),
+                )
+              ).filter((artifact) => artifact !== undefined);
+              for (const inline of candidate.inline) {
+                try {
+                  const bytes = Buffer.from(inline.dataBase64, 'base64');
+                  if (bytes.byteLength === 0 || bytes.byteLength > 25 * 1024 * 1024) continue;
+                  const stored = await conversationStore.uploadBlob(appId, bytes);
+                  artifacts.push({
+                    hash: stored.hash,
+                    mime: inline.mime,
+                    sizeBytes: stored.sizeBytes,
+                    source: 'agent',
+                    filename: inline.filename ?? 'agent-artifact',
+                  });
+                } catch {
+                  // A malformed optional ACP artifact never fails the turn.
+                }
+              }
+              if (artifacts.length > 0) candidate.node.artifacts = artifacts;
+            }
+            const nodes: TurnNode[] = [...acc.toolNodes];
+            // The turn consumed tokens whether it ended in a reply or an
+            // error, so the `usage` totals apply to either step node.
+            const usage = acc.usage ?? {};
+            if (acc.errorMessage !== undefined) {
+              nodes.push({
+                kind: 'step',
+                text: acc.errorMessage,
+                isError: true,
+                ...usage,
+                startedAt: turnStartedAt,
+                endedAt,
+              });
+            } else if (acc.finalText && acc.finalText.trim().length > 0) {
+              nodes.push({
+                kind: 'step',
+                text: acc.finalText,
+                ...usage,
+                startedAt: turnStartedAt,
+                endedAt,
+              });
+            }
+            conversationStore.recordTurn(appId, {
+              conversationId,
+              // The runner's surface decides the ledger kind: the builder-capable
+              // unified runner reports `'build'`, the data-only runner leaves it
+              // unset → recorded as `'chat'` (issue #181). Read statically off the
+              // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
+              ...(runner.runKind ? { kind: runner.runKind } : {}),
+              ...(opts.retryOf !== undefined ? { retryOf: opts.retryOf } : {}),
+              ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+              userMessage: message,
+              ...(opts.attachmentRefs?.length
+                ? {
+                    attachments: opts.attachmentRefs.map((a) => ({
+                      hash: a.hash,
+                      mime: a.mime,
+                      sizeBytes: a.sizeBytes ?? 0,
+                      ...(a.filename !== undefined ? { filename: a.filename } : {}),
+                    })),
+                  }
+                : {}),
+              startedAt: turnStartedAt,
+              endedAt,
+              ok: acc.errorMessage === undefined,
+              ...(acc.errorMessage !== undefined ? { error: acc.errorMessage } : {}),
+              ...(acc.finalText !== undefined ? { finalText: acc.finalText } : {}),
+              nodes,
+              ...(runResult?.hydrationTokens !== undefined
+                ? { hydrationTokens: runResult.hydrationTokens }
+                : {}),
+              ...(acc.errorMessage === undefined && runResult?.adapterKind
+                ? {
+                    adapter: {
+                      kind: runResult.adapterKind,
+                      ...(runResult.adapterSessionId
+                        ? { sessionId: runResult.adapterSessionId }
+                        : {}),
+                      ...(runResult.adapterUsageSnapshot
+                        ? { usageSnapshot: runResult.adapterUsageSnapshot }
+                        : {}),
+                      ...(runResult.hydrated ? { hydrated: true } : {}),
+                    },
+                  }
+                : {}),
+              ...(acc.errorMessage !== undefined && runResult?.adapterKind
+                ? {
+                    failedAdapter: {
+                      kind: runResult.adapterKind,
+                      ...(runResult.adapterSessionId
+                        ? { sessionId: runResult.adapterSessionId }
+                        : {}),
+                      ...(runResult.adapterUsageSnapshot
+                        ? { usageSnapshot: runResult.adapterUsageSnapshot }
+                        : {}),
+                      ...(runResult.hydrated ? { hydrated: true } : {}),
+                    },
+                  }
+                : {}),
+            });
+          } catch {
+            /* best-effort — a ledger miss never fails the turn */
+          }
+          // LLM auto-title (issue #420): only on the naming turn of a new thread,
+          // only when the turn actually produced an answer. Fire-and-forget — the
+          // callback owns the cheap inference and the rename guard.
+          if (
+            wasUnnamed &&
+            opts.generateTitle &&
+            acc.errorMessage === undefined &&
+            acc.finalText &&
+            acc.finalText.trim().length > 0
+          ) {
+            try {
+              opts.generateTitle({
+                conversationId,
+                userMessage: message,
+                assistantText: acc.finalText,
+              });
+            } catch {
+              /* best-effort — a title miss never fails the turn */
+            }
+          }
+        }
         if (!res.writableEnded) {
           res.write(`event: end\ndata: {}\n\n`);
           res.end();
         }
-        return;
       }
-    }
-    let runResult:
-      | {
-          adapterSessionId?: string;
-          adapterKind?: string;
-          adapterUsageSnapshot?: import('../conversation/turn.js').AdapterUsageSnapshot;
-        }
-      | undefined;
-    try {
-      const out = await runner.run(input);
-      runResult = out ?? undefined;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      onEvent({ type: 'error', message: msg });
     } finally {
-      clearInterval(heartbeat);
-      req.off('close', onClientClose);
-      req.off('error', onClientClose);
+      if (lockLeaseHeartbeat) clearInterval(lockLeaseHeartbeat);
       if (conversationStore) {
-        // Whether this conversation is still unnamed BEFORE we record — an
-        // empty title is the "first turn of a new thread" signal (recordTurn
-        // sets the derived truncation below). Read once here so the auto-title
-        // hook fires exactly on the naming turn (issue #420).
-        const wasUnnamed = conversationStore.getSessionMeta(appId, conversationId)?.title === '';
-        // Persist the turn as a `runs` row + its `run_nodes` trace. The
-        // assistant reply (or the turn error) is one `step` node ordered
-        // after the turn's `tool` nodes — matching the transcript shape
-        // `getSession` reconstructs.
-        try {
-          const endedAt = Date.now();
-          const nodes: TurnNode[] = [...acc.toolNodes];
-          // The turn consumed tokens whether it ended in a reply or an
-          // error, so the `usage` totals apply to either step node.
-          const usage = acc.usage ?? {};
-          if (acc.errorMessage !== undefined) {
-            nodes.push({
-              kind: 'step',
-              text: acc.errorMessage,
-              isError: true,
-              ...usage,
-              startedAt: turnStartedAt,
-              endedAt,
-            });
-          } else if (acc.finalText && acc.finalText.trim().length > 0) {
-            nodes.push({
-              kind: 'step',
-              text: acc.finalText,
-              ...usage,
-              startedAt: turnStartedAt,
-              endedAt,
-            });
-          }
-          conversationStore.recordTurn(appId, {
-            conversationId,
-            // The runner's surface decides the ledger kind: the builder-capable
-            // unified runner reports `'build'`, the data-only runner leaves it
-            // unset → recorded as `'chat'` (issue #181). Read statically off the
-            // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
-            ...(runner.runKind ? { kind: runner.runKind } : {}),
-            ...(opts.retryOf !== undefined ? { retryOf: opts.retryOf } : {}),
-            ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
-            userMessage: message,
-            ...(opts.attachmentRefs?.length
-              ? {
-                  attachments: opts.attachmentRefs.map((a) => ({
-                    hash: a.hash,
-                    mime: a.mime,
-                    sizeBytes: a.sizeBytes ?? 0,
-                    ...(a.filename !== undefined ? { filename: a.filename } : {}),
-                  })),
-                }
-              : {}),
-            startedAt: turnStartedAt,
-            endedAt,
-            ok: acc.errorMessage === undefined,
-            ...(acc.errorMessage !== undefined ? { error: acc.errorMessage } : {}),
-            ...(acc.finalText !== undefined ? { finalText: acc.finalText } : {}),
-            nodes,
-          });
-        } catch {
-          /* best-effort — a ledger miss never fails the turn */
-        }
-        // LLM auto-title (issue #420): only on the naming turn of a new thread,
-        // only when the turn actually produced an answer. Fire-and-forget — the
-        // callback owns the cheap inference and the rename guard.
-        if (
-          wasUnnamed &&
-          opts.generateTitle &&
-          acc.errorMessage === undefined &&
-          acc.finalText &&
-          acc.finalText.trim().length > 0
-        ) {
-          try {
-            opts.generateTitle({
-              conversationId,
-              userMessage: message,
-              assistantText: acc.finalText,
-            });
-          } catch {
-            /* best-effort — a title miss never fails the turn */
-          }
-        }
-        // Persist the runner-resume handle. The resume-handle update only
-        // happens when the runner reported an `adapterKind` (codex /
-        // claude-code).
-        try {
-          conversationStore.noteTurn(
-            appId,
-            conversationId,
-            runResult?.adapterKind
-              ? {
-                  kind: runResult.adapterKind,
-                  ...(runResult.adapterSessionId ? { sessionId: runResult.adapterSessionId } : {}),
-                  ...(runResult.adapterUsageSnapshot
-                    ? { usageSnapshot: runResult.adapterUsageSnapshot }
-                    : {}),
-                }
-              : undefined,
-          );
-        } catch {
-          /* best-effort — a turn-count miss never fails the turn */
-        }
-      }
-      if (!res.writableEnded) {
-        res.write(`event: end\ndata: {}\n\n`);
-        res.end();
+        conversationStore.releaseTurnLock(appId, conversationId, lockToken);
       }
     }
   });

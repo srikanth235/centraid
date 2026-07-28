@@ -24,6 +24,8 @@ import type {
 } from '@centraid/app-engine';
 
 export interface AcpTurnInput {
+  /** Stable ledger identity used only to scope the warm-process cache. */
+  conversationId?: string;
   cwd: string;
   message: string;
   /**
@@ -46,12 +48,24 @@ export interface AcpTurnInput {
    */
   extraSystemPrompt: string;
   model?: string;
+  /** Category-keyed ACP pins. `model` is applied before `thought_level`. */
+  configPins?: Readonly<Record<string, string>>;
   /** Host decision for ACP permission requests; automation chat always denies. */
   permissionPolicy?: 'auto-allow' | 'deny';
   /** Session id from a prior turn; triggers resume/load when supported. */
   prevSessionId?: string;
   /** Persisted cumulative counters paired with `prevSessionId`. */
   prevUsageSnapshot?: AdapterUsageSnapshot;
+  /** Canonical ledger handoff, consumed only when a fresh session is used. */
+  hydrationContext?: string;
+  /** Historical files accompanying the retained handoff turns. */
+  hydrationAttachments?: TurnAttachment[];
+  /** Full-ledger handoff used when an otherwise healthy binding cannot resume. */
+  recoveryHydrationContext?: string;
+  /** Historical files accompanying full-ledger recovery. */
+  recoveryHydrationAttachments?: TurnAttachment[];
+  /** A runner change already proved that this turn must hydrate. */
+  forceHydration?: boolean;
   /**
    * Extra absolute workspace roots for agents that advertise
    * `sessionCapabilities.additionalDirectories`. Omitted when empty.
@@ -140,10 +154,24 @@ export interface AcpTurnConfig {
    * options. Identity when the kind has no tier vocabulary.
    */
   resolveModel?: (model: string) => string;
+  /**
+   * Bound initialize and session setup requests. Primarily injectable for
+   * deterministic tests; production callers use the conservative default.
+   */
+  stageTimeoutMs?: number;
+  /**
+   * Kill a prompt that produces no ACP activity for this long. Any session
+   * update or permission request resets the watchdog.
+   */
+  promptIdleTimeoutMs?: number;
 }
 
 export interface AcpTurnResult {
   sessionId?: string;
   /** Current cumulative counters to persist beside `sessionId`. */
   usageSnapshot?: AdapterUsageSnapshot;
+  /** A fresh session consumed the canonical ledger handoff. */
+  hydrated?: boolean;
+  /** Whether the normal delta or full resume-recovery plan was consumed. */
+  hydrationKind?: 'handoff' | 'recovery';
 }

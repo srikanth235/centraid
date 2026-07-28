@@ -21,6 +21,7 @@ import { buildSettingsInject } from './settings/settings-merge.js';
 import { handleTurnRoute, parseTurnSubRoute, type AskModelPrefs } from './http/turn-routes.js';
 import type { TurnLimiter } from './http/turn-limiter.js';
 import type { ConversationRunner } from './conversation/runner.js';
+import type { ConversationWorkspaceKind } from './conversation/schema.js';
 import type { RunnerKind } from './conversation/turn.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
@@ -131,6 +132,11 @@ export interface RuntimeOptions {
    * configured.
    */
   draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
+  /** Host-owned Centraid roots exposed through the per-conversation selector. */
+  conversationWorkspaceRoots?: (
+    appId: string,
+    conversationId: string,
+  ) => Promise<Partial<Record<ConversationWorkspaceKind, string>>>;
   /**
    * Optional per-app `ctx.vault` bridge factory (duaility §12). The gateway
    * injects one when a vault plane is mounted; handlers then reach the
@@ -290,6 +296,7 @@ export class Runtime {
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
+  private readonly conversationWorkspaceRoots?: RuntimeOptions['conversationWorkspaceRoots'];
   /**
    * Per-runtime (and therefore per-gateway) chat-session lock map for the
    * `(appId, conversationId)` chat serialization. Was a module-level map in
@@ -323,6 +330,9 @@ export class Runtime {
     if (opts.turnLimiter) this.turnLimiter = opts.turnLimiter;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     if (opts.draftCodeDir) this.draftCodeDir = opts.draftCodeDir;
+    if (opts.conversationWorkspaceRoots) {
+      this.conversationWorkspaceRoots = opts.conversationWorkspaceRoots;
+    }
     this.dispatcher = new Dispatcher({
       registry: () => this.registry,
       onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
@@ -399,6 +409,12 @@ export class Runtime {
     return {
       registry: this.registry,
       resolveCodeDir: (entry: RegistryEntry) => this.resolveCodeDir(entry),
+      ...(this.conversationWorkspaceRoots
+        ? {
+            workspaceRoots: (entry: RegistryEntry, conversationId: string) =>
+              this.conversationWorkspaceRoots!(entry.id, conversationId),
+          }
+        : {}),
       runner: this.conversationRunner,
       conversationStore: this.conversationHistoryStore,
       conversationRunnerSessionDir: this.conversationRunnerSessionDir,

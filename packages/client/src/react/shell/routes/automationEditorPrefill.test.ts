@@ -72,6 +72,7 @@ describe('buildAutomationAgentEditorData', () => {
           kind: 'codex',
           models: [{ default: true, id: 'gpt-catalog' }],
           modelsLoading: false,
+          sessionReady: true,
           subtitle: 'ready',
           title: 'Codex',
         },
@@ -81,14 +82,19 @@ describe('buildAutomationAgentEditorData', () => {
           kind: 'acp',
           models: [{ default: true, id: 'acp-catalog' }],
           modelsLoading: false,
+          sessionReady: true,
           subtitle: 'ready',
           title: 'Work ACP',
         },
       ],
       savedModelByKind: { acp: 'acp-saved' },
+      defaultConfigPinsByKind: {},
+      subsystemConfigPinsByKind: {},
+      diagnosticsJson: '{}',
       selectedKind: 'codex',
       subsystemModelByKind: { acp: { automations: 'acp-automations' } },
       subsystemRunnerByKey: { automations: 'acp' },
+      subsystemRunnerLadders: {},
     });
 
     expect(data.defaultRunnerKind).toBe('acp');

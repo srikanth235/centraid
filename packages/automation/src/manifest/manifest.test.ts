@@ -195,6 +195,16 @@ describe('validateManifest', () => {
     );
   });
 
+  it('round-trips an open thought-level pin and rejects empty values', () => {
+    expect(
+      validateManifest(baseManifest({ requires: { thoughtLevel: 'vendor-ultra' } })).requires
+        .thoughtLevel,
+    ).toBe('vendor-ultra');
+    expect(() => validateManifest(baseManifest({ requires: { thoughtLevel: '' } }))).toThrow(
+      /requires\.thoughtLevel must be a non-empty string/,
+    );
+  });
+
   it('defaults history.keep to {count:100} when history is absent', () => {
     const raw = baseManifest();
     delete raw.history;

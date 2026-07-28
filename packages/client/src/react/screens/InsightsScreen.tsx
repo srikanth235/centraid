@@ -127,6 +127,10 @@ export default function InsightsScreen({
     1,
     summary.byModel.reduce((s, m) => s + (m.costUsd || m.tokens), 0),
   );
+  const effortTotal = Math.max(
+    1,
+    summary.byEffort.reduce((s, e) => s + (e.costUsd || e.tokens), 0),
+  );
 
   const honestyParts: string[] = [];
   if (kpis.agentReportedCostUsd > 0) {
@@ -183,6 +187,9 @@ export default function InsightsScreen({
           <div className={styles.heroStat}>
             <span className={styles.heroStatLabel}>Tokens</span>
             <span className={styles.heroStatValue}>{insK(kpis.totalTokens)}</span>
+            {kpis.hydrationTokens > 0 ? (
+              <span className={styles.heroStatSub}>{insK(kpis.hydrationTokens)} hydration</span>
+            ) : null}
           </div>
           <div className={styles.heroStat}>
             <span className={styles.heroStatLabel}>Runs</span>
@@ -338,6 +345,31 @@ export default function InsightsScreen({
             </div>
           </Panel>
 
+          <Panel title="By effort" meta="runner-confirmed thought level">
+            <div className={styles.models}>
+              {summary.byEffort.map((e) => {
+                const pct = Math.round(((e.costUsd || e.tokens) / effortTotal) * 100);
+                return (
+                  <div key={e.effort} className={styles.model}>
+                    <div className={styles.modelName}>{e.effort}</div>
+                    <div className={styles.bar}>
+                      <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className={styles.modelFoot}>
+                      <span className={styles.mono}>
+                        {insK(e.tokens)} · {insUsd(e.costUsd)}
+                      </span>
+                      <span className={styles.mono}>{e.runs} runs</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {summary.byEffort.length === 0 ? (
+                <PanelEmpty message="No confirmed effort usage recorded yet." />
+              ) : null}
+            </div>
+          </Panel>
+
           <Panel title="Needs attention" meta={`${summary.recent.length} runs`}>
             <div className={styles.activity}>
               {summary.recent.map((a) => {
@@ -354,6 +386,7 @@ export default function InsightsScreen({
                         {a.provider ? (
                           <span className={styles.actProv}> · {a.provider}</span>
                         ) : null}
+                        {a.effort ? <span className={styles.actProv}> · {a.effort}</span> : null}
                       </div>
                       <div className={styles.actNote}>{a.label}</div>
                     </div>

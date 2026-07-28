@@ -1,3 +1,5 @@
+// governance: allow-repo-hygiene file-size-limit (#567) one component-level suite shares the Assistant bridge fixture across runner, capability, workspace, attachment, stop, and transcript behavior
+// (Provider-egress consent lives on the ROUTE, not this screen — see AssistantRoute.test.tsx.)
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +16,11 @@ function emptySnap(over: Partial<AssistantSnapshot> = {}): AssistantSnapshot {
 
 function modelPickerDTO(over: Partial<AsstModelPickerDTO> = {}): AsstModelPickerDTO {
   return {
+    runners: [
+      { kind: 'codex', title: 'Codex', connected: true, sessionReady: true, hint: 'ready' },
+    ],
+    selectedRunnerKind: 'codex',
+    workspaceKinds: ['vault-data'],
     connected: true,
     models: [
       { id: 'sonnet-5', name: 'Sonnet 5', default: true },
@@ -21,6 +28,11 @@ function modelPickerDTO(over: Partial<AsstModelPickerDTO> = {}): AsstModelPicker
     ],
     defaultModelName: 'Sonnet 5',
     selectedModelId: '',
+    efforts: [],
+    defaultEffortName: '',
+    selectedEffortId: '',
+    supportsAttachments: true,
+    supportsContext: true,
     ...over,
   };
 }
@@ -43,6 +55,8 @@ function makeProps(over: Partial<AssistantBridgeProps> = {}): AssistantBridgePro
     onPagerNav: vi.fn(),
     loadModelPicker: vi.fn().mockResolvedValue(modelPickerDTO()),
     onSetModel: vi.fn(),
+    onSetEffort: vi.fn(),
+    onSetRunner: vi.fn().mockResolvedValue(modelPickerDTO()),
     ...over,
   };
 }
@@ -113,7 +127,22 @@ describe('AssistantScreen', () => {
           {
             kind: 'tools',
             label: '1 query · 12ms',
-            calls: [{ tool: 'vault_sql', sql: 'SELECT 1', state: 'ok', meta: '3 rows · 12ms' }],
+            calls: [
+              {
+                tool: 'vault_sql',
+                sql: 'SELECT 1',
+                state: 'ok',
+                meta: '3 rows · 12ms',
+                outputText: 'terminal output',
+                artifacts: [
+                  {
+                    label: 'report.md',
+                    workspacePath: '/workspace/report.md',
+                    hash: 'abc123',
+                  },
+                ],
+              },
+            ],
           },
           {
             kind: 'ai',
@@ -128,6 +157,9 @@ describe('AssistantScreen', () => {
     expect(el.querySelector('.msgUser')?.textContent).toContain('How much');
     expect(el.querySelector('.tools summary')?.textContent).toContain('1 query');
     expect(el.querySelector('.asstPre')?.textContent).toBe('SELECT 1');
+    expect([...el.querySelectorAll('.asstPre')][1]?.textContent).toBe('terminal output');
+    expect(el.querySelector('.toolArtifact')?.textContent).toContain('report.md');
+    expect(el.querySelector('.toolArtifact')?.getAttribute('title')).toBe('/workspace/report.md');
     // final answer HTML is injected verbatim
     expect(el.querySelector('.msgAi strong')?.textContent).toBe('$412');
   });
@@ -437,5 +469,99 @@ describe('AssistantScreen', () => {
         'Default · Sonnet 5',
       );
     });
+  });
+
+  it('shows capability-derived effort and persists a new choice', async () => {
+    const props = makeProps({
+      loadModelPicker: vi.fn().mockResolvedValue(
+        modelPickerDTO({
+          efforts: [
+            { value: 'medium', name: 'Medium' },
+            { value: 'high', name: 'High' },
+          ],
+          defaultEffortName: 'Medium',
+        }),
+      ),
+    });
+    const el = await mount(props);
+    push(emptySnap());
+    await flush();
+    const effort = el.querySelector('select[aria-label="Assistant effort"]') as HTMLSelectElement;
+    expect(effort).toBeTruthy();
+    await act(async () => {
+      effort.value = 'high';
+      effort.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(props.onSetEffort).toHaveBeenCalledWith('high');
+  });
+
+  it('re-enables the pickers when a runner switch rejects', async () => {
+    const props = makeProps({
+      loadModelPicker: vi.fn().mockResolvedValue(
+        modelPickerDTO({
+          runners: [
+            { kind: 'codex', title: 'Codex', connected: true, sessionReady: true, hint: 'ready' },
+            {
+              kind: 'copilot',
+              title: 'Copilot',
+              connected: true,
+              sessionReady: true,
+              hint: 'ready',
+            },
+          ],
+        }),
+      ),
+      onSetRunner: vi.fn().mockRejectedValue(new Error('preflight failed')),
+    });
+    const el = await mount(props);
+    push(emptySnap());
+    await flush();
+    const runner = el.querySelector('select[aria-label="Assistant runner"]') as HTMLSelectElement;
+    expect(runner.disabled).toBe(false);
+    await act(async () => {
+      runner.value = 'copilot';
+      runner.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await flush();
+    // A rejected switch used to leave every picker disabled for good.
+    expect(props.onSetRunner).toHaveBeenCalledWith('copilot');
+    expect(
+      el.querySelector<HTMLSelectElement>('select[aria-label="Assistant runner"]')?.disabled,
+    ).toBe(false);
+  });
+
+  it('hides the workspace select while there is only one workspace', async () => {
+    const el = await mount(makeProps());
+    push(emptySnap());
+    await flush();
+    expect(el.querySelector('select[aria-label="Assistant workspace"]')).toBeNull();
+  });
+
+  it('labels workspaces in words once there is a choice', async () => {
+    const props = makeProps({
+      loadModelPicker: vi
+        .fn()
+        .mockResolvedValue(modelPickerDTO({ workspaceKinds: ['vault-data', 'app'] })),
+    });
+    const el = await mount(props);
+    push(emptySnap());
+    await flush();
+    const select = el.querySelector('select[aria-label="Assistant workspace"]');
+    expect([...(select?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual([
+      'Vault data',
+      'Live app',
+    ]);
+  });
+
+  it('renders the latest context snapshot and permits the gauge to decrease', async () => {
+    const el = await mount(makeProps());
+    push(emptySnap({ context: { used: 80, size: 100 } }));
+    const gauge = el.querySelector('[aria-label="Context 80 of 100 tokens"]');
+    expect(gauge?.textContent).toContain('80%');
+    push(emptySnap({ context: { used: 25, size: 100 } }));
+    expect(el.querySelector('[aria-label="Context 25 of 100 tokens"]')?.textContent).toContain(
+      '25%',
+    );
   });
 });

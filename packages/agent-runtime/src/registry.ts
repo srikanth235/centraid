@@ -174,6 +174,7 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
       const result = await runAcpTurn(
         {
           cwd: input.cwd,
+          ...(input.conversationId ? { conversationId: input.conversationId } : {}),
           message: input.message,
           ...(input.attachments?.length ? { attachments: input.attachments } : {}),
           // The vault runners: the ACP client serves them from a per-turn
@@ -181,8 +182,21 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
           ...(input.toolContext ? { toolContext: input.toolContext } : {}),
           extraSystemPrompt: input.extraSystemPrompt,
           ...(input.model ? { model: input.model } : {}),
+          ...(input.configPins ? { configPins: input.configPins } : {}),
+          ...(input.permissionPolicy ? { permissionPolicy: input.permissionPolicy } : {}),
           ...(input.prevSessionId ? { prevSessionId: input.prevSessionId } : {}),
           ...(input.prevUsageSnapshot ? { prevUsageSnapshot: input.prevUsageSnapshot } : {}),
+          ...(input.hydrationContext ? { hydrationContext: input.hydrationContext } : {}),
+          ...(input.hydrationAttachments?.length
+            ? { hydrationAttachments: input.hydrationAttachments }
+            : {}),
+          ...(input.recoveryHydrationContext
+            ? { recoveryHydrationContext: input.recoveryHydrationContext }
+            : {}),
+          ...(input.recoveryHydrationAttachments?.length
+            ? { recoveryHydrationAttachments: input.recoveryHydrationAttachments }
+            : {}),
+          ...(input.forceHydration ? { forceHydration: true } : {}),
           ...(input.additionalDirectories?.length
             ? { additionalDirectories: input.additionalDirectories }
             : {}),
@@ -196,6 +210,8 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
         adapterKind: spec.kind,
         ...(result.sessionId ? { sessionId: result.sessionId } : {}),
         ...(result.usageSnapshot ? { usageSnapshot: result.usageSnapshot } : {}),
+        ...(result.hydrated ? { hydrated: true } : {}),
+        ...(result.hydrationKind ? { hydrationKind: result.hydrationKind } : {}),
       };
     },
     // Models are an ACP *session* concern (the agent advertises its own

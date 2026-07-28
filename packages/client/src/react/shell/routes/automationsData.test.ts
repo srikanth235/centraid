@@ -31,7 +31,7 @@ const entry = (over: Partial<AutomationFeedEntry['run']> = {}): AutomationFeedEn
   automationId: 'digest/main',
   automationName: 'Daily Digest',
   run: {
-    runId: 'r1',
+    turnId: 'r1',
     automationId: 'digest/main',
     startedAt: 1000,
     endedAt: 2000,
@@ -68,6 +68,14 @@ describe('buildOverviewData', () => {
     expect(data.rows[0]?.name).toBe('Daily Digest');
     expect(data.rows[0]?.statusLabel).toBeTruthy();
     expect(data.rows[0]?.lastRunLabel).toContain('Last run');
+  });
+
+  it('marks a latest fallback attempt for the overview card', () => {
+    const data = buildOverviewData(
+      [row()],
+      [entry({ turnId: 'digest/main:123:aaaa:failover:1:claude-code' })],
+    );
+    expect(data.rows[0]?.recentFailover).toBe(true);
   });
 
   it('projects compile lifecycle labels into the fleet row', () => {

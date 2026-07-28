@@ -102,6 +102,33 @@ test('a tool_call that arrives already completed emits both start and result', (
   ).toMatchObject({ toolCallId: 'done', status: 'completed' });
 });
 
+test('an agent’s own rawOutput.content survives the renderable-content merge', () => {
+  // The merge used to spread rawOutput and then overwrite `content` with our
+  // renderable projection, silently destroying the payload the agent chose to
+  // return under that key.
+  const { mapper, events } = harness();
+  mapper.handleSessionUpdate({
+    update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'merge',
+      title: 'search',
+      status: 'completed',
+      rawOutput: { content: [{ path: 'a.txt', score: 0.9 }], hits: 1 },
+      content: [{ type: 'content', content: { type: 'text', text: 'found 1 match' } }],
+    },
+  });
+  const result = events.find(
+    (event): event is Extract<TurnStreamEvent, { type: 'tool.result' }> =>
+      event.type === 'tool.result',
+  );
+  const merged = result?.result as Record<string, unknown>;
+  expect(merged.hits).toBe(1);
+  // The renderable projection is what the UI reads…
+  expect(merged.content).toEqual([{ type: 'text', text: 'found 1 match' }]);
+  // …and the agent's own payload is still there, not overwritten.
+  expect(merged.rawOutputContent).toEqual([{ path: 'a.txt', score: 0.9 }]);
+});
+
 test('tool_call_update maps failed → ok:false with an error message, and dedupes', () => {
   const { mapper, events } = harness();
   mapper.handleSessionUpdate({
@@ -179,6 +206,45 @@ test('tool result extracts diff content blocks', () => {
     { path: 'a.ts', oldText: 'x', newText: 'y' },
   ]);
   expect(events.some((e) => e.type === 'phase' && e.phase === 'diff')).toBe(true);
+});
+
+test('tool result preserves renderable content and terminal output as CAS candidates', () => {
+  const { mapper, events } = harness();
+  mapper.handleSessionUpdate({
+    update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'terminal-1',
+      title: 'shell',
+      status: 'completed',
+      rawOutput: { exitCode: 0 },
+      locations: [{ path: '/workspace/report.txt', line: 7 }],
+      content: [
+        { type: 'content', content: 'human-readable result' },
+        { type: 'terminal', terminalId: 'term-1', output: 'build passed' },
+      ],
+    },
+  });
+  const result = events.find(
+    (event): event is Extract<TurnStreamEvent, { type: 'tool.result' }> =>
+      event.type === 'tool.result',
+  );
+  expect(result?.locations).toEqual([{ path: '/workspace/report.txt', line: 7 }]);
+  expect(result?.result).toMatchObject({
+    exitCode: 0,
+    content: [
+      'human-readable result',
+      { type: 'terminal', terminalId: 'term-1', output: 'build passed' },
+    ],
+  });
+  expect(
+    result?.artifacts?.map((artifact) => ({
+      filename: artifact.filename,
+      text: Buffer.from(artifact.dataBase64, 'base64').toString('utf8'),
+    })),
+  ).toEqual([
+    { filename: 'tool-output.txt', text: 'human-readable result' },
+    { filename: 'terminal-output.txt', text: 'build passed' },
+  ]);
 });
 
 test('usage_update folds tokens and cost, surfaced via usage()', () => {

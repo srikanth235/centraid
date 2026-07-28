@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across runner, model, effort, provider-consent, and reload cases
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +35,7 @@ const helpers = vi.hoisted(() => ({
   finishLiveItem: vi.fn(),
   finishLiveTrace: vi.fn(),
   loadThread: vi.fn(),
+  loadProviders: vi.fn(),
   openWebhookReveal: vi.fn(),
   reduceItem: vi.fn(),
   reduceTurn: vi.fn(),
@@ -74,8 +76,16 @@ vi.mock('./automationLiveMessages.js', () => ({
   startAutomationLiveItem: helpers.startLiveItem,
 }));
 vi.mock('../webhookReveal.js', () => ({ openWebhookReveal: helpers.openWebhookReveal }));
+vi.mock('./settingsProvidersData.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./settingsProvidersData.js')>()),
+  loadProviders: helpers.loadProviders,
+}));
 
-const { default: AutomationViewRoute } = await import('./AutomationViewRoute.js');
+const {
+  automationPicker,
+  latestAdapterKind,
+  default: AutomationViewRoute,
+} = await import('./AutomationViewRoute.js');
 
 function automationRow(): CentraidAutomationRow {
   const triggers: CentraidAutomationManifest['triggers'] = [{ kind: 'cron', expr: '0 9 * * *' }];
@@ -230,6 +240,39 @@ beforeEach(() => {
       runs: [],
     },
   });
+  helpers.loadProviders.mockReset().mockResolvedValue({
+    selectedKind: 'codex',
+    anyLoading: false,
+    savedModelByKind: {},
+    subsystemModelByKind: {},
+    defaultConfigPinsByKind: {},
+    subsystemConfigPinsByKind: {},
+    diagnosticsJson: '{}',
+    subsystemRunnerByKey: { automations: 'codex' },
+    subsystemRunnerLadders: {},
+    cards: [
+      {
+        kind: 'codex',
+        title: 'Codex',
+        accent: '#10b981',
+        subtitle: 'ready',
+        connected: true,
+        sessionReady: true,
+        modelsLoading: false,
+        models: [],
+      },
+      {
+        kind: 'copilot',
+        title: 'Copilot',
+        accent: '#111827',
+        subtitle: 'ready',
+        connected: true,
+        sessionReady: true,
+        modelsLoading: false,
+        models: [],
+      },
+    ],
+  });
   helpers.openWebhookReveal.mockReset().mockResolvedValue(undefined);
   helpers.reduceItem.mockReset().mockReturnValue({ trace: 'delta' });
   helpers.reduceTurn.mockReset().mockReturnValue({ trace: 'conversation' });
@@ -249,6 +292,140 @@ afterEach(() => {
 });
 
 describe('AutomationViewRoute', () => {
+  it('drops provider-specific manifest pins after an attended cross-provider switch', () => {
+    const status = {
+      selectedKind: 'codex',
+      anyLoading: false,
+      savedModelByKind: {},
+      subsystemModelByKind: { copilot: { automations: 'copilot-default' } },
+      defaultConfigPinsByKind: {},
+      subsystemConfigPinsByKind: {
+        copilot: { automations: { thought_level: 'medium' } },
+      },
+      diagnosticsJson: '{}',
+      subsystemRunnerByKey: { automations: 'codex' },
+      subsystemRunnerLadders: {},
+      cards: [
+        {
+          kind: 'codex',
+          title: 'Codex',
+          accent: '#10b981',
+          subtitle: 'ready',
+          connected: true,
+          sessionReady: true,
+          modelConfigurable: true,
+          modelsLoading: false,
+          models: [{ id: 'gpt-a' }],
+          configOptions: [
+            {
+              id: 'thought',
+              category: 'thought_level',
+              type: 'select',
+              values: [{ value: 'high' }],
+            },
+          ],
+        },
+        {
+          kind: 'copilot',
+          title: 'Copilot',
+          accent: '#111827',
+          subtitle: 'ready',
+          connected: true,
+          sessionReady: true,
+          modelConfigurable: true,
+          modelsLoading: false,
+          models: [{ id: 'copilot-default' }],
+          configOptions: [
+            {
+              id: 'thought',
+              category: 'thought_level',
+              type: 'select',
+              values: [{ value: 'medium' }],
+            },
+          ],
+        },
+      ],
+    } satisfies import('../../screen-contracts.js').AgentsStatusDTO;
+    expect(
+      automationPicker(status, 'codex', {
+        runner: 'codex',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).toMatchObject({
+      selectedModelId: 'gpt-a',
+      selectedEffortId: 'high',
+      modelLocked: true,
+      effortLocked: true,
+    });
+    expect(
+      automationPicker(status, 'copilot', {
+        runner: 'codex',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).toMatchObject({
+      selectedRunnerKind: 'copilot',
+      selectedModelId: 'copilot-default',
+      selectedEffortId: 'medium',
+    });
+    expect(
+      automationPicker(status, 'copilot', {
+        runner: 'codex',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).not.toMatchObject({ modelLocked: true, effortLocked: true });
+  });
+
+  it('resolves an unregistered manifest runner to a reported fallback and keeps its pins', () => {
+    const status = {
+      selectedKind: 'codex',
+      anyLoading: false,
+      savedModelByKind: {},
+      subsystemModelByKind: {},
+      defaultConfigPinsByKind: {},
+      subsystemConfigPinsByKind: {},
+      diagnosticsJson: '{}',
+      subsystemRunnerByKey: { automations: 'codex' },
+      subsystemRunnerLadders: {},
+      cards: [
+        {
+          kind: 'codex',
+          title: 'Codex',
+          accent: '#10b981',
+          subtitle: 'ready',
+          connected: true,
+          sessionReady: true,
+          modelConfigurable: true,
+          modelsLoading: false,
+          models: [{ id: 'gpt-a' }],
+          configOptions: [
+            {
+              id: 'thought',
+              category: 'thought_level',
+              type: 'select',
+              values: [{ value: 'high' }],
+            },
+          ],
+        },
+      ],
+    } satisfies import('../../screen-contracts.js').AgentsStatusDTO;
+    expect(
+      automationPicker(status, 'future-runner', {
+        runner: 'future-runner',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).toMatchObject({
+      selectedRunnerKind: 'codex',
+      selectedModelId: 'gpt-a',
+      selectedEffortId: 'high',
+      modelLocked: true,
+      effortLocked: true,
+    });
+  });
+
   it('loads the thread and drives lifecycle, cold/live trace, and steering actions', async () => {
     const bridge = await mount();
     await expect(bridge.loadData()).resolves.toMatchObject({
@@ -284,6 +461,7 @@ describe('AutomationViewRoute', () => {
     await expect(
       bridge.onAskAboutRuns(
         'What happened?',
+        {},
         (messages: unknown) => conversationalMessages.push(messages),
         new AbortController().signal,
       ),
@@ -293,6 +471,8 @@ describe('AutomationViewRoute', () => {
       'What happened?',
       expect.any(Function),
       expect.any(AbortSignal),
+      undefined,
+      {},
     );
     expect(conversationalMessages.length).toBeGreaterThan(1);
 
@@ -305,6 +485,71 @@ describe('AutomationViewRoute', () => {
     expect(actions.navigate).toHaveBeenCalledWith({ kind: 'automations' });
   });
 
+  it('restores the persisted conversation runner ahead of subsystem defaults', async () => {
+    api.listAutomationTurns.mockResolvedValueOnce([{ ...turn, adapterKind: 'copilot' }]);
+    const bridge = await mount();
+    await expect(bridge.loadData()).resolves.toMatchObject({
+      runnerConfig: { selectedRunnerKind: 'copilot' },
+    });
+  });
+
+  it('binds the runner to the latest run that recorded an adapter, not list order', () => {
+    const runs = [
+      { ...turn, turnId: 'newest', seq: 3, startedAt: 300, adapterKind: 'copilot' },
+      { ...turn, turnId: 'older', seq: 2, startedAt: 200, adapterKind: 'codex' },
+      { ...turn, turnId: 'no-adapter', seq: 4, startedAt: 400 },
+    ];
+    expect(latestAdapterKind(runs)).toBe('copilot');
+    // Same answer whichever order the feed arrives in.
+    expect(latestAdapterKind(runs.toReversed())).toBe('copilot');
+    expect(latestAdapterKind([{ ...turn }])).toBeUndefined();
+  });
+
+  it('resends an ask with every provider approved so far, and stops on a decline', async () => {
+    const consentPerAttempt = ['claude-code', 'copilot', null];
+    let attempt = 0;
+    api.streamAutomationConversationTurn.mockImplementation(
+      async (
+        _automationId: string,
+        _text: string,
+        onEvent: (event: Record<string, unknown>) => void,
+      ) => {
+        const provider = consentPerAttempt[attempt++] ?? null;
+        if (provider) {
+          onEvent({
+            type: 'consent.required',
+            consentKind: 'provider-egress',
+            provider,
+            reason: 'ladder',
+            message: `${provider} needs approval.`,
+          });
+          return { ended: true };
+        }
+        onEvent({ type: 'assistant.delta', delta: 'Done' });
+        return { turnId: 'turn-3', ended: true };
+      },
+    );
+    const bridge = await mount();
+    await bridge.loadData();
+
+    await expect(
+      bridge.onAskAboutRuns('What happened?', {}, vi.fn(), new AbortController().signal),
+    ).resolves.toBe('turn-3');
+    expect(actions.confirm).toHaveBeenCalledTimes(2);
+    expect(
+      api.streamAutomationConversationTurn.mock.calls.map((call: unknown[]) => call[4]),
+    ).toEqual([undefined, 'claude-code', ['claude-code', 'copilot']]);
+
+    // A decline sends nothing further and yields no turn.
+    api.streamAutomationConversationTurn.mockClear();
+    attempt = 0;
+    actions.confirm.mockResolvedValue(false);
+    await expect(
+      bridge.onAskAboutRuns('And then?', {}, vi.fn(), new AbortController().signal),
+    ).resolves.toBeNull();
+    expect(api.streamAutomationConversationTurn).toHaveBeenCalledTimes(1);
+  });
+
   it('returns null when the automation disappears and guards actions before load', async () => {
     helpers.loadThread.mockResolvedValueOnce(null);
     const bridge = await mount();
@@ -313,7 +558,7 @@ describe('AutomationViewRoute', () => {
     await expect(bridge.onToggleEnabled(true)).resolves.toBe(false);
     await expect(bridge.onDelete()).resolves.toBe(false);
     await expect(
-      bridge.onAskAboutRuns('hello', vi.fn(), new AbortController().signal),
+      bridge.onAskAboutRuns('hello', {}, vi.fn(), new AbortController().signal),
     ).resolves.toBeNull();
   });
 });

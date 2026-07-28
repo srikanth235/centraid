@@ -18,7 +18,7 @@ vi.mock('../../../../app-format.js', () => ({
 }));
 vi.mock('../../../../cron.js', () => ({ describeCron: () => '' }));
 
-import { useBuilder } from './useBuilder.js';
+import { builderPickerForConversation, useBuilder } from './useBuilder.js';
 
 describe('useBuilder module', () => {
   it('is a React hook (throws when called without shell context)', () => {
@@ -31,5 +31,46 @@ describe('useBuilder module', () => {
         showToast: () => undefined,
       }),
     ).toThrow();
+  });
+
+  it('restores a persisted conversation runner ahead of the builder default', () => {
+    const picker = builderPickerForConversation(
+      {
+        selectedKind: 'codex',
+        anyLoading: false,
+        savedModelByKind: {},
+        subsystemModelByKind: {},
+        defaultConfigPinsByKind: {},
+        subsystemConfigPinsByKind: {},
+        diagnosticsJson: '{}',
+        subsystemRunnerByKey: { builder: 'codex' },
+        subsystemRunnerLadders: {},
+        cards: [
+          {
+            kind: 'codex',
+            title: 'Codex',
+            accent: '#10b981',
+            subtitle: 'ready',
+            connected: true,
+            sessionReady: true,
+            modelsLoading: false,
+            models: [],
+          },
+          {
+            kind: 'copilot',
+            title: 'Copilot',
+            accent: '#111827',
+            subtitle: 'ready',
+            connected: true,
+            sessionReady: true,
+            modelsLoading: false,
+            models: [],
+          },
+        ],
+      },
+      'copilot',
+      'codex',
+    );
+    expect(picker.selectedRunnerKind).toBe('copilot');
   });
 });

@@ -141,6 +141,44 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
   });
 });
 
+describe('makeConversationRunnerCore — hydration accounting', () => {
+  it('returns the estimated tokens of the plan the backend actually consumed', async () => {
+    const runner = makeConversationRunnerCore({
+      prefsLoader: async () => ({ kind: 'codex' }),
+      getDispatcher: () => dispatcher,
+      resolveCwd: (input) => input.dataDir,
+      runTurn: async () => ({
+        adapterKind: 'codex',
+        sessionId: 'fresh',
+        hydrated: true,
+        hydrationKind: 'recovery',
+      }),
+    });
+    const result = await runner.run(
+      turnInput({
+        prevAdapterKind: 'codex',
+        prevAdapterSessionId: 'expired',
+        hydrationContext: {
+          prompt: 'delta',
+          includedTurns: 1,
+          omittedTurns: 0,
+          estimatedTokens: 10,
+        },
+        recoveryHydrationContext: {
+          prompt: 'full',
+          includedTurns: 4,
+          omittedTurns: 0,
+          estimatedTokens: 40,
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      hydrated: true,
+      hydrationTokens: 40,
+    });
+  });
+});
+
 describe('makeConversationRunnerCore — session resume gating', () => {
   it('resumes when the previous turn used the same runner kind', async () => {
     const { runner, seen } = build({

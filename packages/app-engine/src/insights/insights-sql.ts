@@ -20,6 +20,7 @@ export interface InsightsPreparedStatements {
   bySource: StatementSync;
   byRunner: StatementSync;
   byModel: StatementSync;
+  byEffort: StatementSync;
   recent: StatementSync;
   daySources: StatementSync;
   kpisDigest: StatementSync;
@@ -27,6 +28,7 @@ export interface InsightsPreparedStatements {
   dailyDigest: StatementSync;
   bySourceDigest: StatementSync;
   byModelDigest: StatementSync;
+  byEffortDigest: StatementSync;
 }
 
 export function prepareInsightsStatements(db: DatabaseSync): InsightsPreparedStatements {
@@ -38,6 +40,7 @@ export function prepareInsightsStatements(db: DatabaseSync): InsightsPreparedSta
           SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed,
           SUM(CASE WHEN ok = 0 THEN COALESCE(total_cost_usd, 0) ELSE 0 END) AS failed_cost,
           SUM(${TOKEN_SUM}) AS tokens,
+          SUM(COALESCE(hydration_tokens, 0)) AS hydration_tokens,
           SUM(COALESCE(total_cost_usd, 0)) AS cost,
           SUM(CASE WHEN total_cost_usd IS NULL THEN 1 ELSE 0 END) AS unpriced,
           SUM(CASE WHEN ${UNREPORTED_PRED} THEN 1 ELSE 0 END) AS unreported
@@ -106,13 +109,25 @@ export function prepareInsightsStatements(db: DatabaseSync): InsightsPreparedSta
         WHERE started_at >= ? AND model IS NOT NULL
         GROUP BY model ORDER BY cost DESC, tokens DESC
       `),
+    byEffort: db.prepare(`
+        SELECT
+          effort AS effort,
+          COUNT(*) AS runs,
+          SUM(${TOKEN_SUM}) AS tokens,
+          SUM(COALESCE(total_cost_usd, 0)) AS cost
+        FROM run_summary
+        WHERE started_at >= ? AND effort IS NOT NULL
+        GROUP BY effort ORDER BY cost DESC, tokens DESC
+      `),
     recent: db.prepare(`
         SELECT
           run_id AS id, kind AS kind, ok AS ok, started_at AS started_at,
           summary AS summary, note AS note, automation_name AS name,
           automation_ref AS automation_ref,
-          model AS model, provider AS provider,
-          ${TOKEN_SUM} AS tokens, COALESCE(total_cost_usd, 0) AS cost
+          model AS model, provider AS provider, effort AS effort,
+          ${TOKEN_SUM} AS tokens,
+          COALESCE(hydration_tokens, 0) AS hydration_tokens,
+          COALESCE(total_cost_usd, 0) AS cost
         FROM run_summary
         WHERE started_at >= ?
         ORDER BY
@@ -140,6 +155,7 @@ export function prepareInsightsStatements(db: DatabaseSync): InsightsPreparedSta
           COALESCE(SUM(run_count), 0) AS generations,
           COALESCE(SUM(retry_count), 0) AS retries,
           COALESCE(SUM(${TOKEN_SUM}), 0) AS tokens,
+          COALESCE(SUM(total_hydration_tokens), 0) AS hydration_tokens,
           COALESCE(SUM(total_cost_usd), 0) AS cost
         FROM conversation_digest
         WHERE last_ended_at IS NOT NULL AND last_ended_at >= ?
@@ -178,6 +194,16 @@ export function prepareInsightsStatements(db: DatabaseSync): InsightsPreparedSta
         FROM conversation_digest d, json_each(d.models_json) m
         WHERE d.last_ended_at IS NOT NULL AND d.last_ended_at >= ?
           AND json_extract(m.value, '$.model') IS NOT NULL
+      `),
+    byEffortDigest: db.prepare(`
+        SELECT
+          json_extract(e.value, '$.effort') AS effort,
+          COALESCE(json_extract(e.value, '$.runs'), 0) AS runs,
+          COALESCE(json_extract(e.value, '$.tokens'), 0) AS tokens,
+          COALESCE(json_extract(e.value, '$.cost'), 0) AS cost
+        FROM conversation_digest d, json_each(d.efforts_json) e
+        WHERE d.last_ended_at IS NOT NULL AND d.last_ended_at >= ?
+          AND json_extract(e.value, '$.effort') IS NOT NULL
       `),
   };
 }

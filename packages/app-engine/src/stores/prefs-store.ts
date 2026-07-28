@@ -19,6 +19,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isRunnerKind, type RunnerKind } from '../conversation/turn.js';
 
 export interface PrefsPersistence {
   read(): Record<string, unknown>;
@@ -129,6 +130,34 @@ export function resolveSubsystemRunner(
 }
 
 /**
+ * Resolve the ordered failover ladder for one subsystem. Arrays are stored
+ * directly by current clients; JSON strings remain accepted for CLI-authored
+ * prefs. The selected primary is always first and duplicate/unknown kinds are
+ * removed.
+ */
+export function resolveSubsystemRunnerLadder(
+  prefs: Record<string, unknown>,
+  subsystem: ModelSubsystem,
+  primary: RunnerKind,
+): RunnerKind[] {
+  const raw = prefs[`runner.ladder.${subsystem}`] ?? prefs['runner.ladder.default'];
+  let values: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      values = JSON.parse(raw) as unknown;
+    } catch {
+      values = [];
+    }
+  }
+  const candidates = Array.isArray(values) ? values : [];
+  const ladder: RunnerKind[] = [primary];
+  for (const value of candidates) {
+    if (isRunnerKind(value) && !ladder.includes(value)) ladder.push(value);
+  }
+  return ladder;
+}
+
+/**
  * Resolve the model id/alias for one LLM turn, in priority order:
  *
  *   1. `explicit` — a caller-supplied override (request body `model`, or
@@ -153,6 +182,46 @@ export function resolveSubsystemModel(
   const fallback = prefs[`model.${runnerKind}.default`];
   if (typeof fallback === 'string' && fallback.length > 0) return fallback;
   return undefined;
+}
+
+/**
+ * Resolve open ACP config categories for one runner/subsystem.
+ *
+ * Pref keys are `config.<runnerKind>.<slot>.<category>`, where `<slot>` is a
+ * subsystem or `default`. Callers pass manifest/request pins in `explicit`;
+ * those win category-by-category. Empty strings are unset. The result remains
+ * a category-keyed map so adapter-specific ids never leak into policy.
+ */
+export function resolveSubsystemConfigPins(
+  prefs: Record<string, unknown>,
+  runnerKind: string,
+  subsystem: ModelSubsystem,
+  explicit: Readonly<Record<string, string>> = {},
+): Record<string, string> {
+  const categories = new Set(Object.keys(explicit));
+  const scopedPrefix = `config.${runnerKind}.${subsystem}.`;
+  const defaultPrefix = `config.${runnerKind}.default.`;
+  for (const key of Object.keys(prefs)) {
+    if (key.startsWith(scopedPrefix)) categories.add(key.slice(scopedPrefix.length));
+    if (key.startsWith(defaultPrefix)) categories.add(key.slice(defaultPrefix.length));
+  }
+  const resolved: Record<string, string> = {};
+  for (const category of categories) {
+    if (!category) continue;
+    const requested = explicit[category];
+    if (requested) {
+      resolved[category] = requested;
+      continue;
+    }
+    const scoped = prefs[`${scopedPrefix}${category}`];
+    if (typeof scoped === 'string' && scoped) {
+      resolved[category] = scoped;
+      continue;
+    }
+    const fallback = prefs[`${defaultPrefix}${category}`];
+    if (typeof fallback === 'string' && fallback) resolved[category] = fallback;
+  }
+  return resolved;
 }
 
 /* ---------- HTTP route handler ---------- */
@@ -189,7 +258,39 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * the ACTIVE vault's owner party id — the one user identity that exists
  * (#280); without a provider the route 404s.
  */
-export function makeUserStoreRouteHandler(getStore: () => PrefsStore, getOwnerId?: () => string) {
+export interface UserStoreRouteHooks {
+  /** Return a user-facing reason to reject an atomic prefs patch. */
+  validatePatch?: (
+    patch: Record<string, unknown>,
+    current: Record<string, unknown>,
+  ) => Promise<string | undefined>;
+  /** Observe a committed patch, including its before/after snapshots. */
+  afterPatch?: (
+    patch: Record<string, unknown>,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+  ) => Promise<void> | void;
+}
+
+export function makeUserStoreRouteHandler(
+  getStore: () => PrefsStore,
+  getOwnerId?: () => string,
+  hooks: UserStoreRouteHooks = {},
+) {
+  let writeTail: Promise<void> = Promise.resolve();
+  const withWriteLock = async <T>(run: () => Promise<T>): Promise<T> => {
+    const previous = writeTail;
+    let release!: () => void;
+    writeTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await run();
+    } finally {
+      release();
+    }
+  };
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
     const url = new URL(req.url, 'http://x');
@@ -222,7 +323,17 @@ export function makeUserStoreRouteHandler(getStore: () => PrefsStore, getOwnerId
             sendError(res, 400, 'patch object is required');
             return true;
           }
-          sendJson(res, 200, { prefs: store.setPrefs(patch) });
+          await withWriteLock(async () => {
+            const before = store.getAllPrefs();
+            const rejection = await hooks.validatePatch?.(patch, before);
+            if (rejection) {
+              sendError(res, 409, rejection);
+              return;
+            }
+            const after = store.setPrefs(patch);
+            await hooks.afterPatch?.(patch, before, after);
+            sendJson(res, 200, { prefs: after });
+          });
           return true;
         }
         sendError(res, 405, 'method not allowed');

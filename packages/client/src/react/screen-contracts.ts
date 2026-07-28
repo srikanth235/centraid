@@ -62,6 +62,7 @@ export interface DiscoverBridgeProps {
 // DTOs mirror CentraidInsightsSummary & friends (centraid-api.d.ts).
 export interface InsightsKpis {
   totalTokens: number;
+  hydrationTokens: number;
   /** Known spend floor when unpriced/unreported runs exist. */
   totalCostUsd: number;
   agentReportedCostUsd: number;
@@ -102,6 +103,12 @@ export interface InsightsModelRow {
   tokens: number;
   costUsd: number;
 }
+export interface InsightsEffortRow {
+  effort: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
 export interface InsightsActivityRow {
   runId: string;
   kind: string;
@@ -111,9 +118,11 @@ export interface InsightsActivityRow {
   ok: boolean;
   startedAt: number;
   tokens: number;
+  hydrationTokens: number;
   costUsd: number;
   provider?: string;
   model?: string;
+  effort?: string;
 }
 export interface InsightsPeakDay {
   date: string;
@@ -143,6 +152,7 @@ export interface InsightsSummary {
   bySource: InsightsSourceRow[];
   byRunner: InsightsRunnerRow[];
   byModel: InsightsModelRow[];
+  byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];
   peakDay?: InsightsPeakDay;
   attention?: InsightsAttention;
@@ -373,6 +383,8 @@ export interface AuOverviewRowDTO {
    *  `filterConsentForAutomation` (automationThreadData.ts) for the
    *  actor-matching rule the caller uses to compute this. */
   attentionCount: number;
+  /** The newest attempt is a successful or failed fallback rung. */
+  recentFailover?: boolean;
 }
 export interface AuOverviewRunDTO {
   runId: string;
@@ -881,9 +893,22 @@ export interface AutomationThreadBridgeProps {
    */
   onAskAboutRuns: (
     text: string,
+    options: {
+      attachments?: BuilderAttachmentRef[];
+      runnerKind?: AgentRunnerKind;
+      model?: string;
+      thinking?: string;
+      onContext?: (context: { used: number; size: number }) => void;
+    },
     onMessages: (messages: AsstMsgDTO[]) => void,
     signal: AbortSignal,
   ) => Promise<string | null>;
+  /** Upload into the automation owner's CAS before the question is sent. */
+  onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
+  /** Auth-aware transcript thumbnail loader. */
+  loadAttachmentImage?: (hash: string, mime: string) => Promise<string>;
+  /** Session-ready preflight before an attended per-conversation switch. */
+  onSetRunner?: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
   onCopyWebhook: (url: string) => void;
   onRotateWebhook: () => Promise<boolean>;
   /** Confirm + delete; resolves true when deleted (thread is navigating away). */
@@ -938,6 +963,21 @@ export interface AgentCardDTO {
   connected: boolean;
   models: AgentModelDTO[];
   modelsLoading: boolean;
+  /** ACP initialize/session probe succeeded and did not request authentication. */
+  sessionReady: boolean;
+  /** Live ACP capability evidence gates the corresponding turn controls. */
+  modelConfigurable?: boolean;
+  supportsAttachments?: boolean;
+  supportsContext?: boolean;
+  /** Semantic ACP session configuration surfaced by the live probe. */
+  configOptions?: Array<{
+    id: string;
+    category: string;
+    type: string;
+    values: Array<{ value: string; name?: string }>;
+    currentValue?: string;
+  }>;
+  additionalDirectories?: boolean;
   /**
    * Short capability chips for Settings (vault, resume, model pin, sign-in).
    * Empty when the gateway has not probed this agent yet.
@@ -947,6 +987,11 @@ export interface AgentCardDTO {
   vaultUnavailable?: boolean;
   /** True when the agent answered AUTH_REQUIRED on the last probe. */
   authRequired?: boolean;
+  /** Active breaker states, exposed so Settings can explain failover decisions. */
+  breakerStates?: Array<{
+    failureClass: string;
+    state: 'open' | 'half-open';
+  }>;
 }
 /**
  * The chat/agent subsystems that can each pin their own model, independent
@@ -963,12 +1008,23 @@ export interface AgentsStatusDTO {
   savedModelByKind: Record<string, string>;
   /** Per-runner subsystem model overrides, keyed by runner kind then subsystem. */
   subsystemModelByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
+  /** Semantic config pins at the runner-default tier. */
+  defaultConfigPinsByKind: Record<string, Record<string, string>>;
+  /** Semantic config pins at the runner + subsystem tier. */
+  subsystemConfigPinsByKind: Record<
+    string,
+    Partial<Record<ModelSubsystem, Record<string, string>>>
+  >;
+  /** Sanitized, exportable capability evidence from the latest probe. */
+  diagnosticsJson: string;
   /**
    * Per-subsystem runner pins (`runner.<subsystem>`). An ABSENT subsystem
    * inherits `selectedKind` — the map only carries explicit pins, so a
    * missing entry and "pinned to the default agent" stay distinguishable.
    */
   subsystemRunnerByKey: Partial<Record<ModelSubsystem, AgentRunnerKind>>;
+  /** Ordered automatic failover members after the resolved primary runner. */
+  subsystemRunnerLadders: Partial<Record<ModelSubsystem, AgentRunnerKind[]>>;
 }
 export interface SettingsProvidersBridgeProps {
   loadStatus: () => Promise<AgentsStatusDTO>;
@@ -980,11 +1036,25 @@ export interface SettingsProvidersBridgeProps {
   setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
   /** Persist this agent's per-subsystem model override ('' = clears back to the default model). */
   setSubsystemModel: (kind: AgentRunnerKind, subsystem: ModelSubsystem, modelId: string) => void;
+  /** Persist a semantic runner-default config pin ('' clears it). */
+  setAgentConfigPin: (kind: AgentRunnerKind, category: string, value: string) => void;
+  /** Persist a semantic per-subsystem config pin ('' clears it). */
+  setSubsystemConfigPin: (
+    kind: AgentRunnerKind,
+    subsystem: ModelSubsystem,
+    category: string,
+    value: string,
+  ) => void;
   /**
    * Pin this subsystem to a runner, independent of the default agent.
    * `''` clears the pin, so the subsystem inherits `selectedKind` again.
    */
-  setSubsystemRunner: (subsystem: ModelSubsystem, kind: AgentRunnerKind | '') => void;
+  setSubsystemRunner: (subsystem: ModelSubsystem, kind: AgentRunnerKind | '') => Promise<boolean>;
+  /**
+   * Replace one lane's ordered automatic failover membership. Removing a
+   * member also revokes ladder-derived provider grants at the gateway.
+   */
+  setSubsystemRunnerLadder: (subsystem: ModelSubsystem, kinds: AgentRunnerKind[]) => void;
 }
 
 // ── Settings: Space (issue #382) ─────────────────────────────────────────────
@@ -1149,6 +1219,8 @@ export interface AsstToolCallDTO {
   sql?: string;
   state: 'run' | 'ok' | 'error';
   meta: string;
+  outputText?: string;
+  artifacts?: Array<{ label: string; hash?: string; workspacePath?: string }>;
 }
 /** A file attached to a sent (or historical) user message. */
 export interface AsstAttachmentDTO {
@@ -1173,6 +1245,8 @@ export interface AsstUsageDTO {
   /** True when `costUsd` is a live client-side estimate (ledger cost is exact). */
   estimated?: boolean;
   model?: string;
+  /** ACP-confirmed semantic thought level; absent when the runner did not confirm it. */
+  effort?: string;
 }
 /**
  * `msgId` is a stable identity for list keying (issue #541). A projected
@@ -1195,7 +1269,7 @@ export type AsstMsgDTO =
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
   | { kind: 'thinking'; text: string; streaming: boolean; msgId?: string }
   /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
-   *  attachments". Live-only; not persisted, so it never replays on reload. */
+   *  attachments". Persisted as a notice step and replayed on reload. */
   | { kind: 'notice'; level: 'warn' | 'info'; text: string; msgId?: string }
   | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean; msgId?: string }
   | {
@@ -1241,6 +1315,12 @@ export interface AssistantSnapshot {
   busy: boolean;
   messages: AsstMsgDTO[];
   pendingAttachments: AsstPendingAttachmentDTO[];
+  /** Latest ACP context snapshot; may decrease after compaction. */
+  context?: { used: number; size: number };
+  /** Explicitly selected extra workspace roots for the next turn. */
+  additionalDirectories?: string[];
+  /** Durable Centraid-owned primary workspace selection. */
+  workspaceKind?: 'vault-data' | 'app' | 'draft';
 }
 /**
  * The composer's inline model picker (subsystem `assistant`, active runner
@@ -1257,10 +1337,28 @@ export interface AsstModelOptionDTO {
   default?: boolean;
 }
 export interface AsstModelPickerDTO {
+  runners: Array<{
+    kind: AgentRunnerKind;
+    title: string;
+    connected: boolean;
+    sessionReady: boolean;
+    hint?: string;
+  }>;
+  selectedRunnerKind: AgentRunnerKind;
+  workspaceKinds: Array<'vault-data' | 'app' | 'draft'>;
   connected: boolean;
   models: AsstModelOptionDTO[];
   defaultModelName: string;
   selectedModelId: string;
+  /** A higher-precedence manifest pin is displayed but cannot be overridden here. */
+  modelLocked?: boolean;
+  efforts: Array<{ value: string; name?: string }>;
+  defaultEffortName: string;
+  selectedEffortId: string;
+  effortLocked?: boolean;
+  supportsAdditionalDirectories?: boolean;
+  supportsAttachments?: boolean;
+  supportsContext?: boolean;
 }
 export interface AssistantBridgeProps {
   suggestions: string[];
@@ -1273,6 +1371,8 @@ export interface AssistantBridgeProps {
   /** Upload one or more just-picked/dropped/pasted files ahead of the next send. */
   onAttachFiles: (files: File[]) => void;
   onRemovePendingAttachment: (id: string) => void;
+  onAddWorkspace?: () => void;
+  onRemoveWorkspace?: (directory: string) => void;
   /** Wire the interactive vault refs inside a just-rendered answer node. */
   hydrateRefs: (node: HTMLElement) => void;
   /** Wire code-block "Copy" buttons inside a just-rendered answer node (#420). */
@@ -1294,6 +1394,12 @@ export interface AssistantBridgeProps {
   loadModelPicker: () => Promise<AsstModelPickerDTO>;
   /** Persist the subsystem model override ('' clears back to the default model). */
   onSetModel: (modelId: string) => void;
+  /** Persist the subsystem thought_level override ('' clears it). */
+  onSetEffort: (effort: string) => void;
+  /** Select a runner for this conversation and reload its semantic controls. */
+  onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
+  /** Persist the Centraid-scoped working directory for this conversation. */
+  onSetWorkspaceKind?: (kind: 'vault-data' | 'app' | 'draft') => void;
   /** Composer entity-mention search (issue #420). Absent = mentions disabled. */
   searchEntities?: (term: string) => Promise<AsstComposerEntity[]>;
   /** Slash-command menu shown on a leading `/` (issue #420). */
@@ -1429,6 +1535,13 @@ export interface BuilderChatSnapshot {
   composerDisabled: boolean;
   /** Bumps to force a history-view re-fetch after a version op. */
   historyNonce: number;
+  context?: { used: number; size: number };
+  model?: string;
+  effort?: string;
+  /** Capability-backed attended runner controls for this builder conversation. */
+  runnerConfig?: AsstModelPickerDTO;
+  workspaceKind: 'vault-data' | 'app' | 'draft';
+  workspaceKinds: Array<'vault-data' | 'app' | 'draft'>;
 }
 /** A builder-composer attachment ref (mirrors ConversationAttachmentRef). */
 export interface BuilderAttachmentRef {
@@ -1444,6 +1557,10 @@ export interface BuilderChatBridgeProps {
   onCancel: () => void;
   onToggleGroup: (id: string) => void;
   onSetView: (view: 'chat' | 'history') => void;
+  onSetWorkspaceKind: (kind: 'vault-data' | 'app' | 'draft') => void;
+  onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
+  onSetModel: (modelId: string) => void;
+  onSetEffort: (effort: string) => void;
   /** Fill the version-history host — vanilla owns the async renderer. */
   onMountHistory: (host: HTMLElement) => void;
   /** Upload one file to the app's blob CAS (issue #420). When omitted, the

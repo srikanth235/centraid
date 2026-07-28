@@ -125,6 +125,12 @@ export function createAutomationLiveTraceFromItems(
         },
       ];
       live.toolIndex = new Map([[key, 0]]);
+    } else if (item.kind === 'step' && item.name?.startsWith('notice:')) {
+      const [, level] = item.name.split(':');
+      const text = itemText(item.outputJson);
+      if (text) {
+        live.notices = [{ level: level === 'warn' ? 'warn' : 'info', text }];
+      }
     } else {
       const text = itemText(item.outputJson);
       if (text) live.finalText = text;
@@ -370,7 +376,7 @@ function liveItemMessages(
     messages.push({ kind: 'notice', ...notice, msgId: `${state.itemId}:notice:${index}` });
   }
   const answer = state.error ?? state.finalText ?? state.assistantText;
-  if (!answer && state.kind === 'tool') return messages;
+  if (!answer && (state.kind === 'tool' || state.notices.length > 0)) return messages;
   if (!state.done) {
     messages.push({ kind: 'ai', streaming: true, text: answer, msgId: `${state.itemId}:ai` });
   } else {

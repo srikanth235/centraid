@@ -64,38 +64,18 @@ describe('ConversationStore — conversations', () => {
     store.close();
   });
 
-  it('uses a different durable conversation when an automation switches harness', () => {
+  it('keeps one durable conversation when an automation switches harness', () => {
     const store = newStore();
     const codex = store.ensureAutomationConversation('app/digest', 'app', 'Digest', 'codex');
     const claude = store.ensureAutomationConversation('app/digest', 'app', 'Digest', 'claude-code');
-    expect(codex).not.toBe(claude);
+    expect(codex).toBe(claude);
     expect(store.getConversation(codex)).toMatchObject({
       automationId: 'app/digest',
       adapterKind: 'codex',
     });
-    expect(store.getConversation(claude)).toMatchObject({
-      automationId: 'app/digest',
-      adapterKind: 'claude-code',
-    });
-    store.close();
-  });
-
-  it('refuses to reuse an automation conversation whose row names another harness', () => {
-    const store = newStore();
-    // A row that could only come from a hand-edited ledger or the deprecated
-    // `createAutomationRun` path: the `::runner:` id says codex, the column
-    // says claude-code. Handing a claude-code ACP resume handle to codex would
-    // corrupt the session, so this fails loudly.
-    store.createConversation({
-      id: 'app/digest::runner:codex',
-      kind: 'automation',
-      userId: '',
-      automationId: 'app/digest',
-      adapterKind: 'claude-code',
-    });
-    expect(() =>
-      store.ensureAutomationConversation('app/digest', 'app', 'Digest', 'codex'),
-    ).toThrow(/belongs to claude-code/);
+    // Ensuring a new target does not claim it before a turn succeeds; the
+    // ledger's post-turn adapter update is the binding commit point.
+    expect(store.getConversation(claude)?.adapterKind).toBe('codex');
     store.close();
   });
 
@@ -347,6 +327,23 @@ describe('ConversationStore — turns', () => {
     expect(store.listTurnsFiltered(c.id, { status: 'error' }).length).toBe(1);
     expect(store.listTurnsFiltered(c.id, { since: 103 }).length).toBe(2);
     expect(store.listTurnsFiltered(c.id, { limit: 2 }).map((t) => t.turnId)).toEqual(['r4', 'r3']);
+    store.close();
+  });
+
+  it('renews a turn-lock lease only for its current owner', () => {
+    const store = newStore();
+    const conversation = store.createConversation({ kind: 'chat', userId: 'u1' });
+    const startedAt = 1_000;
+    const refreshedAt = startedAt + 20 * 60_000;
+    expect(store.acquireTurnLock(conversation.id, 'owner-a', startedAt)).toBe(true);
+    expect(store.refreshTurnLock(conversation.id, 'owner-a', refreshedAt)).toBe(true);
+    expect(store.acquireTurnLock(conversation.id, 'owner-b', startedAt + 31 * 60_000)).toBe(false);
+    expect(store.acquireTurnLock(conversation.id, 'owner-b', refreshedAt + 30 * 60_000 + 1)).toBe(
+      true,
+    );
+    expect(store.refreshTurnLock(conversation.id, 'owner-a', refreshedAt + 30 * 60_000 + 2)).toBe(
+      false,
+    );
     store.close();
   });
 });

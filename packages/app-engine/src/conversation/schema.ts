@@ -59,9 +59,8 @@ export type ItemKind = 'message_in' | 'step' | 'tool' | 'agent';
 /**
  * The durable record holding the turns of one execution. Was `chat_sessions`,
  * generalized: `kind` / `app_id` / `automation_id` moved UP here off the
- * per-turn row. For `kind='automation'`, each harness-owned conversation is
- * tagged with the automation ref; changing harness starts another durable
- * conversation while automation history still queries across that ref.
+ * per-turn row. For `kind='automation'`, the stable automation ref is the
+ * conversation identity; harness ownership is the mutable adapter binding.
  */
 export interface Conversation {
   readonly id: string;
@@ -79,6 +78,10 @@ export interface Conversation {
   readonly adapterSessionId?: string;
   /** Last cumulative ACP counters paired with `adapterSessionId`. */
   readonly adapterUsageSnapshot?: AdapterUsageSnapshot;
+  /** Number of fresh-session handoffs hydrated from this canonical ledger. */
+  readonly hydrationCount: number;
+  /** Most recent hydration boundary, when one exists. */
+  readonly lastHydratedAt?: number;
   /** Number of completed turns on this conversation. */
   readonly turnCount: number;
   /**
@@ -93,6 +96,39 @@ export interface Conversation {
    */
   readonly archived: boolean;
   readonly createdAt: number;
+  readonly updatedAt: number;
+}
+
+/**
+ * One resumable ACP session bound to the canonical conversation ledger.
+ *
+ * A conversation may keep several bindings (one per runner used over its
+ * lifetime), but only the conversation's selected runner is active and at
+ * most one prior runner remains process-warm. Older valid handles are cold;
+ * stale is reserved for invalid or superseded handles that cannot resume.
+ * The watermark is the last canonical turn sequence whose content that ACP
+ * session has observed, so A → B → A can resume A and hydrate only B's delta.
+ */
+export interface ConversationHarnessSession {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly kind: string;
+  readonly acpSessionId: string;
+  readonly usageSnapshot?: AdapterUsageSnapshot;
+  readonly hydratedThroughSeq: number;
+  readonly status: 'active' | 'warm' | 'cold' | 'stale';
+  readonly lastUsedAt: number;
+  readonly createdAt: number;
+}
+
+export type ConversationWorkspaceKind = 'vault-data' | 'app' | 'draft';
+
+/** Durable, consent-recorded workspace selection for one conversation. */
+export interface ConversationWorkspaceSelection {
+  readonly conversationId: string;
+  readonly primaryKind: ConversationWorkspaceKind;
+  /** Canonical realpaths explicitly shared with this conversation. */
+  readonly additionalDirectories: string[];
   readonly updatedAt: number;
 }
 
@@ -119,6 +155,12 @@ export interface Turn {
    * than re-running. Absent on automation turns and pre-#420 rows.
    */
   readonly idempotencyKey?: string;
+  /**
+   * Estimated tokens injected from the canonical ledger for this handoff.
+   * Presence is the explicit hydration-cost marker; ordinary ACP usage stays
+   * in the total token columns and is never guessed from this estimate.
+   */
+  readonly hydrationTokens?: number;
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly ok: boolean;
@@ -184,9 +226,10 @@ export interface Item {
   readonly outputTokens?: number;
   readonly cacheReadTokens?: number;
   readonly cacheWriteTokens?: number;
-  /** `step` / `agent` — the model + provider that served the call. */
+  /** `step` / `agent` — the confirmed model, runner, and effort that served the call. */
   readonly model?: string;
   readonly provider?: string;
+  readonly effort?: string;
   /** Frozen at write time; absent = no price known. Prefer agent-reported USD. */
   readonly costUsd?: number;
   /** Issue #514 — where `costUsd` came from. */
@@ -213,6 +256,8 @@ export interface Attachment {
   /** `'upload'` | `'webhook'` | `'email'` | … */
   readonly source?: string;
   readonly filename?: string;
+  /** Absolute agent workspace path; present means the bytes are not in CAS. */
+  readonly workspacePath?: string;
   readonly createdAt: number;
 }
 

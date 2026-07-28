@@ -68,6 +68,11 @@ export interface RunnerPrefs {
   binPath?: string;
   /** Extra args passed verbatim to the CLI invocation. */
   extraArgs?: string[];
+  /**
+   * Category-keyed ACP configuration defaults. Well-known categories are
+   * `model` and `thought_level`; unknown future categories remain open strings.
+   */
+  configPins?: Readonly<Record<string, string>>;
 }
 
 /** What one `vault_sql` tool call returns to the model (rows + caps). */
@@ -182,9 +187,14 @@ export interface AdapterUsageSnapshot {
     readonly amount: number;
     readonly currency: string;
   };
+  /** Last observed ACP context-window snapshot (not a monotonic counter). */
+  readonly contextUsed?: number;
+  readonly contextSize?: number;
 }
 
 export interface TurnInput {
+  /** Stable ledger identity; scopes the optional warm-process cache. */
+  conversationId?: string;
   /** Working directory the agent operates in (chat: app data dir; builder: app dir). */
   cwd: string;
   message: string;
@@ -197,6 +207,8 @@ export interface TurnInput {
   /** Backend-specific append point: codex `developerInstructions` / claude `systemPrompt.append`. */
   extraSystemPrompt: string;
   model?: string;
+  /** Per-turn category-keyed pins; higher precedence than RunnerPrefs defaults. */
+  configPins?: Readonly<Record<string, string>>;
   /**
    * How ACP `session/request_permission` calls are answered. `deny` is a
    * structural boundary used by automation conversations: the agent keeps
@@ -207,6 +219,16 @@ export interface TurnInput {
   prevSessionId?: string;
   /** Cumulative usage stored with `prevSessionId`; ignored for a fresh session. */
   prevUsageSnapshot?: AdapterUsageSnapshot;
+  /** Canonical ledger handoff, consumed only if a fresh session is required. */
+  hydrationContext?: string;
+  /** Historical files from the retained hydration turns. */
+  hydrationAttachments?: TurnAttachment[];
+  /** Full-ledger handoff reserved for an expired same-runner resume handle. */
+  recoveryHydrationContext?: string;
+  /** Full-ledger historical files for expired-session recovery. */
+  recoveryHydrationAttachments?: TurnAttachment[];
+  /** A runner change has already established that hydration is required. */
+  forceHydration?: boolean;
   /**
    * Extra absolute workspace roots for ACP agents that advertise
    * `sessionCapabilities.additionalDirectories` (monorepo / skills dirs).
@@ -242,6 +264,10 @@ export interface TurnResult {
   adapterKind: RunnerPrefs['kind'];
   /** Cumulative usage to persist beside `sessionId` for the next delta. */
   usageSnapshot?: AdapterUsageSnapshot;
+  /** True when this fresh session consumed the canonical ledger handoff. */
+  hydrated?: boolean;
+  /** Which bounded plan was actually consumed, for honest D4 accounting. */
+  hydrationKind?: 'handoff' | 'recovery';
 }
 
 /**

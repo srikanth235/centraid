@@ -118,3 +118,41 @@ export function ModelSelect({
     </Select>
   );
 }
+
+export function ConfigSelect({
+  card,
+  category,
+  saved,
+  onChange,
+  emptyLabel,
+  ariaLabel,
+}: {
+  card: AgentCardDTO;
+  category: string;
+  saved: string;
+  onChange: (v: string) => void;
+  emptyLabel: string;
+  ariaLabel: string;
+}): JSX.Element | null {
+  const option = card.configOptions?.find((entry) => entry.category === category);
+  if (!option || option.values.length === 0) return null;
+  return (
+    <Select
+      value={saved}
+      onChange={onChange}
+      disabled={!card.connected}
+      inherited={!saved}
+      ariaLabel={ariaLabel}
+    >
+      <option value="">{emptyLabel}</option>
+      {saved && !option.values.some((entry) => entry.value === saved) ? (
+        <option value={saved}>{`${saved} · unavailable`}</option>
+      ) : null}
+      {option.values.map((entry) => (
+        <option key={entry.value} value={entry.value}>
+          {entry.name ?? entry.value}
+        </option>
+      ))}
+    </Select>
+  );
+}

@@ -363,6 +363,79 @@ test('headless compile returns a turn id and records failure in the automation t
   );
 }, 35_000);
 
+test('headless compile failover settles one ledger turn per provider before publishing', async () => {
+  await handle.close();
+  await fs.rm(dataDir, { recursive: true, force: true });
+  dataDir = await tempDir(`gw-compile-failover-${crypto.randomUUID()}-`);
+  const attempted: string[] = [];
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir),
+    runTurn: async (input, config) => {
+      const runner = config.prefs.kind;
+      attempted.push(runner);
+      if (runner === 'codex') {
+        input.onEvent({
+          type: 'error',
+          message: 'codex failed to spawn',
+          failureClass: 'spawn',
+        });
+      } else {
+        input.onEvent({ type: 'final', text: 'Plan ready' });
+      }
+      return { adapterKind: runner };
+    },
+  });
+  handle.prefs.setPrefs({
+    'runner.automations': 'codex',
+    'runner.ladder.automations': ['codex', 'claude-code'],
+  });
+
+  const created = await createAutomation('compile-failover', { enabled: false });
+  const res = await fetch(
+    `${handle.url}/centraid/_automations/compile?ref=${encodeURIComponent(created.row.ref)}`,
+    {
+      method: 'POST',
+      headers: { ...auth(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enableOnSuccess: true }),
+    },
+  );
+  expect(res.status).toBe(202);
+  const { compileTurnId } = (await res.json()) as { compileTurnId: string };
+
+  await vi.waitFor(
+    async () => {
+      const feed = await fetch(
+        `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(created.row.ref)}`,
+        { headers: auth() },
+      );
+      const body = (await feed.json()) as {
+        turns: Array<{
+          turnId: string;
+          note?: string;
+          endedAt?: number | null;
+          ok: boolean | null;
+        }>;
+      };
+      const first = body.turns.find((candidate) => candidate.turnId === compileTurnId);
+      const fallback = body.turns.find((candidate) =>
+        candidate.turnId.startsWith(`${compileTurnId}:failover:1:claude-code`),
+      );
+      expect(first).toMatchObject({ note: 'Compiling plan with codex', ok: false });
+      expect(typeof first?.endedAt).toBe('number');
+      expect(fallback).toMatchObject({
+        note:
+          'codex failed at the compile boundary (spawn). Continuing with claude-code; ' +
+          'provider-specific model and effort pins were cleared.',
+        ok: true,
+      });
+      expect(typeof fallback?.endedAt).toBe('number');
+    },
+    { timeout: 30_000, interval: 100 },
+  );
+  expect(attempted).toEqual(['codex', 'claude-code']);
+}, 35_000);
+
 test('headless revision validates steering and returns the compile turn id immediately', async () => {
   const created = await createAutomation('revise-ledger', { enabled: false });
   const endpoint = `${handle.url}/centraid/_automations/revise?ref=${encodeURIComponent(created.row.ref)}`;

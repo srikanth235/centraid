@@ -56,6 +56,16 @@ export type ResolveConnection = (connector: {
  */
 export interface DispatchSurface {
   agentDispatcher: AgentDispatcher;
+  /**
+   * Optional host-owned binding/watermark finalizer. `runHandler` invokes it
+   * inside the same SQLite transaction that settles the turn.
+   */
+  finalizeTurn?: (
+    store: ConversationStore,
+    conversationId: string,
+    turnId: string,
+    ok: boolean,
+  ) => void;
   close(): Promise<void>;
 }
 
@@ -74,6 +84,8 @@ export interface OpenDispatchArgs {
    * tier; undefined means "the host's default automation model".
    */
   model?: string;
+  /** Semantic ACP configuration pins, keyed by capability category. */
+  configPins?: Readonly<Record<string, string>>;
   onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
 }
 
@@ -83,6 +95,7 @@ export type OpenDispatch = (args: OpenDispatchArgs) => Promise<DispatchSurface>;
 export interface NestedAutomationRuntime {
   runnerKind?: string;
   model?: string;
+  configPins?: Readonly<Record<string, string>>;
 }
 
 export interface RunFireOptions {
@@ -131,6 +144,13 @@ export interface RunFireOptions {
   runnerKind?: string;
   /** Host-resolved model fallback used for dispatch and honest cost estimation. */
   model?: string;
+  /**
+   * False for a failover rung: provider-specific manifest pins belong only
+   * to the primary runner and must not cross the fire boundary.
+   */
+  allowManifestProviderPins?: boolean;
+  /** Host-resolved semantic ACP configuration pins. */
+  configPins?: Readonly<Record<string, string>>;
   /** Resolve an onFailure target's own harness/model instead of inheriting its parent. */
   resolveNestedRuntime?: (automationRef: string) => Promise<NestedAutomationRuntime>;
   /**
@@ -152,6 +172,8 @@ export interface RunFireOptions {
   triggerOrigin?: AutomationTriggerOrigin;
   /** Human-readable trigger-gap/cursor note stored on the turn. */
   note?: string;
+  /** Durable reader-facing boundary notice when this is a failover attempt. */
+  failoverNotice?: string;
   /** Optional input payload (e.g. for on_failure dispatch). */
   input?: unknown;
   /** Optional parent run id for the onFailure sub-run DAG link. */
@@ -161,6 +183,12 @@ export interface RunFireOptions {
    * refuses to push the chain past depth 3.
    */
   failureDepth?: number;
+  /**
+   * Suppress this attempt's onFailure cascade. The agent-runtime router uses
+   * this only while advancing a pre-consented runner ladder at the next fire
+   * boundary; the final attempt still owns the ordinary onFailure cascade.
+   */
+  deferOnFailure?: boolean | ((outcome: HandlerOutcome) => boolean);
   /**
    * Gateway broker seam (issue #304): resolve the connector's connection to
    * an injectable credential before the handler runs. Absent → every
@@ -218,14 +246,26 @@ export async function runFire(
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
   const vaultBridge = await opts.vaultFor?.(parsed.appId, opts.automationRef);
+  // Establish the final phase-3 identity before the host acquires the durable
+  // turn lock: one automation conversation, regardless of runner rung.
+  runsStore.ensureAutomationConversation(
+    opts.automationRef,
+    parsed.appId,
+    row.name,
+    opts.runnerKind,
+  );
 
-  const effectiveModel = row.manifest.requires.model ?? opts.model;
+  const effectiveModel =
+    opts.allowManifestProviderPins === false
+      ? opts.model
+      : (row.manifest.requires.model ?? opts.model);
   const dispatch = await deps.openDispatch({
     workdir: row.dir,
     automationRef: opts.automationRef,
     runId,
     ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
     ...(effectiveModel ? { model: effectiveModel } : {}),
+    ...(opts.configPins ? { configPins: opts.configPins } : {}),
     onLog,
   });
 
@@ -347,6 +387,7 @@ export async function runFire(
       now: new Date(startedAt).toISOString(),
       agentDispatcher: dispatch.agentDispatcher,
       runsStore,
+      ...(dispatch.finalizeTurn ? { finalizeTurn: dispatch.finalizeTurn } : {}),
       ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
       ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(vaultBridge ? { vault: vaultBridge } : {}),
@@ -354,6 +395,7 @@ export async function runFire(
       triggerKind: opts.triggerKind ?? 'scheduled',
       triggerOrigin: opts.triggerOrigin ?? 'cron',
       ...(opts.note ? { note: opts.note } : {}),
+      ...(opts.failoverNotice ? { failoverNotice: opts.failoverNotice } : {}),
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
@@ -391,7 +433,11 @@ export async function runFire(
   // onFailure cascade: when the handler fails and the manifest names a
   // follow-up automation, fire it with the failed run as input. The handle
   // resolves a bare id within the same app. Capped at depth 3.
-  if (!outcome.ok && row.manifest.onFailure) {
+  const deferOnFailure =
+    typeof opts.deferOnFailure === 'function'
+      ? opts.deferOnFailure(outcome)
+      : (opts.deferOnFailure ?? false);
+  if (!outcome.ok && row.manifest.onFailure && !deferOnFailure) {
     if (failureDepth >= 3) {
       onLog('warn', `onFailure cascade for ${row.name} aborted at depth ${failureDepth} (cap=3)`);
     } else {
@@ -416,6 +462,9 @@ export async function runFire(
                 : {}),
               ...((nestedRuntime?.model ?? opts.model)
                 ? { model: nestedRuntime?.model ?? opts.model }
+                : {}),
+              ...((nestedRuntime?.configPins ?? opts.configPins)
+                ? { configPins: nestedRuntime?.configPins ?? opts.configPins }
                 : {}),
               ...(opts.resolveNestedRuntime
                 ? { resolveNestedRuntime: opts.resolveNestedRuntime }

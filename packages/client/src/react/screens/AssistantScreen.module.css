@@ -296,6 +296,26 @@
   color: var(--ink-4);
   padding-top: 3px;
 }
+.toolArtifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 5px;
+}
+.toolArtifact {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tool[data-state='error'] .toolMeta {
   color: var(--danger);
 }
@@ -461,7 +481,7 @@
   border-radius: 999px;
   border: 0;
   background: var(--accent);
-  color: var(--ink-inv, #fff);
+  color: var(--ink-inv);
   font-size: 14px;
   cursor: pointer;
   flex: none;
@@ -487,6 +507,32 @@
    reads as metadata about the composer rather than a competing action. */
 .modelPicker {
   position: relative;
+}
+.effortPicker select {
+  height: 26px;
+  max-width: 132px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink-3);
+  font: var(--t-tiny);
+  cursor: pointer;
+}
+.effortPicker select:hover {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.effortPicker select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 .modelBtn {
   display: inline-flex;

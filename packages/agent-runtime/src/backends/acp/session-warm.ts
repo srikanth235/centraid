@@ -16,10 +16,25 @@ import type { Readable, Writable } from 'node:stream';
 import type { AcpConnection } from './json-rpc.js';
 
 const IDLE_MS = 120_000;
+const MAX_WARM_SLOTS = 8;
+const DISPOSE_TIMEOUT_MS = 5_000;
+
+async function bounded<T>(promise: Promise<T>): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), DISPOSE_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 
 export interface WarmAgentSlot {
   key: string;
   kind: string;
+  /** Stable ledger identity; unlike cwd, this does not alias other threads. */
+  conversationId?: string;
   cwd: string;
   sessionId: string;
   child: ChildProcessByStdio<Writable, Readable, Readable>;
@@ -27,6 +42,7 @@ export interface WarmAgentSlot {
   canResume: boolean;
   canLoad: boolean;
   canClose: boolean;
+  canAdditional: boolean;
   /** Agent still has HTTP MCP capability from the original initialize. */
   httpMcp: boolean;
   promptCaps: Record<string, unknown>;
@@ -36,16 +52,22 @@ export interface WarmAgentSlot {
 
 const pool = new Map<string, WarmAgentSlot>();
 
-export function warmKey(kind: string, cwd: string, sessionId: string): string {
-  return `${kind}\0${cwd}\0${sessionId}`;
+export function warmKey(
+  kind: string,
+  cwd: string,
+  sessionId: string,
+  conversationId = sessionId,
+): string {
+  return `${conversationId}\0${kind}\0${cwd}\0${sessionId}`;
 }
 
 export function takeWarmSlot(
   kind: string,
   cwd: string,
   sessionId: string,
+  conversationId?: string,
 ): WarmAgentSlot | undefined {
-  const key = warmKey(kind, cwd, sessionId);
+  const key = warmKey(kind, cwd, sessionId, conversationId);
   const slot = pool.get(key);
   if (!slot) return undefined;
   pool.delete(key);
@@ -59,7 +81,17 @@ export function takeWarmSlot(
 }
 
 export function putWarmSlot(slot: Omit<WarmAgentSlot, 'timer' | 'key' | 'lastUsed'>): void {
-  const key = warmKey(slot.kind, slot.cwd, slot.sessionId);
+  const conversationId = slot.conversationId ?? slot.sessionId;
+  const key = warmKey(slot.kind, slot.cwd, slot.sessionId, conversationId);
+  // A conversation keeps exactly one warm process. cwd is not an identity:
+  // unrelated conversations can legitimately share the same workspace.
+  for (const [existingKey, existing] of pool) {
+    if (existingKey === key || (existing.conversationId ?? existing.sessionId) !== conversationId)
+      continue;
+    pool.delete(existingKey);
+    clearTimeout(existing.timer);
+    void disposeSlot(existing);
+  }
   // Replace any stale entry for this session.
   const prev = pool.get(key);
   if (prev) {
@@ -69,6 +101,7 @@ export function putWarmSlot(slot: Omit<WarmAgentSlot, 'timer' | 'key' | 'lastUse
   }
   const entry: WarmAgentSlot = {
     ...slot,
+    conversationId,
     key,
     lastUsed: Date.now(),
     timer: setTimeout(() => {
@@ -82,6 +115,16 @@ export function putWarmSlot(slot: Omit<WarmAgentSlot, 'timer' | 'key' | 'lastUse
   // Don't keep the event loop alive solely for idle eviction.
   entry.timer.unref?.();
   pool.set(key, entry);
+  if (pool.size > MAX_WARM_SLOTS) {
+    const oldest = [...pool.values()]
+      .filter((candidate) => candidate.key !== key)
+      .sort((a, b) => a.lastUsed - b.lastUsed)[0];
+    if (oldest) {
+      pool.delete(oldest.key);
+      clearTimeout(oldest.timer);
+      void disposeSlot(oldest);
+    }
+  }
 }
 
 export async function disposeSlot(
@@ -91,7 +134,7 @@ export async function disposeSlot(
   const child = slot.child;
   if ('canClose' in slot && slot.canClose && !conn.hasExited()) {
     try {
-      await conn.request('session/close', { sessionId: slot.sessionId });
+      await bounded(conn.request('session/close', { sessionId: slot.sessionId }));
     } catch {
       // ignore — kill path follows
     }
@@ -102,7 +145,18 @@ export async function disposeSlot(
     // ignore
   }
   if (!child.killed) child.kill('SIGTERM');
-  await conn.exited.catch(() => undefined);
+  const exited = await bounded(
+    conn.exited.then(
+      () => true,
+      () => true,
+    ),
+  );
+  if (!exited) {
+    // SIGTERM is a request. An agent that ignores it would leak one warm
+    // child per evicted slot, so the dispose path escalates.
+    child.kill('SIGKILL');
+    await conn.exited.catch(() => undefined);
+  }
 }
 
 /** Test helper: drop every warm slot. */

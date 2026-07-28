@@ -49,6 +49,9 @@ import type {
   AutomationStateEntry,
   AutomationTriggerKind,
   AutomationTriggerOrigin,
+  ConversationHarnessSession,
+  ConversationWorkspaceKind,
+  ConversationWorkspaceSelection,
   ItemKind,
   RunKind,
 } from './schema.js';
@@ -76,7 +79,7 @@ export interface CreateConversationInput {
   readonly appId?: string;
   readonly automationId?: string;
   readonly title?: string;
-  /** Runner ownership fixed when an automation conversation is created. */
+  /** Initial runner binding; mutable after successful handoffs. */
   readonly adapterKind?: string;
 }
 
@@ -90,6 +93,8 @@ export interface InsertTurnInput {
   /** Client-supplied idempotency key (issue #420). */
   readonly idempotencyKey?: string;
   readonly note?: string;
+  /** Explicit D4 marker: estimated handoff prompt tokens, not ACP usage. */
+  readonly hydrationTokens?: number;
   readonly startedAt: number;
 }
 
@@ -136,6 +141,7 @@ export interface InsertItemInput {
   readonly cacheWriteTokens?: number;
   readonly model?: string;
   readonly provider?: string;
+  readonly effort?: string;
   readonly costUsd?: number;
   /** Issue #514 — `agent` (ACP) or `estimated` (catalog). */
   readonly costSource?: 'agent' | 'estimated';
@@ -172,6 +178,7 @@ export interface CloseItemInput {
   readonly cacheWriteTokens?: number;
   readonly model?: string;
   readonly provider?: string;
+  readonly effort?: string;
   readonly costUsd?: number;
   /** Issue #514 — `agent` (ACP) or `estimated` (catalog). */
   readonly costSource?: 'agent' | 'estimated';
@@ -185,6 +192,7 @@ export interface InsertAttachmentInput {
   readonly sizeBytes: number;
   readonly source?: string;
   readonly filename?: string;
+  readonly workspacePath?: string;
 }
 
 export interface ListTurnsOptions {
@@ -335,6 +343,7 @@ export class ConversationStore {
       ...(input.automationId !== undefined ? { automationId: input.automationId } : {}),
       title: input.title ?? '',
       ...(input.adapterKind !== undefined ? { adapterKind: input.adapterKind } : {}),
+      hydrationCount: 0,
       turnCount: 0,
       pinned: false,
       archived: false,
@@ -344,9 +353,10 @@ export class ConversationStore {
   }
 
   /**
-   * Ensure one long-lived conversation for this automation+harness pair.
-   * A harness switch deliberately chooses another conversation; ACP resume
-   * handles never cross runner ownership.
+   * Ensure one long-lived ledger conversation for this automation. Runner
+   * ownership is the mutable `(adapterKind, adapterSessionId)` binding on the
+   * row, never part of conversation identity. A runner switch therefore keeps
+   * one contiguous history and simply declines the old runner's resume handle.
    */
   ensureAutomationConversation(
     automationRef: string,
@@ -354,10 +364,7 @@ export class ConversationStore {
     name?: string,
     runnerKind?: string,
   ): string {
-    const conversationId =
-      runnerKind === undefined
-        ? automationRef
-        : `${automationRef}::runner:${encodeURIComponent(runnerKind)}`;
+    const conversationId = automationRef;
     const existing = this.getConversation(conversationId);
     if (!existing) {
       this.createConversation({
@@ -373,21 +380,6 @@ export class ConversationStore {
     }
     if (existing.kind !== 'automation' || existing.automationId !== automationRef) {
       throw new Error(`conversation id collision for automation "${conversationId}"`);
-    }
-    // Unreachable through this method — the id above encodes `runnerKind`, so
-    // a row found under it was created for that kind. It stays as a corruption
-    // guard for the rows that DON'T come from here: a hand-edited ledger, or
-    // the deprecated `createAutomationRun` path where a caller's own ref can
-    // collide with the `::runner:` encoding. Failing loudly beats handing an
-    // ACP resume handle to the wrong harness.
-    if (
-      runnerKind !== undefined &&
-      existing.adapterKind !== undefined &&
-      existing.adapterKind !== runnerKind
-    ) {
-      throw new Error(
-        `automation conversation "${conversationId}" belongs to ${existing.adapterKind}, not ${runnerKind}`,
-      );
     }
     const { stmts } = this.ensureReady();
     stmts.updateAutomationConversation.run(
@@ -531,26 +523,328 @@ export class ConversationStore {
   noteTurn(
     id: string,
     userId: string,
-    adapter?: { kind: string; sessionId?: string; usageSnapshot?: AdapterUsageSnapshot },
+    adapter?: {
+      kind: string;
+      sessionId?: string;
+      usageSnapshot?: AdapterUsageSnapshot;
+      hydrated?: boolean;
+    },
   ): boolean {
-    const { stmts } = this.ensureReady();
+    const { db, stmts } = this.ensureReady();
     const now = Date.now();
+    const hydrated = adapter?.hydrated === true ? 1 : 0;
     let res;
     if (adapter && adapter.sessionId !== undefined) {
+      // `turns.seq` starts at 0, so -1 — not 0 — is the "nothing hydrated yet"
+      // sentinel. A 0 here would silently exclude the first turn from every
+      // later delta hydration (`seq > afterSeq`).
+      const maxSeq = Number(
+        (
+          db
+            .prepare(`SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`)
+            .get(id) as { seq: number }
+        ).seq,
+      );
+      // Preserve one active + at most one warm process candidate without
+      // discarding older valid resume handles. A displaced warm binding
+      // becomes cold (durable but no longer process-warm); stale is reserved
+      // for handles that must never be resumed again.
+      const active = db
+        .prepare(
+          `SELECT runner_kind, acp_session_id
+             FROM conversation_harness_sessions
+            WHERE conversation_id = ? AND status = 'active'
+            LIMIT 1`,
+        )
+        .get(id) as { runner_kind: string; acp_session_id: string } | undefined;
+      const activeChanges =
+        active !== undefined &&
+        (active.runner_kind !== adapter.kind || active.acp_session_id !== adapter.sessionId);
+      if (activeChanges) {
+        db.prepare(
+          `UPDATE conversation_harness_sessions
+              SET status = 'cold'
+            WHERE conversation_id = ? AND status = 'warm'
+              AND NOT (runner_kind = ? AND acp_session_id = ?)`,
+        ).run(id, adapter.kind, adapter.sessionId);
+        db.prepare(
+          `UPDATE conversation_harness_sessions
+              SET status = 'warm'
+            WHERE conversation_id = ? AND status = 'active'
+              AND NOT (runner_kind = ? AND acp_session_id = ?)`,
+        ).run(id, adapter.kind, adapter.sessionId);
+      }
+      db.prepare(
+        `INSERT INTO conversation_harness_sessions (
+           id, conversation_id, runner_kind, acp_session_id, usage_snapshot_json,
+           hydrated_through_seq, status, last_used_at, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)
+         ON CONFLICT(conversation_id, runner_kind, acp_session_id) DO UPDATE SET
+           usage_snapshot_json = excluded.usage_snapshot_json,
+           hydrated_through_seq = MAX(
+             conversation_harness_sessions.hydrated_through_seq,
+             excluded.hydrated_through_seq
+           ),
+           status = 'active',
+           last_used_at = excluded.last_used_at`,
+      ).run(
+        randomUUID(),
+        id,
+        adapter.kind,
+        adapter.sessionId,
+        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
+        maxSeq,
+        now,
+        now,
+      );
+      // A runner can have only one resumable binding. Superseded opaque ids
+      // stay as `stale` audit rows rather than silently disappearing.
+      db.prepare(
+        `UPDATE conversation_harness_sessions
+            SET status = 'stale'
+          WHERE conversation_id = ?
+            AND runner_kind = ?
+            AND acp_session_id <> ?
+            AND status <> 'stale'`,
+      ).run(id, adapter.kind, adapter.sessionId);
       res = stmts.noteTurnWithAdapter.run(
         now,
         adapter.kind,
         adapter.sessionId,
         adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
+        hydrated,
+        hydrated,
+        now,
         id,
         userId,
       );
+      // `noteTurn` is normally called from the same transaction that inserted
+      // the just-completed turn. Set the watermark after the conversation
+      // update as well, so it always observes that transaction's final seq.
+      db.prepare(
+        `UPDATE conversation_harness_sessions
+            SET hydrated_through_seq = MAX(
+              hydrated_through_seq,
+              (SELECT COALESCE(MAX(seq), -1) FROM turns WHERE conversation_id = ?)
+            )
+          WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?`,
+      ).run(id, id, adapter.kind, adapter.sessionId);
     } else if (adapter) {
-      res = stmts.noteTurnKindOnly.run(now, adapter.kind, id, userId);
+      res = stmts.noteTurnKindOnly.run(now, adapter.kind, hydrated, hydrated, now, id, userId);
     } else {
       res = stmts.noteTurnNoAdapter.run(now, id, userId);
     }
     return Number(res.changes) > 0;
+  }
+
+  /**
+   * Commit a completed failed turn without changing the active provider.
+   *
+   * If the failed prompt ran against an already-known exact session, advance
+   * only that binding's cumulative accounting. A new target session is
+   * deliberately not inserted: failure must never replace the prior active
+   * binding, while an existing session must not double-book cumulative usage
+   * on its next resume.
+   *
+   * The hydration watermark is deliberately NOT advanced: the failed turn's
+   * user message never reached the model, so it must stay inside the next
+   * delta hydration rather than being marked as already-delivered context.
+   */
+  noteFailedTurn(
+    id: string,
+    userId: string,
+    adapter?: {
+      kind: string;
+      sessionId?: string;
+      usageSnapshot?: AdapterUsageSnapshot;
+      hydrated?: boolean;
+    },
+  ): boolean {
+    const { db, stmts } = this.ensureReady();
+    const now = Date.now();
+    const res = stmts.noteTurnNoAdapter.run(now, id, userId);
+    if (Number(res.changes) === 0) return false;
+    if (adapter?.sessionId) {
+      db.prepare(
+        `UPDATE conversation_harness_sessions
+            SET usage_snapshot_json = COALESCE(?, usage_snapshot_json),
+                last_used_at = ?
+          WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?
+            AND status <> 'stale'`,
+      ).run(
+        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
+        now,
+        id,
+        adapter.kind,
+        adapter.sessionId,
+      );
+    }
+    if (adapter?.hydrated) {
+      db.prepare(
+        `UPDATE conversations
+            SET hydration_count = hydration_count + 1,
+                last_hydrated_at = ?
+          WHERE id = ? AND user_id = ?`,
+      ).run(now, id, userId);
+    }
+    return true;
+  }
+
+  /** Latest non-stale resumable session for this conversation + runner. */
+  getHarnessBinding(
+    conversationId: string,
+    runnerKind: string,
+  ): ConversationHarnessSession | undefined {
+    const { db } = this.ensureReady();
+    const raw = db
+      .prepare(
+        `SELECT id, conversation_id, runner_kind, acp_session_id,
+                usage_snapshot_json, hydrated_through_seq, status,
+                last_used_at, created_at
+           FROM conversation_harness_sessions
+          WHERE conversation_id = ? AND runner_kind = ? AND status <> 'stale'
+          ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, last_used_at DESC
+          LIMIT 1`,
+      )
+      .get(conversationId, runnerKind) as
+      | {
+          id: string;
+          conversation_id: string;
+          runner_kind: string;
+          acp_session_id: string;
+          usage_snapshot_json: string | null;
+          hydrated_through_seq: number;
+          status: 'active' | 'warm' | 'cold';
+          last_used_at: number;
+          created_at: number;
+        }
+      | undefined;
+    if (!raw) return undefined;
+    let usageSnapshot: AdapterUsageSnapshot | undefined;
+    if (raw.usage_snapshot_json) {
+      try {
+        usageSnapshot = JSON.parse(raw.usage_snapshot_json) as AdapterUsageSnapshot;
+      } catch {
+        // A corrupt optional accounting snapshot cannot hide the resume handle.
+      }
+    }
+    return {
+      id: raw.id,
+      conversationId: raw.conversation_id,
+      kind: raw.runner_kind,
+      acpSessionId: raw.acp_session_id,
+      ...(usageSnapshot ? { usageSnapshot } : {}),
+      hydratedThroughSeq: Number(raw.hydrated_through_seq),
+      status: raw.status,
+      lastUsedAt: raw.last_used_at,
+      createdAt: raw.created_at,
+    };
+  }
+
+  markHarnessBindingStale(id: string): void {
+    this.ensureReady()
+      .db.prepare(
+        `UPDATE conversation_harness_sessions
+            SET status = 'stale'
+          WHERE id = ?`,
+      )
+      .run(id);
+  }
+
+  /** Persisted cross-process single-writer claim. */
+  acquireTurnLock(conversationId: string, token: string, now = Date.now()): boolean {
+    const { db } = this.ensureReady();
+    const staleBefore = now - 30 * 60_000;
+    const result = db
+      .prepare(
+        `INSERT INTO conversation_turn_locks (conversation_id, lock_token, acquired_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(conversation_id) DO UPDATE SET
+           lock_token = excluded.lock_token,
+           acquired_at = excluded.acquired_at
+         WHERE conversation_turn_locks.acquired_at < ?`,
+      )
+      .run(conversationId, token, now, staleBefore);
+    return Number(result.changes) > 0;
+  }
+
+  /**
+   * Renew a live turn lease without letting a stale owner revive a lock that
+   * another process has already taken over.
+   */
+  refreshTurnLock(conversationId: string, token: string, now = Date.now()): boolean {
+    const result = this.ensureReady()
+      .db.prepare(
+        `UPDATE conversation_turn_locks
+            SET acquired_at = ?
+          WHERE conversation_id = ? AND lock_token = ?`,
+      )
+      .run(now, conversationId, token);
+    return Number(result.changes) > 0;
+  }
+
+  releaseTurnLock(conversationId: string, token: string): void {
+    this.ensureReady()
+      .db.prepare(
+        `DELETE FROM conversation_turn_locks
+          WHERE conversation_id = ? AND lock_token = ?`,
+      )
+      .run(conversationId, token);
+  }
+
+  getWorkspaceSelection(conversationId: string): ConversationWorkspaceSelection | undefined {
+    const raw = this.ensureReady()
+      .db.prepare(
+        `SELECT conversation_id, primary_kind, additional_directories_json, updated_at
+           FROM conversation_workspace_selection
+          WHERE conversation_id = ?`,
+      )
+      .get(conversationId) as
+      | {
+          conversation_id: string;
+          primary_kind: ConversationWorkspaceKind;
+          additional_directories_json: string;
+          updated_at: number;
+        }
+      | undefined;
+    if (!raw) return undefined;
+    let parsed: unknown = [];
+    try {
+      parsed = JSON.parse(raw.additional_directories_json);
+    } catch {
+      // Corrupt optional selections fail closed to no additional roots.
+    }
+    const additionalDirectories = Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === 'string')
+      : [];
+    return {
+      conversationId: raw.conversation_id,
+      primaryKind: raw.primary_kind,
+      additionalDirectories,
+      updatedAt: raw.updated_at,
+    };
+  }
+
+  setWorkspaceSelection(
+    conversationId: string,
+    primaryKind: ConversationWorkspaceKind,
+    additionalDirectories: readonly string[],
+    now = Date.now(),
+  ): void {
+    const allowed: readonly ConversationWorkspaceKind[] = ['vault-data', 'app', 'draft'];
+    if (!allowed.includes(primaryKind)) throw new Error('invalid Centraid workspace kind');
+    const selected = [...new Set(additionalDirectories)];
+    this.ensureReady()
+      .db.prepare(
+        `INSERT INTO conversation_workspace_selection (
+           conversation_id, primary_kind, additional_directories_json, updated_at
+         ) VALUES (?, ?, ?, ?)
+         ON CONFLICT(conversation_id) DO UPDATE SET
+           primary_kind = excluded.primary_kind,
+           additional_directories_json = excluded.additional_directories_json,
+           updated_at = excluded.updated_at`,
+      )
+      .run(conversationId, primaryKind, JSON.stringify(selected), now);
   }
 
   // ─── turns ──────────────────────────────────────────────────────────
@@ -568,6 +862,7 @@ export class ConversationStore {
       input.retryOf ?? null,
       input.idempotencyKey ?? null,
       input.note ?? null,
+      input.hydrationTokens ?? null,
       input.startedAt,
     );
   }
@@ -595,6 +890,13 @@ export class ConversationStore {
       outputJson: input.outputJson ?? null,
       tid: input.turnId,
     });
+  }
+
+  /** Stamp the explicit D4 handoff marker after a host-owned dispatch settles. */
+  setTurnHydrationTokens(turnId: string, hydrationTokens: number): void {
+    this.ensureReady()
+      .db.prepare(`UPDATE turns SET hydration_tokens = ? WHERE id = ? AND ended_at IS NOT NULL`)
+      .run(Math.max(0, Math.floor(hydrationTokens)), turnId);
   }
 
   getTurn(turnId: string): Turn | undefined {
@@ -732,6 +1034,7 @@ export class ConversationStore {
       input.text ?? null,
       input.model ?? null,
       input.provider ?? null,
+      input.effort ?? null,
       input.inputTokens ?? null,
       input.outputTokens ?? null,
       input.cacheReadTokens ?? null,
@@ -783,6 +1086,7 @@ export class ConversationStore {
       cacheWriteTokens: input.cacheWriteTokens ?? null,
       model: input.model ?? null,
       provider: input.provider ?? null,
+      effort: input.effort ?? null,
       costUsd: input.costUsd ?? null,
       costSource: input.costSource ?? null,
       endedAt: input.endedAt,
@@ -817,6 +1121,7 @@ export class ConversationStore {
       input.sizeBytes,
       input.source ?? null,
       input.filename ?? null,
+      input.workspacePath ?? null,
       Date.now(),
     );
     return id;

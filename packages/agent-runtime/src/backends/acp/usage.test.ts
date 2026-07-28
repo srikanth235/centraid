@@ -132,17 +132,35 @@ describe('readTokenUsage / readCost', () => {
 
 describe('buildUsageEvent', () => {
   it('emits nothing when the agent reported nothing worth recording', () => {
-    expect(buildUsageEvent('acp', 'm', {}, undefined)).toBeUndefined();
+    expect(buildUsageEvent('acp', 'm', undefined, {}, undefined)).toBeUndefined();
   });
 
   it('withholds a non-USD amount rather than mislabelling it as costUsd', () => {
-    const event = buildUsageEvent('acp', 'm', { inputTokens: 5 }, { amount: 3, currency: 'EUR' });
+    const event = buildUsageEvent(
+      'acp',
+      'm',
+      'high',
+      { inputTokens: 5 },
+      { amount: 3, currency: 'EUR' },
+    );
     expect(event).toMatchObject({ type: 'usage', provider: 'acp', model: 'm', inputTokens: 5 });
+    expect(event).toMatchObject({ effort: 'high' });
     expect(event && 'costUsd' in event).toBe(false);
   });
 
+  it('does not book a usage row for effort alone', () => {
+    // Effort is a configuration label, not spend. Emitting for it wrote a
+    // zero-token, zero-cost ledger row for every turn a runner reported no
+    // usage at all.
+    expect(buildUsageEvent('acp', 'm', 'high', {}, undefined)).toBeUndefined();
+    // It still rides along whenever there IS usage to book (see above).
+    expect(buildUsageEvent('acp', 'm', 'high', { inputTokens: 1 }, undefined)).toMatchObject({
+      effort: 'high',
+    });
+  });
+
   it('omits an unconfirmed model so repricing never trusts a guess', () => {
-    const event = buildUsageEvent('acp', undefined, { inputTokens: 5 }, undefined);
+    const event = buildUsageEvent('acp', undefined, undefined, { inputTokens: 5 }, undefined);
     expect(event && 'model' in event).toBe(false);
   });
 });

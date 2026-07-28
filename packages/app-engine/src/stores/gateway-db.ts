@@ -71,6 +71,10 @@
  *                        Insights/Executions union this with live run_summary
  *                        so pruning raw rows stays invisible to every
  *                        dashboard. CASCADE off `conversations`.
+ *     runner_health    — workspace × runner × failure-class circuit breakers
+ *                        used only at turn boundaries.
+ *     conversation_provider_consent
+ *                      — explicit conversation × runner egress grants.
  *
  *     `turns.conversation_id` and `items.turn_id` and `attachments.item_id`
  *     are real same-file FKs (CASCADE): deleting a conversation drops its
@@ -136,6 +140,8 @@ export const CONVERSATION_LEDGER_DDL = `
       adapter_kind       TEXT,
       adapter_session_id TEXT,
       adapter_usage_json TEXT,
+      hydration_count    INTEGER NOT NULL DEFAULT 0,
+      last_hydrated_at   INTEGER,
       turn_count         INTEGER NOT NULL DEFAULT 0,
       item_count         INTEGER NOT NULL DEFAULT 0,
       pinned             INTEGER NOT NULL DEFAULT 0,
@@ -163,6 +169,9 @@ export const CONVERSATION_LEDGER_DDL = `
       output_json              TEXT,
       retry_of                 TEXT,
       idempotency_key          TEXT,
+      -- Explicit handoff-cost marker (D4): estimated canonical-ledger prompt
+      -- tokens injected on this turn, separate from ACP-reported usage.
+      hydration_tokens         INTEGER,
       ok                       INTEGER NOT NULL DEFAULT 0,
       error                    TEXT,
       feedback                 TEXT,
@@ -207,6 +216,9 @@ export const CONVERSATION_LEDGER_DDL = `
       child_turn_id      TEXT,
       model              TEXT,
       provider           TEXT,
+      -- ACP semantic thought_level confirmed for this call. NULL means the
+      -- runner did not confirm a selectable effort; never infer a default.
+      effort             TEXT,
       input_tokens       INTEGER,
       output_tokens      INTEGER,
       cache_read_tokens  INTEGER,
@@ -239,12 +251,95 @@ export const CONVERSATION_LEDGER_DDL = `
       size_bytes INTEGER NOT NULL,
       source     TEXT,
       filename   TEXT,
+      -- Agent-created files stay in their workspace. The hash verifies the
+      -- referenced bytes; no duplicate is copied into the blob CAS.
+      workspace_path TEXT,
       created_at INTEGER NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_attachments_item
       ON attachments(item_id);
     CREATE INDEX IF NOT EXISTS idx_attachments_hash
       ON attachments(hash);
+
+    -- ACP resume handles are bindings to the canonical conversation ledger,
+    -- never the ledger identity itself. Retaining one row per observed
+    -- runner/session lets A → B → A resume A and hydrate only the canonical
+    -- turn delta past A's watermark.
+    CREATE TABLE IF NOT EXISTS conversation_harness_sessions (
+      id                    TEXT PRIMARY KEY,
+      conversation_id       TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      runner_kind           TEXT NOT NULL,
+      acp_session_id        TEXT NOT NULL,
+      usage_snapshot_json   TEXT,
+      hydrated_through_seq  INTEGER NOT NULL DEFAULT -1,
+      status                TEXT NOT NULL DEFAULT 'warm',
+      last_used_at          INTEGER NOT NULL,
+      created_at            INTEGER NOT NULL,
+      UNIQUE (conversation_id, runner_kind, acp_session_id),
+      CHECK (status IN ('active','warm','cold','stale'))
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_conversation_harness_latest
+      ON conversation_harness_sessions(conversation_id, runner_kind, status, last_used_at DESC);
+
+    -- Cross-process single writer. The in-process queue improves UX; this row
+    -- is the correctness boundary shared by a gateway and worker processes.
+    CREATE TABLE IF NOT EXISTS conversation_turn_locks (
+      conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+      lock_token      TEXT NOT NULL,
+      acquired_at     INTEGER NOT NULL
+    ) STRICT;
+
+    -- The workspace choice is an enum resolved by the host to Centraid-owned
+    -- roots. Raw client paths never become durable authority. Additional roots
+    -- are recorded as explicit per-conversation consent.
+    CREATE TABLE IF NOT EXISTS conversation_workspace_selection (
+      conversation_id             TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+      primary_kind                TEXT NOT NULL,
+      additional_directories_json TEXT NOT NULL DEFAULT '[]',
+      updated_at                  INTEGER NOT NULL,
+      CHECK (primary_kind IN ('vault-data','app','draft'))
+    ) STRICT;
+
+    -- Persistent runner circuit breakers. One row per workspace context,
+    -- runner and failure class keeps an auth outage independent from a later
+    -- transport wedge and prevents one broken project from sidelining a
+    -- runner everywhere on the device.
+    CREATE TABLE IF NOT EXISTS runner_health (
+      workspace_context    TEXT NOT NULL,
+      runner_kind          TEXT NOT NULL,
+      failure_class        TEXT NOT NULL,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      breaker_until        INTEGER,
+      half_open_claimed_at INTEGER,
+      last_error           TEXT,
+      last_failure_at      INTEGER,
+      last_ok_at           INTEGER,
+      PRIMARY KEY (workspace_context, runner_kind, failure_class),
+      CHECK (failure_class IN ('spawn','auth','init','timeout','quota','wedge','exit','unknown'))
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_runner_health_breaker
+      ON runner_health(workspace_context, runner_kind, breaker_until);
+
+    -- Explicit provider-egress grants. Direct consent and ladder-derived
+    -- consent are separate rows: removing a runner from one subsystem ladder
+    -- revokes only that subsystem's forward grant and never erases a direct
+    -- conversation × provider decision.
+    CREATE TABLE IF NOT EXISTS conversation_provider_consent (
+      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+      runner_kind     TEXT NOT NULL,
+      source          TEXT NOT NULL,
+      subsystem       TEXT NOT NULL,
+      granted_at      INTEGER NOT NULL,
+      revoked_at      INTEGER,
+      PRIMARY KEY (conversation_id, runner_kind, source, subsystem),
+      CHECK (
+        (source = 'direct' AND subsystem = '')
+        OR
+        (source = 'ladder' AND subsystem IN ('assistant','ask','builder','automations'))
+      )
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_conversation_provider_consent_active
+      ON conversation_provider_consent(conversation_id, runner_kind, subsystem, revoked_at);
 
     CREATE TABLE IF NOT EXISTS automation_state (
       automation_id TEXT NOT NULL,
@@ -335,8 +430,8 @@ export const CONVERSATION_LEDGER_DDL = `
     -- run_summary view). Insights and the Executions feed union live run_summary
     -- aggregates with these digest rollups, so pruning raw rows is invisible to
     -- every dashboard — the numbers before archive == digest+live after prune.
-    -- models_json is the per-model rollup [{model,runs,tokens,cost}] so byModel
-    -- stays truthful once the item rows are gone. first_started_at/last_ended_at
+    -- models_json / efforts_json keep the confirmed semantic breakdowns
+    -- truthful once item rows are gone. first_started_at/last_ended_at
     -- bound the archived span (digests carry no per-day grain — day-grain series
     -- coarsen archived rollups only beyond the archive horizon; see insights-store).
     CREATE TABLE IF NOT EXISTS conversation_digest (
@@ -356,10 +451,12 @@ export const CONVERSATION_LEDGER_DDL = `
       total_output_tokens      INTEGER NOT NULL DEFAULT 0,
       total_cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
       total_cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+      total_hydration_tokens   INTEGER NOT NULL DEFAULT 0,
       total_cost_usd           REAL NOT NULL DEFAULT 0,
       step_count               INTEGER NOT NULL DEFAULT 0,
       tool_count               INTEGER NOT NULL DEFAULT 0,
       models_json              TEXT NOT NULL DEFAULT '[]',
+      efforts_json             TEXT NOT NULL DEFAULT '[]',
       updated_at               INTEGER NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_conversation_digest_automation
@@ -411,12 +508,20 @@ export const CONVERSATION_LEDGER_DDL = `
           GROUP BY i.provider
           ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
           LIMIT 1)       AS provider,
+        -- Effort is recorded only after ACP confirms thought_level. Picking
+        -- the dominant confirmed value mirrors the model/provider rollups.
+        (SELECT i.effort FROM items i
+          WHERE i.turn_id = t.id AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
+          GROUP BY i.effort
+          ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+          LIMIT 1)       AS effort,
         t.started_at               AS started_at,
         t.ended_at                 AS ended_at,
         t.total_input_tokens       AS total_input_tokens,
         t.total_output_tokens      AS total_output_tokens,
         t.total_cache_read_tokens  AS total_cache_read_tokens,
         t.total_cache_write_tokens AS total_cache_write_tokens,
+        t.hydration_tokens          AS hydration_tokens,
         t.total_cost_usd           AS total_cost_usd,
         t.step_count               AS step_count,
         t.tool_count               AS tool_count
@@ -521,6 +626,41 @@ const CONVERSATION_ITEM_COUNT_DDL = `
  * directly instead of opening a second connection.
  */
 export function ensureConversationLedger(db: DatabaseSync): void {
+  // Schema-dependent views are recreated by CONVERSATION_LEDGER_DDL. Upgrade
+  // the source tables first on an existing vault, otherwise SQLite rejects
+  // CREATE VIEW run_summary when it encounters the new `items.effort` column.
+  const existingTable = (name: string): boolean =>
+    db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name) !==
+    undefined;
+  if (existingTable('items')) {
+    const existingItemCols = (
+      db.prepare(`PRAGMA table_info(items)`).all() as { name: string }[]
+    ).map((column) => column.name);
+    if (!existingItemCols.includes('effort')) {
+      db.exec(`ALTER TABLE items ADD COLUMN effort TEXT`);
+    }
+  }
+  if (existingTable('conversation_digest')) {
+    const existingDigestCols = (
+      db.prepare(`PRAGMA table_info(conversation_digest)`).all() as { name: string }[]
+    ).map((column) => column.name);
+    if (!existingDigestCols.includes('efforts_json')) {
+      db.exec(`ALTER TABLE conversation_digest ADD COLUMN efforts_json TEXT NOT NULL DEFAULT '[]'`);
+    }
+    if (!existingDigestCols.includes('total_hydration_tokens')) {
+      db.exec(
+        `ALTER TABLE conversation_digest ADD COLUMN total_hydration_tokens INTEGER NOT NULL DEFAULT 0`,
+      );
+    }
+  }
+  if (existingTable('turns')) {
+    const existingTurnCols = (
+      db.prepare(`PRAGMA table_info(turns)`).all() as { name: string }[]
+    ).map((column) => column.name);
+    if (!existingTurnCols.includes('hydration_tokens')) {
+      db.exec(`ALTER TABLE turns ADD COLUMN hydration_tokens INTEGER`);
+    }
+  }
   db.exec(CONVERSATION_LEDGER_DDL);
   const conversationCols = (
     db.prepare(`PRAGMA table_info(conversations)`).all() as { name: string }[]
@@ -537,6 +677,12 @@ export function ensureConversationLedger(db: DatabaseSync): void {
          )
     `);
   }
+  if (!conversationCols.includes('hydration_count')) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN hydration_count INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!conversationCols.includes('last_hydrated_at')) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN last_hydrated_at INTEGER`);
+  }
   // Issue #514: cost provenance on existing vaults created before cost_source.
   const itemCols = (db.prepare(`PRAGMA table_info(items)`).all() as { name: string }[]).map(
     (c) => c.name,
@@ -544,6 +690,51 @@ export function ensureConversationLedger(db: DatabaseSync): void {
   if (!itemCols.includes('cost_source')) {
     db.exec(`ALTER TABLE items ADD COLUMN cost_source TEXT`);
   }
+  if (existingTable('attachments')) {
+    const attachmentCols = (
+      db.prepare(`PRAGMA table_info(attachments)`).all() as { name: string }[]
+    ).map((c) => c.name);
+    if (!attachmentCols.includes('workspace_path')) {
+      db.exec(`ALTER TABLE attachments ADD COLUMN workspace_path TEXT`);
+    }
+  }
+  if (existingTable('runner_health')) {
+    const healthCols = (
+      db.prepare(`PRAGMA table_info(runner_health)`).all() as { name: string }[]
+    ).map((c) => c.name);
+    if (!healthCols.includes('half_open_claimed_at')) {
+      db.exec(`ALTER TABLE runner_health ADD COLUMN half_open_claimed_at INTEGER`);
+    }
+  }
+  if (existingTable('conversation_workspace_selection')) {
+    const workspaceCols = (
+      db.prepare(`PRAGMA table_info(conversation_workspace_selection)`).all() as {
+        name: string;
+      }[]
+    ).map((c) => c.name);
+    if (!workspaceCols.includes('additional_directories_json')) {
+      db.exec(
+        `ALTER TABLE conversation_workspace_selection
+           ADD COLUMN additional_directories_json TEXT NOT NULL DEFAULT '[]'`,
+      );
+    }
+  }
+  // Pre-release cut-over: existing single resume handles become the first
+  // canonical binding. New turns update this table and keep the legacy
+  // conversation columns only as a read-through compatibility projection.
+  db.exec(`
+    INSERT OR IGNORE INTO conversation_harness_sessions (
+      id, conversation_id, runner_kind, acp_session_id,
+      usage_snapshot_json, hydrated_through_seq, status, last_used_at, created_at
+    )
+    SELECT lower(hex(randomblob(16))), c.id, c.adapter_kind, c.adapter_session_id,
+           c.adapter_usage_json, COALESCE(MAX(t.seq), -1), 'active',
+           c.updated_at, c.created_at
+      FROM conversations c
+      LEFT JOIN turns t ON t.conversation_id = c.id
+     WHERE c.adapter_kind IS NOT NULL AND c.adapter_session_id IS NOT NULL
+     GROUP BY c.id
+  `);
   db.exec(CONVERSATION_ITEM_COUNT_DDL);
   db.exec(CONVERSATION_FTS_DDL);
 }

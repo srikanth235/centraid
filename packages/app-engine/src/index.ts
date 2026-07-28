@@ -46,6 +46,7 @@ export type {
   ConversationTurnInput,
   ConversationTurnResult,
   TurnStreamEvent,
+  AgentFailureClass,
 } from './conversation/runner.js';
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in `@centraid/automation`. The model turn is injected as a
@@ -264,9 +265,11 @@ export {
   withConversationLock,
   parseTurnAttachmentRefs,
   resolveTurnAttachments,
+  validateTurnAttachmentRefs,
   type DriveTurnOptions,
   type TurnAttachmentRef,
 } from './http/turn-sse.js';
+export { parseAdditionalDirectories, parseWorkspaceKind } from './http/turn-sse-support.js';
 // Idempotency replay (issue #420): recorded-turn → SSE event sequence.
 export { buildReplayEvents } from './http/turn-replay.js';
 // Per-vault turn-concurrency gate (issue #420): bounds concurrently-running
@@ -328,14 +331,36 @@ export type { VaultWorkspace, WorkspaceProvider } from './stores/vault-workspace
 // ledger tables; the old write-through sink is gone). The type stays at the
 // package root so the `insights/` boundary remains one-way (#151).
 export type { RunSummary } from './conversation/run-summary-sink.js';
+export {
+  compileHydrationPlan,
+  hydrationMessagesFromLedger,
+  type HydrationMessage,
+  type HydrationOptions,
+  type HydrationPlan,
+} from './conversation/hydration.js';
+export {
+  RunnerHealthStore,
+  RUNNER_HEALTH_POLICIES,
+  type RunnerHealthController,
+  type RunnerHealthEntry,
+  type RunnerHealthPolicy,
+  type RunnerHealthStatus,
+} from './conversation/runner-health.js';
+export {
+  ProviderEgressConsentStore,
+  type ProviderEgressConsentController,
+  type ProviderConsentSource,
+} from './conversation/provider-egress-consent.js';
 
 // Device-prefs store + HTTP route dispatcher (a JSON file — #280 killed the
 // identity DB; the wire prefix stays `/_centraid-user` for the desktop client).
 export {
   PrefsStore,
   makeUserStoreRouteHandler,
+  resolveSubsystemConfigPins,
   resolveSubsystemModel,
   resolveSubsystemRunner,
+  resolveSubsystemRunnerLadder,
   type ModelSubsystem,
 } from './stores/prefs-store.js';
 

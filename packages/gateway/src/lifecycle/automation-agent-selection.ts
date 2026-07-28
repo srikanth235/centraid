@@ -1,5 +1,27 @@
-import { isRunnerKind, resolveSubsystemModel, type RunnerKind } from '@centraid/app-engine';
+import {
+  isRunnerKind,
+  resolveSubsystemConfigPins,
+  resolveSubsystemModel,
+  type RunnerKind,
+} from '@centraid/app-engine';
 import type { ManifestRequires } from '@centraid/automation';
+
+/**
+ * Where the selected runner came from. `prefs` means the user's own
+ * automations primary (or a manifest pin that names it anyway) — user-authored
+ * consent for unattended egress. `manifest` means the automation's own
+ * `requires.runner` chose a different provider; manifests are agent-writable,
+ * so that selection is NOT consent and must be checked against the user's
+ * ladder before anything leaves the device (#567 D13/D5).
+ */
+type AutomationRunnerSelectionSource = 'prefs' | 'manifest';
+
+export interface AutomationAgentSelection {
+  runner: RunnerKind;
+  selectionSource: AutomationRunnerSelectionSource;
+  model?: string;
+  configPins?: Readonly<Record<string, string>>;
+}
 
 /**
  * Resolve one automation's harness/model with manifest pins taking priority.
@@ -10,10 +32,32 @@ export function resolveAutomationAgentSelection(
   requires: ManifestRequires,
   prefs: Record<string, unknown>,
   fallbackRunner: RunnerKind,
-): { runner: RunnerKind; model?: string } {
+  options: { includeManifestProviderPins?: boolean } = {},
+): AutomationAgentSelection {
   const runner = isRunnerKind(requires.runner) ? requires.runner : fallbackRunner;
-  const model = resolveSubsystemModel(prefs, runner, 'automations', requires.model);
-  return { runner, ...(model ? { model } : {}) };
+  const selectionSource: AutomationRunnerSelectionSource =
+    runner === fallbackRunner ? 'prefs' : 'manifest';
+  const includeManifestProviderPins = options.includeManifestProviderPins ?? true;
+  const model = resolveSubsystemModel(
+    prefs,
+    runner,
+    'automations',
+    includeManifestProviderPins ? requires.model : undefined,
+  );
+  const configPins = resolveSubsystemConfigPins(
+    prefs,
+    runner,
+    'automations',
+    includeManifestProviderPins && requires.thoughtLevel
+      ? { thought_level: requires.thoughtLevel }
+      : {},
+  );
+  return {
+    runner,
+    selectionSource,
+    ...(model ? { model } : {}),
+    ...(Object.keys(configPins).length > 0 ? { configPins } : {}),
+  };
 }
 
 /**
@@ -23,7 +67,11 @@ export function resolveAutomationAgentSelection(
  */
 export function resolveAutomationRewriteModel(
   requires: ManifestRequires,
-  selection: { runner: RunnerKind; model?: string },
+  selection: {
+    runner: RunnerKind;
+    model?: string;
+    configPins?: Readonly<Record<string, string>>;
+  },
   configuredRewrite: unknown,
   fastModel?: string,
 ): string | undefined {

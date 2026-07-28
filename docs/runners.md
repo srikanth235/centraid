@@ -118,26 +118,32 @@ The claude adapter computes `ALLOW_BYPASS = !IS_ROOT || !!process.env.IS_SANDBOX
 
 As a backstop for agents that prompt anyway, the ACP client auto-allows the least-destructive `session/request_permission` option.
 
-### Model pinning
+### Semantic configuration pins
 
 ACP has no per-prompt model field. An agent advertises `configOptions` on the `session/new` / `session/load` result; the client pins one with `session/set_config_option { sessionId, configId, value }`. The model selector is the option whose `id` is `model` or whose `category` is `model`, and its values are **concrete provider model ids supplied by the agent** — we only ever echo back what it offered, so no model ids are hardcoded (`no-hardcoded-model-ids`).
 
 Kinds whose picker offers capability tiers (`smart`/`balanced`/`fast`) set `resolveModel` to map a tier to the runtime's native alias before matching. When the agent advertises no model option, or offers nothing matching, the turn emits a `notice` — never a silent drop.
 
-An automation can pin both choices in `automation.json`:
+All session configuration is a category-keyed `configPins` map. The well-known
+categories are `model`, `thought_level`, and `mode`; adapter-specific ids such
+as Codex's `reasoning_effort` and Claude's `effort` never cross the engine
+boundary. Model is pinned first, then the client re-reads any
+`config_option_update` before pinning `thought_level`, because a model change
+can rebuild the valid effort values. A requested value is not accounting
+evidence: model and effort are stamped only after ACP confirms the current
+value or accepts the pin.
+
+An automation can pin the runner, model, and thought level in `automation.json`:
 `requires.runner` is an open, non-empty registry key and `requires.model` is
-the model id/alias. At execution time the gateway accepts the runner only when
-the current `RUNNER_KINDS` registry recognizes it; an unknown future/removed
-key falls back to `runner.automations` (then the default agent). Model
-precedence is the manifest pin, `model.<resolved-runner>.automations`, the
-runner-wide default, then the backend default. The same resolution feeds
-headless compile plus manual, scheduled, and webhook fires. Any
-automation-specific conversational route must reuse this resolver rather than
-reading subsystem prefs directly, so authoring and execution cannot silently
-use different harnesses. The durable ledger fixes runner ownership at the
-automation-conversation boundary: changing the runner starts a new
-conversation (history still joins both by automation ref), and an ACP resume
-handle is never carried across that switch.
+the model id/alias; `requires.thoughtLevel` is the semantic effort value.
+At execution time the gateway accepts the runner only when the current
+`RUNNER_KINDS` registry recognizes it; an unknown future/removed key falls back
+to `runner.automations` (then the default agent). Per category, precedence is
+manifest pin, runner+subsystem preference, runner-wide preference, then backend
+default. The same resolution feeds headless compile plus manual, scheduled, and
+webhook fires. Any automation-specific conversational route must reuse this
+resolver rather than reading subsystem prefs directly, so authoring and
+execution cannot silently use different harnesses.
 
 `agent.runner.binPath` and `agent.runner.extraArgs` belong only to the
 configured default runner. A manifest pin to another registered kind uses that
@@ -149,6 +155,59 @@ across a per-turn override.
 `usage_update` carries only context-window `used`/`size` plus a **cumulative** `cost { amount, currency }`; the token breakdown rides on the `session/prompt` result as `PromptResponse.usage`. Both are cumulative per ACP session. Centraid persists the last cumulative snapshot beside the resumable session id and books only the monotonic delta on a later load, warm resume, or process restart. A fresh session, counter regression, or currency change resets that baseline and books the current total in full.
 
 The backend folds these into **one** `usage` event at the end of the turn, stamped with `provider` and with `model` only when the live ACP session confirms it through the model selector's `currentValue` or a successful pin. A requested/configured model is not accounting evidence: an agent may ignore it, so Centraid neither stamps nor prices that identity when ACP does not confirm it. Agent-reported USD is authoritative; a non-USD amount is withheld rather than mislabelled. When ACP reports tokens the catalog can price, accounting books that estimate and stamps `costSource: 'estimated'`. When ACP reports tokens **without** USD and without a model the catalog can price, cost and provenance are both left **NULL** — unknown, not a number. Centraid used to substitute the catalog's maximum per-token rate (with a `$100 / MTok` floor) in that case, which read as a real estimate while being wrong by orders of magnitude for a local or newly released model; that fallback is gone. A caller summing cost must treat NULL as "unknown", never as "free" — the tokens are still recorded, so an unpriced turn is visible as usage without a dollar figure rather than as a cheap one.
+
+### Unified routing, continuity, and egress
+
+Every conversational surface resolves a primary runner plus
+`runner.ladder.<subsystem>` at a turn boundary. A prompt is **never retried
+inside a turn**: once a runner receives it, that turn settles visibly on success
+or failure. An already-open breaker may skip a runner before the prompt is sent.
+Interactive conversations consider the ladder again on the next owner turn;
+scheduled fires and headless compiles re-enter at their outer fire/compile
+boundary, with a new ledger turn id for every rung. Spawn, auth (`-32000` or an
+auth-ish internal error), initialization, timeout, quota, wedge, and exit
+failures have independent persistent breakers keyed by vault workspace and
+runner. Auth stays open until a successful live preflight observes re-auth;
+quota uses TTL/backoff; timeout and wedge admit one half-open claimant. A
+fallback drops the previous provider's model/config pins, starts or resumes its
+own binding, and writes a reader-visible notice naming the failed class.
+
+Hydration is bounded by tokens and complete-turn boundaries. User and assistant
+text is retained, tool calls become one-line summaries, tool output is omitted,
+attachments are filename/MIME references, and custody-pruned archive segments
+never re-enter provider context. Failed `session/resume` or `session/load`
+self-heals through `session/new` plus hydration from watermark zero. The
+`conversation_harness_sessions` binding table holds each runner's opaque ACP
+session id, cumulative usage snapshot, per-runner hydration watermark, status,
+and last-use time. `active` is the selected runner, at most one prior runner is
+`warm`, older valid handles are `cold`, and only invalid or superseded handles
+are `stale`. `conversations.adapter_*` is only the read-through active binding.
+A→B→A therefore keeps one conversation id, resumes A's own handle, and sends
+only the ledger delta past A's watermark. The durable turn lock is the single
+writer; binding/watermark advancement commits with the turn. Conversation
+pruning cascades to bindings.
+
+Before any prompt, hydration, attachment, vault-tool result, or other content
+leaves the gateway, the exact conversation × provider pair must have an active
+grant. Initial use is implicit in the owner's chosen surface. An attended
+cross-provider switch is confirm-gated once per conversation×provider. Settings
+ladder membership is itself the explicit consent for unattended failover, so a
+ladder rung auto-grants with source `ladder` and never prompts at fire time.
+Ladders are never populated from installed CLIs. Removing a provider from all
+of one subsystem's effective ladder revokes grants from that subsystem's
+membership, even when another ladder retains the provider, without revoking
+direct grants or the other subsystem's grant.
+
+Settings runner changes are serialized and preflighted before the atomic prefs
+write. A failed preflight leaves the prior route and active conversation binding
+intact. Each conversation keeps at most one process-warm binding while retaining
+older valid handles as cold durable resume state; stale bindings are audit-only
+and never resumed. The process pool also enforces bounded idle LRU reaping.
+
+The primary workspace is one durable, conversation-scoped Centraid root:
+`vault-data`, `app`, or `draft`. Additional directories are the explicit escape
+hatch: absolute canonical directories only, never `/`, deduplicated by realpath,
+capability-gated, and persisted as the conversation's consent record.
 
 ### Vault tools
 
@@ -174,6 +233,15 @@ Mapped to ACP prompt content blocks by [`multimodal.ts`](../packages/agent-runti
 
 Note the field names are ACP's, not Anthropic's: `ImageContent { data, mimeType }`, **not** a nested `source.media_type`. Only attachments the agent genuinely can't accept (or that can't be read) produce an `attachment_unsupported` notice, and the notice **names** them.
 
+ACP tool `locations` are outbound artifacts. A file still rooted in the turn's
+workspace (or an explicitly shared additional directory) is recorded as
+`source=agent` with its canonical path, size, and SHA-256; its bytes are not
+copied. Inline image/audio/resource bytes without a filesystem home are the only
+agent outputs promoted to the conversation CAS. Homeless terminal and text
+content is normalized into CAS-backed transcript artifacts, while still
+rendering inline; hydration cites workspace path + short hash rather than
+copying prior output prose.
+
 ### Auth
 
 An agent that hasn't been signed in answers session creation with ACP's `AUTH_REQUIRED` — JSON-RPC code **-32000** (`RequestError.authRequired` in the SDK). This is the single most common first-run failure: 18 of the 31 agents in the ACP registry's daily probe return it. The backend detects the code and emits an error built from the registry's own `label` + `installHint`, so the per-kind "how do I log in" string lives in `registry.ts` with the kind's other metadata and never becomes a branch inside the ACP client.
@@ -191,8 +259,8 @@ Centraid is a **headless turn driver + vault MCP host**, not a full IDE ACP clie
 | Model pin | `session/set_config_option` each turn; failed pins are **warn** notices |
 | Vault MCP | HTTP when agent advertises it; otherwise **stdio bridge** (`vault-mcp-stdio-proxy.mjs`) to the same loopback HTTP endpoint |
 | Session continuity | Resume/load notices; short warm process pool (same kind+cwd+session, ~2 min idle) |
-| Capabilities | Settings **Refresh models & capabilities** probes ACP `initialize` and shows chips (vault / resume / models / sign-in) |
-| Plans / diffs | `phase: plan` with normalized `plan[]`; tool results may carry `diffs[]` + `phase: diff` |
+| Capabilities | Settings **Refresh models & capabilities** probes ACP `initialize` plus one bounded diagnostic prompt, persists the full option/signal snapshot by runner launch config, and shows vault / resume / model / effort / context / location / scoped-folder / sign-in chips. It may re-apply the current model value to observe updates but never selects an alternative model. |
+| Plans / diffs / artifacts | `phase: plan` with normalized `plan[]`; tool results may carry `diffs[]`, `locations[]`, inline artifacts, and `phase: diff` |
 | `additionalDirectories` | Passed on session lifecycle when the agent advertises the capability and the turn supplies paths |
 
 Still **not** product features (intentional):

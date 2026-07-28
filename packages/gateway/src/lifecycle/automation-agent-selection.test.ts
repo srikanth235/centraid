@@ -9,6 +9,8 @@ describe('resolveAutomationAgentSelection', () => {
     'model.codex.automations': 'codex-auto',
     'model.claude-code.automations': 'claude-auto',
     'model.claude-code.default': 'claude-default',
+    'config.claude-code.default.thought_level': 'medium',
+    'config.claude-code.automations.thought_level': 'high',
   };
 
   it('gives valid manifest runner/model pins priority over subsystem prefs', () => {
@@ -18,12 +20,21 @@ describe('resolveAutomationAgentSelection', () => {
         prefs,
         'codex',
       ),
-    ).toEqual({ runner: 'claude-code', model: 'claude-explicit' });
+    ).toEqual({
+      runner: 'claude-code',
+      // The manifest named a provider the user's automations lane does not
+      // use, so this selection is not consent for unattended egress (#567).
+      selectionSource: 'manifest',
+      model: 'claude-explicit',
+      configPins: { thought_level: 'high' },
+    });
   });
 
   it('falls back from an unregistered open key and scopes model prefs to that fallback', () => {
     expect(resolveAutomationAgentSelection({ runner: 'future-runner' }, prefs, 'codex')).toEqual({
       runner: 'codex',
+      // Falling back lands on the user's own automations runner.
+      selectionSource: 'prefs',
       model: 'codex-auto',
     });
   });
@@ -31,8 +42,26 @@ describe('resolveAutomationAgentSelection', () => {
   it('uses the pinned runner subsystem model when no model is explicit', () => {
     expect(resolveAutomationAgentSelection({ runner: 'claude-code' }, prefs, 'codex')).toEqual({
       runner: 'claude-code',
+      selectionSource: 'manifest',
       model: 'claude-auto',
+      configPins: { thought_level: 'high' },
     });
+  });
+
+  it('reports a manifest pin that names the user own runner as prefs-authored', () => {
+    expect(
+      resolveAutomationAgentSelection({ runner: 'claude-code' }, prefs, 'claude-code'),
+    ).toMatchObject({ runner: 'claude-code', selectionSource: 'prefs' });
+  });
+
+  it('gives a manifest thought-level pin priority over prefs', () => {
+    expect(
+      resolveAutomationAgentSelection(
+        { runner: 'claude-code', thoughtLevel: 'max' },
+        prefs,
+        'codex',
+      ),
+    ).toMatchObject({ configPins: { thought_level: 'max' } });
   });
 
   it('keeps an explicit automation model ahead of rewrite and catalog defaults', () => {

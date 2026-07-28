@@ -6,7 +6,11 @@
  */
 
 import { beforeEach, expect, it, vi } from 'vitest';
-import { loadProviders } from './settingsProvidersData.js';
+import {
+  loadProviders,
+  resolveReportedRunnerKind,
+  setSubsystemRunnerLadder,
+} from './settingsProvidersData.js';
 
 const getAgentsStatus = vi.fn();
 const getUserPrefs = vi.fn();
@@ -37,6 +41,7 @@ function entry(over: Record<string, unknown> = {}): Record<string, unknown> {
 beforeEach(() => {
   getAgentsStatus.mockReset();
   getUserPrefs.mockReset();
+  saveUserPrefs.mockClear();
   getUserPrefs.mockResolvedValue({});
 });
 
@@ -68,6 +73,16 @@ it('renders a runner kind this build has never heard of', async () => {
   expect(card?.accent).toBeTruthy();
 });
 
+it('falls stale picker preferences back to a runner reported by the gateway', async () => {
+  getAgentsStatus.mockResolvedValue({ agents: [entry()] });
+  getUserPrefs.mockResolvedValue({
+    'agent.runner.kind': 'future-runner',
+    'runner.assistant': 'removed-runner',
+  });
+  const dto = await loadProviders();
+  expect(resolveReportedRunnerKind(dto, 'removed-runner', 'assistant')).toBe('codex');
+});
+
 it('reads saved models for every listed kind, including unknown ones', async () => {
   getAgentsStatus.mockResolvedValue({
     agents: [entry(), entry({ kind: 'some-future-agent', label: 'Some Future Agent' })],
@@ -83,11 +98,64 @@ it('reads saved models for every listed kind, including unknown ones', async () 
   expect(dto.subsystemModelByKind['some-future-agent']?.builder).toBe('future-2');
 });
 
+it('reads semantic default and subsystem config pins from probed categories', async () => {
+  getAgentsStatus.mockResolvedValue({
+    agents: [
+      entry({
+        capabilities: {
+          reachable: true,
+          loadSession: true,
+          resume: true,
+          close: true,
+          additionalDirectories: true,
+          mcpHttp: true,
+          mcpSse: false,
+          modelConfigurable: true,
+          authRequired: false,
+          promptImage: true,
+          configOptions: [
+            {
+              id: 'thought',
+              category: 'thought_level',
+              type: 'select',
+              currentValue: 'medium',
+              values: [{ value: 'high', name: 'High' }],
+            },
+          ],
+        },
+      }),
+    ],
+  });
+  getUserPrefs.mockResolvedValue({
+    'config.codex.default.thought_level': 'medium',
+    'config.codex.builder.thought_level': 'high',
+  });
+  const dto = await loadProviders();
+  expect(dto.defaultConfigPinsByKind.codex?.thought_level).toBe('medium');
+  expect(dto.subsystemConfigPinsByKind.codex?.builder?.thought_level).toBe('high');
+  expect(dto.cards[0]?.capabilityChips).toContain('effort');
+  expect(dto.diagnosticsJson).toContain('"thought_level"');
+});
+
 it('keeps a subsystem pin naming a kind this build does not know', async () => {
   getAgentsStatus.mockResolvedValue({ agents: [entry()] });
   getUserPrefs.mockResolvedValue({ 'runner.builder': 'some-future-agent' });
   const dto = await loadProviders();
   expect(dto.subsystemRunnerByKey.builder).toBe('some-future-agent');
+});
+
+it('reads and writes ordered subsystem failover membership', async () => {
+  getAgentsStatus.mockResolvedValue({ agents: [entry()] });
+  getUserPrefs.mockResolvedValue({
+    'runner.ladder.builder': ['claude-code', 'gemini', 'claude-code'],
+  });
+  const dto = await loadProviders();
+  expect(dto.subsystemRunnerLadders.builder).toEqual(['claude-code', 'gemini']);
+
+  setSubsystemRunnerLadder('builder', ['gemini', 'claude-code']);
+  expect(saveUserPrefs).toHaveBeenCalledWith({
+    'runner.ladder.builder': ['gemini', 'claude-code'],
+  });
 });
 
 it('shows the gateway’s install hint as the subtitle of an unavailable agent', async () => {

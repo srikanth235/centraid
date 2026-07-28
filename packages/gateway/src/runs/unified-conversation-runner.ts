@@ -45,6 +45,7 @@ import { promises as fs } from 'node:fs';
 import { defaultCentraidCliDir, runTurn } from '@centraid/agent-runtime';
 import {
   makeConversationRunnerCore,
+  type ConversationTurnInput,
   type ConversationRunner,
   type TurnStreamEvent,
   type Dispatcher,
@@ -52,6 +53,8 @@ import {
   type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
+  type RunnerHealthController,
+  type ProviderEgressConsentController,
   type VaultInvokeRunner,
   type VaultContentRunner,
   type VaultSqlRunner,
@@ -107,6 +110,14 @@ export interface UnifiedConversationRunnerOptions {
   sessionIdFor?: (appId: string) => string;
   /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
+  runnerLadder?: (
+    subsystem: ModelSubsystem | undefined,
+    primary: RunnerKind,
+  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
+  runnerHealth?: RunnerHealthController;
+  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+  providerEgressConsent?: ProviderEgressConsentController;
+  onFailover?: Parameters<typeof makeConversationRunnerCore>[0]['onFailover'];
 }
 
 function defaultSessionIdFor(appId: string): string {
@@ -182,10 +193,16 @@ export function makeUnifiedConversationRunner(
     // The model turn driver — the local codex/claude `runTurn` unless a
     // test injects a stub.
     runTurn: opts.runTurn ?? runTurn,
+    ...(opts.runnerLadder ? { runnerLadder: opts.runnerLadder } : {}),
+    ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
+    ...(opts.runnerHealthContext ? { runnerHealthContext: opts.runnerHealthContext } : {}),
+    ...(opts.providerEgressConsent ? { providerEgressConsent: opts.providerEgressConsent } : {}),
+    ...(opts.onFailover ? { onFailover: opts.onFailover } : {}),
 
     // cwd IS the draft session worktree (issue #144's draft-code framing
     // survives; the branched data.sqlite did not — #286 phase 2).
-    cwdIsDraftWorktree: true,
+    cwdIsDraftWorktree: (input) =>
+      input.workspaceKind === undefined || input.workspaceKind === 'draft',
 
     // The builder's data tools are the vault register — the same
     // vault_sql/vault_invoke surface the assistant and ask turns ride.
@@ -198,6 +215,7 @@ export function makeUnifiedConversationRunner(
     // vault's DRAFT ext band in step with the draft manifest (first access
     // seeds from live rows) so preview writes stay scratch.
     resolveCwd: async (input) => {
+      if (input.workspaceDirectory) return input.workspaceDirectory;
       const sessionId = input.draftSessionId ?? sessionIdFor(input.appId);
       await ensureSession(opts.store, sessionId);
       const worktreeAppDir = await opts.store.snapshotSessionAppDir(sessionId, input.appId);

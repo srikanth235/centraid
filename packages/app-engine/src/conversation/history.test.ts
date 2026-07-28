@@ -253,6 +253,232 @@ describe('ConversationHistoryStore', () => {
     expect(found?.error).toBe('nope');
   });
 
+  it('persists A→B→A bindings, per-runner watermarks, workspace, lock, and cascade GC', () => {
+    const dir = freshVaultDir();
+    const durable = new ConversationHistoryStore(workspaceFor(dir));
+    const session = durable.createSession(APP);
+
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'ask A', 'answer A'),
+      adapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+    const db = journalFor(dir)();
+    expect(
+      db.prepare(`SELECT seq FROM turns WHERE conversation_id = ? ORDER BY seq`).all(session.id),
+    ).toEqual([{ seq: 0 }]);
+    const codexAtOne = durable.getAdapterResumeState(APP, session.id, 'codex');
+    expect(codexAtOne).toMatchObject({
+      kind: 'codex',
+      sessionId: 'codex-session',
+      hydratedThroughSeq: 0,
+    });
+
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'ask B', 'answer B'),
+      adapter: { kind: 'claude-code', sessionId: 'claude-session' },
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'claude-code')).toMatchObject({
+      sessionId: 'claude-session',
+      hydratedThroughSeq: 1,
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'codex')).toMatchObject({
+      sessionId: 'codex-session',
+      hydratedThroughSeq: 0,
+    });
+    const codexDelta = durable.getHydrationDelta(APP, session.id, 0);
+    expect(codexDelta?.throughSeq).toBe(1);
+    expect(
+      codexDelta?.messages.map((message) => (message.payload as { text?: string }).text),
+    ).toEqual(['ask B', 'answer B']);
+
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'back to A', 'answer A2'),
+      adapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'codex')).toMatchObject({
+      hydratedThroughSeq: 2,
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'claude-code')).toMatchObject({
+      hydratedThroughSeq: 1,
+    });
+
+    expect(durable.acquireTurnLock(APP, session.id, 'owner-a')).toBe(true);
+    expect(durable.acquireTurnLock(APP, session.id, 'owner-b')).toBe(false);
+    durable.releaseTurnLock(APP, session.id, 'owner-a');
+    expect(durable.acquireTurnLock(APP, session.id, 'owner-b')).toBe(true);
+    durable.releaseTurnLock(APP, session.id, 'owner-b');
+
+    durable.setWorkspaceSelection(APP, session.id, 'draft', ['/workspace/docs']);
+    expect(durable.getSession(APP, session.id)?.workspace).toMatchObject({
+      primaryKind: 'draft',
+      additionalDirectories: ['/workspace/docs'],
+    });
+
+    const bindingId = durable.getAdapterResumeState(APP, session.id, 'codex')!.bindingId!;
+    durable.markAdapterBindingStale(APP, session.id, bindingId);
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'self heal A', 'answer A3'),
+      adapter: { kind: 'codex', sessionId: 'codex-session-2', hydrated: true },
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'codex')).toMatchObject({
+      sessionId: 'codex-session-2',
+      hydratedThroughSeq: 3,
+    });
+
+    expect(
+      (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS count
+               FROM conversation_harness_sessions
+              WHERE conversation_id = ?`,
+          )
+          .get(session.id) as { count: number }
+      ).count,
+    ).toBe(3);
+    expect(
+      db
+        .prepare(
+          `SELECT runner_kind, acp_session_id, status
+             FROM conversation_harness_sessions
+            WHERE conversation_id = ?
+            ORDER BY created_at, acp_session_id`,
+        )
+        .all(session.id),
+    ).toEqual([
+      { runner_kind: 'codex', acp_session_id: 'codex-session', status: 'stale' },
+      { runner_kind: 'claude-code', acp_session_id: 'claude-session', status: 'warm' },
+      { runner_kind: 'codex', acp_session_id: 'codex-session-2', status: 'active' },
+    ]);
+    expect(durable.deleteSession(APP, session.id)).toBe(true);
+    for (const table of [
+      'conversation_harness_sessions',
+      'conversation_turn_locks',
+      'conversation_workspace_selection',
+    ]) {
+      expect(
+        (
+          db
+            .prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE conversation_id = ?`)
+            .get(session.id) as { count: number }
+        ).count,
+      ).toBe(0);
+    }
+  });
+
+  it('hydrates turn seq 0 into a binding minted before the conversation had turns', () => {
+    // `seq` starts at 0, so an empty conversation's watermark must be -1. A 0
+    // sentinel would read as "turn 0 already delivered" and silently drop the
+    // very first exchange from the binding's next delta hydration.
+    const dir = freshVaultDir();
+    const durable = new ConversationHistoryStore(workspaceFor(dir));
+    const session = durable.createSession(APP);
+    durable.noteTurn(APP, session.id, { kind: 'codex', sessionId: 'codex-session' });
+    const fresh = durable.getAdapterResumeState(APP, session.id, 'codex');
+    expect(fresh).toMatchObject({ sessionId: 'codex-session', hydratedThroughSeq: -1 });
+
+    durable.recordTurn(APP, turn(session.id, 'first ever question', 'first ever answer'));
+    const delta = durable.getHydrationDelta(APP, session.id, fresh!.hydratedThroughSeq!);
+    expect(delta?.messages.map((message) => (message.payload as { text?: string }).text)).toEqual([
+      'first ever question',
+      'first ever answer',
+    ]);
+  });
+
+  it('keeps a failed turn inside the next delta instead of advancing the watermark', () => {
+    // The failed prompt never reached the model, so marking it "hydrated"
+    // would erase that user message from every later handoff.
+    const dir = freshVaultDir();
+    const durable = new ConversationHistoryStore(workspaceFor(dir));
+    const session = durable.createSession(APP);
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'ask A', 'answer A'),
+      adapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'codex')).toMatchObject({
+      hydratedThroughSeq: 0,
+    });
+
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'ask B while codex is down', ''),
+      ok: false,
+      error: 'runner unavailable',
+      finalText: undefined,
+      nodes: [],
+      failedAdapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+    const resume = durable.getAdapterResumeState(APP, session.id, 'codex');
+    expect(resume).toMatchObject({ hydratedThroughSeq: 0 });
+    const delta = durable.getHydrationDelta(APP, session.id, resume!.hydratedThroughSeq!);
+    expect(delta?.messages.map((message) => (message.payload as { text?: string }).text)).toContain(
+      'ask B while codex is down',
+    );
+  });
+
+  it('keeps one active/one warm process while A→B→C retains every runner resume handle', () => {
+    const dir = freshVaultDir();
+    const durable = new ConversationHistoryStore(workspaceFor(dir));
+    const session = durable.createSession(APP);
+
+    for (const [index, adapter] of [
+      ['codex', 'codex-a'],
+      ['claude-code', 'claude-b'],
+      ['copilot', 'copilot-c'],
+    ] as const) {
+      durable.recordTurn(APP, {
+        ...turn(session.id, `ask ${index}`, `answer ${index}`),
+        adapter: { kind: index, sessionId: adapter },
+      });
+    }
+
+    const db = journalFor(dir)();
+    expect(
+      db
+        .prepare(
+          `SELECT runner_kind, acp_session_id, status
+             FROM conversation_harness_sessions
+            WHERE conversation_id = ?
+            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END`,
+        )
+        .all(session.id),
+    ).toEqual([
+      { runner_kind: 'copilot', acp_session_id: 'copilot-c', status: 'active' },
+      { runner_kind: 'claude-code', acp_session_id: 'claude-b', status: 'warm' },
+      { runner_kind: 'codex', acp_session_id: 'codex-a', status: 'cold' },
+    ]);
+    expect(durable.getAdapterResumeState(APP, session.id, 'copilot')).toMatchObject({
+      sessionId: 'copilot-c',
+    });
+    expect(durable.getAdapterResumeState(APP, session.id, 'claude-code')).toMatchObject({
+      sessionId: 'claude-b',
+    });
+    const codexResume = durable.getAdapterResumeState(APP, session.id, 'codex');
+    expect(codexResume).toMatchObject({ sessionId: 'codex-a', hydratedThroughSeq: 0 });
+    const delta = durable.getHydrationDelta(APP, session.id, codexResume?.hydratedThroughSeq ?? -1);
+    expect(JSON.stringify(delta?.messages)).not.toContain('ask codex');
+    expect(JSON.stringify(delta?.messages)).toContain('ask claude-code');
+    expect(JSON.stringify(delta?.messages)).toContain('ask copilot');
+
+    durable.recordTurn(APP, {
+      ...turn(session.id, 'return to codex', 'answer A2'),
+      adapter: { kind: 'codex', sessionId: 'codex-a', hydrated: true },
+    });
+    expect(
+      db
+        .prepare(
+          `SELECT runner_kind, acp_session_id, status
+             FROM conversation_harness_sessions
+            WHERE conversation_id = ?
+            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'warm' THEN 1 ELSE 2 END`,
+        )
+        .all(session.id),
+    ).toEqual([
+      { runner_kind: 'codex', acp_session_id: 'codex-a', status: 'active' },
+      { runner_kind: 'copilot', acp_session_id: 'copilot-c', status: 'warm' },
+      { runner_kind: 'claude-code', acp_session_id: 'claude-b', status: 'cold' },
+    ]);
+  });
+
   it('recordTurn attachments surface on the reconstructed user message (hash/mime/sizeBytes/filename/url)', () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, {
@@ -296,6 +522,51 @@ describe('ConversationHistoryStore', () => {
     store.recordTurn(APP, turn(s.id, 'no files', 'ok'));
     const user = store.getSession(APP, s.id)?.messages[0]!.payload as Record<string, unknown>;
     expect('attachments' in user).toBe(false);
+  });
+
+  it('records agent workspace artifacts as path + hash refs without a CAS URL', () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, {
+      conversationId: s.id,
+      userMessage: 'write the report',
+      startedAt: 1_000,
+      endedAt: 1_010,
+      ok: true,
+      finalText: 'done',
+      nodes: [
+        {
+          kind: 'tool',
+          toolName: 'write_file',
+          ok: true,
+          startedAt: 1_000,
+          endedAt: 1_005,
+          artifacts: [
+            {
+              hash: 'b'.repeat(64),
+              mime: 'text/markdown',
+              sizeBytes: 42,
+              filename: 'report.md',
+              source: 'agent',
+              workspacePath: '/workspace/report.md',
+            },
+          ],
+        },
+        { kind: 'step', text: 'done', startedAt: 1_005, endedAt: 1_010 },
+      ],
+    });
+    const tool = store.getSession(APP, s.id)?.messages[1]?.payload as {
+      artifacts?: Array<Record<string, unknown>>;
+    };
+    expect(tool.artifacts).toEqual([
+      {
+        hash: 'b'.repeat(64),
+        mime: 'text/markdown',
+        sizeBytes: 42,
+        filename: 'report.md',
+        source: 'agent',
+        workspacePath: '/workspace/report.md',
+      },
+    ]);
   });
 
   it('recordTurn preserves order across multiple turns', () => {

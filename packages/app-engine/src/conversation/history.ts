@@ -26,7 +26,13 @@ import { randomUUID } from 'node:crypto';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
 import type { AdapterUsageSnapshot } from './turn.js';
-import type { Item, RunKind, Turn } from './schema.js';
+import type {
+  ConversationWorkspaceKind,
+  ConversationWorkspaceSelection,
+  Item,
+  RunKind,
+  Turn,
+} from './schema.js';
 import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
 import { resolveItemCost } from '../model-pricing.js';
 import {
@@ -49,6 +55,10 @@ export interface ConversationSummary {
   adapterSessionId: string | null;
   /** Number of completed turns on this session. */
   turnCount: number;
+  /** Number of canonical-ledger hydrations across runner/session handoffs. */
+  hydrationCount: number;
+  /** Most recent hydration boundary. */
+  lastHydratedAt?: number;
   /** Pinned threads sort first in the sidebar (issue #420). */
   pinned: boolean;
   /** Archived threads hide behind a collapsed group and drop out of search. */
@@ -81,6 +91,7 @@ export interface ConversationMessageRow {
  */
 export interface SessionTranscript extends ConversationSummary {
   messages: ConversationMessageRow[];
+  workspace?: ConversationWorkspaceSelection;
   hasArchivedHistory?: boolean;
   archivedTurnCount?: number;
   archiveUnavailable?: boolean;
@@ -98,7 +109,10 @@ export interface ConversationAttachmentPayload {
   mime: string;
   sizeBytes: number;
   filename?: string;
-  url: string;
+  source?: string;
+  /** Workspace-backed agent artifact; no CAS URL is emitted. */
+  workspacePath?: string;
+  url?: string;
 }
 
 /**
@@ -113,6 +127,7 @@ export interface ConversationTurnUsage {
   outputTokens?: number;
   costUsd?: number;
   model?: string;
+  effort?: string;
 }
 
 /**
@@ -137,6 +152,8 @@ export interface ConversationTurnAttachment {
   filename?: string;
   /** Defaults to `'upload'`. */
   source?: string;
+  /** Absolute agent workspace path; when set the bytes are not copied to CAS. */
+  workspacePath?: string;
 }
 
 /**
@@ -150,8 +167,11 @@ export type TurnNode =
       text: string;
       /** True when this step carries a runner/turn error message. */
       isError?: boolean;
+      /** Durable runner/failover/self-heal notice rather than model prose. */
+      notice?: { level: 'info' | 'warn'; code?: string };
       model?: string;
       provider?: string;
+      effort?: string;
       inputTokens?: number;
       outputTokens?: number;
       cacheReadTokens?: number;
@@ -170,6 +190,7 @@ export type TurnNode =
       ok: boolean;
       result?: unknown;
       errorText?: string;
+      artifacts?: ConversationTurnAttachment[];
       appId?: string;
       startedAt: number;
       endedAt: number;
@@ -204,8 +225,24 @@ export interface RecordTurnInput {
   error?: string;
   /** The assistant's final reply text (the turn's terminal output). */
   finalText?: string;
+  /** Estimated canonical-ledger prompt tokens injected for this handoff. */
+  hydrationTokens?: number;
   /** The turn's ordered trace (assistant steps + tool calls). */
   nodes: TurnNode[];
+  /** Successful ACP binding committed atomically with this turn + watermark. */
+  adapter?: {
+    kind: string;
+    sessionId?: string;
+    usageSnapshot?: AdapterUsageSnapshot;
+    hydrated?: boolean;
+  };
+  /** Failed-turn accounting update that must not switch the active binding. */
+  failedAdapter?: {
+    kind: string;
+    sessionId?: string;
+    usageSnapshot?: AdapterUsageSnapshot;
+    hydrated?: boolean;
+  };
 }
 
 // Re-exported for back-compat — every existing import site pulls this from
@@ -303,7 +340,13 @@ export class ConversationHistoryStore {
       attachmentsOf: (itemId) => this.attachmentsPayload(appId, itemId),
       isArchived: () => false,
     });
-    return { ...toMeta(meta), messageCount: messages.length, messages };
+    const workspace = store.getWorkspaceSelection(id);
+    return {
+      ...toMeta(meta),
+      messageCount: messages.length,
+      messages,
+      ...(workspace ? { workspace } : {}),
+    };
   }
 
   /**
@@ -347,7 +390,10 @@ export class ConversationHistoryStore {
             mime: a.mime,
             sizeBytes: a.sizeBytes,
             ...(a.filename !== undefined ? { filename: a.filename } : {}),
-            url: blobUrl(appId, a.hash),
+            ...(a.source !== undefined && a.source !== 'upload' ? { source: a.source } : {}),
+            ...(a.workspacePath !== undefined
+              ? { workspacePath: a.workspacePath }
+              : { url: blobUrl(appId, a.hash) }),
           }));
         }
         return this.attachmentsPayload(appId, itemId);
@@ -359,6 +405,7 @@ export class ConversationHistoryStore {
       ...toMeta(meta),
       messageCount: messages.length,
       messages,
+      ...(store.getWorkspaceSelection(id) ? { workspace: store.getWorkspaceSelection(id)! } : {}),
       hasArchivedHistory: true,
       archivedTurnCount: archived.turnIds.size,
       ...(archived.unavailable ? { archiveUnavailable: true } : {}),
@@ -373,7 +420,10 @@ export class ConversationHistoryStore {
       mime: a.mime,
       sizeBytes: a.sizeBytes,
       ...(a.filename !== undefined ? { filename: a.filename } : {}),
-      url: blobUrl(appId, a.hash),
+      ...(a.source !== undefined && a.source !== 'upload' ? { source: a.source } : {}),
+      ...(a.workspacePath !== undefined
+        ? { workspacePath: a.workspacePath }
+        : { url: blobUrl(appId, a.hash) }),
     }));
   }
 
@@ -493,6 +543,7 @@ export class ConversationHistoryStore {
         conversationId: input.conversationId,
         triggerKind: 'interactive',
         startedAt: input.startedAt,
+        ...(input.hydrationTokens !== undefined ? { hydrationTokens: input.hydrationTokens } : {}),
         ...(input.retryOf !== undefined ? { retryOf: input.retryOf } : {}),
         ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
       });
@@ -510,10 +561,27 @@ export class ConversationHistoryStore {
           sizeBytes: att.sizeBytes,
           source: att.source ?? 'upload',
           ...(att.filename !== undefined ? { filename: att.filename } : {}),
+          ...(att.workspacePath !== undefined ? { workspacePath: att.workspacePath } : {}),
         });
       }
       // Trace items start at ordinal 1 — the inbound message is ordinal 0.
-      input.nodes.forEach((node, i) => recordNode(store, turnId, i + 1, node));
+      input.nodes.forEach((node, i) => {
+        const itemId = recordNode(store, turnId, i + 1, node);
+        if (node.kind !== 'tool') return;
+        for (const artifact of node.artifacts ?? []) {
+          store.insertAttachment({
+            itemId,
+            hash: artifact.hash,
+            mime: artifact.mime,
+            sizeBytes: artifact.sizeBytes,
+            source: artifact.source ?? 'agent',
+            ...(artifact.filename !== undefined ? { filename: artifact.filename } : {}),
+            ...(artifact.workspacePath !== undefined
+              ? { workspacePath: artifact.workspacePath }
+              : {}),
+          });
+        }
+      });
       store.finishTurn({
         turnId,
         endedAt: input.endedAt,
@@ -523,6 +591,11 @@ export class ConversationHistoryStore {
           ? { outputJson: JSON.stringify({ text: input.finalText }) }
           : {}),
       });
+      if (input.failedAdapter) {
+        store.noteFailedTurn(input.conversationId, userId, input.failedAdapter);
+      } else {
+        store.noteTurn(input.conversationId, userId, input.adapter);
+      }
       const now = Date.now();
       if (!existingTitle) {
         store.setTitle(input.conversationId, userId, deriveTitle(input.userMessage), now);
@@ -556,6 +629,7 @@ export class ConversationHistoryStore {
       ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
       ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
       ...(step?.model ? { model: step.model } : {}),
+      ...(step?.effort ? { effort: step.effort } : {}),
     };
     return {
       turnId: turn.turnId,
@@ -570,7 +644,12 @@ export class ConversationHistoryStore {
   noteTurn(
     appId: string,
     sessionId: string,
-    adapter?: { kind: string; sessionId?: string; usageSnapshot?: AdapterUsageSnapshot },
+    adapter?: {
+      kind: string;
+      sessionId?: string;
+      usageSnapshot?: AdapterUsageSnapshot;
+      hydrated?: boolean;
+    },
   ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, sessionId)) return undefined;
@@ -582,20 +661,118 @@ export class ConversationHistoryStore {
   getAdapterResumeState(
     appId: string,
     sessionId: string,
+    runnerKind?: string,
   ):
     | {
+        bindingId?: string;
         kind?: string;
         sessionId?: string;
         usageSnapshot?: AdapterUsageSnapshot;
+        hydratedThroughSeq?: number;
       }
     | undefined {
     const meta = this.ownedMeta(appId, sessionId);
     if (!meta) return undefined;
+    const { store } = this.appConversation(appId);
+    const kind = runnerKind ?? meta.adapterKind ?? undefined;
+    const binding = kind ? store.getHarnessBinding(sessionId, kind) : undefined;
+    if (binding) {
+      return {
+        bindingId: binding.id,
+        kind: binding.kind,
+        sessionId: binding.acpSessionId,
+        ...(binding.usageSnapshot ? { usageSnapshot: binding.usageSnapshot } : {}),
+        hydratedThroughSeq: binding.hydratedThroughSeq,
+      };
+    }
+    // A targeted lookup asks only for that provider's resumable binding.
+    // Falling back to the conversation's different active provider would
+    // pair the wrong opaque session id with the requested runner. A miss is
+    // `undefined` — an empty object reads as "state found, all fields absent"
+    // at every call site that only truthiness-tests the result.
+    if (runnerKind) return undefined;
     return {
       ...(meta.adapterKind ? { kind: meta.adapterKind } : {}),
       ...(meta.adapterSessionId ? { sessionId: meta.adapterSessionId } : {}),
       ...(meta.adapterUsageSnapshot ? { usageSnapshot: meta.adapterUsageSnapshot } : {}),
     };
+  }
+
+  markAdapterBindingStale(appId: string, conversationId: string, bindingId: string): void {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, conversationId)) return;
+    store.markHarnessBindingStale(bindingId);
+  }
+
+  /**
+   * Live, custody-safe delta for an ACP binding. Pruned/archive-custody rows
+   * never enter this path; only turns still present in the canonical ledger
+   * after the binding's watermark are folded.
+   */
+  getHydrationDelta(
+    appId: string,
+    conversationId: string,
+    afterSeq: number,
+  ): { messages: ConversationMessageRow[]; throughSeq: number } | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, conversationId)) return undefined;
+    const all = store.listTurns(conversationId);
+    // `seq` starts at 0, so the empty-ledger watermark is -1 — 0 would claim
+    // the first turn was already hydrated.
+    const throughSeq = all.at(-1)?.seq ?? -1;
+    const turns = all.filter((turn) => turn.seq > afterSeq);
+    const itemsByTurn = new Map<string, Item[]>();
+    for (const turn of turns) itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+    return {
+      messages: foldTranscript({
+        turns,
+        itemsByTurn,
+        attachmentsOf: (itemId) => this.attachmentsPayload(appId, itemId),
+        isArchived: () => false,
+      }),
+      throughSeq,
+    };
+  }
+
+  acquireTurnLock(appId: string, conversationId: string, token: string): boolean {
+    const { store } = this.appConversation(appId);
+    return (
+      this.ownedMeta(appId, conversationId) !== undefined &&
+      store.acquireTurnLock(conversationId, token)
+    );
+  }
+
+  refreshTurnLock(appId: string, conversationId: string, token: string): boolean {
+    const { store } = this.appConversation(appId);
+    return (
+      this.ownedMeta(appId, conversationId) !== undefined &&
+      store.refreshTurnLock(conversationId, token)
+    );
+  }
+
+  releaseTurnLock(appId: string, conversationId: string, token: string): void {
+    const { store } = this.appConversation(appId);
+    store.releaseTurnLock(conversationId, token);
+  }
+
+  getWorkspaceSelection(
+    appId: string,
+    conversationId: string,
+  ): ConversationWorkspaceSelection | undefined {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, conversationId)) return undefined;
+    return store.getWorkspaceSelection(conversationId);
+  }
+
+  setWorkspaceSelection(
+    appId: string,
+    conversationId: string,
+    primaryKind: ConversationWorkspaceKind,
+    additionalDirectories: readonly string[],
+  ): void {
+    const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, conversationId)) throw new Error('No such conversation.');
+    store.setWorkspaceSelection(conversationId, primaryKind, additionalDirectories);
   }
 }
 
@@ -641,6 +818,7 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
       ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
       ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
       ...(step?.model ? { model: step.model } : {}),
+      ...(step?.effort ? { effort: step.effort } : {}),
     };
     return Object.keys(usage).length > 0 ? usage : undefined;
   };
@@ -694,6 +872,20 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
     for (const item of activeItems) {
       if (item.kind === 'step') {
         const parsed = parseStepOutput(item.outputJson);
+        if (item.name?.startsWith('notice:')) {
+          const [, level] = item.name.split(':');
+          messages.push({
+            idx: idx++,
+            payload: {
+              kind: 'notice',
+              level: level === 'warn' ? 'warn' : 'info',
+              text: parsed.text,
+              ...(arch ? { fromArchive: true } : {}),
+            },
+            createdAt: item.startedAt,
+          });
+          continue;
+        }
         // Only the terminal step carries turn identity / feedback / the retry
         // pager — interim steps stay plain.
         const terminal = item.itemId === terminalStepId;
@@ -718,6 +910,7 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
       } else if (item.kind === 'tool') {
         const args = parseToolArgs(item.argsJson);
         const out = parseToolOutput(item.outputJson);
+        const artifacts = attachmentsOf(item.itemId);
         messages.push({
           idx: idx++,
           payload: {
@@ -729,6 +922,7 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
             state: item.ok ? 'ok' : 'error',
             ...(out.result !== undefined ? { result: out.result } : {}),
             ...(out.errorText !== undefined ? { errorText: out.errorText } : {}),
+            ...(artifacts.length > 0 ? { artifacts } : {}),
             ...(arch ? { fromArchive: true } : {}),
           },
           createdAt: item.startedAt,
@@ -744,7 +938,8 @@ function recordNode(
   turnId: string,
   ordinal: number,
   node: TurnNode,
-): void {
+): string {
+  const itemId = randomUUID();
   if (node.kind === 'step') {
     // Prefer agent/ACP cost; else catalog estimate; else NULL (issue #514).
     const usage = {
@@ -764,14 +959,18 @@ function recordNode(
               usage,
             });
     store.insertItem({
-      itemId: randomUUID(),
+      itemId,
       turnId,
       ordinal,
       kind: 'step',
+      ...(node.notice
+        ? { name: `notice:${node.notice.level}:${node.notice.code ?? 'runner'}` }
+        : {}),
       outputJson: JSON.stringify({ text: node.text, ...(node.isError ? { error: true } : {}) }),
       ok: !node.isError,
       ...(node.model !== undefined ? { model: node.model } : {}),
       ...(node.provider !== undefined ? { provider: node.provider } : {}),
+      ...(node.effort !== undefined ? { effort: node.effort } : {}),
       ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
       ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
       ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
@@ -784,7 +983,7 @@ function recordNode(
     });
   } else {
     store.insertItem({
-      itemId: randomUUID(),
+      itemId,
       turnId,
       ordinal,
       kind: 'tool',
@@ -805,6 +1004,7 @@ function recordNode(
       durationMs: Math.max(0, node.endedAt - node.startedAt),
     });
   }
+  return itemId;
 }
 
 function toMeta(c: ConversationMeta): ConversationSummary {
@@ -815,6 +1015,8 @@ function toMeta(c: ConversationMeta): ConversationSummary {
     adapterKind: c.adapterKind ?? null,
     adapterSessionId: c.adapterSessionId ?? null,
     turnCount: c.turnCount,
+    hydrationCount: c.hydrationCount,
+    ...(c.lastHydratedAt !== undefined ? { lastHydratedAt: c.lastHydratedAt } : {}),
     pinned: c.pinned,
     archived: c.archived,
     createdAt: c.createdAt,

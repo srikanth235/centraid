@@ -18,6 +18,7 @@ import { getRunnerBackend } from './registry.js';
 import { readRunnerModels } from './models/catalog.js';
 import { agentSpawnEnv } from './spawn-env.js';
 import { lowPriorityCommand } from './low-priority.js';
+import { resolveAcpCapabilities } from './backends/acp/capabilities-cache.js';
 
 const VERSION_TIMEOUT_MS = 5_000;
 
@@ -47,7 +48,7 @@ interface CachedStatus {
 let cached: CachedStatus | undefined;
 
 function cacheKey(prefs: RunnerPrefs): string {
-  return `${prefs.kind}::${prefs.binPath ?? ''}`;
+  return `${prefs.kind}::${prefs.binPath ?? ''}::${JSON.stringify(prefs.extraArgs ?? [])}`;
 }
 
 export function invalidatePreflightCache(): void {
@@ -95,12 +96,35 @@ export async function probeCliAvailability(
  */
 export async function runPreflight(
   prefs: RunnerPrefs,
-  opts: { catalogPath?: string; refresh?: boolean } = {},
+  opts: { catalogPath?: string; refresh?: boolean; requireSessionReady?: boolean } = {},
 ): Promise<RunnerStatus> {
   const key = cacheKey(prefs);
   const status = cached && cached.cacheKey === key ? cached.status : await probe(prefs);
   cached = { status, cacheKey: key };
 
+  if (status.ok && opts.requireSessionReady) {
+    // Readiness only needs "does this agent reach initialize + session/new,
+    // and is it signed in". A fresh cached snapshot answers that, so this
+    // never spawns on a warm cache — and when it does have to spawn it skips
+    // the probe's live diagnostic prompt, which would bill the owner a real
+    // provider turn on every session-ready check.
+    const caps = await resolveAcpCapabilities(prefs.kind, {
+      ...(prefs.binPath ? { binPath: prefs.binPath } : {}),
+      ...(prefs.extraArgs?.length ? { extraArgs: prefs.extraArgs } : {}),
+      probeIfMissing: true,
+      probeLivePrompt: false,
+    });
+    if (!caps?.reachable || caps.authRequired) {
+      return {
+        ...status,
+        ok: false,
+        reason: caps?.authRequired
+          ? `agent session is not authenticated${caps.reason ? `: ${caps.reason}` : ''}`
+          : (caps?.reason ?? 'agent did not complete ACP initialize/session readiness'),
+        hint: getRunnerBackend(prefs.kind).installHint,
+      };
+    }
+  }
   if (status.ok) {
     status.models = opts.catalogPath ? await readRunnerModels(opts.catalogPath, prefs.kind) : [];
   }
@@ -194,7 +218,8 @@ async function execVersion(bin: string, env: NodeJS.ProcessEnv): Promise<string>
       stdio: ['ignore', 'pipe', 'pipe'],
       env,
     });
-    const chunks: Buffer[] = [];
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
     let settled = false;
     const settle = (fn: () => void): void => {
       if (settled) return;
@@ -209,16 +234,22 @@ async function execVersion(bin: string, env: NodeJS.ProcessEnv): Promise<string>
     }, VERSION_TIMEOUT_MS);
     timer.unref?.();
 
-    child.stdout.on('data', (c: Buffer) => chunks.push(c));
-    child.stderr.on('data', (c: Buffer) => chunks.push(c));
+    child.stdout.on('data', (c: Buffer) => stdoutChunks.push(c));
+    child.stderr.on('data', (c: Buffer) => stderrChunks.push(c));
     child.on('error', (err) => {
       clearTimeout(timer);
       settle(() => reject(err));
     });
     child.on('exit', (code) => {
       clearTimeout(timer);
-      if (code === 0) settle(() => resolve(Buffer.concat(chunks).toString('utf8')));
-      else settle(() => reject(new Error(`--version exited ${code ?? 'null'}`)));
+      if (code === 0) {
+        const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+        const stderr = Buffer.concat(stderrChunks).toString('utf8');
+        // `nice` can report a harmless setpriority denial on stderr inside a
+        // sandbox. Successful CLIs normally put their version on stdout; fall
+        // back to stderr only for CLIs that intentionally version there.
+        settle(() => resolve(stdout.trim() ? stdout : stderr));
+      } else settle(() => reject(new Error(`--version exited ${code ?? 'null'}`)));
     });
   });
 }

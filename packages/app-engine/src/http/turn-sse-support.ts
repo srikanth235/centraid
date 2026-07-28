@@ -1,4 +1,8 @@
 import type { ConversationHistoryStore } from '../conversation/history.js';
+import type { ConversationWorkspaceKind } from '../conversation/schema.js';
+import { promises as fs } from 'node:fs';
+import { statSync } from 'node:fs';
+import path from 'node:path';
 
 /** A file uploaded to the blob CAS before the turn, referenced by its hash. */
 export interface TurnAttachmentRef {
@@ -29,6 +33,34 @@ export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
 }
 
 /**
+ * Validate and canonicalize explicitly owner-selected extra workspace roots.
+ * Persistence of the returned realpaths is the per-conversation consent
+ * receipt; a symlink swap therefore cannot widen a later turn's authority.
+ */
+export async function parseAdditionalDirectories(raw: unknown): Promise<string[]> {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new Error('additionalDirectories must be an array.');
+  const out: string[] = [];
+  for (const value of raw) {
+    if (typeof value !== 'string' || !path.isAbsolute(value)) {
+      throw new Error('Each additional directory must be an absolute path.');
+    }
+    const resolved = await fs.realpath(value);
+    const stat = await fs.stat(resolved);
+    if (!stat.isDirectory() || resolved === path.parse(resolved).root) {
+      throw new Error('Each additional directory must name a non-root directory.');
+    }
+    if (!out.includes(resolved)) out.push(resolved);
+    if (out.length > 8) throw new Error('At most eight additional directories may be shared.');
+  }
+  return out;
+}
+
+export function parseWorkspaceKind(raw: unknown): ConversationWorkspaceKind | undefined {
+  return raw === 'vault-data' || raw === 'app' || raw === 'draft' ? raw : undefined;
+}
+
+/**
  * Resolve validated attachment refs to on-disk blob paths for the runner's
  * multimodal content blocks — the shape `ConversationTurnInput.attachments`
  * expects. `appId` scopes the blob CAS lookup (an app id, or `_assistant`).
@@ -38,12 +70,33 @@ export function resolveTurnAttachments(
   appId: string,
   refs: readonly TurnAttachmentRef[],
 ): { path: string; mime: string; filename?: string }[] {
-  if (!conversationStore || refs.length === 0) return [];
-  return refs.map((a) => ({
+  if (!conversationStore) return [];
+  return validateTurnAttachmentRefs(conversationStore, appId, refs).map((a) => ({
     path: conversationStore.blobPathFor(appId, a.hash),
     mime: a.mime,
     ...(a.filename !== undefined ? { filename: a.filename } : {}),
   }));
+}
+
+/**
+ * Keep only refs that name a real file in this app's CAS. When the sender
+ * supplies a size receipt it must match the stored bytes, so a forged or
+ * stale ref can neither enter the ledger nor reach an agent process.
+ */
+export function validateTurnAttachmentRefs(
+  conversationStore: ConversationHistoryStore | undefined,
+  appId: string,
+  refs: readonly TurnAttachmentRef[],
+): TurnAttachmentRef[] {
+  if (!conversationStore || refs.length === 0) return [];
+  return refs.filter((ref) => {
+    try {
+      const stat = statSync(conversationStore.blobPathFor(appId, ref.hash));
+      return stat.isFile() && (ref.sizeBytes === undefined || stat.size === ref.sizeBytes);
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**

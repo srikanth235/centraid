@@ -213,6 +213,18 @@
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--danger) 28%, transparent);
 }
+.failoverBadge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 12%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--c-amber) 28%, transparent);
+}
 /* Recent activity — a secondary, quieter feed below the tile grid. The
    section is set off with a hairline divider and dialled down (muted label,
    slightly smaller rows) so the automation tiles stay the focus. */

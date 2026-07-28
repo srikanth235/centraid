@@ -29,8 +29,10 @@ function seedRun(
     automationName?: string;
     model?: string;
     provider?: string;
+    effort?: string;
     inputTokens?: number;
     outputTokens?: number;
+    hydrationTokens?: number;
     costUsd?: number;
     costSource?: 'agent' | 'estimated';
     retryOf?: string;
@@ -55,6 +57,7 @@ function seedRun(
     conversationId,
     triggerKind: opts.kind === 'chat' ? 'interactive' : 'manual',
     ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
+    ...(opts.hydrationTokens !== undefined ? { hydrationTokens: opts.hydrationTokens } : {}),
     startedAt,
   });
   runs.insertItem({
@@ -65,6 +68,7 @@ function seedRun(
     ok: opts.ok !== false,
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.provider ? { provider: opts.provider } : {}),
+    ...(opts.effort ? { effort: opts.effort } : {}),
     ...(opts.inputTokens !== undefined ? { inputTokens: opts.inputTokens } : {}),
     ...(opts.outputTokens !== undefined ? { outputTokens: opts.outputTokens } : {}),
     ...(opts.costUsd !== undefined ? { costUsd: opts.costUsd } : {}),
@@ -83,6 +87,7 @@ describe('InsightsStore (#514)', () => {
     const s = insights.summary();
     expect(s.kpis.generations).toBe(0);
     expect(s.kpis.totalTokens).toBe(0);
+    expect(s.kpis.hydrationTokens).toBe(0);
     expect(s.kpis.totalCostUsd).toBe(0);
     expect(s.kpis.agentReportedCostUsd).toBe(0);
     expect(s.kpis.estimatedCostUsd).toBe(0);
@@ -94,7 +99,22 @@ describe('InsightsStore (#514)', () => {
     expect(s.bySource).toEqual([]);
     expect(s.byRunner).toEqual([]);
     expect(s.byModel).toEqual([]);
+    expect(s.byEffort).toEqual([]);
     expect(s.recent).toEqual([]);
+  });
+
+  it('reports hydration estimates as an explicit subset marker, not ordinary usage', () => {
+    const { runs, insights } = setup();
+    const runId = seedRun(runs, {
+      kind: 'chat',
+      inputTokens: 100,
+      outputTokens: 25,
+      hydrationTokens: 40,
+    });
+    const summary = insights.summary();
+    expect(summary.kpis.totalTokens).toBe(125);
+    expect(summary.kpis.hydrationTokens).toBe(40);
+    expect(summary.recent.find((row) => row.runId === runId)?.hydrationTokens).toBe(40);
   });
 
   it('splits agent-reported vs estimated cost and counts unpriced', () => {
@@ -182,6 +202,32 @@ describe('InsightsStore (#514)', () => {
     expect(s.byRunner[0]?.provider).toBe('claude-code');
     expect(s.attention?.key).toBe('app/big');
     expect(s.attention!.share).toBeGreaterThanOrEqual(0.4);
+  });
+
+  it('groups only runner-confirmed effort and carries it into recent activity', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, {
+      kind: 'chat',
+      provider: 'codex',
+      model: 'm',
+      effort: 'high',
+      inputTokens: 90,
+      outputTokens: 10,
+      costUsd: 0.2,
+      costSource: 'agent',
+    });
+    seedRun(runs, {
+      kind: 'chat',
+      provider: 'codex',
+      model: 'm',
+      inputTokens: 20,
+      costUsd: 0.01,
+      costSource: 'agent',
+    });
+    const s = insights.summary();
+    expect(s.byEffort).toEqual([{ effort: 'high', runs: 1, tokens: 100, costUsd: 0.2 }]);
+    expect(s.recent.some((r) => r.effort === 'high')).toBe(true);
+    expect(s.byEffort.some((r) => r.effort === 'default')).toBe(false);
   });
 
   it('recent prefers failed then high-cost runs', () => {
@@ -316,6 +362,7 @@ function seedDigest(
     tokens?: number;
     cost?: number;
     modelsJson?: string;
+    effortsJson?: string;
   },
 ): void {
   db.prepare(
@@ -323,8 +370,8 @@ function seedDigest(
        conversation_id, kind, automation_ref, app_id, automation_name,
        first_started_at, last_ended_at, run_count, retry_count,
        total_input_tokens, total_output_tokens, total_cache_read_tokens, total_cache_write_tokens,
-       total_cost_usd, step_count, tool_count, models_json, updated_at
-     ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 0, ?, 0, 0, 0, ?, 0, 0, ?, ?)`,
+       total_cost_usd, step_count, tool_count, models_json, efforts_json, updated_at
+     ) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 0, ?, 0, 0, 0, ?, 0, 0, ?, ?, ?)`,
   ).run(
     d.conversationId,
     d.kind ?? 'chat',
@@ -335,6 +382,7 @@ function seedDigest(
     d.tokens ?? 0,
     d.cost ?? 0,
     d.modelsJson ?? '[]',
+    d.effortsJson ?? '[]',
     Date.now(),
   );
 }
@@ -361,10 +409,12 @@ describe('InsightsStore digest union (#438 + #514)', () => {
       cost: 0.05,
       runCount: 3,
       modelsJson: JSON.stringify([{ model: 'old-m', runs: 3, tokens: 1000, cost: 0.05 }]),
+      effortsJson: JSON.stringify([{ effort: 'medium', runs: 3, tokens: 1000, cost: 0.05 }]),
     });
     const s = insights.summary({ windowDays: 365 });
     expect(s.kpis.totalTokens).toBe(300 + 1000);
     expect(s.kpis.generations).toBe(1 + 3);
+    expect(s.byEffort).toEqual([{ effort: 'medium', runs: 3, tokens: 1000, costUsd: 0.05 }]);
     // bySource includes live + digest
     expect(s.bySource.some((r) => r.kind === 'chat')).toBe(true);
   });

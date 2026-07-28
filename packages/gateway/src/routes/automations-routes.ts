@@ -35,6 +35,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
   InsightsStore,
+  isRunnerKind,
+  parseTurnAttachmentRefs,
+  type TurnAttachmentRef,
   type ConversationStore,
   type Item,
   type Turn,
@@ -44,7 +47,7 @@ import {
 import * as automation from '@centraid/automation';
 import { journalConversationStore } from '../journal-stores.js';
 import type { WorktreeStore } from '../worktree-store/index.js';
-import { readJson, sendError, sendJson } from './route-helpers.js';
+import { parseProviderConsent, readJson, sendError, sendJson } from './route-helpers.js';
 import { SseSubscriberCap } from './sse-cap.js';
 
 /**
@@ -95,6 +98,13 @@ export interface AutomationsRouteOptions {
     message: string;
     abortSignal: AbortSignal;
     onEvent: (event: TurnStreamEvent) => void;
+    providerConsent?:
+      | import('@centraid/app-engine').RunnerKind
+      | readonly import('@centraid/app-engine').RunnerKind[];
+    runnerKind?: import('@centraid/app-engine').RunnerKind;
+    model?: string;
+    thinking?: string;
+    attachmentRefs?: TurnAttachmentRef[];
   }) => Promise<void>;
   /** Overridable for tests; production callers take the shared default. */
   subscriberCap?: SseSubscriberCap;
@@ -116,6 +126,8 @@ interface AutomationTurnJson extends Turn {
   automationId?: string;
   /** The automation's last-known display name — see `RunSummary.automationName`. */
   automationName?: string;
+  /** Active runner binding on the stable automation conversation. */
+  adapterKind?: string;
 }
 
 /**
@@ -156,11 +168,13 @@ function turnToAutomationTurn(
   turn: Turn,
   automationRef: string | undefined,
   conversationTitle: string | undefined,
+  adapterKind: string | undefined,
 ): AutomationTurnJson {
   return {
     ...turn,
     ...(automationRef !== undefined ? { automationId: automationRef } : {}),
     ...(conversationTitle ? { automationName: conversationTitle } : {}),
+    ...(adapterKind ? { adapterKind } : {}),
   };
 }
 
@@ -363,7 +377,12 @@ export function makeAutomationsRouteHandler(
             })();
         const turns = rows.map((turn) => {
           const conversation = turnsStore.getConversation(turn.conversationId);
-          return turnToAutomationTurn(turn, conversation?.automationId, conversation?.title);
+          return turnToAutomationTurn(
+            turn,
+            conversation?.automationId,
+            conversation?.title,
+            conversation?.adapterKind,
+          );
         });
         return sendJson(res, 200, { turns });
       }
@@ -377,7 +396,12 @@ export function makeAutomationsRouteHandler(
           (ref ? store?.listAutomationTurns(ref, { limit: 1 })[0] : undefined);
         if (!store || !turn) return sendJson(res, 200, { turn: null });
         const conversation = store.getConversation(turn.conversationId);
-        const record = turnToAutomationTurn(turn, conversation?.automationId, conversation?.title);
+        const record = turnToAutomationTurn(
+          turn,
+          conversation?.automationId,
+          conversation?.title,
+          conversation?.adapterKind,
+        );
         return sendJson(res, 200, {
           turn: record,
           ...(url.searchParams.get('expand') === 'items'
@@ -415,6 +439,24 @@ export function makeAutomationsRouteHandler(
             message: 'turn body needs a non-empty {message}',
           });
         }
+        const providerConsent = parseProviderConsent(body.providerConsent);
+        if (providerConsent === 'invalid') {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'providerConsent must name registered runners.',
+          });
+        }
+        const runnerKind = isRunnerKind(body.runnerKind) ? body.runnerKind : undefined;
+        if (body.runnerKind !== undefined && !runnerKind) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'runnerKind must name a registered runner.',
+          });
+        }
+        const model = typeof body.model === 'string' && body.model ? body.model : undefined;
+        const thinking =
+          typeof body.thinking === 'string' && body.thinking ? body.thinking : undefined;
+        const attachmentRefs = parseTurnAttachmentRefs(body.attachments);
         // Same fd-exhaustion guard as `turn/events` (sse-cap.ts): every
         // accepted request holds an open response, a 30s heartbeat, and —
         // once the per-automation lock clears — an ACP child. A client
@@ -450,6 +492,11 @@ export function makeAutomationsRouteHandler(
             row,
             turnId,
             message,
+            ...(providerConsent ? { providerConsent } : {}),
+            ...(runnerKind ? { runnerKind } : {}),
+            ...(model ? { model } : {}),
+            ...(thinking ? { thinking } : {}),
+            ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
             abortSignal: abort.signal,
             onEvent,
           });

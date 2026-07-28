@@ -47,6 +47,7 @@ export function deltaCumulativeUsage(
   currentTokens: TokenUsage,
   currentCost: UsageCost | undefined,
   previous: AdapterUsageSnapshot | undefined,
+  context?: { used?: number; size?: number },
 ): DeltaCumulativeUsage {
   const tokens: TokenUsage = {};
   const snapshot: AdapterUsageSnapshot = { ...previous };
@@ -75,6 +76,12 @@ export function deltaCumulativeUsage(
       currency: currentCost.currency,
     };
     (snapshot as { cost?: UsageCost }).cost = currentCost;
+  }
+  if (context?.used !== undefined) {
+    (snapshot as { contextUsed?: number }).contextUsed = context.used;
+  }
+  if (context?.size !== undefined) {
+    (snapshot as { contextSize?: number }).contextSize = context.size;
   }
 
   return {
@@ -127,15 +134,23 @@ export function readCost(raw: unknown): UsageCost | undefined {
 export function buildUsageEvent(
   kind: RunnerKind,
   model: string | undefined,
+  effort: string | undefined,
   tokens: TokenUsage,
   cost: UsageCost | undefined,
 ): TurnStreamEvent | undefined {
   const costUsd = cost && cost.currency.toUpperCase() === 'USD' ? cost.amount : undefined;
-  if (Object.keys(tokens).length === 0 && costUsd === undefined) return undefined;
+  // Effort alone is not usage. Emitting for it books a zero-token, zero-cost
+  // ledger row whose only content is a configuration label — noise the
+  // repricing pipeline then has to carry forever. Effort rides ALONG with
+  // real usage (below) when there is any.
+  if (Object.keys(tokens).length === 0 && costUsd === undefined) {
+    return undefined;
+  }
   return {
     type: 'usage',
     provider: kind,
     ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
     ...tokens,
     ...(costUsd !== undefined ? { costUsd } : {}),
   };

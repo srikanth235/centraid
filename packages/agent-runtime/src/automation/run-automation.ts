@@ -18,16 +18,20 @@
  * `ctx.agent` starts zero child processes and zero HTTP servers.
  */
 
+import { randomUUID } from 'node:crypto';
 import {
   isRunnerKind,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type AutomationTurnStreamEvent,
+  type ProviderEgressConsentController,
+  type RunnerHealthController,
+  type RunnerPrefs,
   type VaultBridge,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
-import { startLiveDispatch } from './run-automation-live-dispatch.js';
+import { parseAutomationAgentFailure, startLiveDispatch } from './run-automation-live-dispatch.js';
 
 export interface RunAutomationOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
@@ -64,6 +68,13 @@ export interface RunAutomationOptions {
   /** Which CLI to drive. Defaults to codex. */
   runner?: RunnerKind;
   /**
+   * Whether `runner` came from the user's own settings (`prefs`) or from the
+   * automation's agent-writable manifest (`manifest`). Only the former is
+   * consent for unattended egress; a manifest pin must still be a live ladder
+   * member or carry an existing grant (#567 D13).
+   */
+  runnerSelectionSource?: 'prefs' | 'manifest';
+  /**
    * Fallback model id/alias for this fire's `ctx.agent` calls, applied only
    * when the automation's manifest doesn't set `requires.model` (that always
    * wins — see `runFire`'s `OpenDispatchArgs.model`). The caller resolves
@@ -72,6 +83,27 @@ export interface RunAutomationOptions {
    * the backend sends no `model` field and uses its own built-in default.
    */
   model?: string;
+  /** Semantic ACP configuration pins resolved for the automation subsystem. */
+  configPins?: Readonly<Record<string, string>>;
+  /** Ordered, pre-consented fallback runners for ctx.agent calls. */
+  runnerLadder?: readonly RunnerKind[];
+  /** Load launch settings/default pins for each failover rung. */
+  runnerPrefsFor?: (runner: RunnerKind) => Promise<RunnerPrefs | undefined>;
+  runnerHealth?: RunnerHealthController;
+  runnerHealthContext?: string;
+  /** Durable conversation×provider grant controller for unattended fires. */
+  providerEgressConsent?: ProviderEgressConsentController;
+  /** Resolve historical attachment hashes for scheduled handoff hydration. */
+  hydrationAttachmentPath?: (hash: string) => string;
+  /** Alert/monitor seam when a failed fire advances to the next rung. */
+  onFailover?: (event: {
+    automationRef: string;
+    from: RunnerKind;
+    to: RunnerKind;
+    failureClass: string;
+    failedRunId: string;
+    nextRunId: string;
+  }) => void;
   /** Hard timeout. Defaults to 5 minutes. */
   timeoutMs?: number;
   /** Optional logger. */
@@ -105,9 +137,11 @@ export interface RunAutomationOptions {
    */
   resolveConnection?: automation.ResolveConnection;
   /** Resolve each onFailure target's own automation pin. */
-  resolveNestedRuntime?: (
-    automationRef: string,
-  ) => Promise<{ runnerKind?: RunnerKind; model?: string }>;
+  resolveNestedRuntime?: (automationRef: string) => Promise<{
+    runnerKind?: RunnerKind;
+    model?: string;
+    configPins?: Readonly<Record<string, string>>;
+  }>;
 }
 
 /**
@@ -118,46 +152,149 @@ export interface RunAutomationOptions {
 export async function runAutomation(
   opts: RunAutomationOptions,
 ): Promise<{ outcome: automation.HandlerOutcome; record: automation.RunRecord }> {
-  const runner: RunnerKind = opts.runner ?? 'codex';
+  const primary: RunnerKind = opts.runner ?? 'codex';
+  const ladder: RunnerKind[] = [];
+  for (const kind of [primary, ...(opts.runnerLadder ?? [])]) {
+    if (!ladder.includes(kind)) ladder.push(kind);
+  }
+  const baseRunId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+  let last: { outcome: automation.HandlerOutcome; record: automation.RunRecord } | undefined;
+  let failoverNotice: string | undefined;
+  const condemned: string[] = [];
 
-  // The injected dispatch surface: the `ctx.agent` rail routes through the
-  // runner registry (issue #479). The runner kind is captured here, so
-  // onFailure cascades (which app-engine drives by recursing with the same
-  // `openDispatch`) reuse the same runner without re-threading config.
-  const openDispatch: automation.OpenDispatch = (args) =>
-    startLiveDispatch({
-      workdir: args.workdir,
-      runId: args.runId,
-      runner: isRunnerKind(args.runnerKind) ? args.runnerKind : runner,
-      // The manifest's `requires.model` (already folded into `args.model` by
-      // `runFire`) always wins; `opts.model` is the caller's prefs-resolved
-      // fallback for when the manifest doesn't specify one.
-      ...((args.model ?? opts.model) ? { model: args.model ?? opts.model } : {}),
-      onLog: args.onLog,
-    });
+  for (let index = 0; index < ladder.length; index += 1) {
+    const runner = ladder[index]!;
+    const isPrimary = index === 0;
+    // A known-open breaker is decided BEFORE the handler runs. `ctx.agent`
+    // checks it too, but by then the handler's earlier side effects
+    // (`ctx.fetch`, vault writes) have already landed and the next rung would
+    // replay them. Scoped only when the caller supplied the same health
+    // context the dispatcher uses — otherwise the keys would not match and the
+    // dispatcher's check stays the only honest one.
+    if (opts.runnerHealthContext && opts.runnerHealth) {
+      const breaker = opts.runnerHealth.canAttempt(opts.runnerHealthContext, runner);
+      if (!breaker.allowed) {
+        const reason =
+          `${runner} is circuit-broken (${breaker.failureClass ?? 'unknown'})` +
+          `${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ''}`;
+        condemned.push(reason);
+        const next = ladder[index + 1];
+        opts.onLog?.(
+          'warn',
+          `${reason}; skipping it for ${opts.automationRef}` +
+            `${next ? ` and continuing with ${next}` : ''}`,
+        );
+        failoverNotice = next
+          ? `${reason}. Skipped without running the handler; continuing with ${next}.`
+          : undefined;
+        if (next) {
+          opts.onFailover?.({
+            automationRef: opts.automationRef,
+            from: runner,
+            to: next,
+            failureClass: breaker.failureClass ?? 'unknown',
+            failedRunId: index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`,
+            nextRunId: `${baseRunId}:failover:${index + 1}:${next}`,
+          });
+        }
+        continue;
+      }
+    }
+    const prefs = await opts.runnerPrefsFor?.(runner);
+    const model = isPrimary ? opts.model : undefined;
+    const configPins = isPrimary ? opts.configPins : prefs?.configPins;
+    const runId = index === 0 ? baseRunId : `${baseRunId}:failover:${index}:${runner}`;
+    const openDispatch: automation.OpenDispatch = (args) =>
+      startLiveDispatch({
+        workdir: args.workdir,
+        runId: args.runId,
+        automationRef: args.automationRef,
+        journalDbFile: opts.journalDbFile,
+        runner: isRunnerKind(args.runnerKind) ? args.runnerKind : runner,
+        // A manifest capability tier, when present, still wins. Provider-
+        // specific owner pins are deliberately cleared after the first rung.
+        ...((args.model ?? model) ? { model: args.model ?? model } : {}),
+        ...((args.configPins ?? configPins) ? { configPins: args.configPins ?? configPins } : {}),
+        ...(opts.runnerPrefsFor ? { runnerPrefsFor: opts.runnerPrefsFor } : {}),
+        ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
+        ...(opts.runnerHealthContext ? { runnerHealthContext: opts.runnerHealthContext } : {}),
+        ...(opts.providerEgressConsent
+          ? { providerEgressConsent: opts.providerEgressConsent }
+          : {}),
+        ...(opts.hydrationAttachmentPath
+          ? { hydrationAttachmentPath: opts.hydrationAttachmentPath }
+          : {}),
+        // A manifest-pinned primary is not user-authored consent; it may still
+        // egress if the user's live failover ladder contains that runner, which
+        // is exactly what `recordDerived('ladder', …)` verifies.
+        consentSource: isPrimary && opts.runnerSelectionSource !== 'manifest' ? 'direct' : 'ladder',
+        onLog: args.onLog,
+      });
 
-  return automation.runFire(
-    {
+    const turnNote = [failoverNotice, opts.note].filter((part) => !!part).join(' ');
+
+    last = await automation.runFire(
+      {
+        automationRef: opts.automationRef,
+        runId,
+        appsDir: opts.appsDir,
+        journalDbFile: opts.journalDbFile,
+        ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
+        ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
+        ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+        ...(opts.onLog ? { onLog: opts.onLog } : {}),
+        runnerKind: runner,
+        ...(model ? { model } : {}),
+        ...(configPins ? { configPins } : {}),
+        allowManifestProviderPins: isPrimary,
+        ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
+        ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
+        ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
+        // The caller's trigger-gap/cursor note stays on every rung; a failover
+        // notice is additive evidence, not a replacement for it.
+        ...(turnNote ? { note: turnNote } : {}),
+        ...(failoverNotice ? { failoverNotice } : {}),
+        ...(opts.input !== undefined ? { input: opts.input } : {}),
+        ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
+        ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),
+        ...(opts.resolveConnection ? { resolveConnection: opts.resolveConnection } : {}),
+        ...(opts.resolveNestedRuntime ? { resolveNestedRuntime: opts.resolveNestedRuntime } : {}),
+        deferOnFailure: (outcome) =>
+          index < ladder.length - 1 && parseAutomationAgentFailure(outcome.error) !== undefined,
+      },
+      { openDispatch },
+    );
+
+    const failure = parseAutomationAgentFailure(last.outcome.error);
+    const next = ladder[index + 1];
+    if (!failure || !next) return last;
+    const nextRunId = `${baseRunId}:failover:${index + 1}:${next}`;
+    opts.onLog?.(
+      'warn',
+      `${runner} failed at automation fire boundary (${failure.failureClass}); ` +
+        `re-entering ${opts.automationRef} with ${next} as ${nextRunId}`,
+    );
+    failoverNotice =
+      `${runner} failed at the automation fire boundary (${failure.failureClass}). ` +
+      `Continuing with ${next}; provider-specific model and effort pins were cleared.`;
+    opts.onFailover?.({
       automationRef: opts.automationRef,
-      ...(opts.runId ? { runId: opts.runId } : {}),
-      appsDir: opts.appsDir,
-      journalDbFile: opts.journalDbFile,
-      ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
-      ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
-      ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
-      ...(opts.onLog ? { onLog: opts.onLog } : {}),
-      runnerKind: runner,
-      ...(opts.model ? { model: opts.model } : {}),
-      ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
-      ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
-      ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-      ...(opts.note ? { note: opts.note } : {}),
-      ...(opts.input !== undefined ? { input: opts.input } : {}),
-      ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-      ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),
-      ...(opts.resolveConnection ? { resolveConnection: opts.resolveConnection } : {}),
-      ...(opts.resolveNestedRuntime ? { resolveNestedRuntime: opts.resolveNestedRuntime } : {}),
-    },
-    { openDispatch },
-  );
+      from: runner,
+      to: next,
+      failureClass: failure.failureClass,
+      failedRunId: runId,
+      nextRunId,
+    });
+  }
+
+  if (!last) {
+    // Every rung was condemned before its handler could run. Surfacing this as
+    // a throw keeps the caller's "failed before the ledger opened" path — which
+    // closes the run stream and records the health error — instead of inventing
+    // a run record for work that never started.
+    throw new Error(
+      `automation ${opts.automationRef}: no runner available — ${condemned.join('; ')}`,
+    );
+  }
+  return last;
 }

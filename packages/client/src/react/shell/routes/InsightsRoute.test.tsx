@@ -75,6 +75,7 @@ const summary = {
   }>,
   byRunner: [],
   byModel: [],
+  byEffort: [],
   recent: [] as Array<{
     runId: string;
     kind: string;

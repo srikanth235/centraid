@@ -1,4 +1,6 @@
 /*
+ * governance: allow-repo-hygiene file-size-limit (#567) the generic ACP lifecycle is one ordered initialize/configure/resume/prompt/settle state machine; splitting its transaction would scatter failure cleanup and confirmed-state accounting
+ *
  * Generic ACP (Agent Client Protocol) backend — the ONE integration path
  * for every runner kind (issue #479).
  *
@@ -18,7 +20,7 @@ import {
   type ContentBlock,
   type PromptCapabilities,
 } from '../../multimodal.js';
-import { classifyAgentFailure } from './agent-errors.js';
+import { classifyAgentFailureDetail } from './agent-errors.js';
 import { isObject } from './content.js';
 import {
   ACP_PROTOCOL_VERSION,
@@ -39,7 +41,10 @@ import {
   hasSessionCapability,
   modeAvailable,
   pinModel,
+  pinThoughtLevel,
   readConfigOptions,
+  readConfigOptionUpdate,
+  readCurrentConfigValue,
   SET_MODE,
   type InitializeResult,
   type SessionConfigOption,
@@ -57,6 +62,23 @@ export type { AcpAdapterSpec, AcpTurnConfig, AcpTurnInput, AcpTurnResult } from 
 
 type Continuity = 'fresh' | 'resumed' | 'loaded' | 'warm';
 
+const DEFAULT_STAGE_TIMEOUT_MS = 20_000;
+const DEFAULT_PROMPT_IDLE_TIMEOUT_MS = 120_000;
+
+function requestWithTimeout<T>(request: Promise<T>, timeoutMs: number, stage: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`ACP ${stage} timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+    timer.unref?.();
+  });
+  return Promise.race([request, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 export async function runAcpTurn(
   input: AcpTurnInput,
   config: AcpTurnConfig,
@@ -66,7 +88,12 @@ export async function runAcpTurn(
   try {
     launch = planLaunch(config, input.extraPath, pendingNotices);
   } catch (err) {
-    input.onEvent({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+    const failure = classifyAgentFailureDetail(err, '', config);
+    input.onEvent({
+      type: 'error',
+      message: failure.message,
+      failureClass: failure.failureClass === 'unknown' ? 'spawn' : failure.failureClass,
+    });
     return {};
   }
 
@@ -76,6 +103,7 @@ export async function runAcpTurn(
   let promptStarted = false;
   let vaultMcp: Awaited<ReturnType<typeof startTurnVaultTools>>['handle'];
   let activeModel: string | undefined;
+  let activeEffort: string | undefined;
   // Assigned on warm take or fresh spawn before any use; definite assignment
   // assertion keeps the dual-path structure readable for tsc.
   let child!: ChildProcessByStdio<Writable, Readable, Readable>;
@@ -92,6 +120,27 @@ export async function runAcpTurn(
   let configOptions: SessionConfigOption[] = [];
   let modes: SessionModes | undefined;
   let usageSnapshot: AcpTurnResult['usageSnapshot'];
+  let hydrated = false;
+  let hydrationKind: 'handoff' | 'recovery' | undefined;
+  let promptIdleTimer: ReturnType<typeof setTimeout> | undefined;
+  let rejectPromptIdle: ((error: Error) => void) | undefined;
+  const stageTimeoutMs = config.stageTimeoutMs ?? DEFAULT_STAGE_TIMEOUT_MS;
+  const promptIdleTimeoutMs = config.promptIdleTimeoutMs ?? DEFAULT_PROMPT_IDLE_TIMEOUT_MS;
+
+  const clearPromptIdleWatchdog = (): void => {
+    if (promptIdleTimer) clearTimeout(promptIdleTimer);
+    promptIdleTimer = undefined;
+  };
+  const touchPromptIdleWatchdog = (): void => {
+    if (!rejectPromptIdle) return;
+    clearPromptIdleWatchdog();
+    promptIdleTimer = setTimeout(() => {
+      rejectPromptIdle?.(
+        new Error(`ACP prompt idle watchdog timed out after ${promptIdleTimeoutMs}ms (wedge)`),
+      );
+    }, promptIdleTimeoutMs);
+    promptIdleTimer.unref?.();
+  };
 
   const emit = (event: TurnStreamEvent): void => {
     if (input.abortSignal.aborted) return;
@@ -102,6 +151,7 @@ export async function runAcpTurn(
 
   const makeHandlers = (): AcpConnectionHandlers => ({
     onServerRequest: (id, method, params) => {
+      touchPromptIdleWatchdog();
       if (method === 'session/request_permission') {
         if (input.abortSignal.aborted) {
           conn.respond(id, { outcome: { outcome: 'cancelled' } });
@@ -137,7 +187,21 @@ export async function runAcpTurn(
       conn.respondMethodNotFound(id, method);
     },
     onNotification: (method, params) => {
+      touchPromptIdleWatchdog();
       if (method !== 'session/update') return;
+      const optionUpdate = readConfigOptionUpdate(params);
+      if (optionUpdate) {
+        // `ConfigOptionUpdate.configOptions` is "the full set" per the ACP
+        // schema — REPLACE, never merge, so an option the agent dropped stops
+        // being a pin target and stops feeding accounting.
+        configOptions = optionUpdate;
+        // The agent just told us what is actually in effect, which is exactly
+        // the D4 "ACP-confirmed" evidence the usage stamp needs. A mid-turn
+        // model/effort switch has to book the rest of the turn under the new
+        // identity instead of the value pinned before the prompt started.
+        activeModel = readCurrentConfigValue(configOptions, 'model');
+        activeEffort = readCurrentConfigValue(configOptions, 'thought_level');
+      }
       if (!promptStarted) return;
       stream.handleSessionUpdate(params);
     },
@@ -145,7 +209,7 @@ export async function runAcpTurn(
 
   // ---- Warm reuse ---------------------------------------------------------
   if (input.prevSessionId) {
-    const warm = takeWarmSlot(config.kind, input.cwd, input.prevSessionId);
+    const warm = takeWarmSlot(config.kind, input.cwd, input.prevSessionId, input.conversationId);
     if (warm) {
       reusedWarm = true;
       child = warm.child;
@@ -154,6 +218,7 @@ export async function runAcpTurn(
       canClose = warm.canClose;
       canResume = warm.canResume;
       canLoad = warm.canLoad;
+      canAdditional = warm.canAdditional;
       httpMcp = warm.httpMcp;
       promptCaps = warm.promptCaps as PromptCapabilities;
       continuity = 'warm';
@@ -198,14 +263,18 @@ export async function runAcpTurn(
 
   try {
     if (!reusedWarm) {
-      const init = await conn.request<InitializeResult>('initialize', {
-        protocolVersion: ACP_PROTOCOL_VERSION,
-        clientCapabilities: {
-          fs: { readTextFile: false, writeTextFile: false },
-          terminal: false,
-        },
-        clientInfo: { name: 'centraid-local-runner', title: 'Centraid', version: '0.1.0' },
-      });
+      const init = await requestWithTimeout(
+        conn.request<InitializeResult>('initialize', {
+          protocolVersion: ACP_PROTOCOL_VERSION,
+          clientCapabilities: {
+            fs: { readTextFile: false, writeTextFile: false },
+            terminal: false,
+          },
+          clientInfo: { name: 'centraid-local-runner', title: 'Centraid', version: '0.1.0' },
+        }),
+        stageTimeoutMs,
+        'initialize',
+      );
       canLoad = init?.agentCapabilities?.loadSession === true;
       const sc = init?.agentCapabilities?.sessionCapabilities;
       canResume = hasSessionCapability(sc, 'resume');
@@ -234,9 +303,10 @@ export async function runAcpTurn(
 
       if (input.prevSessionId && canResume) {
         try {
-          const resumed = await conn.request<SessionSetupResult>(
+          const resumed = await requestWithTimeout(
+            conn.request<SessionSetupResult>('session/resume', withMcp(input.prevSessionId)),
+            stageTimeoutMs,
             'session/resume',
-            withMcp(input.prevSessionId),
           );
           configOptions = readConfigOptions(resumed);
           modes = resumed?.modes ?? undefined;
@@ -248,9 +318,10 @@ export async function runAcpTurn(
       }
       if (!sessionId && input.prevSessionId && canLoad) {
         try {
-          const loaded = await conn.request<SessionSetupResult>(
+          const loaded = await requestWithTimeout(
+            conn.request<SessionSetupResult>('session/load', withMcp(input.prevSessionId)),
+            stageTimeoutMs,
             'session/load',
-            withMcp(input.prevSessionId),
           );
           configOptions = readConfigOptions(loaded);
           modes = loaded?.modes ?? undefined;
@@ -261,13 +332,29 @@ export async function runAcpTurn(
         }
       }
       if (!sessionId) {
-        const created = await conn.request<SessionSetupResult>('session/new', withMcp());
+        const selfHealed = Boolean(input.prevSessionId) && (canResume || canLoad);
+        const created = await requestWithTimeout(
+          conn.request<SessionSetupResult>('session/new', withMcp()),
+          stageTimeoutMs,
+          'session/new',
+        );
         const id = typeof created?.sessionId === 'string' ? created.sessionId : undefined;
         if (!id) throw new Error('acp agent did not return a sessionId');
         configOptions = readConfigOptions(created);
         modes = created?.modes ?? undefined;
         sessionId = id;
         continuity = 'fresh';
+        // Only claim the self-heal once the fresh session really exists — a
+        // failing `session/new` must not leave the owner told we recovered.
+        if (selfHealed) {
+          emit({
+            type: 'notice',
+            level: 'warn',
+            code: 'session_resume_self_heal',
+            message:
+              'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
+          });
+        }
       }
     } else {
       for (const notice of pendingNotices) emit(notice);
@@ -282,26 +369,50 @@ export async function runAcpTurn(
       const sid = sessionId!;
       try {
         if (canResume) {
-          const resumed = await conn.request<SessionSetupResult>('session/resume', {
-            ...sessionParams(sid),
-            mcpServers,
-          });
+          const resumed = await requestWithTimeout(
+            conn.request<SessionSetupResult>('session/resume', {
+              ...sessionParams(sid),
+              mcpServers,
+            }),
+            stageTimeoutMs,
+            'session/resume',
+          );
           configOptions = readConfigOptions(resumed);
           modes = resumed?.modes ?? undefined;
         } else if (canLoad) {
-          const loaded = await conn.request<SessionSetupResult>('session/load', {
-            ...sessionParams(sid),
-            mcpServers,
-          });
+          const loaded = await requestWithTimeout(
+            conn.request<SessionSetupResult>('session/load', {
+              ...sessionParams(sid),
+              mcpServers,
+            }),
+            stageTimeoutMs,
+            'session/load',
+          );
           configOptions = readConfigOptions(loaded);
           modes = loaded?.modes ?? undefined;
         }
       } catch {
+        const created = await requestWithTimeout(
+          conn.request<SessionSetupResult>('session/new', {
+            ...sessionParams(),
+            mcpServers,
+          }),
+          stageTimeoutMs,
+          'session/new after resume failure',
+        );
+        const freshId = typeof created?.sessionId === 'string' ? created.sessionId : undefined;
+        if (!freshId) throw new Error('acp agent did not return a sessionId after resume failure');
+        configOptions = readConfigOptions(created);
+        modes = created?.modes ?? undefined;
+        sessionId = freshId;
+        continuity = 'fresh';
+        // Announced only after the replacement session exists (see above).
         emit({
           type: 'notice',
           level: 'warn',
-          code: 'session_warm_reattach_failed',
-          message: 'Could not reattach the warm agent session; continuing with the existing id.',
+          code: 'session_resume_self_heal',
+          message:
+            'The agent no longer recognized its saved session. Started a fresh session and restored the conversation from Centraid’s ledger.',
         });
       }
     }
@@ -319,11 +430,22 @@ export async function runAcpTurn(
               ? 'Loaded the prior agent session.'
               : 'Reused a warm agent process for this turn.',
     });
+    if (input.additionalDirectories?.length && !canAdditional) {
+      emit({
+        type: 'notice',
+        level: 'warn',
+        code: 'additional_directories_unsupported',
+        message:
+          'This runner does not advertise scoped additional directories, so the selected folders were not shared.',
+      });
+    }
 
     const wantMode = config.adapter?.sessionModeId;
+    const timedRequest = <T = unknown>(method: string, params: unknown): Promise<T> =>
+      requestWithTimeout(conn.request<T>(method, params), stageTimeoutMs, method);
     if (wantMode && sessionId) {
       if (modeAvailable(modes, wantMode)) {
-        await conn.request(SET_MODE, { sessionId, modeId: wantMode }).catch(() => undefined);
+        await timedRequest(SET_MODE, { sessionId, modeId: wantMode }).catch(() => undefined);
       } else {
         emit({
           type: 'notice',
@@ -336,18 +458,66 @@ export async function runAcpTurn(
       }
     }
 
+    const requestedModel = input.configPins?.model ?? input.model;
     activeModel = await pinModel({
-      request: conn.request,
+      request: timedRequest,
       emit,
       sessionId: sessionId!,
       configOptions,
-      requested: input.model,
+      requested: requestedModel,
       resolveModel: config.resolveModel,
+    });
+    activeEffort = await pinThoughtLevel({
+      request: timedRequest,
+      emit,
+      sessionId: sessionId!,
+      configOptions,
+      requested: input.configPins?.thought_level,
     });
 
     const prompt: ContentBlock[] = [];
     if (input.extraSystemPrompt) {
       prompt.push({ type: 'text', text: input.extraSystemPrompt });
+    }
+    const hydrationContext =
+      continuity === 'fresh' && input.prevSessionId
+        ? (input.recoveryHydrationContext ?? input.hydrationContext)
+        : input.hydrationContext;
+    const shouldHydrate =
+      Boolean(hydrationContext) &&
+      (input.forceHydration === true ||
+        (input.prevSessionId !== undefined && continuity === 'fresh'));
+    if (shouldHydrate && hydrationContext) {
+      prompt.push({ type: 'text', text: hydrationContext });
+      hydrated = true;
+      hydrationKind = continuity === 'fresh' && input.prevSessionId ? 'recovery' : 'handoff';
+      emit({
+        type: 'notice',
+        level: 'info',
+        code: 'session_hydrated',
+        message:
+          continuity === 'fresh' && input.prevSessionId
+            ? 'The prior agent session could not resume. Started fresh and restored context from the conversation ledger.'
+            : 'Switched agents and restored context from the conversation ledger.',
+      });
+      const historicalAttachments =
+        hydrationKind === 'recovery'
+          ? input.recoveryHydrationAttachments
+          : input.hydrationAttachments;
+      if (historicalAttachments?.length) {
+        const mapped = acpAttachmentBlocks(historicalAttachments, promptCaps);
+        prompt.push(...mapped.blocks);
+        if (mapped.skipped.length) {
+          emit({
+            type: 'notice',
+            level: 'info',
+            code: 'hydration_attachment_described',
+            message:
+              `This runner can’t re-attach ${mapped.skipped.join(', ')}. ` +
+              'Their names and media types remain in the conversation handoff.',
+          });
+        }
+      }
     }
     prompt.push({ type: 'text', text: input.message });
 
@@ -381,17 +551,33 @@ export async function runAcpTurn(
     usageSnapshot = resumeBaseline;
 
     promptStarted = true;
-    const promptResult = await conn.request<{ usage?: unknown; stopReason?: unknown }>(
-      'session/prompt',
-      { sessionId, prompt },
-    );
+    const idleWatchdog = new Promise<never>((_, reject) => {
+      rejectPromptIdle = reject;
+      touchPromptIdleWatchdog();
+    });
+    const promptResult = await Promise.race([
+      conn.request<{ usage?: unknown; stopReason?: unknown }>('session/prompt', {
+        sessionId,
+        prompt,
+      }),
+      idleWatchdog,
+    ]).finally(() => {
+      rejectPromptIdle = undefined;
+      clearPromptIdleWatchdog();
+    });
 
     if (isObject(promptResult?.usage)) stream.foldTokenUsage(promptResult.usage);
     const folded = stream.usage();
-    const delta = deltaCumulativeUsage(folded.tokens, folded.cost, resumeBaseline);
+    const delta = deltaCumulativeUsage(folded.tokens, folded.cost, resumeBaseline, folded.context);
     // Only the session's live config option / confirmed pin is authoritative.
     // A requested model may be ignored or refused and must never be stamped.
-    const usageEvent = buildUsageEvent(config.kind, activeModel, delta.tokens, delta.cost);
+    const usageEvent = buildUsageEvent(
+      config.kind,
+      activeModel,
+      activeEffort,
+      delta.tokens,
+      delta.cost,
+    );
     // Accounting is NOT cancellable. ACP session usage is cumulative, so the
     // booked delta and the persisted snapshot have to advance together or not
     // at all: dropping the event on an aborted turn while still advancing the
@@ -434,17 +620,22 @@ export async function runAcpTurn(
   } catch (err) {
     parkWarm = false;
     if (!input.abortSignal.aborted) {
+      const failure = classifyAgentFailureDetail(err, conn.stderrTail(), config);
       emit({
         type: 'error',
-        message: classifyAgentFailure(err, conn.stderrTail(), config),
+        message: failure.message,
+        failureClass: failure.failureClass,
       });
     }
   } finally {
+    rejectPromptIdle = undefined;
+    clearPromptIdleWatchdog();
     await vaultMcp?.close();
 
     if (parkWarm && sessionId && !input.abortSignal.aborted && !conn.hasExited()) {
       putWarmSlot({
         kind: config.kind,
+        ...(input.conversationId ? { conversationId: input.conversationId } : {}),
         cwd: input.cwd,
         sessionId,
         child,
@@ -452,13 +643,18 @@ export async function runAcpTurn(
         canResume,
         canLoad,
         canClose,
+        canAdditional,
         httpMcp,
         promptCaps: promptCaps as Record<string, unknown>,
       });
     } else {
       if (canClose && sessionId && !conn.hasExited()) {
         try {
-          await conn.request('session/close', { sessionId });
+          await requestWithTimeout(
+            conn.request('session/close', { sessionId }),
+            stageTimeoutMs,
+            'session/close',
+          );
         } catch {
           // ignore
         }
@@ -469,7 +665,21 @@ export async function runAcpTurn(
         // ignore
       }
       if (!child.killed) child.kill('SIGTERM');
-      await conn.exited;
+      const exited = await requestWithTimeout(
+        // A rejected `exited` still means the process is gone.
+        conn.exited.then(
+          () => true,
+          () => true,
+        ),
+        stageTimeoutMs,
+        'process exit',
+      ).catch(() => false);
+      if (!exited) {
+        // SIGTERM is a request. An agent that ignores it would otherwise leak
+        // one child per turn for the lifetime of the gateway.
+        child.kill('SIGKILL');
+        await conn.exited.catch(() => undefined);
+      }
     }
 
     input.abortSignal.removeEventListener('abort', abortHandler);
@@ -477,12 +687,16 @@ export async function runAcpTurn(
 
   const spawnError = conn.spawnError();
   if (input.abortSignal.aborted) input.onEvent({ type: 'aborted' });
-  else if (spawnError) input.onEvent({ type: 'error', message: spawnError.message });
+  else if (spawnError) {
+    input.onEvent({ type: 'error', message: spawnError.message, failureClass: 'spawn' });
+  }
 
   return sessionId
     ? {
         sessionId,
         ...(usageSnapshot ? { usageSnapshot } : {}),
+        ...(hydrated ? { hydrated: true } : {}),
+        ...(hydrationKind ? { hydrationKind } : {}),
       }
     : {};
 }
