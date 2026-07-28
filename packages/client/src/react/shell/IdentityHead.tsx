@@ -7,16 +7,9 @@ import { DEFAULT_SPACE_ICON, PROFILE_COLORS } from "./routes/SpaceModal.js";
 
 import styles from "./IdentityHead.module.css";
 
-// The sidebar's identity row (issue #599, Decision 14). It stands where the
-// space switcher used to, but it is not a switcher: a member is not "in" one
-// space any more, so the row simply says who you are and where you live, and
-// opens Household — the page that lists the people, devices and spaces behind
-// that identity.
-//
-// The one switch that survives is the GATEWAY switch, and only when this client
-// knows more than one gateway. It is a separate trailing button rather than a
-// second meaning for the row, so "open Household" and "talk to a different
-// gateway" can never be confused for one another.
+// The sidebar's identity row names the active space and gateway. The main row
+// opens Household; the separate trailing control opens the combined space and
+// gateway switcher, keeping navigation and context changes unambiguous.
 
 export interface IdentityHeadProps {
   /** The member's own space — the identity this row names. Undefined until the
@@ -27,8 +20,7 @@ export interface IdentityHeadProps {
   gatewayLabel: string;
   /** Opens Household. */
   onOpenHousehold: () => void;
-  /** Present only when more than one gateway is registered — omitted hides the
-   *  switch button entirely (a single-gateway household never sees it). */
+  /** Opens the combined space and gateway switcher. */
   onSwitchGateway?: (anchor: DOMRect) => void;
   /** Whether the gateway popover is open — a styling hook (`data-open`). */
   switcherOpen?: boolean;
@@ -92,8 +84,8 @@ export default function IdentityHead({
           aria-haspopup="menu"
           aria-expanded={switcherOpen ? "true" : "false"}
           data-open={switcherOpen ? "true" : undefined}
-          aria-label="Switch gateway"
-          title="Switch gateway"
+          aria-label="Switch space or gateway"
+          title="Switch space or gateway (⌘⇧G)"
           onClick={(e) =>
             onSwitchGateway(e.currentTarget.getBoundingClientRect())
           }

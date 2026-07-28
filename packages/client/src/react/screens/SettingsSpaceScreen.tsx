@@ -116,8 +116,9 @@ export default function SettingsSpaceScreen({
     <div className={drawerGroupCss.group}>
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
-          This space is a vault — its own apps, chats, and data. Switch, add, or
-          manage other spaces from the switcher at the top of the sidebar (⌘⇧G).
+          This space is a vault — its own apps, conversations, and data. Switch
+          between reachable spaces, or add and manage gateways, from the
+          switcher at the top of the sidebar (⌘⇧G).
         </div>
 
         <div className={spaceModalStyles.profModalPreview}>

@@ -3,7 +3,7 @@
 // `bun run build` runs scripts/stamp-sw-version.mjs which rewrites this line
 // (issue #468 K8). Do not hand-bump here.
 (() => {
-  const VERSION = 'v11';
+  const VERSION = 'v12';
   const SHELL_CACHE = `centraid-shell-${VERSION}`;
   const ASSET_CACHE = 'centraid-tunnel-assets-' + VERSION;
   const BLOB_CACHE = 'centraid-tunnel-blobs-' + VERSION;

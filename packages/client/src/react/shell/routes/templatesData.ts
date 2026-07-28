@@ -26,11 +26,28 @@ export async function loadAppTemplates(): Promise<TemplateEntry[]> {
   }
 }
 
-/** Automation templates only. */
+export const V0_AUTOMATION_TEMPLATE_IDS = [
+  "google-gmail-pull",
+  "google-calendar-pull",
+  "google-contacts-pull",
+  "google-drive-pull",
+  "obligation-extractor",
+  "renewal-reminders",
+  "screenshot-extractor",
+  "photo-captioner",
+] as const;
+
+const V0_AUTOMATION_TEMPLATE_ID_SET = new Set<string>(
+  V0_AUTOMATION_TEMPLATE_IDS
+);
+
+/** Automation templates intentionally listed in the v0 gallery. */
 export async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
   try {
     return ((await listTemplates()) as TemplateEntry[]).filter(
-      isAutomationTemplate
+      (template) =>
+        isAutomationTemplate(template) &&
+        V0_AUTOMATION_TEMPLATE_ID_SET.has(template.id)
     );
   } catch {
     return [];
@@ -44,7 +61,7 @@ const OVERVIEW_SUGGESTION_IDS = [
   "obligation-extractor",
   "google-gmail-pull",
   "renewal-reminders",
-  "release-notes-drafter",
+  "screenshot-extractor",
 ] as const;
 
 /** Curated 3–4 automation templates for the fleet empty state. */

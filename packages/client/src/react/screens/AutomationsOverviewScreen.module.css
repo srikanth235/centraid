@@ -184,7 +184,7 @@
   top: 0;
   bottom: 0;
   width: 2.5px;
-  border-radius: var(--lib-tile-radius) 0 0 var(--lib-tile-radius);
+  border-radius: var(--lib-tile-radius, 12px) 0 0 var(--lib-tile-radius, 12px);
   background: var(--danger);
 }
 .attentionBadge {

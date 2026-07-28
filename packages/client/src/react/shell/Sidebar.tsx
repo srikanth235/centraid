@@ -1,5 +1,6 @@
 import type { IconName } from "@centraid/design-tokens";
 import { useState, type JSX, type ReactNode } from "react";
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive navigation component owns desktop, mobile, and compact variants over one item model
 
 import Icon from "../ui/Icon.js";
 import Logo from "../ui/Logo.js";
@@ -114,6 +115,7 @@ export interface SidebarProps {
   gatewayStatus?: "up" | "down" | "unknown";
   /** People, devices and spaces (issue #599). */
   onHousehold?: () => void;
+  /** @deprecated Storage is a Gateway tab; retained for caller compatibility. */
   onStorage?: () => void;
   onAtlas?: () => void;
   /** @deprecated Apps list is no longer shown in the sidebar. */
@@ -471,13 +473,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         active={props.activePage === "household"}
         disabled={!props.onHousehold}
         onClick={() => props.onHousehold?.()}
-      />
-      <SbItem
-        icon={<Icon name="Save" size={15} />}
-        label="Storage"
-        active={props.activePage === "storage"}
-        disabled={!props.onStorage}
-        onClick={() => props.onStorage?.()}
       />
       <SbItem
         icon={<Icon name="Globe" size={15} />}

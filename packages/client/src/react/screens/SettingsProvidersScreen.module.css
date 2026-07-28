@@ -71,6 +71,16 @@
   gap: 6px;
 }
 
+@media (max-width: 1000px) {
+  .routeRow {
+    grid-template-columns: 1fr;
+  }
+  .routeControls,
+  .ladderRow {
+    justify-content: flex-start;
+  }
+}
+
 .ladderMember {
   display: inline-flex;
   align-items: center;

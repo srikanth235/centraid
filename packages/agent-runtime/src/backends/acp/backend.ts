@@ -462,19 +462,6 @@ export async function runAcpTurn(
       }
     }
 
-    emit({
-      type: "notice",
-      level: "info",
-      code: "session_continuity",
-      message:
-        continuity === "fresh"
-          ? "Started a new agent session for this turn."
-          : continuity === "resumed"
-            ? "Resumed the prior agent session (no history replay)."
-            : continuity === "loaded"
-              ? "Loaded the prior agent session."
-              : "Reused a warm agent process for this turn.",
-    });
     if (input.additionalDirectories?.length && !canAdditional) {
       emit({
         type: "notice",

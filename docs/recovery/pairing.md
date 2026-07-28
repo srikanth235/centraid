@@ -40,12 +40,20 @@ recover --kit …`).
 
 Once a gateway is running:
 
-1. An enrolled owner mints `centraid-gateway pair --data-dir … [--vault …]`
-   (`--qr` for a terminal QR). Omitting `--vault` targets the registry
-   default, which on an auto-founded gateway is **Shared**.
+1. On the gateway host, run `centraid-gateway pair --data-dir … [--vault …]`
+   (`--qr` for a terminal QR). The command talks to the running loopback
+   daemon on the configured port. With no member flag it pairs another device
+   to the existing owner and carries all of that owner's current grants.
+   Omitting `--vault` targets the registry default, which on an auto-founded
+   gateway is **Shared**.
+   - Use `--member <id-or-label>` to pair another device for an existing
+     household member.
+   - Creating a person is always explicit:
+     `--new-member <label> [--grant <vault>:<role>]…`.
 2. The device redeems the one-time capability over the iroh pairing ALPN.
-3. Redemption and the `gateway.db` enrollment commit atomically. New ordinary
-   devices receive `full` trust unless a narrower trust was requested.
+3. Redemption and the `gateway.db` enrollment commit atomically. The redeeming
+   device supplies its own display name; this is separate from the saved
+   gateway label and can be renamed later from Household.
 4. Subsequent requests are admitted by the enrolled EndpointId. There is no
    direct-HTTP pairing route or per-device bearer.
 

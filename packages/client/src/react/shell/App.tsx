@@ -29,7 +29,6 @@ import { type ShellActions, ShellActionsProvider } from "./actions.js";
 import { openConfirm } from "./confirm.js";
 import { openMenu } from "./contextMenu.js";
 import {
-  countGateways,
   getCachedGatewayRows,
   openGatewayRegistry,
 } from "./gatewayRegistry.js";
@@ -139,11 +138,12 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case "automations":
     case "connectors":
     case "approvals":
-    case "gateway":
     case "household":
-    case "storage":
     case "atlas":
       return route.kind;
+    case "gateway":
+    case "storage":
+      return "gateway";
     case "settings":
       // Legacy deep link Settings → Connections → promote highlight to Connectors.
       return route.page === "connections" ? "connectors" : "settings";
@@ -273,12 +273,6 @@ export default function App(): JSX.Element {
     []
   );
   const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
-  // How many gateways this client knows. The gateway switcher is the ONE
-  // switcher that survived Decision 14 (#599), and it only earns sidebar space
-  // when there is something to switch between — a single-gateway household
-  // never sees it. Re-counted whenever the active gateway changes (which is
-  // also what a fresh pairing broadcasts).
-  const [gatewayCount, setGatewayCount] = useState(0);
   // The switcher's per-gateway actions (issue #382) — "Test connection…",
   // "Rename…" and the footer "Add gateway…" all open one of these small modals;
   // the popover itself already closed by the time any of them fires
@@ -310,6 +304,13 @@ export default function App(): JSX.Element {
       } else if (meta && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         setPaletteOpen((open) => !open);
+      } else if (meta && e.shiftKey && (e.key === "g" || e.key === "G")) {
+        e.preventDefault();
+        document
+          .querySelector<HTMLButtonElement>(
+            'button[aria-label="Switch space or gateway"]'
+          )
+          ?.click();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -339,13 +340,6 @@ export default function App(): JSX.Element {
     window.CentraidApi.onGatewayChanged?.(reScope);
     window.CentraidApi.onVaultChanged?.(reScope);
 
-    const recount = (): void => {
-      void countGateways()
-        .then(setGatewayCount)
-        .catch(() => undefined);
-    };
-    recount();
-    window.CentraidApi.onGatewayChanged?.(recount);
     return () => {
       document.removeEventListener("keydown", onKey);
       // The gateway switcher is a body-portalled overlay outside React's tree —
@@ -552,10 +546,9 @@ export default function App(): JSX.Element {
     (nav: ShellNav) => {
       const page = activePageFor(nav.route);
       const go = (route: ShellRoute) => () => nav.navigate(route);
-      // The sidebar head is an IDENTITY row now, not a switcher (#599,
-      // Decision 14): it names the member's own space and the gateway it lives
-      // on, and it opens Household. Choosing a space is no longer a mode —
-      // Household lists them and every creation flow names its own target.
+      // The identity head names the active space and gateway and opens the
+      // combined switcher (#608). Spaces are the frequent context change;
+      // explicit creation targets and conversation pins remain stronger keys.
       const activeGatewayId = memberScopes.gatewayId ?? "";
       const openGatewayPicker = (anchor: DOMRect): void => {
         setGatewaySwitcherOpen(true);
@@ -568,7 +561,19 @@ export default function App(): JSX.Element {
         // settles (stale-while-revalidate).
         openGatewaySwitcher({
           anchor,
+          spaces: memberScopes.scopes.map((scope) => ({
+            id: scope.id,
+            label: scope.label,
+            role: scope.role,
+            isActive: scope.id === memberScopes.active?.id,
+          })),
           rows: getCachedGatewayRows(activeGatewayId),
+          onSelectSpace: (vaultId) => {
+            void window.CentraidApi.setActiveVault({ vaultId }).catch(
+              (err: unknown) =>
+                showToast(`Couldn't switch space: ${errMsg(err)}`)
+            );
+          },
           onAddGateway: () => setAddGatewayOpen(true),
           onSelectGateway: (gatewayId) => {
             void window.CentraidApi.setActiveGateway({ id: gatewayId }).catch(
@@ -604,12 +609,12 @@ export default function App(): JSX.Element {
       };
       const headSlot = (
         <IdentityHead
-          {...(memberScopes.primary
+          {...(memberScopes.active
             ? {
                 space: {
-                  name: memberScopes.primary.label,
-                  color: memberScopes.primary.color ?? "#4E68DD",
-                  icon: memberScopes.primary.icon ?? "Sparkle",
+                  name: memberScopes.active.label,
+                  color: memberScopes.active.color ?? "#4E68DD",
+                  icon: memberScopes.active.icon ?? "Sparkle",
                 },
               }
             : {})}
@@ -621,12 +626,8 @@ export default function App(): JSX.Element {
                   : memberScopes.gatewayLabel) || "This Mac"
           }
           onOpenHousehold={() => nav.navigate({ kind: "household" })}
-          {...(gatewayCount > 1
-            ? {
-                onSwitchGateway: openGatewayPicker,
-                switcherOpen: gatewaySwitcherOpen,
-              }
-            : {})}
+          onSwitchGateway={openGatewayPicker}
+          switcherOpen={gatewaySwitcherOpen}
         />
       );
       // Rows carry their space only when it is NOT the member's own — a
@@ -661,11 +662,7 @@ export default function App(): JSX.Element {
               ? nav.route.conversationId
               : undefined
           }
-          headSlot={
-            memberScopes.loading || memberScopes.scopes.length > 0
-              ? headSlot
-              : undefined
-          }
+          headSlot={headSlot}
           onHome={go({ kind: "home" })}
           onSearch={() => setPaletteOpen(true)}
           onAssistant={go({ kind: "assistant" })}
@@ -678,7 +675,6 @@ export default function App(): JSX.Element {
           onGateway={go({ kind: "gateway" })}
           gatewayStatus={gatewayStatus}
           onHousehold={go({ kind: "household" })}
-          onStorage={go({ kind: "storage" })}
           onAtlas={go({ kind: "atlas" })}
           onSettings={go({ kind: "settings" })}
           {...(builderEnabled
@@ -705,7 +701,6 @@ export default function App(): JSX.Element {
     [
       builderEnabled,
       memberScopes,
-      gatewayCount,
       gatewaySwitcherOpen,
       blockingCount,
       updateStatus,

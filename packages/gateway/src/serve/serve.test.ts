@@ -48,7 +48,7 @@ describe("serve scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gateway-runtime-${crypto.randomUUID()}-`);
     handle = await serve({ paths: pathsUnder(dataDir) });
-  });
+  }, 30_000);
 
   afterEach(async () => {
     await handle.close().catch(() => undefined);

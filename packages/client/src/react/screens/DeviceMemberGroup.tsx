@@ -38,6 +38,10 @@ export interface DeviceMemberGroupProps {
     device: CentraidGatewayDevice,
     confirmLastAdmin?: string
   ) => Promise<void>;
+  onRenameDevice?: (
+    device: CentraidGatewayDevice,
+    label: string
+  ) => Promise<void>;
   onUpdateCompute?: (
     device: CentraidGatewayDevice,
     enabled: boolean
@@ -54,6 +58,7 @@ export default function DeviceMemberGroup({
   isSelf,
   now,
   onRevokeDevice,
+  onRenameDevice,
   onUpdateCompute,
   onRemoveMember,
 }: DeviceMemberGroupProps): JSX.Element {
@@ -178,6 +183,7 @@ export default function DeviceMemberGroup({
               device={device}
               now={now}
               onRevoke={onRevokeDevice}
+              {...(onRenameDevice ? { onRename: onRenameDevice } : {})}
               {...(onUpdateCompute ? { onUpdateCompute } : {})}
             />
           ))}

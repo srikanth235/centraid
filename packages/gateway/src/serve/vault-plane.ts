@@ -57,6 +57,7 @@ import {
   purposeConceptId,
   clearAllScopeTombstones,
   clearScopeTombstones,
+  checkpointVault,
   deleteReplicaIntentOutcomesForDevice,
   closeObsoleteScopeRequest,
   getOpenScopeRequest,
@@ -663,6 +664,10 @@ export class VaultPlane {
     // declared extension tables (issue #286 phase 2) — command handlers
     // live in gateway memory, the contract rows in the vault.
     this.gateway.registerAllExtCommands();
+    // Fresh bootstrap is the one safe early checkpoint: all schema/default
+    // writes have landed and the WAL shipper has not attached yet. Leaving
+    // these pages in WAL makes a pristine two-vault install needlessly large.
+    if (this.boot.fresh) checkpointVault(this.db);
     this.logger.info(
       this.boot.fresh
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`

@@ -553,6 +553,18 @@ export const RUNNER_BACKENDS: Record<RunnerKind, RunnerBackend> = {
   acp: acpBackend,
 };
 
+/** The deliberately small v0 product roster. */
+export const SUPPORTED_RUNNER_KINDS = [
+  "codex",
+  "claude-code",
+  "opencode",
+  "grok",
+  "pi",
+] as const satisfies readonly RunnerKind[];
+
+export const SUPPORTED_RUNNER_BACKENDS: readonly RunnerBackend[] =
+  SUPPORTED_RUNNER_KINDS.map((kind) => RUNNER_BACKENDS[kind]);
+
 /**
  * Resolve the backend for a runner kind. Throws on an unregistered kind —
  * callers that must never throw (best-effort enumeration) index

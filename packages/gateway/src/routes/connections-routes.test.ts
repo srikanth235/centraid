@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
 /** BYO OAuth PKCE ceremony over HTTP, including sealed tokens and safe health output. */
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive connection-route suite shares one real OAuth and sealed-store harness
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -474,17 +475,11 @@ describe("connections-routes", () => {
     ).find((p) => p.id === "github")!;
     expect(github.credKind).toBe("api_key");
     const ids = (providers.providers as { id: string }[]).map((p) => p.id);
-    for (const id of [
-      "microsoft",
-      "gitlab",
-      "linear",
-      "notion",
-      "todoist",
-      "slack",
-      "dropbox",
-    ]) {
+    for (const id of ["gitlab", "linear", "notion", "todoist", "slack"]) {
       expect(ids).toContain(id);
     }
+    expect(ids).not.toContain("microsoft");
+    expect(ids).not.toContain("dropbox");
   });
 
   test("DELETE removes a connection with no history, 409s on a real refusal, 404s an unknown id", async () => {

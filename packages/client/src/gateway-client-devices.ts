@@ -237,6 +237,27 @@ export async function revokeGatewayDevice(
   return readJson<{ removed: boolean }>(res, "revoke device");
 }
 
+export async function renameGatewayDevice(
+  deviceId: string,
+  label: string
+): Promise<CentraidGatewayDevice> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_gateway/devices/${enc(deviceId)}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ label }),
+    }
+  );
+  const out = await readJson<{ device: CentraidGatewayDevice }>(
+    res,
+    "rename device"
+  );
+  return out.device;
+}
+
 const BASIC_BROWSER_COMPUTE: DeviceComputeCapabilities = {
   previews: true,
   poster: true,

@@ -189,11 +189,14 @@ export function installWebHost(): void {
             message: "This ticket is missing Iroh pairing details.",
           };
         }
+        const deviceName =
+          input.label?.trim() ||
+          `Web browser · ${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
         const { response } = await pairGatewayOverIroh({
           endpointTicket: decoded.gw,
           ticketId: decoded.ticketId,
           secret: decoded.secret,
-          deviceName: input.label ?? "Web browser",
+          deviceName,
           rememberDevice: input.rememberDevice ?? false,
         });
         if (!response.ok || !response.vaultId || !response.gatewayId) {
@@ -205,7 +208,7 @@ export function installWebHost(): void {
           endpointTicket: decoded.gw,
           endpointId: response.gatewayId,
           vaultId: response.vaultId,
-          label: input.label ?? response.gatewayName ?? "Web gateway",
+          label: response.gatewayName ?? "Web gateway",
           rememberDevice: input.rememberDevice ?? false,
         });
         if (input.rememberDevice !== true) purgeTunnelCaches();

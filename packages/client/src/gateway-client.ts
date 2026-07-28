@@ -814,6 +814,7 @@ export * from "./gateway-client-local-storage.js";
 export {
   listGatewayDevices,
   revokeGatewayDevice,
+  renameGatewayDevice,
   createGatewayDeviceTicket,
   setGatewayDeviceCompute,
   getGatewayDeviceWorkStatus,

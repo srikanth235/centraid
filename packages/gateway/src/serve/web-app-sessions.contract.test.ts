@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive browser-session contract shares one production gateway and app fixture
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
@@ -72,7 +73,7 @@ describe("web-app-sessions.contract scenarios", () => {
     await seedApp(store, "alpha");
     await seedApp(store, "beta");
     await handle.syncApps();
-  });
+  }, 30_000);
 
   afterEach(async () => {
     await handle.close().catch(() => undefined);

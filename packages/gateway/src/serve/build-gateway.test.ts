@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive gateway-construction suite shares one production graph harness
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
@@ -22,6 +23,21 @@ function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, "vault"),
   };
+}
+
+async function directoryBytes(dir: string): Promise<number> {
+  return (
+    await Promise.all(
+      (
+        await fs.readdir(dir, { withFileTypes: true })
+      ).map(async (entry) => {
+        const target = path.join(dir, entry.name);
+        return entry.isDirectory()
+          ? directoryBytes(target)
+          : (await fs.stat(target)).size;
+      })
+    )
+  ).reduce((total, size) => total + size, 0);
 }
 
 /** Mount a handler on a bare loopback server with no auth in front. */
@@ -97,6 +113,9 @@ describe("build-gateway scenarios", () => {
     ]);
     const founded = gateway.vaults.list().map((v) => v.vaultId);
     expect(gateway.vaults.defaultVaultId()).toBe(founded[0]);
+    await expect(directoryBytes(dataDir)).resolves.toBeLessThanOrEqual(
+      14 * 1024 ** 2
+    );
     await expect(
       fs.access(path.join(dataDir, "gateway.db"))
     ).resolves.toBeUndefined();

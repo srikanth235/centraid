@@ -1,17 +1,17 @@
 /*
- * `centraid-gateway pair` / `centraid-gateway devices` — stopped-daemon
- * filesystem maintenance for device enrollment (issue #289 phase 2).
+ * `centraid-gateway pair` / `centraid-gateway devices` — device enrollment
+ * administration (issue #289 phase 2).
  *
- * SSH is the bootstrap channel for headless gateways: the landlord runs
- * `pair --vault <name>` on the box, gets a one-line ticket (gateway
- * identity pin + relay hint + one-time secret, short TTL), and hands it to
- * the device being enrolled. Desktop / PWA paste the token into "Add
- * gateway"; phones scan `pair --qr` (terminal block QR of the same token)
- * or paste it in Settings. `devices add` is the direct shortcut when the
- * admin already knows a device's EndpointId (the desktop shows its own in
- * Settings). Mutations take gateway.db's exclusive lock and refuse while the
- * daemon is running. Tickets redeem only through the iroh ceremony, where the
- * joining device proves the EndpointId persisted in its enrollment.
+ * `pair` reaches the running loopback daemon through the host-custody bearer
+ * and receives a one-line ticket (gateway identity pin + relay hint +
+ * one-time secret, short TTL). Desktop / PWA paste the token into "Add
+ * gateway"; phones can scan `pair --qr` or paste it in Settings. `devices
+ * governance: allow-repo-hygiene file-size-limit (#608) cohesive device-admin command family shares parsing, host-custody auth, and output contracts
+ * add` remains the stopped-daemon shortcut when the admin already knows a
+ * device EndpointId. Offline mutations take gateway.db's exclusive lock and
+ * refuse while the daemon is running. Tickets redeem only through the iroh
+ * ceremony, where the joining device proves the EndpointId persisted in its
+ * enrollment.
  */
 
 import { handshakeGateway } from "@centraid/protocol";
@@ -60,7 +60,7 @@ interface DeviceArgs {
   json?: boolean;
   /**
    * Human mode: also print a terminal QR of the one-line ticket so a phone
-   * can scan it from an SSH session (VPS headless bootstrap). Ignored with
+   * can scan it from another screen. Ignored with
    * `--json` (JSON consumers already get `ticket`).
    */
   qr?: boolean;

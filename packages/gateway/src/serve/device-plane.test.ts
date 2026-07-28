@@ -115,6 +115,28 @@ describe("device-plane scenarios", () => {
     ]);
   });
 
+  test("enrollment makes colliding client defaults distinguishable", async () => {
+    const file = await tempFile("gateway.db");
+    const store = EnrollmentStore.open(file);
+    const first = store.enroll({
+      endpointId: "browser-one",
+      vaultId: "v1",
+      label: "Web browser · ABCD",
+      memberLabel: "Priya",
+    });
+    const second = store.enroll({
+      endpointId: "browser-two",
+      label: "Web browser · ABCD",
+      memberId: first.memberId,
+    });
+
+    expect(first.label).toBe("Web browser · ABCD");
+    expect(second.label).toBe("Web browser · ABCD · browser-two");
+    expect(new Set(store.listByVault("v1").map((row) => row.label)).size).toBe(
+      2
+    );
+  });
+
   test("enrollment: a second process's writes are visible without restart", async () => {
     const file = await tempFile("gateway.db");
     const daemon = EnrollmentStore.open(file, { statTtlMs: 0 });

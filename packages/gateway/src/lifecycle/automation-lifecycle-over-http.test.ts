@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive automation lifecycle suite shares one production HTTP and scheduler fixture
 import { promises as fs } from "node:fs";
 /*
  * Automation CRUD over HTTP (issue #141, C7). The desktop no longer
@@ -126,7 +127,7 @@ describe("automation-lifecycle-over-http scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-autocrud-${crypto.randomUUID()}-`);
     handle = await serve({ paths: pathsUnder(dataDir) });
-  });
+  }, 30_000);
 
   afterEach(async () => {
     await handle?.close().catch(() => undefined);

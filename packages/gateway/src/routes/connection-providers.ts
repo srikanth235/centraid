@@ -49,6 +49,8 @@ export interface ProviderPreset {
   readonly id: string;
   readonly name: string;
   readonly credKind: "oauth2" | "api_key";
+  /** The product ships an Assist onboarding path for this OAuth provider. */
+  readonly assistOnboarding?: true;
   readonly authUrl?: string;
   readonly tokenUrl?: string;
   /** Everything connectors need, pre-joined; trim to taste. */
@@ -138,6 +140,7 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     id: "google",
     name: "Google (Gmail, Calendar, Contacts, Drive)",
     credKind: "oauth2",
+    assistOnboarding: true,
     authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenUrl: "https://oauth2.googleapis.com/token",
     scopes: [
@@ -340,3 +343,13 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     connectors: [{ templateId: "dropbox-pull", kind: "pull.dropbox" }],
   }),
 ];
+
+/**
+ * Providers offered for new connections. OAuth entries are derived from the
+ * existence of a shipped Assist onboarding path; API-key providers continue
+ * to use the owner-supplied credential flow.
+ */
+export const OFFERED_PROVIDER_PRESETS: readonly ProviderPreset[] =
+  PROVIDER_PRESETS.filter(
+    (preset) => preset.credKind === "api_key" || preset.assistOnboarding
+  );

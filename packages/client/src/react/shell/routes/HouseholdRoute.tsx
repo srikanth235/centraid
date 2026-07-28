@@ -6,6 +6,7 @@ import {
   listGatewayDevices,
   listGatewayMembers,
   removeGatewayMember,
+  renameGatewayDevice,
   revokeGatewayDevice,
   setGatewayDeviceCompute,
 } from "../../../gateway-client.js";
@@ -74,6 +75,7 @@ export default function HouseholdRoute(): JSX.Element {
         }
         loadDevices={listGatewayDevices}
         onRevokeDevice={revokeGatewayDevice}
+        onRenameDevice={renameGatewayDevice}
         onCurrentDeviceRevoked={() =>
           import("../../../replica/shell-session.js").then((replica) =>
             replica.purgeCurrentReplicaDevice()

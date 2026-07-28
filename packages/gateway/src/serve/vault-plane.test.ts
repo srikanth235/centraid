@@ -55,6 +55,20 @@ describe("vault-plane", () => {
     return plane;
   }
 
+  test("fresh bootstrap checkpoints both WALs before the shipper attaches", async () => {
+    const dir = await tempDir("fresh-bootstrap-wal-");
+    openPlane(dir);
+    await Promise.all(
+      ["vault.db-wal", "journal.db-wal"].map(async (name) => {
+        const size = await fs
+          .stat(path.join(dir, name))
+          .then((stat) => stat.size)
+          .catch(() => 0);
+        expect(size, name).toBeLessThanOrEqual(32 * 1024);
+      })
+    );
+  });
+
   test("a protector-backed gateway reopens real sealed rows while a copied data dir cannot", async () => {
     const root = await tempDir("protected-vault-plane-");
     const vaultRoot = path.join(root, "vault");

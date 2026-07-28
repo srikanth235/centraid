@@ -104,6 +104,7 @@ function RouteRow({
   onSetModel,
   onSetEffort,
   onSetLadder,
+  unattended,
 }: {
   label: string;
   hint: string;
@@ -121,7 +122,10 @@ function RouteRow({
   onSetModel: (v: string) => void;
   onSetEffort: (v: string) => void;
   onSetLadder: (v: AgentRunnerKind[]) => void;
+  unattended: boolean;
 }): JSX.Element {
+  const [fallbackPick, setFallbackPick] = useState("");
+  const [fallbackFeedback, setFallbackFeedback] = useState<string | null>(null);
   // D13: ladder membership IS the consent record, so the row shows exactly what
   // is stored — including a member that currently resolves as this lane's
   // primary. Hiding it made the UI disagree with the consent the gateway holds.
@@ -159,6 +163,9 @@ function RouteRow({
           <option value="">
             {defaultCard ? `Use default · ${defaultCard.title}` : "Use default"}
           </option>
+          {runner && !cards.some((card) => card.kind === runner) ? (
+            <option value={runner}>{runner} · existing hidden pin</option>
+          ) : null}
           {cards.map((c) => (
             <option key={c.kind} value={c.kind} disabled={!c.connected}>
               {c.connected ? c.title : `${c.title} · unavailable`}
@@ -188,7 +195,9 @@ function RouteRow({
         )}
       </div>
       <div className={styles.ladderRow}>
-        <span className={styles.routeHint}>Automatic failover</span>
+        <span className={styles.routeHint}>
+          {unattended ? "In-fire failover" : "Next-turn failover"}
+        </span>
         {activeLadder.length === 0 ? (
           <span className={styles.routeHint}>None</span>
         ) : (
@@ -243,11 +252,13 @@ function RouteRow({
         <select
           className={styles.ladderAdd}
           aria-label={`Add fallback agent for ${label}`}
-          value=""
+          value={fallbackPick}
           disabled={availableFallbacks.length === 0}
           onChange={(event) => {
             const kind = event.target.value as AgentRunnerKind;
             if (!kind) return;
+            setFallbackPick(kind);
+            setFallbackFeedback(null);
             const title =
               cards.find((card) => card.kind === kind)?.title ?? kind;
             void openConfirm({
@@ -255,7 +266,13 @@ function RouteRow({
               title: `Add ${title} to ${label} failover?`,
               message: `If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
             }).then((approved) => {
-              if (approved) onSetLadder([...activeLadder, kind]);
+              if (approved) {
+                onSetLadder([...activeLadder, kind]);
+                setFallbackFeedback(`${title} added`);
+              } else {
+                setFallbackFeedback(`${title} was not added`);
+              }
+              setFallbackPick("");
             });
           }}
         >
@@ -266,6 +283,16 @@ function RouteRow({
             </option>
           ))}
         </select>
+        {fallbackFeedback ? (
+          <span className={styles.routeHint}>{fallbackFeedback}</span>
+        ) : null}
+        {cards
+          .filter((card) => card.connected && !card.sessionReady)
+          .map((card) => (
+            <span className={styles.routeHint} key={card.kind}>
+              {card.title}: {card.fallbackBlockedReason}
+            </span>
+          ))}
       </div>
     </div>
   );
@@ -498,6 +525,11 @@ export default function SettingsProvidersScreen({
                   onChange={onSetDefault}
                   ariaLabel="Default agent"
                 >
+                  {cards.some((card) => card.kind === defaultKind) ? null : (
+                    <option value={defaultKind}>
+                      {defaultKind} · existing hidden pin
+                    </option>
+                  )}
                   {cards.map((c) => (
                     <option key={c.kind} value={c.kind} disabled={!c.connected}>
                       {c.connected ? c.title : `${c.title} · unavailable`}
@@ -542,6 +574,7 @@ export default function SettingsProvidersScreen({
                     onSetSubsystemConfig(kind, row.key, "thought_level", v)
                   }
                   onSetLadder={(v) => onSetSubsystemRunnerLadder(row.key, v)}
+                  unattended={row.key === "automations"}
                 />
               );
             })}

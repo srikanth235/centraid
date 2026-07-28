@@ -983,6 +983,8 @@ export interface AgentCardDTO {
   modelsLoading: boolean;
   /** ACP initialize/session probe succeeded and did not request authentication. */
   sessionReady: boolean;
+  /** Why an installed runner cannot join unattended failover. */
+  fallbackBlockedReason?: string;
   /** Live ACP capability evidence gates the corresponding turn controls. */
   modelConfigurable?: boolean;
   supportsAttachments?: boolean;

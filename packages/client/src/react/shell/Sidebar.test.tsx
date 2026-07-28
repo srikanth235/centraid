@@ -124,10 +124,8 @@ describe("Sidebar suite", () => {
       );
     });
 
-    it("groups Gateway and Storage under an Operations section", () => {
-      const el = render(
-        <Sidebar {...base} onGateway={() => {}} onStorage={() => {}} />
-      );
+    it("groups the three operations destinations together", () => {
+      const el = render(<Sidebar {...base} onGateway={() => {}} />);
       // Sentence case in the markup — chrome.module.css uppercases it.
       const section = [...el.querySelectorAll(".sbSection")].find((s) =>
         s.textContent?.includes("Operations")
@@ -137,43 +135,39 @@ describe("Sidebar suite", () => {
 
       const items = [...el.querySelectorAll(".sbItem")];
       const gateway = items.find((b) => b.textContent?.includes("Gateway"))!;
-      const storage = items.find((b) => b.textContent?.includes("Storage"))!;
+      const household = items.find((b) =>
+        b.textContent?.includes("Household")
+      )!;
+      const atlas = items.find((b) => b.textContent?.includes("Vault Atlas"))!;
       expect(gateway).toBeDefined();
-      expect(storage).toBeDefined();
-      // Both sit after the section header, and Gateway leads.
+      expect(household).toBeDefined();
+      expect(atlas).toBeDefined();
+      expect(
+        items.find((b) => b.textContent?.includes("Storage"))
+      ).toBeUndefined();
       expect(
         section!.compareDocumentPosition(gateway) &
           Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
       expect(
-        gateway.compareDocumentPosition(storage) &
+        gateway.compareDocumentPosition(household) &
           Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
     });
 
-    it("puts Household in Operations between Gateway and Storage (#599)", () => {
+    it("puts Household after Gateway in Operations (#599)", () => {
       const onHousehold = vi.fn<NonNullable<SidebarProps["onHousehold"]>>();
       const el = render(
-        <Sidebar
-          {...base}
-          onGateway={() => {}}
-          onHousehold={onHousehold}
-          onStorage={() => {}}
-        />
+        <Sidebar {...base} onGateway={() => {}} onHousehold={onHousehold} />
       );
       const items = [...el.querySelectorAll(".sbItem")];
       const gateway = items.find((b) => b.textContent?.includes("Gateway"))!;
       const household = items.find((b) =>
         b.textContent?.includes("Household")
       )!;
-      const storage = items.find((b) => b.textContent?.includes("Storage"))!;
       expect(household).toBeDefined();
       expect(
         gateway.compareDocumentPosition(household) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
-      expect(
-        household.compareDocumentPosition(storage) &
           Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
       act(() => (household as HTMLButtonElement).click());
@@ -219,33 +213,14 @@ describe("Sidebar suite", () => {
       expect(own.textContent).not.toContain("·");
     });
 
-    it("fires onStorage and highlights the Storage item on its route", () => {
-      const onStorage = vi.fn<NonNullable<SidebarProps["onStorage"]>>();
-      const el = render(
-        <Sidebar {...base} activePage="storage" onStorage={onStorage} />
-      );
-      const storage = [...el.querySelectorAll(".sbItem")].find((b) =>
-        b.textContent?.includes("Storage")
-      ) as HTMLButtonElement;
-      act(() => storage.click());
-      expect(onStorage).toHaveBeenCalledWith();
-      expect(el.querySelector('[data-active="true"]')?.textContent).toContain(
-        "Storage"
-      );
-    });
-
-    it("disables Storage when no handler is provided, and keeps the Gateway pill to itself", () => {
+    it("keeps the Gateway heartbeat pill on Gateway", () => {
       const el = render(
         <Sidebar {...base} gatewayStatus="up" onGateway={() => {}} />
       );
       const items = [...el.querySelectorAll(".sbItem")];
-      const storage = items.find((b) =>
-        b.textContent?.includes("Storage")
-      ) as HTMLButtonElement;
-      expect(storage.disabled).toBe(true);
-      // The `live` pill belongs to Gateway's heartbeat — Storage must not grow
-      // one.
-      expect(storage.querySelector("[data-tone]")).toBeNull();
+      expect(
+        items.find((b) => b.textContent?.includes("Storage"))
+      ).toBeUndefined();
       const gateway = items.find((b) => b.textContent?.includes("Gateway"))!;
       expect(gateway.querySelector('[data-tone="live"]')).not.toBeNull();
       expect(gateway.textContent).toContain("up");

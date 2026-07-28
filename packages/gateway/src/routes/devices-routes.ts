@@ -5,6 +5,7 @@
  *
  * `POST /centraid/_gateway/devices/ticket` — the inverse of revoke: MINT a
  * one-time pairing ticket from the app, the HTTP twin of `centraid-gateway
+ * governance: allow-repo-hygiene file-size-limit (#608) cohesive device route owns listing, pairing, rename, compute, and revocation authorization
  * pair`. Same caller-plane scope; the target vault is `body.vaultId` or the
  * addressed `x-centraid-vault`. Requires the daemon's iroh endpoint (the
  * ticket's `gw` pin) — 409 `no_iroh_endpoint` when absent.
@@ -334,6 +335,33 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     const enrollmentId = decodeURIComponent(
       url.pathname.slice(`${DEVICES_PATH}/`.length)
     );
+    if (method === "PATCH") {
+      const target = deps.enrollments
+        .list()
+        .find((row) => row.enrollmentId === enrollmentId);
+      if (!target || !isAllowed(target.vaultId)) {
+        return sendJson(res, 404, { error: "not_found" });
+      }
+      if (
+        callerKey !== target.endpointId &&
+        deps.enrollments.get(callerKey, target.vaultId)?.role !== "admin"
+      ) {
+        return sendJson(res, 403, { error: "not_admin" });
+      }
+      let body: Record<string, unknown>;
+      try {
+        body = await readJson(req);
+      } catch {
+        return sendJson(res, 400, { error: "invalid_body" });
+      }
+      if (typeof body.label !== "string" || body.label.trim().length === 0) {
+        return sendJson(res, 400, { error: "invalid_label" });
+      }
+      const renamed = deps.enrollments.rename(enrollmentId, body.label);
+      return sendJson(res, 200, {
+        device: toDto(renamed, deps, callerKey),
+      });
+    }
     if (method !== "DELETE") {
       return sendJson(res, 405, { error: "method_not_allowed" });
     }

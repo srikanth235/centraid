@@ -10,13 +10,20 @@ import {
   vi,
 } from "vitest";
 
+type GatewayClient = typeof import("../../gateway-client.js");
+
+const apiMocks = vi.hoisted(() => ({
+  listAppScopes: vi.fn<GatewayClient["listAppScopes"]>(),
+  listVaults: vi.fn<GatewayClient["listVaults"]>(),
+}));
+
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   getUserPrefs: () => Promise.resolve({}),
   // The sidebar identity row + every scope picker read the member's scope
   // registry (#599). `undefined` is the "gateway has no scopes plane" answer,
   // which falls through to listVaults.
-  listAppScopes: () => Promise.resolve(undefined),
-  listVaults: () => Promise.resolve([]),
+  listAppScopes: apiMocks.listAppScopes,
+  listVaults: apiMocks.listVaults,
   saveUserPrefs: () => Promise.resolve(undefined),
   listApps: () =>
     Promise.resolve([{ id: "todos", name: "Todos", kind: "app" }]),
@@ -109,6 +116,8 @@ describe("App suite", () => {
   }, 60_000);
 
   beforeEach(() => {
+    apiMocks.listAppScopes.mockReset().mockResolvedValue(undefined);
+    apiMocks.listVaults.mockReset().mockResolvedValue([]);
     store.clear();
     store.set("home.userApps", [
       { id: "todos", name: "Todos", iconKey: "Todo", color: "#123" },
@@ -233,6 +242,39 @@ describe("App suite", () => {
         "closed"
       );
       expect(store.get("appearance")).toMatchObject({ sidebarOpen: false });
+    });
+
+    it("switches the active space through the combined sidebar switcher", async () => {
+      apiMocks.listVaults.mockResolvedValue([
+        { vaultId: "shared", name: "Shared", ownerPartyId: "owner" },
+        { vaultId: "personal", name: "Personal", ownerPartyId: "owner" },
+      ]);
+      const setActiveVault =
+        vi.fn<(input: { vaultId: string }) => Promise<void>>();
+      setActiveVault.mockResolvedValue(undefined);
+      const centraidApi = (
+        globalThis as unknown as {
+          CentraidApi: Record<string, unknown>;
+        }
+      ).CentraidApi;
+      centraidApi.getGatewayAuth = () => Promise.resolve({ vaultId: "shared" });
+      centraidApi.setActiveVault = setActiveVault;
+
+      const el = await mount();
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const switcher = el.querySelector<HTMLButtonElement>(
+        'button[aria-label="Switch space or gateway"]'
+      )!;
+      await act(async () => switcher.click());
+      const personal = document.querySelector<HTMLButtonElement>(
+        '[data-space-id="personal"]'
+      )!;
+      expect(personal.textContent).toContain("Personal");
+      await act(async () => personal.click());
+      expect(setActiveVault).toHaveBeenCalledWith({ vaultId: "personal" });
     });
   });
 

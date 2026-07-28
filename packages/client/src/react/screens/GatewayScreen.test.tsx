@@ -79,6 +79,11 @@ const stubProps = {
   onRestartGateway: noRestartGateway,
   onExportDiagnostics: noExportDiagnostics,
 } as const;
+const backupProps: NonNullable<GatewayScreenProps["backup"]> = {
+  loadStatus: () => new Promise(() => {}),
+  onRunNow: () => new Promise(() => {}),
+  onConfirmRecoveryKit: () => new Promise(() => {}),
+};
 
 const render = (
   snapshot: GatewayRuntimeSnapshot,
@@ -118,6 +123,18 @@ describe("GatewayScreen — Overview tab (default)", () => {
     expect(html).toContain("Components");
     expect(html).toContain("Logs");
     expect(html).toContain("Alerts");
+  });
+
+  it("keeps backup and recovery controls on Overview", () => {
+    const html = renderToStaticMarkup(
+      <GatewayScreen
+        snapshot={base}
+        now={NOW}
+        {...stubProps}
+        backup={backupProps}
+      />
+    );
+    expect(html).toContain("Backups");
   });
 
   it("renders one heartbeat tick per sample, flagging failures", () => {
@@ -326,9 +343,7 @@ describe("GatewayScreen interactions", () => {
     expect(search?.value).toBe("connections");
   });
 
-  // Backup/Storage now live on their own page — see BackupsScreen.test.tsx.
-  // This asserts the split held: the Gateway page must not re-grow them.
-  it("no longer mounts the Backup or Storage cards", async () => {
+  it("keeps Storage as a separate tab when backup data is unavailable", async () => {
     await act(async () => {
       root.render(<GatewayScreen snapshot={base} now={NOW} {...stubProps} />);
     });
@@ -339,7 +354,7 @@ describe("GatewayScreen interactions", () => {
     expect(host.textContent).not.toContain(
       "Save this recovery kit somewhere offline"
     );
-    expect(host.textContent).not.toContain("Storage");
+    expect(host.textContent).toContain("Storage");
   });
 
   it("restarts the gateway and clears back to idle on success", async () => {

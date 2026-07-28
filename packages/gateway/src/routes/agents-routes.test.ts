@@ -1,22 +1,21 @@
 /*
- * The agents-status route reports one entry per REGISTERED runner kind — the
- * list is derived from the runner-backend registry, not a hardcoded
- * codex/claude pair, so a kind added to the registry shows up here without
- * touching this route. These tests cover the list shape and the resolver
- * plumbing; the CLI probe itself runs for real and is not asserted on (its
- * result varies by host).
+ * The agents-status route reports the v0-supported runner roster while the
+ * broader backend registry remains available to persisted configuration.
+ * These tests cover the offered list shape and resolver plumbing; the CLI
+ * probe itself runs for real and is not asserted on (its result varies by
+ * host).
  */
 
-import { RUNNER_KINDS } from "@centraid/app-engine";
+import { SUPPORTED_RUNNER_KINDS } from "@centraid/agent-runtime";
 import { describe, expect, test } from "vitest";
 
 import { readAgentsStatus } from "./agents-routes.ts";
 
 describe("agents-routes", () => {
-  test("reports one entry per registered runner kind", async () => {
+  test("reports one entry per supported runner kind", async () => {
     const s = await readAgentsStatus();
     expect(s.agents.map((a) => a.kind).sort()).toStrictEqual(
-      [...RUNNER_KINDS].sort()
+      [...SUPPORTED_RUNNER_KINDS].sort()
     );
     // Every entry is self-describing: the client renders off these, never off a
     // local table keyed on kinds it happens to know.
@@ -40,12 +39,14 @@ describe("agents-routes", () => {
   });
 
   test("an unavailable agent carries the install hint; an available one does not", async () => {
-    // `acp` has no default binary, so it is always unavailable without a
-    // configured path — a stable way to assert the unavailable branch on any host.
-    const s = await readAgentsStatus();
-    const acp = s.agents.find((a) => a.kind === "acp");
-    expect(acp?.available).toBe(false);
-    expect(acp?.hint).toBeTruthy();
+    const s = await readAgentsStatus({
+      binPathFor: (kind) =>
+        kind === "pi" ? "/definitely/not/a/runner" : undefined,
+      refresh: true,
+    });
+    const pi = s.agents.find((a) => a.kind === "pi");
+    expect(pi?.available).toBe(false);
+    expect(pi?.hint).toBeTruthy();
     expect(
       s.agents
         .filter((agent) => agent.available)
@@ -58,11 +59,11 @@ describe("agents-routes", () => {
     await readAgentsStatus({
       binPathFor: (kind) => {
         seen.push(kind);
-        return kind === "acp" ? "/nonexistent/custom-agent" : undefined;
+        return kind === "pi" ? "/nonexistent/custom-agent" : undefined;
       },
     });
-    // Every registered kind is offered the override, not just a known pair.
-    expect(seen.sort()).toStrictEqual([...RUNNER_KINDS].sort());
+    // Every product-supported kind is offered the override, not just a known pair.
+    expect(seen.sort()).toStrictEqual([...SUPPORTED_RUNNER_KINDS].sort());
   });
 
   test("defaults every agent to an empty model surface when no resolver is supplied", async () => {
@@ -87,7 +88,7 @@ describe("agents-routes", () => {
     });
     // Asked once per registered kind, and each answer landed on its own entry.
     expect(calls.map(([k]) => k).sort()).toStrictEqual(
-      [...RUNNER_KINDS].sort()
+      [...SUPPORTED_RUNNER_KINDS].sort()
     );
     const codex = s.agents.find((a) => a.kind === "codex");
     expect(codex?.models).toStrictEqual([
@@ -114,7 +115,7 @@ describe("agents-routes", () => {
       },
       refresh: true,
     });
-    expect(seen).toStrictEqual(RUNNER_KINDS.map(() => true));
+    expect(seen).toStrictEqual(SUPPORTED_RUNNER_KINDS.map(() => true));
   });
 
   test("a throwing resolver degrades that agent to an empty list", async () => {
@@ -128,7 +129,7 @@ describe("agents-routes", () => {
     expect(codex?.models).toStrictEqual([]);
     expect(codex?.modelsStatus).toBe("empty");
     // One agent's failure never takes the rest of the list down with it.
-    expect(s.agents.find((a) => a.kind === "gemini")?.modelsStatus).toBe(
+    expect(s.agents.find((a) => a.kind === "opencode")?.modelsStatus).toBe(
       "ready"
     );
   });

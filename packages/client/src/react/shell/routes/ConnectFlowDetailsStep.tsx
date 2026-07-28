@@ -52,12 +52,12 @@ export function GatewayDetailsStep({
       </label>
       <label className={styles.field}>
         <span className={styles.fieldLabel}>
-          Label<span className={styles.fieldOptional}>optional</span>
+          Device name<span className={styles.fieldOptional}>optional</span>
         </span>
         <input
           className={styles.input}
           type="text"
-          placeholder="e.g. Home server"
+          placeholder="e.g. Chrome on the work laptop"
           value={state.label}
           onChange={setField("label")}
         />

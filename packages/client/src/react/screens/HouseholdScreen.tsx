@@ -12,11 +12,9 @@ import DevicesCard, { type DevicesCardProps } from "./DevicesCard.js";
 
 import styles from "./HouseholdScreen.module.css";
 
-// Household (issue #599, Decision 14) — one page for the people side of this
-// installation. It exists because the space switcher is gone: a member is no
-// longer "in" one space, so there has to be a place that shows all of them at
-// once, together with the people who hold roles in them and the hardware acting
-// on those people's behalf.
+// Household (issue #599) — one page for the people side of this installation.
+// It shows every space at once, together with the people who hold roles in
+// them and the hardware acting on those people's behalf.
 //
 // Two sections, in the order the questions get asked:
 //
@@ -31,12 +29,11 @@ export interface HouseholdScreenProps {
   now: number;
   /** Spaces the calling member holds a role in, own space first. */
   spaces: MemberScope[];
-  /** The shell's internal default-scope pointer — badges one card "Default".
-   *  It is not a mode: nothing here switches it. */
+  /** The shell's default/active scope pointer — badges one card "Default". */
   defaultScopeId: string;
   /** True until the scope registry's first fetch settles. */
   spacesLoading?: boolean;
-  /** Local disk footprint + offsite custody (the Storage page). */
+  /** Local disk footprint + limits (Gateway → Storage). */
   onOpenStorage: () => void;
   /** Open the "new space" sheet. Omitted (a gateway this client can't create
    *  spaces on) hides the affordance rather than offering a failing button. */
@@ -49,6 +46,7 @@ export interface HouseholdScreenProps {
    *  test) renders the page without the roster rather than crashing. */
   loadDevices?: DevicesCardProps["loadDevices"];
   onRevokeDevice?: DevicesCardProps["onRevokeDevice"];
+  onRenameDevice?: DevicesCardProps["onRenameDevice"];
   onCurrentDeviceRevoked?: DevicesCardProps["onCurrentDeviceRevoked"];
   loadMembers?: DevicesCardProps["loadMembers"];
   onRemoveMember?: DevicesCardProps["onRemoveMember"];
@@ -153,6 +151,9 @@ export default function HouseholdScreen(
             now={props.now}
             loadDevices={props.loadDevices}
             onRevokeDevice={props.onRevokeDevice}
+            {...(props.onRenameDevice
+              ? { onRenameDevice: props.onRenameDevice }
+              : {})}
             {...(props.onCurrentDeviceRevoked
               ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
               : {})}

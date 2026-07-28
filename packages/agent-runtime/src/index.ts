@@ -81,6 +81,8 @@ export {
 // it; the gateway can enumerate `RUNNER_BACKENDS` for labels / defaults.
 export {
   RUNNER_BACKENDS,
+  SUPPORTED_RUNNER_BACKENDS,
+  SUPPORTED_RUNNER_KINDS,
   getRunnerBackend,
   type RunnerBackend,
   type RunnerVersion,
@@ -89,6 +91,7 @@ export {
 export {
   runPreflight,
   probeCliAvailability,
+  CLI_AVAILABILITY_TTL_MS,
   type CliAvailability,
   invalidatePreflightCache,
   minVersionString,

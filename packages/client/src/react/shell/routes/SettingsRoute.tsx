@@ -55,7 +55,7 @@ import styles from "./SettingsRoute.module.css";
 // sidebar's Gateway page itself, as tabs (GatewayScreen.tsx), so the two
 // "Gateway" surfaces stop being unrelated pages that share a name.
 
-type SettingsPageId =
+export type SettingsPageId =
   | "appearance"
   | "layout"
   | "workspace"
@@ -73,7 +73,7 @@ interface PageDef {
   subtitle: string;
 }
 
-const PAGES: readonly PageDef[] = [
+const ALL_PAGES: readonly PageDef[] = [
   {
     id: "appearance",
     label: "Appearance",
@@ -102,7 +102,7 @@ const PAGES: readonly PageDef[] = [
     section: "Account",
     icon: "Users",
     subtitle:
-      "This space’s presentation — name, icon, color, and description. Switch, add, rename, or remove OTHER spaces and gateways from the switcher at the top of the sidebar (⌘⇧G).",
+      "This space’s presentation — name, icon, color, and description. Switch between reachable spaces, or add and manage gateways, from the sidebar switcher (⌘⇧G).",
   },
   {
     id: "phone",
@@ -121,10 +121,9 @@ const PAGES: readonly PageDef[] = [
       "Bring your existing data into the vault — everything stages for review before it lands.",
   },
   // Connections / Connectors moved to a primary sidebar page (ConnectorsRoute).
-  // "Storage provider", not "Storage": the Operations sidebar owns a page
-  // called Storage now (issue #544 — local footprint, budget, and backups),
-  // and two destinations under the same word is a coin toss for the owner.
-  // This one is narrower and always was: the provider CONNECTION.
+  // "Storage provider", not "Storage": Gateway owns the local footprint,
+  // budget, and backup surfaces now (issues #544 and #608). This hidden route
+  // remains narrower: it configures only the provider connection.
   {
     id: "storage",
     label: "Storage provider",
@@ -142,16 +141,21 @@ const PAGES: readonly PageDef[] = [
       "The coding-agent CLIs the gateway can drive, plus which model each one uses by default and per chat surface. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.",
   },
 ];
+const PAGES = ALL_PAGES.filter(
+  (page) => !["workspace", "import", "storage"].includes(page.id)
+);
 
-const AUTO_SAVE = new Set<SettingsPageId>([
-  "appearance",
-  "layout",
-  "workspace",
-]);
+const AUTO_SAVE = new Set<SettingsPageId>(["appearance", "layout"]);
 const SECTIONS = ["Workspace", "Account", "Models"];
 
 function isSettingsPageId(id: string | undefined): id is SettingsPageId {
   return PAGES.some((p) => p.id === id);
+}
+
+export function resolveSettingsPage(
+  initialPage: string | undefined
+): SettingsPageId {
+  return isSettingsPageId(initialPage) ? initialPage : "appearance";
 }
 
 export interface SettingsRouteProps {
@@ -169,8 +173,8 @@ export default function SettingsRoute({
   setPrefs,
   initialPage,
 }: SettingsRouteProps): JSX.Element {
-  const [page, setPage] = useState<SettingsPageId>(
-    isSettingsPageId(initialPage) ? initialPage : "appearance"
+  const [page, setPage] = useState<SettingsPageId>(() =>
+    resolveSettingsPage(initialPage)
   );
   const def = PAGES.find((p) => p.id === page);
   const { showToast, navigate, confirm } = useShellActions();

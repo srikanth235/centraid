@@ -10,6 +10,7 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
 | --- | --- | --- |
 | **Directory / vault path** | On-disk vault identity | Vault open path, desktop gateway id + vault id |
 | **Workspace / profile** | Multi-gateway profile selection | Active gateway pointer in settings |
+| **Active space pointer** | Ambient shell context and untargeted requests | Combined space/gateway switcher, sidebar identity |
 | **Gateway instance** | Live process | `instanceId` from `/centraid/_gateway/info` |
 | **Conversation id** | Ledger scope | Conversation list + turn pages |
 | **App id + vault** | Generated app / grants | App session, replica scope |
@@ -40,6 +41,12 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
    falls back to the internal default-scope pointer, which is exactly how every
    conversation behaved before the picker existed. Never re-derive a
    conversation's space from "the space the shell is pointing at now".
+
+7. **The active space pointer is visible context, not identity** (issue #608).
+   The combined sidebar switcher may update `setActiveVault`, and the identity
+   row must render the scope named by that pointer rather than `scopes[0]`.
+   Explicitly targeted operations and pinned conversations do not follow it;
+   only ambient requests and surfaces with no stronger key do.
 
 ## Related
 

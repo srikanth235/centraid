@@ -1,11 +1,9 @@
 /*
  * The gateway registry behind the sidebar's identity row (issue #599).
  *
- * This is the surviving half of the retired (gateway, space) switcher: since
- * Decision 14 the space switcher is gone — Household lists the member's spaces
- * and every creation flow names its own target — so the only thing left to
- * choose from the sidebar is which GATEWAY this client talks to, and only when
- * more than one is registered.
+ * Gateway half of the combined (space, gateway) switcher. Household still
+ * lists every member scope and creation flows still name their own target;
+ * this registry owns only the transport profiles and their reachability.
  *
  * `buildGatewayRows` is pure (no `window`), so the merge/sort/status folding is
  * unit-testable; the rest wires `window.CentraidApi` and owns a module-level
@@ -146,8 +144,8 @@ function toRegistryGateway(p: ProfileShape): RegistryGateway {
   };
 }
 
-/** How many gateways this client knows about — the >1 gate on showing the
- *  switcher at all. Resolves `0` when the host exposes no gateway list. */
+/** Refresh the gateways this client knows about. Resolves `0` when the host
+ * exposes no gateway list; the combined switcher itself remains available. */
 export async function countGateways(): Promise<number> {
   const profiles =
     (await window.CentraidApi.listGateways?.().catch(() => [])) ?? [];

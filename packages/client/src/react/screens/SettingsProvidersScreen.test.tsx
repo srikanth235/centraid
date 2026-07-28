@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive provider-routing screen suite shares one bridge and DOM harness
 
 import type {
   AgentsStatusDTO,
@@ -253,6 +254,28 @@ describe("SettingsProvidersScreen suite", () => {
       ]);
     });
 
+    it("labels chat and automation failover by their actual recovery boundary", async () => {
+      const el = await mount(makeProps());
+      expect(el.textContent).toContain("Next-turn failover");
+      expect(el.textContent).toContain("In-fire failover");
+    });
+
+    it("shows explicit feedback when fallback consent is cancelled", async () => {
+      dialog.openConfirm.mockReset().mockResolvedValue(false);
+      const props = makeProps({
+        loadStatus: vi
+          .fn<SettingsProvidersBridgeProps["loadStatus"]>()
+          .mockResolvedValue(withSessionReady(makeStatusBothConnected())),
+      });
+      const el = await mount(props);
+      await pick(sel(el, "Add fallback agent for Assistant"), "claude-code");
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(el.textContent).toContain("Claude Code was not added");
+      expect(props.setSubsystemRunnerLadder).not.toHaveBeenCalled();
+    });
+
     it("will not offer an agent that has not passed its session preflight as a fallback", async () => {
       // Unattended failover has nobody to answer an auth prompt, so `connected`
       // alone is not enough to join the ladder.
@@ -267,6 +290,50 @@ describe("SettingsProvidersScreen suite", () => {
         [...add.querySelectorAll("option")].map((option) => option.value)
       ).toStrictEqual([""]);
       expect(add.disabled).toBe(true);
+    });
+
+    it("explains why an installed runner is ineligible for unattended failover", async () => {
+      const status = makeStatusBothConnected();
+      const props = makeProps({
+        loadStatus: vi
+          .fn<SettingsProvidersBridgeProps["loadStatus"]>()
+          .mockResolvedValue({
+            ...status,
+            cards: status.cards.map((card) =>
+              card.kind === "claude-code"
+                ? {
+                    ...card,
+                    fallbackBlockedReason:
+                      "Sign in once before unattended failover",
+                  }
+                : card
+            ),
+          }),
+      });
+      const el = await mount(props);
+      expect(el.textContent).toContain(
+        "Claude Code: Sign in once before unattended failover"
+      );
+    });
+
+    it("surfaces a persisted non-roster primary so the owner can clear it", async () => {
+      const props = makeProps({
+        loadStatus: vi
+          .fn<SettingsProvidersBridgeProps["loadStatus"]>()
+          .mockResolvedValue(
+            makeStatus({
+              subsystemRunnerByKey: { assistant: "cursor" },
+            })
+          ),
+      });
+      const el = await mount(props);
+      const assistant = sel(el, "Agent for Assistant");
+      expect(assistant.value).toBe("cursor");
+      expect(assistant.selectedOptions[0]?.textContent).toBe(
+        "cursor · existing hidden pin"
+      );
+      await pick(assistant, "");
+      expect(props.setSubsystemRunner).toHaveBeenCalledWith("assistant", "");
     });
 
     it("shows the stored ladder in full, including a member that is now the lane primary", async () => {

@@ -23,6 +23,7 @@ import { agentSpawnEnv } from "./spawn-env.js";
 import type { RunnerKind, RunnerPrefs } from "./types.js";
 
 const VERSION_TIMEOUT_MS = 5_000;
+export const CLI_AVAILABILITY_TTL_MS = 24 * 60 * 60 * 1_000;
 
 interface SemVer {
   major: number;
@@ -48,6 +49,11 @@ interface CachedStatus {
 }
 
 let cached: CachedStatus | undefined;
+const availabilityCache = new Map<
+  string,
+  { readonly checkedAt: number; readonly status: CliAvailability }
+>();
+const availabilityInFlight = new Map<string, Promise<CliAvailability>>();
 
 function cacheKey(prefs: RunnerPrefs): string {
   return `${prefs.kind}::${prefs.binPath ?? ""}::${JSON.stringify(prefs.extraArgs ?? [])}`;
@@ -55,6 +61,8 @@ function cacheKey(prefs: RunnerPrefs): string {
 
 export function invalidatePreflightCache(): void {
   cached = undefined;
+  availabilityCache.clear();
+  availabilityInFlight.clear();
 }
 
 export interface CliAvailability {
@@ -73,16 +81,39 @@ export interface CliAvailability {
  */
 export async function probeCliAvailability(
   kind: RunnerKind,
-  binPath?: string
+  binPath?: string,
+  opts: { refresh?: boolean; now?: number } = {}
 ): Promise<CliAvailability> {
   const bin = binPath ?? getRunnerBackend(kind).defaultBin;
   // The custom `acp` kind has no default binary — unavailable until configured.
   if (!bin) return { available: false };
+  const key = `${kind}::${bin}`;
+  const now = opts.now ?? Date.now();
+  const prior = availabilityCache.get(key);
+  if (
+    !opts.refresh &&
+    prior &&
+    now - prior.checkedAt < CLI_AVAILABILITY_TTL_MS
+  ) {
+    return prior.status;
+  }
+  const pending = availabilityInFlight.get(key);
+  if (!opts.refresh && pending) return pending;
+  const probe = (async (): Promise<CliAvailability> => {
+    try {
+      const raw = await execVersion(bin, agentSpawnEnv({ binPath }));
+      return { available: true, version: raw.trim().slice(0, 200) };
+    } catch {
+      return { available: false };
+    }
+  })();
+  availabilityInFlight.set(key, probe);
   try {
-    const raw = await execVersion(bin, agentSpawnEnv({ binPath }));
-    return { available: true, version: raw.trim().slice(0, 200) };
-  } catch {
-    return { available: false };
+    const status = await probe;
+    availabilityCache.set(key, { checkedAt: now, status });
+    return status;
+  } finally {
+    availabilityInFlight.delete(key);
   }
 }
 

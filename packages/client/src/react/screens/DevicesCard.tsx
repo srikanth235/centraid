@@ -53,6 +53,10 @@ export interface DevicesCardProps {
     deviceId: string,
     options?: { confirmLastAdmin?: string }
   ) => Promise<{ removed: boolean }>;
+  onRenameDevice?: (
+    deviceId: string,
+    label: string
+  ) => Promise<CentraidGatewayDevice>;
   /** Eager local cleanup after this renderer successfully revokes itself. */
   onCurrentDeviceRevoked?: () => Promise<void>;
   /**
@@ -86,6 +90,7 @@ export default function DevicesCard({
   now,
   loadDevices,
   onRevokeDevice,
+  onRenameDevice,
   onCurrentDeviceRevoked,
   loadMembers,
   onRemoveMember,
@@ -156,6 +161,22 @@ export default function DevicesCard({
       refresh();
     },
     [onCurrentDeviceRevoked, onRevokeDevice, refresh]
+  );
+
+  const rename = useCallback(
+    async (device: CentraidGatewayDevice, label: string): Promise<void> => {
+      if (!onRenameDevice) return;
+      const updated = await onRenameDevice(device.deviceId, label);
+      if (mountedRef.current) {
+        setDevices(
+          (prev) =>
+            prev?.map((row) =>
+              row.deviceId === updated.deviceId ? updated : row
+            ) ?? prev
+        );
+      }
+    },
+    [onRenameDevice]
   );
 
   const removeMember = useCallback(
@@ -278,6 +299,7 @@ export default function DevicesCard({
                   isSelf={group.isSelf}
                   now={now}
                   onRevokeDevice={revoke}
+                  {...(onRenameDevice ? { onRenameDevice: rename } : {})}
                   {...(onUpdateCompute
                     ? { onUpdateCompute: updateCompute }
                     : {})}
