@@ -249,6 +249,9 @@ bun run --cwd apps/mobile ci:bundle
 
 bun run --cwd apps/mobile ci:android-native
 # :centraid-tunnel:compileDebugKotlin; BUILD SUCCESSFUL
+
+bun run --cwd apps/desktop test:e2e -- appview-templates-insights.spec.ts --grep "10.2"
+# 1 passed — automation template clone survives gateway + Electron restart
 ```
 
 Before installing the #609 prerequisite, the same bundle command reproduced
@@ -299,6 +302,13 @@ PR verification run `30397228787` passed all 6,286 coverage tests and then
 rejected the initially proposed 92%/74% line floors against Linux measurements
 of 90.65%/67.65%. The corrected 88%/65% floors apply the documented two-point
 margin while still tightening the previous 70%/45% baselines.
+
+The first two full-nightly attempts also exposed a deterministic stale desktop
+fixture: `apps/desktop/tests/e2e/appview-templates-insights.spec.ts` invented a
+`digest` automation template ID after Discover had moved to an explicit v0
+catalog allowlist, so the product correctly rendered an empty catalog.
+The journey now uses the public `obligation-extractor` catalog ID while
+retaining its Daily Digest presentation and clone/restart assertions.
 
 ### Mechanical checklist crosswalk
 
@@ -360,6 +370,11 @@ gate is wired through the existing aggregator, the 88%/65% coverage floors
 faithfully apply the Linux evidence margin, all staged paths are covered, and
 Dependabot majors remain enabled as individual PRs.
 
+PASS — the final fresh-context delta audit confirmed
+`obligation-extractor` is a public v0 catalog ID, the change repairs only stale
+test data without weakening product filtering, every clone/restart assertion
+remains intact, and the focused Electron journey passes.
+
 ## Steering
 
 PASS — a fresh-context steering audit found one correction: the maintainer
@@ -380,6 +395,7 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785270421-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 10251 | 0 | 1448192 | 1166 | 11417 | 0.4052 | 1131637 | 0 | 61080576 | 126896 | test(report): make nightly evidence zero-grey (#587) -m governance: allow-toolch |
 | codex-019fa9f8-a97-1785270587-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 11164 | 0 | 1924864 | 1931 | 13095 | 0.5381 | 1142801 | 0 | 63005440 | 128827 | test(report): make nightly evidence zero-grey (#587) -m governance: allow-toolch |
 | codex-019fa9f8-a97-1785272503-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 237732 | 0 | 13811712 | 17343 | 255075 | 4.3074 | 1380533 | 0 | 76817152 | 146170 | fix(mobile): compile native module in PR gate (#587) -m governance: allow-toolch |
+| codex-019fa9f8-a97-1785273583-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 86351 | 0 | 13147648 | 8353 | 94704 | 3.6281 | 1466884 | 0 | 89964800 | 154523 | test(desktop): align template fixture with catalog (#587) |
 
 ### Steering
 
