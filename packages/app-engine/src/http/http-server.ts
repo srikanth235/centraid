@@ -308,20 +308,16 @@ export async function startRuntimeHttpServer(
     delete req.headers[WEB_SHELL_ORIGIN_HEADER];
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     const resolveAuthorization = (): BearerAuthorization | undefined => {
-      // Evaluate both possible credentials independently; never let the mere
-      // *presence* of an Authorization header decide which auth path is checked.
-      // Bearer is preferred when it resolves, otherwise a host-supplied cookie
-      // authorizer may still vouch for the request.
-      let bearerAuthz: BearerAuthorization | undefined;
+      // A present Authorization header selects the bearer path outright: when
+      // it fails validation the request is unauthorized, and the host-supplied
+      // cookie authorizer (which mutates req.url/headers) never runs. An absent
+      // header selects the cookie path. Header *presence* alone never decides
+      // the outcome — it only selects which single credential is evaluated.
       if (raw) {
-        if (opts.authorizeBearer) {
-          bearerAuthz = opts.authorizeBearer(raw);
-        } else if (timingSafeEqual(raw, token)) {
-          bearerAuthz = { plane: 'admin' as const };
-        }
+        if (opts.authorizeBearer) return opts.authorizeBearer(raw);
+        return timingSafeEqual(raw, token) ? { plane: 'admin' as const } : undefined;
       }
-      const requestAuthz = opts.authorizeRequest?.(req);
-      return bearerAuthz ?? requestAuthz;
+      return opts.authorizeRequest?.(req);
     };
     const authz = resolveAuthorization();
     if (!isPublic && !authz) {

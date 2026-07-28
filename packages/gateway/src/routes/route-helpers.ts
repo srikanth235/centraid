@@ -128,7 +128,7 @@ async function walkFileMap(root: string, rel: string, out: FileMapEntry[]): Prom
       if (stat.size > MAX_FILE_MAP_BYTES) continue;
       out.push({ path: r, content: await fd.readFile({ encoding: 'utf8' }) });
     } catch {
-      // Unreadable files are silently skipped, matching the previous behavior.
+      // Unreadable files are skipped (previously they were pushed with empty content).
     } finally {
       await fd.close();
     }

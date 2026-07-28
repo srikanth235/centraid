@@ -37,10 +37,19 @@ beforeEach(() => setup());
 describe('the lexical gate', () => {
   test('SELECT / WITH / EXPLAIN pass; comments and a trailing ; are fine', () => {
     expect(readOnlySqlRefusal('SELECT 1;')).toBeUndefined();
+    expect(readOnlySqlRefusal('SELECT 1;;')).toBeUndefined();
+    expect(readOnlySqlRefusal('SELECT 1 ; ')).toBeUndefined();
     expect(
       readOnlySqlRefusal('-- top spenders\nWITH t AS (SELECT 1 AS n) SELECT * FROM t'),
     ).toBeUndefined();
     expect(readOnlySqlRefusal('EXPLAIN SELECT 1')).toBeUndefined();
+  });
+
+  test('a second statement hidden behind trailing terminators is still refused', () => {
+    // Only the *trailing* run of terminators is stripped; an interior `;`
+    // remains and trips the one-statement rule.
+    expect(readOnlySqlRefusal('SELECT 1; ;')).toBeTruthy();
+    expect(readOnlySqlRefusal('SELECT 1; SELECT 2;;;')).toBeTruthy();
   });
 
   test('writes, DDL, PRAGMA, and multi-statements are refused', () => {

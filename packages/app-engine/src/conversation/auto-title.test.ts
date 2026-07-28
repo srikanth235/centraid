@@ -34,6 +34,13 @@ describe('cleanTitle', () => {
     expect(cleanTitle('  spaced   out   title  ')).toBe('spaced out title');
   });
 
+  it('trims the space left when punctuation follows a space, and keeps mid-title periods', () => {
+    // Pre-refactor order: collapse → strip trailing punctuation → trim.
+    expect(cleanTitle('Hello world .')).toBe('Hello world');
+    expect(cleanTitle('Dr. Strangelove')).toBe('Dr. Strangelove');
+    expect(cleanTitle('Trip to Rome.')).toBe('Trip to Rome');
+  });
+
   it('caps overly long output with an ellipsis and rejects empties', () => {
     const long = 'a'.repeat(80);
     const out = cleanTitle(long);

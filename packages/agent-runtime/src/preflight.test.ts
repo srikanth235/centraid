@@ -50,6 +50,20 @@ test('parseSemver handles common --version output shapes', () => {
   expect(parseSemver('no version here')).toBe(undefined);
 });
 
+test('parseSemver matches the old regex on edge shapes (characterization)', () => {
+  // First three dot-separated digit runs win, even with trailing extras.
+  expect(parseSemver('1.2.3.4')).toEqual({ major: 1, minor: 2, patch: 3 });
+  expect(parseSemver('1.2')).toBeUndefined();
+  expect(parseSemver('1.2.x')).toBeUndefined();
+  // Long digit runs stay linear (the old `\d+` regex was a ReDoS risk).
+  const long = `${'9'.repeat(5000)}.${'8'.repeat(5000)}.${'7'.repeat(5000)}`;
+  expect(parseSemver(long)).toEqual({
+    major: Number('9'.repeat(5000)),
+    minor: Number('8'.repeat(5000)),
+    patch: Number('7'.repeat(5000)),
+  });
+});
+
 test('compareSemver orders versions', () => {
   const a = { major: 1, minor: 2, patch: 3 };
   const b = { major: 1, minor: 2, patch: 4 };

@@ -84,10 +84,16 @@ function stripLineComments(sql: string): string {
  * error, and so the `:memory:` fallback (tests share the main handle,
  * where query_only cannot be toggled) still refuses writes outright.
  */
+/** Drop the trailing statement terminator (`;+\s*$`) without a backtracking regex. */
+function stripTrailingTerminator(s: string): string {
+  let end = s.length;
+  while (end > 0 && /\s/.test(s[end - 1]!)) end--;
+  while (end > 0 && s[end - 1] === ';') end--;
+  return s.slice(0, end);
+}
+
 export function readOnlySqlRefusal(sql: string): string | undefined {
-  const stripped = stripLineComments(stripBlockComments(sql))
-    .trim()
-    .replace(/;+\s*$/, '');
+  const stripped = stripTrailingTerminator(stripLineComments(stripBlockComments(sql)).trim());
 
   if (!stripped) return 'empty statement';
   if (stripped.includes(';')) return 'one statement per call — drop the extra ";"';

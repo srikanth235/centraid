@@ -108,3 +108,35 @@ test('extractPdfText ignores streams with non-Flate filters', () => {
   ]);
   expect(extractPdfText(pdf)).toBeNull();
 });
+
+/** Minimal PDF whose content stream is the raw operator string given. */
+function rawStreamPdf(stream: string): Buffer {
+  const body = [
+    '%PDF-1.4',
+    `1 0 obj<< /Length ${stream.length} >>stream`,
+    stream,
+    'endstream',
+    'endobj',
+    'trailer<< /Root 1 0 R >>',
+    '%%EOF',
+  ].join('\n');
+  return Buffer.from(body, 'latin1');
+}
+
+test('TJ extraction ignores arrays that are not text-show operators', () => {
+  // /Annots arrays, dash patterns, and filters all use `[...]` without TJ.
+  const stream = 'BT /Annots [(junk junk junk junk)] /Foo [(real text for indexing)] TJ ET';
+  expect(extractPdfText(rawStreamPdf(stream))).toBe('real text for indexing');
+});
+
+test('TJ extraction does not duplicate strings from nested non-TJ arrays', () => {
+  const stream = 'BT [[(nested junk text)] 1] 0 d [(real nested case text)] TJ ET';
+  expect(extractPdfText(rawStreamPdf(stream))).toBe('real nested case text');
+});
+
+test('an unbalanced "(" does not abort the remaining Tj extraction', () => {
+  // The old regex found no match at the unbalanced paren and kept scanning;
+  // `(nested) Tj` and the later balanced operator are both still extracted.
+  const stream = 'BT (unclosed (nested) Tj (valid text after recovery) Tj ET';
+  expect(extractPdfText(rawStreamPdf(stream))).toBe('nested valid text after recovery');
+});

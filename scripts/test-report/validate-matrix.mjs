@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectDefaultCiEnvGate } from './report-signals.mjs';
@@ -38,12 +38,23 @@ export async function validateMatrix(matrix, options = {}) {
         } else if (path.isAbsolute(cellOwner.owner) || cellOwner.owner.includes('..')) {
           errors.push(`${cellId} owner must be a repository-relative path`);
         } else if (options.checkFiles !== false) {
-          try {
-            const ownerPath = path.join(options.root ?? root, cellOwner.owner);
-            const source = await readFile(ownerPath, 'utf8');
-            // Solid/partial cells whose only owner is whole-file env-gated off
-            // default CI claim coverage they never get on PR/nightly defaults.
-            if (options.checkEnvGates !== false && !cellOwner.owner.endsWith('.mjs')) {
+          const ownerPath = path.join(options.root ?? root, cellOwner.owner);
+          if (options.checkEnvGates !== false && !cellOwner.owner.endsWith('.mjs')) {
+            // Only non-.mjs owners need their source (env-gate detection);
+            // read it directly and treat a directory as missing.
+            let source;
+            try {
+              source = await readFile(ownerPath, 'utf8');
+            } catch (err) {
+              if (err?.code === 'ENOENT' || err?.code === 'EISDIR') {
+                errors.push(`${cellId} owner does not exist: ${cellOwner.owner}`);
+              } else {
+                errors.push(`${cellId} owner unreadable: ${cellOwner.owner}`);
+              }
+            }
+            if (source !== undefined) {
+              // Solid/partial cells whose only owner is whole-file env-gated
+              // off default CI claim coverage they never get on PR/nightly.
               const gate = detectDefaultCiEnvGate(source);
               if (gate) {
                 errors.push(
@@ -51,11 +62,16 @@ export async function validateMatrix(matrix, options = {}) {
                 );
               }
             }
-          } catch (err) {
-            if (err?.code === 'ENOENT') {
+          } else {
+            // .mjs owners (and the checkEnvGates-off path) only need an
+            // existence check — no read, and a directory counts as missing.
+            try {
+              const stats = await stat(ownerPath);
+              if (!stats.isFile()) {
+                errors.push(`${cellId} owner does not exist: ${cellOwner.owner}`);
+              }
+            } catch {
               errors.push(`${cellId} owner does not exist: ${cellOwner.owner}`);
-            } else {
-              errors.push(`${cellId} owner unreadable: ${cellOwner.owner}`);
             }
           }
         }
@@ -139,7 +155,7 @@ export async function validateMatrix(matrix, options = {}) {
           }
         }
       } catch (err) {
-        if (err?.code === 'ENOENT') {
+        if (err?.code === 'ENOENT' || err?.code === 'EISDIR') {
           errors.push(`${flow.id} owner does not exist: ${flow.owner}`);
         } else {
           errors.push(`${flow.id} owner unreadable: ${flow.owner}`);

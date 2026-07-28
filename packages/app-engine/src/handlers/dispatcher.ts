@@ -177,30 +177,28 @@ export class Dispatcher {
 
   private async loadManifest(codeDir: string): Promise<Manifest> {
     const file = path.join(codeDir, APP_MANIFEST_FILE);
-    // Use a single file handle for the read + stat so CodeQL's TOCTOU race
-    // cannot occur: the mtime and bytes belong to the same open file.
+    // Use a single file handle for the stat + read so CodeQL's TOCTOU race
+    // cannot occur: the mtime and bytes belong to the same open file. Stat
+    // first so a cache hit skips the read entirely (this runs on every
+    // dispatch path).
     const fh = await fs.open(file, 'r');
-    let text: string;
-    let mtimeMs: number;
     try {
-      [text, mtimeMs] = await Promise.all([
-        fh.readFile({ encoding: 'utf8' }),
-        fh.stat().then((st) => st.mtimeMs),
-      ]);
+      const { mtimeMs } = await fh.stat();
+      const cached = this.manifestCache.get(codeDir);
+      if (cached && cached.mtimeMs === mtimeMs) return cached.manifest;
+      const text = await fh.readFile({ encoding: 'utf8' });
+      const manifest = parseManifest(text);
+      this.manifestCache.set(codeDir, {
+        codeDir,
+        mtimeMs,
+        manifest,
+        actionValidators: new Map(),
+        queryValidators: new Map(),
+      });
+      return manifest;
     } finally {
       await fh.close();
     }
-    const cached = this.manifestCache.get(codeDir);
-    if (cached && cached.mtimeMs === mtimeMs) return cached.manifest;
-    const manifest = parseManifest(text);
-    this.manifestCache.set(codeDir, {
-      codeDir,
-      mtimeMs,
-      manifest,
-      actionValidators: new Map(),
-      queryValidators: new Map(),
-    });
-    return manifest;
   }
 
   private validatorFor(

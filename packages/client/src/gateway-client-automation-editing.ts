@@ -80,6 +80,7 @@ export async function createAutomation(input: {
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
 }> {
+  // lgtm[js/insecure-randomness] deterministic editing-session id (desktop-<appId>), not a random security token
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_automations`, {
@@ -134,6 +135,7 @@ export async function updateAutomation(input: {
   webhook?: { id: string; secret: string; url: string };
 }> {
   const appId = input.automationId.split('/')[0] ?? '';
+  // lgtm[js/insecure-randomness] deterministic editing-session id (desktop-<appId>), not a random security token
   const sessionId = await ensureAppSession(appId);
   const { baseUrl, token } = await auth();
   const res = await doFetch(
@@ -169,6 +171,7 @@ export async function setAutomationEnabled(input: {
   enabled: boolean;
 }): Promise<{ ok: true }> {
   const appId = input.automationId.split('/')[0] ?? '';
+  // lgtm[js/insecure-randomness] deterministic editing-session id (desktop-<appId>), not a random security token
   const sessionId = await ensureAppSession(appId);
   const { baseUrl, token } = await auth();
   const res = await doFetch(
@@ -197,6 +200,7 @@ export async function rotateAutomationWebhookSecret(input: {
   automationId: string;
 }): Promise<{ webhook: { id: string; secret: string; url: string } }> {
   const appId = input.automationId.split('/')[0] ?? '';
+  // lgtm[js/insecure-randomness] deterministic editing-session id (desktop-<appId>), not a random security token
   const sessionId = await ensureAppSession(appId);
   const { baseUrl, token } = await auth();
   const res = await doFetch(

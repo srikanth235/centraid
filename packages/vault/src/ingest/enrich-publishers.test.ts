@@ -25,6 +25,15 @@ test('tagNotation lowercases, slugifies, and caps length', () => {
   expect(tagNotation('a'.repeat(100)).length).toBe(64);
 });
 
+test('tagNotation matches the old regexes on edge shapes (characterization)', () => {
+  // Runs of non-alphanumerics collapse to one dash; leading/trailing dashes trim.
+  expect(tagNotation('--a--b--')).toBe('a-b');
+  expect(tagNotation('a - b - c')).toBe('a-b-c');
+  expect(tagNotation('Café au lait')).toBe('caf-au-lait');
+  expect(tagNotation('')).toBe('untitled');
+  expect(tagNotation('-'.repeat(200))).toBe('untitled');
+});
+
 test('ENRICH_PUBLISHERS covers the five derived-data entity types', () => {
   expect(ENRICH_PUBLISHERS.map((p) => p.entityType).sort()).toEqual([
     'core.collection',

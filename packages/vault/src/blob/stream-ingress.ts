@@ -433,7 +433,14 @@ export class RemoteStreamIngress {
   }
 
   private contributePreview(row: IngressSessionRow, sha256: string, mediaType: string): void {
-    if (!this.deps.contributePreview || !row.temp_path) return;
+    if (!row.temp_path) return;
+    if (!this.deps.contributePreview) {
+      // Defensive: spoolPreview already gates on contributePreview, but never
+      // leave a preview temp behind if that invariant changes.
+      this.removePreviewTemp(row.temp_path);
+      this.deps.state.setSessionTempPath(row.session_id, null);
+      return;
+    }
     try {
       const bytes = readFileSync(row.temp_path);
       this.deps.contributePreview({

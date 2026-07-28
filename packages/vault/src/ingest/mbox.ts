@@ -52,18 +52,23 @@ export function parseAddress(raw: string | undefined): {
   email: string | null;
 } {
   if (!raw) return { name: null, email: null };
+  // Match the old `^(.*?)<([^>]+)>` semantics: the display-name part cannot
+  // cross a newline, and the angle address needs at least one character.
+  const firstNewline = raw.indexOf('\n');
   const lt = raw.indexOf('<');
-  const gt = raw.indexOf('>', lt + 1);
-  if (lt >= 0 && gt > lt) {
-    const name = raw.slice(0, lt).trim().replace(/^"|"$/g, '');
-    return {
-      name: name || null,
-      email:
-        raw
-          .slice(lt + 1, gt)
-          .trim()
-          .toLowerCase() || null,
-    };
+  if (lt >= 0 && (firstNewline === -1 || lt < firstNewline)) {
+    const gt = raw.indexOf('>', lt + 1);
+    if (gt > lt + 1) {
+      const name = raw.slice(0, lt).trim().replace(/^"|"$/g, '');
+      return {
+        name: name || null,
+        email:
+          raw
+            .slice(lt + 1, gt)
+            .trim()
+            .toLowerCase() || null,
+      };
+    }
   }
   const bare = raw.trim();
   return bare.includes('@')
@@ -87,7 +92,7 @@ export function threadKey(subject: string | null): string {
     const lower = trimmed.toLowerCase();
     for (const p of prefixes) {
       if (lower.startsWith(p)) {
-        let after = trimmed.slice(p.length).trimStart();
+        const after = trimmed.slice(p.length).trimStart();
         if (after.startsWith(':')) {
           s = after.slice(1).trimStart();
           changed = true;

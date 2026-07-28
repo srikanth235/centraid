@@ -188,6 +188,60 @@ test('does not reflect foreign Origin with credentials for cookie-only requests 
   }
 });
 
+test('a present Authorization header selects the bearer path and never runs the cookie authorizer', async () => {
+  const runtime = new Runtime({ appsDir: workspace });
+  let cookieCalls = 0;
+  const hardened = await startRuntimeHttpServer({
+    runtime,
+    authorizeRequest: (req) => {
+      cookieCalls += 1;
+      // Side effects mirror gateway.webAppSessions.authorize: header stamping
+      // and URL rewriting. A valid bearer must never trigger them.
+      req.headers['x-cookie-stamped'] = '1';
+      req.url = '/mutated-by-cookie-auth';
+      return { plane: 'admin' };
+    },
+  });
+  try {
+    const res = await fetch(`${hardened.url}/centraid/_apps`, {
+      headers: {
+        Authorization: `Bearer ${hardened.token}`,
+        Cookie: 'session=ok',
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(cookieCalls).toBe(0);
+    // URL was not rewritten by the cookie authorizer.
+    expect((await res.json()) as unknown[]).toEqual([]);
+  } finally {
+    await hardened.close();
+  }
+});
+
+test('an invalid bearer returns 401 even when a valid cookie is present (no fallthrough)', async () => {
+  const runtime = new Runtime({ appsDir: workspace });
+  let cookieCalls = 0;
+  const hardened = await startRuntimeHttpServer({
+    runtime,
+    authorizeRequest: (req) => {
+      cookieCalls += 1;
+      return (req.headers.cookie ?? '').includes('session=ok') ? { plane: 'admin' } : undefined;
+    },
+  });
+  try {
+    const res = await fetch(`${hardened.url}/centraid/_apps`, {
+      headers: {
+        Authorization: 'Bearer wrong-token',
+        Cookie: 'session=ok',
+      },
+    });
+    expect(res.status).toBe(401);
+    expect(cookieCalls).toBe(0);
+  } finally {
+    await hardened.close();
+  }
+});
+
 test('contains rejected handlers at the HTTP boundary before and after headers', async () => {
   const runtime = new Runtime({ appsDir: workspace });
   const guarded = await startRuntimeHttpServer({

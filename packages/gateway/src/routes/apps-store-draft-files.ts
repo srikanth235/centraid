@@ -62,7 +62,7 @@ async function walk(root: string, rel: string, out: DraftFile[]): Promise<void> 
       if (stat.size > MAX_DRAFT_FILE_BYTES) continue;
       out.push({ path: r, content: await fd.readFile({ encoding: 'utf8' }) });
     } catch {
-      // Unreadable files are silently skipped, matching the previous behavior.
+      // Unreadable files are skipped (previously they were pushed with empty content).
     } finally {
       await fd.close();
     }

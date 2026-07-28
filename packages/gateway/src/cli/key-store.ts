@@ -37,10 +37,9 @@ const warnedFallbacks = new Set<string>();
  * then failed to unwrap.
  */
 export function keychainAccountFor(keysDir: string, label = DEFAULT_LAUNCHD_LABEL): string {
-  // lgtm[js/insufficient-password-hash]
-  // SHA-256 is used here to derive a stable, non-secret keychain account name
-  // from the data-directory path. It is a filesystem identifier, not password storage.
-  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex').slice(0, 16);
+  // SHA-256 derives a stable, non-secret keychain account name from the
+  // data-directory path — a filesystem identifier, not password storage.
+  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex').slice(0, 16); // lgtm[js/insufficient-password-hash]
   return `${label}.${id}`;
 }
 
@@ -114,10 +113,9 @@ export function headlessCredentialFile(
               'centraid',
               'credentials',
             ));
-  // lgtm[js/insufficient-password-hash]
-  // SHA-256 derives a stable, non-secret filename from the data-directory path.
-  // This is a filesystem identifier, not password storage.
-  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex');
+  // SHA-256 derives a stable, non-secret filename from the data-directory
+  // path — a filesystem identifier, not password storage.
+  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex'); // lgtm[js/insufficient-password-hash]
   return path.join(root, `${id}.key`);
 }
 

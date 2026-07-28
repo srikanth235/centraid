@@ -143,11 +143,10 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
       .sort((a, b) => a.epoch - b.epoch)
       .map((epoch) => ({
         epoch: epoch.epoch,
-        // lgtm[js/insufficient-password-hash]
-        // SHA-256 is used for a content fingerprint over public key-epoch material,
-        // not for password verification. The recovery kit's integrity relies on the
-        // authenticated wrap (scrypt + AES-256-GCM) and this fingerprint only disambiguates kits.
-        keyHash: createHash('sha256').update(Buffer.from(epoch.key, 'base64')).digest('hex'),
+        // SHA-256 fingerprints public key-epoch material; the kit's integrity
+        // relies on the authenticated scrypt + AES-256-GCM wrap, and this
+        // fingerprint only disambiguates kits (not password verification).
+        keyHash: createHash('sha256').update(Buffer.from(epoch.key, 'base64')).digest('hex'), // lgtm[js/insufficient-password-hash]
       })),
     targets: [...document.targets]
       .sort((a, b) => a.vaultId.localeCompare(b.vaultId) || a.targetId.localeCompare(b.targetId))
@@ -155,18 +154,16 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
         provider: target.provider,
         targetId: target.targetId,
         vaultId: target.vaultId,
-        // lgtm[js/insufficient-password-hash]
-        // SHA-256 fingerprints the optional seal key; the actual key is stored in
-        // the authenticated, scrypt-wrapped ciphertext. This is not password verification.
+        // SHA-256 fingerprints the optional seal key; the actual key lives in
+        // the authenticated, scrypt-wrapped ciphertext (not password verification).
         sealkeyHash: target.sealKey
-          ? createHash('sha256').update(Buffer.from(target.sealKey, 'base64')).digest('hex')
+          ? createHash('sha256').update(Buffer.from(target.sealKey, 'base64')).digest('hex') // lgtm[js/insufficient-password-hash]
           : null,
       })),
   };
-  // lgtm[js/insufficient-password-hash]
-  // SHA-256 produces a stable kit capability fingerprint. The kit itself is
-  // protected by scrypt + AES-256-GCM; this hash is not used for password storage.
-  return createHash('sha256').update(canonicalJson(preimage)).digest('hex');
+  // SHA-256 produces a stable kit capability fingerprint; the kit itself is
+  // protected by scrypt + AES-256-GCM (not password storage).
+  return createHash('sha256').update(canonicalJson(preimage)).digest('hex'); // lgtm[js/insufficient-password-hash]
 }
 
 /** Server-side password wrap; provider credentials never enter the document. */

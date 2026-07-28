@@ -105,6 +105,16 @@ function textShowingParts(raw: string): string[] {
   return parts;
 }
 
+/** `Tj`/`TJ` operator at `index`, followed by a non-alphanumeric boundary. */
+function hasTextOperator(raw: string, index: number, op: 'Tj' | 'TJ'): boolean {
+  return (
+    index + 1 < raw.length &&
+    raw[index] === op[0] &&
+    raw[index + 1] === op[1] &&
+    (index + 2 >= raw.length || /[^A-Za-z0-9]/.test(raw[index + 2] ?? ''))
+  );
+}
+
 /** Extract `( ... ) Tj` text-show operators without a backtracking regex. */
 function extractTjStrings(raw: string): string[] {
   const parts: string[] = [];
@@ -124,15 +134,15 @@ function extractTjStrings(raw: string): string[] {
       else if (ch === ')') depth--;
       j++;
     }
-    if (depth !== 0) break;
+    if (depth !== 0) {
+      // Unbalanced '(': the old regex simply found no match here and kept
+      // scanning after `open`, so do the same rather than aborting extraction.
+      i = open + 1;
+      continue;
+    }
     let k = j;
     while (k < raw.length && /\s/.test(raw[k] ?? '')) k++;
-    if (
-      k + 1 < raw.length &&
-      raw[k] === 'T' &&
-      raw[k + 1] === 'j' &&
-      (k + 2 >= raw.length || /[^A-Za-z0-9]/.test(raw[k + 2] ?? ''))
-    ) {
+    if (hasTextOperator(raw, k, 'Tj')) {
       parts.push(decodePdfString(raw.slice(open + 1, j - 1)));
       i = k + 2;
       continue;
@@ -151,6 +161,12 @@ function extractTJArrayStrings(raw: string, limit: number): string[] {
     if (open < 0) break;
     let j = open + 1;
     let depth = 1;
+    // Buffer this candidate array locally; only commit to `parts` once the
+    // closing bracket is actually followed by the TJ operator. PDF content
+    // streams are full of non-TJ arrays (dash patterns, /Annots, /Filter),
+    // and pushing while scanning leaks their strings into extracted text.
+    const candidate: string[] = [];
+    let balanced = true;
     while (j < raw.length && depth > 0) {
       const ch = raw[j];
       if (ch === '\\') {
@@ -170,9 +186,12 @@ function extractTJArrayStrings(raw: string, limit: number): string[] {
           else if (c2 === ')') d--;
           s++;
         }
-        if (d === 0) {
-          parts.push(decodePdfString(raw.slice(j + 1, s - 1)));
-          if (parts.length >= limit) return parts;
+        if (d !== 0) {
+          balanced = false;
+          break;
+        }
+        if (parts.length + candidate.length < limit) {
+          candidate.push(decodePdfString(raw.slice(j + 1, s - 1)));
         }
         j = s;
         continue;
@@ -181,15 +200,14 @@ function extractTJArrayStrings(raw: string, limit: number): string[] {
       else if (ch === ']') depth--;
       j++;
     }
-    if (depth !== 0) break;
+    if (!balanced || depth !== 0) {
+      i = open + 1;
+      continue;
+    }
     let k = j;
     while (k < raw.length && /\s/.test(raw[k] ?? '')) k++;
-    if (
-      k + 1 < raw.length &&
-      raw[k] === 'T' &&
-      raw[k + 1] === 'J' &&
-      (k + 2 >= raw.length || /[^A-Za-z0-9]/.test(raw[k + 2] ?? ''))
-    ) {
+    if (hasTextOperator(raw, k, 'TJ')) {
+      parts.push(...candidate);
       i = k + 2;
       continue;
     }
