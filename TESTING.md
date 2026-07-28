@@ -356,10 +356,12 @@ so the test suite can identify precisely which upgrade works and which one
 breaks a compatibility contract. A failing gate is evidence about that proposed
 upgrade, not a policy that majors are forbidden.
 
-The same job verifies the committed iOS Pod lock against resolved Expo/React
-Native, rejects machine/worktree-shaped native paths, and compares both
-platforms with `apps/mobile/native-fingerprints.json`. A native dependency,
-SDK, config-plugin, or generated-project change therefore requires an explicit
+The same job verifies the committed iOS Pod lock against resolved Expo and
+React Native, including `React-Core`, `React-Core-prebuilt`,
+`ReactNativeDependencies`, and Hermes; rejects machine/worktree-shaped native
+paths; and compares both platforms with
+`apps/mobile/native-fingerprints.json`. A native dependency, SDK,
+config-plugin, or generated-project change therefore requires an explicit
 fingerprint rebaseline after reviewing the native diff.
 
 Android decisions mirror iOS where the artifact exists: Android uses the same

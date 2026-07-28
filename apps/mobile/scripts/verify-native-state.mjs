@@ -12,7 +12,7 @@ const podsRootVariable = ["$", "{PODS_ROOT}"].join("");
 export function podVersions(lock) {
   const version = (name) => {
     const match = new RegExp(
-      `^  - ${name} \\((?<version>[^)]+)\\):`,
+      `^  - ${name} \\((?<version>[^)]+)\\):?$`,
       "mu"
     ).exec(lock);
     return match?.groups?.version ?? null;
@@ -20,6 +20,8 @@ export function podVersions(lock) {
   return {
     expo: version("Expo"),
     reactNative: version("React-Core"),
+    reactNativePrebuilt: version("React-Core-prebuilt"),
+    reactNativeDependencies: version("ReactNativeDependencies"),
     hermesTag:
       /^ {4}:tag: (?<tag>hermes-v\S+)$/mu.exec(lock)?.groups?.tag ?? null,
   };
@@ -41,6 +43,16 @@ export function validatePodLock({
   if (actual.reactNative !== reactNativeVersion) {
     errors.push(
       `Podfile.lock React-Core ${actual.reactNative ?? "missing"} does not match node_modules react-native ${reactNativeVersion}`
+    );
+  }
+  if (actual.reactNativePrebuilt !== reactNativeVersion) {
+    errors.push(
+      `Podfile.lock React-Core-prebuilt ${actual.reactNativePrebuilt ?? "missing"} does not match node_modules react-native ${reactNativeVersion}`
+    );
+  }
+  if (actual.reactNativeDependencies !== reactNativeVersion) {
+    errors.push(
+      `Podfile.lock ReactNativeDependencies ${actual.reactNativeDependencies ?? "missing"} does not match node_modules react-native ${reactNativeVersion}`
     );
   }
   if (!actual.hermesTag || !hermesTags.includes(actual.hermesTag)) {

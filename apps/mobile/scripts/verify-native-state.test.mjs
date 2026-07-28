@@ -17,10 +17,12 @@ import {
 describe("native state guards", () => {
   test("rejects a stale Expo and React Native Podfile.lock", () => {
     const lock =
-      "  - Expo (54.0.34):\n  - React-Core (0.81.5):\n    :tag: hermes-v0.16.0\n";
+      "  - Expo (54.0.34):\n  - React-Core (0.81.5):\n  - React-Core-prebuilt (0.81.5):\n  - ReactNativeDependencies (0.81.5):\n    :tag: hermes-v0.16.0\n";
     expect(podVersions(lock)).toEqual({
       expo: "54.0.34",
       reactNative: "0.81.5",
+      reactNativePrebuilt: "0.81.5",
+      reactNativeDependencies: "0.81.5",
       hermesTag: "hermes-v0.16.0",
     });
     expect(
@@ -33,6 +35,8 @@ describe("native state guards", () => {
     ).toEqual([
       "Podfile.lock Expo 54.0.34 does not match node_modules Expo 57.0.8",
       "Podfile.lock React-Core 0.81.5 does not match node_modules react-native 0.86.2",
+      "Podfile.lock React-Core-prebuilt 0.81.5 does not match node_modules react-native 0.86.2",
+      "Podfile.lock ReactNativeDependencies 0.81.5 does not match node_modules react-native 0.86.2",
       "Podfile.lock Hermes tag hermes-v0.16.0 does not match node_modules react-native Hermes tag(s) hermes-v0.17.0, hermes-v250829098.0.16",
     ]);
   });

@@ -157,8 +157,9 @@ checks, including `ci:android-native`. `apps/mobile/native-fingerprints.json`
 commits both expected hashes;
 `apps/mobile/scripts/native-fingerprint.mjs` excludes that expectation file
 from the input hash. `apps/mobile/scripts/verify-native-state.mjs` verifies
-Expo/React Native pod-lock versions, the resolved Hermes tag,
-repository-relative native paths, and both platform fingerprints.
+Expo/React Native pod-lock versions—including `React-Core-prebuilt` and
+`ReactNativeDependencies`—the resolved Hermes tag, repository-relative native
+paths, and both platform fingerprints.
 `apps/mobile/scripts/check-xcode-minimum.mjs` derives
 the minimum from the installed React Native helper, compares `xcodebuild`, and
 writes named `infra-mismatch` evidence on failure.
@@ -187,6 +188,15 @@ are covered in the required PR gate. The full compile also revealed Kotlin
 daemon diagnostics under `android/.kotlin/` were changing the next native
 fingerprint despite no source change; that machine-local directory is now
 explicitly excluded from the cache-key input.
+
+The following iOS nightly then exposed a second stale-lock variant:
+`apps/mobile/ios/Podfile.lock` still resolved `React-Core-prebuilt` 0.86.0
+beside React Native 0.86.2. Expo repaired it transiently during the job, after
+which Xcode exited 65 while resolving the resulting build state. The committed
+lock now resolves the prebuilt pod at 0.86.2; the strengthened
+`apps/mobile/scripts/verify-native-state.mjs` and its
+`apps/mobile/scripts/verify-native-state.test.mjs` coverage prevent either
+prebuilt dependency from silently diverging again.
 
 `.github/dependabot.yml` continues to propose all major upgrades, but leaves
 each production major in its own attributable PR while grouping patch/minor
@@ -254,7 +264,7 @@ Mobile prevention and prerequisite replay:
 
 ```sh
 bun run --cwd apps/mobile ci:native-state
-# native state: Pod lock (Expo/RN/Hermes), paths, and both fingerprints match
+# native-state: Pod lock, project paths, and iOS/Android fingerprints agree
 
 bun run --cwd apps/mobile ci:bundle
 # iOS Bundled 2,132 modules; Android Bundled 2,129 modules
@@ -410,6 +420,8 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785273583-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 86351 | 0 | 13147648 | 8353 | 94704 | 3.6281 | 1466884 | 0 | 89964800 | 154523 | test(desktop): align template fixture with catalog (#587) |
 | codex-019fa9f8-a97-1785275603-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 237384 | 0 | 15204352 | 19753 | 257137 | 4.6908 | 1704268 | 0 | 105169152 | 174276 | fix(mobile): compile Expo application shell (#587) |
 | codex-019fa9f8-a97-1785275651-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 3983 | 0 | 637952 | 319 | 4302 | 0.1742 | 1708251 | 0 | 105807104 | 174595 | fix(mobile): compile Expo application shell (#587) -m governance: allow-toolchai |
+| codex-019fa9f8-a97-1785277234-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 158547 | 0 | 18686720 | 16161 | 174708 | 5.3105 | 1866798 | 0 | 124493824 | 190756 | fix(mobile): align iOS prebuilt React lock (#587) |
+| codex-019fa9f8-a97-1785277279-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 5554 | 0 | 251392 | 487 | 6041 | 0.0840 | 1872352 | 0 | 124745216 | 191243 | fix(mobile): align iOS prebuilt React lock (#587) |
 
 ### Steering
 
