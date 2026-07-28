@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one end-to-end suite over a single served gateway+vault fixture — the scenarios intentionally share state to test the plane as one surface
 import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -11,7 +12,6 @@ import {
   ensureAppEnrolled,
   uuidv7,
 } from "@centraid/vault";
-// governance: allow-repo-hygiene file-size-limit one end-to-end suite over a single served gateway+vault fixture — the scenarios intentionally share state to test the plane as one surface
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";

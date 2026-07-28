@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite per served-asset concern of a single module — CSP/nonce, shared fallback, depth-aware JSX transform, ETag/conditional, and compression tiers all exercise serveStatic and share its fixtures
 import {
   writeFileSync,
   mkdirSync,
@@ -10,7 +11,6 @@ import path from "node:path";
 import zlib from "node:zlib";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-// governance: allow-repo-hygiene file-size-limit one suite per served-asset concern of a single module — CSP/nonce, shared fallback, depth-aware JSX transform, ETag/conditional, and compression tiers all exercise serveStatic and share its fixtures
 import { describe, expect, it, vi } from "vitest";
 
 import { resolveStaticPath } from "./security.js";

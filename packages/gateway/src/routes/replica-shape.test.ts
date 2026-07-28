@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#406) one end-to-end consent-shape suite shares the real vault-plane fixture across field, row, temporal, identity, projection, and retention invariants
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
@@ -9,7 +10,6 @@ import {
   currentReplicaLogState,
   readReplicaRow,
 } from "@centraid/vault";
-// governance: allow-repo-hygiene file-size-limit (#406) one end-to-end consent-shape suite shares the real vault-plane fixture across field, row, temporal, identity, projection, and retention invariants
 import { describe, afterEach, expect, test } from "vitest";
 
 import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
