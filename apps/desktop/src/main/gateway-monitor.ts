@@ -361,8 +361,13 @@ async function tick(): Promise<void> {
   const prevHealthStatus = trackedState.healthStatus;
   state = applyProbe(trackedState, probe);
 
+  // Suppress the down-alert during first-run setup (#603): until the user
+  // picks "Start fresh on this Mac" the local gateway is deliberately not
+  // started (no keychain prompt ahead of the chooser), so "unreachable" is
+  // expected, not an outage. A FAILED settings read still alerts.
+  const inFirstRunSetup = settings !== undefined && settings.onboardingCompletedAt === undefined;
   const alert: GatewayAlertConfig = {
-    enabled: settings?.gatewayAlertsEnabled ?? true,
+    enabled: (settings?.gatewayAlertsEnabled ?? true) && !inFirstRunSetup,
     thresholdSeconds: settings?.gatewayAlertSeconds ?? DEFAULT_ALERT_SECONDS,
   };
   const evaluated = evaluateAlert(state, alert, Date.now());

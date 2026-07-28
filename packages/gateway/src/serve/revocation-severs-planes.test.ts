@@ -49,7 +49,6 @@ test('revocation removes web sessions and closes the admitted iroh endpoint', as
     await endpoint?.revokeEndpoint(endpointId);
   });
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: {
       dataDir,
       vaultDir: path.join(dataDir, 'vault'),

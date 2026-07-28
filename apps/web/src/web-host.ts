@@ -353,10 +353,10 @@ export function installWebHost(): void {
         error: 'unsupported',
         stages: [
           {
-            id: 'ssh' as const,
-            label: 'Connect over SSH',
+            id: 'reach' as const,
+            label: 'Reach gateway over Iroh',
             status: 'fail' as const,
-            detail: 'SSH setup is available in the desktop client.',
+            detail: 'A pair ticket is the only way to reach a gateway from the browser.',
           },
         ],
       };
@@ -438,9 +438,9 @@ export function installWebHost(): void {
       ok: false as const,
       error: 'Use the gateway CLI to export the recovery kit.',
     }),
-    createVault: async () => {
-      throw new Error('Create vaults on the gateway host.');
-    },
+    // No `createVault`: the browser is not any gateway's landlord. Callers
+    // gate on `typeof window.CentraidApi.createVault === 'function'` and hide
+    // the affordance rather than offering a button that always fails.
     deleteVault: async () => {
       throw new Error('Delete vaults on the gateway host.');
     },
@@ -450,11 +450,6 @@ export function installWebHost(): void {
     },
     relaunchToUpdate: async () => window.location.reload(),
     getChangelog: async () => ({ currentVersion: 'web', releases: [] }),
-    sshConnectGateway: async () => ({
-      ok: false as const,
-      error: 'unsupported',
-      message: 'SSH setup is available in the desktop client.',
-    }),
   };
 
   window.CentraidApi = api as unknown as typeof window.CentraidApi;

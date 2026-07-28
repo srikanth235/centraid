@@ -169,7 +169,7 @@ describe('fileExists', () => {
 
 /*
  * `isDirectHostRequest` — the real host-only capability gate (issue #568
- * items A/B). The founding tests stub `canMintFoundingTicket: () => true`, so
+ * items A/B). Route tests stub `isHostCustody: () => true`, so
  * without this nothing exercises the predicate the product actually installs.
  *
  * The organising rule: LOOPBACK IS NOT AN IDENTITY. Every forwarder in the

@@ -27,7 +27,7 @@
  * Loopback is not an identity (issue #568 items A/B). Every forwarder —
  * this one, the Rust byte relay, and the desktop phone tunnel — hands a
  * REMOTE peer to 127.0.0.1, so each also stamps `TUNNEL_FORWARDED_HEADER`
- * and `canMintFoundingTicket` refuses anything carrying it.
+ * and `isHostCustody` refuses anything carrying it.
  */
 
 import crypto from 'node:crypto';
@@ -87,7 +87,7 @@ export interface DaemonDevicePlane {
    * endpoint, the Rust byte relay, and the desktop phone tunnel — delivers a
    * remote peer to 127.0.0.1, so loopback alone proves nothing (#568 A/B).
    */
-  canMintFoundingTicket(req: IncomingMessage): boolean;
+  isHostCustody(req: IncomingMessage): boolean;
   /** Bind the endpoint once the HTTP listener is up. */
   startEndpoint(upstream: {
     baseUrl: string;
@@ -146,12 +146,10 @@ export function makeDaemonDevicePlane(input: {
   });
   const controlSecret = input.controlSecret ?? crypto.randomBytes(32).toString('hex');
   let liveEndpointId: string | undefined;
-  const authorizeEndpoint = (endpointId: string): boolean =>
-    enrollments.isEnrolled(endpointId) ||
-    // Fresh gateway + an unexpired founding QR: the ceremony has to be
-    // dialable before any enrollment exists. Keyed to the ticket's own ten
-    // minutes, not the two-hour restore reservation (issue #568 item C).
-    (input.vaults()?.isFresh() === true && tickets.hasOpenFoundingWindow());
+  // An enrollment is the ONLY admission (issue #603 retired the admit-anyone
+  // founding window): a gateway founds itself locally, so no unknown
+  // EndpointId ever needs to reach it before it holds a ticket-issued row.
+  const authorizeEndpoint = (endpointId: string): boolean => enrollments.isEnrolled(endpointId);
 
   const deviceAccess: DeviceAccess = {
     deviceKeyFor: (req: IncomingMessage): string | undefined => {
@@ -173,7 +171,7 @@ export function makeDaemonDevicePlane(input: {
     },
     vaultsFor: (deviceKey: string): string[] => enrollments.vaultsFor(deviceKey),
   };
-  const canMintFoundingTicket = isDirectHostRequest;
+  const isHostCustody = isDirectHostRequest;
 
   const pairDevice = (candidate: unknown, endpointId: string): GatewayPairResponse => {
     const request = candidate as Partial<GatewayPairRequest> | null;
@@ -307,7 +305,7 @@ export function makeDaemonDevicePlane(input: {
 
   return {
     deviceAccess,
-    canMintFoundingTicket,
+    isHostCustody,
     startEndpoint,
     dataPlaneControl,
     pairing: { enrollments, tickets },

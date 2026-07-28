@@ -57,7 +57,6 @@ import { commandBackup } from './backup-admin.js';
 import { commandRecover } from './recover-admin.js';
 import { commandService } from './service-admin.js';
 import { commandStatus } from './status-admin.js';
-import { commandInitTicket } from './founding-admin.js';
 import { commandLockStatus } from './lock-admin.js';
 import { kitlessHostIdentity } from '../serve/host-identity.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
@@ -95,7 +94,7 @@ function usage(): never {
   process.stderr.write(
     [
       'Usage:',
-      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--init-vault <name>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
+      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
       '  centraid-gateway vault list --data-dir <path> [--json]',
       '  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]',
       '  centraid-gateway vault rename --data-dir <path> <vaultId> <name>',
@@ -230,11 +229,10 @@ async function commandServe(args: string[]): Promise<void> {
   const loopbackSecret =
     process.env.CENTRAID_GATEWAY_TOKEN?.trim() ||
     landlordBearerForEndpointSecret(keyStore.loadOrCreate('endpoint-key.bin'));
+  // The daemon always has a host identity: it is the device the auto-founded
+  // vaults are owned by (issue #603), and the identity `pair` mints against.
   const hostEndpointId =
-    desktopEndpointId ??
-    (parsed.initVaultName
-      ? kitlessHostIdentity(keyStore.loadOrCreate('endpoint-key.bin'))
-      : undefined);
+    desktopEndpointId ?? kitlessHostIdentity(keyStore.loadOrCreate('endpoint-key.bin'));
   let vaultsRef: import('../serve/vault-registry.js').VaultRegistry | undefined;
   const devicePlane = makeDaemonDevicePlane({
     layout,
@@ -243,7 +241,7 @@ async function commandServe(args: string[]): Promise<void> {
     logger,
     keyStore,
     ...(dataPlaneSecret ? { controlSecret: dataPlaneSecret } : {}),
-    ...(hostEndpointId ? { loopbackEndpointId: hostEndpointId } : {}),
+    loopbackEndpointId: hostEndpointId,
   });
 
   // The ephemeral secret opens only the process-local HTTP listener. Device
@@ -256,7 +254,6 @@ async function commandServe(args: string[]): Promise<void> {
     assistOAuth: assistOAuthFromEnvironment(process.env),
     paths: layout,
     gatewayDatabase,
-    ...(parsed.initVaultName ? { initVaultName: parsed.initVaultName } : {}),
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined ? { port: config.port } : {}),
     ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
@@ -265,9 +262,9 @@ async function commandServe(args: string[]): Promise<void> {
     token: loopbackSecret,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
-    canMintFoundingTicket: devicePlane.canMintFoundingTicket,
+    isHostCustody: devicePlane.isHostCustody,
     keyStore,
-    ...(hostEndpointId ? { hostDeviceEndpointId: hostEndpointId } : {}),
+    hostDeviceEndpointId: hostEndpointId,
     dataPlaneControl: devicePlane.dataPlaneControl,
     ...(dataPlaneSecret && dataPlaneHttpUrl
       ? {
@@ -371,9 +368,6 @@ async function main(): Promise<void> {
       return;
     case 'pair':
       await commandPair(rest, fail);
-      return;
-    case 'init-ticket':
-      await commandInitTicket(rest, fail);
       return;
     case 'members':
       commandMembers(rest, fail);

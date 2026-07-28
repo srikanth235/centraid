@@ -17,13 +17,7 @@ vi.hoisted(() => {
 function makeProps(over: Partial<FirstRunGateProps> = {}): FirstRunGateProps {
   return {
     onOnboardingComplete: vi.fn(),
-    onFoundingComplete: vi.fn(),
-    gatewayStatus: 'uninitialized',
-    founding: {
-      initialize: vi.fn(),
-      verify: vi.fn(),
-      restore: vi.fn(),
-    },
+    host: 'desktop',
     ...over,
   };
 }
@@ -63,42 +57,45 @@ function clickIncludes(el: HTMLElement, text: string): void {
 }
 
 describe('FirstRunGate', () => {
-  it('offers exactly the two first-run choices', async () => {
+  it('desktop offers exactly the two first-run choices — and no founding ceremony', async () => {
     const el = await mount(makeProps());
-    expect(el.textContent).toContain('Create vault');
-    expect(el.textContent).toContain('Restore vault');
-    expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
+    expect(el.textContent).toContain('Start fresh on this Mac');
+    expect(el.textContent).toContain('Connect with a ticket');
+    expect(el.textContent).not.toContain('Create vault');
+    expect(el.textContent).not.toContain('Restore vault');
+    expect(el.querySelectorAll('button').length).toBe(2);
   });
 
-  it('"Create vault" opens the founding ceremony', async () => {
+  it('"Start fresh on this Mac" goes straight to the profile step', async () => {
     const el = await mount(makeProps());
-    clickIncludes(el, 'Create vault');
+    clickIncludes(el, 'Start fresh on this Mac');
     await flush();
-    expect(el.textContent).toContain('Create your vault');
-    expect(el.textContent).toContain('Recovery-kit password');
+    expect(el.textContent).toContain('Make yourself');
+    expect(el.querySelector('[data-testid="onboarding-view"]')).toBeTruthy();
   });
 
-  it('"Restore vault" opens the restore peer of the same ceremony', async () => {
+  it('"Connect with a ticket" also starts at the profile step', async () => {
     const el = await mount(makeProps());
-    clickIncludes(el, 'Restore vault');
+    clickIncludes(el, 'Connect with a ticket');
     await flush();
-    expect(el.textContent).toContain('Restore your vault');
-    expect(el.textContent).toContain('Storage-provider key');
+    expect(el.textContent).toContain('Make yourself');
   });
 
-  it('"Back" from founding returns to the choice', async () => {
+  it('"Back" from a chosen path returns to the chooser', async () => {
     const el = await mount(makeProps());
-    clickIncludes(el, 'Restore vault');
+    clickIncludes(el, 'Connect with a ticket');
     await flush();
     clickIncludes(el, 'Back');
     await flush();
-    expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
+    expect(el.querySelector('[data-testid="first-run-choice"]')).toBeTruthy();
   });
 
-  it('never shows Create / Restore for an already-founded gateway', async () => {
-    const el = await mount(makeProps({ gatewayStatus: 'ready' }));
+  it('web never shows the chooser — the ticket path is the only path', async () => {
+    const el = await mount(makeProps({ host: 'web' }));
+    expect(el.querySelector('[data-testid="first-run-choice"]')).toBeNull();
     expect(el.textContent).toContain('Make yourself');
-    expect(el.textContent).not.toContain('Create vault');
-    expect(el.textContent).not.toContain('Restore vault');
+    expect(el.textContent).not.toContain('this Mac');
+    // No chooser to go back to, so no back affordance either.
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent === 'Back')).toBe(false);
   });
 });

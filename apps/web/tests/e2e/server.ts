@@ -7,6 +7,9 @@ import { serve } from '../../../../packages/gateway/dist/serve/serve.js';
 const dataDir = await fs.mkdtemp(
   path.join(os.tmpdir(), `centraid-web-e2e-${crypto.randomUUID()}-`),
 );
+// No `initVaultName`: a fresh gateway auto-founds "Shared" + "Personal" at
+// construction (issue #603), and the specs address whichever vault
+// `/centraid/_web/control` hands back rather than one by name.
 const handle = await serve({
   host: '127.0.0.1',
   port: 48765,
@@ -14,7 +17,6 @@ const handle = await serve({
   paths: {
     vaultDir: path.join(dataDir, 'vault'),
   },
-  initVaultName: 'Web E2E',
   web: {
     rootDir: path.resolve('dist'),
     host: '127.0.0.1',

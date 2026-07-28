@@ -10,7 +10,13 @@ import type { SpaceModalCommit } from './SpaceModal.js';
 
 /** Create a space and make it the addressed vault (re-scopes Home). */
 export async function createSpace(data: SpaceModalCommit): Promise<void> {
-  const created = await window.CentraidApi.createVault({ name: data.name });
+  // Hosts that cannot administer vaults (the web PWA) omit `createVault`
+  // entirely; callers hide the affordance, and this is the honest backstop.
+  const create = window.CentraidApi.createVault;
+  if (typeof create !== 'function') {
+    throw new Error('Creating a space needs the desktop app or the gateway host CLI.');
+  }
+  const created = await create({ name: data.name });
   await updateVault({
     vaultId: created.vaultId,
     color: data.color,

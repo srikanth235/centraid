@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 test('GET /centraid/_templates returns stripped bundled metadata behind auth', async () => {
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
 
   // No bearer → 401.
   const unauth = await fetch(`${handle.url}/centraid/_templates`);

@@ -99,7 +99,7 @@
     "blob-custody.performance": "Partial: blob-custody.performance has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
     "blob-custody.scalability": "Partial: blob-custody.scalability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
     "blob-custody.security": "Partial: blob-custody.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "backup-restore.concurrency": "Partial: backup-restore.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
+    "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) — restore is the offline `recover` verb, so concurrent restore has no surface.",
     "backup-restore.scalability": "Partial: backup-restore.scalability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
     "backup-restore.journey": "Partial: backup-restore.journey has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
     "replica-sync.durability": "Partial: replica-sync.durability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
@@ -209,10 +209,7 @@
       "owner": "packages/gateway/src/backup/wal.integration.test.ts",
       "tier": "integration"
     },
-    "backup-restore.concurrency": {
-      "owner": "packages/gateway/src/backup/recover-live.integration.test.ts",
-      "tier": "integration"
-    },
+    "backup-restore.concurrency": null,
     "backup-restore.performance": null,
     "backup-restore.scalability": {
       "owner": "tests/scale/backup-restore.scale.test.ts",
@@ -302,7 +299,7 @@
     "gateway.offline": null,
     "gateway.compat": null,
     "gateway.journey": {
-      "owner": "tests/agent-e2e-pairing/flows/vps-phone-founding.mjs",
+      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
       "tier": "e2e"
     },
     "app-engine.correctness": {
@@ -681,7 +678,7 @@
         "correctness": "solid",
         "contracts": "solid",
         "durability": "solid",
-        "concurrency": "partial",
+        "concurrency": "skip",
         "performance": "skip",
         "scalability": "partial",
         "security": "solid",
@@ -1265,12 +1262,12 @@
       "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs"
     },
     {
-      "id": "gateway-founding-journey",
-      "name": "Empty VPS → first phone owner + verified wrapped recovery kit",
+      "id": "gateway-journey",
+      "name": "Auto-founded gateway → pair ticket → phone joins Shared (#603)",
       "surface": "gateway",
       "dimension": "journey",
       "tier": "e2e",
-      "owner": "tests/agent-e2e-pairing/flows/vps-phone-founding.mjs"
+      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs"
     },
     {
       "id": "pairing-real-journey",

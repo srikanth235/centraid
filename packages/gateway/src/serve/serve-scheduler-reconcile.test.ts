@@ -109,7 +109,6 @@ beforeEach(async () => {
   reconcileCalls = [];
   started = 0;
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     scheduler: stubScheduler(),
   });
@@ -177,7 +176,6 @@ test('publishing an automation triggers a scheduler reconcile with the new rows'
 test('publish does not report ready when a data cursor bootstrap fails', async () => {
   await handle.close();
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     scheduler: bootstrapRejectingScheduler(),
   });
@@ -190,7 +188,7 @@ test('a committed watched entity fires a data automation in well under a second'
   // Exercise the real scheduler behind a live HTTP gateway, not the spy used
   // by the reconcile test above.
   await handle.close();
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   await publishBrief(DATA_AUTOMATION_JSON);
 
   // Publishing awaits reconciliation, including the fresh watcher's
@@ -267,7 +265,6 @@ test('a committed watched entity fires a data automation in well under a second'
   // for the same persisted-cursor state.
   await handle.close();
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     scheduler: stubScheduler(),
   });
@@ -286,7 +283,7 @@ test('a committed watched entity fires a data automation in well under a second'
     .get() as { prov_id: string };
   await handle.close();
 
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   await waitFor(async () => {
     await refreshRuns();
     return runs.length === 10 && runs.every((run) => run.endedAt !== undefined);

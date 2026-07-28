@@ -1,7 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit ipc-hub pending split per-feature handler modules (agent, chat, apps, provider) once the surface stabilizes
-import { ipcMain, BrowserWindow, shell } from 'electron';
+import { app, ipcMain, BrowserWindow, safeStorage, shell } from 'electron';
 import {
   loadSettings,
+  requestLocalGatewayStart,
   saveSettings,
   setActiveGatewayId,
   setActiveVaultId,
@@ -40,17 +41,16 @@ import {
   type TestConnectionInput,
 } from './gateway-connectivity.js';
 import {
-  sshConnectGateway,
-  sshEnrollIntoVault,
-  type SshConnectResult,
-} from './gateway-ssh-connect.js';
-import { sshVaultCreate } from './ssh-host.js';
-import {
   deviceTranscriptionAvailable,
   transcribeDeviceMedia,
   type DeviceTranscriptionInput,
 } from './device-transcription.js';
-import { Channel, gatewayChangedPayload, vaultChangedPayload } from './ipc-core.js';
+import {
+  Channel,
+  gatewayChangedPayload,
+  keychainPromptExpected,
+  vaultChangedPayload,
+} from './ipc-core.js';
 
 export { Channel };
 
@@ -292,45 +292,6 @@ export function registerIpcHandlers(): void {
       testGatewayConnection(input),
   );
 
-  // ConnectFlow "Over SSH" commit (issue #382): on success this runs the
-  // same teardown/cache-invalidation/broadcast sequence GATEWAY_PAIR_REDEEM
-  // does, since `sshConnectGateway` ends with the same `redeemGatewayPairing`
-  // call under the hood (active gateway + vault both flip).
-  ipcMain.handle(
-    Channel.GATEWAY_SSH_CONNECT,
-    async (
-      _e,
-      input: {
-        destination: string;
-        dataDir?: string;
-        label?: string;
-        rememberDevice?: boolean;
-        vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
-      },
-    ): Promise<SshConnectResult> => {
-      const result = await sshConnectGateway(input);
-      if (result.ok) {
-        const next = await loadSettings();
-        const { shutdownAllLocalGatewaysExcept } = await import('./local-gateway.js');
-        await shutdownAllLocalGatewaysExcept(
-          next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
-        );
-        const { closeAllIrohDialersExcept } = await import('./iroh-dialer.js');
-        await closeAllIrohDialersExcept(
-          next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
-        );
-        await invalidateGatewayCaches();
-        broadcastGatewayChanged(
-          next,
-          input.rememberDevice === true ? {} : { purgeReplicaGatewayId: result.gatewayId },
-        );
-        broadcastVaultChanged(next);
-        nudgeGatewayMonitor();
-      }
-      return result;
-    },
-  );
-
   // Vault switch (issue #289): a pure client-side pointer flip on the active
   // gateway. No server call, no re-root, no session/iframe teardown — only
   // the auth cache drops so the next request carries the new
@@ -346,105 +307,30 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // Vault create/delete on the LOCAL gateway only (issue #289): the desktop
-  // is the landlord for its own in-process gateway. A remote gateway's vault
-  // lifecycle is a host-only CLI operation over SSH — refuse here
-  // with a message pointing at it. Still used by VAULTS_DELETE unchanged
-  // (see its comment below for why delete didn't get the ssh-routing
-  // VAULTS_CREATE got).
+  // Vault create/delete run on the LOCAL gateway only: the desktop is the
+  // landlord for its own in-process gateway, and a remote gateway's vault
+  // lifecycle is a host-side admin act. Issue #603 deleted the SSH-routed
+  // remote create, so both verbs share this one guard again.
   const assertLocalAdmin = async (): Promise<string> => {
     const settings = await loadSettings();
     if (settings.activeGatewayKind !== 'local') {
       throw new Error(
         'Vault create/delete on a remote gateway is a server-side admin act — ' +
-          'run `centraid-gateway vault …` on that box over SSH.',
+          'run `centraid-gateway vault …` with the CLI on the gateway host.',
       );
     }
     return settings.activeGatewayId;
   };
 
-  // Where VAULTS_CREATE routes (issue #382): local stays the desktop's own
-  // in-process create; a remote gateway routes over SSH when its profile
-  // carries an `ssh` block (set by GATEWAY_SSH_CONNECT, or a prior ssh
-  // create); a plain remote gateway (no ssh block) is still refused with
-  // the same message `assertLocalAdmin` throws.
-  const resolveVaultCreateRoute = async (): Promise<
-    | { mode: 'local'; gatewayId: string }
-    | {
-        mode: 'ssh';
-        gatewayId: string;
-        profile: GatewayProfile['ssh'];
-        rememberDevice: boolean;
-      }
-  > => {
-    const settings = await loadSettings();
-    if (settings.activeGatewayKind === 'local') {
-      return { mode: 'local', gatewayId: settings.activeGatewayId };
-    }
-    const profiles = await listGateways();
-    const active = profiles.find((p) => p.id === settings.activeGatewayId);
-    if (active?.ssh) {
-      return {
-        mode: 'ssh',
-        gatewayId: active.id,
-        profile: active.ssh,
-        rememberDevice: active.rememberDevice === true,
-      };
-    }
-    throw new Error(
-      'Vault create/delete on a remote gateway is a server-side admin act — ' +
-        'run `centraid-gateway vault …` on that box over SSH.',
-    );
-  };
-
   ipcMain.handle(
     Channel.VAULTS_CREATE,
     async (_e, input: { name?: string }): Promise<{ vaultId: string }> => {
-      const route = await resolveVaultCreateRoute();
-      if (route.mode === 'local') {
-        const { createLocalVault } = await import('./local-gateway.js');
-        return await createLocalVault(route.gatewayId, input.name);
-      }
-      // ssh-routed (issue #382): create the vault remotely, then enroll THIS
-      // device into it via the exact same pair+redeem helper
-      // GATEWAY_SSH_CONNECT uses. Unlike the local path, this DOES flip the
-      // active gateway+vault — enrollment (via a pairing ticket redemption)
-      // is how a device gains access to a remote vault at all, so
-      // `redeemGatewayPairing`'s atomic "enroll + activate" is the correct
-      // outcome here, not an accidental side effect. The switcher/renderer
-      // should treat a ssh-routed create like a combined create+switch.
-      const profile = route.profile as NonNullable<GatewayProfile['ssh']>;
-      const created = await sshVaultCreate(profile, input.name);
-      if (!created.ok) throw new Error(created.message);
-      const enrolled = await sshEnrollIntoVault(
-        profile,
-        created.value.vaultId,
-        undefined,
-        route.rememberDevice,
-      );
-      if (!enrolled.ok) throw new Error(enrolled.message);
-      const next = await loadSettings();
-      const { shutdownAllLocalGatewaysExcept } = await import('./local-gateway.js');
-      await shutdownAllLocalGatewaysExcept(
-        next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
-      );
-      const { closeAllIrohDialersExcept } = await import('./iroh-dialer.js');
-      await closeAllIrohDialersExcept(
-        next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
-      );
-      await invalidateGatewayCaches();
-      broadcastGatewayChanged(next);
-      broadcastVaultChanged(next);
-      nudgeGatewayMonitor();
-      return { vaultId: enrolled.vaultId };
+      const gatewayId = await assertLocalAdmin();
+      const { createLocalVault } = await import('./local-gateway.js');
+      return await createLocalVault(gatewayId, input.name);
     },
   );
 
-  // VAULTS_DELETE stays local-only (issue #382 scope decision): a
-  // symmetric ssh-routed delete would need `vault delete --json` on the
-  // remote CLI first (today only `pair`/`vault list`/`vault create` got
-  // `--json`, see `packages/gateway/src/cli/vault-admin.ts`) — left as a
-  // follow-up rather than widening this issue's CLI surface further.
   ipcMain.handle(
     Channel.VAULTS_DELETE,
     async (_e, input: { vaultId: string; name: string }): Promise<{ deleted: true }> => {
@@ -563,6 +449,9 @@ export function registerIpcHandlers(): void {
       return { ok: false, error: 'remote gateways restart server-side' };
     }
     try {
+      // An explicit restart is a user act, so it lifts the first-run
+      // keychain deferral the same way the chooser's local-connect does.
+      requestLocalGatewayStart();
       const { restartLocalGateway } = await import('./local-gateway.js');
       await restartLocalGateway(settings.activeGatewayId);
     } catch (err) {
@@ -655,6 +544,19 @@ export function registerIpcHandlers(): void {
     relaunchToUpdate();
     return { ok: true as const };
   });
+
+  // ----- Keychain pre-write note (issue #603) -----
+  // Answers "will starting the local gateway pop an OS credential prompt?"
+  // so the first-run chooser can warn BEFORE the dialog appears instead of
+  // leaving the user to guess what asked for their password. Policy lives in
+  // the pure `keychainPromptExpected`; this handler only reads the live host.
+  ipcMain.handle(Channel.KEYCHAIN_PROMPT_EXPECTED, (): boolean =>
+    keychainPromptExpected({
+      platform: process.platform,
+      encryptionAvailable: safeStorage.isEncryptionAvailable(),
+      packaged: app.isPackaged,
+    }),
+  );
 
   // ----- "What's new" changelog -----
   ipcMain.handle(Channel.CHANGELOG_GET, async () => getChangelog());

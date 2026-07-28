@@ -31,7 +31,10 @@ bug**: the row-browser pager never advanced (see "Bug found" below).
   remote EndpointId row in the main-process-owned `connections.json`, maps that
   EndpointId to the loopback mock through an in-memory E2E transport seam, marks it
   active, and sets `onboardingCompletedAt`. No URL/token is persisted. See
-  [fixtures.ts](./fixtures.ts).
+  [fixtures.ts](./fixtures.ts). On a true first run (no `onboardingCompletedAt`)
+  the app defers starting its local gateway until the user picks "Start fresh
+  on this Mac" in the first-run chooser (#603), so virgin-env specs must expect
+  an empty `gatewayUrl` before that click.
 - **Mock gateway:** one configurable HTTP server per test covering the full gateway
   surface + **SSE** for chat turns and automation run events, with CORS/OPTIONS and
   per-route error knobs. `gateway.state` is the single source of fixture data.

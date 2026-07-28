@@ -72,7 +72,7 @@ async function install(templateId: string): Promise<Response> {
 
 beforeEach(async () => {
   dataDir = await tempDir(`gw-install-${crypto.randomUUID()}-`);
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {

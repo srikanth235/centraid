@@ -46,7 +46,7 @@ async function mountUnauthed(
 
 beforeEach(async () => {
   dataDir = await tempDir(`build-gateway-${crypto.randomUUID()}-`);
-  gateway = await buildGateway({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {
@@ -68,67 +68,103 @@ test('constructs the graph and exposes the lifecycle without binding a socket', 
   expect((gateway as unknown as Record<string, unknown>).token).toBe(undefined);
 });
 
-test('vaultless boot is healthy, explicit, and creates no vault or cache tree (#555)', async () => {
+test('a fresh data dir auto-founds Shared then Personal, and a second boot is a no-op (#603)', async () => {
   await gateway.stop();
   await fs.rm(dataDir, { recursive: true, force: true });
-  dataDir = await tempDir(`build-gateway-vaultless-${crypto.randomUUID()}-`);
-  const dataPlaneSecret = 'vaultless-data-plane-secret';
+  dataDir = await tempDir(`build-gateway-autofound-${crypto.randomUUID()}-`);
+  const dataPlaneSecret = 'autofound-data-plane-secret';
   gateway = await buildGateway({
     paths: pathsUnder(dataDir),
     dataPlaneControl: {
       secret: dataPlaneSecret,
-      authorize: (endpointId) => ({ allowed: endpointId === 'founder-device' }),
+      authorize: (endpointId) => ({ allowed: endpointId === 'owner-device' }),
       pair: () => ({ ok: false }),
     },
   });
-  expect(gateway.vaults.list()).toEqual([]);
-  await expect(fs.access(path.join(dataDir, 'vault'))).rejects.toMatchObject({ code: 'ENOENT' });
-  await expect(fs.access(path.join(dataDir, 'cache'))).rejects.toMatchObject({ code: 'ENOENT' });
+  // Order is load-bearing: ids are UUIDv7, so the OLDEST is the default the
+  // registry hands unscoped callers and unnamed pair tickets.
+  expect(gateway.vaults.list().map((v) => v.name)).toEqual(['Shared', 'Personal']);
+  const founded = gateway.vaults.list().map((v) => v.vaultId);
+  expect(gateway.vaults.defaultVaultId()).toBe(founded[0]);
   await expect(fs.access(path.join(dataDir, 'gateway.db'))).resolves.toBeUndefined();
 
   const mounted = await mountUnauthed(gateway.composedHandler);
   try {
-    const [info, vaults, apps, automations, health, tunnel, tunnelAttacker, refused] =
-      await Promise.all([
-        fetch(`${mounted.url}/centraid/_gateway/info`),
-        fetch(`${mounted.url}/centraid/_vault/vaults`),
-        fetch(`${mounted.url}/centraid/_apps`),
-        fetch(`${mounted.url}/centraid/_automations`),
-        fetch(`${mounted.url}/centraid/_gateway/health`),
-        fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=founder-device`, {
-          headers: { 'x-centraid-data-plane-secret': dataPlaneSecret },
-        }),
-        fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=founder-device`),
-        fetch(`${mounted.url}/centraid/_vault/status`),
-      ]);
-    expect(await info.json()).toMatchObject({ status: 'uninitialized' });
-    expect(await vaults.json()).toEqual({ vaults: [] });
-    expect(await apps.json()).toEqual([]);
-    expect(await automations.json()).toEqual({ rows: [], errors: [] });
+    const [info, health, tunnel, tunnelAttacker, status] = await Promise.all([
+      fetch(`${mounted.url}/centraid/_gateway/info`),
+      fetch(`${mounted.url}/centraid/_gateway/health`),
+      fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=owner-device`, {
+        headers: { 'x-centraid-data-plane-secret': dataPlaneSecret },
+      }),
+      fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=owner-device`),
+      fetch(`${mounted.url}/centraid/_vault/status`),
+    ]);
+    // No `status` field survives #603 — there is no uninitialized state left.
+    const infoBody = (await info.json()) as Record<string, unknown>;
+    expect('status' in infoBody).toBe(false);
+    expect(infoBody).toMatchObject({ authenticated: false });
     expect(health.status).toBe(200);
     expect(tunnel.status).toBe(200);
     expect(await tunnel.json()).toEqual({ allowed: true });
     expect(tunnelAttacker.status).toBe(403);
-    expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({ error: 'uninitialized' });
-
-    // Founding changes the registry from zero→one before the phone opens its
-    // next QUIC connection to verify the recovery kit. The relay control
-    // callback must remain gateway-scoped after that transition; it cannot
-    // require the device header it is itself responsible for injecting.
-    gateway.vaults.create('Phone founded');
-    const [infoAfterFounding, tunnelAfterFounding] = await Promise.all([
-      fetch(`${mounted.url}/centraid/_gateway/info`),
-      fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=founder-device`, {
-        headers: { 'x-centraid-data-plane-secret': dataPlaneSecret },
-      }),
-    ]);
-    expect(infoAfterFounding.status).toBe(200);
-    expect(await infoAfterFounding.json()).toMatchObject({ status: 'ready' });
-    expect(tunnelAfterFounding.status).toBe(200);
-    expect(await tunnelAfterFounding.json()).toEqual({ allowed: true });
+    // The vault plane answers straight away: no 409 wall to clear first.
+    expect(status.status).toBe(200);
+    expect(await status.json()).toMatchObject({ vaultId: founded[0] });
   } finally {
     await mounted.close();
+  }
+
+  // Rebuilding over the SAME dir must adopt what is there, never re-found.
+  await gateway.stop();
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+  expect(gateway.vaults.list().map((v) => v.vaultId)).toEqual(founded);
+  expect(gateway.vaults.list().map((v) => v.name)).toEqual(['Shared', 'Personal']);
+});
+
+test('an existing data dir with one vault is left exactly as it was found (#603)', async () => {
+  await gateway.stop();
+  await fs.rm(dataDir, { recursive: true, force: true });
+  dataDir = await tempDir(`build-gateway-existing-${crypto.randomUUID()}-`);
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+  const [shared] = gateway.vaults.list();
+  gateway.vaults.delete(gateway.vaults.list()[1]!.vaultId);
+  await gateway.stop();
+
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+  expect(gateway.vaults.list().map((v) => v.vaultId)).toEqual([shared!.vaultId]);
+});
+
+test('an inhabited gateway whose vaults were all erased is NOT re-founded (#603)', async () => {
+  // Erasing every vault leaves the filesystem registry fresh but keeps the
+  // `members` rows in gateway.db. Restarting the daemon in that state must
+  // wait for restore — auto-founding a new Shared + Personal over it would
+  // silently bury restore-after-erase.
+  for (const vault of gateway.vaults.list()) {
+    gateway.vaults.delete(vault.vaultId);
+  }
+  await gateway.stop();
+
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+  expect(gateway.vaults.list()).toEqual([]);
+});
+
+test('the host that founded the vaults is enrolled admin on BOTH (#603)', async () => {
+  const founded = gateway.vaults.list().map((v) => v.vaultId);
+  expect(founded).toHaveLength(2);
+  // Release the gateway's handle before reading gateway.db from outside it.
+  await gateway.stop();
+  const database = GatewayDatabase.open(dataDir);
+  try {
+    const roles = database.db
+      .prepare('SELECT vault_id, role FROM member_roles ORDER BY vault_id')
+      .all() as Array<{ vault_id: string; role: string }>;
+    expect(roles.map((row) => row.vault_id).sort()).toEqual([...founded].sort());
+    expect(roles.every((row) => row.role === 'admin')).toBe(true);
+    // ONE member owns both — a fresh install has no "Unassigned" binding.
+    const members = database.db.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number };
+    expect(members.n).toBe(1);
+  } finally {
+    database.close();
   }
 });
 
@@ -141,7 +177,6 @@ test('network filesystem detection warns without refusing and disables orphan de
     networkFileSystem: true,
   });
   gateway = await buildGateway({
-    initVaultName: 'Network vault',
     paths: pathsUnder(dataDir),
     gatewayDatabase: database,
   });
@@ -165,7 +200,7 @@ test('mounts the vault registry and recovers it across rebuilds (#280)', async (
   // The registry is mandatory now — the whole app world is vault-scoped.
   expect(gateway.vaults).toBeDefined();
   expect(gateway.vaults.current().boot.fresh).toBe(true);
-  expect(gateway.vaults.list()).toHaveLength(1);
+  expect(gateway.vaults.list()).toHaveLength(2);
   // The owner consent surface answers through the composed chain.
   const mounted = await mountUnauthed(gateway.composedHandler);
   try {
@@ -182,7 +217,7 @@ test('mounts the vault registry and recovers it across rebuilds (#280)', async (
   const vaultId = gateway.vaults.current().boot.vaultId;
   expect(gateway.vaults.current().walShipper).toBeDefined();
   await gateway.stop();
-  gateway = await buildGateway({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
   expect(gateway.vaults.current().boot.fresh).toBe(false);
   expect(gateway.vaults.current().boot.vaultId).toBe(vaultId);
   expect(gateway.vaults.current().walShipper).toBeDefined();
@@ -218,7 +253,6 @@ test('production route table reaches both tunnel controls and the OAuth callback
   dataDir = await tempDir(`build-gateway-routes-${crypto.randomUUID()}-`);
   const secret = 'compiled-route-secret';
   gateway = await buildGateway({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     dataPlaneControl: {
       secret,
@@ -391,7 +425,7 @@ test('serves component health through the composed chain', async () => {
     expect(body.status).toBe('error');
     const byName = new Map(body.components.map((c) => [c.component, c]));
     // Wired-in probes: the boot vault mounted, no connections configured.
-    expect(byName.get('vaults')).toMatchObject({ status: 'ok', detail: '1 vault mounted' });
+    expect(byName.get('vaults')).toMatchObject({ status: 'ok', detail: '2 vaults mounted' });
     expect(byName.get('connections')).toMatchObject({ status: 'ok' });
     // Reconcile ran during start() and reported the scheduler healthy.
     expect(byName.get('automations')?.status).toBe('ok');

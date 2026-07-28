@@ -8,7 +8,7 @@ Thin client over the **same** gateway wire protocol as desktop/web/mobile (issue
 | --- | --- |
 | `--token <hex>` | Explicit per-device token, or the daemon's loopback secret |
 | `CENTRAID_TOKEN` | Env override |
-| `CENTRAID_GATEWAY_TOKEN` | The loopback secret the daemon was started with (issue #505 phase 7 retired the on-disk `token.bin`, so there is no data-dir token to auto-read) |
+| `CENTRAID_GATEWAY_TOKEN` | The daemon's loopback bearer. It is **derived** from `keys/endpoint-key.bin` and stable (issue #568 item J), not minted per boot; issue #505 phase 7 retired the on-disk `token.bin`, so there is no data-dir token to auto-read. This CLI cannot derive it — supply the value, or pin the same one on the daemon. Pinning it for the daemon breaks `centraid-gateway` admin verbs run without it (see [docs/dev-environment.md](../../docs/dev-environment.md)) |
 
 ## Commands
 

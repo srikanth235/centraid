@@ -5,9 +5,8 @@
  * device identity — the devices route authorizes it through its own
  * host-custody check (`canMintPairingTicket` → `isDirectHostRequest`). The
  * composed handler's global "proved enrolled device" gate used to run first,
- * so that hatch was unreachable and a headless daemon could not enroll a
- * second device from the CLI after founding. (Founding itself is unaffected:
- * it runs on `foundingHandler`, mounted outside the composed handler.)
+ * so that hatch was unreachable and a headless daemon could not enroll any
+ * device from the CLI at all.
  *
  * The bypass must stay narrow — a loopback, non-forwarded caller only. An
  * iroh-forwarded request carries device headers and must still be gated.
@@ -40,11 +39,10 @@ beforeEach(async () => {
   const enrollments = EnrollmentStore.open(database);
   const tickets = PairingTicketStore.open(database);
   gateway = await buildGateway({
-    initVaultName: "Owner's vault",
     paths: { dataDir, vaultDir: path.join(dataDir, 'vault') },
     gatewayDatabase: database,
     devicePairing: { enrollments, tickets, endpointTicket: () => 'endpoint-ticket' },
-    canMintFoundingTicket: isDirectHostRequest,
+    isHostCustody: isDirectHostRequest,
     // Mirrors the daemon's resolver rather than letting buildGateway fall back
     // to `embeddedAccess`, which resolves EVERY loopback request to the
     // embedded owner and would make the negative case pass vacuously.

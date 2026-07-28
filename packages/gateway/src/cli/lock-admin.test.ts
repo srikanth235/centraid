@@ -100,6 +100,7 @@ test('lock-status distinguishes an answering daemon from a wedged holder', async
         instanceId: 'answering',
         startedAt: Date.now(),
         uptimeMs: 1,
+        authenticated: true,
         endpointId,
       }),
     )) as typeof fetch;

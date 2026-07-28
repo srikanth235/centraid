@@ -12,7 +12,7 @@ import {
 
 const gateways: RegistryGateway[] = [
   { gatewayId: 'local', gatewayKind: 'local', gatewayLabel: 'This Mac' },
-  { gatewayId: 'office', gatewayKind: 'remote', gatewayLabel: 'Office', hasSsh: true },
+  { gatewayId: 'office', gatewayKind: 'remote', gatewayLabel: 'Office' },
   { gatewayId: 'attic', gatewayKind: 'remote', gatewayLabel: 'Attic' },
 ];
 
@@ -46,11 +46,11 @@ describe('buildGatewayRows', () => {
     expect(rows[0]!.isActive).toBe(true);
   });
 
-  it('badges transport from the profile — SSH only when the gateway has one', () => {
+  it('badges transport from the profile — This Mac for local, iroh for remote', () => {
     const rows = buildGatewayRows(gateways, {}, 'local');
     const badge = (id: string): string => rows.find((r) => r.gatewayId === id)!.transportBadge;
     expect(badge('local')).toBe('This Mac');
-    expect(badge('office')).toBe('SSH');
+    expect(badge('office')).toBe('iroh');
     expect(badge('attic')).toBe('iroh');
   });
 

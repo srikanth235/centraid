@@ -25,13 +25,6 @@ export interface GatewayInfoRouteOptions {
   instanceId: string;
   /** Optional capability overrides (tests / reduced surfaces). */
   capabilities?: GatewayCapabilities;
-  /** Read live because the first vault may be founded after process boot. */
-  status?: () => 'uninitialized' | 'ready';
-  /**
-   * A vault exists but its recovery kit is unverified, so `status` still
-   * reads `uninitialized` while create/restore would 409 (issue #568 item G).
-   */
-  foundingPending?: () => boolean;
   /** Stable identity can be derived before the endpoint joins the network. */
   endpointId?: () => string | undefined;
   /**
@@ -69,7 +62,11 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
       return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
     }
     const endpointId = options.endpointId?.();
-    const endpointTicket = isAuthenticated(req) ? options.endpointTicket?.() : undefined;
+    // Reported on the payload (issue #603): an anonymous caller silently loses
+    // `endpointTicket`, and without this flag a bearer mismatch is
+    // indistinguishable from an endpoint that has not come up yet.
+    const authenticated = isAuthenticated(req);
+    const endpointTicket = authenticated ? options.endpointTicket?.() : undefined;
     return sendJson(
       res,
       200,
@@ -77,8 +74,7 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
         instanceId: options.instanceId,
         startedAt,
         uptimeMs: Date.now() - startedAt,
-        status: options.status?.() ?? 'ready',
-        ...(options.foundingPending?.() ? { foundingPending: true } : {}),
+        authenticated,
         ...(endpointId !== undefined ? { endpointId } : {}),
         ...(endpointTicket !== undefined ? { endpointTicket } : {}),
         ...(options.capabilities ? { capabilities: options.capabilities } : {}),

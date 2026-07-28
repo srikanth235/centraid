@@ -141,13 +141,18 @@ if (!gotSingleInstanceLock) {
     // active one) and local-gateway.ts's supervisor now owns backed-off
     // background retries — this is just the "tell the user something's
     // wrong" surface for a launch-time failure, not itself a retry loop.
+    //
+    // On a TRUE first run `loadSettings()` deliberately does NOT start the
+    // local gateway (issue #603 — no keychain prompt before the user has
+    // chosen anything), so `gatewayUrl` comes back empty and the tray says
+    // "not running" until the first-run chooser's local-connect starts it.
     try {
       const settings = await loadSettings();
       // Launch-at-login (issue #351, tier 4) — apply on every launch, not
       // just when the setting changes, so an OS-level login-item reset (or
       // a settings.json hand-edit) reconciles instead of drifting silently.
       applyLaunchAtLogin(settings.launchAtLogin);
-      setTrayGatewayRunning(true);
+      setTrayGatewayRunning(settings.gatewayUrl.length > 0);
     } catch (err) {
       setTrayGatewayRunning(false);
       dialog.showErrorBox(

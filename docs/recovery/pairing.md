@@ -1,34 +1,48 @@
-# Recovery: founding and enrollment
+# Recovery: auto-founding and enrollment
 
-Use this runbook when a gateway has no vault, a pairing capability expired, or
-a device lost its private iroh identity. Ground truth for relay e2e remains
+Use this runbook when a gateway's first boot did not produce the vaults you
+expect, a pairing capability expired, or a device lost its private iroh
+identity. Ground truth for relay e2e remains
 `tests/agent-e2e-pairing/AGENTS.md`.
 
-## Zero-vault founding
+## Auto-founding (issue #603)
 
-1. Start `centraid-gateway serve` on the host. A healthy zero-vault gateway
-   reports `status: "uninitialized"` and keeps serving.
-2. From the host, run `centraid-gateway init-ticket --data-dir … --qr`. The
-   daemon must be running; the 10-minute capability is host-possession-gated,
-   one-time, and has no `vaultId`.
-3. Scan or paste it on the first phone/desktop. Choose Create or Restore.
-4. Create requires a recovery-kit password, delivery of the wrapped kit,
-   re-selecting and opening that file, and explicit loss consent. Home remains
-   unavailable until verification succeeds. The proved first EndpointId becomes
-   the vault's `owner`.
-5. Restore requires the wrapped kit, its password, and provider credentials.
-   Provider credentials are never stored in the kit. The recovered keyring and
-   vault DEK enter custody through `KeyStore`.
+There is no founding ceremony, no founding ticket, and no `uninitialized`
+state. A gateway founds itself:
 
-For headless automation that deliberately accepts no recovery kit, use
-`serve --init-vault <name>`. This is not the human first-run ceremony.
+1. Start `centraid-gateway serve` (or boot the desktop embed) on a **fresh**
+   data dir. At construction the gateway creates two vaults, in this order:
+   - **Shared** — the household vault. Created first, so it is the registry
+     default: a pair ticket minted without an explicit `--vault` targets it,
+     and every member who pairs later lands there by default.
+   - **Personal** — the founder's private vault. On desktop it is renamed to
+     the founder's display name once the profile step completes; a headless
+     gateway that never sees a profile step keeps the name `Personal`.
+2. The host's own device identity is enrolled as the owner **member**, `admin`
+   on both vaults, in the same `gateway.db` transaction.
+3. Nothing else happens. No kit is minted, no capability is issued, and no
+   screen blocks the user.
+
+A data dir that **already** holds vault directories is never modified.
+`VaultRegistry.isFresh()` counts a vault directory that failed to mount, so
+corruption or a missing custody key can never make an existing gateway look
+fresh and get founded over its own data.
+
+If a gateway does look empty, that is a real fault, not a legal state — check
+`centraid-gateway status --data-dir …` and `vault list`, both of which report
+`failedMounts` distinctly from an empty registry.
+
+Restoring an existing vault onto a blank machine is the **backup plane**, not
+founding: see [backup-restore.md](backup-restore.md) (`centraid-gateway
+recover --kit …`).
 
 ## Ordinary enrollment
 
-Once a vault exists:
+Once a gateway is running:
 
-1. An enrolled owner mints `centraid-gateway pair --data-dir … --vault …`
-   (`--qr` for a terminal QR).
+1. An enrolled owner mints `centraid-gateway pair --data-dir … [--vault …]`
+   (`--qr` for a terminal QR). Omitting `--vault` targets the registry
+   default, which on an auto-founded gateway is **Shared**.
 2. The device redeems the one-time capability over the iroh pairing ALPN.
 3. Redemption and the `gateway.db` enrollment commit atomically. New ordinary
    devices receive `full` trust unless a narrower trust was requested.
@@ -56,8 +70,17 @@ identity and changing one must not create a second connection record.
 
 ### Capability expired or was consumed
 
-Mint a new capability. Never try to revive or edit the old value. Minting a new
-founding capability invalidates the previous one.
+Mint a new pair ticket. Never try to revive or edit the old value. Tickets burn
+on first successful redeem (or on a wrong secret).
+
+### `pair` reports a rejected credential
+
+`pair` fails with a bearer-mismatch error naming `CENTRAID_GATEWAY_TOKEN` when
+the daemon was launched with a pinned bearer this CLI cannot derive from
+`keys/endpoint-key.bin`. Restart the daemon without the pin, or run the command
+with `CENTRAID_GATEWAY_TOKEN` set to the same value. This used to be reported
+as "the iroh endpoint is not ready" — a lie the owner could not act on
+(issue #603).
 
 ### Device enrolled but cannot connect
 
@@ -74,8 +97,9 @@ founding capability invalidates the previous one.
 ### Sole owner is lost
 
 Use the filesystem-anchored device CLI on the gateway host. Revoking the last
-owner requires typed confirmation because it leaves only this SSH/console
-recovery path.
+owner requires typed confirmation because it leaves only this shell/console
+recovery path — Centraid itself no longer offers any SSH-routed connect
+(issue #603 deleted that code).
 
 ### Gateway identity is corrupt or lost
 
@@ -88,4 +112,6 @@ it deliberately mints a new identity and requires every device to re-pair.
 - Hand-edit `gateway.db` while the daemon holds its exclusive lock.
 - Persist pairing tickets as gateway identity.
 - Copy device credentials into the gateway data directory.
-- Commit real tickets, endpoint secrets, or recovery kits.
+- Commit real pair tickets, endpoint secrets, or recovery kits.
+- Delete `vault/` to "reset" a gateway — that is how you get a data dir the
+  auto-found bootstrap will happily found over.

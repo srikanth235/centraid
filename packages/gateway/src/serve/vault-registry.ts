@@ -17,9 +17,9 @@
  *
  * Vault lifecycle is split by AUTHORITY, not by transport (issue #289,
  * corrected in #568 item J). `create` and `delete` are ADMIN acts, but they
- * are no longer CLI-only: the founding plane (`founding-routes.ts`) creates
- * the zero→one vault over HTTP against a one-time host-possession ticket, and
- * the erase ceremony (`vault-routes.ts`) deletes over HTTP behind the owner
+ * are no longer CLI-only: a fresh data dir auto-creates its two vaults at
+ * construction (issue #603), an admin device may create further ones, and the
+ * erase ceremony (`vault-routes.ts`) deletes over HTTP behind the owner
  * enrollment + typed-name + verified-kit guards. What has not changed is that
  * neither is reachable by an ordinary enrolled device on ordinary authority.
  * `rename`/presentation remain plain owner acts on an enrolled vault.
@@ -300,11 +300,12 @@ export class VaultRegistry {
   }
 
   /**
-   * Whether the gateway is unfounded. The filesystem registry is the only
+   * Whether this data dir has never held a vault — the one input to the
+   * auto-found decision (issue #603). The filesystem registry is the only
    * authority; there is deliberately no `vaults` table to disagree with it.
    * A vault directory that failed to mount is still a vault for this gate:
    * corruption or a missing custody key must never make an existing gateway
-   * look fresh and permit a second founding ceremony over its data.
+   * look fresh and get founded over its own data.
    */
   isFresh(): boolean {
     if (this.planes.size > 0) return false;
@@ -317,7 +318,7 @@ export class VaultRegistry {
     );
   }
 
-  /** Canonical registry root for the zero-vault founding restore verb. */
+  /** Canonical registry root on disk. */
   rootPath(): string {
     return this.rootDir;
   }
@@ -326,9 +327,8 @@ export class VaultRegistry {
    * Adopt a recovered vault directory as a live vault (issue #439 R1 — the
    * live-gateway path wave 4's `/recover` routes call after `recover()` has
    * renamed its staging dir into place). The directory `<root>/<vaultId>` MUST
-   * already exist on disk; this mounts it (`scan`). The shared founding gate
-   * enforces zero vaults before recovery starts, so no cleanup heuristic is
-   * needed here.
+   * already exist on disk; this mounts it (`scan`). Recovery runs against a
+   * data dir the operator brought, so no cleanup heuristic is needed here.
    */
   adopt(vaultId: string): VaultInfo {
     this.scan();
@@ -434,25 +434,16 @@ export class VaultRegistry {
   }
 
   /**
-   * Create (and mount) a fresh vault. ADMIN act: the CLI, or the founding
-   * plane redeeming a host-possession ticket over HTTP (#568 item J — this
-   * is no longer CLI-only). Never reachable on ordinary device authority.
+   * Create (and mount) a fresh vault. ADMIN act: the CLI, the auto-found
+   * bootstrap a fresh data dir runs at construction (#603), or an admin
+   * device over HTTP. Never reachable on ordinary device authority.
    */
-  create(name?: string, reservedVaultId?: string): VaultInfo {
+  create(name?: string): VaultInfo {
     const trimmed = name?.trim();
     if (trimmed !== undefined && trimmed.length === 0) {
       throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
     }
-    const vaultId = reservedVaultId ?? uuidv7();
-    if (
-      reservedVaultId !== undefined &&
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(reservedVaultId)
-    ) {
-      throw new VaultRegistryError(
-        'bad_name',
-        'a reserved founding vault id must be a canonical UUIDv7',
-      );
-    }
+    const vaultId = uuidv7();
     const dir = path.join(this.rootDir, vaultId);
     const plane = this.openPlane(dir, {
       vaultId,
@@ -464,38 +455,6 @@ export class VaultRegistry {
     this.notifyMounted(plane);
     this.logger.info(`vault registry: created vault ${plane.boot.vaultId} ("${plane.name}")`);
     return this.info(plane);
-  }
-
-  /**
-   * Remove an uncommitted founding artifact without touching its remote
-   * backup. Unlike owner deletion this is local rollback, so purging provider
-   * objects here would destroy the only recovery source after a failed restore.
-   */
-  discardPendingFoundingVault(vaultId: string): void {
-    const plane = this.planes.get(vaultId);
-    if (plane) {
-      plane.stop();
-      this.planes.delete(vaultId);
-      this.scannedDirs.delete(plane.dir);
-      this.failedMountsByDir.delete(plane.dir);
-    }
-    const vaultDir = path.resolve(this.rootDir, vaultId);
-    const cacheDir = path.resolve(this.cacheRootDir, vaultId);
-    if (
-      path.dirname(vaultDir) !== path.resolve(this.rootDir) ||
-      path.dirname(cacheDir) !== path.resolve(this.cacheRootDir)
-    ) {
-      throw new VaultRegistryError('bad_name', 'invalid pending founding vault id');
-    }
-    rmSync(vaultDir, { recursive: true, force: true });
-    rmSync(cacheDir, { recursive: true, force: true });
-    if (existsSync(this.rootDir) && readdirSync(this.rootDir).length === 0) {
-      rmSync(this.rootDir, { recursive: true, force: true });
-    }
-    if (existsSync(this.cacheRootDir) && readdirSync(this.cacheRootDir).length === 0) {
-      rmSync(this.cacheRootDir, { recursive: true, force: true });
-    }
-    this.logger.info(`vault registry: discarded uncommitted founding vault ${vaultId}`);
   }
 
   /** Rename one vault (owner act on its own `core_vault` row). */
@@ -526,8 +485,7 @@ export class VaultRegistry {
    * orphan objects, which any later reconcile against the empty set finds).
    * ADMIN act: the CLI, or the erase ceremony over HTTP behind the owner
    * enrollment, typed-name confirmation, and verified-kit guards (#568 item
-   * J — this is no longer CLI-only). Deleting the last vault returns the
-   * gateway to the legal uninitialized state.
+   * J — this is no longer CLI-only).
    *
    * This registry owns content deletion only. The erase ceremony's durable
    * state machine owns crypto-erasure through KeyStore after its gateway rows

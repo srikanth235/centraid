@@ -140,10 +140,7 @@ export async function commandRecover(
     gatewayDatabase = GatewayDatabase.open(parsed.dataDir, { lock: 'exclusive' });
   } catch (error) {
     if (error instanceof GatewayLockError) {
-      fail(
-        'the running daemon holds gateway.db — run restore through its founding route, or stop it first',
-        2,
-      );
+      fail('the running daemon holds gateway.db — stop it before recovering into this data dir', 2);
     }
     throw error;
   }

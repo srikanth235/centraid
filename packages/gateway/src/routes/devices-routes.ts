@@ -85,8 +85,13 @@ export interface DevicesRouteDeps {
    * has an endpoint (or on the desktop embed).
    */
   endpointTicket?: () => string | undefined;
-  /** Founding must happen before an ordinary enrollment ticket can be minted. */
-  isUninitialized?: () => boolean;
+  /**
+   * The registry's default vault — "Shared" on an auto-founded gateway
+   * (issue #603). Used when the caller names no target at all, so a bare
+   * `centraid-gateway pair` invites into the household vault rather than
+   * whichever vault happens to sort first in the caller's enrollments.
+   */
+  defaultVaultId?: () => string | undefined;
   /** Direct host-custody request (authenticated bearer, never iroh-forwarded). */
   canMintPairingTicket?: (req: IncomingMessage) => boolean;
   /** Filesystem registry ids, used only by the direct host-custody mint lane. */
@@ -142,13 +147,6 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       if (method !== 'POST') {
         return sendJson(res, 405, { error: 'method_not_allowed' });
       }
-      if (deps.isUninitialized?.()) {
-        return sendJson(res, 409, {
-          error: 'uninitialized',
-          message:
-            'gateway has no vault yet — run `centraid-gateway init-ticket` and complete founding first',
-        });
-      }
       let body: Record<string, unknown>;
       try {
         body = await readJson(req);
@@ -172,9 +170,17 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         });
       }
       const hostVaults = hostCustody ? (deps.vaultIds?.() ?? []) : [];
+      // No named target → the registry default (Shared), but only when the
+      // caller may actually address it; otherwise fall back to what it holds.
+      const preferred = deps.defaultVaultId?.();
       const target =
         requested === undefined
-          ? ([...allowedVaults][0] ?? hostVaults[0])
+          ? ((preferred !== undefined &&
+            (allowedVaults.has(preferred) || hostVaults.includes(preferred))
+              ? preferred
+              : undefined) ??
+            [...allowedVaults][0] ??
+            hostVaults[0])
           : [...allowedVaults, ...hostVaults].find(
               (vaultId) => vaultId === requested || deps.vaultName(vaultId) === requested,
             );

@@ -30,7 +30,6 @@ export const Channel = {
   GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',
   GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
   GATEWAY_TEST_CONNECTION: 'centraid:gateways:test-connection',
-  GATEWAY_SSH_CONNECT: 'centraid:gateways:ssh-connect',
   VAULTS_SET_ACTIVE: 'centraid:vaults:set-active',
   VAULT_CHANGED: 'centraid:vaults:changed',
   VAULTS_CREATE: 'centraid:vaults:create',
@@ -55,6 +54,8 @@ export const Channel = {
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
   GATEWAY_SERVICE_INSTALL: 'centraid:gateway:service-install',
   UPDATE_AVAILABLE: 'centraid:update:available',
+
+  KEYCHAIN_PROMPT_EXPECTED: 'centraid:keychain:prompt-expected',
 
   CHANGELOG_GET: 'centraid:changelog:get',
   DEEP_LINK: 'centraid:deep-link',
@@ -108,6 +109,38 @@ export function vaultChangedPayload(next: { activeGatewayId: string; activeVault
     gatewayId: next.activeGatewayId,
     ...(next.activeVaultId !== undefined ? { activeVaultId: next.activeVaultId } : {}),
   };
+}
+
+/**
+ * Will starting the local gateway pop an OS credential prompt? (issue #603)
+ *
+ * The gateway's first start writes this device's wrapping key + loopback
+ * token through `safeStorage` (`gateway-secrets.ts` `writeSecrets` is the
+ * single choke point). Whether that is silent or throws up a system dialog is
+ * purely a property of the host, so the renderer can pre-warn honestly:
+ *
+ *  - **no safeStorage encryption** → nothing to prompt for. macOS/Windows
+ *    would have thrown before reaching a prompt; Linux falls back to the 0600
+ *    device-local secrets file. Either way: no dialog.
+ *  - **macOS, unpackaged** (dev / unsigned builds) → the keychain item is not
+ *    owned by a stable signed identity, so the login keychain asks for
+ *    permission. Packaged + signed builds own their item and stay silent.
+ *  - **Linux with a working libsecret/kwallet** → the keyring may need to be
+ *    unlocked, which is a prompt.
+ *  - **Windows** → DPAPI, always silent.
+ *
+ * Pure so the policy is unit-testable; `ipc.ts` supplies the live
+ * `safeStorage.isEncryptionAvailable()` / `app.isPackaged` / `process.platform`.
+ */
+export function keychainPromptExpected(host: {
+  platform: NodeJS.Platform;
+  encryptionAvailable: boolean;
+  packaged: boolean;
+}): boolean {
+  if (!host.encryptionAvailable) return false;
+  if (host.platform === 'darwin') return !host.packaged;
+  if (host.platform === 'linux') return true;
+  return false;
 }
 
 /**

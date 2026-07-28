@@ -75,7 +75,7 @@ afterEach(async () => {
 });
 
 test('serves a staged draft (static + handlers) while live keeps the published version', async () => {
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   const store = await handle.appsStore();
   await seedApp(store, 'app');
   await handle.syncApps();
@@ -122,7 +122,7 @@ test('serves a staged draft (static + handlers) while live keeps the published v
 });
 
 test('an unknown draft session yields 503 (no live fallback)', async () => {
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   await seedApp(await handle.appsStore(), 'app');
   await handle.syncApps();
 

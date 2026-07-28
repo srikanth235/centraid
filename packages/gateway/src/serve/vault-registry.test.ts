@@ -22,7 +22,7 @@ function openRegistry(rootDir: string): VaultRegistry {
   return registry;
 }
 
-test('a fresh root stays uninitialized until an explicit create', async () => {
+test('a fresh root holds no vault until an explicit create', async () => {
   const root = await tempDir();
   const registry = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => registry.stop());

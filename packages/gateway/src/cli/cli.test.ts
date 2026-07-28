@@ -40,8 +40,6 @@ test('parseServeArgsPure accepts host/port/data-dir/allowed-host flags', () => {
     'gateway.local',
     '--allowed-host',
     'other.local',
-    '--init-vault',
-    'Kit-less test vault',
     '--config',
     '/tmp/cfg.json',
   ]);
@@ -52,7 +50,6 @@ test('parseServeArgsPure accepts host/port/data-dir/allowed-host flags', () => {
       host: '0.0.0.0',
       port: 8765,
       allowedHosts: ['gateway.local', 'other.local'],
-      initVaultName: 'Kit-less test vault',
       configPath: '/tmp/cfg.json',
     },
   });

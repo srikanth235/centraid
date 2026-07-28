@@ -33,7 +33,7 @@ nightly in CI (`.github/workflows/e2e.yml`).
 | # | Scenario | Pri | Status |
 |---|---|---|---|
 | 1.1 | First launch → onboarding; CTA disabled until name entered | P0 | ✅ |
-| 1.2 | Enter name + color → Submit → profile saved, lands on home | P0 | ✅ |
+| 1.2 | Chooser → "Start fresh on this Mac" → name + color → auto-founded Shared + Personal (renamed), lands on home (#603) | P0 | ✅ |
 | 1.3 | Onboarding save fails → error in card | P1 | ⬜ needs IPC fault-injection seam (contextBridge API is frozen) |
 | 1.4 | Relaunch after completion → straight to home | P0 | ✅ |
 | 1.5 | Settings fetch fails on boot → home with defaults | P1 | ⬜ needs IPC fault-injection seam |

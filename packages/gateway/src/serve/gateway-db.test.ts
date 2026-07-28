@@ -34,7 +34,6 @@ test('installs the full vaultless schema without a vault catalog or shm sidecar'
     'device_checkpoints',
     'devices',
     'erase_intents',
-    'founding_ticket_reservations',
     'gateway_meta',
     'member_roles',
     'members',
@@ -46,13 +45,14 @@ test('installs the full vaultless schema without a vault catalog or shm sidecar'
     'web_sessions',
   ]);
   expect(tables).not.toContain('vaults');
+  // #603 retired the founding ceremony: no reservation table, and a ticket
+  // has one shape (an invitation) rather than a `kind` discriminant.
+  expect(tables).not.toContain('founding_ticket_reservations');
   expect(
-    (
-      gateway.db.prepare('PRAGMA table_info(founding_ticket_reservations)').all() as Array<{
-        name: string;
-      }>
-    ).map((column) => column.name),
-  ).toContain('pending_vault_ids_json');
+    (gateway.db.prepare('PRAGMA table_info(tickets)').all() as Array<{ name: string }>).map(
+      (column) => column.name,
+    ),
+  ).not.toContain('kind');
   expect(existsSync(path.join(dir, 'gateway.db-shm'))).toBe(false);
   for (const retired of [
     'prefs.json',

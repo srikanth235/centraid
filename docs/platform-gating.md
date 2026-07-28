@@ -9,6 +9,7 @@ Decision matrix for UI/runtime branches across desktop (Electron), web PWA, and 
 | Signal | Meaning | Typical source |
 | --- | --- | --- |
 | `isWeb` | Browser / PWA shell | `typeof window` + no Electron bridge |
+| `isWebHost()` | The **synchronous first-paint** answer to "which shell hosts this bundle", for branches that run before any bridge round trip — first run's ticket-only-vs-chooser split (#603). `packages/client/src/react/host-platform.ts`; the marker is `window.CentraidIroh`, which the web host installs and the Electron preload never does. Presentation only — never branch auth or security on it |
 | `isNative` | Expo / React Native | `Platform.OS` / Expo constants |
 | Electron bridge | Desktop main capabilities | `window.centraid` / preload IPC |
 | Compact form-factor | Narrow layout, not a trust boundary | CSS / shell layout, not auth |

@@ -12,12 +12,13 @@ surviving a daemon restart, and dying on revocation.
 
 ## Setup
 
-Fresh `--data-dir` with explicit `--init-vault "Pairing E2E"`; harness waits
-for the HTTP listener and the iroh endpoint identity.
+Fresh `--data-dir`, no bootstrap flag: the daemon auto-founds `Shared` +
+`Personal` at construction (issue #603 removed `--init-vault`). The harness
+waits for the HTTP listener and the iroh endpoint identity.
 
 ## Steps
 
-1. `pair --vault "Pairing E2E"` — parse the pasteable base64url token; assert it
+1. `pair --vault "Shared"` — parse the pasteable base64url token; assert it
    carries the gateway EndpointTicket, ticket id/secret, vault name, expiry.
 2. Fresh device identity redeems over `centraid/gw-pair/1` → `ok: true` with
    the vault id/name + version-handshake material.

@@ -1,3 +1,5 @@
+import { loadSettingsPatch, subscribe, SETTINGS_EVENT } from './web-state.js';
+
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -69,16 +71,27 @@ function showInstallBanner(event: InstallPromptEvent): void {
   banner.append(install, dismiss);
 }
 
+/** First run has no gateway yet, so "reconnect to your gateway" is nonsense
+ *  copy over the welcome screen (issue #603 W6). The banner starts once the
+ *  user has actually finished onboarding. */
+function onboardingComplete(): boolean {
+  return typeof loadSettingsPatch()['onboardingCompletedAt'] === 'string';
+}
+
 export function installWebChrome(): void {
   const offline = notice(
     'offline',
     'You’re offline. Centraid will reconnect to your gateway when the network returns.',
   );
   const syncOnline = (): void => {
-    offline.toggleAttribute('data-visible', !navigator.onLine);
+    offline.toggleAttribute('data-visible', !navigator.onLine && onboardingComplete());
   };
   window.addEventListener('online', syncOnline);
   window.addEventListener('offline', syncOnline);
+  // The onboarding stamp is written through `saveSettingsPatch`, which
+  // publishes this — so the banner appears the moment first run finishes on
+  // an offline tab, with no polling.
+  subscribe(SETTINGS_EVENT, syncOnline);
   syncOnline();
 
   // Keep listening across the session (not `{ once: true }`) so a later

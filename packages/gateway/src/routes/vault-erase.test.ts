@@ -74,8 +74,8 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
   const invitedMember = enrollments.members.create('Invited');
   database.run(
     `INSERT INTO tickets (
-      ticket_id, kind, secret_hash, member_id, grants_json, created_at, expires_at
-    ) VALUES (?, 'enroll', ?, ?, ?, ?, ?)`,
+      ticket_id, secret_hash, member_id, grants_json, created_at, expires_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
     'pending-pair',
     'secret-hash',
     invitedMember.memberId,
@@ -130,7 +130,7 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
   expect(await response.json()).toMatchObject({
     ok: true,
     erasedVaultId: vault.vaultId,
-    status: 'uninitialized',
+    remainingVaults: 0,
   });
   expect(fenceVaultForErase).toHaveBeenCalledOnce();
 

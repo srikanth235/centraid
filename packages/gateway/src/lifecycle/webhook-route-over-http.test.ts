@@ -31,10 +31,12 @@ function auth(extra: Record<string, string> = {}): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}`, ...extra };
 }
 
+/** The DEFAULT vault's journal — a gateway auto-founds two of them (#603). */
 async function journalDbPath(): Promise<string> {
+  const vaultId = handle.vaults.defaultVaultId();
   const entries = await fs.readdir(dataDir, { recursive: true });
-  const relative = entries.find((entry) => entry.endsWith('journal.db'));
-  if (!relative) throw new Error('gateway journal.db was not created');
+  const relative = entries.find((entry) => entry.endsWith('journal.db') && entry.includes(vaultId));
+  if (!relative) throw new Error(`journal.db for vault ${vaultId} was not created`);
   return path.join(dataDir, relative);
 }
 
@@ -126,7 +128,7 @@ async function createWebhookAutomation(
 
 beforeEach(async () => {
   dataDir = await tempDir(`gw-webhook-${crypto.randomUUID()}-`);
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {

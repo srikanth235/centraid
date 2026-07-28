@@ -10,6 +10,7 @@ When backup, restore, or blank-machine `recover` strands mid-flight. Product pat
 | **Lazy default** | Blobs may fetch on first access; `--full` is explicit |
 | **Fencing** | Successful recover adopts with generation bump so the old machine's next register fails (no split-brain) |
 | Keys | Sealing keys / recovery kit are outside casual vault copy — need the kit + provider credentials |
+| The kit is an **export**, not a first-run artifact | Since issue #603 nothing mints a kit for you. Export it deliberately (`centraid-gateway backup kit --out …`, or the Backup screen) *before* you need it |
 
 The recovery-kit passphrase wrap is **load-bearing key custody**, not a
 convenience. The kit contains the backup keyring and backed-up vault DEKs;
@@ -24,7 +25,7 @@ recovery story is materially different from an ordinary restore.
 
 ## Symptoms
 
-- Founding restore stuck in `fetching` / `replaying`
+- Blank-machine `recover` stuck in `fetching` / `replaying`
 - `recover` failed after partial download
 - Two machines both think they are primary
 - PITR / WAL replay error
@@ -42,8 +43,15 @@ recovery story is materially different from an ordinary restore.
 
 Phases (conceptually): `discovering → fetching → replaying → fencing → adopting → warming`.
 
-1. Read gateway logs and the founding UI error.
-2. If failure was before **adopting**, retry the zero-vault restore with the recovery kit. Remove only the specifically named disposable cache/scratch path when instructed; never remove provider objects or the live vault root.
+`recover` is an **offline CLI verb** — it takes `gateway.db`'s exclusive lock and
+refuses while the daemon runs. There is no founding UI and no `vaults:restore`
+route (issue #603): keep the daemon stopped for the whole sequence, and on a
+data dir whose `vault/` is empty do not restart it between attempts — auto-founding
+would create a fresh `Shared` + `Personal` and the dir would no longer be
+vault-free.
+
+1. Read gateway logs and the `centraid-gateway recover` error output ([logs.md](../logs.md)).
+2. If failure was before **adopting**, re-run `centraid-gateway recover --kit … --password-file … --api-key … --data-dir …`. Remove only the specifically named disposable cache/scratch path when instructed; never remove provider objects or the live vault root.
 3. If failure was **during/after fencing**, treat as high risk of split-brain:
    - Do not start the old machine's gateway against the same vault without maintainer guidance.
    - Prefer completing recover on the new machine; old machine should see registration **409** / fence errors — that is success of fencing.

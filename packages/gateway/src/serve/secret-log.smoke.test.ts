@@ -46,7 +46,6 @@ beforeEach(async () => {
   logsDir = path.join(dataDir, 'gateway-logs');
   await fs.mkdir(logsDir, { recursive: true });
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir, logsDir),
     token: ADMIN,
   });

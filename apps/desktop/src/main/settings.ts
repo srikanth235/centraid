@@ -242,6 +242,39 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
   await fs.rename(tmp, file);
 }
 
+/**
+ * First-run keychain deferral (issue #603).
+ *
+ * Starting the local gateway — embedded or detached — reads/mints this
+ * device's wrapping key and loopback token through `safeStorage`
+ * (`gateway-secrets.ts`). On macOS that is an OS keychain access, and on a
+ * fresh install it used to happen at `app.whenReady()` before the user had
+ * seen a single word of UI: the very first thing Centraid did was spook the
+ * user with a system keychain prompt.
+ *
+ * So on a **true first run** — persisted settings with no
+ * `onboardingCompletedAt` — `resolveEffective` returns the settings with an
+ * empty local URL/token instead of booting the runtime (a state the effective
+ * shape already models, see the comment at the local branch below). The
+ * renderer shows its first-run chooser, and picking "Start fresh on this Mac"
+ * routes through `setActiveGatewayId('local')`, which flips this latch and
+ * starts the gateway for real.
+ *
+ * A returning install (onboarding already completed) never takes this branch —
+ * its gateway still starts eagerly at boot, as before.
+ */
+let localGatewayStartRequested = false;
+
+/**
+ * Explicit "the user asked for the local gateway" signal. Called by
+ * `setActiveGatewayId` (the renderer's local-connect path) and by the manual
+ * gateway restart. Process-lifetime only; once `onboardingCompletedAt` is
+ * persisted the deferral is moot anyway.
+ */
+export function requestLocalGatewayStart(): void {
+  localGatewayStartRequested = true;
+}
+
 async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> {
   // The local gateway must exist before we resolve — its profile
   // is auto-created on first read. If the persisted `activeGatewayId`
@@ -263,8 +296,11 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
   // For local gateways, the URL/token are minted by the in-process
   // runtime. If the runtime hasn't started yet we still return the
   // settings (with empty URL/token) so boot-time code paths that just
-  // need `appsDir` don't deadlock waiting for it.
-  if (resolved.profile.kind === 'local' && !resolved.url) {
+  // need `appsDir` don't deadlock waiting for it — which is exactly the
+  // state a deferred first run stays in until the user picks "Start fresh
+  // on this Mac" (see `localGatewayStartRequested` above).
+  const deferLocalStart = p.onboardingCompletedAt === undefined && !localGatewayStartRequested;
+  if (resolved.profile.kind === 'local' && !resolved.url && !deferLocalStart) {
     const { ensureLocalGateway } = await import('./local-gateway.js');
     const handle = await ensureLocalGateway(resolved.profile.id);
     resolved = {
@@ -355,6 +391,10 @@ export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
   if (!(await listGateways()).some((g) => g.id === id)) {
     throw new Error(`Cannot activate unknown gateway: ${id}`);
   }
+  // Activating a gateway is a deliberate user act (the first-run chooser's
+  // "Start fresh on this Mac" lands here with `local`), so it lifts the
+  // first-run keychain deferral for the rest of this process.
+  requestLocalGatewayStart();
   return saveSettings({ activeGatewayId: id });
 }
 

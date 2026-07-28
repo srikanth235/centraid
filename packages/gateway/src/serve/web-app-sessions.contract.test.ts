@@ -56,7 +56,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 
 beforeEach(async () => {
   dataDir = await tempDir(`web-session-${crypto.randomUUID()}-`);
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  handle = await serve({ paths: pathsUnder(dataDir) });
   const store = await handle.appsStore();
   await seedApp(store, 'alpha');
   await seedApp(store, 'beta');
@@ -284,7 +284,6 @@ test('a persisted control session still authorizes after a gateway restart', asy
   // Re-serve the same dataDir WITH persistence wired.
   await handle.close();
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     webSessions: { controlsFile },
   });
@@ -296,7 +295,6 @@ test('a persisted control session still authorizes after a gateway restart', asy
   // kept only its HttpOnly cookie, yet it must still authorize.
   await handle.close();
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     webSessions: { controlsFile },
   });
@@ -352,7 +350,6 @@ test('a control session without a proved device identity fails closed', async ()
   // There is no shared-bearer admin wildcard: a session without a device key
   // cannot survive the enrollment check.
   handle = await serve({
-    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     webSessions: { controlsFile, isDeviceValid: () => false },
   });
