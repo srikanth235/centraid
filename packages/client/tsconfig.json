@@ -7,7 +7,9 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": ["vitest/globals"],
-    "baseUrl": ".",
+    // No `baseUrl`: it was removed in TS7 (and rejected by oxlint's tsgolint
+    // type-aware pass). Every `paths` target below is relative, and modern
+    // TypeScript resolves relative `paths` against this tsconfig's directory.
     "paths": {
       "@centraid/design-tokens": ["../design-tokens/src/index.ts"],
       // Blueprint inline-app entries resolve to a contract stub so tsc never

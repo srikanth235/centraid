@@ -95,28 +95,33 @@ describe("cli.branches", () => {
     expect(ver.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 
-  function jsonResponse(status: number, body: unknown) {
+  // Test double: only the four members the CLI reads. The cast is what makes
+  // the double assignable where a real Response is expected.
+  function jsonResponse(status: number, body: unknown): Response {
     const text = body === undefined ? "" : JSON.stringify(body);
     return {
       ok: status >= 200 && status < 300,
       status,
       json: async () => body,
       text: async () => text,
-    };
+    } as unknown as Response;
   }
 
   test("health fails on non-2xx; list fails on 401 and other non-2xx", async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/health")) return jsonResponse(503, { error: "down" });
-      if (url.includes("/_apps"))
-        return jsonResponse(401, { error: "unauthorized" });
-      return jsonResponse(200, {
-        version: "0.1.0",
-        protocolVersion: 2,
-        minSupportedProtocol: 2,
-      });
-    });
+    const fetchImpl = vi.fn<typeof fetch>(
+      async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes("/health"))
+          return jsonResponse(503, { error: "down" });
+        if (url.includes("/_apps"))
+          return jsonResponse(401, { error: "unauthorized" });
+        return jsonResponse(200, {
+          version: "0.1.0",
+          protocolVersion: 2,
+          minSupportedProtocol: 2,
+        });
+      }
+    );
     vi.stubGlobal("fetch", fetchImpl);
 
     const health = await runCli([
@@ -139,7 +144,7 @@ describe("cli.branches", () => {
     expect(list401.code).toBe(1);
     expect(list401.stderr).toMatch(/unauthorized/u);
 
-    fetchImpl.mockImplementation(async (input: RequestInfo | URL) => {
+    fetchImpl.mockImplementation(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.includes("/_apps")) return jsonResponse(500, {});
       return jsonResponse(200, {});

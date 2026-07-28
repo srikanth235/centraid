@@ -5,9 +5,13 @@
     "rootDir": "./src",
     "noEmit": false,
     "declaration": true,
-    "module": "CommonJS",
-    "moduleResolution": "Node"
+    // `moduleResolution: "Node"` (node10) was removed in TS7. This package has
+    // no `"type": "module"`, so under Node16 every file is still a CommonJS
+    // module and the emit is byte-identical to the old CommonJS output —
+    // extensionless relative imports stay legal in the CJS resolution mode.
+    "module": "Node16",
+    "moduleResolution": "Node16"
   },
-  "include": ["src"],
-  "exclude": ["dist", "node_modules"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules", "src/**/*.test.ts"]
 }
