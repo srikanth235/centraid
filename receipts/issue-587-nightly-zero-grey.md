@@ -150,7 +150,7 @@ output covering the root manifest, root lockfile, mobile sources, and shared
 client/design packages. The resulting required-check-capable `mobile-smoke`
 job runs Expo compatibility diagnostics as advisory evidence, then blocks on
 native-state verification, both iOS and Android Metro exports, and compilation
-of the Android Expo tunnel module under JDK 17.
+of the Android application and its native modules under JDK 17.
 
 `apps/mobile/package.json` exposes only repo-script entry points for these
 checks, including `ci:android-native`. `apps/mobile/native-fingerprints.json`
@@ -175,6 +175,18 @@ now uses the unambiguous `tunnelRuntime` name, and
 `apps/mobile/native-fingerprints.json` explicitly accepts that reviewed native
 source change. The Android journey build remains the compiler-backed
 compatibility test for this class of dependency break.
+
+The next full-nightly run exposed that compiling only the tunnel module was
+still too narrow: the generated application shell imported Expo's removed
+`ReactNativeHostWrapper`.
+`apps/mobile/android/app/src/main/java/dev/centraid/mobile/MainApplication.kt`
+now follows Expo SDK 57's `ExpoReactHostFactory` contract while preserving the
+manually registered foreground-upload package, and `ci:android-native` compiles
+`:app:compileDebugKotlin` so both the shell and every transitive native module
+are covered in the required PR gate. The full compile also revealed Kotlin
+daemon diagnostics under `android/.kotlin/` were changing the next native
+fingerprint despite no source change; that machine-local directory is now
+explicitly excluded from the cache-key input.
 
 `.github/dependabot.yml` continues to propose all major upgrades, but leaves
 each production major in its own attributable PR while grouping patch/minor
@@ -248,7 +260,7 @@ bun run --cwd apps/mobile ci:bundle
 # iOS Bundled 2,132 modules; Android Bundled 2,129 modules
 
 bun run --cwd apps/mobile ci:android-native
-# :centraid-tunnel:compileDebugKotlin; BUILD SUCCESSFUL
+# :app:compileDebugKotlin (including native modules); BUILD SUCCESSFUL
 
 bun run --cwd apps/desktop test:e2e -- appview-templates-insights.spec.ts --grep "10.2"
 # 1 passed — automation template clone survives gateway + Electron restart
@@ -396,6 +408,8 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785270587-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 11164 | 0 | 1924864 | 1931 | 13095 | 0.5381 | 1142801 | 0 | 63005440 | 128827 | test(report): make nightly evidence zero-grey (#587) -m governance: allow-toolch |
 | codex-019fa9f8-a97-1785272503-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 237732 | 0 | 13811712 | 17343 | 255075 | 4.3074 | 1380533 | 0 | 76817152 | 146170 | fix(mobile): compile native module in PR gate (#587) -m governance: allow-toolch |
 | codex-019fa9f8-a97-1785273583-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 86351 | 0 | 13147648 | 8353 | 94704 | 3.6281 | 1466884 | 0 | 89964800 | 154523 | test(desktop): align template fixture with catalog (#587) |
+| codex-019fa9f8-a97-1785275603-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 237384 | 0 | 15204352 | 19753 | 257137 | 4.6908 | 1704268 | 0 | 105169152 | 174276 | fix(mobile): compile Expo application shell (#587) |
+| codex-019fa9f8-a97-1785275651-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 3983 | 0 | 637952 | 319 | 4302 | 0.1742 | 1708251 | 0 | 105807104 | 174595 | fix(mobile): compile Expo application shell (#587) -m governance: allow-toolchai |
 
 ### Steering
 

@@ -13,7 +13,7 @@
     "lint": "bun scripts/check-import-boundaries.ts",
     "ci:versions": "expo install --check",
     "ci:bundle": "expo export --platform ios --output-dir ../../dist/mobile-bundle-smoke/ios --clear && expo export --platform android --output-dir ../../dist/mobile-bundle-smoke/android --clear",
-    "ci:android-native": "cd android && ./gradlew :centraid-tunnel:compileDebugKotlin --no-daemon",
+    "ci:android-native": "cd android && ./gradlew :app:compileDebugKotlin --no-daemon",
     "ci:native-state": "node scripts/verify-native-state.mjs",
     "ci:xcode": "node scripts/check-xcode-minimum.mjs",
     "generate:theme": "bun scripts/generate-theme.ts",

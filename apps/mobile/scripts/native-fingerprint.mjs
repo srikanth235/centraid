@@ -40,7 +40,14 @@ export async function fingerprintForPlatform(platform) {
     platforms: [platform],
     // The committed expectation is the ratchet output, not an input. Including
     // it would make every refresh self-referential and impossible to settle.
-    ignorePaths: ["native-fingerprints.json"],
+    ignorePaths: [
+      "native-fingerprints.json",
+      // Kotlin 2.1 writes local daemon error reports here during a native
+      // compile. They describe the machine/build attempt, not binary inputs,
+      // and Expo's defaults do not yet exclude this directory. Without this,
+      // merely running the compile gate changes the next cache key.
+      "android/.kotlin/**/*",
+    ],
   });
   // Guard against a silent empty digest becoming a constant (always-hit) key.
   if (!fingerprint.hash || fingerprint.sources.length === 0) {

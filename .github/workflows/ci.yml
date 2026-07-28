@@ -447,7 +447,7 @@ jobs:
         run: bun run --cwd apps/mobile ci:native-state
       - name: Bundle iOS and Android through Metro
         run: bun run --cwd apps/mobile ci:bundle
-      - name: Compile the Android Expo tunnel module
+      - name: Compile the Android application and native modules
         run: bun run --cwd apps/mobile ci:android-native
 
   docs:

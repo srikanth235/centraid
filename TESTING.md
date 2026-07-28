@@ -343,9 +343,9 @@ does **not** prove that Metro can transform/resolve the app or that either
 native project builds. Expo/React Native peer ranges can accept incompatible
 major Babel versions at install time. The required PR `mobile-smoke` job is the
 compensating control: it runs Expo's compatibility check as an advisory, then
-requires iOS and Android Metro exports plus compilation of the Android Expo
-tunnel module to succeed. `expo install --check` currently catches Expo's
-bundled-native-module version drift, but it does not model the
+requires iOS and Android Metro exports plus compilation of the Android
+application and its native modules to succeed. `expo install --check`
+currently catches Expo's bundled-native-module version drift, but it does not model the
 Babel-core/runtime constraints that broke #565 or Kotlin members added by a
 new Expo Module base class. Metro catches the transform-time and resolve-time
 failures; the Kotlin compile catches native source/API collisions.
