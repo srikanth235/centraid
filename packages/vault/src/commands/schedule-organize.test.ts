@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -36,6 +36,7 @@ describe("schedule organization commands", () => {
       )
       .run(calendarId, boot.ownerPartyId);
   });
+  afterEach(() => vi.useRealTimers());
 
   function invoke(command: string, input: Record<string, unknown>) {
     return gateway.invoke(owner, {
@@ -190,5 +191,35 @@ describe("schedule organization commands", () => {
       recurrence_anchor: "completion",
       recurrence_tz: "Asia/Kolkata",
     });
+  });
+
+  test("a completion-relative monthly task anchors its next occurrence to completion", () => {
+    const taskResult = invoke("schedule.add_task", {
+      title: "Review household budget",
+      due_at: "2026-07-01T03:30:00.000Z",
+      rrule: "FREQ=MONTHLY",
+    });
+    const taskId = (taskResult as { output: { task_id: string } }).output
+      .task_id;
+    expect(
+      invoke("schedule.organize_task", {
+        task_id: taskId,
+        clear_project: true,
+        sort_order: 0,
+        recurrence_anchor: "completion",
+        recurrence_tz: "Asia/Kolkata",
+      }).status
+    ).toBe("executed");
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T12:15:00.000Z"));
+    const completed = invoke("schedule.set_task_status", {
+      task_id: taskId,
+      status: "completed",
+    });
+    expect(completed.status).toBe("executed");
+    expect(
+      (completed as { output: { next_due_at?: string } }).output.next_due_at
+    ).toBe("2026-08-29T12:15:00.000Z");
   });
 });

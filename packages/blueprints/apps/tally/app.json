@@ -28,6 +28,12 @@
       },
       { "schema": "tally", "table": "settlement", "verbs": "read" },
       { "schema": "tally", "table": "obligation", "verbs": "read" },
+      { "schema": "tally", "table": "recurring_expense", "verbs": "read" },
+      {
+        "schema": "schedule",
+        "table": "recurrence_exception",
+        "verbs": "read"
+      },
       { "schema": "tally", "table": "add_friend", "verbs": "act" },
       { "schema": "tally", "table": "create_group", "verbs": "act" },
       { "schema": "tally", "table": "rename_group", "verbs": "act" },
@@ -41,6 +47,21 @@
       { "schema": "tally", "table": "restore_expense", "verbs": "act" },
       { "schema": "tally", "table": "undo_expense", "verbs": "act" },
       { "schema": "tally", "table": "settle_up", "verbs": "act" },
+      {
+        "schema": "tally",
+        "table": "save_recurring_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "materialize_recurring_expense",
+        "verbs": "act"
+      },
+      {
+        "schema": "tally",
+        "table": "edit_recurring_expense_occurrence",
+        "verbs": "act"
+      },
       {
         "schema": "core",
         "table": "entity_revision",
@@ -164,6 +185,16 @@
           "group_id": { "type": "string", "minLength": 1 },
           "description": { "type": "string", "minLength": 1 },
           "amount_minor": { "type": "integer", "minimum": 1 },
+          "original_amount_minor": { "type": "integer", "minimum": 1 },
+          "original_currency": { "type": "string", "pattern": "^[A-Za-z]{3}$" },
+          "settlement_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "rate_scaled": { "type": "integer", "minimum": 1 },
+          "rate_scale": { "type": "integer", "minimum": 0, "maximum": 12 },
+          "rate_source": { "type": "string", "minLength": 1 },
+          "rate_date": { "type": "string", "minLength": 1 },
           "paid_by": { "type": "string", "minLength": 1 },
           "spent_on": { "type": "string" },
           "category": { "type": "string" },
@@ -201,6 +232,126 @@
       "writes": []
     },
     {
+      "name": "save-recurring-expense",
+      "description": "Create or edit a deterministic recurring expense template with fixed-point currency provenance and a human-readable recurrence preview.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "template_id": { "type": "string", "minLength": 1 },
+          "group_id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "original_amount_minor": { "type": "integer", "minimum": 1 },
+          "original_currency": { "type": "string", "pattern": "^[A-Za-z]{3}$" },
+          "settlement_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "paid_by": { "type": "string", "minLength": 1 },
+          "category": { "type": "string", "minLength": 1 },
+          "splits": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": { "type": "string", "minLength": 1 },
+                "weight": { "type": "integer", "minimum": 1 }
+              },
+              "required": ["party_id", "weight"],
+              "additionalProperties": false
+            }
+          },
+          "rrule": { "type": "string", "minLength": 1 },
+          "anchor_start": { "type": "string", "minLength": 1 },
+          "time_zone": { "type": "string", "minLength": 1 },
+          "rate_scaled": { "type": "integer", "minimum": 1 },
+          "rate_scale": { "type": "integer", "minimum": 0, "maximum": 12 },
+          "rate_source": { "type": "string", "minLength": 1 },
+          "rate_date": { "type": "string", "minLength": 1 },
+          "status": {
+            "type": "string",
+            "enum": ["active", "paused", "ended"]
+          }
+        },
+        "required": [
+          "group_id",
+          "description",
+          "original_amount_minor",
+          "original_currency",
+          "settlement_currency",
+          "paid_by",
+          "category",
+          "splits",
+          "rrule",
+          "anchor_start",
+          "time_zone"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "materialize-recurring-expense",
+      "description": "Materialize one exact recurring occurrence idempotently, respecting occurrence/future exceptions.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "template_id": { "type": "string", "minLength": 1 },
+          "original_start": { "type": "string", "minLength": 1 }
+        },
+        "required": ["template_id", "original_start"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "edit-recurring-expense-occurrence",
+      "description": "Skip or override this occurrence, this and future occurrences, or the full recurring expense series.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "template_id": { "type": "string", "minLength": 1 },
+          "original_start": { "type": "string", "minLength": 1 },
+          "scope": {
+            "type": "string",
+            "enum": ["occurrence", "future", "series"]
+          },
+          "action": { "type": "string", "enum": ["skip", "override"] },
+          "override": { "type": "object" }
+        },
+        "required": ["template_id", "original_start", "scope", "action"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "edit-expense",
       "description": "Rewrite an expense through tally.edit_expense — same fields as add, re-validated the same way.",
       "confirmation": "none",
@@ -210,6 +361,16 @@
           "expense_id": { "type": "string", "minLength": 1 },
           "description": { "type": "string", "minLength": 1 },
           "amount_minor": { "type": "integer", "minimum": 1 },
+          "original_amount_minor": { "type": "integer", "minimum": 1 },
+          "original_currency": { "type": "string", "pattern": "^[A-Za-z]{3}$" },
+          "settlement_currency": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{3}$"
+          },
+          "rate_scaled": { "type": "integer", "minimum": 1 },
+          "rate_scale": { "type": "integer", "minimum": 0, "maximum": 12 },
+          "rate_source": { "type": "string", "minLength": 1 },
+          "rate_date": { "type": "string", "minLength": 1 },
           "paid_by": { "type": "string", "minLength": 1 },
           "spent_on": { "type": "string" },
           "category": { "type": "string" },

@@ -61,6 +61,8 @@ export const CHANGE_TABLES = [
   "core.link",
   "core.content_item",
   "core.party_identifier",
+  "social.contact_channel",
+  "people.merge",
   "core.tag",
   "core.concept",
   "knowledge.note",
@@ -679,10 +681,18 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onSettleDebt={(debtId) =>
           logic.drawerAct("settle-debt", { debt_id: debtId }, "Debt settled")
         }
+        onSaveContact={(fields) => logic.saveContactChannel(dp!, fields)}
+        onDeleteContact={(channelId) =>
+          void logic.deleteContactChannel(dp!, channelId)
+        }
         onEdit={(fields) => logic.editPerson(dp!, fields)}
         onSetCadence={(cadenceDays) => logic.setCadence(dp!, cadenceDays)}
         onTrash={() => logic.trashPerson(dp!)}
         onUndo={(revisionId) => void logic.undoPerson(dp!.party_id, revisionId)}
+        mergeCandidates={data.people.filter(
+          (person2) => person2.party_id !== dp?.party_id
+        )}
+        onMerge={(targetPartyId) => void logic.mergePerson(dp!, targetPartyId)}
       />
     );
   }

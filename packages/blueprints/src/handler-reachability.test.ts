@@ -34,7 +34,7 @@ const REPO_ROOT = path.resolve(PACKAGE_ROOT, "../..");
 const APPS_ROOT = path.join(PACKAGE_ROOT, "apps");
 const MOBILE_APPS_ROOT = path.join(REPO_ROOT, "apps/mobile/src/apps");
 
-const WEBVIEW_APPS = new Set(["notes", "people", "tally", "tasks"]);
+const WEBVIEW_APPS = new Set(["notes"]);
 
 const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   "locker.query.autofill-candidates": {
@@ -58,7 +58,10 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   agenda: ["upcoming", "parties", "search"],
   docs: ["drive", "search"],
   locker: ["auth", "items", "item"],
+  people: ["people", "person"],
   photos: ["library", "faces", "duplicates", "enrichment-status", "search"],
+  tally: ["dashboard", "group"],
+  tasks: ["board"],
 };
 
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
@@ -88,7 +91,62 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "query.search",
     "query.trash",
   ],
+  people: [
+    "action.edit-person",
+    "action.set-cadence",
+    "action.trash-person",
+    "action.restore-person",
+    "action.undo-person",
+    "action.log-interaction",
+    "action.star-person",
+    "action.unstar-person",
+    "action.move-person",
+    "action.add-note",
+    "action.add-task",
+    "action.toggle-task",
+    "action.add-important-date",
+    "action.toggle-reminder",
+    "action.add-relationship",
+    "action.add-gift",
+    "action.toggle-gift",
+    "action.add-debt",
+    "action.settle-debt",
+    "action.create-list",
+    "action.rename-list",
+    "action.delete-list",
+    "action.add-journal-entry",
+    "query.search",
+    "query.journal",
+    "query.dashboard",
+    "query.trash",
+    "query.history",
+  ],
   photos: ["action.restore-album", "action.tag-asset", "action.untag-asset"],
+  tally: [
+    "action.add-receipt-expense",
+    "action.edit-expense",
+    "action.delete-expense",
+    "action.undo-expense",
+    "action.restore-expense",
+    "action.settle-up",
+    "action.add-friend",
+    "action.rename-group",
+    "action.add-group-member",
+    "action.remove-group-member",
+    "action.delete-group",
+    "query.friend",
+    "query.activity",
+    "query.search",
+    "query.history",
+  ],
+  tasks: [
+    "action.edit",
+    "action.attach",
+    "action.detach",
+    "action.add-tag",
+    "action.remove-tag",
+    "query.search",
+  ],
 };
 
 const MOBILE_EXCEPTION_RATIONALE =

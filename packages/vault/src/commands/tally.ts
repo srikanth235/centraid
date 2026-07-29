@@ -35,6 +35,10 @@ import {
   markEntityRevisionUndone,
   recordEntityRevision,
 } from "./entity-revisions.js";
+import {
+  convertCurrencyMinor,
+  registerTallyOrganizeCommands,
+} from "./tally-organize.js";
 
 /** The vault owner's party id — Tally's implicit `me`. */
 function ownerPartyId(ctx: HandlerCtx): string {
@@ -111,6 +115,13 @@ interface ExpenseSnapshot {
     paid_by: string;
     spent_on: string;
     category: string;
+    original_amount_minor: number | null;
+    original_currency: string | null;
+    settlement_currency: string | null;
+    rate_scaled: number | null;
+    rate_scale: number | null;
+    rate_source: string | null;
+    rate_date: string | null;
     deleted_at: string | null;
     purge_at: string | null;
   };
@@ -121,6 +132,8 @@ function expenseSnapshot(ctx: HandlerCtx, expenseId: string): ExpenseSnapshot {
   const expense = ctx.db
     .prepare(
       `SELECT description, amount_minor, paid_by, spent_on, category,
+              original_amount_minor, original_currency, settlement_currency,
+              rate_scaled, rate_scale, rate_source, rate_date,
               deleted_at, purge_at
          FROM tally_expense WHERE expense_id = ?`
     )
@@ -160,7 +173,9 @@ function restoreExpenseSnapshot(
     .prepare(
       `UPDATE tally_expense
           SET description = ?, amount_minor = ?, paid_by = ?, spent_on = ?,
-              category = ?, deleted_at = ?, purge_at = ?
+              category = ?, original_amount_minor = ?, original_currency = ?,
+              settlement_currency = ?, rate_scaled = ?, rate_scale = ?,
+              rate_source = ?, rate_date = ?, deleted_at = ?, purge_at = ?
         WHERE expense_id = ?`
     )
     .run(
@@ -169,6 +184,13 @@ function restoreExpenseSnapshot(
       expense.paid_by,
       expense.spent_on,
       expense.category,
+      expense.original_amount_minor,
+      expense.original_currency,
+      expense.settlement_currency,
+      expense.rate_scaled,
+      expense.rate_scale,
+      expense.rate_source,
+      expense.rate_date,
       expense.deleted_at,
       expense.purge_at,
       expenseId
@@ -683,6 +705,13 @@ const ADD_EXPENSE: CommandDefinition = {
       spent_on: { type: "string" },
       category: { type: "string", enum: CATEGORY_ENUM },
       splits: SPLIT_SCHEMA,
+      original_amount_minor: { type: "integer", minimum: 1 },
+      original_currency: { type: "string", pattern: "^[A-Za-z]{3}$" },
+      settlement_currency: { type: "string", pattern: "^[A-Za-z]{3}$" },
+      rate_scaled: { type: "integer", minimum: 1 },
+      rate_scale: { type: "integer", minimum: 0, maximum: 12 },
+      rate_source: { type: "string", minLength: 1 },
+      rate_date: { type: "string", minLength: 1 },
     },
   },
   outputSchema: {
@@ -719,12 +748,46 @@ const ADD_EXPENSE: CommandDefinition = {
       spent_on?: string;
       category: string;
       splits: SplitInput[];
+      original_amount_minor?: number;
+      original_currency?: string;
+      settlement_currency?: string;
+      rate_scaled?: number;
+      rate_scale?: number;
+      rate_source?: string;
+      rate_date?: string;
     };
+    const originalCurrency = (
+      input.original_currency ?? baseCurrency(ctx)
+    ).toUpperCase();
+    const settlementCurrency = (
+      input.settlement_currency ?? baseCurrency(ctx)
+    ).toUpperCase();
+    const originalAmount = input.original_amount_minor ?? input.amount_minor;
+    const rateScale = input.rate_scale ?? 6;
+    const rateScaled =
+      input.rate_scaled ??
+      (originalCurrency === settlementCurrency ? 10 ** rateScale : undefined);
+    if (
+      rateScaled === undefined ||
+      (originalCurrency !== settlementCurrency &&
+        (!input.rate_source || !input.rate_date))
+    )
+      throw new Error(
+        "cross-currency expenses need a rate, source, and effective date"
+      );
+    if (
+      convertCurrencyMinor(originalAmount, rateScaled, rateScale) !==
+      input.amount_minor
+    )
+      throw new Error("settlement amount does not match the supplied rate");
     const expenseId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO tally_expense (expense_id, group_id, description, amount_minor, paid_by, spent_on, category, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tally_expense
+          (expense_id, group_id, description, amount_minor, paid_by, spent_on,
+           category, created_at, original_amount_minor, original_currency,
+           settlement_currency, rate_scaled, rate_scale, rate_source, rate_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         expenseId,
@@ -734,7 +797,14 @@ const ADD_EXPENSE: CommandDefinition = {
         input.paid_by,
         input.spent_on ?? ctx.now.slice(0, 10),
         input.category,
-        ctx.now
+        ctx.now,
+        originalAmount,
+        originalCurrency,
+        settlementCurrency,
+        rateScaled,
+        rateScale,
+        input.rate_source ?? "identity",
+        input.rate_date ?? input.spent_on ?? ctx.now.slice(0, 10)
       );
     ctx.wrote("tally.expense", expenseId);
     writeSplits(
@@ -779,6 +849,13 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
       spent_on: { type: "string" },
       category: { type: "string", enum: CATEGORY_ENUM },
       splits: SPLIT_SCHEMA,
+      original_amount_minor: { type: "integer", minimum: 1 },
+      original_currency: { type: "string", pattern: "^[A-Za-z]{3}$" },
+      settlement_currency: { type: "string", pattern: "^[A-Za-z]{3}$" },
+      rate_scaled: { type: "integer", minimum: 1 },
+      rate_scale: { type: "integer", minimum: 0, maximum: 12 },
+      rate_source: { type: "string", minLength: 1 },
+      rate_date: { type: "string", minLength: 1 },
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       ocr_text: { type: "string", minLength: 1, maxLength: 200_000 },
       line_items: RECEIPT_LINE_SCHEMA,
@@ -1020,17 +1097,46 @@ const EDIT_EXPENSE: CommandDefinition = {
       spent_on?: string;
       category: string;
       splits: SplitInput[];
+      original_amount_minor?: number;
+      original_currency?: string;
+      settlement_currency?: string;
+      rate_scaled?: number;
+      rate_scale?: number;
+      rate_source?: string;
+      rate_date?: string;
     };
     const row = ctx.db
       .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
       .get(input.expense_id) as { group_id: string } | undefined;
     if (!row) throw new Error("expense not found");
+    const originalCurrency = (
+      input.original_currency ?? baseCurrency(ctx)
+    ).toUpperCase();
+    const settlementCurrency = (
+      input.settlement_currency ?? baseCurrency(ctx)
+    ).toUpperCase();
+    const originalAmount = input.original_amount_minor ?? input.amount_minor;
+    const rateScale = input.rate_scale ?? 6;
+    const rateScaled =
+      input.rate_scaled ??
+      (originalCurrency === settlementCurrency ? 10 ** rateScale : undefined);
+    if (
+      rateScaled === undefined ||
+      convertCurrencyMinor(originalAmount, rateScaled, rateScale) !==
+        input.amount_minor
+    )
+      throw new Error("settlement amount does not match the supplied rate");
     const revision = recordExpenseRevision(ctx, input.expense_id, "edit");
     ctx.db
       .prepare(
         `UPDATE tally_expense
            SET description = :description, amount_minor = :amount_minor, paid_by = :paid_by,
-               spent_on = COALESCE(:spent_on, spent_on), category = :category
+               spent_on = COALESCE(:spent_on, spent_on), category = :category,
+               original_amount_minor = :original_amount_minor,
+               original_currency = :original_currency,
+               settlement_currency = :settlement_currency,
+               rate_scaled = :rate_scaled, rate_scale = :rate_scale,
+               rate_source = :rate_source, rate_date = :rate_date
          WHERE expense_id = :expense_id`
       )
       .run({
@@ -1040,6 +1146,13 @@ const EDIT_EXPENSE: CommandDefinition = {
         paid_by: input.paid_by,
         spent_on: input.spent_on ?? null,
         category: input.category,
+        original_amount_minor: originalAmount,
+        original_currency: originalCurrency,
+        settlement_currency: settlementCurrency,
+        rate_scaled: rateScaled,
+        rate_scale: rateScale,
+        rate_source: input.rate_source ?? "identity",
+        rate_date: input.rate_date ?? input.spent_on ?? ctx.now.slice(0, 10),
       });
     ctx.wrote("tally.expense", input.expense_id);
     writeSplits(
@@ -1435,6 +1548,7 @@ const SET_EXPENSE_MEMO: CommandDefinition = {
 
 /** Register the Tally commands on a gateway. */
 export function registerTallyCommands(gateway: Gateway): void {
+  registerTallyOrganizeCommands(gateway);
   gateway.registerCommand(ADD_FRIEND);
   gateway.registerCommand(CREATE_GROUP);
   gateway.registerCommand(RENAME_GROUP);

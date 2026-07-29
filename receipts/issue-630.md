@@ -82,7 +82,25 @@ instant as their durable identity. This keeps concurrent offline edits and
 future-scope exceptions addressable even when an override changes the visible
 start. In a fall-back overlap, the earlier absolute instant is canonical and
 the duplicate wall occurrence is suppressed, matching the automation policy
-documented in docs/cron-timezone.md. -->
+documented in docs/cron-timezone.md.
+
+The remaining organization surface is now first-class on web and native:
+Tasks has Inbox/Today/Upcoming/project views, area-classified projects,
+sections, cross-section moves, and persistent drag ordering; People has
+normalized contact-channel CRUD with preferred/provenance/duplicate guidance
+plus merge undo; and Tally uses fixed-point original/settlement amounts,
+auditable rate source/date, locale display, recurring previews, idempotent
+materialization, and skip/edit occurrence/future/series controls. Native
+Agenda creation now exposes the same complete event contract as editing and
+local reminder text intentionally omits the event title.
+
+Exit evidence at this checkpoint: the vault organization/recurrence suites
+pass (6 tests), independent replicas converge on concurrent task/contact/
+expense/event logs, blueprint reachability and query suites pass (29 tests),
+and the weekly-09:00 matrix covers Asia/Kolkata, Europe/London,
+America/New_York, and Australia/Sydney across a full year. Mobile and
+blueprint typechecks, mobile import boundaries, and the focused native suite
+are green. -->
 
 ### Costs
 
@@ -105,3 +123,5 @@ documented in docs/cron-timezone.md. -->
 | codex-019fad18-4c1-1785337231-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 440644 | 0 | 25269760 | 80374 | 521018 | 8.6247 | 4366638 | 0 | 226159616 | 631528 | feat(time): unify recurrence and Agenda editing (#630) |
 | codex-019fad18-4c1-1785337540-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 73402 | 0 | 4989952 | 3951 | 77353 | 1.4903 | 4440040 | 0 | 231149568 | 635479 | feat(time): unify recurrence and Agenda editing (#630) |
 | codex-019fad18-4c1-1785337630-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 9699 | 0 | 1854464 | 631 | 10330 | 0.4973 | 4449739 | 0 | 233004032 | 636110 | feat(time): unify recurrence and Agenda editing (#630) -m governance: allow-tool |
+| codex-019fad18-4c1-1785340357-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 482747 | 0 | 28319488 | 98138 | 580885 | 9.7588 | 4932486 | 0 | 261323520 | 734248 | feat(blueprints): complete organizational parity (#630) |
+| codex-019fad18-4c1-1785340549-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 34754 | 0 | 2243584 | 4721 | 39475 | 0.7186 | 4967240 | 0 | 263567104 | 738969 | feat(blueprints): complete organizational parity (#630) |

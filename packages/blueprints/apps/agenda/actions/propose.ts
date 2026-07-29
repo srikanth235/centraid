@@ -26,6 +26,9 @@ export default async function propose({
           ? { recurrence_semantics: String(input.recurrence_semantics) }
           : {}),
         ...(input.rrule ? { rrule: String(input.rrule) } : {}),
+        ...(input.location_place_id
+          ? { location_place_id: String(input.location_place_id) }
+          : {}),
         ...(input.conferencing_uri
           ? { conferencing_uri: String(input.conferencing_uri) }
           : {}),

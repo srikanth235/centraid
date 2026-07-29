@@ -104,6 +104,10 @@
             "type": "string",
             "minLength": 1
           },
+          "location_place_id": {
+            "type": "string",
+            "minLength": 1
+          },
           "conferencing_uri": {
             "type": "string",
             "minLength": 1

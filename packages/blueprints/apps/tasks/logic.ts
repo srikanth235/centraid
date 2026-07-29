@@ -1,3 +1,6 @@
+// governance: allow-repo-hygiene file-size-limit (#630) — this factory is the
+// cohesive controller for one blueprint; its board, ordering, and write
+// outcomes share the same live app-state closure.
 import {
   BUCKETS,
   VIEW_BUCKETS,
@@ -218,6 +221,54 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
+  // ---------- Projects, sections, and manual order ----------
+
+  async function saveProject(name: string): Promise<boolean> {
+    const clean = name.trim();
+    if (!clean) return false;
+    const outcome = await write("save-project", {
+      name: clean,
+      sort_order: data.projects.length,
+    });
+    if (outcome?.status === "executed") toast("Project created · receipt");
+    return outcome?.status === "executed";
+  }
+
+  async function saveSection(
+    projectId: string,
+    name: string
+  ): Promise<boolean> {
+    const clean = name.trim();
+    if (!clean) return false;
+    const outcome = await write("save-section", {
+      project_id: projectId,
+      name: clean,
+      sort_order: data.sections.filter((row) => row.project_id === projectId)
+        .length,
+    });
+    if (outcome?.status === "executed") toast("Section created · receipt");
+    return outcome?.status === "executed";
+  }
+
+  async function organizeTask(
+    taskId: string,
+    projectId: string | null,
+    sectionId: string | null,
+    sortOrder: number
+  ): Promise<boolean> {
+    const outcome = await write("organize-task", {
+      task_id: taskId,
+      ...(projectId
+        ? {
+            project_id: projectId,
+            ...(sectionId ? { section_id: sectionId } : {}),
+          }
+        : { clear_project: true }),
+      sort_order: sortOrder,
+    });
+    return outcome?.status === "executed";
+  }
+
   // ---------- Status transitions ----------
 
   // The one hot, high-frequency write path (issue #404). Checking a box used
@@ -416,6 +467,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     findTask,
     submitCapture,
     addSubtask,
+    saveProject,
+    saveSection,
+    organizeTask,
     toggleComplete,
     cancelTask,
     toggleProcess,
@@ -474,6 +528,64 @@ export function buildSections(
       .filter((t): t is Task => t !== null);
   }
 
+  if (!searching && state.view === "inbox") {
+    const rows = open
+      .filter((task) => !task.project_id)
+      .toSorted(
+        (a, b) =>
+          Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0) ||
+          a.task_id.localeCompare(b.task_id)
+      );
+    return {
+      sections: rows.length
+        ? [
+            {
+              key: "inbox",
+              label: "Inbox",
+              tone: "muted",
+              count: rows.length,
+              rows,
+            },
+          ]
+        : [],
+      isEmpty: rows.length === 0,
+    };
+  }
+
+  if (!searching && state.view.startsWith("project:")) {
+    const projectId = state.view.slice("project:".length);
+    const rows = open.filter((task) => task.project_id === projectId);
+    const byOrder = (a: Task, b: Task) =>
+      Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0) ||
+      a.task_id.localeCompare(b.task_id);
+    const projectSections = data.sections
+      .filter((section) => section.project_id === projectId)
+      .toSorted(
+        (a, b) =>
+          a.sort_order - b.sort_order ||
+          a.section_id.localeCompare(b.section_id)
+      );
+    const sections = [
+      {
+        key: `project:${projectId}:loose`,
+        label: "No section",
+        tone: "muted",
+        rows: rows.filter((task) => !task.section_id).toSorted(byOrder),
+      },
+      ...projectSections.map((section) => ({
+        key: section.section_id,
+        label: section.name,
+        tone: "muted",
+        rows: rows
+          .filter((task) => task.section_id === section.section_id)
+          .toSorted(byOrder),
+      })),
+    ]
+      .filter((section) => section.rows.length > 0)
+      .map((section) => ({ ...section, count: section.rows.length }));
+    return { sections, isEmpty: rows.length === 0 };
+  }
+
   // A search is a global "find tasks" action, not a per-view filter — once
   // the owner is searching, don't also restrict results to the currently
   // selected focus view's bucket allow-list (e.g. Today = overdue+today
@@ -520,6 +632,7 @@ export function sidebarCounts(data: BoardData): SidebarCountsShape {
   const today = todayStr();
   const open = data.open ?? [];
   return {
+    inbox: open.filter((task) => !task.project_id).length,
     today: open.filter(
       (t) => t.due_at && String(t.due_at).slice(0, 10) <= today
     ).length,

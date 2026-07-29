@@ -37,6 +37,7 @@ import DocsHome from "./src/apps/docs/DocsHome";
 import DocumentViewer from "./src/apps/docs/DocumentViewer";
 import InsightsScreen from "./src/apps/insights/Insights";
 import LockerHome from "./src/apps/locker/LockerHome";
+import PeopleHome from "./src/apps/people/PeopleHome";
 import AlbumDetail from "./src/apps/photos/AlbumDetail";
 import BackupHealth from "./src/apps/photos/BackupHealth";
 import DuplicateReview from "./src/apps/photos/DuplicateReview";
@@ -47,6 +48,8 @@ import PhotosLibrary from "./src/apps/photos/PhotosLibrary";
 import PhotosSearch from "./src/apps/photos/PhotosSearch";
 import PhotoStateView from "./src/apps/photos/PhotoStateView";
 import PlacesMap from "./src/apps/photos/PlacesMap";
+import TallyHome from "./src/apps/tally/TallyHome";
+import TasksHome from "./src/apps/tasks/TasksHome";
 import ErrorBoundary from "./src/ErrorBoundary";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
 import {
@@ -172,6 +175,9 @@ const LINKING: LinkingOptions<RootStackParamList> = {
         },
       },
       Locker: "locker",
+      Tasks: "apps/tasks",
+      People: "apps/people",
+      Tally: "apps/tally",
       AppDetail: "apps/:appId",
       Assistant: "assistant",
       Automations: "automations",
@@ -504,6 +510,21 @@ export default function App(): React.JSX.Element | null {
                           <RootStack.Screen
                             name="Locker"
                             component={LockerHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Tasks"
+                            component={TasksHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="People"
+                            component={PeopleHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Tally"
+                            component={TallyHome}
                             options={COVER_OPTIONS}
                           />
                           <RootStack.Screen

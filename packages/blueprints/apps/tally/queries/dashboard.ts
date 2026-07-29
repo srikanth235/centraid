@@ -1,3 +1,6 @@
+// governance: allow-repo-hygiene file-size-limit (#630) — the bounded dashboard
+// projection and balance derivation intentionally stay together so every
+// monetary view uses the same fixed-point source rows and allocation rules.
 /**
  * The dashboard, and the shared balance engine every Tally query reads through.
  * Balances are DERIVED here, never stored: loadTally() pulls the ground facts
@@ -41,6 +44,29 @@ interface ExpenseRowRaw {
   description?: string;
   category?: string;
   spent_on?: string;
+  original_amount_minor?: number | null;
+  original_currency?: string | null;
+  settlement_currency?: string | null;
+  rate_scaled?: number | null;
+  rate_scale?: number | null;
+  rate_source?: string | null;
+  rate_date?: string | null;
+  recurring_template_id?: string | null;
+}
+
+interface RecurringRow {
+  template_id: string;
+  group_id: string;
+  description: string;
+  original_amount_minor: number;
+  original_currency: string;
+  settlement_currency: string;
+  rate_source?: string | null;
+  rate_date?: string | null;
+  rrule: string;
+  anchor_start: string;
+  time_zone: string;
+  status: "active" | "paused" | "ended";
 }
 type ExpenseFact = ExpenseRowRaw & { splits: Record<string, number> };
 interface ReceiptLineFact {
@@ -457,6 +483,14 @@ export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
     group_id: e.group_id,
     description: e.description,
     amount_minor: e.amount_minor,
+    original_amount_minor: e.original_amount_minor ?? e.amount_minor,
+    original_currency: e.original_currency ?? data.currency,
+    settlement_currency: e.settlement_currency ?? data.currency,
+    rate_scaled: e.rate_scaled ?? 1_000_000,
+    rate_scale: e.rate_scale ?? 6,
+    rate_source: e.rate_source ?? "identity",
+    rate_date: e.rate_date ?? e.spent_on,
+    recurring_template_id: e.recurring_template_id ?? null,
     category: e.category,
     spent_on: e.spent_on,
     paid_by: e.paid_by,
@@ -500,13 +534,33 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   try {
     const data = await loadTally(ctx, purpose);
-    const trashRes = await ctx.vault.read({
-      entity: "tally.expense",
-      where: [{ column: "deleted_at", op: "not-null" }],
-      orderBy: { column: "deleted_at", dir: "desc" },
-      limit: 100,
-      purpose,
-    });
+    const [trashRes, recurringRes, exceptionRes] = await Promise.all([
+      ctx.vault.read({
+        entity: "tally.expense",
+        where: [{ column: "deleted_at", op: "not-null" }],
+        orderBy: { column: "deleted_at", dir: "desc" },
+        limit: 100,
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: "tally.recurring_expense",
+        orderBy: { column: "updated_at", dir: "desc" },
+        limit: 500,
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: "schedule.recurrence_exception",
+        where: [
+          {
+            column: "target_type",
+            op: "eq",
+            value: "tally.recurring_expense",
+          },
+        ],
+        limit: 2000,
+        purpose,
+      }),
+    ]);
     const bal = pairwise(data);
     const friends = data.friends.map((f) => {
       const p = personOf(data, f.party_id);
@@ -546,12 +600,53 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       deleted_at: String(row.deleted_at),
       purge_at: row.purge_at == null ? null : String(row.purge_at),
     }));
+    const now = new Date();
+    const rangeFrom = now.toISOString();
+    const rangeTo = new Date(now.getTime() + 180 * 86_400_000).toISOString();
+    const exceptionRows = exceptionRes.rows ?? [];
+    const recurring = (
+      (recurringRes.rows ?? []) as unknown as RecurringRow[]
+    ).map((template) => {
+      const instances = ctx.time.expandRecurrence({
+        rrule: template.rrule,
+        start: template.anchor_start,
+        rangeFrom,
+        rangeTo,
+        timeZone: template.time_zone,
+        maxInstances: 8,
+      });
+      const exceptions = exceptionRows
+        .filter((row) => row.target_id === template.template_id)
+        .map((row) => ({
+          originalStart: String(row.original_start),
+          action: String(row.action) as "skip" | "override",
+          scope: String(row.scope) as "occurrence" | "future",
+          ...(row.override_json
+            ? {
+                start: String(
+                  (
+                    JSON.parse(String(row.override_json)) as {
+                      start?: string;
+                    }
+                  ).start ?? ""
+                ),
+              }
+            : {}),
+        }));
+      const next = ctx.time.applyRecurrenceExceptions(instances, exceptions)[0];
+      return {
+        ...template,
+        preview: ctx.time.describeRecurrence(template.rrule) ?? template.rrule,
+        next_start: next?.originalStart ?? null,
+      };
+    });
     return {
       me: data.me,
       currency: data.currency,
       friends,
       groups,
       trash,
+      recurring,
       owe_total_minor: owe,
       owed_total_minor: owed,
     };
@@ -563,6 +658,7 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       friends: [],
       groups: [],
       trash: [],
+      recurring: [],
       owe_total_minor: 0,
       owed_total_minor: 0,
       vaultDenied: { code: e.code, message: e.message },

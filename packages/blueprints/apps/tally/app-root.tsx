@@ -49,6 +49,8 @@ export const CHANGE_TABLES = [
   "tally.expense_receipt",
   "tally.expense_line_item",
   "tally.expense_line_allocation",
+  "tally.recurring_expense",
+  "schedule.recurrence_exception",
   "core.content_item",
   "tally.settlement",
   "tally.friend",
@@ -86,6 +88,7 @@ function makeDash(): Dash {
     friends: [],
     groups: [],
     trash: [],
+    recurring: [],
     owe_total_minor: 0,
     owed_total_minor: 0,
   };
@@ -168,6 +171,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     dash.friends = merged.friends ?? [];
     dash.groups = merged.groups ?? [];
     dash.trash = merged.trash ?? [];
+    dash.recurring = merged.recurring ?? [];
     dash.owe_total_minor = merged.owe_total_minor;
     dash.owed_total_minor = merged.owed_total_minor;
     if (merged.me) dash.me = merged.me;
@@ -220,6 +224,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     setNewGroup: handleSetNewGroup,
     setSettle: handleSetSettle,
     undoExpense: handleUndoExpense,
+    materializeRecurringExpense: handleMaterializeRecurring,
+    editRecurringExpense: handleEditRecurring,
   } = logic;
 
   const setRoot = useCallback(
@@ -366,6 +372,16 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         onOpenAddFriend={handleOpenAddFriend}
         onOpenNewGroup={handleOpenNewGroup}
         onRestoreExpense={handleRestoreExpense}
+        onMaterializeRecurring={handleMaterializeRecurring}
+        onEditRecurring={(template, scope, action, override) =>
+          handleEditRecurring(
+            template.template_id,
+            template.next_start ?? new Date().toISOString(),
+            scope,
+            action,
+            override
+          )
+        }
       />
     ) : (
       <KitSkeleton rows={4} />

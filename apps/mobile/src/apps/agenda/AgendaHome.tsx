@@ -4,7 +4,6 @@ import React, { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -19,6 +18,8 @@ import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useTheme } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
+import AgendaCreateModal from "./AgendaCreateModal";
+import type { AgendaCreateInput } from "./AgendaCreateModal";
 import { styles } from "./AgendaHome.styles";
 import type { AgendaEventModel } from "./recurrence";
 import { useAgenda } from "./useAgenda";
@@ -51,14 +52,10 @@ export default function AgendaHome({
   const [cursor, setCursor] = useState(new Date());
   const [mode, setMode] = useState<ViewMode>("agenda");
   const [createOpen, setCreateOpen] = useState(false);
-  const [summary, setSummary] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [hiddenCalendars, setHiddenCalendars] = useState(new Set<string>());
-  const [startPreset, setStartPreset] = useState<"next-hour" | "tomorrow">(
-    "next-hour"
-  );
   const range = useMemo(
     () =>
       mode === "month"
@@ -98,59 +95,60 @@ export default function AgendaHome({
     return rows;
   }, [visibleEvents]);
 
-  const create = async (): Promise<void> => {
-    if (!session || !summary.trim() || !calendarId) {
+  const create = async (input: AgendaCreateInput): Promise<boolean> => {
+    if (!session || !calendarId) {
       Alert.alert(
         "Calendar unavailable",
         "Sync a calendar before creating an event."
       );
-      return;
+      return false;
     }
-    const start = new Date();
-    if (startPreset === "tomorrow") {
-      start.setDate(start.getDate() + 1);
-      start.setHours(9, 0, 0, 0);
-    } else {
-      start.setMinutes(Math.ceil(start.getMinutes() / 30) * 30, 0, 0);
-      start.setHours(start.getHours() + 1);
-    }
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
     const rowId = `optimistic-${Date.now()}`;
-    const result = await session.write("agenda", {
-      action: "propose",
-      input: {
-        summary: summary.trim(),
-        dtstart: start.toISOString(),
-        dtend: end.toISOString(),
-        start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        calendar_id: calendarId,
-        reminders: [{ minutes_before: 15 }],
-      },
-      optimistic: [
-        {
-          op: "upsert",
-          entity: "core.event",
-          rowId,
-          values: {
-            event_id: rowId,
-            summary: summary.trim(),
-            dtstart: start.toISOString(),
-            dtend: end.toISOString(),
-            start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            status: "tentative",
+    try {
+      const result = await session.write("agenda", {
+        action: "propose",
+        input,
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.event",
+            rowId,
+            values: {
+              event_id: rowId,
+              summary: String(input.summary),
+              dtstart: String(input.dtstart),
+              dtend: String(input.dtend),
+              start_tz: String(input.start_tz),
+              end_tz: String(input.end_tz),
+              recurrence_semantics: String(input.recurrence_semantics),
+              rrule: input.rrule ?? null,
+              status: "tentative",
+            },
           },
-        },
-      ],
-    });
-    setSummary("");
-    setCreateOpen(false);
-    if (result.status === "parked")
-      navigation.navigate("Settings", { screen: "Approvals" });
-    else if (result.status === "queued")
+        ],
+      });
+      if (result.status === "parked")
+        navigation.navigate("Settings", { screen: "Approvals" });
+      else if (result.status === "queued")
+        Alert.alert(
+          "Saved offline",
+          "This event will sync automatically when the gateway reconnects."
+        );
+      else if (result.status === "denied" || result.status === "failed") {
+        Alert.alert(
+          "Event not created",
+          result.reason ?? "The vault rejected this event."
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
       Alert.alert(
-        "Saved offline",
-        "This event will sync automatically when the gateway reconnects."
+        "Event not created",
+        error instanceof Error ? error.message : "Please try again."
       );
+      return false;
+    }
   };
   const refreshAgenda = async (): Promise<void> => {
     setRefreshing(true);
@@ -379,71 +377,16 @@ export default function AgendaHome({
           )
         }
       />
-      <Modal
-        transparent
-        animationType="fade"
-        visible={createOpen}
-        onRequestClose={() => setCreateOpen(false)}
-      >
-        <Pressable
-          style={styles.backdrop}
-          onPress={() => setCreateOpen(false)}
+      {createOpen ? (
+        <AgendaCreateModal
+          visible
+          calendars={agenda.calendars}
+          parties={agenda.parties}
+          defaultCalendarId={calendarId}
+          onClose={() => setCreateOpen(false)}
+          onCreate={create}
         />
-        <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
-            New event
-          </Text>
-          <Text style={[styles.dialogMeta, { color: colors.ink2 }]}>
-            1 hour · 15 minute local reminder
-          </Text>
-          <TextInput
-            autoFocus
-            value={summary}
-            onChangeText={setSummary}
-            placeholder="Event title"
-            placeholderTextColor={colors.ink3}
-            style={[
-              styles.input,
-              { borderColor: colors.lineStrong, color: colors.ink },
-            ]}
-          />
-          <View style={styles.startPresets}>
-            {(
-              [
-                ["next-hour", "Next hour"],
-                ["tomorrow", "Tomorrow · 9 AM"],
-              ] as const
-            ).map(([key, label]) => (
-              <Pressable
-                key={key}
-                onPress={() => setStartPreset(key)}
-                style={[
-                  styles.startPreset,
-                  {
-                    backgroundColor:
-                      startPreset === key ? colors.ink : colors.bgSunken,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.startPresetText,
-                    { color: startPreset === key ? colors.bg : colors.ink2 },
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable
-            style={[styles.create, { backgroundColor: colors.accent }]}
-            onPress={() => void create()}
-          >
-            <Text style={styles.createText}>Create tentative event</Text>
-          </Pressable>
-        </View>
-      </Modal>
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -120,6 +120,29 @@ export function toCents(str: string | null | undefined): number {
   if (!Number.isFinite(n)) return NaN;
   return Math.round(n * 100);
 }
+
+export function rateToScaled(rate: string): number {
+  const value = Number(rate);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(value * 1_000_000);
+}
+
+/** Same fixed-point, half-up conversion as the vault command. */
+export function convertMinor(
+  originalMinor: number,
+  rateScaled: number
+): number {
+  if (
+    !Number.isSafeInteger(originalMinor) ||
+    originalMinor <= 0 ||
+    !Number.isSafeInteger(rateScaled) ||
+    rateScaled <= 0
+  )
+    return 0;
+  return Number(
+    (BigInt(originalMinor) * BigInt(rateScaled) + 500_000n) / 1_000_000n
+  );
+}
 export function todayKey(): string {
   return localDayKey(new Date());
 }

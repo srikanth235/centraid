@@ -89,17 +89,29 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
               .filter((exception) => value(exception, "target_id") === id)
               .map((exception) => {
                 const raw = value<string>(exception, "override_json");
-                const override = raw
-                  ? (JSON.parse(raw) as {
-                      scope?: "occurrence" | "future";
-                      start?: string;
-                    })
-                  : {};
+                let override: {
+                  scope?: "occurrence" | "future";
+                  start?: string;
+                } = {};
+                if (raw) {
+                  try {
+                    const parsed = JSON.parse(raw) as unknown;
+                    if (parsed && typeof parsed === "object")
+                      override = parsed as typeof override;
+                  } catch {
+                    // A malformed replicated override is ignored; one bad row
+                    // must not blank the entire native Agenda.
+                  }
+                }
                 return {
                   originalStart:
                     value<string>(exception, "original_start") ?? "",
                   action:
                     value<"skip" | "override">(exception, "action") ?? "skip",
+                  scope:
+                    value<"occurrence" | "future">(exception, "scope") ??
+                    override.scope ??
+                    "occurrence",
                   ...override,
                 };
               })

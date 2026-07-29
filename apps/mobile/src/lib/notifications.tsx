@@ -77,7 +77,7 @@ async function handleNotificationResponse(
     }
     if (plan.kind === "open-app") {
       if (rootNavigationRef.isReady())
-        rootNavigationRef.navigate("AppDetail", { appId: plan.appId });
+        rootNavigationRef.navigate(plan.appId === "tasks" ? "Tasks" : "Tally");
     }
   } catch (error) {
     surfaceWriteFailure(error, "Notification action failed");

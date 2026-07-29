@@ -30,6 +30,7 @@ import {
 import { setStarred, starredExistsSql } from "./flags.js";
 import { contentItemFor } from "./knowledge.js";
 import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from "./links.js";
+import { registerPeopleOrganizeCommands } from "./people-organize.js";
 
 // An https URI, not a urn: one — this literal interpolates into condition SQL,
 // where `:lists` would read as a named parameter (the issue-258 colon-literal
@@ -1839,6 +1840,7 @@ const ADD_JOURNAL_ENTRY: CommandDefinition = {
 
 /** Register the People commands on a gateway. */
 export function registerPeopleCommands(gateway: Gateway): void {
+  registerPeopleOrganizeCommands(gateway);
   gateway.registerCommand(ADD_PERSON);
   gateway.registerCommand(EDIT_PERSON);
   gateway.registerCommand(SET_CADENCE);

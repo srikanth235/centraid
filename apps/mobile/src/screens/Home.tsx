@@ -191,6 +191,15 @@ export default function HomeScreen({
         case "locker":
           navigation.navigate("Locker");
           break;
+        case "tasks":
+          navigation.navigate("Tasks");
+          break;
+        case "people":
+          navigation.navigate("People");
+          break;
+        case "tally":
+          navigation.navigate("Tally");
+          break;
         case "app":
           navigation.navigate("AppDetail", { appId: route.appId });
           break;

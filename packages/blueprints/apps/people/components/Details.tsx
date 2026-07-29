@@ -9,7 +9,7 @@ import { useState } from "react";
 
 import { I } from "../icons.ts";
 import { armConfirm } from "../kit.ts";
-import type { DetailPerson } from "../types.ts";
+import type { DetailPerson, Person } from "../types.ts";
 import { Sections } from "./DetailSections.tsx";
 import { History } from "./History.tsx";
 import { Icon, KitAvatar } from "./Shared.tsx";
@@ -32,6 +32,8 @@ export interface DrawerCallbacks {
   onToggleGift: (giftId: string) => void;
   onAddDebt: (fields: Record<string, unknown>) => Promise<boolean>;
   onSettleDebt: (debtId: string) => void;
+  onSaveContact: (fields: Record<string, unknown>) => Promise<boolean>;
+  onDeleteContact: (channelId: string) => void;
 }
 
 export function Details({
@@ -45,6 +47,8 @@ export function Details({
   onSetCadence,
   onTrash,
   onUndo,
+  mergeCandidates,
+  onMerge,
   ...callbacks
 }: {
   person: DetailPerson | null;
@@ -57,6 +61,8 @@ export function Details({
   onSetCadence: (cadenceDays: number) => Promise<boolean>;
   onTrash: () => void;
   onUndo: (revisionId: string) => void;
+  mergeCandidates: Person[];
+  onMerge: (targetPartyId: string) => void;
 } & DrawerCallbacks) {
   const dp = person;
   const [editing, setEditing] = useState(false);
@@ -65,6 +71,7 @@ export function Details({
   const [role, setRole] = useState(dp?.role ?? "");
   const [met, setMet] = useState(dp?.met ?? "");
   const [cadence, setCadence] = useState(dp?.cadence_days ?? 30);
+  const [mergeTarget, setMergeTarget] = useState("");
   return (
     <>
       <button
@@ -238,6 +245,35 @@ export function Details({
                 }}
               >
                 Delete person
+              </button>
+              <select
+                className="kit-input"
+                aria-label="Merge this person into"
+                value={mergeTarget}
+                onChange={(event) => setMergeTarget(event.currentTarget.value)}
+              >
+                <option value="">Merge duplicate into…</option>
+                {mergeCandidates.map((person2) => (
+                  <option key={person2.party_id} value={person2.party_id}>
+                    {person2.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="kit-btn danger"
+                disabled={!mergeTarget}
+                onClick={(event) => {
+                  if (
+                    !armConfirm(event.currentTarget, {
+                      armedLabel: "Confirm merge?",
+                    })
+                  )
+                    return;
+                  onMerge(mergeTarget);
+                }}
+              >
+                Merge duplicate
               </button>
             </>
           ) : null}

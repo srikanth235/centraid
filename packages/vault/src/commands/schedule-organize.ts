@@ -273,10 +273,10 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO schedule_recurrence_exception
-        (exception_id, target_type, target_id, original_start, action,
+        (exception_id, target_type, target_id, original_start, scope, action,
          override_json, created_at, updated_at)
-       VALUES (?, 'core.event', ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(target_type, target_id, original_start) DO UPDATE SET
+       VALUES (?, 'core.event', ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(target_type, target_id, original_start, scope) DO UPDATE SET
          action = excluded.action, override_json = excluded.override_json,
          updated_at = excluded.updated_at`
     )
@@ -284,6 +284,7 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
       exceptionId,
       input.event_id,
       input.original_start,
+      input.scope,
       input.action,
       override,
       ctx.now,

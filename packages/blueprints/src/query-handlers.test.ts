@@ -327,6 +327,72 @@ describe("agenda upcoming query — range-bounded recurrence (issue #404)", () =
       a.events.map((e) => e.instance_key)
     );
   });
+
+  it("preserves weekly 09:00 wall time and unique occurrences across a DST property matrix", async () => {
+    const { default: upcoming } = await importQuery(
+      "../apps/agenda/queries/upcoming.ts"
+    );
+    const cases = [
+      {
+        zone: "Asia/Kolkata",
+        start: "2026-01-05T03:30:00.000Z",
+      },
+      {
+        zone: "Europe/London",
+        start: "2026-01-05T09:00:00.000Z",
+      },
+      {
+        zone: "America/New_York",
+        start: "2026-01-05T14:00:00.000Z",
+      },
+      {
+        zone: "Australia/Sydney",
+        start: "2026-01-04T22:00:00.000Z",
+      },
+    ];
+    await Promise.all(
+      cases.map(async (item, index) => {
+        const event = {
+          ...ev,
+          event_id: `weekly-${index}`,
+          summary: `Weekly 09:00 ${item.zone}`,
+          dtstart: item.start,
+          dtend: new Date(Date.parse(item.start) + 3_600_000).toISOString(),
+          start_tz: item.zone,
+          end_tz: item.zone,
+          recurrence_semantics: "zoned",
+          rrule: "FREQ=WEEKLY",
+        };
+        const ctx = ctxOf({ "core.event": [event] });
+        const result = await upcoming({
+          query: {
+            from: "2026-01-01T00:00:00.000Z",
+            to: "2027-01-01T00:00:00.000Z",
+          },
+          input: {
+            from: "2026-01-01T00:00:00.000Z",
+            to: "2027-01-01T00:00:00.000Z",
+          },
+          ctx,
+        });
+        const keys = result.events.map((row) => row.instance_key);
+        expect(new Set(keys).size, item.zone).toBe(keys.length);
+        expect(keys.length, item.zone).toBeGreaterThan(45);
+        for (const row of result.events) {
+          const parts = new Intl.DateTimeFormat("en-GB", {
+            timeZone: item.zone,
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+          }).formatToParts(new Date(row.dtstart));
+          const value = Object.fromEntries(
+            parts.map((part) => [part.type, part.value])
+          );
+          expect(`${value.hour}:${value.minute}`, item.zone).toBe("09:00");
+        }
+      })
+    );
+  });
 });
 
 describe("replica-local search projections (issue #406)", () => {

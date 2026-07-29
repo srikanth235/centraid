@@ -185,8 +185,8 @@ export default function AgendaEvent({
     }
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: event.summary,
-        body: "Starts in 15 minutes",
+        title: "Event reminder",
+        body: "An event starts in 15 minutes.",
         data: { eventId: event.id },
       },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },

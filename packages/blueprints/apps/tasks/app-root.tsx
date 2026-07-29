@@ -26,10 +26,20 @@ import {
   sidebarCounts,
   todayProgress,
 } from "./logic.ts";
-import type { AppState, BoardData, EditPatch, Task, View } from "./types.ts";
+import type {
+  AppState,
+  BoardData,
+  EditPatch,
+  Project,
+  Section,
+  Task,
+  View,
+} from "./types.ts";
 
 export const CHANGE_TABLES = [
   "schedule.task",
+  "schedule.project",
+  "schedule.section",
   "core.tag",
   "core.concept",
   "core.attachment",
@@ -37,7 +47,8 @@ export const CHANGE_TABLES = [
   "core.link",
 ];
 
-const VIEW_TITLES: Record<View, string> = {
+const VIEW_TITLES: Partial<Record<View, string>> = {
+  inbox: "Inbox",
   today: "Today",
   upcoming: "Upcoming",
   anytime: "Anytime",
@@ -47,6 +58,7 @@ const VIEW_TITLES: Record<View, string> = {
 
 const VALID_VIEWS = new Set<View>([
   "today",
+  "inbox",
   "upcoming",
   "anytime",
   "all",
@@ -107,6 +119,8 @@ function emptyCopy(state: AppState): { title: string; sub: string } {
 interface BoardPayload {
   open?: Task[];
   logbook?: Task[];
+  projects?: Project[];
+  sections?: Section[];
   counts?: BoardData["counts"];
   window?: number;
   truncated?: boolean;
@@ -122,6 +136,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const dataRef = useRef<BoardData>({
     open: [],
     logbook: [],
+    projects: [],
+    sections: [],
     counts: {},
     window: 500,
   });
@@ -157,6 +173,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     if (denied) {
       data.open = [];
       data.logbook = [];
+      data.projects = [];
+      data.sections = [];
       data.counts = {};
       state.detailId = null;
       setLoaded(true);
@@ -165,6 +183,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     }
     data.open = res?.open ?? [];
     data.logbook = res?.logbook ?? [];
+    data.projects = res?.projects ?? [];
+    data.sections = res?.sections ?? [];
     data.counts = res?.counts ?? {};
     data.window = res?.window ?? state.boardWindow;
     state.boardTruncated = Boolean(res?.truncated);
@@ -289,9 +309,22 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const state = stateRef.current;
   const data = dataRef.current;
   const counts = sidebarCounts(data);
+  const projectCounts = new Map(
+    data.projects.map((project) => [
+      project.project_id,
+      data.open.filter((task) => task.project_id === project.project_id).length,
+    ])
+  );
   const { sections, isEmpty } = buildSections(data, state);
   const q = state.search.trim();
-  const title = q ? `Results for “${q}”` : (VIEW_TITLES[state.view] ?? "Today");
+  const activeProject = state.view.startsWith("project:")
+    ? data.projects.find(
+        (project) => project.project_id === state.view.slice("project:".length)
+      )
+    : null;
+  const title = q
+    ? `Results for “${q}”`
+    : (activeProject?.name ?? VIEW_TITLES[state.view] ?? "Today");
   let sub: string;
   if (q) {
     const n = sections.reduce((s, x) => s + x.rows.length, 0);
@@ -362,7 +395,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           <SidebarNav
             view={state.view}
             counts={counts}
+            projects={data.projects}
+            projectCounts={projectCounts}
             onSelectView={selectView}
+            onCreateProject={(name) => logic.saveProject(name)}
+            onCreateSection={(projectId, name) =>
+              logic.saveSection(projectId, name)
+            }
           />
         }
         sidebarFoot={<SidebarFoot progress={todayProgress(data)} />}
@@ -384,6 +423,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             search={state.search}
             snippets={state.searchSnippets}
             pendingIds={state.pendingIds}
+            projects={data.projects}
+            projectSections={data.sections}
             footer={footer}
             onShowMore={showMore}
             onEmptyAction={() => {
@@ -398,6 +439,28 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             }}
             onOpenDetail={openDetail}
             onToggle={(task) => logic.toggleComplete(task)}
+            onOrganize={(taskId, projectId, sectionId, sortOrder) =>
+              logic.organizeTask(taskId, projectId, sectionId, sortOrder)
+            }
+            onReorder={async (dragged, before) => {
+              const sameProject = dragged.project_id === before.project_id;
+              const sameSection = dragged.section_id === before.section_id;
+              if (!sameProject || !sameSection) return false;
+              const beforeOrder = Number(before.sort_order ?? 0);
+              const moved = await logic.organizeTask(
+                dragged.task_id,
+                dragged.project_id ?? null,
+                dragged.section_id ?? null,
+                beforeOrder
+              );
+              if (!moved) return false;
+              return logic.organizeTask(
+                before.task_id,
+                before.project_id ?? null,
+                before.section_id ?? null,
+                beforeOrder + 1
+              );
+            }}
           />
         }
         detail={

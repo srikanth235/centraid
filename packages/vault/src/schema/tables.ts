@@ -96,7 +96,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "meter_reading",
   ],
   business: ["client", "project", "time_entry", "invoice", "invoice_line"],
-  people: ["profile", "important_date"],
+  people: ["profile", "important_date", "merge"],
   locker: ["item"],
   sync: [
     "connection",

@@ -32,6 +32,17 @@ interface RawIdentifier {
   value: string;
 }
 
+interface RawContactChannel {
+  channel_id: string;
+  party_id: string;
+  kind: "phone" | "email" | "address" | "handle";
+  label?: string | null;
+  value: string;
+  normalized_value: string;
+  is_preferred: number;
+  provenance_json?: string | null;
+}
+
 interface RawLink {
   link_id: string;
   from_type: string;
@@ -93,8 +104,16 @@ interface RawScheme {
 }
 
 interface ContactEntry {
-  kind: string;
+  channel_id?: string;
+  kind: "phone" | "email" | "address" | "handle";
+  label?: string | null;
   value: string;
+  normalized_value?: string;
+  preferred?: boolean;
+  provenance?: Record<string, unknown> | null;
+  duplicate_party_ids?: string[];
+  duplicate_names?: string[];
+  legacy?: boolean;
 }
 
 const LIST_SCHEME_URI = "https://centraid.dev/schemes/lists";
@@ -127,6 +146,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
 
     const [
       ids,
+      channelRowsResult,
       outgoingLinks,
       incomingLinks,
       dates,
@@ -142,6 +162,11 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         entity: "core.party_identifier",
         where: [{ column: "party_id", op: "eq", value: partyId }],
         purpose,
+      }),
+      ctx.vault.read({
+        entity: "social.contact_channel",
+        purpose,
+        limit: 2000,
       }),
       ctx.vault.read({
         entity: "core.link",
@@ -208,6 +233,11 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     ]);
 
     const identifierRows = (ids.rows ?? []) as unknown as RawIdentifier[];
+    const allChannelRows = (channelRowsResult.rows ??
+      []) as unknown as RawContactChannel[];
+    const channelRows = allChannelRows.filter(
+      (channel) => channel.party_id === partyId
+    );
     const outgoing = (outgoingLinks.rows ?? []) as unknown as RawLink[];
     const incoming = (incomingLinks.rows ?? []) as unknown as RawLink[];
     const dateRows = (dates.rows ?? []) as unknown as RawDate[];
@@ -256,48 +286,82 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     const activityIds = incoming
       .filter((link) => link.from_type === "core.activity")
       .map((link) => link.from_id);
-    const [relatedParties, tasks, interactions, interactionNotes] =
-      await Promise.all([
-        relationLinks.length > 0
-          ? ctx.vault.read({
-              entity: "core.party",
-              where: [
-                {
-                  column: "party_id",
-                  op: "in",
-                  value: relationLinks.map((l) => l.to_id),
-                },
-              ],
-              purpose,
-            })
-          : Promise.resolve({ rows: [] }),
-        taskIds.length > 0
-          ? ctx.vault.read({
-              entity: "schedule.task",
-              where: [{ column: "task_id", op: "in", value: taskIds }],
-              purpose,
-            })
-          : Promise.resolve({ rows: [] }),
-        activityIds.length > 0
-          ? ctx.vault.read({
-              entity: "core.activity",
-              where: [{ column: "activity_id", op: "in", value: activityIds }],
-              orderBy: { column: "started_at", dir: "desc" },
-              purpose,
-            })
-          : Promise.resolve({ rows: [] }),
-        activityIds.length > 0
-          ? ctx.vault.read({
-              entity: "knowledge.annotation",
-              where: [
-                { column: "target_type", op: "eq", value: "core.activity" },
-                { column: "target_id", op: "in", value: activityIds },
-              ],
-              purpose,
-            })
-          : Promise.resolve({ rows: [] }),
-      ]);
+    const duplicatePartyIds = [
+      ...new Set(
+        channelRows.flatMap((channel) =>
+          allChannelRows
+            .filter(
+              (other) =>
+                other.party_id !== partyId &&
+                other.kind === channel.kind &&
+                other.normalized_value === channel.normalized_value
+            )
+            .map((other) => other.party_id)
+        )
+      ),
+    ];
+    const [
+      relatedParties,
+      duplicateParties,
+      tasks,
+      interactions,
+      interactionNotes,
+    ] = await Promise.all([
+      relationLinks.length > 0
+        ? ctx.vault.read({
+            entity: "core.party",
+            where: [
+              {
+                column: "party_id",
+                op: "in",
+                value: relationLinks.map((l) => l.to_id),
+              },
+            ],
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+      duplicatePartyIds.length > 0
+        ? ctx.vault.read({
+            entity: "core.party",
+            where: [
+              {
+                column: "party_id",
+                op: "in",
+                value: duplicatePartyIds,
+              },
+            ],
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+      taskIds.length > 0
+        ? ctx.vault.read({
+            entity: "schedule.task",
+            where: [{ column: "task_id", op: "in", value: taskIds }],
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+      activityIds.length > 0
+        ? ctx.vault.read({
+            entity: "core.activity",
+            where: [{ column: "activity_id", op: "in", value: activityIds }],
+            orderBy: { column: "started_at", dir: "desc" },
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+      activityIds.length > 0
+        ? ctx.vault.read({
+            entity: "knowledge.annotation",
+            where: [
+              { column: "target_type", op: "eq", value: "core.activity" },
+              { column: "target_id", op: "in", value: activityIds },
+            ],
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+    ]);
     const relatedPartyRows = (relatedParties.rows ??
+      []) as unknown as RawParty[];
+    const duplicatePartyRows = (duplicateParties.rows ??
       []) as unknown as RawParty[];
     const taskRows = (tasks.rows ?? []) as unknown as RawTask[];
     const interactionRows = (interactions.rows ??
@@ -338,11 +402,59 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       ])
     );
 
-    const contact: ContactEntry[] = [];
+    const duplicateNameById = new Map(
+      duplicatePartyRows.map((row) => [row.party_id, row.display_name])
+    );
+    const contact: ContactEntry[] = channelRows
+      .toSorted(
+        (a, b) =>
+          b.is_preferred - a.is_preferred ||
+          a.kind.localeCompare(b.kind) ||
+          a.channel_id.localeCompare(b.channel_id)
+      )
+      .map((channel) => {
+        const duplicateIds = allChannelRows
+          .filter(
+            (other) =>
+              other.party_id !== partyId &&
+              other.kind === channel.kind &&
+              other.normalized_value === channel.normalized_value
+          )
+          .map((other) => other.party_id);
+        let provenance: Record<string, unknown> | null = null;
+        try {
+          provenance = channel.provenance_json
+            ? (JSON.parse(channel.provenance_json) as Record<string, unknown>)
+            : null;
+        } catch {
+          provenance = { source: "unreadable provenance" };
+        }
+        return {
+          channel_id: channel.channel_id,
+          kind: channel.kind,
+          label: channel.label ?? null,
+          value: channel.value,
+          normalized_value: channel.normalized_value,
+          preferred: Boolean(channel.is_preferred),
+          provenance,
+          duplicate_party_ids: duplicateIds,
+          duplicate_names: duplicateIds.map(
+            (id) => duplicateNameById.get(id) ?? id
+          ),
+        };
+      });
+    const channelKeys = new Set(
+      channelRows.map(
+        (channel) => `${channel.kind}:${channel.normalized_value}`
+      )
+    );
     for (const i of identifierRows) {
-      if (i.scheme === "tel") contact.push({ kind: "phone", value: i.value });
-      else if (i.scheme === "email")
-        contact.push({ kind: "email", value: i.value });
+      const kind =
+        i.scheme === "tel" ? "phone" : i.scheme === "email" ? "email" : null;
+      if (!kind) continue;
+      const key = `${kind}:${i.value.trim().toLocaleLowerCase("en-US")}`;
+      if (!channelKeys.has(key))
+        contact.push({ kind, value: i.value, legacy: true });
     }
 
     const person = {

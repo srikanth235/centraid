@@ -79,6 +79,7 @@ interface DecoratedAttendee {
 interface StoredRecurrenceException {
   target_id: string;
   original_start: string;
+  scope?: "occurrence" | "future";
   action: "skip" | "override";
   override_json?: string | null;
 }
@@ -277,7 +278,7 @@ function expandRecurringEvents(
       return {
         originalStart: exception.original_start,
         action: exception.action,
-        ...(override.scope === undefined ? {} : { scope: override.scope }),
+        scope: exception.scope ?? override.scope ?? "occurrence",
         ...(override.start === undefined ? {} : { start: override.start }),
       };
     });

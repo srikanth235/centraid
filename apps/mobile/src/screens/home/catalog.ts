@@ -23,6 +23,9 @@ export type LauncherRoute =
   | { kind: "docs" }
   | { kind: "agenda" }
   | { kind: "locker" }
+  | { kind: "tasks" }
+  | { kind: "people" }
+  | { kind: "tally" }
   | { kind: "app"; appId: string }
   | { kind: "pair" };
 
@@ -54,6 +57,27 @@ const NATIVE_APPS: readonly AppMetaResolved[] = [
     colorKey: "slate",
   }),
   resolveAppMeta({
+    id: "tasks",
+    name: "Tasks",
+    description: "Inbox, projects, ordering and offline repeat rules.",
+    iconKey: "Todo",
+    colorKey: "forest",
+  }),
+  resolveAppMeta({
+    id: "people",
+    name: "People",
+    description: "Contacts, duplicate review and merge receipts.",
+    iconKey: "Users",
+    colorKey: "rose",
+  }),
+  resolveAppMeta({
+    id: "tally",
+    name: "Tally",
+    description: "Multi-currency expenses and recurring shared costs.",
+    iconKey: "Coin",
+    colorKey: "violet",
+  }),
+  resolveAppMeta({
     id: "agenda",
     name: "Agenda",
     description: "Calendar, schedule, guests and reminders.",
@@ -79,6 +103,9 @@ const NATIVE_ROUTES: Record<string, LauncherRoute> = {
   docs: { kind: "docs" },
   agenda: { kind: "agenda" },
   locker: { kind: "locker" },
+  tasks: { kind: "tasks" },
+  people: { kind: "people" },
+  tally: { kind: "tally" },
 };
 
 // The five gateway apps the launcher always advertises. Glyphs are picked from
@@ -90,32 +117,11 @@ const NATIVE_ROUTES: Record<string, LauncherRoute> = {
 // merges over this entry by id (see buildLauncherItems).
 const GATEWAY_CATALOG: readonly AppMetaResolved[] = [
   resolveAppMeta({
-    id: "tasks",
-    name: "Tasks",
-    description: "Lists, projects and what needs doing.",
-    iconKey: "Todo",
-    colorKey: "forest",
-  }),
-  resolveAppMeta({
     id: "notes",
     name: "Notes",
     description: "Quick capture and long-form writing.",
     iconKey: "Journal",
     colorKey: "amber",
-  }),
-  resolveAppMeta({
-    id: "people",
-    name: "People",
-    description: "Your personal CRM — contacts and circles.",
-    iconKey: "Users",
-    colorKey: "rose",
-  }),
-  resolveAppMeta({
-    id: "tally",
-    name: "Tally",
-    description: "Money in, money out — a simple ledger.",
-    iconKey: "Coin",
-    colorKey: "violet",
   }),
 ];
 
@@ -160,7 +166,7 @@ export function buildLauncherItems(
   }
 
   for (const app of remoteApps) {
-    if (catalogIds.has(app.id)) continue;
+    if (catalogIds.has(app.id) || NATIVE_APP_IDS.has(app.id)) continue;
     items.push({
       installed: true,
       meta: app,

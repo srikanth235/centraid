@@ -1,3 +1,6 @@
+// governance: allow-repo-hygiene file-size-limit (#630) — this factory is the
+// cohesive controller for one blueprint; splitting its shared mutable app
+// closure would obscure write/outcome and undo sequencing.
 import {
   PALETTE,
   listColor,
@@ -438,6 +441,100 @@ export function createLogic({
     return true;
   }
 
+  async function saveContactChannel(
+    person: DetailPerson,
+    fields: Record<string, unknown>
+  ): Promise<boolean> {
+    const outcome = await act("save-contact-channel", {
+      party_id: person.party_id,
+      ...fields,
+    });
+    if (!narrate(outcome)) return false;
+    const channelId = String(outcome?.output?.channel_id ?? "");
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    const duplicates = Array.isArray(outcome?.output?.duplicate_party_ids)
+      ? outcome.output.duplicate_party_ids.length
+      : 0;
+    toast(
+      duplicates > 0
+        ? `Contact saved · ${duplicates} possible duplicate${duplicates === 1 ? "" : "s"}`
+        : "Contact saved · receipt",
+      {
+        duration: revisionId ? 10_000 : undefined,
+        undoLabel: revisionId ? "Undo" : undefined,
+        onUndo:
+          revisionId && channelId
+            ? () =>
+                void undoContactChannel(person.party_id, channelId, revisionId)
+            : undefined,
+      }
+    );
+    await loadDetail(person.party_id);
+    return true;
+  }
+
+  async function deleteContactChannel(
+    person: DetailPerson,
+    channelId: string
+  ): Promise<void> {
+    const outcome = await act("delete-contact-channel", {
+      channel_id: channelId,
+    });
+    if (!narrate(outcome)) return;
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    toast("Contact deleted · receipt", {
+      duration: revisionId ? 10_000 : undefined,
+      undoLabel: revisionId ? "Undo" : undefined,
+      onUndo: revisionId
+        ? () => void undoContactChannel(person.party_id, channelId, revisionId)
+        : undefined,
+    });
+    await loadDetail(person.party_id);
+  }
+
+  async function undoContactChannel(
+    partyId: string,
+    channelId: string,
+    revisionId: string
+  ): Promise<void> {
+    const outcome = await act("undo-contact-channel", {
+      channel_id: channelId,
+      revision_id: revisionId,
+    });
+    if (!narrate(outcome)) return;
+    toast("Contact restored · receipt");
+    await loadDetail(partyId);
+  }
+
+  async function mergePerson(
+    source: DetailPerson,
+    targetPartyId: string
+  ): Promise<void> {
+    const outcome = await act("merge-people", {
+      source_party_id: source.party_id,
+      target_party_id: targetPartyId,
+    });
+    if (!narrate(outcome)) return;
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    closeDetails();
+    await refresh();
+    toast(`${source.name} merged · receipt`, {
+      duration: revisionId ? 10_000 : undefined,
+      undoLabel: revisionId ? "Undo" : undefined,
+      onUndo: revisionId
+        ? async () => {
+            const undo = await act("undo-merge", {
+              source_party_id: source.party_id,
+              revision_id: revisionId,
+            });
+            if (!narrate(undo)) return;
+            toast("Merge undone · receipt");
+            await refresh();
+          }
+        : undefined,
+    });
+  }
+
   // ---------- Add-person modal ----------
 
   async function addPerson({
@@ -583,6 +680,9 @@ export function createLogic({
     loadDetail,
     toggleAdder,
     drawerAct,
+    saveContactChannel,
+    deleteContactChannel,
+    mergePerson,
     addPerson,
     openAddModal,
     closeAddModal,

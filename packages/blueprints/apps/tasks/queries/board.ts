@@ -25,6 +25,19 @@ interface RawTask {
   title: string;
   [k: string]: unknown;
 }
+interface RawProject {
+  project_id: string;
+  name: string;
+  area?: string | null;
+  color?: string | null;
+  sort_order: number;
+}
+interface RawSection {
+  section_id: string;
+  project_id: string;
+  name: string;
+  sort_order: number;
+}
 interface RawAttachment {
   attachment_id: string;
   target_type: string;
@@ -112,22 +125,34 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
   const OPEN = new Set(OPEN_STATUSES);
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   try {
-    const [openResult, closedResult] = await Promise.all([
-      ctx.vault.read({
-        entity: "schedule.task",
-        where: [{ column: "status", op: "in", value: OPEN_STATUSES }],
-        orderBy: { column: "task_id", dir: "desc" },
-        limit: window,
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "schedule.task",
-        where: [{ column: "status", op: "in", value: CLOSED_STATUSES }],
-        orderBy: { column: "completed_at", dir: "desc" },
-        limit: 50,
-        purpose,
-      }),
-    ]);
+    const [openResult, closedResult, projectsResult, sectionsResult] =
+      await Promise.all([
+        ctx.vault.read({
+          entity: "schedule.task",
+          where: [{ column: "status", op: "in", value: OPEN_STATUSES }],
+          orderBy: { column: "task_id", dir: "desc" },
+          limit: window,
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "schedule.task",
+          where: [{ column: "status", op: "in", value: CLOSED_STATUSES }],
+          orderBy: { column: "completed_at", dir: "desc" },
+          limit: 50,
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "schedule.project",
+          where: [{ column: "archived_at", op: "is-null" }],
+          orderBy: { column: "sort_order", dir: "asc" },
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "schedule.section",
+          orderBy: { column: "sort_order", dir: "asc" },
+          purpose,
+        }),
+      ]);
     const openRows = (openResult.rows ?? []) as unknown as RawTask[];
     const closedRows = (closedResult.rows ?? []) as unknown as RawTask[];
     const byId = new Map<string, RawTask>();
@@ -393,6 +418,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     return {
       open,
       logbook,
+      projects: (projectsResult.rows ?? []) as unknown as RawProject[],
+      sections: (sectionsResult.rows ?? []) as unknown as RawSection[],
       tags: allTags,
       counts: { open: openCount, closed: rows.length - openCount },
       truncated,
@@ -403,6 +430,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
     return {
       open: [],
       logbook: [],
+      projects: [],
+      sections: [],
       tags: [],
       counts: { open: 0, closed: 0 },
       vaultDenied: { code: e.code, message: e.message },

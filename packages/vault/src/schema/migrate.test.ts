@@ -39,14 +39,18 @@ function rewindVaultTo(file: string, version: 1 | 2 | 4): void {
     DROP TRIGGER IF EXISTS trg_replica_tally_expense_au;
     DROP TRIGGER IF EXISTS trg_replica_tally_expense_ad;
 
+    DROP INDEX IF EXISTS tally_expense_recurring_instance_idx;
     DROP INDEX IF EXISTS tally_recurring_expense_group_idx;
+    DROP INDEX IF EXISTS people_merge_source_active_idx;
     DROP INDEX IF EXISTS social_contact_channel_preferred_idx;
+    DROP INDEX IF EXISTS social_contact_channel_duplicate_idx;
     DROP INDEX IF EXISTS social_contact_channel_party_idx;
     DROP INDEX IF EXISTS schedule_recurrence_exception_target_idx;
     DROP INDEX IF EXISTS schedule_task_organize_idx;
     DROP INDEX IF EXISTS schedule_section_project_idx;
     DROP INDEX IF EXISTS schedule_project_owner_idx;
     DROP TABLE IF EXISTS tally_recurring_expense;
+    DROP TABLE IF EXISTS people_merge;
     DROP TABLE IF EXISTS social_contact_channel;
     DROP TABLE IF EXISTS schedule_recurrence_exception;
     DROP TABLE IF EXISTS schedule_section;

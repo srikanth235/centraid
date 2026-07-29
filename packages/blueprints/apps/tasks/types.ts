@@ -14,8 +14,30 @@ export type TaskStatus =
   | "completed"
   | "cancelled";
 
-/** The five focus views the sidebar switches between. */
-export type View = "today" | "upcoming" | "anytime" | "all" | "logbook";
+/** Built-in focus views plus one stable route per project. */
+export type View =
+  | "inbox"
+  | "today"
+  | "upcoming"
+  | "anytime"
+  | "all"
+  | "logbook"
+  | `project:${string}`;
+
+export interface Project {
+  project_id: string;
+  name: string;
+  area?: string | null;
+  color?: string | null;
+  sort_order: number;
+}
+
+export interface Section {
+  section_id: string;
+  project_id: string;
+  name: string;
+  sort_order: number;
+}
 
 /** One tag edge decorated with its concept's label (board/search join). */
 export interface TaskTag {
@@ -41,6 +63,11 @@ export interface Task {
   effort_min?: number | null;
   rrule?: string | null;
   remind_before_min?: number | null;
+  project_id?: string | null;
+  section_id?: string | null;
+  sort_order?: number;
+  recurrence_anchor?: "scheduled" | "completion";
+  recurrence_tz?: string | null;
   parent_task_id?: string | null;
   children?: Task[];
   done_children?: number;
@@ -93,6 +120,7 @@ export interface BoardCounts {
 
 /** The derived sidebar/focus-view counts (logic.ts sidebarCounts). */
 export interface SidebarCountsShape {
+  inbox: number;
   today: number;
   upcoming: number;
   anytime: number;
@@ -123,6 +151,8 @@ export interface BoardData {
   open: Task[];
   logbook: Task[];
   counts: BoardCounts;
+  projects: Project[];
+  sections: Section[];
   window: number;
 }
 

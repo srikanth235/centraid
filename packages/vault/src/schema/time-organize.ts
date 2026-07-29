@@ -47,6 +47,8 @@ CREATE TABLE schedule_recurrence_exception (
   target_type   TEXT NOT NULL CHECK (target_type IN ('core.event','tally.recurring_expense')),
   target_id     TEXT NOT NULL,
   original_start TEXT NOT NULL,
+  scope         TEXT NOT NULL DEFAULT 'occurrence'
+    CHECK (scope IN ('occurrence','future')),
   action        TEXT NOT NULL CHECK (action IN ('skip','override')),
   override_json TEXT CHECK (
     (action = 'skip' AND override_json IS NULL)
@@ -54,7 +56,7 @@ CREATE TABLE schedule_recurrence_exception (
   ),
   created_at    TEXT NOT NULL,
   updated_at    TEXT NOT NULL,
-  UNIQUE (target_type, target_id, original_start)
+  UNIQUE (target_type, target_id, original_start, scope)
 ) STRICT;
 CREATE INDEX schedule_recurrence_exception_target_idx
   ON schedule_recurrence_exception(target_type, target_id, original_start);
@@ -70,12 +72,26 @@ CREATE TABLE social_contact_channel (
   provenance_json  TEXT CHECK (provenance_json IS NULL OR json_valid(provenance_json)),
   created_at       TEXT NOT NULL,
   updated_at       TEXT NOT NULL,
-  UNIQUE (kind, normalized_value)
+  UNIQUE (party_id, kind, normalized_value)
 ) STRICT;
 CREATE INDEX social_contact_channel_party_idx
   ON social_contact_channel(party_id, kind, is_preferred DESC);
+CREATE INDEX social_contact_channel_duplicate_idx
+  ON social_contact_channel(kind, normalized_value, party_id);
 CREATE UNIQUE INDEX social_contact_channel_preferred_idx
   ON social_contact_channel(party_id, kind) WHERE is_preferred = 1;
+
+CREATE TABLE people_merge (
+  merge_id        TEXT PRIMARY KEY,
+  source_party_id TEXT NOT NULL REFERENCES core_party(party_id),
+  target_party_id TEXT NOT NULL REFERENCES core_party(party_id),
+  revision_id     TEXT NOT NULL REFERENCES core_entity_revision(revision_id),
+  merged_at       TEXT NOT NULL,
+  undone_at       TEXT,
+  CHECK (source_party_id <> target_party_id)
+) STRICT;
+CREATE UNIQUE INDEX people_merge_source_active_idx
+  ON people_merge(source_party_id) WHERE undone_at IS NULL;
 
 ALTER TABLE tally_expense ADD COLUMN original_amount_minor INTEGER
   CHECK (original_amount_minor IS NULL OR original_amount_minor > 0);
@@ -116,4 +132,7 @@ CREATE TABLE tally_recurring_expense (
 ) STRICT;
 CREATE INDEX tally_recurring_expense_group_idx
   ON tally_recurring_expense(group_id, status, anchor_start);
+CREATE UNIQUE INDEX tally_expense_recurring_instance_idx
+  ON tally_expense(recurring_template_id, spent_on)
+  WHERE recurring_template_id IS NOT NULL;
 `;

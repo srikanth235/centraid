@@ -1,6 +1,13 @@
 import { fmtDay } from "../format.ts";
 import { I } from "../icons.ts";
-import type { BoardSection, PendingAdd, Task, View } from "../types.ts";
+import type {
+  BoardSection,
+  PendingAdd,
+  Project,
+  Section,
+  Task,
+  View,
+} from "../types.ts";
 // The scrolling board column: the capture bar, a "pending approval" strip
 // for parked adds (no task_id exists yet, so these are rendered as ghost
 // rows rather than real Row components), the bucketed/logbook sections, the
@@ -52,11 +59,15 @@ export function Board({
   search,
   snippets,
   pendingIds,
+  projects,
+  projectSections,
   footer,
   onShowMore,
   onEmptyAction,
   onOpenDetail,
   onToggle,
+  onOrganize,
+  onReorder,
 }: {
   view: View;
   showCapture: boolean;
@@ -69,11 +80,20 @@ export function Board({
   search: string;
   snippets: Map<string, string> | null;
   pendingIds: Set<string>;
+  projects: Project[];
+  projectSections: Section[];
   footer: { windowSize: number } | null;
   onShowMore: () => void;
   onEmptyAction: () => void;
   onOpenDetail: (id: string) => void;
   onToggle: (task: Task) => Promise<boolean>;
+  onOrganize: (
+    taskId: string,
+    projectId: string | null,
+    sectionId: string | null,
+    sortOrder: number
+  ) => Promise<boolean>;
+  onReorder: (task: Task, before: Task) => Promise<boolean>;
 }) {
   return (
     <div className={styles.column}>
@@ -105,16 +125,113 @@ export function Board({
           </div>
           <div className={styles.rows}>
             {sec.rows.map((task) => (
-              <Row
+              <div
+                className={styles.organizedRow}
                 key={task.task_id}
-                task={task}
-                closed={view === "logbook"}
-                pending={pendingIds.has(task.task_id)}
-                search={search}
-                snippet={snippets?.get(task.task_id)}
-                onOpen={onOpenDetail}
-                onToggle={onToggle}
-              />
+                draggable={view !== "logbook"}
+                onDragStart={(event) =>
+                  event.dataTransfer.setData(
+                    "application/x-centraid-task",
+                    task.task_id
+                  )
+                }
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const draggedId = event.dataTransfer.getData(
+                    "application/x-centraid-task"
+                  );
+                  const dragged = sections
+                    .flatMap((section) => section.rows)
+                    .find((row) => row.task_id === draggedId);
+                  if (dragged && dragged.task_id !== task.task_id)
+                    void onReorder(dragged, task);
+                }}
+              >
+                <Row
+                  task={task}
+                  closed={view === "logbook"}
+                  pending={pendingIds.has(task.task_id)}
+                  search={search}
+                  snippet={snippets?.get(task.task_id)}
+                  onOpen={onOpenDetail}
+                  onToggle={onToggle}
+                />
+                {view === "logbook" ? null : (
+                  <select
+                    className={styles.organizeSelect}
+                    aria-label={`Project for ${task.title}`}
+                    value={
+                      task.section_id
+                        ? `section:${task.section_id}`
+                        : task.project_id
+                          ? `project:${task.project_id}`
+                          : "inbox"
+                    }
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      if (value === "inbox") {
+                        void onOrganize(
+                          task.task_id,
+                          null,
+                          null,
+                          Number(task.sort_order ?? 0)
+                        );
+                        return;
+                      }
+                      if (value.startsWith("section:")) {
+                        const sectionId = value.slice("section:".length);
+                        const section = projectSections.find(
+                          (row) => row.section_id === sectionId
+                        );
+                        if (section)
+                          void onOrganize(
+                            task.task_id,
+                            section.project_id,
+                            section.section_id,
+                            Number(task.sort_order ?? 0)
+                          );
+                        return;
+                      }
+                      void onOrganize(
+                        task.task_id,
+                        value.slice("project:".length),
+                        null,
+                        Number(task.sort_order ?? 0)
+                      );
+                    }}
+                  >
+                    <option value="inbox">Inbox</option>
+                    {projects.map((project) => (
+                      <optgroup
+                        key={project.project_id}
+                        label={
+                          project.area
+                            ? `${project.name} · ${project.area}`
+                            : project.name
+                        }
+                      >
+                        <option value={`project:${project.project_id}`}>
+                          No section
+                        </option>
+                        {projectSections
+                          .filter(
+                            (section) =>
+                              section.project_id === project.project_id
+                          )
+                          .map((section) => (
+                            <option
+                              key={section.section_id}
+                              value={`section:${section.section_id}`}
+                            >
+                              {section.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                )}
+              </div>
             ))}
           </div>
         </div>

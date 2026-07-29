@@ -24,6 +24,18 @@
       { "schema": "knowledge", "table": "note", "verbs": "read" },
       { "schema": "schedule", "table": "task", "verbs": "read" },
       { "schema": "tally", "table": "obligation", "verbs": "read" },
+      { "schema": "social", "table": "contact_channel", "verbs": "read" },
+      { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
+      {
+        "schema": "social",
+        "table": "delete_contact_channel",
+        "verbs": "act"
+      },
+      {
+        "schema": "social",
+        "table": "undo_contact_channel",
+        "verbs": "act"
+      },
       {
         "schema": "core",
         "table": "entity_revision",
@@ -578,6 +590,128 @@
           "entry_date": { "type": "string" }
         },
         "required": ["mood", "text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "save-contact-channel",
+      "description": "Create or edit a normalized phone, email, address, or handle, including label, preferred status, provenance, and duplicate warnings.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "channel_id": { "type": "string", "minLength": 1 },
+          "party_id": { "type": "string", "minLength": 1 },
+          "kind": {
+            "type": "string",
+            "enum": ["phone", "email", "address", "handle"]
+          },
+          "label": { "type": "string" },
+          "value": { "type": "string", "minLength": 1 },
+          "preferred": { "type": "boolean" },
+          "provenance": { "type": "object" }
+        },
+        "required": ["party_id", "kind", "value"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete-contact-channel",
+      "description": "Delete one contact channel with a durable one-shot undo revision.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "channel_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["channel_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "undo-contact-channel",
+      "description": "Restore a contact channel edit or deletion from its one-shot revision.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "channel_id": { "type": "string", "minLength": 1 },
+          "revision_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["channel_id", "revision_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "merge-people",
+      "description": "Merge a duplicate People profile into another while preserving identity and a durable undo receipt.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "source_party_id": { "type": "string", "minLength": 1 },
+          "target_party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["source_party_id", "target_party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "undo-merge",
+      "description": "Undo one People merge, restoring the source profile and its original channels.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "source_party_id": { "type": "string", "minLength": 1 },
+          "revision_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["source_party_id", "revision_id"],
         "additionalProperties": false
       },
       "output": {
