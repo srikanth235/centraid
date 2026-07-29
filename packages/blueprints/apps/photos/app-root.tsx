@@ -471,10 +471,16 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           const members = ownAssets.filter((a) =>
             (a.album_ids ?? []).includes(album.album_id)
           );
+          const cover =
+            members.find(
+              (member) =>
+                !!album.cover_content_id &&
+                member.content_id === album.cover_content_id
+            ) ?? members[0];
           return {
             ...album,
             count: members.length,
-            coverUri: members[0]?.thumb_uri ?? members[0]?.content_uri ?? null,
+            coverUri: cover?.thumb_uri ?? cover?.content_uri ?? null,
           };
         });
         mainRoot.render(

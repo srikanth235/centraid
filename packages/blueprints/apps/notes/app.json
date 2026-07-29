@@ -80,6 +80,16 @@
         "verbs": "act"
       },
       {
+        "schema": "knowledge",
+        "table": "restore_note",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "restore_note_version",
+        "verbs": "act"
+      },
+      {
         "schema": "core",
         "table": "attach",
         "verbs": "act"
@@ -316,7 +326,7 @@
     {
       "name": "delete-notebook",
       "description": "Delete a notebook through knowledge.delete_notebook — member notes are unfiled, never destroyed (the outcome reports notes_unfiled); refuses while child notebooks exist.",
-      "confirmation": "none",
+      "confirmation": "always",
       "input": {
         "type": "object",
         "properties": {
@@ -346,7 +356,38 @@
     },
     {
       "name": "delete-note",
-      "description": "Delete a note through knowledge.delete_note — removes the note with its placements, annotations and attachment edges; the deduped body is released only when nothing else shares it.",
+      "description": "Move a note to the 30-day trash through knowledge.delete_note without removing placements, annotations or attachment edges.",
+      "confirmation": "always",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-note",
+      "description": "Restore a trashed note in place through knowledge.restore_note.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -357,6 +398,41 @@
           }
         },
         "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-note-version",
+      "description": "Restore one prior body from this note's append-only version chain.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id", "content_id"],
         "additionalProperties": false
       },
       "output": {
@@ -549,6 +625,9 @@
           "notes": {
             "type": "array"
           },
+          "trash": {
+            "type": "array"
+          },
           "notebooks": {
             "type": "array"
           },
@@ -616,6 +695,32 @@
         "type": "object",
         "properties": {
           "notes": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "history",
+      "description": "The selected note's append-only body version chain, newest first.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "versions": {
             "type": "array"
           },
           "vaultDenied": {

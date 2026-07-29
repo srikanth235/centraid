@@ -96,6 +96,10 @@
   gap: 7px;
   margin-bottom: 18px;
 }
+.albumChoice {
+  display: inline-flex;
+  align-items: stretch;
+}
 .albumChip {
   padding: 6px 12px;
   border-radius: 999px;
@@ -110,6 +114,23 @@
   background: var(--sel);
   color: var(--accent-deep-fg);
   font-weight: 600;
+}
+.albumChoice:has(.coverButton) .albumChip {
+  border-radius: 999px 0 0 999px;
+}
+.coverButton {
+  border: 1px solid var(--selb);
+  border-left: 0;
+  border-radius: 0 999px 999px 0;
+  background: var(--sel);
+  color: var(--accent-deep-fg);
+  font: var(--t-small);
+  font-size: 11px;
+  padding: 6px 9px;
+}
+.coverButton:disabled {
+  color: var(--ink-3);
+  cursor: default;
 }
 .tagChipX,
 .tagChipNew {

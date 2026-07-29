@@ -169,6 +169,10 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     name: "Collection items",
     blurb: "What's inside each collection.",
   },
+  "core.entity_revision": {
+    name: "Entity history",
+    blurb: "Pre-mutation snapshots for version history and undo.",
+  },
   "core.share_origin": {
     name: "Shared with here",
     blurb: "Where an item placed in this space came from, and who placed it.",

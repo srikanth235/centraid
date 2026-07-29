@@ -109,7 +109,10 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
     const [profiles, parties] = await Promise.all([
       ctx.vault.read({
         entity: "people.profile",
-        where: [{ column: "party_id", op: "eq", value: partyId }],
+        where: [
+          { column: "party_id", op: "eq", value: partyId },
+          { column: "deleted_at", op: "is-null" },
+        ],
         purpose,
       }),
       ctx.vault.read({

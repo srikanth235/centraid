@@ -11,6 +11,7 @@ import activityQuery from "./queries/activity.ts";
 import dashboardQuery from "./queries/dashboard.ts";
 import friendQuery from "./queries/friend.ts";
 import groupQuery from "./queries/group.ts";
+import historyQuery from "./queries/history.ts";
 import searchQuery from "./queries/search.ts";
 
 const tallyInlineApp: InlineAppModule = {
@@ -25,6 +26,7 @@ const tallyInlineApp: InlineAppModule = {
     friend: { default: friendQuery },
     activity: { default: activityQuery },
     search: { default: searchQuery },
+    history: { default: historyQuery },
   } as unknown as InlineAppModule["queries"],
   kitAsk: {
     scope: "tally",

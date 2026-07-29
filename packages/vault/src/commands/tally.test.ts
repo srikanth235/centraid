@@ -218,6 +218,90 @@ describe("tally", () => {
     ).expense_id;
   }
 
+  test("edit and trash revisions undo the exact expense and split state", () => {
+    const priya = addFriend();
+    const gid = out<{ group_id: string }>(
+      invoke("tally.create_group", {
+        name: "Apt",
+        icon: "🏠",
+        member_ids: [priya],
+      })
+    ).group_id;
+    const xid = addRentExpense(gid, priya);
+    const edited = out<{ revision_id: string }>(
+      invoke("tally.edit_expense", {
+        expense_id: xid,
+        description: "Rent + utilities",
+        amount_minor: 300,
+        paid_by: priya,
+        category: "rent",
+        splits: [
+          { party_id: me, share_minor: 150 },
+          { party_id: priya, share_minor: 150 },
+        ],
+      })
+    );
+    const expense = () =>
+      db.vault
+        .prepare(
+          `SELECT description, amount_minor, paid_by, category, deleted_at
+             FROM tally_expense WHERE expense_id = ?`
+        )
+        .get(xid) as {
+        description: string;
+        amount_minor: number;
+        paid_by: string;
+        category: string;
+        deleted_at: string | null;
+      };
+    const splits = () =>
+      (
+        db.vault
+          .prepare(
+            `SELECT party_id, share_minor FROM tally_expense_split
+              WHERE expense_id = ? ORDER BY party_id`
+          )
+          .all(xid) as Array<{ party_id: string; share_minor: number }>
+      ).map((row) => ({ ...row }));
+    expect(expense()).toMatchObject({
+      description: "Rent + utilities",
+      amount_minor: 300,
+      paid_by: priya,
+      category: "rent",
+    });
+    out(
+      invoke("tally.undo_expense", {
+        expense_id: xid,
+        revision_id: edited.revision_id,
+      })
+    );
+    expect(expense()).toMatchObject({
+      description: "Rent",
+      amount_minor: 200,
+      paid_by: me,
+      category: "rent",
+      deleted_at: null,
+    });
+    expect(splits()).toStrictEqual(
+      [
+        { party_id: me, share_minor: 100 },
+        { party_id: priya, share_minor: 100 },
+      ].sort((a, b) => a.party_id.localeCompare(b.party_id))
+    );
+
+    const trashed = out<{ revision_id: string }>(
+      invoke("tally.delete_expense", { expense_id: xid })
+    );
+    expect(expense().deleted_at).not.toBeNull();
+    out(
+      invoke("tally.undo_expense", {
+        expense_id: xid,
+        revision_id: trashed.revision_id,
+      })
+    );
+    expect(expense().deleted_at).toBeNull();
+  });
+
   test("delete_group is refused while it holds an expense — a TRASHED expense still blocks until it purges", () => {
     const priya = addFriend();
     const gid = out<{ group_id: string }>(

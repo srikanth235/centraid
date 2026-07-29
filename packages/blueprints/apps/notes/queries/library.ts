@@ -26,6 +26,8 @@ interface NoteRow {
   created_at?: string;
   updated_at?: string;
   body_content_id?: string;
+  deleted_at?: string | null;
+  purge_at?: string | null;
 }
 
 interface CollectionRow {
@@ -206,7 +208,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // Pinned notes ride beside the window, not inside it — a pin is the
     // owner saying "always on top", which must survive the note aging out
     // of the recent slice.
-    const [recent, pinnedNotes, notebooks] = await Promise.all([
+    const [recent, pinnedNotes, trashedNotes, notebooks] = await Promise.all([
       ctx.vault.read({
         entity: "knowledge.note",
         // Trashed notes (issue #308: delete is reversible) stay out of the library.
@@ -225,6 +227,13 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         limit: 200,
         purpose,
       }),
+      ctx.vault.read({
+        entity: "knowledge.note",
+        where: [{ column: "deleted_at", op: "not-null" }],
+        orderBy: { column: "deleted_at", dir: "desc" },
+        limit: 200,
+        purpose,
+      }),
       // Notebooks are collections (issue #274) — the one curation mechanism.
       ctx.vault.read({ entity: "core.collection", purpose }),
     ]);
@@ -232,6 +241,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     for (const n of [
       ...((recent.rows ?? []) as unknown as NoteRow[]),
       ...((pinnedNotes.rows ?? []) as unknown as NoteRow[]),
+      ...((trashedNotes.rows ?? []) as unknown as NoteRow[]),
     ]) {
       byId.set(n.note_id, n);
     }
@@ -248,6 +258,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     if (windowed.length === 0) {
       return {
         notes: [],
+        trash: [],
         notebooks: books,
         tags: [],
         truncated: false,
@@ -438,6 +449,8 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           pinned: n.pinned,
           created_at: n.created_at,
           updated_at: n.updated_at,
+          deleted_at: n.deleted_at ?? null,
+          purge_at: n.purge_at ?? null,
           preview: previewOf(decoded),
           check: checkOf(decoded),
           notebook_ids: notebookIds,
@@ -459,11 +472,19 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // offers "Show more" (a re-read with a larger window) and search.
     const truncated =
       ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
-    return { notes: rows, notebooks: books, tags: allTags, truncated, window };
+    return {
+      notes: rows.filter((row) => row.deleted_at == null),
+      trash: rows.filter((row) => row.deleted_at != null),
+      notebooks: books,
+      tags: allTags,
+      truncated,
+      window,
+    };
   } catch (error) {
     const e = error as { code?: string; message?: string };
     return {
       notes: [],
+      trash: [],
       notebooks: [],
       vaultDenied: { code: e.code, message: e.message },
     };

@@ -79,8 +79,28 @@ export async function deleteAlbumConfirmed(
     ownScope()
   );
   if (narrate(outcome)) {
+    const revisionId = String(outcome?.output?.revision_id ?? "");
     setSelectedAlbum(null);
-    toast("Album deleted — its photos stay in your library.");
+    toast("Album deleted — its photos stay in your library.", {
+      duration: revisionId ? 10_000 : undefined,
+      undoLabel: revisionId ? "Undo" : undefined,
+      onUndo: revisionId
+        ? () => {
+            void (async () => {
+              const restored = await act(
+                "restore-album",
+                { album_id: album.album_id, revision_id: revisionId },
+                ownScope()
+              );
+              if (narrate(restored)) {
+                setSelectedAlbum(album.album_id);
+                await refresh();
+                toast("Album restored.");
+              }
+            })();
+          }
+        : undefined,
+    });
     await refresh();
   }
 }

@@ -2,6 +2,7 @@
 // per-person split breakdown, and delete/close/edit actions.
 import { MS, cat, first, money, tint, todayKey } from "../format.ts";
 import type { Group, LedgerRow } from "../types.ts";
+import { History } from "./History.tsx";
 import { ArmedButton, KitAvatar, ModalBackdrop } from "./Shared.tsx";
 
 import shared from "./shared.module.css";
@@ -14,6 +15,7 @@ export function DetailModal({
   onClose,
   onEdit,
   onDelete,
+  onUndo,
 }: {
   row: LedgerRow;
   me: string | null;
@@ -22,6 +24,7 @@ export function DetailModal({
   onClose: () => void;
   onEdit: (row: LedgerRow) => void;
   onDelete: (expenseId: string) => void;
+  onUndo: (expenseId: string, revisionId: string) => void;
 }) {
   const c = cat(row.category);
   const d = new Date((row.spent_on || todayKey()) + "T12:00:00");
@@ -101,6 +104,7 @@ export function DetailModal({
             </div>
           ))}
         </div>
+        <History expenseId={row.expense_id} onUndo={onUndo} />
         <div className="kit-modal-foot">
           <ArmedButton
             className={`kit-btn danger ${shared.del}`}

@@ -22,7 +22,7 @@ import {
   LOCKER_AUTH_DDL,
   LOCKER_DDL,
 } from "./domains-locker.js";
-import { PEOPLE_DDL } from "./domains-people.js";
+import { PEOPLE_DDL, PEOPLE_PROFILE_LIFECYCLE_DDL } from "./domains-people.js";
 import {
   SOCIAL_DDL,
   KNOWLEDGE_DDL,
@@ -30,6 +30,7 @@ import {
 } from "./domains-social-knowledge-media.js";
 import { TALLY_DDL } from "./domains-tally.js";
 import { ENRICH_DDL } from "./enrich.js";
+import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import { APP_EXT_DDL } from "./ext.js";
 import { FTS_DDL } from "./fts.js";
 import { JOURNAL_DDL } from "./journal.js";
@@ -94,6 +95,8 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     BLOB_DDL,
   ].join("\n"),
   LOCKER_AUTH_DDL,
+  ENTITY_REVISIONS_DDL,
+  PEOPLE_PROFILE_LIFECYCLE_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

@@ -29,6 +29,11 @@ import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { replaceMemo } from "./annotations.js";
+import {
+  loadEntityRevision,
+  markEntityRevisionUndone,
+  recordEntityRevision,
+} from "./entity-revisions.js";
 
 /** The vault owner's party id — Tally's implicit `me`. */
 function ownerPartyId(ctx: HandlerCtx): string {
@@ -95,6 +100,90 @@ const EXPENSE_LIVE_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NULL";
 const EXPENSE_TRASHED_SQL =
   "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id AND deleted_at IS NOT NULL";
+const EXPENSE_ANY_SQL =
+  "SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id";
+
+interface ExpenseSnapshot {
+  expense: {
+    description: string;
+    amount_minor: number;
+    paid_by: string;
+    spent_on: string;
+    category: string;
+    deleted_at: string | null;
+    purge_at: string | null;
+  };
+  splits: Array<{ party_id: string; share_minor: number }>;
+}
+
+function expenseSnapshot(ctx: HandlerCtx, expenseId: string): ExpenseSnapshot {
+  const expense = ctx.db
+    .prepare(
+      `SELECT description, amount_minor, paid_by, spent_on, category,
+              deleted_at, purge_at
+         FROM tally_expense WHERE expense_id = ?`
+    )
+    .get(expenseId) as ExpenseSnapshot["expense"] | undefined;
+  if (!expense) throw new Error("expense not found");
+  const splits = ctx.db
+    .prepare(
+      `SELECT party_id, share_minor
+         FROM tally_expense_split
+        WHERE expense_id = ?
+        ORDER BY party_id`
+    )
+    .all(expenseId) as ExpenseSnapshot["splits"];
+  return { expense, splits };
+}
+
+function recordExpenseRevision(
+  ctx: HandlerCtx,
+  expenseId: string,
+  operation: string
+): { revisionId: string; undoUntil: string } {
+  return recordEntityRevision(ctx, {
+    entityType: "tally.expense",
+    entityId: expenseId,
+    operation,
+    snapshot: expenseSnapshot(ctx, expenseId),
+  });
+}
+
+function restoreExpenseSnapshot(
+  ctx: HandlerCtx,
+  expenseId: string,
+  snapshot: ExpenseSnapshot
+): void {
+  const expense = snapshot.expense;
+  ctx.db
+    .prepare(
+      `UPDATE tally_expense
+          SET description = ?, amount_minor = ?, paid_by = ?, spent_on = ?,
+              category = ?, deleted_at = ?, purge_at = ?
+        WHERE expense_id = ?`
+    )
+    .run(
+      expense.description,
+      expense.amount_minor,
+      expense.paid_by,
+      expense.spent_on,
+      expense.category,
+      expense.deleted_at,
+      expense.purge_at,
+      expenseId
+    );
+  ctx.db
+    .prepare("DELETE FROM tally_expense_split WHERE expense_id = ?")
+    .run(expenseId);
+  const insert = ctx.db.prepare(
+    `INSERT INTO tally_expense_split
+      (expense_id, party_id, share_minor)
+     VALUES (?, ?, ?)`
+  );
+  for (const split of snapshot.splits)
+    insert.run(expenseId, split.party_id, split.share_minor);
+  ctx.wrote("tally.expense", expenseId);
+}
 
 /** ~30-day trash grace window before the sweep purges — mirrors Docs/Locker. */
 const PURGE_WINDOW_DAYS = 30;
@@ -659,7 +748,12 @@ const EDIT_EXPENSE: CommandDefinition = {
   },
   outputSchema: {
     type: "object",
-    properties: { expense_id: { type: "string" } },
+    required: ["expense_id", "revision_id", "undo_until"],
+    properties: {
+      expense_id: { type: "string" },
+      revision_id: { type: "string" },
+      undo_until: { type: "string" },
+    },
   },
   preconditions: [
     {
@@ -687,6 +781,7 @@ const EDIT_EXPENSE: CommandDefinition = {
       .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
       .get(input.expense_id) as { group_id: string } | undefined;
     if (!row) throw new Error("expense not found");
+    const revision = recordExpenseRevision(ctx, input.expense_id, "edit");
     ctx.db
       .prepare(
         `UPDATE tally_expense
@@ -711,7 +806,11 @@ const EDIT_EXPENSE: CommandDefinition = {
       input.paid_by,
       input.splits
     );
-    return { expense_id: input.expense_id };
+    return {
+      expense_id: input.expense_id,
+      revision_id: revision.revisionId,
+      undo_until: revision.undoUntil,
+    };
   },
 };
 
@@ -726,7 +825,12 @@ const DELETE_EXPENSE: CommandDefinition = {
   },
   outputSchema: {
     type: "object",
-    properties: { expense_id: { type: "string" } },
+    required: ["expense_id", "revision_id", "undo_until"],
+    properties: {
+      expense_id: { type: "string" },
+      revision_id: { type: "string" },
+      undo_until: { type: "string" },
+    },
   },
   preconditions: [
     {
@@ -755,6 +859,7 @@ const DELETE_EXPENSE: CommandDefinition = {
     // purge (tally_expense_split ON DELETE CASCADE) along with cleaning the
     // expense's polymorphic references (its memo annotation among them).
     const expenseId = String((ctx.input as { expense_id: string }).expense_id);
+    const revision = recordExpenseRevision(ctx, expenseId, "trash");
     ctx.db
       .prepare(
         "UPDATE tally_expense SET deleted_at = :now, purge_at = :purge WHERE expense_id = :expense_id"
@@ -765,7 +870,11 @@ const DELETE_EXPENSE: CommandDefinition = {
         purge: plusDays(ctx.now, PURGE_WINDOW_DAYS),
       });
     ctx.wrote("tally.expense", expenseId);
-    return { expense_id: expenseId };
+    return {
+      expense_id: expenseId,
+      revision_id: revision.revisionId,
+      undo_until: revision.undoUntil,
+    };
   },
 };
 
@@ -805,6 +914,7 @@ const RESTORE_EXPENSE: CommandDefinition = {
   handler: (ctx) => {
     // Lossless restore within the grace window — splits were never dropped.
     const expenseId = String((ctx.input as { expense_id: string }).expense_id);
+    recordExpenseRevision(ctx, expenseId, "restore");
     ctx.db
       .prepare(
         "UPDATE tally_expense SET deleted_at = NULL, purge_at = NULL WHERE expense_id = :expense_id"
@@ -812,6 +922,54 @@ const RESTORE_EXPENSE: CommandDefinition = {
       .run({ expense_id: expenseId });
     ctx.wrote("tally.expense", expenseId);
     return { expense_id: expenseId };
+  },
+};
+
+const UNDO_EXPENSE: CommandDefinition = {
+  name: "tally.undo_expense",
+  ownerSchema: "tally",
+  inputSchema: {
+    type: "object",
+    required: ["expense_id", "revision_id"],
+    additionalProperties: false,
+    properties: {
+      expense_id: { type: "string", minLength: 1 },
+      revision_id: { type: "string", minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["expense_id", "revision_id"],
+    properties: {
+      expense_id: { type: "string" },
+      revision_id: { type: "string" },
+    },
+  },
+  preconditions: [
+    {
+      name: "expense_exists_including_trash",
+      sql: EXPENSE_ANY_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [],
+  idempotency: "once",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as { expense_id: string; revision_id: string };
+    const revision = loadEntityRevision<ExpenseSnapshot>(ctx, {
+      entityType: "tally.expense",
+      entityId: input.expense_id,
+      revisionId: input.revision_id,
+    });
+    restoreExpenseSnapshot(ctx, input.expense_id, revision.snapshot);
+    markEntityRevisionUndone(ctx, revision.revisionId);
+    return {
+      expense_id: input.expense_id,
+      revision_id: revision.revisionId,
+    };
   },
 };
 
@@ -1043,6 +1201,7 @@ export function registerTallyCommands(gateway: Gateway): void {
   gateway.registerCommand(EDIT_EXPENSE);
   gateway.registerCommand(DELETE_EXPENSE);
   gateway.registerCommand(RESTORE_EXPENSE);
+  gateway.registerCommand(UNDO_EXPENSE);
   gateway.registerCommand(SETTLE_UP);
   gateway.registerCommand(BIND_TXN);
   gateway.registerCommand(SET_EXPENSE_MEMO);

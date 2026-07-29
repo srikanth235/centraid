@@ -8,10 +8,12 @@
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
 import dashboardQuery from "./queries/dashboard.ts";
+import historyQuery from "./queries/history.ts";
 import journalQuery from "./queries/journal.ts";
 import peopleQuery from "./queries/people.ts";
 import personQuery from "./queries/person.ts";
 import searchQuery from "./queries/search.ts";
+import trashQuery from "./queries/trash.ts";
 
 const peopleInlineApp: InlineAppModule = {
   appId: "people",
@@ -25,6 +27,8 @@ const peopleInlineApp: InlineAppModule = {
     person: { default: personQuery },
     journal: { default: journalQuery },
     dashboard: { default: dashboardQuery },
+    trash: { default: trashQuery },
+    history: { default: historyQuery },
   } as unknown as InlineAppModule["queries"],
   kitAsk: {
     scope: "people",

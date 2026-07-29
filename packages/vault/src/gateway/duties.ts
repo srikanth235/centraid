@@ -437,6 +437,11 @@ const DOMAIN_TRASH_TABLES: readonly {
     idCol: "date_id",
     entity: "people.important_date",
   },
+  {
+    physical: "people_profile",
+    idCol: "profile_id",
+    entity: "people.profile",
+  },
   { physical: "tally_expense", idCol: "expense_id", entity: "tally.expense" },
   {
     physical: "tally_settlement",

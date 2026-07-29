@@ -1,0 +1,33 @@
+.status {
+  color: var(--ink-3);
+  font: var(--t-small);
+  margin: 8px 0;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+}
+.row div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.row strong {
+  text-transform: capitalize;
+  font: var(--t-body-strong);
+}
+.row span,
+.done {
+  color: var(--ink-3);
+  font: var(--t-small);
+}

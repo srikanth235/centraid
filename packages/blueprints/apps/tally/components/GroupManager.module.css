@@ -1,0 +1,78 @@
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  margin-bottom: 18px;
+  padding: 14px;
+}
+
+.heading {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.heading h3 {
+  font: var(--t-body-strong);
+  margin: 0;
+}
+
+.rename,
+.add {
+  display: flex;
+  gap: 8px;
+}
+
+.rename input,
+.add select {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  flex: 1;
+  font: var(--t-body);
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.members {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 14px 0;
+}
+
+.member {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.member > span {
+  flex: 1;
+  font: var(--t-body);
+}
+
+.hint {
+  color: var(--ink-3);
+  font: var(--t-small);
+  margin: 10px 0 0;
+}
+
+.danger {
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+@media (max-width: 560px) {
+  .rename,
+  .add {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

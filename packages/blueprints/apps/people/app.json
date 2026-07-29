@@ -23,7 +23,29 @@
       { "schema": "knowledge", "table": "annotation", "verbs": "read" },
       { "schema": "knowledge", "table": "note", "verbs": "read" },
       { "schema": "schedule", "table": "task", "verbs": "read" },
-      { "schema": "tally", "table": "obligation", "verbs": "read" }
+      { "schema": "tally", "table": "obligation", "verbs": "read" },
+      {
+        "schema": "core",
+        "table": "entity_revision",
+        "verbs": "read",
+        "rowFilter": [
+          {
+            "column": "entity_type",
+            "op": "eq",
+            "value": "people.person"
+          }
+        ],
+        "fieldMask": [
+          "revision_id",
+          "entity_type",
+          "entity_id",
+          "operation",
+          "snapshot_json",
+          "recorded_at",
+          "undo_until",
+          "undone_at"
+        ]
+      }
     ]
   },
   "actions": [
@@ -90,6 +112,73 @@
           "cadence_days": { "type": "integer", "minimum": 1 }
         },
         "required": ["party_id", "cadence_days"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "trash-person",
+      "description": "Move a People profile to reversible 30-day trash while preserving its canonical party and linked facts.",
+      "confirmation": "always",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-person",
+      "description": "Restore a People profile from its grace-window trash.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "undo-person",
+      "description": "Apply one People pre-mutation snapshot exactly once, restoring edits, cadence, or trash state.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 },
+          "revision_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["party_id", "revision_id"],
         "additionalProperties": false
       },
       "output": {
@@ -589,6 +678,41 @@
         "type": "object",
         "properties": {
           "people": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "trash",
+      "description": "People profiles in reversible trash, with purge dates and safe display metadata.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "people": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "history",
+      "description": "Durable pre-mutation history for one People profile, including one-shot undo state.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "revisions": { "type": "array" },
           "vaultDenied": { "type": "object" }
         }
       }

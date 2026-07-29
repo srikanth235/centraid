@@ -201,6 +201,8 @@ describe("backup", () => {
     lockerPlaintext: string;
     lockerPassphrase: string;
     outboxItemId: string;
+    peoplePartyId: string;
+    peopleRevisionId: string;
   }
 
   interface Harness {
@@ -362,6 +364,17 @@ describe("backup", () => {
 
     const { itemId: outboxItemId } = seedApprovedOutboxItem(h.plane);
 
+    // #630 P5 preservation canary: the profile lifecycle columns and the
+    // exact pre-trash revision must both survive snapshot/adoption.
+    const peoplePartyId = invoke(h.plane, "people.add_person", {
+      display_name: "Maya Chen",
+      role: "Design lead",
+      cadence_days: 14,
+    })["party_id"] as string;
+    const peopleRevisionId = invoke(h.plane, "people.trash_person", {
+      party_id: peoplePartyId,
+    })["revision_id"] as string;
+
     h.seeded = {
       taskTitles,
       smallBlobSha,
@@ -372,6 +385,8 @@ describe("backup", () => {
       lockerPlaintext,
       lockerPassphrase,
       outboxItemId,
+      peoplePartyId,
+      peopleRevisionId,
     };
 
     // 2. First real backup — REAL assembleSourceEntries → REAL LocalBackupProvider.
@@ -563,6 +578,38 @@ describe("backup", () => {
       }>;
       const titles = rows.map((r) => r.title);
       for (const t of h.seeded.taskTitles) expect(titles).toContain(t);
+
+      const restoredPerson = plane.db.vault
+        .prepare(
+          `SELECT pr.role, pr.deleted_at, pr.purge_at, r.operation,
+                  r.entity_type, r.entity_id, r.snapshot_json
+             FROM people_profile pr
+             JOIN core_entity_revision r
+               ON r.revision_id = ?
+            WHERE pr.party_id = ?`
+        )
+        .get(h.seeded.peopleRevisionId, h.seeded.peoplePartyId) as {
+        role: string;
+        deleted_at: string | null;
+        purge_at: string | null;
+        operation: string;
+        entity_type: string;
+        entity_id: string;
+        snapshot_json: string;
+      };
+      expect(restoredPerson).toMatchObject({
+        role: "Design lead",
+        operation: "trash",
+        entity_type: "people.person",
+        entity_id: h.seeded.peoplePartyId,
+      });
+      expect(restoredPerson.deleted_at).not.toBeNull();
+      expect(restoredPerson.purge_at).not.toBeNull();
+      expect(JSON.parse(restoredPerson.snapshot_json)).toMatchObject({
+        role: "Design lead",
+        deleted_at: null,
+        purge_at: null,
+      });
 
       // Byte-identical blob content via the real blob read path.
       const smallRead = await plane.db.blobs.open(h.seeded.smallBlobSha);

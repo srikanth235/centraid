@@ -181,29 +181,97 @@ describe("media", () => {
     expect(album.cover_content_id).toBe(b.content_id);
   });
 
-  test("rename_album and delete_album curate without touching assets", () => {
-    const { asset_id } = addAsset({ data_uri: PIXEL });
+  test("delete_album undo restores metadata, ordered membership, and cover without touching assets", () => {
+    const first = addAsset({ data_uri: PIXEL });
+    const second = addAsset({ data_uri: CLIP });
     const albumId = createAlbum("Trip");
-    invoke("media.add_to_album", { album_id: albumId, asset_id });
+    invoke("media.add_to_album", {
+      album_id: albumId,
+      asset_id: first.asset_id,
+    });
+    invoke("media.add_to_album", {
+      album_id: albumId,
+      asset_id: second.asset_id,
+    });
+    invoke("media.set_album_cover", {
+      album_id: albumId,
+      asset_id: second.asset_id,
+    });
     expect(
       invoke("media.rename_album", { album_id: albumId, title: "Goa 2026" })
         .status
     ).toBe("executed");
+    const deleted = invoke("media.delete_album", { album_id: albumId });
+    expect(deleted.status).toBe("executed");
+    const revision = (
+      deleted as { output: { revision_id: string; undo_until: string } }
+    ).output;
+    expect(Date.parse(revision.undo_until)).toBeGreaterThan(Date.now());
+    expect(
+      invoke("media.restore_album", {
+        album_id: albumId,
+        revision_id: revision.revision_id,
+      }).status
+    ).toBe("executed");
+    const album = db.vault
+      .prepare(
+        `SELECT name, cover_content_id FROM core_collection
+          WHERE collection_id = ?`
+      )
+      .get(albumId) as { name: string; cover_content_id: string };
+    expect({ ...album }).toStrictEqual({
+      name: "Goa 2026",
+      cover_content_id: second.content_id,
+    });
+    expect(
+      (
+        db.vault
+          .prepare(
+            `SELECT target_id, position FROM core_collection_entry
+              WHERE collection_id = ? ORDER BY position`
+          )
+          .all(albumId) as Array<{ target_id: string; position: number }>
+      ).map((row) => ({ ...row }))
+    ).toStrictEqual([
+      { target_id: first.asset_id, position: 0 },
+      { target_id: second.asset_id, position: 1 },
+    ]);
+    expect(
+      invoke("media.restore_album", {
+        album_id: albumId,
+        revision_id: revision.revision_id,
+      }).status
+    ).toBe("failed");
+    expect(
+      (
+        db.vault
+          .prepare("SELECT count(*) AS n FROM media_media_asset")
+          .get() as { n: number }
+      ).n
+    ).toBe(2);
+  });
+
+  test("delete_album removes only the collection when undo is not used", () => {
+    const { asset_id } = addAsset({ data_uri: PIXEL });
+    const albumId = createAlbum("Trip");
+    invoke("media.add_to_album", { album_id: albumId, asset_id });
     expect(invoke("media.delete_album", { album_id: albumId }).status).toBe(
       "executed"
     );
-    const albums = db.vault
-      .prepare("SELECT count(*) AS n FROM core_collection")
-      .get() as {
-      n: number;
-    };
-    expect(albums.n).toBe(0);
-    const assets = db.vault
-      .prepare("SELECT count(*) AS n FROM media_media_asset")
-      .get() as {
-      n: number;
-    };
-    expect(assets.n).toBe(1);
+    expect(
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM core_collection").get() as {
+          n: number;
+        }
+      ).n
+    ).toBe(0);
+    expect(
+      (
+        db.vault
+          .prepare("SELECT count(*) AS n FROM media_media_asset")
+          .get() as { n: number }
+      ).n
+    ).toBe(1);
   });
 
   test("delete_asset trashes the asset, leaves albums, and soft-deletes unreferenced bytes", () => {

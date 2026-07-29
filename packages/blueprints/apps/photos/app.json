@@ -26,6 +26,7 @@
       { "schema": "media", "table": "rename_album", "verbs": "act" },
       { "schema": "media", "table": "set_album_cover", "verbs": "act" },
       { "schema": "media", "table": "delete_album", "verbs": "act" },
+      { "schema": "media", "table": "restore_album", "verbs": "act" },
       { "schema": "media", "table": "add_to_album", "verbs": "act" },
       { "schema": "media", "table": "remove_from_album", "verbs": "act" },
       { "schema": "media", "table": "face_region", "verbs": "read" },
@@ -238,13 +239,36 @@
     {
       "name": "delete-album",
       "description": "Delete an album through media.delete_album; its photos stay in the library.",
-      "confirmation": "none",
+      "confirmation": "always",
       "input": {
         "type": "object",
         "properties": {
           "album_id": { "type": "string", "minLength": 1 }
         },
         "required": ["album_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-album",
+      "description": "Restore a deleted album and its ordered membership from its durable P5 revision.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": "string", "minLength": 1 },
+          "revision_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["album_id", "revision_id"],
         "additionalProperties": false
       },
       "output": {

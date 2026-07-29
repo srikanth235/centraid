@@ -85,7 +85,7 @@ export function createLogic({
     if (search.trim()) {
       base = state.searchResults ?? [];
     } else {
-      base = data.people.slice();
+      base = nav.kind === "trash" ? data.trash.slice() : data.people.slice();
       if (nav.kind === "reconnect")
         base = base.filter((p) => daysSince(p) >= (p.cadence_days ?? 30));
       else if (nav.kind === "upcoming")
@@ -226,6 +226,86 @@ export function createLogic({
     toast(`Moved to ${name} · receipted.`);
     await refresh();
     await reloadOpenDetail(p.party_id);
+  }
+
+  async function undoPerson(
+    partyId: string,
+    revisionId: string
+  ): Promise<void> {
+    const outcome = await act("undo-person", {
+      party_id: partyId,
+      revision_id: revisionId,
+    });
+    if (!narrate(outcome)) return;
+    toast("Change undone · receipt");
+    await refresh();
+    await reloadOpenDetail(partyId);
+  }
+
+  async function editPerson(
+    p: DetailPerson,
+    fields: Record<string, unknown>
+  ): Promise<boolean> {
+    const outcome = await act("edit-person", {
+      party_id: p.party_id,
+      ...fields,
+    });
+    if (!narrate(outcome)) return false;
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    toast("Profile updated · receipt", {
+      duration: revisionId ? 10_000 : undefined,
+      undoLabel: revisionId ? "Undo" : undefined,
+      onUndo: revisionId
+        ? () => void undoPerson(p.party_id, revisionId)
+        : undefined,
+    });
+    await refresh();
+    await reloadOpenDetail(p.party_id);
+    return true;
+  }
+
+  async function setCadence(
+    p: DetailPerson,
+    cadenceDays: number
+  ): Promise<boolean> {
+    const outcome = await act("set-cadence", {
+      party_id: p.party_id,
+      cadence_days: cadenceDays,
+    });
+    if (!narrate(outcome)) return false;
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    toast("Cadence updated · receipt", {
+      duration: revisionId ? 10_000 : undefined,
+      undoLabel: revisionId ? "Undo" : undefined,
+      onUndo: revisionId
+        ? () => void undoPerson(p.party_id, revisionId)
+        : undefined,
+    });
+    await refresh();
+    await reloadOpenDetail(p.party_id);
+    return true;
+  }
+
+  async function trashPerson(p: DetailPerson): Promise<void> {
+    const outcome = await act("trash-person", { party_id: p.party_id });
+    if (!narrate(outcome)) return;
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    closeDetails();
+    toast(`${p.name} moved to trash`, {
+      duration: revisionId ? 10_000 : undefined,
+      undoLabel: revisionId ? "Undo" : undefined,
+      onUndo: revisionId
+        ? () => void undoPerson(p.party_id, revisionId)
+        : undefined,
+    });
+    await refresh();
+  }
+
+  async function restorePerson(p: Person): Promise<void> {
+    const outcome = await act("restore-person", { party_id: p.party_id });
+    if (!narrate(outcome)) return;
+    toast(`${p.name} restored · receipt`);
+    await refresh();
   }
 
   async function logInteraction(p: DetailPerson, kind: string, text: string) {
@@ -485,6 +565,11 @@ export function createLogic({
     openPersonMenu,
     toggleStar,
     movePerson,
+    undoPerson,
+    editPerson,
+    setCadence,
+    trashPerson,
+    restorePerson,
     logInteraction,
     favoriteSelected,
     createList,

@@ -16,6 +16,7 @@ import { deriveTitle, parseBlocks, stripInline } from "../format.ts";
 import { I } from "../icons.ts";
 import { relTime, renderAttachments } from "../kit.ts";
 import type { Note, NotePatch, Notebook } from "../types.ts";
+import { History } from "./History.tsx";
 import { Icon } from "./Shared.tsx";
 
 import styles from "./Editor.module.css";
@@ -104,7 +105,7 @@ function DeleteButton({ onDelete }: { onDelete: () => void }) {
       }}
     >
       {armed ? (
-        <span className={shared.armedLabel}>Sure?</span>
+        <span className={shared.armedLabel}>Delete note?</span>
       ) : (
         <Icon svg={I.trashLg} />
       )}
@@ -269,6 +270,7 @@ function Blocks({
 
 export function Editor({
   note,
+  trashed,
   notebooks,
   pending,
   registerFlush,
@@ -277,12 +279,15 @@ export function Editor({
   onTogglePin,
   onMove,
   onDelete,
+  onRestore,
+  onRestoreVersion,
   onAttach,
   onRemoveAttachment,
   onAddTag,
   onRemoveTag,
 }: {
   note: Note;
+  trashed: boolean;
   notebooks: Notebook[];
   pending: boolean;
   registerFlush: (fn: () => Promise<void>) => void;
@@ -294,6 +299,8 @@ export function Editor({
   onTogglePin: (note: Note) => void;
   onMove: (noteId: string, notebookId: string | null) => void;
   onDelete: (note: Note) => void;
+  onRestore: (noteId: string) => void;
+  onRestoreVersion: (noteId: string, contentId: string) => void;
   onAttach: (noteId: string) => void;
   onRemoveAttachment: (
     attachmentId: string
@@ -305,6 +312,7 @@ export function Editor({
   const [body, setBody] = useState(note.body ?? "");
   const [bodyEditing, setBodyEditing] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const titleRef = useRef(title);
   const bodyRef = useRef(body);
   const lastSavedRef = useRef({
@@ -526,48 +534,62 @@ export function Editor({
           </button>
           <span className={styles.saveLabel}>{saveLabel}</span>
           <div className={styles.editorTools}>
-            <select
-              className={styles.nbSelect}
-              aria-label="Notebook"
-              value={notebookId}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-                // Best-effort: let any in-flight/pending title-body autosave
-                // land before the discrete move write fires. The two never
-                // collide on a field (autosave only ever sends title/
-                // body_text; a move only ever sends notebook_id), so this
-                // is a courtesy ordering, not a correctness requirement.
-                flush();
-                onMove(note.note_id, e.target.value || null);
-              }}
-            >
-              <option value="">Unfiled</option>
-              {notebooks.map((nb) => (
-                <option key={nb.notebook_id} value={nb.notebook_id}>
-                  {nb.name ?? "Notebook"}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="kit-icon-btn"
-              aria-label="Add checklist item"
-              onClick={insertChecklist}
-            >
-              <Icon svg={I.checklistAdd} />
-            </button>
-            <button
-              type="button"
-              className={note.pinned === 1 ? "kit-icon-btn on" : "kit-icon-btn"}
-              aria-label={note.pinned === 1 ? "Unpin note" : "Pin note"}
-              aria-pressed={note.pinned === 1}
-              onClick={() => {
-                flush();
-                onTogglePin(note);
-              }}
-            >
-              <Icon svg={I.pinEditor} />
-            </button>
-            <DeleteButton onDelete={() => onDelete(note)} />
+            {trashed ? (
+              <button
+                type="button"
+                className="kit-btn primary"
+                onClick={() => onRestore(note.note_id)}
+              >
+                Restore note
+              </button>
+            ) : (
+              <>
+                <select
+                  className={styles.nbSelect}
+                  aria-label="Notebook"
+                  value={notebookId}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                    // Best-effort: let any in-flight/pending title-body autosave
+                    // land before the discrete move write fires. The two never
+                    // collide on a field (autosave only ever sends title/
+                    // body_text; a move only ever sends notebook_id), so this
+                    // is a courtesy ordering, not a correctness requirement.
+                    flush();
+                    onMove(note.note_id, e.target.value || null);
+                  }}
+                >
+                  <option value="">Unfiled</option>
+                  {notebooks.map((nb) => (
+                    <option key={nb.notebook_id} value={nb.notebook_id}>
+                      {nb.name ?? "Notebook"}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="kit-icon-btn"
+                  aria-label="Add checklist item"
+                  onClick={insertChecklist}
+                >
+                  <Icon svg={I.checklistAdd} />
+                </button>
+                <button
+                  type="button"
+                  className={
+                    note.pinned === 1 ? "kit-icon-btn on" : "kit-icon-btn"
+                  }
+                  aria-label={note.pinned === 1 ? "Unpin note" : "Pin note"}
+                  aria-pressed={note.pinned === 1}
+                  onClick={() => {
+                    flush();
+                    onTogglePin(note);
+                  }}
+                >
+                  <Icon svg={I.pinEditor} />
+                </button>
+                <DeleteButton onDelete={() => onDelete(note)} />
+              </>
+            )}
           </div>
         </div>
 
@@ -578,6 +600,7 @@ export function Editor({
             placeholder="Title"
             aria-label="Note title"
             value={title}
+            readOnly={trashed}
             onChange={(e) => updateTitle(e.target.value)}
           />
 
@@ -602,22 +625,48 @@ export function Editor({
             <Blocks
               body={body}
               onToggleCheck={toggleCheck}
-              onEnter={enterEdit}
+              onEnter={trashed ? () => undefined : enterEdit}
             />
           )}
 
-          <div className={shared.eyebrowLabel}>Tags</div>
-          <TagStrip note={note} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
-
-          <div className={shared.eyebrowLabel}>Attachments</div>
-          <AttachStrip note={note} onRemove={onRemoveAttachment} />
           <button
             type="button"
-            className={`kit-btn ${styles.attachBtn}`}
-            onClick={() => onAttach(note.note_id)}
+            className="kit-btn"
+            aria-expanded={historyOpen}
+            onClick={() => setHistoryOpen((open) => !open)}
           >
-            Attach a file
+            {historyOpen ? "Hide version history" : "Version history"}
           </button>
+          {historyOpen ? (
+            <History
+              noteId={note.note_id}
+              readOnly={trashed}
+              onRestore={(contentId) =>
+                onRestoreVersion(note.note_id, contentId)
+              }
+            />
+          ) : null}
+
+          {trashed ? null : (
+            <>
+              <div className={shared.eyebrowLabel}>Tags</div>
+              <TagStrip
+                note={note}
+                onAddTag={onAddTag}
+                onRemoveTag={onRemoveTag}
+              />
+
+              <div className={shared.eyebrowLabel}>Attachments</div>
+              <AttachStrip note={note} onRemove={onRemoveAttachment} />
+              <button
+                type="button"
+                className={`kit-btn ${styles.attachBtn}`}
+                onClick={() => onAttach(note.note_id)}
+              >
+                Attach a file
+              </button>
+            </>
+          )}
         </div>
 
         <div className={styles.editorFoot}>

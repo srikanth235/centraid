@@ -33,6 +33,7 @@ import {
   Storage,
 } from "./components/Sidebar.tsx";
 import { StatusChips } from "./components/Toolbar.tsx";
+import { TrashCard } from "./components/TrashCard.tsx";
 import { avatarColor, hashInt, listName, PALETTE } from "./format.ts";
 import { I } from "./icons.ts";
 import {
@@ -75,6 +76,10 @@ interface PeoplePayload {
 interface SearchPayload {
   people?: Person[];
 }
+interface TrashPayload {
+  people?: Person[];
+  vaultDenied?: { code?: string; message?: string };
+}
 
 // Knobs: read the initial default view from the app ROOT element (the host sets
 // data-app-* there), not documentElement (#505 trap 5).
@@ -116,6 +121,7 @@ const TOOLBAR_TITLES: Record<Exclude<Nav["kind"], "list">, string> = {
   starred: "Favorites",
   journal: "Journal",
   activity: "Activity",
+  trash: "Trash",
 };
 const SORT_NAMES: Record<AppState["sortKey"], string> = {
   last: "Last spoke",
@@ -130,7 +136,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const themeBtnRef = useRef<HTMLButtonElement | null>(null);
   const newWrapRef = useRef<HTMLDivElement | null>(null);
-  const dataRef = useRef<AppData>({ people: [], lists: [] });
+  const dataRef = useRef<AppData>({ people: [], trash: [], lists: [] });
   const stateRef = useRef<AppState>(makeState(initialView(null)));
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
   const consentRef = useRef<{ message: string } | null>(null);
@@ -141,11 +147,18 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const data = dataRef.current;
     const logic = logicRef.current;
     let next: PeoplePayload | undefined;
+    let trash: TrashPayload | undefined;
     try {
-      next = await window.centraid.read<PeoplePayload>({
-        query: "people",
-        input: { limit: state.peopleWindow },
-      });
+      [next, trash] = await Promise.all([
+        window.centraid.read<PeoplePayload>({
+          query: "people",
+          input: { limit: state.peopleWindow },
+        }),
+        window.centraid.read<TrashPayload>({
+          query: "trash",
+          input: {},
+        }),
+      ]);
     } catch {
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       readFailedShownRef.current = true;
@@ -163,6 +176,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     }
     const incoming = next ?? data;
     data.people = incoming.people ?? [];
+    data.trash = trash?.vaultDenied ? [] : (trash?.people ?? []);
     data.lists = incoming.lists ?? [];
     state.peopleTruncated = Boolean(next?.truncated);
     state.selected = new Set(
@@ -215,6 +229,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     toggleAllVisible: handleToggleAllVisible,
     toggleSelect: handleToggleSelect,
     toggleStar: handleToggleStar,
+    restorePerson: handleRestorePerson,
   } = logic;
 
   const setRoot = useCallback(
@@ -393,9 +408,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const rows = logic.currentRows();
   state.visibleRows = rows;
 
-  const isPeople = ["all", "reconnect", "upcoming", "starred", "list"].includes(
-    nav.kind
-  );
+  const isPeople = [
+    "all",
+    "reconnect",
+    "upcoming",
+    "starred",
+    "list",
+    "trash",
+  ].includes(nav.kind);
   let title =
     nav.kind === "list" ? listName(data, nav.listId) : TOOLBAR_TITLES[nav.kind];
   if (state.search.trim()) title = `Results for "${state.search.trim()}"`;
@@ -412,6 +432,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   else if (nav.kind === "upcoming")
     sub = `${n} with reminders · birthdays and dates`;
   else if (nav.kind === "starred") sub = `${n} favorite${n === 1 ? "" : "s"}`;
+  else if (nav.kind === "trash")
+    sub = `${n} in trash · auto-purge after 30 days`;
   else sub = `${n} ${n === 1 ? "person" : "people"}`;
 
   const sortLabel = `${SORT_NAMES[state.sortKey]} ${state.sortDir === 1 ? "↑" : "↓"}`;
@@ -433,6 +455,29 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onOpenDetails={handleOpenDetails}
       />
     );
+  } else if (nav.kind === "trash") {
+    board =
+      rows.length === 0 ? (
+        <div className="kit-empty">
+          <div className="kit-empty-icon">
+            <Icon svg={I.del} />
+          </div>
+          <div className="kit-empty-title">Trash is empty</div>
+          <div className="kit-empty-sub">
+            Deleted people stay recoverable here for 30 days.
+          </div>
+        </div>
+      ) : (
+        <div className={styles.grid}>
+          {rows.map((person) => (
+            <TrashCard
+              key={person.party_id}
+              person={person}
+              onRestore={handleRestorePerson}
+            />
+          ))}
+        </div>
+      );
   } else if (rows.length === 0) {
     const searching = !!state.search.trim();
     const emptyTitle = searching
@@ -528,7 +573,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       : PALETTE[hashInt(nameGuess) % PALETTE.length]!;
     details = (
       <Details
-        key={state.detailsId}
+        key={`${state.detailsId}:${dp ? "loaded" : "loading"}`}
         person={dp}
         nameGuess={nameGuess}
         color={color}
@@ -597,6 +642,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         onSettleDebt={(debtId) =>
           logic.drawerAct("settle-debt", { debt_id: debtId }, "Debt settled")
         }
+        onEdit={(fields) => logic.editPerson(dp!, fields)}
+        onSetCadence={(cadenceDays) => logic.setCadence(dp!, cadenceDays)}
+        onTrash={() => logic.trashPerson(dp!)}
+        onUndo={(revisionId) => void logic.undoPerson(dp!.party_id, revisionId)}
       />
     );
   }
@@ -654,6 +703,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           <SmartNav
             navKind={nav.kind}
             people={data.people}
+            trash={data.trash}
             onSelectNav={handleSelectNav}
           />
         }

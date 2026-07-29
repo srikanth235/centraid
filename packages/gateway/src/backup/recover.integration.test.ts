@@ -112,6 +112,9 @@ describe("backup/recover", () => {
     appId: string;
     serverUrl: string;
     apiKey: string;
+    peoplePartyId: string;
+    peopleRevisionId: string;
+    sourceSealKeyDestroyed: boolean;
   }
 
   async function publishSeedApp(plane: VaultPlane): Promise<string> {
@@ -199,6 +202,18 @@ describe("backup/recover", () => {
 
     const { itemId, grantId } = seedSealedOutbox(plane);
 
+    // #630 P5 restore-after-erase canary: preserve both the new lifecycle
+    // columns and their durable pre-trash snapshot through kit/provider
+    // recovery after the source DEK file is destroyed.
+    const peoplePartyId = invoke(plane, "people.add_person", {
+      display_name: "Maya Chen",
+      role: "Design lead",
+      cadence_days: 14,
+    })["party_id"] as string;
+    const peopleRevisionId = invoke(plane, "people.trash_person", {
+      party_id: peoplePartyId,
+    })["revision_id"] as string;
+
     const appId = await publishSeedApp(plane);
 
     const replica = new ReplicaIndex(plane.db.vault);
@@ -213,6 +228,9 @@ describe("backup/recover", () => {
       await service.recoveryKitDocument(),
       KIT_PASSWORD
     );
+    const sourceSealKeyDestroyed = new KeyStore(
+      path.join(vaultRoot, "keys")
+    ).destroy(`${vaultId}.sealkey`);
 
     const casProvider = openRemoteBackupProvider({
       baseUrl: server.url,
@@ -244,6 +262,9 @@ describe("backup/recover", () => {
       appId,
       serverUrl: server.url,
       apiKey: server.apiKey,
+      peoplePartyId,
+      peopleRevisionId,
+      sourceSealKeyDestroyed,
     };
   }
 
@@ -252,6 +273,7 @@ describe("backup/recover", () => {
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
     expect(a.oldGeneration).toBe(1);
+    expect(a.sourceSealKeyDestroyed).toBe(true);
 
     const dataDir = await tempDir("recover-blank");
     const layout = daemonLayoutFor(dataDir);
@@ -279,6 +301,37 @@ describe("backup/recover", () => {
             .get() as { n: number }
         ).n
       ).toBe(3);
+      const restoredPerson = restoredDb
+        .prepare(
+          `SELECT pr.role, pr.deleted_at, pr.purge_at, r.operation,
+                  r.entity_type, r.entity_id, r.snapshot_json
+             FROM people_profile pr
+             JOIN core_entity_revision r
+               ON r.revision_id = ?
+            WHERE pr.party_id = ?`
+        )
+        .get(a.peopleRevisionId, a.peoplePartyId) as {
+        role: string;
+        deleted_at: string | null;
+        purge_at: string | null;
+        operation: string;
+        entity_type: string;
+        entity_id: string;
+        snapshot_json: string;
+      };
+      expect(restoredPerson).toMatchObject({
+        role: "Design lead",
+        operation: "trash",
+        entity_type: "people.person",
+        entity_id: a.peoplePartyId,
+      });
+      expect(restoredPerson.deleted_at).not.toBeNull();
+      expect(restoredPerson.purge_at).not.toBeNull();
+      expect(JSON.parse(restoredPerson.snapshot_json)).toMatchObject({
+        role: "Design lead",
+        deleted_at: null,
+        purge_at: null,
+      });
     } finally {
       restoredDb.close();
     }
@@ -393,13 +446,14 @@ describe("backup/recover", () => {
     expect({
       truncated: report.truncated,
       warmed: report.previews.warmed,
+      hasReason: report.previews.reason.length > 0,
     }).toStrictEqual({
       truncated: false,
       warmed: false,
+      hasReason: true,
     });
     if (report.previews.warmed)
       throw new Error("headless recovery must not pre-warm previews");
-    expect(report.previews.reason.length).toBeGreaterThan(0);
   }, 45_000);
 
   test("recovery refuses a snapshot written by newer software BEFORE any byte is fetched", async () => {

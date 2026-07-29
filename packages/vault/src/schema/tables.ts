@@ -37,6 +37,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "tag",
     "collection",
     "collection_entry",
+    // P5 pre-mutation snapshots. Grants row-filter this by entity_type.
+    "entity_revision",
     // Share-by-placement provenance (issue #599). Registered so a merged
     // multi-scope app view can read the audience + who-placed-it badge for a
     // projected row like any other table.

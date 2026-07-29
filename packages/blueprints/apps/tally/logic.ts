@@ -334,6 +334,7 @@ export function createLogic({
         ...base,
       });
       if (!narrate(outcome)) return;
+      armExpenseUndo(outcome, "Expense updated.");
       toast("Expense updated · receipted.");
       closeExpense();
       await refreshAll();
@@ -376,6 +377,7 @@ export function createLogic({
   async function deleteExpense(expenseId: string) {
     const outcome = await act("delete-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
+    armExpenseUndo(outcome, "Expense moved to Trash.");
     toast("Expense deleted · receipted.");
     closeAllModals();
     // closeAllModals() only nulls the state — every other caller follows it
@@ -386,10 +388,78 @@ export function createLogic({
     await refreshAll();
   }
 
+  function armExpenseUndo(outcome: VaultOutcome | undefined, label: string) {
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    const expenseId = String(outcome?.output?.expense_id ?? "");
+    const until = String(outcome?.output?.undo_until ?? "");
+    if (!revisionId || !expenseId || !until) return;
+    state.expenseUndo = { expenseId, revisionId, until, label };
+    render();
+    const delay = Math.max(0, Date.parse(until) - Date.now());
+    setTimeout(() => {
+      if (state.expenseUndo?.revisionId !== revisionId) return;
+      state.expenseUndo = null;
+      render();
+    }, delay + 50);
+  }
+
+  async function undoExpense(expenseId: string, revisionId: string) {
+    const outcome = await act("undo-expense", {
+      expense_id: expenseId,
+      revision_id: revisionId,
+    });
+    if (!narrate(outcome)) return;
+    state.expenseUndo = null;
+    closeAllModals();
+    renderModals();
+    toast("Expense change undone · receipted.");
+    await refreshAll();
+  }
+
   async function restoreExpense(expenseId: string) {
     const outcome = await act("restore-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
     toast("Expense restored · receipted.");
+    await refreshAll();
+  }
+
+  // ---------- Group management ----------
+
+  async function renameGroup(groupId: string, name: string) {
+    const outcome = await act("rename-group", {
+      group_id: groupId,
+      name,
+    });
+    if (!narrate(outcome)) return;
+    toast("Group renamed · receipted.");
+    await refreshAll();
+  }
+
+  async function addGroupMember(groupId: string, partyId: string) {
+    const outcome = await act("add-group-member", {
+      group_id: groupId,
+      party_id: partyId,
+    });
+    if (!narrate(outcome)) return;
+    toast("Member added · receipted.");
+    await refreshAll();
+  }
+
+  async function removeGroupMember(groupId: string, partyId: string) {
+    const outcome = await act("remove-group-member", {
+      group_id: groupId,
+      party_id: partyId,
+    });
+    if (!narrate(outcome)) return;
+    toast("Member removed · receipted.");
+    await refreshAll();
+  }
+
+  async function deleteGroup(groupId: string) {
+    const outcome = await act("delete-group", { group_id: groupId });
+    if (!narrate(outcome)) return;
+    toast("Group deleted · receipted.");
+    setNav({ view: "dashboard", groupId: null, search: "" });
     await refreshAll();
   }
 
@@ -566,7 +636,12 @@ export function createLogic({
     setExpenseGroup,
     saveExpense,
     deleteExpense,
+    undoExpense,
     restoreExpense,
+    renameGroup,
+    addGroupMember,
+    removeGroupMember,
+    deleteGroup,
     openSettle,
     closeSettle,
     setSettle,

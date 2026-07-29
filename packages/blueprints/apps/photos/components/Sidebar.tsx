@@ -125,7 +125,12 @@ function AlbumRow({
           aria-label={`Delete ${album.title ?? "album"}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!armConfirm(e.currentTarget, { armedLabel: "×?" })) return;
+            if (
+              !armConfirm(e.currentTarget, {
+                armedLabel: `Delete ${album.title ?? "album"}?`,
+              })
+            )
+              return;
             onDelete(album);
           }}
         >

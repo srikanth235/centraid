@@ -13,6 +13,7 @@ export type Nav =
   | { kind: "reconnect" }
   | { kind: "upcoming" }
   | { kind: "starred" }
+  | { kind: "trash" }
   | { kind: "journal" }
   | { kind: "activity" }
   | { kind: "list"; listId: string };
@@ -36,6 +37,7 @@ export interface Person {
   list_id?: string | null;
   starred?: boolean;
   reminders?: Reminder[];
+  purge_at?: string | null;
   /** FTS snippet — present only on `search` query rows. */
   snippet?: string;
 }
@@ -161,6 +163,7 @@ export type SortKey = "last" | "name" | "cadence";
 
 export interface AppData {
   people: Person[];
+  trash: Person[];
   lists: PersonList[];
 }
 

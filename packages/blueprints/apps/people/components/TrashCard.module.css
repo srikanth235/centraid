@@ -1,0 +1,29 @@
+.card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  padding: 14px;
+}
+.copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+.copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--t-body-strong);
+}
+.copy span,
+.copy small {
+  color: var(--ink-2);
+  font: var(--t-small);
+}
+.copy small {
+  color: var(--ink-3);
+}

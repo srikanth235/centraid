@@ -15,6 +15,7 @@ import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { sha256Hex } from "../ids.js";
 import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { assertTextBodyWithinBudget } from "./inline-body-guard.js";
+import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { releaseContentIfUnreferenced } from "./media.js";
 import { recordRevision } from "./revisions.js";
 
@@ -738,6 +739,116 @@ function restoreNote(ctx: HandlerCtx): Record<string, unknown> {
   return { note_id: input.note_id };
 }
 
+const RESTORE_NOTE_VERSION: CommandDefinition = {
+  name: "knowledge.restore_note_version",
+  ownerSchema: "knowledge",
+  inputSchema: {
+    type: "object",
+    required: ["note_id", "content_id"],
+    additionalProperties: false,
+    properties: {
+      note_id: { type: "string", minLength: 1 },
+      content_id: { type: "string", minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["note_id", "content_id"],
+    properties: {
+      note_id: { type: "string" },
+      content_id: { type: "string" },
+    },
+  },
+  preconditions: [
+    {
+      name: "note_is_live",
+      sql: "SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id AND deleted_at IS NULL",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+    {
+      name: "not_already_current",
+      sql: "SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id AND body_content_id = :content_id",
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+    {
+      // Only a content item reached through this note's append-only
+      // NEW->OLD `revises` chain is restorable. UNION terminates cycles made
+      // by restore-of-a-restore while preserving history.
+      name: "target_in_chain",
+      sql: `WITH RECURSIVE chain(content_id) AS (
+              SELECT body_content_id FROM knowledge_note WHERE note_id = :note_id
+              UNION
+              SELECT l.to_id FROM core_link l
+                JOIN chain ON l.from_type = 'core.content_item'
+                          AND l.from_id = chain.content_id
+               WHERE l.to_type = 'core.content_item' AND l.valid_to IS NULL
+                 AND l.relation_concept_id = (
+                   SELECT c.concept_id FROM core_concept c
+                   JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+                   WHERE s.uri = ${RELATIONS_SCHEME_URI_SQL}
+                     AND c.notation = 'revises'
+                 )
+            )
+            SELECT count(*) AS n FROM chain WHERE content_id = :content_id`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "restored_and_recorded",
+      sql: `SELECT (
+              EXISTS(SELECT 1 FROM knowledge_note
+                      WHERE note_id = :note_id
+                        AND body_content_id = :content_id)
+              AND EXISTS(
+                SELECT 1 FROM core_link l
+                 WHERE l.from_type = 'core.content_item'
+                   AND l.from_id = :content_id
+                   AND l.to_type = 'core.content_item'
+                   AND l.valid_to IS NULL
+                   AND l.relation_concept_id = (
+                     SELECT c.concept_id FROM core_concept c
+                     JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+                     WHERE s.uri = ${RELATIONS_SCHEME_URI_SQL}
+                       AND c.notation = 'revises'
+                   )
+              )
+            ) AS n`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as { note_id: string; content_id: string };
+    const note = ctx.db
+      .prepare("SELECT body_content_id FROM knowledge_note WHERE note_id = ?")
+      .get(input.note_id) as { body_content_id: string } | undefined;
+    if (!note) throw new Error("note vanished between check and execute");
+    recordRevision(ctx, input.content_id, note.body_content_id);
+    ctx.db
+      .prepare(
+        "UPDATE knowledge_note SET body_content_id = ?, updated_at = ? WHERE note_id = ?"
+      )
+      .run(input.content_id, ctx.now, input.note_id);
+    ctx.wrote("knowledge.note", input.note_id);
+    ctx.cite({
+      claim: `note ${input.note_id} restored to prior version ${input.content_id}`,
+      entityType: "knowledge.note",
+      entityId: input.note_id,
+    });
+    return { note_id: input.note_id, content_id: input.content_id };
+  },
+};
+
 /** Register the knowledge domain's commands on a gateway. */
 export function registerKnowledgeCommands(gateway: Gateway): void {
   gateway.registerCommand(CREATE_NOTE);
@@ -748,4 +859,5 @@ export function registerKnowledgeCommands(gateway: Gateway): void {
   gateway.registerCommand(DELETE_NOTEBOOK);
   gateway.registerCommand(DELETE_NOTE);
   gateway.registerCommand(RESTORE_NOTE);
+  gateway.registerCommand(RESTORE_NOTE_VERSION);
 }

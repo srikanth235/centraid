@@ -26,10 +26,9 @@
 // (`purge_at IS NULL OR deleted_at IS NOT NULL`), matching Docs/Photos/Locker —
 // so a delete here is a reversible grace-window trash, and the lifecycle sweep
 // (gateway/duties.ts) is what finally purges and cleans the row's polymorphic
-// references. people_profile is deliberately EXCLUDED: it is not content but a
-// 1:1 identity decoration on the party (role/cadence/hue), whose lifecycle is
-// the party's — removing a CRM contact is deleting the party, not trashing a
-// profile row, so it needs no independent grace window.
+// references. #630 gives people_profile the same lifecycle in its forward
+// migration: the profile is membership in the People projection, so trashing
+// it hides the person without deleting the canonical party or linked facts.
 //
 // All tables STRICT; PKs are TEXT UUIDv7; money is fixed-scale INTEGER minor
 // units; timestamps are TEXT ISO-8601 UTC — the core spine's conventions.
@@ -73,4 +72,15 @@ CREATE INDEX IF NOT EXISTS idx_important_date_party ON people_important_date(par
 
 ${touchUpdatedAt("people_profile", "profile_id")}
 ${touchUpdatedAt("people_important_date", "date_id")}
+`;
+
+// #630 P5: people become reversible without deleting their canonical party.
+// The profile is the People-app membership row, so trashing it hides the person
+// from that projection while preserving shared links, Tally participation, and
+// every dependent fact for lossless restore.
+export const PEOPLE_PROFILE_LIFECYCLE_DDL = `
+ALTER TABLE people_profile ADD COLUMN deleted_at TEXT;
+ALTER TABLE people_profile ADD COLUMN purge_at TEXT
+  CHECK (purge_at IS NULL OR deleted_at IS NOT NULL);
+CREATE INDEX people_profile_purge_idx ON people_profile(purge_at);
 `;

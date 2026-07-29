@@ -33,6 +33,8 @@ export interface Note {
   tags?: NoteTag[];
   snippet?: string;
   body?: string;
+  deleted_at?: string | null;
+  purge_at?: string | null;
 }
 
 /** A notebook (a core.collection projected to the app's row shape). */
@@ -52,6 +54,7 @@ export interface SidebarTag {
 export type Nav =
   | { kind: "all" }
   | { kind: "pinned" }
+  | { kind: "trash" }
   | { kind: "notebook"; notebookId: string }
   | { kind: "tag"; conceptId: string };
 
@@ -68,6 +71,7 @@ export interface PendingCreate {
  */
 export interface AppData {
   notes: Note[];
+  trash: Note[];
   notebooks: Notebook[];
   tags: SidebarTag[];
   window: number;
@@ -101,6 +105,7 @@ export interface NotePatch {
 export interface SidebarCounts {
   all: number;
   pinned: number;
+  trash: number;
   notebooks: number;
   checks: number;
 }

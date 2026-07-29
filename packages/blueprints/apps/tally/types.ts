@@ -43,6 +43,14 @@ export interface TrashedExpense {
   purge_at?: string | null;
 }
 
+/** A still-live one-shot revision advertised by the 10-second undo surface. */
+export interface ExpenseUndo {
+  expenseId: string;
+  revisionId: string;
+  until: string;
+  label: string;
+}
+
 /** The group meta a group-view payload carries (no member_count). */
 export interface GroupMeta {
   group_id: string;
@@ -213,6 +221,7 @@ export interface AppState {
   settle: SettleModel | null;
   newGroup: NewGroupModel | null;
   addFriend: AddFriendModel | null;
+  expenseUndo: ExpenseUndo | null;
   modalMembers: Member[];
   pendingExpenses: LedgerRow[];
 }

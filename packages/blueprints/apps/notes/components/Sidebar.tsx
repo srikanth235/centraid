@@ -116,6 +116,16 @@ export function SidebarNav({
           <span className={styles.navLabel}>Pinned</span>
           <span className={styles.navCount}>{counts.pinned}</span>
         </button>
+        <button
+          type="button"
+          className={styles.navItem}
+          aria-current={nav.kind === "trash"}
+          onClick={() => onSelect({ kind: "trash" })}
+        >
+          <Icon svg={I.trash} />
+          <span className={styles.navLabel}>Trash</span>
+          <span className={styles.navCount}>{counts.trash}</span>
+        </button>
       </nav>
 
       <div className={styles.nbHead}>

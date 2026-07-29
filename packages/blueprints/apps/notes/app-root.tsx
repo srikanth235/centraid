@@ -71,6 +71,7 @@ function makeState(view: AppState["view"]): AppState {
 
 interface LibraryPayload {
   notes?: Note[];
+  trash?: Note[];
   notebooks?: Notebook[];
   tags?: SidebarTag[];
   window?: number;
@@ -85,6 +86,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const dataRef = useRef<AppData>({
     notes: [],
+    trash: [],
     notebooks: [],
     tags: [],
     window: 200,
@@ -121,6 +123,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     consentRef.current = denied ? { message: denied.message ?? "" } : null;
     if (denied) {
       data.notes = [];
+      data.trash = [];
       data.notebooks = [];
       data.tags = [];
       state.editorId = null;
@@ -128,6 +131,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       return;
     }
     data.notes = res?.notes ?? [];
+    data.trash = res?.trash ?? [];
     data.notebooks = res?.notebooks ?? [];
     data.tags = res?.tags ?? [];
     data.window = res?.window ?? state.libraryWindow;
@@ -288,7 +292,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const q = state.search.trim();
   const wall = buildWall(data, state);
   const rows = wall.pinned.length + wall.others.length;
-  const titles: Record<string, string> = { all: "All notes", pinned: "Pinned" };
+  const titles: Record<string, string> = {
+    all: "All notes",
+    pinned: "Pinned",
+    trash: "Trash",
+  };
   let activeTitle: string;
   if (state.nav.kind === "notebook") {
     activeTitle = logic.notebookName(state.nav.notebookId);
@@ -300,7 +308,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   }
   const activeSub = q
     ? `${rows} match${rows === 1 ? "" : "es"} “${q}”`
-    : `${rows} ${rows === 1 ? "note" : "notes"}`;
+    : state.nav.kind === "trash"
+      ? `${rows} in trash · auto-purge after 30 days`
+      : `${rows} ${rows === 1 ? "note" : "notes"}`;
   const footer =
     state.libraryTruncated && !q
       ? { windowSize: data.window ?? state.libraryWindow }
@@ -410,7 +420,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         wall={
           <Wall
             view={state.view}
-            showQuickAdd={state.nav.kind !== "pinned" && !q}
+            showQuickAdd={
+              state.nav.kind !== "pinned" && state.nav.kind !== "trash" && !q
+            }
             quickAddProps={{
               targetLabel,
               onSubmit: (payload) => logic.submitQuickAdd(payload),
@@ -438,6 +450,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             <Editor
               key={`${editorNote.note_id}:${typeof editorNote.body === "string" ? "full" : "lite"}`}
               note={editorNote}
+              trashed={editorNote.deleted_at != null}
               notebooks={data.notebooks}
               pending={state.pendingNoteIds.has(editorNote.note_id)}
               registerFlush={(fn) => {
@@ -452,6 +465,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 logic.moveNote(noteId, notebookId)
               }
               onDelete={(n) => logic.deleteNote(n)}
+              onRestore={(noteId) => logic.restoreNote(noteId)}
+              onRestoreVersion={(noteId, contentId) =>
+                logic.restoreNoteVersion(noteId, contentId)
+              }
               onAttach={(noteId) => {
                 logic.setAttachTarget(noteId);
                 (

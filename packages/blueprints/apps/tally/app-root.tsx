@@ -14,7 +14,9 @@ import { ActivityFeed } from "./components/Activity.tsx";
 import { Dashboard } from "./components/Dashboard.tsx";
 import { DetailModal } from "./components/DetailModal.tsx";
 import { ExpenseModal } from "./components/ExpenseModal.tsx";
+import { ExpenseUndo } from "./components/ExpenseUndo.tsx";
 import { FriendModal } from "./components/FriendModal.tsx";
+import { GroupManager } from "./components/GroupManager.tsx";
 import { GroupModal } from "./components/GroupModal.tsx";
 import { Ledger } from "./components/Ledger.tsx";
 import { SearchResults } from "./components/Search.tsx";
@@ -67,6 +69,7 @@ function makeState(): AppState {
     settle: null,
     newGroup: null,
     addFriend: null,
+    expenseUndo: null,
     modalMembers: [],
     pendingExpenses: [],
   };
@@ -192,6 +195,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     closeNewGroup: handleCloseNewGroup,
     closeSettle: handleCloseSettle,
     deleteExpense: handleDeleteExpense,
+    deleteGroup: handleDeleteGroup,
+    addGroupMember: handleAddGroupMember,
     openAddExpense: handleOpenAddExpense,
     openAddFriend: handleOpenAddFriend,
     openDetail: handleOpenDetail,
@@ -199,6 +204,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     openNewGroup: handleOpenNewGroup,
     openSettle: handleOpenSettle,
     restoreExpense: handleRestoreExpense,
+    removeGroupMember: handleRemoveGroupMember,
+    renameGroup: handleRenameGroup,
     saveAddFriend: handleSaveAddFriend,
     saveExpense: handleSaveExpense,
     saveNewGroup: handleSaveNewGroup,
@@ -208,6 +215,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     setExpenseGroup: handleSetExpenseGroup,
     setNewGroup: handleSetNewGroup,
     setSettle: handleSetSettle,
+    undoExpense: handleUndoExpense,
   } = logic;
 
   const setRoot = useCallback(
@@ -377,12 +385,36 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           }
         : state.viewData;
     content = (
-      <Ledger
-        view={state.view}
-        viewData={viewData}
-        currency={dash.currency}
-        onOpenDetail={handleOpenDetail}
-      />
+      <>
+        {state.view === "group" && viewData?.group ? (
+          <GroupManager
+            key={viewData.group.group_id}
+            group={viewData.group}
+            members={viewData.members ?? []}
+            friends={dash.friends}
+            me={dash.me}
+            onRename={handleRenameGroup}
+            onAddMember={handleAddGroupMember}
+            onRemoveMember={handleRemoveGroupMember}
+            onDelete={handleDeleteGroup}
+          />
+        ) : null}
+        <Ledger
+          view={state.view}
+          viewData={viewData}
+          currency={dash.currency}
+          onOpenDetail={handleOpenDetail}
+        />
+      </>
+    );
+  }
+
+  if (state.expenseUndo) {
+    content = (
+      <>
+        <ExpenseUndo undo={state.expenseUndo} onUndo={handleUndoExpense} />
+        {content}
+      </>
     );
   }
 
@@ -398,6 +430,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         onClose={handleCloseDetail}
         onEdit={handleOpenEditExpense}
         onDelete={handleDeleteExpense}
+        onUndo={handleUndoExpense}
       />
     );
   } else if (state.expense) {

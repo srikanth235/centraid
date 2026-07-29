@@ -100,6 +100,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
     const [profiles, concepts, schemes] = await Promise.all([
       ctx.vault.read({
         entity: "people.profile",
+        where: [{ column: "deleted_at", op: "is-null" }],
         orderBy: { column: "created_at", dir: "desc" },
         limit: window,
         purpose,

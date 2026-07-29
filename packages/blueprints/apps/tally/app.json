@@ -30,7 +30,30 @@
       { "schema": "tally", "table": "edit_expense", "verbs": "act" },
       { "schema": "tally", "table": "delete_expense", "verbs": "act" },
       { "schema": "tally", "table": "restore_expense", "verbs": "act" },
-      { "schema": "tally", "table": "settle_up", "verbs": "act" }
+      { "schema": "tally", "table": "undo_expense", "verbs": "act" },
+      { "schema": "tally", "table": "settle_up", "verbs": "act" },
+      {
+        "schema": "core",
+        "table": "entity_revision",
+        "verbs": "read",
+        "rowFilter": [
+          {
+            "column": "entity_type",
+            "op": "eq",
+            "value": "tally.expense"
+          }
+        ],
+        "fieldMask": [
+          "revision_id",
+          "entity_type",
+          "entity_id",
+          "operation",
+          "snapshot_json",
+          "recorded_at",
+          "undo_until",
+          "undone_at"
+        ]
+      }
     ]
   },
   "actions": [
@@ -129,11 +152,34 @@
     {
       "name": "delete-expense",
       "description": "Delete an expense through tally.delete_expense.",
-      "confirmation": "none",
+      "confirmation": "always",
       "input": {
         "type": "object",
         "properties": { "expense_id": { "type": "string", "minLength": 1 } },
         "required": ["expense_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "undo-expense",
+      "description": "Apply one durable pre-edit or pre-trash expense snapshot exactly once.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": { "type": "string", "minLength": 1 },
+          "revision_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["expense_id", "revision_id"],
         "additionalProperties": false
       },
       "output": {
@@ -288,7 +334,7 @@
     {
       "name": "remove-group-member",
       "description": "Remove a member from a group through tally.remove_group_member — refused while they are on the ledger.",
-      "confirmation": "none",
+      "confirmation": "always",
       "input": {
         "type": "object",
         "properties": {
@@ -311,7 +357,7 @@
     {
       "name": "delete-group",
       "description": "Delete an empty group through tally.delete_group — refused while it still holds expenses.",
-      "confirmation": "none",
+      "confirmation": "always",
       "input": {
         "type": "object",
         "properties": { "group_id": { "type": "string", "minLength": 1 } },
@@ -426,6 +472,25 @@
           "me": { "type": ["string", "null"] },
           "currency": { "type": "string" },
           "results": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "history",
+      "description": "Durable edit/trash history for one expense, including one-shot undo state.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["expense_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "revisions": { "type": "array" },
           "vaultDenied": { "type": "object" }
         }
       }

@@ -24,6 +24,34 @@ function userVersionOf(file: string): number {
   return row.user_version;
 }
 
+/** Reconstruct a historical migration frontier from a fresh current fixture. */
+function rewindVaultTo(file: string, version: 1 | 2): void {
+  const raw = new DatabaseSync(file);
+  raw.exec(`
+    DROP TRIGGER IF EXISTS trg_replica_people_profile_ai;
+    DROP TRIGGER IF EXISTS trg_replica_people_profile_au;
+    DROP TRIGGER IF EXISTS trg_replica_people_profile_ad;
+    DROP INDEX IF EXISTS people_profile_purge_idx;
+    ALTER TABLE people_profile DROP COLUMN purge_at;
+    ALTER TABLE people_profile DROP COLUMN deleted_at;
+
+    DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ai;
+    DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_au;
+    DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ad;
+    DROP INDEX IF EXISTS core_entity_revision_undo_idx;
+    DROP INDEX IF EXISTS core_entity_revision_entity_idx;
+    DROP TABLE core_entity_revision;
+  `);
+  if (version === 1) {
+    raw.exec(`
+      DROP INDEX locker_auth_credential_kind_idx;
+      DROP TABLE locker_auth_credential;
+    `);
+  }
+  raw.exec(`PRAGMA user_version = ${version}`);
+  raw.close();
+}
+
 describe("schema/migrate", () => {
   test("ontology contract version stamps 1.4 (issue #450 canonical consolidation)", () => {
     expect(ONTOLOGY_VERSION).toBe("1.4");
@@ -158,29 +186,86 @@ describe("schema/migrate", () => {
 
     // Reconstruct the exact previous schema frontier: the populated Locker
     // base rung exists, while #630's credential table does not.
-    const prior = new DatabaseSync(path.join(dir, "vault.db"));
-    prior.exec(`
-      DROP TABLE locker_auth_credential;
-      PRAGMA user_version = 1;
-    `);
-    prior.close();
+    rewindVaultTo(path.join(dir, "vault.db"), 1);
 
     const upgraded = openVaultDb({ dir });
+    const locker = upgraded.vault
+      .prepare(
+        `SELECT type, title FROM locker_item WHERE item_id = 'existing-login'`
+      )
+      .get() as { type: string; title: string };
+    expect({ ...locker }).toStrictEqual({
+      type: "login",
+      title: "Before auth",
+    });
     expect(
-      upgraded.vault
-        .prepare(
-          `SELECT type, title FROM locker_item WHERE item_id = 'existing-login'`
-        )
-        .get()
-    ).toStrictEqual({ type: "login", title: "Before auth" });
+      (
+        upgraded.vault
+          .prepare(
+            `SELECT name FROM sqlite_master
+               WHERE type = 'table' AND name = 'locker_auth_credential'`
+          )
+          .get() as { name: string }
+      ).name
+    ).toBe("locker_auth_credential");
+    expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
+      VAULT_MIGRATIONS.length
+    );
+    upgraded.close();
+  });
+
+  test("the pre-P5 frontier preserves People rows while adding lifecycle and revision storage", () => {
+    const dir = tempDirSync();
+    const seeded = openVaultDb({ dir });
+    const now = "2026-07-29T00:00:00.000Z";
+    seeded.vault
+      .prepare(
+        `INSERT INTO core_party
+          (party_id, kind, display_name, created_at, updated_at, ontology_version)
+         VALUES ('existing-person', 'person', 'Maya', ?, ?, ?)`
+      )
+      .run(now, now, ONTOLOGY_VERSION);
+    seeded.vault
+      .prepare(
+        `INSERT INTO people_profile
+          (profile_id, party_id, role, cadence_days, created_at, updated_at)
+         VALUES ('existing-profile', 'existing-person', 'Friend', 14, ?, ?)`
+      )
+      .run(now, now);
+    seeded.close();
+
+    rewindVaultTo(path.join(dir, "vault.db"), 2);
+
+    const upgraded = openVaultDb({ dir });
+    const person = upgraded.vault
+      .prepare(
+        `SELECT p.display_name, pr.role, pr.deleted_at, pr.purge_at
+           FROM core_party p
+           JOIN people_profile pr ON pr.party_id = p.party_id
+          WHERE p.party_id = 'existing-person'`
+      )
+      .get() as {
+      display_name: string;
+      role: string;
+      deleted_at: string | null;
+      purge_at: string | null;
+    };
+    expect({ ...person }).toStrictEqual({
+      display_name: "Maya",
+      role: "Friend",
+      deleted_at: null,
+      purge_at: null,
+    });
     expect(
-      upgraded.vault
-        .prepare(
-          `SELECT name FROM sqlite_master
-             WHERE type = 'table' AND name = 'locker_auth_credential'`
-        )
-        .get()
-    ).toStrictEqual({ name: "locker_auth_credential" });
+      (
+        upgraded.vault
+          .prepare(
+            `SELECT name FROM sqlite_master
+              WHERE type = 'table' AND name = 'core_entity_revision'`
+          )
+          .get() as { name: string }
+      ).name
+    ).toBe("core_entity_revision");
     expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
       VAULT_MIGRATIONS.length
     );

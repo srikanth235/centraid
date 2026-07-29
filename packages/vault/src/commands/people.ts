@@ -22,6 +22,11 @@ import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { cleanupPolyRefs } from "../schema/poly-refs.js";
 import { annotate } from "./annotations.js";
+import {
+  loadEntityRevision,
+  markEntityRevisionUndone,
+  recordEntityRevision,
+} from "./entity-revisions.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { contentItemFor } from "./knowledge.js";
 import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from "./links.js";
@@ -187,7 +192,97 @@ function slug(text: string): string {
 const PERSON_EXISTS_SQL = `
   SELECT count(*) AS n FROM people_profile pr
     JOIN core_party p ON p.party_id = pr.party_id
+   WHERE pr.party_id = :party_id AND p.kind = 'person'
+     AND pr.deleted_at IS NULL`;
+const PERSON_TRASHED_SQL = `
+  SELECT count(*) AS n FROM people_profile pr
+    JOIN core_party p ON p.party_id = pr.party_id
+   WHERE pr.party_id = :party_id AND p.kind = 'person'
+     AND pr.deleted_at IS NOT NULL`;
+const PERSON_ANY_SQL = `
+  SELECT count(*) AS n FROM people_profile pr
+    JOIN core_party p ON p.party_id = pr.party_id
    WHERE pr.party_id = :party_id AND p.kind = 'person'`;
+const PEOPLE_PURGE_DAYS = 30;
+
+function peoplePurgeAt(now: string): string {
+  const date = new Date(now);
+  date.setUTCDate(date.getUTCDate() + PEOPLE_PURGE_DAYS);
+  return date.toISOString();
+}
+
+interface PersonSnapshot {
+  profile_id: string;
+  display_name: string;
+  role: string | null;
+  avatar_color: string | null;
+  cadence_days: number;
+  last_contacted_at: string | null;
+  met: string | null;
+  deleted_at: string | null;
+  purge_at: string | null;
+}
+
+function personSnapshot(ctx: HandlerCtx, partyId: string): PersonSnapshot {
+  const row = ctx.db
+    .prepare(
+      `SELECT pr.profile_id, p.display_name, pr.role, pr.avatar_color,
+              pr.cadence_days, pr.last_contacted_at, pr.met,
+              pr.deleted_at, pr.purge_at
+         FROM people_profile pr
+         JOIN core_party p ON p.party_id = pr.party_id
+        WHERE pr.party_id = ?`
+    )
+    .get(partyId) as PersonSnapshot | undefined;
+  if (!row) throw new Error("person not found");
+  return row;
+}
+
+function recordPersonRevision(
+  ctx: HandlerCtx,
+  partyId: string,
+  operation: string
+): { revisionId: string; undoUntil: string } {
+  return recordEntityRevision(ctx, {
+    entityType: "people.person",
+    entityId: partyId,
+    operation,
+    snapshot: personSnapshot(ctx, partyId),
+  });
+}
+
+function restorePersonSnapshot(
+  ctx: HandlerCtx,
+  partyId: string,
+  snapshot: PersonSnapshot
+): void {
+  ctx.db
+    .prepare(
+      `UPDATE core_party
+          SET display_name = ?, updated_at = ?
+        WHERE party_id = ?`
+    )
+    .run(snapshot.display_name, ctx.now, partyId);
+  ctx.db
+    .prepare(
+      `UPDATE people_profile
+          SET role = ?, avatar_color = ?, cadence_days = ?,
+              last_contacted_at = ?, met = ?, deleted_at = ?, purge_at = ?
+        WHERE party_id = ?`
+    )
+    .run(
+      snapshot.role,
+      snapshot.avatar_color,
+      snapshot.cadence_days,
+      snapshot.last_contacted_at,
+      snapshot.met,
+      snapshot.deleted_at,
+      snapshot.purge_at,
+      partyId
+    );
+  ctx.wrote("core.party", partyId);
+  ctx.wrote("people.profile", snapshot.profile_id);
+}
 
 // Condition fragment: :list_id is a live concept in the lists scheme.
 const LIST_EXISTS_SQL = `
@@ -297,8 +392,12 @@ const EDIT_PERSON: CommandDefinition = {
   },
   outputSchema: {
     type: "object",
-    required: ["party_id"],
-    properties: { party_id: { type: "string" } },
+    required: ["party_id", "revision_id", "undo_until"],
+    properties: {
+      party_id: { type: "string" },
+      revision_id: { type: "string" },
+      undo_until: { type: "string" },
+    },
   },
   preconditions: [
     {
@@ -332,6 +431,7 @@ function editPerson(ctx: HandlerCtx): Record<string, unknown> {
     avatar_color?: string;
     met?: string;
   };
+  const revision = recordPersonRevision(ctx, input.party_id, "edit");
   if (input.display_name !== undefined) {
     ctx.db
       .prepare(
@@ -365,7 +465,11 @@ function editPerson(ctx: HandlerCtx): Record<string, unknown> {
       .get(input.party_id) as { profile_id: string } | undefined;
     if (profile) ctx.wrote("people.profile", profile.profile_id);
   }
-  return { party_id: input.party_id };
+  return {
+    party_id: input.party_id,
+    revision_id: revision.revisionId,
+    undo_until: revision.undoUntil,
+  };
 }
 
 const SET_CADENCE: CommandDefinition = {
@@ -382,8 +486,12 @@ const SET_CADENCE: CommandDefinition = {
   },
   outputSchema: {
     type: "object",
-    required: ["party_id"],
-    properties: { party_id: { type: "string" } },
+    required: ["party_id", "revision_id", "undo_until"],
+    properties: {
+      party_id: { type: "string" },
+      revision_id: { type: "string" },
+      undo_until: { type: "string" },
+    },
   },
   preconditions: [
     {
@@ -407,6 +515,7 @@ const SET_CADENCE: CommandDefinition = {
   risk: "low",
   handler: (ctx) => {
     const input = ctx.input as { party_id: string; cadence_days: number };
+    const revision = recordPersonRevision(ctx, input.party_id, "cadence");
     ctx.db
       .prepare("UPDATE people_profile SET cadence_days = ? WHERE party_id = ?")
       .run(input.cadence_days, input.party_id);
@@ -414,7 +523,167 @@ const SET_CADENCE: CommandDefinition = {
       .prepare("SELECT profile_id FROM people_profile WHERE party_id = ?")
       .get(input.party_id) as { profile_id: string } | undefined;
     if (profile) ctx.wrote("people.profile", profile.profile_id);
-    return { party_id: input.party_id };
+    return {
+      party_id: input.party_id,
+      revision_id: revision.revisionId,
+      undo_until: revision.undoUntil,
+    };
+  },
+};
+
+const TRASH_PERSON: CommandDefinition = {
+  name: "people.trash_person",
+  ownerSchema: "people",
+  inputSchema: {
+    type: "object",
+    required: ["party_id"],
+    additionalProperties: false,
+    properties: { party_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["party_id", "revision_id", "undo_until"],
+    properties: {
+      party_id: { type: "string" },
+      revision_id: { type: "string" },
+      undo_until: { type: "string" },
+    },
+  },
+  preconditions: [
+    {
+      name: "person_live",
+      sql: PERSON_EXISTS_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "person_trashed",
+      sql: PERSON_TRASHED_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "once",
+  risk: "medium",
+  handler: (ctx) => {
+    const partyId = String((ctx.input as { party_id: string }).party_id);
+    const revision = recordPersonRevision(ctx, partyId, "trash");
+    const profile = personSnapshot(ctx, partyId);
+    ctx.db
+      .prepare(
+        `UPDATE people_profile
+            SET deleted_at = ?, purge_at = ?
+          WHERE party_id = ?`
+      )
+      .run(ctx.now, peoplePurgeAt(ctx.now), partyId);
+    ctx.wrote("people.profile", profile.profile_id);
+    return {
+      party_id: partyId,
+      revision_id: revision.revisionId,
+      undo_until: revision.undoUntil,
+    };
+  },
+};
+
+const RESTORE_PERSON: CommandDefinition = {
+  name: "people.restore_person",
+  ownerSchema: "people",
+  inputSchema: {
+    type: "object",
+    required: ["party_id"],
+    additionalProperties: false,
+    properties: { party_id: { type: "string", minLength: 1 } },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["party_id"],
+    properties: { party_id: { type: "string" } },
+  },
+  preconditions: [
+    {
+      name: "person_trashed",
+      sql: PERSON_TRASHED_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "person_live",
+      sql: PERSON_EXISTS_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
+  handler: (ctx) => {
+    const partyId = String((ctx.input as { party_id: string }).party_id);
+    const profile = personSnapshot(ctx, partyId);
+    recordPersonRevision(ctx, partyId, "restore");
+    ctx.db
+      .prepare(
+        `UPDATE people_profile
+            SET deleted_at = NULL, purge_at = NULL
+          WHERE party_id = ?`
+      )
+      .run(partyId);
+    ctx.wrote("people.profile", profile.profile_id);
+    return { party_id: partyId };
+  },
+};
+
+const UNDO_PERSON: CommandDefinition = {
+  name: "people.undo_person",
+  ownerSchema: "people",
+  inputSchema: {
+    type: "object",
+    required: ["party_id", "revision_id"],
+    additionalProperties: false,
+    properties: {
+      party_id: { type: "string", minLength: 1 },
+      revision_id: { type: "string", minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["party_id", "revision_id"],
+    properties: {
+      party_id: { type: "string" },
+      revision_id: { type: "string" },
+    },
+  },
+  preconditions: [
+    {
+      name: "person_exists_including_trash",
+      sql: PERSON_ANY_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [],
+  idempotency: "once",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as { party_id: string; revision_id: string };
+    const revision = loadEntityRevision<PersonSnapshot>(ctx, {
+      entityType: "people.person",
+      entityId: input.party_id,
+      revisionId: input.revision_id,
+    });
+    restorePersonSnapshot(ctx, input.party_id, revision.snapshot);
+    markEntityRevisionUndone(ctx, revision.revisionId);
+    return {
+      party_id: input.party_id,
+      revision_id: revision.revisionId,
+    };
   },
 };
 
@@ -1573,6 +1842,9 @@ export function registerPeopleCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_PERSON);
   gateway.registerCommand(EDIT_PERSON);
   gateway.registerCommand(SET_CADENCE);
+  gateway.registerCommand(TRASH_PERSON);
+  gateway.registerCommand(RESTORE_PERSON);
+  gateway.registerCommand(UNDO_PERSON);
   gateway.registerCommand(LOG_INTERACTION);
   gateway.registerCommand(STAR_PERSON);
   gateway.registerCommand(UNSTAR_PERSON);
