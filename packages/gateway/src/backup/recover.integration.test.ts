@@ -114,6 +114,8 @@ describe("backup/recover", () => {
     apiKey: string;
     peoplePartyId: string;
     peopleRevisionId: string;
+    receiptExpenseId: string;
+    receiptId: string;
     sourceSealKeyDestroyed: boolean;
   }
 
@@ -213,6 +215,44 @@ describe("backup/recover", () => {
     const peopleRevisionId = invoke(plane, "people.trash_person", {
       party_id: peoplePartyId,
     })["revision_id"] as string;
+    const ownerPartyId = (
+      plane.db.vault
+        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+        .get() as { owner_party_id: string }
+    ).owner_party_id;
+    const receiptGroupId = invoke(plane, "tally.create_group", {
+      name: "Recovery receipt",
+      icon: "🧾",
+      member_ids: [],
+    })["group_id"] as string;
+    const receiptOutput = invoke(plane, "tally.add_receipt_expense", {
+      group_id: receiptGroupId,
+      description: "Recovery dinner",
+      amount_minor: 1_200,
+      paid_by: ownerPartyId,
+      category: "food",
+      splits: [{ party_id: ownerPartyId, share_minor: 1_200 }],
+      staged_sha: stage(
+        plane,
+        Buffer.from("receipt-recovery-canary"),
+        "receipt.jpg"
+      ),
+      ocr_text: "Dinner 10.00\nTax 2.00",
+      line_items: [
+        {
+          kind: "item",
+          description: "Dinner",
+          amount_minor: 1_000,
+          allocations: [{ party_id: ownerPartyId, share_minor: 1_000 }],
+        },
+        {
+          kind: "tax",
+          description: "Tax",
+          amount_minor: 200,
+          allocations: [{ party_id: ownerPartyId, share_minor: 200 }],
+        },
+      ],
+    });
 
     const appId = await publishSeedApp(plane);
 
@@ -264,6 +304,8 @@ describe("backup/recover", () => {
       apiKey: server.apiKey,
       peoplePartyId,
       peopleRevisionId,
+      receiptExpenseId: receiptOutput["expense_id"] as string,
+      receiptId: receiptOutput["receipt_id"] as string,
       sourceSealKeyDestroyed,
     };
   }
@@ -332,6 +374,36 @@ describe("backup/recover", () => {
         deleted_at: null,
         purge_at: null,
       });
+      expect(
+        restoredDb
+          .prepare(
+            `SELECT r.expense_id, d.text_content,
+                    count(DISTINCT l.line_item_id) AS line_count,
+                    count(a.party_id) AS allocation_count
+               FROM tally_expense_receipt r
+               JOIN core_content_derivative d
+                 ON d.content_id = r.content_id AND d.variant = 'text'
+               JOIN tally_expense_line_item l ON l.receipt_id = r.receipt_id
+               JOIN tally_expense_line_allocation a
+                 ON a.line_item_id = l.line_item_id
+              WHERE r.receipt_id = ?
+              GROUP BY r.expense_id, d.text_content`
+          )
+          .get(a.receiptId)
+      ).toMatchObject({
+        expense_id: a.receiptExpenseId,
+        text_content: "Dinner 10.00\nTax 2.00",
+        line_count: 2,
+        allocation_count: 2,
+      });
+      expect(
+        restoredDb
+          .prepare(
+            `SELECT role, is_primary FROM core_attachment
+              WHERE target_type = 'tally.expense' AND target_id = ?`
+          )
+          .get(a.receiptExpenseId)
+      ).toMatchObject({ role: "receipt", is_primary: 1 });
     } finally {
       restoredDb.close();
     }

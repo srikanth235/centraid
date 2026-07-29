@@ -261,7 +261,7 @@ export default function HomeScreen({
         <GlassDock
           onSearch={() => setSearchOpen(true)}
           onAssistant={() => navigation.navigate("Assistant")}
-          onSettings={openSettings}
+          onCapture={() => navigation.navigate("Capture")}
         />
 
         {searchOpen ? (

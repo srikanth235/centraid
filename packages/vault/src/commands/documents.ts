@@ -26,6 +26,7 @@ import {
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { cleanupPolyRefs } from "../schema/poly-refs.js";
+import { writeExtractedText } from "./enrich.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 import { RELATIONS_SCHEME_URI_SQL } from "./links.js";
@@ -140,6 +141,7 @@ const ADD_DOCUMENT: CommandDefinition = {
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       title: { type: "string", minLength: 1 },
       folder_id: { type: "string", minLength: 1 },
+      extracted_text: { type: "string", minLength: 1, maxLength: 200_000 },
     },
   },
   outputSchema: {
@@ -223,6 +225,7 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     staged_sha?: string;
     title: string;
     folder_id?: string;
+    extracted_text?: string;
   };
   // Staged bytes claim their content item (issue #296); small inline
   // payloads mint one. A document's identity is the wrapper row, not the
@@ -244,6 +247,8 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(documentId, input.title, contentId, ctx.now, ctx.now);
   ctx.wrote("core.document", documentId);
+  if (input.extracted_text)
+    writeExtractedText(ctx, contentId, input.extracted_text);
   fileInto(ctx, documentId, input.folder_id ?? rootFolderId(ctx));
   ctx.cite({
     claim: `"${input.title}" (${minted.mediaType}, ${minted.byteSize} bytes) filed into the drive`,

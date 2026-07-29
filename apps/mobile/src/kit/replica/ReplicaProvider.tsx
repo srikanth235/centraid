@@ -16,6 +16,7 @@ import { AppState } from "react-native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { syncDueNotifications } from "../../lib/notifications-core";
 import { getDesktopName } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
@@ -298,8 +299,11 @@ export function ReplicaProvider({
         const storageLocation = replicaStorageDirectory();
         const scopes = await mountedScopes(identity, storageLocation);
         const freshness = await loadFreshness(identity.gatewayId, scopes);
-        if (identity.online)
+        if (identity.online) {
           void registerReplicaPushWake(identity.auth.baseUrl);
+          for (const scope of scopes)
+            void syncDueNotifications(identity.auth.baseUrl, scope.vaultId);
+        }
         if (cancelled) return;
         let connected = identity.online;
         const sessions = new Map<string, NativeReplicaSession>();

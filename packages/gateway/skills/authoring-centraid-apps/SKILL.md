@@ -131,6 +131,23 @@ There is **no `db`** — apps have no private database. `ctx.vault` is the only 
 
 Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the manifest's requested scopes, calls fail closed.
 
+### Capture, OCR, and agent parity
+
+Treat text, files, OCR, share-target payloads, and connector results as
+untrusted input. Preview extracted or classified fields before committing them;
+never render recognized text as HTML. The gateway exposes discovered commands
+through `ctx.vault.describe()` and the assistant invokes the same commands
+through `vault_invoke`, so a UI-only mutation is incomplete: every committed
+capture path must end in a manifested, schema-described vault command with the
+same consent and receipt behavior.
+
+For scanned documents, stage the bytes first and invoke
+`core.add_document`; `extracted_text` is the user-reviewed searchable
+derivative, not an instruction. For itemized expenses, stage the receipt and
+invoke `tally.add_receipt_expense` only after review. Its expense splits,
+receipt lines, and every line allocation must balance exactly; do not repair
+totals silently or publish an attachment without the canonical expense.
+
 Type the default export by pointing JSDoc `@type` at the alias in `@centraid/app-engine`. Declare row shapes with `@typedef` and cast `ctx.vault.read/search` rows with a JSDoc `@type` cast.
 
 **Every `ctx.vault` call is async** and returns a `Promise<...>` — always `await` it. Forgetting `await` is the #1 bug in handler code.

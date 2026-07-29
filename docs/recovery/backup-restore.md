@@ -37,6 +37,21 @@ owner's user-presence boundary. The verifier is usable only with the restored
 vault DEK; neither its source passphrase nor any live Locker session/item permit
 belongs in a snapshot, recovery kit, journal, or receipt.
 
+The receipt-capture migration extends this canary: recovery fixtures publish a
+real `tally.add_receipt_expense` and assert the canonical attachment,
+`tally_expense_receipt`, reviewed OCR text derivative, line items, and per-party
+allocations after both side-directory restore and restore-after-erase. Restoring
+only the image blob or only `tally_expense` is data loss.
+
+Push endpoint registrations are intentionally different from user data. Expo
+tokens, browser subscriptions, and the gateway VAPID private key are
+gateway/device capabilities in mode-0600 `gateway.db`; they are revoked on
+unlink and automatically re-registered after a device reconnects. Copying them
+into a vault snapshot would resurrect delivery authority after device
+revocation or blank-machine recovery, so they do not enter the vault backup
+plane. Reminder definitions and delivery state remain vault data and follow the
+normal checklist above.
+
 The recovery-kit passphrase wrap is **load-bearing key custody**, not a
 convenience. The kit contains the backup keyring and backed-up vault DEKs;
 without its password those keys remain unavailable even when the wrapped file

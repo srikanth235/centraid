@@ -7,6 +7,7 @@ import { Platform } from "react-native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../gateway";
+import { syncDueNotifications } from "../notifications-core";
 import { getActiveSpace, hydrateSpaces } from "../spaces";
 import { drainUploadQueueInBackground } from "../upload/boot";
 import { nativeSyncAllowed } from "../upload/native-policy";
@@ -111,6 +112,7 @@ export async function runBackgroundReplicaSync(): Promise<void> {
           });
           await session.pullNow();
           await session.flushIntents();
+          await syncDueNotifications(baseUrl, scope.vaultId);
           sessions.set(scope.vaultId, session);
         } catch (error) {
           if (session) await session.close();

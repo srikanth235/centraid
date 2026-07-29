@@ -8,6 +8,8 @@
 //   ├─ Locker        → LockerHome   (native authenticated secrets cover)
 //   ├─ AppDetail     → AppDetailScreen (remote-app WebView cover)
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
+//   ├─ Capture       → CaptureScreen (preview-first universal quick add)
+//   ├─ Scan          → ScanScreen (camera/share OCR review)
 //   ├─ Automations   → AutomationsScreen (list + run the space's automations)
 //   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
 //   └─ Settings      → SettingsStack (Settings, Approvals)
@@ -23,6 +25,7 @@ import type {
   CompositeScreenProps,
   NavigatorScreenParams,
 } from "@react-navigation/native";
+import { createNavigationContainerRef } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 export type PhotosStackParamList = {
@@ -58,6 +61,16 @@ export type SettingsStackParamList = {
 
 export type RootStackParamList = {
   Home: undefined;
+  Capture: { text?: string } | undefined;
+  Scan:
+    | {
+        fileUri?: string;
+        fileName?: string;
+        mediaType?: string;
+        plaintextSize?: number;
+        deleteSourceAfterSettle?: boolean;
+      }
+    | undefined;
   Photos: NavigatorScreenParams<PhotosStackParamList>;
   Docs: NavigatorScreenParams<DocsStackParamList>;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
@@ -69,11 +82,16 @@ export type RootStackParamList = {
   Settings: NavigatorScreenParams<SettingsStackParamList>;
 };
 
+export const rootNavigationRef =
+  createNavigationContainerRef<RootStackParamList>();
+
 export type RootScreenProps<T extends keyof RootStackParamList> =
   NativeStackScreenProps<RootStackParamList, T>;
 
 // Root-level screens (no nested stack of their own).
 export type HomeScreenProps = RootScreenProps<"Home">;
+export type CaptureScreenProps = RootScreenProps<"Capture">;
+export type ScanScreenProps = RootScreenProps<"Scan">;
 export type AppDetailScreenProps = RootScreenProps<"AppDetail">;
 export type LockerScreenProps = RootScreenProps<"Locker">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;

@@ -54,6 +54,8 @@ describe("gateway-db scenarios", () => {
       "storage_connections",
       "storage_limits",
       "tickets",
+      "web_push_registrations",
+      "web_push_vapid",
       "web_sessions",
     ]);
     expect(tables).not.toContain("vaults");

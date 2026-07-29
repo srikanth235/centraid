@@ -41,9 +41,24 @@ interface ExpenseRowRaw {
   description?: string;
   category?: string;
   spent_on?: string;
-  [k: string]: unknown;
 }
 type ExpenseFact = ExpenseRowRaw & { splits: Record<string, number> };
+interface ReceiptLineFact {
+  line_item_id: string;
+  kind: "item" | "tax" | "tip";
+  description: string;
+  amount_minor: number;
+  sort_order: number;
+  allocations: Record<string, number>;
+}
+interface ReceiptFact {
+  receipt_id: string;
+  content_id: string;
+  content_uri?: string;
+  media_type?: string;
+  lines: ReceiptLineFact[];
+}
+type ExpenseWithReceipt = ExpenseFact & { receipt?: ReceiptFact };
 interface SettlementRow {
   from_party: string;
   to_party: string;
@@ -69,7 +84,7 @@ export interface TallyData {
   friends: FriendRow[];
   groups: DecoratedGroup[];
   membersByGroup: Map<string, string[]>;
-  expenses: ExpenseFact[];
+  expenses: ExpenseWithReceipt[];
   settlements: SettlementRow[];
   obligations: ObligationRow[];
 }
@@ -123,6 +138,9 @@ export async function loadTally(
     splitsRes,
     settlesRes,
     obligationsRes,
+    receiptsRes,
+    receiptLinesRes,
+    receiptAllocationsRes,
   ] = await Promise.all([
     ctx.vault.read({ entity: "core.vault", purpose }),
     ctx.vault.read({ entity: "tally.friend", purpose }),
@@ -152,6 +170,21 @@ export async function loadTally(
         { column: "deleted_at", op: "is-null" },
       ],
       limit: 2000,
+      purpose,
+    }),
+    ctx.vault.read({
+      entity: "tally.expense_receipt",
+      limit: 2_000,
+      purpose,
+    }),
+    ctx.vault.read({
+      entity: "tally.expense_line_item",
+      limit: 8_000,
+      purpose,
+    }),
+    ctx.vault.read({
+      entity: "tally.expense_line_allocation",
+      limit: 32_000,
       purpose,
     }),
   ]);
@@ -236,11 +269,90 @@ export async function loadTally(
       splitsByExpense.set(s.expense_id, {});
     splitsByExpense.get(s.expense_id)![s.party_id] = s.share_minor;
   }
-  const expenses: ExpenseFact[] = (
+  const receiptRows = (receiptsRes.rows ?? []) as unknown as Array<{
+    receipt_id: string;
+    expense_id: string;
+    content_id: string;
+  }>;
+  const receiptContentIds = [
+    ...new Set(receiptRows.map((row) => row.content_id)),
+  ];
+  const receiptContents =
+    receiptContentIds.length > 0
+      ? await ctx.vault.read({
+          entity: "core.content_item",
+          where: [{ column: "content_id", op: "in", value: receiptContentIds }],
+          purpose,
+        })
+      : { rows: [] as Record<string, unknown>[] };
+  const contentsById = new Map(
+    (
+      (receiptContents.rows ?? []) as unknown as Array<{
+        content_id: string;
+        content_uri?: string;
+        media_type?: string;
+      }>
+    ).map((row) => [row.content_id, row] as const)
+  );
+  const allocationsByLine = new Map<string, Record<string, number>>();
+  for (const allocation of (receiptAllocationsRes.rows ??
+    []) as unknown as Array<{
+    line_item_id: string;
+    party_id: string;
+    share_minor: number;
+  }>) {
+    if (!allocationsByLine.has(allocation.line_item_id))
+      allocationsByLine.set(allocation.line_item_id, {});
+    allocationsByLine.get(allocation.line_item_id)![allocation.party_id] =
+      allocation.share_minor;
+  }
+  const linesByReceipt = new Map<string, ReceiptLineFact[]>();
+  for (const line of (receiptLinesRes.rows ?? []) as unknown as Array<{
+    line_item_id: string;
+    receipt_id: string;
+    kind: "item" | "tax" | "tip";
+    description: string;
+    amount_minor: number;
+    sort_order: number;
+  }>) {
+    if (!linesByReceipt.has(line.receipt_id))
+      linesByReceipt.set(line.receipt_id, []);
+    linesByReceipt.get(line.receipt_id)!.push({
+      line_item_id: line.line_item_id,
+      kind: line.kind,
+      description: line.description,
+      amount_minor: line.amount_minor,
+      sort_order: line.sort_order,
+      allocations: allocationsByLine.get(line.line_item_id) ?? {},
+    });
+  }
+  for (const lines of linesByReceipt.values())
+    lines.sort((a, b) => a.sort_order - b.sort_order);
+  const receiptByExpense = new Map<string, ReceiptFact>();
+  for (const receipt of receiptRows) {
+    const content = contentsById.get(receipt.content_id);
+    receiptByExpense.set(receipt.expense_id, {
+      receipt_id: receipt.receipt_id,
+      content_id: receipt.content_id,
+      ...(content?.content_uri
+        ? {
+            content_uri: content.content_uri.startsWith("blob:")
+              ? `/centraid/_vault/blobs/${receipt.content_id}`
+              : content.content_uri,
+          }
+        : {}),
+      ...(content?.media_type ? { media_type: content.media_type } : {}),
+      lines: linesByReceipt.get(receipt.receipt_id) ?? [],
+    });
+  }
+  const expenses: ExpenseWithReceipt[] = (
     (expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]
   ).map((e) => ({
     ...e,
     splits: splitsByExpense.get(e.expense_id) ?? {},
+    ...(receiptByExpense.has(e.expense_id)
+      ? { receipt: receiptByExpense.get(e.expense_id)! }
+      : {}),
   }));
 
   return {
@@ -323,7 +435,7 @@ export function groupNet(data: TallyData, gid: string): Map<string, number> {
 }
 
 /** A ledger row: the expense decorated with the owner's lent/borrowed stance. */
-export function ledgerRow(data: TallyData, e: ExpenseFact) {
+export function ledgerRow(data: TallyData, e: ExpenseWithReceipt) {
   const me = data.me;
   const myShare = me == null ? undefined : e.splits[me];
   const yourShare = myShare ?? 0;
@@ -361,6 +473,26 @@ export function ledgerRow(data: TallyData, e: ExpenseFact) {
         share_minor: share,
       };
     }),
+    ...(e.receipt
+      ? {
+          receipt: {
+            ...e.receipt,
+            lines: e.receipt.lines.map((line) => ({
+              ...line,
+              allocations: Object.entries(line.allocations).map(
+                ([pid, share]) => {
+                  const person = personOf(data, pid);
+                  return {
+                    party_id: pid,
+                    name: person.name,
+                    share_minor: share,
+                  };
+                }
+              ),
+            })),
+          },
+        }
+      : {}),
   };
 }
 

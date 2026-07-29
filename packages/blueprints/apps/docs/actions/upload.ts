@@ -18,6 +18,9 @@ export default async function upload({ body, ctx }: HandlerArgs) {
         ...(input.folder_id == null
           ? {}
           : { folder_id: String(input.folder_id) }),
+        ...(input.extracted_text == null
+          ? {}
+          : { extracted_text: String(input.extracted_text) }),
       },
       purpose: "dpv:ServiceProvision",
     });

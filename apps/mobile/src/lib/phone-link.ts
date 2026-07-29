@@ -44,6 +44,7 @@ import {
   addSpace,
   getActiveSpace,
   hydrateSpaces,
+  listSpaces,
   removeSpace,
   setActiveSpace,
 } from "./spaces";
@@ -213,12 +214,14 @@ export async function pair(
  */
 export async function unpair(): Promise<void> {
   await hydrateSpaces();
+  const active = getActiveSpace();
   if (isTunnelAvailableImpl()) {
+    if (active && isLastSpaceForGateway(active))
+      await revokePushRegistration().catch(() => undefined);
     await stopTunnel().catch(() => {
       /* already stopped */
     });
   }
-  const active = getActiveSpace();
   if (active) await removeSpace(active.id);
 }
 
@@ -251,13 +254,33 @@ export async function switchSpace(id: string): Promise<Space | undefined> {
  */
 export async function forgetSpace(id: string): Promise<void> {
   await hydrateSpaces();
-  const wasActive = getActiveSpace()?.id === id;
+  const active = getActiveSpace();
+  const removed = listSpaces().find((space) => space.id === id);
+  const wasActive = active?.id === id;
   if (wasActive && isTunnelAvailableImpl()) {
+    if (removed && isLastSpaceForGateway(removed))
+      await revokePushRegistration().catch(() => undefined);
     await stopTunnel().catch(() => {
       /* not running */
     });
   }
   await removeSpace(id);
+}
+
+function isLastSpaceForGateway(space: Space): boolean {
+  return !listSpaces().some(
+    (candidate) =>
+      candidate.id !== space.id && candidate.gatewayId === space.gatewayId
+  );
+}
+
+async function revokePushRegistration(): Promise<void> {
+  const tunnel = await ensureTunnelStarted();
+  if (!tunnel) return;
+  await fetch(
+    new URL("/centraid/_gateway/push/registrations", tunnel.baseUrl),
+    { method: "DELETE" }
+  );
 }
 
 // Deduplicate concurrent starts (Home + AppDetail can race on mount).

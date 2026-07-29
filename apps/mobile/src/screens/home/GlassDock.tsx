@@ -2,7 +2,7 @@
 // A rounded pill anchored just above the home indicator, its frosted-glass
 // material now comes from the shared GlassBar (Slice C) so the dock and the
 // Photos bottom bar render the identical blur/tint/hairline. Two symmetric
-// slots — Search · Settings — with the Assistant raised and teal at the spine,
+// slots — Search · Add — with the Assistant raised and teal at the spine,
 // the app's single primary action.
 //
 // Gateway status is deliberately NOT a dock slot any more — it lives in the
@@ -24,13 +24,13 @@ import type { ThemeColors } from "../../kit/theme";
 export interface GlassDockProps {
   onSearch: () => void;
   onAssistant: () => void;
-  onSettings: () => void;
+  onCapture: () => void;
 }
 
 export default function GlassDock({
   onSearch,
   onAssistant,
-  onSettings,
+  onCapture,
 }: GlassDockProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -64,9 +64,9 @@ export default function GlassDock({
           />
           <View style={styles.centerGap} />
           <DockSlot
-            icon="Settings"
-            label="Settings"
-            onPress={tap(onSettings)}
+            icon="Plus"
+            label="Add"
+            onPress={tap(onCapture)}
             styles={styles}
             colors={colors}
           />

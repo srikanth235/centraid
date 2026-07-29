@@ -331,6 +331,21 @@ function installGatewaySchema(db: DatabaseSync): void {
       platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
       updated_at TEXT NOT NULL
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS web_push_vapid (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      public_key TEXT NOT NULL,
+      private_key TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS web_push_registrations (
+      endpoint TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS web_push_registrations_device_idx
+      ON web_push_registrations(device_id);
   `);
 }
 

@@ -105,6 +105,19 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
 
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
+  await expect(manifest.json()).resolves.toMatchObject({
+    share_target: {
+      action: "/?capture=shared",
+      method: "GET",
+      params: { text: "text", title: "title", url: "url" },
+    },
+    shortcuts: expect.arrayContaining([
+      expect.objectContaining({
+        name: "Quick capture",
+        url: "/?capture=shortcut",
+      }),
+    ]),
+  });
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)

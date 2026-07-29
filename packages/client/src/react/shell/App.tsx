@@ -11,16 +11,19 @@ import type { ShellRoute } from "../../app-shell-context.js";
 import {
   ASSISTANT_APP_ID,
   deleteConversation,
+  enableWebPushWake,
   loadConversation,
   renameConversation,
   searchConversations,
   setConversationArchived,
   setConversationPinned,
+  syncWebDueNotifications,
 } from "../../gateway-client.js";
 import PaletteScreen from "../screens/PaletteScreen.js";
 import WhatsNewModal from "../screens/WhatsNewModal.js";
 import { ShellActionsProvider } from "./actions.js";
 import type { ShellActions } from "./actions.js";
+import { CaptureLauncher, CaptureOverlay } from "./CaptureOverlay.js";
 import { openConfirm } from "./confirm.js";
 import { openMenu } from "./contextMenu.js";
 import {
@@ -257,6 +260,10 @@ export default function App(): JSX.Element {
   const builderEnabled = useBuilderEnabled();
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [captureOpen, setCaptureOpen] = useState(() =>
+    new URL(window.location.href).searchParams.has("capture")
+  );
+  const captureInitialText = useMemo(() => sharedCaptureText(), []);
   // The palette's injected refresh() (issue #420) — held so the async
   // conversation-search source can re-run buildPaletteGroups when hits land.
   // Created once per mount; the palette hands it its `refresh()` on mount via
@@ -302,6 +309,13 @@ export default function App(): JSX.Element {
       } else if (meta && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         setPaletteOpen((open) => !open);
+      } else if (
+        !meta &&
+        (e.key === "c" || e.key === "C") &&
+        !isEditableTarget(e.target)
+      ) {
+        e.preventDefault();
+        setCaptureOpen(true);
       } else if (meta && e.shiftKey && (e.key === "g" || e.key === "G")) {
         e.preventDefault();
         document
@@ -325,6 +339,7 @@ export default function App(): JSX.Element {
         window.dispatchEvent(
           new CustomEvent("centraid:open-app-vault-settings")
         ),
+      openCapture: () => setCaptureOpen(true),
       openSearch: () => setPaletteOpen(true),
       openDiscover: go({ kind: "discover" }),
       openStarred: go({ kind: "starred" }),
@@ -334,6 +349,38 @@ export default function App(): JSX.Element {
       renderHome: go({ kind: "home" }),
       getRuntimeMode: () => undefined,
     };
+    const onOpenCapture = (): void => setCaptureOpen(true);
+    window.addEventListener("centraid:open-capture", onOpenCapture);
+    const enablePush = (): void => {
+      void enableWebPushWake(true);
+    };
+    const onPushMessage = (event: MessageEvent): void => {
+      if (
+        event.origin === window.location.origin &&
+        (event.data as { type?: unknown } | null)?.type ===
+          "centraid:notification-value"
+      )
+        enablePush();
+    };
+    window.addEventListener("centraid:notification-value", enablePush);
+    window.addEventListener("message", onPushMessage);
+    const onServiceWorkerMessage = (event: MessageEvent): void => {
+      if (
+        (event.data as { type?: unknown } | null)?.type === "centraid:push-wake"
+      )
+        void syncWebDueNotifications();
+    };
+    navigator.serviceWorker?.addEventListener(
+      "message",
+      onServiceWorkerMessage
+    );
+    // Re-register an already-granted browser after a service-worker or gateway
+    // change; this never prompts at launch.
+    if (
+      "Notification" in window &&
+      window.Notification.permission === "granted"
+    )
+      void enableWebPushWake(false);
 
     const reScope = (): void => {
       void refresh();
@@ -344,6 +391,13 @@ export default function App(): JSX.Element {
 
     return () => {
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("centraid:open-capture", onOpenCapture);
+      window.removeEventListener("centraid:notification-value", enablePush);
+      window.removeEventListener("message", onPushMessage);
+      navigator.serviceWorker?.removeEventListener(
+        "message",
+        onServiceWorkerMessage
+      );
       // The gateway switcher is a body-portalled overlay outside React's tree —
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeGatewaySwitcher();
@@ -949,6 +1003,16 @@ export default function App(): JSX.Element {
           ? { onNewApp: () => navRef.current?.navigate({ kind: "builder" }) }
           : {})}
       />
+      <CaptureLauncher onOpen={() => setCaptureOpen(true)} />
+      {captureOpen ? (
+        <CaptureOverlay
+          initialText={captureInitialText}
+          onClose={() => {
+            setCaptureOpen(false);
+            clearSharedCaptureQuery();
+          }}
+        />
+      ) : null}
       {whatsNewOpen ? <WhatsNewModal onClose={closeWhatsNew} /> : null}
       {paletteOpen ? (
         <PaletteScreen
@@ -1012,5 +1076,31 @@ export default function App(): JSX.Element {
         />
       ) : null}
     </>
+  );
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable ||
+      target.matches("input, textarea, select, [role='textbox']"))
+  );
+}
+
+function sharedCaptureText(): string {
+  const params = new URL(window.location.href).searchParams;
+  return [params.get("title"), params.get("text"), params.get("url")]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join("\n");
+}
+
+function clearSharedCaptureQuery(): void {
+  const url = new URL(window.location.href);
+  for (const key of ["capture", "title", "text", "url"])
+    url.searchParams.delete(key);
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${url.search}${url.hash}`
   );
 }

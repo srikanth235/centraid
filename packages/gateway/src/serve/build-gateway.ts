@@ -80,6 +80,7 @@ import {
   Runtime,
   changesSubscriberCount,
   cleanupDeregisteredApp,
+  classifyCaptureWithAgent,
   deriveTitle,
   generateConversationTitle,
   makeConversationRouteHandler,
@@ -115,6 +116,7 @@ import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
+import { recognizeWithTesseract } from "../capture/tesseract-ocr.js";
 import {
   closeJournalConversationStores,
   journalConversationStore,
@@ -157,6 +159,7 @@ import {
 } from "../routes/automations-routes.js";
 import { makeBackupRouteHandler } from "../routes/backup-routes.js";
 import { makeBlobRouteHandler } from "../routes/blob-routes.js";
+import { makeCaptureRouteHandler } from "../routes/capture-routes.js";
 import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
 import { makeDataPlaneControlHandler } from "../routes/data-plane-control.js";
 import type { DataPlaneControlOptions } from "../routes/data-plane-control.js";
@@ -3587,6 +3590,23 @@ export async function buildGateway(
     })();
   };
 
+  const classifyCapture = async (
+    text: string
+  ): Promise<Awaited<ReturnType<typeof classifyCaptureWithAgent>>> => {
+    if (turnLimiterForCurrentVault().atCapacity()) return undefined;
+    const runnerPrefs = await prefsLoader("assistant");
+    if (!runnerPrefs) return undefined;
+    const model = await resolveModel("assistant", undefined, runnerPrefs.kind);
+    return classifyCaptureWithAgent({
+      runTurn: accountedRunTurn,
+      runnerPrefs,
+      cwd: assistantCwd(vaultRegistry),
+      text,
+      ...(model ? { model } : {}),
+      timeoutMs: 20_000,
+    });
+  };
+
   // Ask-register lens metadata (issue #286 phase 2): the app copilot's
   // `register: 'ask'` turns ARE the owner assistant wearing the app lens —
   // name + description bias the prompt, never a permission boundary.
@@ -3771,6 +3791,13 @@ export async function buildGateway(
     forRoutePrefixes(
       "/centraid/_gateway/resource",
       makeResourceRouteHandler(health, powerContext)
+    ),
+    forRoutePrefixes(
+      "/centraid/_gateway/capture",
+      makeCaptureRouteHandler({
+        classify: classifyCapture,
+        recognizeOcr: recognizeWithTesseract,
+      })
     ),
     // A single JSON document a user can save + hand to support: version,
     // health snapshot, log tail, vault sizes, and a redacted config

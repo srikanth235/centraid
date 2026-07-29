@@ -137,23 +137,21 @@ export default function createExpoConfig({
         "expo-share-intent",
         {
           iosActivationRules: {
+            NSExtensionActivationSupportsText: true,
+            NSExtensionActivationSupportsWebURLWithMaxCount: 20,
             NSExtensionActivationSupportsImageWithMaxCount: 100,
             NSExtensionActivationSupportsMovieWithMaxCount: 20,
             NSExtensionActivationSupportsFileWithMaxCount: 100,
           },
-          androidIntentFilters: [
-            "image/*",
-            "video/*",
-            "audio/*",
-            "application/pdf",
-          ],
+          androidIntentFilters: ["text/*", "image/*", "video/*", "*/*"],
+          androidMultiIntentFilters: ["image/*", "video/*", "*/*"],
         },
       ],
       [
         "expo-camera",
         {
           cameraPermission:
-            "Centraid uses the camera to scan the pairing QR code shown on your desktop.",
+            "Centraid uses the camera to scan pairing QR codes, documents, cards, and receipts you choose to capture.",
         },
       ],
       "expo-video",

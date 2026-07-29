@@ -203,6 +203,8 @@ describe("backup", () => {
     outboxItemId: string;
     peoplePartyId: string;
     peopleRevisionId: string;
+    receiptExpenseId: string;
+    receiptId: string;
   }
 
   interface Harness {
@@ -375,6 +377,49 @@ describe("backup", () => {
       party_id: peoplePartyId,
     })["revision_id"] as string;
 
+    // #630 P1/P5 preservation canary: a canonical receipt is more than its
+    // blob. The expense, receipt link, reviewed OCR derivative, structured
+    // lines, allocations, and attachment must cross the same recovery plane.
+    const ownerPartyId = (
+      h.plane.db.vault
+        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+        .get() as { owner_party_id: string }
+    ).owner_party_id;
+    const receiptGroupId = invoke(h.plane, "tally.create_group", {
+      name: "Backup receipt",
+      icon: "🧾",
+      member_ids: [],
+    })["group_id"] as string;
+    const stagedReceipt = h.plane.gateway.stageBlob(h.plane.ownerCredential, {
+      bytes: Buffer.from("receipt-backup-canary"),
+      filename: "receipt.jpg",
+      mediaType: "image/jpeg",
+    });
+    const receiptOutput = invoke(h.plane, "tally.add_receipt_expense", {
+      group_id: receiptGroupId,
+      description: "Backup dinner",
+      amount_minor: 1_200,
+      paid_by: ownerPartyId,
+      category: "food",
+      splits: [{ party_id: ownerPartyId, share_minor: 1_200 }],
+      staged_sha: stagedReceipt.sha256,
+      ocr_text: "Dinner 10.00\nTax 2.00",
+      line_items: [
+        {
+          kind: "item",
+          description: "Dinner",
+          amount_minor: 1_000,
+          allocations: [{ party_id: ownerPartyId, share_minor: 1_000 }],
+        },
+        {
+          kind: "tax",
+          description: "Tax",
+          amount_minor: 200,
+          allocations: [{ party_id: ownerPartyId, share_minor: 200 }],
+        },
+      ],
+    });
+
     h.seeded = {
       taskTitles,
       smallBlobSha,
@@ -387,6 +432,8 @@ describe("backup", () => {
       outboxItemId,
       peoplePartyId,
       peopleRevisionId,
+      receiptExpenseId: receiptOutput["expense_id"] as string,
+      receiptId: receiptOutput["receipt_id"] as string,
     };
 
     // 2. First real backup — REAL assembleSourceEntries → REAL LocalBackupProvider.
@@ -610,6 +657,41 @@ describe("backup", () => {
         deleted_at: null,
         purge_at: null,
       });
+
+      const restoredReceipt = plane.db.vault
+        .prepare(
+          `SELECT r.expense_id, d.text_content,
+                  count(DISTINCT l.line_item_id) AS line_count,
+                  count(a.party_id) AS allocation_count
+             FROM tally_expense_receipt r
+             JOIN core_content_derivative d
+               ON d.content_id = r.content_id AND d.variant = 'text'
+             JOIN tally_expense_line_item l ON l.receipt_id = r.receipt_id
+             JOIN tally_expense_line_allocation a
+               ON a.line_item_id = l.line_item_id
+            WHERE r.receipt_id = ?
+            GROUP BY r.expense_id, d.text_content`
+        )
+        .get(h.seeded.receiptId) as {
+        expense_id: string;
+        text_content: string;
+        line_count: number;
+        allocation_count: number;
+      };
+      expect(restoredReceipt).toMatchObject({
+        expense_id: h.seeded.receiptExpenseId,
+        text_content: "Dinner 10.00\nTax 2.00",
+        line_count: 2,
+        allocation_count: 2,
+      });
+      expect(
+        plane.db.vault
+          .prepare(
+            `SELECT role, is_primary FROM core_attachment
+              WHERE target_type = 'tally.expense' AND target_id = ?`
+          )
+          .get(h.seeded.receiptExpenseId)
+      ).toMatchObject({ role: "receipt", is_primary: 1 });
 
       // Byte-identical blob content via the real blob read path.
       const smallRead = await plane.db.blobs.open(h.seeded.smallBlobSha);

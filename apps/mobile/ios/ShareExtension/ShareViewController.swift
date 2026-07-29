@@ -17,17 +17,21 @@ class ShareViewController: UIViewController {
   var sharedMedia: [SharedMediaFile] = []
   let imageContentType: String = UTType.image.identifier
   let videoContentType: String = UTType.movie.identifier
+  let textContentType: String = UTType.text.identifier
+  let urlContentType: String = UTType.url.identifier
   let fileURLType: String = UTType.fileURL.identifier
   let pkpassContentType: String = "com.apple.pkpass"
   let pdfContentType: String = UTType.pdf.identifier
   let vcardContentType: String = "public.vcard"
 
-  // One attachment's load result. Every supported share resolves to a file
-  // that lands in `shareIntent.files`; a hard load error aborts the whole
-  // share rather than delivering a partial set (#431 F7). Text and web-URL
-  // shares are no longer advertised (#431 F9), so there is no text/url case.
+  // One attachment's load result. A hard load error aborts the whole share
+  // rather than delivering a partial set (#431 F7). Text and web URLs stay
+  // typed so the host opens preview-first Quick capture instead of silently
+  // turning them into files.
   private enum LoadOutcome {
     case media(SharedMediaFile)
+    case text(String)
+    case webUrl(WebUrl)
     case failed(String)
   }
 
@@ -77,6 +81,10 @@ class ShareViewController: UIViewController {
       return await loadPkPass(attachment: attachment)
     } else if attachment.hasItemConformingToTypeIdentifier(pdfContentType) {
       return await loadPdf(attachment: attachment)
+    } else if attachment.hasItemConformingToTypeIdentifier(urlContentType) {
+      return await loadUrl(attachment: attachment)
+    } else if attachment.hasItemConformingToTypeIdentifier(textContentType) {
+      return await loadText(attachment: attachment)
     } else {
       NSLog("[ERROR] content type not handled")
       return .failed("content type not handled")
@@ -94,19 +102,67 @@ class ShareViewController: UIViewController {
       if case let .media(file) = outcome { return file }
       return nil
     }
-    guard !files.isEmpty else {
-      dismissWithError(message: "No content found")
+    let texts = outcomes.compactMap { outcome -> String? in
+      if case let .text(text) = outcome { return text }
+      return nil
+    }
+    let urls = outcomes.compactMap { outcome -> WebUrl? in
+      if case let .webUrl(url) = outcome { return url }
+      return nil
+    }
+    let kinds = [files.isEmpty, texts.isEmpty, urls.isEmpty].filter { !$0 }.count
+    guard kinds == 1 else {
+      dismissWithError(
+        message: kinds == 0
+          ? "No content found"
+          : "Share files, text, or links in separate batches for review")
       return
     }
-    self.sharedMedia = files
-    // Generic documents (pdf, vCard, pkpass, arbitrary files) redirect as
-    // `.file`; a pure photo/video share as `.media`. Both decode to
-    // `shareIntent.files` on the JS side.
-    let redirect: RedirectType = files.contains { $0.type == .file } ? .file : .media
     let userDefaults = UserDefaults(suiteName: self.hostAppGroupIdentifier)
-    userDefaults?.set(self.toData(data: self.sharedMedia), forKey: self.sharedKey)
+    let redirect: RedirectType
+    if !texts.isEmpty {
+      userDefaults?.set(texts, forKey: self.sharedKey)
+      redirect = .text
+    } else if !urls.isEmpty {
+      userDefaults?.set(self.toData(data: urls), forKey: self.sharedKey)
+      redirect = .weburl
+    } else {
+      self.sharedMedia = files
+      userDefaults?.set(self.toData(data: files), forKey: self.sharedKey)
+      // Generic documents (pdf, vCard, pkpass, arbitrary files) redirect as
+      // `.file`; a pure photo/video share as `.media`.
+      redirect = files.contains { $0.type == .file } ? .file : .media
+    }
     userDefaults?.synchronize()
     self.redirectToHostApp(type: redirect)
+  }
+
+  private func loadText(attachment: NSItemProvider) async -> LoadOutcome {
+    do {
+      guard
+        let text = try await attachment.loadItem(forTypeIdentifier: textContentType)
+          as? String
+      else {
+        return .failed("Cannot load shared text")
+      }
+      return .text(text)
+    } catch {
+      return .failed("Text share error: \(error.localizedDescription)")
+    }
+  }
+
+  private func loadUrl(attachment: NSItemProvider) async -> LoadOutcome {
+    do {
+      guard
+        let url = try await attachment.loadItem(forTypeIdentifier: urlContentType)
+          as? URL
+      else {
+        return .failed("Cannot load shared URL")
+      }
+      return .webUrl(WebUrl(url: url.absoluteString, meta: ""))
+    } catch {
+      return .failed("URL share error: \(error.localizedDescription)")
+    }
   }
 
   private func loadVCard(attachment: NSItemProvider) async -> LoadOutcome {
@@ -378,6 +434,8 @@ class ShareViewController: UIViewController {
 
   enum RedirectType {
     case media
+    case text
+    case weburl
     case file
   }
 
@@ -485,6 +543,16 @@ class ShareViewController: UIViewController {
     return path
   }
 
+  class WebUrl: Codable {
+    var url: String
+    var meta: String
+
+    init(url: String, meta: String) {
+      self.url = url
+      self.meta = meta
+    }
+  }
+
   class SharedMediaFile: Codable {
     var path: String  // can be image, video or url path
     var thumbnail: String?  // video thumbnail
@@ -519,6 +587,11 @@ class ShareViewController: UIViewController {
   }
 
   func toData(data: [SharedMediaFile]) -> Data? {
+    let encodedData = try? JSONEncoder().encode(data)
+    return encodedData
+  }
+
+  func toData(data: [WebUrl]) -> Data? {
     let encodedData = try? JSONEncoder().encode(data)
     return encodedData
   }

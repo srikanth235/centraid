@@ -41,6 +41,7 @@ import type { DeviceOriginal } from "./device-media";
 interface Rules {
   wifiOnly: boolean;
   allowMetered: boolean;
+  allowRoaming: boolean;
   chargerOnly: boolean;
   selectedAlbums: string[];
 }
@@ -48,6 +49,7 @@ const RULES_KEY = "photos.backupRules";
 const DEFAULT_RULES: Rules = {
   wifiOnly: true,
   allowMetered: false,
+  allowRoaming: false,
   chargerOnly: false,
   selectedAlbums: [],
 };
@@ -318,6 +320,13 @@ export default function BackupHealth({
           onValueChange={(value) => update({ ...rules, allowMetered: value })}
           colors={colors}
           disabled={rules.wifiOnly}
+        />
+        <Rule
+          label="Allow roaming or unknown cellular status"
+          value={rules.allowRoaming}
+          onValueChange={(value) => update({ ...rules, allowRoaming: value })}
+          colors={colors}
+          disabled={rules.wifiOnly || !rules.allowMetered}
         />
         <Rule
           label="Only while charging"

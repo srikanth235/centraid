@@ -4,6 +4,9 @@ out
 .turbo
 .astro
 .expo
+# Expo local modules are Gradle subprojects; their nested output is not covered
+# by the root Android project's ignore file.
+apps/mobile/modules/*/android/build/
 .DS_Store
 *.log
 .meridian-cache

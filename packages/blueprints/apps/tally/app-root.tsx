@@ -46,6 +46,10 @@ import type {
 export const CHANGE_TABLES = [
   "tally.expense",
   "tally.expense_split",
+  "tally.expense_receipt",
+  "tally.expense_line_item",
+  "tally.expense_line_allocation",
+  "core.content_item",
   "tally.settlement",
   "tally.friend",
   "tally.group",

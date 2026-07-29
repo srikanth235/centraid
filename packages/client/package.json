@@ -9,6 +9,8 @@
     "./replica": "./src/replica/index.ts",
     "./replica/native": "./src/replica/native.ts",
     "./replica/intent-invalidations": "./src/replica/intent-invalidations.ts",
+    "./capture": "./src/capture.ts",
+    "./receipt-capture": "./src/receipt-capture.ts",
     "./version-handshake": "./src/version-handshake.ts",
     "./video-frame": "./src/video-frame.ts",
     "./styles.css": "./src/styles.css"

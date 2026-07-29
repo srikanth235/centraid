@@ -28,7 +28,7 @@ import {
   KNOWLEDGE_DDL,
   MEDIA_DDL,
 } from "./domains-social-knowledge-media.js";
-import { TALLY_DDL } from "./domains-tally.js";
+import { TALLY_DDL, TALLY_RECEIPT_DDL } from "./domains-tally.js";
 import { ENRICH_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import { APP_EXT_DDL } from "./ext.js";
@@ -97,6 +97,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   LOCKER_AUTH_DDL,
   ENTITY_REVISIONS_DDL,
   PEOPLE_PROFILE_LIFECYCLE_DDL,
+  TALLY_RECEIPT_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

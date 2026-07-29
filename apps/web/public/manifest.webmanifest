@@ -8,6 +8,15 @@
   "display": "standalone",
   "background_color": "#111317",
   "theme_color": "#111317",
+  "share_target": {
+    "action": "/?capture=shared",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/icon-192.png",
@@ -36,6 +45,7 @@
   ],
   "shortcuts": [
     { "name": "Home", "url": "/#home" },
+    { "name": "Quick capture", "url": "/?capture=shortcut" },
     { "name": "Assistant", "url": "/#assistant" },
     { "name": "Automations", "url": "/#automations" }
   ]

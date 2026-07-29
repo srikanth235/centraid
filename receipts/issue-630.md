@@ -43,6 +43,30 @@ search/no-results path. Verification at this checkpoint: Blueprints 648,
 Client 1,438, and Mobile 268 tests pass; all three package typechecks and the
 mobile import-boundary lint pass. -->
 
+<!-- Checkpoint: Wave 3 adds one private capture plane on web/PWA, iOS, and
+Android: universal text quick-add with deterministic task/expense/note/event
+routing and a local-agent fallback; PWA/OS share targets for text, URLs, and
+files; Apple Vision / Android ML Kit OCR with a bounded opt-in Tesseract
+gateway fallback; preview-before-commit routing to Docs, Photos, Locker, and
+an atomically published Tally receipt with canonical attachment, reviewed OCR
+text, allocated line items, tax, and tip. Gateway reminder scheduling now
+drives opaque Expo and Web Push wakes, actionable native task/event/Tally
+routes, exact due-time re-arming, per-device registration/revocation, and
+content-minimized notification fetches. Photos backup exposes source album,
+battery, Wi-Fi/metered, roaming, custody, and PWA bulk-import controls; unknown
+cellular roaming is conservatively blocked unless the owner opts in. iOS share
+extension and Android/native modules compile, and native fingerprints are
+reviewed and pinned.
+
+Ambiguity decision: notification endpoint tokens and the VAPID private key are
+gateway/device capabilities, not portable user records. They stay mode-0600 in
+gateway.db, are revoked on unlink, and are re-registered after reconnect.
+Including them in vault backup would resurrect delivery authority after a
+revoked device or blank-machine recovery. Reminder definitions remain
+backup-covered vault data. The receipt recovery canary separately proves the
+image, canonical attachment, OCR derivative, line items, and allocations
+survive side restore and restore-after-erase. -->
+
 ### Costs
 
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
@@ -58,3 +82,6 @@ mobile import-boundary lint pass. -->
 | codex-019fad18-4c1-1785326903-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 2342 | 0 | 225792 | 161 | 2503 | 0.0647 | 2391410 | 0 | 114201088 | 308691 | feat(security): harden blueprint content and imports (#630) |
 | codex-019fad18-4c1-1785326968-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 2336 | 0 | 226816 | 270 | 2606 | 0.0666 | 2393746 | 0 | 114427904 | 308961 | feat(security): harden blueprint content and imports (#630) |
 | codex-019fad18-4c1-1785329594-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 559681 | 0 | 31398400 | 75630 | 635311 | 10.3833 | 2953427 | 0 | 145826304 | 384591 | feat(blueprints): make offline state honest and reachable (#630) |
+| codex-019fad18-4c1-1785334143-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 877041 | 0 | 48042496 | 144738 | 1021779 | 16.3743 | 3830468 | 0 | 193868800 | 529329 | feat(capture): add private cross-platform intake and reminders (#630) |
+| codex-019fad18-4c1-1785334747-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 91929 | 0 | 6185472 | 21489 | 113418 | 2.0985 | 3922397 | 0 | 200054272 | 550818 | feat(capture): add private cross-platform intake and reminders (#630) |
+| codex-019fad18-4c1-1785334818-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 3597 | 0 | 835584 | 336 | 3933 | 0.2229 | 3925994 | 0 | 200889856 | 551154 | feat(capture): add private cross-platform intake and reminders (#630) |

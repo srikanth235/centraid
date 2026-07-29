@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { family, useTheme } from "../../kit/theme";
+import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import type { AgendaScreenProps } from "../../navigation";
 import { useAgenda } from "./useAgenda";
 
@@ -31,7 +32,7 @@ export default function AgendaEvent({
   navigation,
 }: AgendaScreenProps<"AgendaEvent">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const { session, gatewayBase } = useReplica();
   const { eventId, instanceKey } = route.params;
   const range = useMemo(
     () => [new Date("1970-01-01"), new Date("2100-01-01")] as const,
@@ -168,6 +169,7 @@ export default function AgendaEvent({
       );
       return;
     }
+    if (gatewayBase) void registerReplicaPushWake(gatewayBase);
     const date = new Date(Date.parse(event.start) - 15 * 60 * 1000);
     if (date <= new Date()) {
       Alert.alert(

@@ -1,6 +1,7 @@
 import * as Battery from "expo-battery";
 import * as Network from "expo-network";
 
+import { getCellularRoamingStatus } from "../../../modules/centraid-network-status";
 import { Store } from "../../storage";
 import type { UploadPolicy } from "./uploader";
 
@@ -8,6 +9,7 @@ const RULES_KEY = "photos.backupRules";
 interface TransferRules {
   wifiOnly: boolean;
   allowMetered: boolean;
+  allowRoaming: boolean;
   chargerOnly: boolean;
 }
 
@@ -20,6 +22,7 @@ export function nativeUploadPolicy(): UploadPolicy {
       const rules = await Store.hydrate<TransferRules>(RULES_KEY, {
         wifiOnly: true,
         allowMetered: false,
+        allowRoaming: false,
         chargerOnly: false,
       });
       const network = await Network.getNetworkStateAsync();
@@ -32,6 +35,17 @@ export function nativeUploadPolicy(): UploadPolicy {
         network.type === Network.NetworkStateType.CELLULAR
       )
         return false;
+      if (
+        !rules.wifiOnly &&
+        rules.allowMetered &&
+        !rules.allowRoaming &&
+        network.type === Network.NetworkStateType.CELLULAR
+      ) {
+        const roaming = await getCellularRoamingStatus();
+        // Android reports a reliable boolean. iOS and older Android return
+        // unknown, which stays blocked until the user explicitly allows it.
+        if (roaming !== false) return false;
+      }
       if (rules.chargerOnly) {
         const state = await Battery.getBatteryStateAsync();
         if (

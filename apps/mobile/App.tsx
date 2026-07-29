@@ -10,10 +10,12 @@ import PlayfairDisplay_600SemiBold from "@expo-google-fonts/playfair-display/600
 import PlayfairDisplay_600SemiBold_Italic from "@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf";
 import SpaceGrotesk_500Medium from "@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf";
 import SpaceGrotesk_600SemiBold from "@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf";
+import type { LinkingOptions } from "@react-navigation/native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
+import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { ShareIntentProvider } from "expo-share-intent";
 import * as SplashScreen from "expo-splash-screen";
@@ -61,9 +63,11 @@ import {
   useAppearance,
   useTheme,
 } from "./src/kit/theme";
+import { NotificationCoordinator } from "./src/lib/notifications";
 import { hydrateProfile, isOnboarded } from "./src/lib/profile";
 import { MOBILE_COMPATIBILITY_WALL_COPY } from "./src/lib/replica/mobile-gateway-compatibility-core";
 import { useUploadReconciliation } from "./src/lib/upload/boot";
+import { rootNavigationRef } from "./src/navigation";
 import type {
   AgendaStackParamList,
   DocsStackParamList,
@@ -73,9 +77,11 @@ import type {
 } from "./src/navigation";
 import AppDetailScreen from "./src/screens/AppDetail";
 import ApprovalsScreen from "./src/screens/Approvals";
+import CaptureScreen from "./src/screens/Capture";
 import HomeScreen from "./src/screens/Home";
 import OnboardingScreen from "./src/screens/Onboarding";
 import PhoneStorageScreen from "./src/screens/PhoneStorage";
+import ScanScreen from "./src/screens/Scan";
 import SettingsScreen from "./src/screens/Settings";
 
 // Keep the native splash up until fonts have loaded — avoids a flash of
@@ -114,6 +120,79 @@ const COVER_OPTIONS = {
   animation: "fade",
   presentation: "fullScreenModal",
 } as const;
+
+const LINKING: LinkingOptions<RootStackParamList> = {
+  prefixes: ["centraid://"],
+  async getInitialURL(): Promise<string | null> {
+    const url = await Linking.getInitialURL();
+    if (url) return url;
+    return notificationUrl(
+      await Notifications.getLastNotificationResponseAsync()
+    );
+  },
+  subscribe(listener): () => void {
+    const linking = Linking.addEventListener("url", ({ url }) => listener(url));
+    const notifications = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const url = notificationUrl(response);
+        if (url) listener(url);
+      }
+    );
+    return () => {
+      linking.remove();
+      notifications.remove();
+    };
+  },
+  config: {
+    screens: {
+      Capture: "capture",
+      Scan: {
+        path: "scan",
+        parse: {
+          plaintextSize: Number,
+          deleteSourceAfterSettle: (value: string) => value === "true",
+        },
+      },
+      Agenda: {
+        screens: {
+          AgendaHome: "agenda",
+          AgendaEvent: "agenda/event/:eventId",
+        },
+      },
+      Photos: {
+        screens: {
+          PhotosHome: "photos",
+          PhotoLightbox: "photos/:assetId",
+        },
+      },
+      Docs: {
+        screens: {
+          DocsHome: "docs",
+          DocumentViewer: "docs/:documentId",
+        },
+      },
+      Locker: "locker",
+      AppDetail: "apps/:appId",
+      Assistant: "assistant",
+      Automations: "automations",
+      Insights: "insights",
+      Settings: "settings",
+      Home: "",
+    },
+  },
+};
+
+function notificationUrl(
+  response: Notifications.NotificationResponse | null
+): string | null {
+  if (!response) return null;
+  const value = (
+    response.notification.request.content.data as { url?: unknown }
+  ).url;
+  return typeof value === "string" && value.startsWith("centraid://")
+    ? value
+    : null;
+}
 
 function UploadReconciliation(): null {
   const { session } = useReplica();
@@ -366,12 +445,17 @@ export default function App(): React.JSX.Element | null {
                   <ReplicaCompatibilityGate>
                     <UploadReconciliation />
                     <ShareIntentIngest />
+                    <NotificationCoordinator />
                     {/* The replica error banner is only meaningful inside the app
                       shell — during onboarding the user hasn't paired yet, so a
                       "couldn't open replica" banner would just be noise. */}
                     {onboarded ? <ReplicaErrorBanner /> : null}
                     {onboarded ? (
-                      <NavigationContainer theme={navThemeFor(scheme)}>
+                      <NavigationContainer
+                        ref={rootNavigationRef}
+                        linking={LINKING}
+                        theme={navThemeFor(scheme)}
+                      >
                         <StatusBar
                           style={scheme === "dark" ? "light" : "dark"}
                         />
@@ -391,6 +475,16 @@ export default function App(): React.JSX.Element | null {
                           <RootStack.Screen
                             name="Home"
                             component={HomeScreen}
+                          />
+                          <RootStack.Screen
+                            name="Capture"
+                            component={CaptureScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Scan"
+                            component={ScanScreen}
+                            options={COVER_OPTIONS}
                           />
                           <RootStack.Screen
                             name="Photos"

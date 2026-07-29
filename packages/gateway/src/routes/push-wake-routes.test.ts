@@ -8,6 +8,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { notifyReplicaCommit } from "@centraid/vault";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import type { WebPushSender } from "../push/web-push.js";
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
@@ -16,6 +17,7 @@ import type { VaultRegistry } from "../serve/vault-registry.js";
 import {
   makePushRegistrationRouteHandler,
   PUSH_REGISTRATIONS_PATH,
+  PUSH_VAPID_KEY_PATH,
   PushWakeRelay,
 } from "./push-wake-routes.js";
 
@@ -156,6 +158,53 @@ describe("push-wake-routes", () => {
     await expect(unknownPath.text()).resolves.toBe("");
   });
 
+  test("registers and revokes a browser subscription without storing content", async () => {
+    const webPush: WebPushSender = {
+      publicKey: () => "public-vapid-key",
+      sendWake: async () => undefined,
+    };
+    const { base, database } = await registrationServer(webPush);
+    const headers = {
+      [AUTHED_DEVICE_HEADER]: "phone-1",
+      "content-type": "application/json",
+    };
+    const key = await fetch(`${base}${PUSH_VAPID_KEY_PATH}`, { headers });
+    expect(key.status).toBe(200);
+    await expect(key.json()).resolves.toStrictEqual({
+      publicKey: "public-vapid-key",
+    });
+    const registered = await fetch(`${base}${PUSH_REGISTRATIONS_PATH}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        platform: "web",
+        subscription: {
+          endpoint: "https://push.example/subscription-1",
+          keys: {
+            p256dh: "p".repeat(65),
+            auth: "a".repeat(16),
+          },
+        },
+      }),
+    });
+    expect(registered.status).toBe(200);
+    expect(webRegistrationRows(database)).toStrictEqual([
+      {
+        auth: "a".repeat(16),
+        device_id: "phone-1",
+        endpoint: "https://push.example/subscription-1",
+        p256dh: "p".repeat(65),
+      },
+    ]);
+
+    const removed = await fetch(`${base}${PUSH_REGISTRATIONS_PATH}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(removed.status).toBe(200);
+    expect(webRegistrationRows(database)).toStrictEqual([]);
+  });
+
   test("PushWakeRelay debounces vault commits and posts only opaque wake payloads", async () => {
     vi.useFakeTimers();
     const { plane, enrollments, database, vaults } = await wakeFixture();
@@ -261,9 +310,60 @@ describe("push-wake-routes", () => {
     await flushMicrotasks();
     expect(send).toHaveBeenCalledOnce();
   });
+
+  test("PushWakeRelay arms the exact next reminder instead of relying on a poll", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T12:00:00.000Z"));
+    const { plane, enrollments, database, vaults } = await wakeFixture();
+    const deviceId = "timer-phone";
+    enrollments.enroll({
+      endpointId: deviceId,
+      label: "Timer phone",
+      memberLabel: "Priya",
+      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+    });
+    insertRegistration(
+      database,
+      deviceId,
+      "ExponentPushToken[timer]",
+      "android"
+    );
+    plane.db.vault
+      .prepare(
+        `INSERT INTO schedule_task
+          (task_id, owner_party_id, title, status, priority, due_at,
+           remind_before_min)
+         VALUES ('timer-task', ?, 'Leave now', 'needs-action', 0,
+                 '2026-07-29T12:00:05.000Z', 0)`
+      )
+      .run(plane.boot.ownerPartyId);
+    const send = vi.fn<typeof fetch>(
+      async () => new Response("{}", { status: 200 })
+    );
+    const webPush: WebPushSender = {
+      publicKey: () => "unused",
+      sendWake: async () => undefined,
+    };
+    const relay = new PushWakeRelay(
+      vaults,
+      enrollments,
+      database,
+      send,
+      webPush
+    );
+    relays.push(relay);
+    relay.start();
+
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await flushMicrotasks();
+
+    expect(send).toHaveBeenCalledOnce();
+  });
 });
 
-async function registrationServer(): Promise<{
+async function registrationServer(webPush?: WebPushSender): Promise<{
   base: string;
   database: GatewayDatabase;
 }> {
@@ -278,7 +378,7 @@ async function registrationServer(): Promise<{
     memberLabel: "Priya",
     grants: [{ vaultId: "vault-personal", role: "write" }],
   });
-  const handler = makePushRegistrationRouteHandler(database);
+  const handler = makePushRegistrationRouteHandler(database, webPush);
   const server = http.createServer((req, res) => {
     void handler(req, res).then((handled) => {
       if (!handled && !res.writableEnded) res.end();
@@ -288,6 +388,28 @@ async function registrationServer(): Promise<{
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   return { base: `http://127.0.0.1:${port}`, database };
+}
+
+function webRegistrationRows(database: GatewayDatabase): Array<{
+  endpoint: string;
+  device_id: string;
+  p256dh: string;
+  auth: string;
+}> {
+  return (
+    database.db
+      .prepare(
+        `SELECT endpoint, device_id, p256dh, auth
+           FROM web_push_registrations
+          ORDER BY endpoint`
+      )
+      .all() as Array<{
+      endpoint: string;
+      device_id: string;
+      p256dh: string;
+      auth: string;
+    }>
+  ).map((row) => ({ ...row }));
 }
 
 async function wakeFixture(): Promise<{

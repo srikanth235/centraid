@@ -12,12 +12,20 @@
     "scopes": [
       { "schema": "core", "table": "vault", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "core", "table": "content_item", "verbs": "read" },
       { "schema": "tally", "table": "friend", "verbs": "read" },
       { "schema": "tally", "table": "group", "verbs": "read" },
       { "schema": "social", "table": "circle", "verbs": "read" },
       { "schema": "social", "table": "circle_member", "verbs": "read" },
       { "schema": "tally", "table": "expense", "verbs": "read" },
       { "schema": "tally", "table": "expense_split", "verbs": "read" },
+      { "schema": "tally", "table": "expense_receipt", "verbs": "read" },
+      { "schema": "tally", "table": "expense_line_item", "verbs": "read" },
+      {
+        "schema": "tally",
+        "table": "expense_line_allocation",
+        "verbs": "read"
+      },
       { "schema": "tally", "table": "settlement", "verbs": "read" },
       { "schema": "tally", "table": "obligation", "verbs": "read" },
       { "schema": "tally", "table": "add_friend", "verbs": "act" },
@@ -27,6 +35,7 @@
       { "schema": "tally", "table": "remove_group_member", "verbs": "act" },
       { "schema": "tally", "table": "delete_group", "verbs": "act" },
       { "schema": "tally", "table": "add_expense", "verbs": "act" },
+      { "schema": "tally", "table": "add_receipt_expense", "verbs": "act" },
       { "schema": "tally", "table": "edit_expense", "verbs": "act" },
       { "schema": "tally", "table": "delete_expense", "verbs": "act" },
       { "schema": "tally", "table": "restore_expense", "verbs": "act" },
@@ -57,6 +66,94 @@
     ]
   },
   "actions": [
+    {
+      "name": "add-receipt-expense",
+      "description": "Publish a reviewed receipt image as canonical content together with OCR line items, tax/tip rows, per-line participant allocations, and the resulting balanced expense.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "amount_minor": { "type": "integer", "minimum": 1 },
+          "paid_by": { "type": "string", "minLength": 1 },
+          "spent_on": { "type": "string" },
+          "category": { "type": "string" },
+          "staged_sha": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
+          "ocr_text": { "type": "string", "minLength": 1 },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": { "type": "string" },
+                "share_minor": { "type": "integer" }
+              },
+              "required": ["party_id", "share_minor"],
+              "additionalProperties": false
+            }
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["item", "tax", "tip"]
+                },
+                "description": { "type": "string", "minLength": 1 },
+                "amount_minor": { "type": "integer", "minimum": 0 },
+                "allocations": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "party_id": { "type": "string" },
+                      "share_minor": { "type": "integer" }
+                    },
+                    "required": ["party_id", "share_minor"],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "description",
+                "amount_minor",
+                "allocations"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "group_id",
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "staged_sha",
+          "ocr_text",
+          "splits",
+          "line_items"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
     {
       "name": "add-expense",
       "description": "Add an expense through tally.add_expense. The split method (equally / exact / percent) is resolved to a splits map client-side; the command re-validates it sums to the amount and every participant is a group member.",

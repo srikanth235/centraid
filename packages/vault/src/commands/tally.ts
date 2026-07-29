@@ -29,6 +29,7 @@ import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { replaceMemo } from "./annotations.js";
+import { writeExtractedText } from "./enrich.js";
 import {
   loadEntityRevision,
   markEntityRevisionUndone,
@@ -282,6 +283,37 @@ const SPLIT_SCHEMA = {
     properties: {
       party_id: { type: "string", minLength: 1 },
       share_minor: { type: "integer", minimum: 0 },
+    },
+  },
+};
+
+const LINE_ALLOCATION_SCHEMA = {
+  type: "array",
+  minItems: 1,
+  items: {
+    type: "object",
+    required: ["party_id", "share_minor"],
+    additionalProperties: false,
+    properties: {
+      party_id: { type: "string", minLength: 1 },
+      share_minor: { type: "integer", minimum: 0 },
+    },
+  },
+};
+
+const RECEIPT_LINE_SCHEMA = {
+  type: "array",
+  minItems: 1,
+  maxItems: 200,
+  items: {
+    type: "object",
+    required: ["kind", "description", "amount_minor", "allocations"],
+    additionalProperties: false,
+    properties: {
+      kind: { type: "string", enum: ["item", "tax", "tip"] },
+      description: { type: "string", minLength: 1, maxLength: 500 },
+      amount_minor: { type: "integer", minimum: 0 },
+      allocations: LINE_ALLOCATION_SCHEMA,
     },
   },
 };
@@ -719,6 +751,218 @@ const ADD_EXPENSE: CommandDefinition = {
       entityId: expenseId,
     });
     return { expense_id: expenseId };
+  },
+};
+
+const ADD_RECEIPT_EXPENSE: CommandDefinition = {
+  name: "tally.add_receipt_expense",
+  ownerSchema: "tally",
+  inputSchema: {
+    type: "object",
+    required: [
+      "group_id",
+      "description",
+      "amount_minor",
+      "paid_by",
+      "category",
+      "splits",
+      "staged_sha",
+      "ocr_text",
+      "line_items",
+    ],
+    additionalProperties: false,
+    properties: {
+      group_id: { type: "string", minLength: 1 },
+      description: { type: "string", minLength: 1 },
+      amount_minor: { type: "integer", minimum: 1 },
+      paid_by: { type: "string", minLength: 1 },
+      spent_on: { type: "string" },
+      category: { type: "string", enum: CATEGORY_ENUM },
+      splits: SPLIT_SCHEMA,
+      staged_sha: { type: "string", minLength: 64, maxLength: 64 },
+      ocr_text: { type: "string", minLength: 1, maxLength: 200_000 },
+      line_items: RECEIPT_LINE_SCHEMA,
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["expense_id", "receipt_id", "content_id"],
+    properties: {
+      expense_id: { type: "string" },
+      receipt_id: { type: "string" },
+      content_id: { type: "string" },
+    },
+  },
+  preconditions: [
+    {
+      name: "group_exists",
+      sql: GROUP_EXISTS_SQL,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "receipt_expense_created",
+      sql: `SELECT count(*) AS n
+              FROM tally_expense_receipt r
+              JOIN tally_expense e ON e.expense_id = r.expense_id
+             WHERE e.expense_id = :expense_id
+               AND r.receipt_id = :receipt_id`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "once",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as {
+      group_id: string;
+      description: string;
+      amount_minor: number;
+      paid_by: string;
+      spent_on?: string;
+      category: string;
+      splits: SplitInput[];
+      staged_sha: string;
+      ocr_text: string;
+      line_items: Array<{
+        kind: "item" | "tax" | "tip";
+        description: string;
+        amount_minor: number;
+        allocations: SplitInput[];
+      }>;
+    };
+    const amountMinor = Math.round(input.amount_minor);
+    const lineTotal = input.line_items.reduce(
+      (sum, line) => sum + Math.round(line.amount_minor),
+      0
+    );
+    if (lineTotal !== amountMinor)
+      throw new Error(
+        `receipt lines must sum to the expense amount (got ${lineTotal}, need ${amountMinor})`
+      );
+    const members = groupMemberIds(ctx, input.group_id);
+    for (const line of input.line_items) {
+      const allocationTotal = line.allocations.reduce(
+        (sum, allocation) => sum + Math.round(allocation.share_minor),
+        0
+      );
+      if (allocationTotal !== Math.round(line.amount_minor))
+        throw new Error(
+          `allocations for "${line.description}" must sum to its amount`
+        );
+      const seen = new Set<string>();
+      for (const allocation of line.allocations) {
+        if (!members.has(allocation.party_id))
+          throw new Error("a line allocation is not a group member");
+        if (seen.has(allocation.party_id))
+          throw new Error("duplicate participant in line allocations");
+        seen.add(allocation.party_id);
+      }
+    }
+
+    const minted = ctx.blobs.claimStaged(input.staged_sha, {
+      title: `${input.description} receipt`,
+    });
+    const expenseId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO tally_expense
+          (expense_id, group_id, description, amount_minor, paid_by, spent_on,
+           category, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        expenseId,
+        input.group_id,
+        input.description,
+        amountMinor,
+        input.paid_by,
+        input.spent_on ?? ctx.now.slice(0, 10),
+        input.category,
+        ctx.now
+      );
+    ctx.wrote("tally.expense", expenseId);
+    writeSplits(
+      ctx,
+      expenseId,
+      input.group_id,
+      amountMinor,
+      input.paid_by,
+      input.splits
+    );
+
+    const receiptId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO tally_expense_receipt
+          (receipt_id, expense_id, content_id, created_at)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(receiptId, expenseId, minted.contentId, ctx.now);
+    ctx.wrote("tally.expense_receipt", receiptId);
+    ctx.wrote("core.content_item", minted.contentId);
+    const attachmentId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO core_attachment
+          (attachment_id, target_type, target_id, content_id, role, is_primary,
+           created_at)
+         VALUES (?, 'tally.expense', ?, ?, 'receipt', 1, ?)`
+      )
+      .run(attachmentId, expenseId, minted.contentId, ctx.now);
+    ctx.wrote("core.attachment", attachmentId);
+    writeExtractedText(ctx, minted.contentId, input.ocr_text);
+
+    const insertLine = ctx.db.prepare(
+      `INSERT INTO tally_expense_line_item
+        (line_item_id, receipt_id, kind, description, amount_minor, sort_order,
+         created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    const insertAllocation = ctx.db.prepare(
+      `INSERT INTO tally_expense_line_allocation
+        (line_item_id, party_id, share_minor, created_at)
+       VALUES (?, ?, ?, ?)`
+    );
+    input.line_items.forEach((line, index) => {
+      const lineItemId = ctx.newId();
+      insertLine.run(
+        lineItemId,
+        receiptId,
+        line.kind,
+        line.description,
+        Math.round(line.amount_minor),
+        index,
+        ctx.now
+      );
+      ctx.wrote("tally.expense_line_item", lineItemId);
+      for (const allocation of line.allocations) {
+        insertAllocation.run(
+          lineItemId,
+          allocation.party_id,
+          Math.round(allocation.share_minor),
+          ctx.now
+        );
+        ctx.wrote(
+          "tally.expense_line_allocation",
+          `${lineItemId}:${allocation.party_id}`
+        );
+      }
+    });
+    ctx.cite({
+      claim: `"${input.description}" published from a reviewed receipt with ${input.line_items.length} allocated lines`,
+      entityType: "tally.expense",
+      entityId: expenseId,
+    });
+    return {
+      expense_id: expenseId,
+      receipt_id: receiptId,
+      content_id: minted.contentId,
+    };
   },
 };
 
@@ -1198,6 +1442,7 @@ export function registerTallyCommands(gateway: Gateway): void {
   gateway.registerCommand(REMOVE_GROUP_MEMBER);
   gateway.registerCommand(DELETE_GROUP);
   gateway.registerCommand(ADD_EXPENSE);
+  gateway.registerCommand(ADD_RECEIPT_EXPENSE);
   gateway.registerCommand(EDIT_EXPENSE);
   gateway.registerCommand(DELETE_EXPENSE);
   gateway.registerCommand(RESTORE_EXPENSE);

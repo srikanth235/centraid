@@ -1,0 +1,11 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["CentraidNetworkStatusModule"]
+  },
+  "android": {
+    "modules": [
+      "expo.modules.centraidnetworkstatus.CentraidNetworkStatusModule"
+    ]
+  }
+}

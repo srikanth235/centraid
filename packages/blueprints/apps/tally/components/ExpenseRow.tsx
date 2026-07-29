@@ -74,7 +74,10 @@ export function ExpenseRow({
       </span>
       <span className={styles.exmain}>
         <span className={styles.exdesc}>{displayText(row.description)}</span>
-        <span className={styles.exsub}>{sub}</span>
+        <span className={styles.exsub}>
+          {sub}
+          {row.receipt ? " · receipt" : ""}
+        </span>
       </span>
       <span className={styles.exright}>
         {pending ? (

@@ -87,6 +87,24 @@ export interface LedgerRow {
   your_role: Role;
   your_amount_minor: number;
   splits: SplitEntry[];
+  receipt?: {
+    receipt_id: string;
+    content_id: string;
+    content_uri?: string;
+    media_type?: string;
+    lines: Array<{
+      line_item_id: string;
+      kind: "item" | "tax" | "tip";
+      description: string;
+      amount_minor: number;
+      sort_order: number;
+      allocations: Array<{
+        party_id: string;
+        name?: string;
+        share_minor: number;
+      }>;
+    }>;
+  };
   pending?: boolean;
   parked?: boolean;
 }

@@ -1037,6 +1037,7 @@
         "actions/add-expense.ts",
         "actions/add-friend.ts",
         "actions/add-group-member.ts",
+        "actions/add-receipt-expense.ts",
         "actions/create-group.ts",
         "actions/delete-expense.ts",
         "actions/delete-group.ts",

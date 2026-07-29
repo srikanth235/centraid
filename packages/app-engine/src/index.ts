@@ -269,6 +269,12 @@ export {
   cleanTitle,
   type GenerateTitleDeps,
 } from "./conversation/auto-title.js";
+export {
+  classifyCaptureWithAgent,
+  parseAgentCapturePreview,
+  type AgentCapturePreview,
+  type ClassifyCaptureDeps,
+} from "./conversation/capture-classifier.js";
 export { makeConversationRouteHandler } from "./http/conversation-routes.js";
 // The shared SSE turn driver (stream framing + run-ledger fold) — the
 // per-app `_turn` route and the gateway's vault-assistant route both ride it.

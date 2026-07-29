@@ -3,6 +3,12 @@ import type { IncomingMessage } from "node:http";
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { subscribeReplicaCommits } from "@centraid/vault";
 
+import { createWebPushSender } from "../push/web-push.js";
+import type { WebPushSender } from "../push/web-push.js";
+import {
+  computeDueReminders,
+  nextReminderFireAt,
+} from "../reminders/due-reminders.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
@@ -11,13 +17,20 @@ import type { VaultRegistry } from "../serve/vault-registry.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export const PUSH_REGISTRATIONS_PATH = "/centraid/_gateway/push/registrations";
+export const PUSH_VAPID_KEY_PATH = "/centraid/_gateway/push/vapid-key";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
 export function makePushRegistrationRouteHandler(
-  gatewayDatabase: GatewayDatabase
+  gatewayDatabase: GatewayDatabase,
+  webPush: WebPushSender = createWebPushSender(gatewayDatabase)
 ): RouteHandler {
   return async (req, res): Promise<boolean> => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
+    if (url.pathname === PUSH_VAPID_KEY_PATH) {
+      if ((req.method ?? "GET") !== "GET")
+        return sendJson(res, 405, { error: "method_not_allowed" });
+      return sendJson(res, 200, { publicKey: webPush.publicKey() });
+    }
     if (url.pathname !== PUSH_REGISTRATIONS_PATH) return false;
     const deviceId = callerDeviceId(req);
     if (!deviceId)
@@ -25,6 +38,10 @@ export function makePushRegistrationRouteHandler(
     if ((req.method ?? "GET") === "DELETE") {
       gatewayDatabase.run(
         "DELETE FROM push_registrations WHERE device_id = ?",
+        deviceId
+      );
+      gatewayDatabase.run(
+        "DELETE FROM web_push_registrations WHERE device_id = ?",
         deviceId
       );
       return sendJson(res, 200, { removed: true });
@@ -39,6 +56,44 @@ export function makePushRegistrationRouteHandler(
     }
     const token = body.token;
     const platform = body.platform;
+    const subscription =
+      body.subscription && typeof body.subscription === "object"
+        ? (body.subscription as Record<string, unknown>)
+        : undefined;
+    if (platform === "web" && subscription) {
+      const endpoint = subscription.endpoint;
+      const keys =
+        subscription.keys && typeof subscription.keys === "object"
+          ? (subscription.keys as Record<string, unknown>)
+          : undefined;
+      const p256dh = keys?.p256dh;
+      const auth = keys?.auth;
+      if (
+        typeof endpoint !== "string" ||
+        !endpoint.startsWith("https://") ||
+        typeof p256dh !== "string" ||
+        p256dh.length < 40 ||
+        typeof auth !== "string" ||
+        auth.length < 8
+      )
+        return sendJson(res, 400, { error: "invalid_push_registration" });
+      gatewayDatabase.run(
+        `INSERT INTO web_push_registrations
+          (endpoint, device_id, p256dh, auth, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(endpoint) DO UPDATE SET
+           device_id = excluded.device_id,
+           p256dh = excluded.p256dh,
+           auth = excluded.auth,
+           updated_at = excluded.updated_at`,
+        endpoint,
+        deviceId,
+        p256dh,
+        auth,
+        new Date().toISOString()
+      );
+      return sendJson(res, 200, { registered: true });
+    }
     if (
       typeof token !== "string" ||
       !/^(?:ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/u.test(token) ||
@@ -71,12 +126,17 @@ export function makePushRegistrationRouteHandler(
 export class PushWakeRelay {
   readonly #unsubscribes = new Map<string, () => void>();
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
+  readonly #dueTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  readonly #dueKeys = new Map<string, Set<string>>();
 
   constructor(
     private readonly vaults: VaultRegistry,
     private readonly enrollments: EnrollmentStore,
     private readonly gatewayDatabase: GatewayDatabase,
-    private readonly send: typeof fetch = fetch
+    private readonly send: typeof fetch = fetch,
+    private readonly webPush: WebPushSender = createWebPushSender(
+      gatewayDatabase
+    )
   ) {}
 
   start(): void {
@@ -90,17 +150,22 @@ export class PushWakeRelay {
     if (this.#unsubscribes.has(plane.boot.vaultId)) return;
     this.#unsubscribes.set(
       plane.boot.vaultId,
-      subscribeReplicaCommits(plane.db.vault, () =>
-        this.schedule(plane.boot.vaultId)
-      )
+      subscribeReplicaCommits(plane.db.vault, () => {
+        this.schedule(plane.boot.vaultId);
+        this.armDue(plane);
+      })
     );
+    this.armDue(plane);
   }
 
   stop(): void {
     for (const unsubscribe of this.#unsubscribes.values()) unsubscribe();
     for (const timer of this.#timers.values()) clearTimeout(timer);
+    for (const timer of this.#dueTimers.values()) clearTimeout(timer);
     this.#unsubscribes.clear();
     this.#timers.clear();
+    this.#dueTimers.clear();
+    this.#dueKeys.clear();
   }
 
   private schedule(vaultId: string): void {
@@ -111,6 +176,35 @@ export class PushWakeRelay {
     }, 10_000);
     timer.unref?.();
     this.#timers.set(vaultId, timer);
+  }
+
+  private armDue(plane: VaultPlane): void {
+    const vaultId = plane.boot.vaultId;
+    const prior = this.#dueTimers.get(vaultId);
+    if (prior) clearTimeout(prior);
+    this.#dueTimers.delete(vaultId);
+    const now = new Date();
+    const seen = this.#dueKeys.get(vaultId) ?? new Set<string>();
+    this.#dueKeys.set(vaultId, seen);
+    const due = computeDueReminders(plane.db, now.toISOString()).filter(
+      (reminder) => !seen.has(reminder.key)
+    );
+    if (due.length > 0) {
+      for (const reminder of due) seen.add(reminder.key);
+      void this.wake(vaultId);
+    }
+    const next = nextReminderFireAt(plane.db, now.toISOString());
+    if (!next) return;
+    const delay = Math.max(
+      0,
+      Math.min(Date.parse(next) - now.getTime(), 2_147_000_000)
+    );
+    const timer = setTimeout(() => {
+      this.#dueTimers.delete(vaultId);
+      this.armDue(plane);
+    }, delay);
+    timer.unref?.();
+    this.#dueTimers.set(vaultId, timer);
   }
 
   private async wake(vaultId: string): Promise<void> {
@@ -136,15 +230,19 @@ export class PushWakeRelay {
         priority: "normal",
         ttl: 60,
       }));
-    if (messages.length === 0) return;
-    await this.send(EXPO_PUSH_URL, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(messages),
-    }).catch(() => undefined);
+    await Promise.all([
+      messages.length === 0
+        ? Promise.resolve()
+        : this.send(EXPO_PUSH_URL, {
+            method: "POST",
+            headers: {
+              accept: "application/json",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(messages),
+          }).catch(() => undefined),
+      this.webPush.sendWake(deviceIds),
+    ]);
   }
 }
 

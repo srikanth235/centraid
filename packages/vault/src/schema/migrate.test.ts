@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
 
+import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import {
   JOURNAL_MIGRATIONS,
@@ -25,24 +26,36 @@ function userVersionOf(file: string): number {
 }
 
 /** Reconstruct a historical migration frontier from a fresh current fixture. */
-function rewindVaultTo(file: string, version: 1 | 2): void {
+function rewindVaultTo(file: string, version: 1 | 2 | 4): void {
   const raw = new DatabaseSync(file);
   raw.exec(`
-    DROP TRIGGER IF EXISTS trg_replica_people_profile_ai;
-    DROP TRIGGER IF EXISTS trg_replica_people_profile_au;
-    DROP TRIGGER IF EXISTS trg_replica_people_profile_ad;
-    DROP INDEX IF EXISTS people_profile_purge_idx;
-    ALTER TABLE people_profile DROP COLUMN purge_at;
-    ALTER TABLE people_profile DROP COLUMN deleted_at;
-
-    DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ai;
-    DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_au;
-    DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ad;
-    DROP INDEX IF EXISTS core_entity_revision_actor_idx;
-    DROP INDEX IF EXISTS core_entity_revision_undo_idx;
-    DROP INDEX IF EXISTS core_entity_revision_entity_idx;
-    DROP TABLE core_entity_revision;
+    DROP TRIGGER IF EXISTS tally_expense_line_allocation_touch_updated_at;
+    DROP TRIGGER IF EXISTS tally_expense_line_item_touch_updated_at;
+    DROP TRIGGER IF EXISTS tally_expense_receipt_touch_updated_at;
+    DROP INDEX IF EXISTS tally_expense_line_allocation_party_idx;
+    DROP INDEX IF EXISTS tally_expense_line_receipt_idx;
+    DROP TABLE IF EXISTS tally_expense_line_allocation;
+    DROP TABLE IF EXISTS tally_expense_line_item;
+    DROP TABLE IF EXISTS tally_expense_receipt;
   `);
+  if (version <= 2) {
+    raw.exec(`
+      DROP TRIGGER IF EXISTS trg_replica_people_profile_ai;
+      DROP TRIGGER IF EXISTS trg_replica_people_profile_au;
+      DROP TRIGGER IF EXISTS trg_replica_people_profile_ad;
+      DROP INDEX IF EXISTS people_profile_purge_idx;
+      ALTER TABLE people_profile DROP COLUMN purge_at;
+      ALTER TABLE people_profile DROP COLUMN deleted_at;
+
+      DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ai;
+      DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_au;
+      DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ad;
+      DROP INDEX IF EXISTS core_entity_revision_actor_idx;
+      DROP INDEX IF EXISTS core_entity_revision_undo_idx;
+      DROP INDEX IF EXISTS core_entity_revision_entity_idx;
+      DROP TABLE core_entity_revision;
+    `);
+  }
   if (version === 1) {
     raw.exec(`
       DROP INDEX locker_auth_credential_kind_idx;
@@ -102,6 +115,9 @@ describe("schema/migrate", () => {
       "tally_group",
       "tally_expense",
       "tally_expense_split",
+      "tally_expense_receipt",
+      "tally_expense_line_item",
+      "tally_expense_line_allocation",
       "tally_settlement",
       "tally_obligation",
       "home_asset_item",
@@ -267,6 +283,64 @@ describe("schema/migrate", () => {
           .get() as { name: string }
       ).name
     ).toBe("core_entity_revision");
+    expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
+      VAULT_MIGRATIONS.length
+    );
+    upgraded.close();
+  });
+
+  test("the pre-receipt frontier preserves Tally expenses while adding receipt storage", () => {
+    const dir = tempDirSync();
+    const seeded = openVaultDb({ dir });
+    const boot = bootstrapVault(seeded, { ownerName: "Priya" });
+    const now = "2026-07-29T00:00:00.000Z";
+    seeded.vault
+      .prepare(
+        `INSERT INTO social_circle
+          (circle_id, owner_party_id, name, kind)
+         VALUES ('receipt-circle', ?, 'Dinner', 'friends')`
+      )
+      .run(boot.ownerPartyId);
+    seeded.vault
+      .prepare(
+        `INSERT INTO tally_group
+          (group_id, circle_id, icon, color, created_at, updated_at)
+         VALUES ('receipt-group', 'receipt-circle', 'D', '#123456', ?, ?)`
+      )
+      .run(now, now);
+    seeded.vault
+      .prepare(
+        `INSERT INTO tally_expense
+          (expense_id, group_id, description, amount_minor, paid_by,
+           spent_on, category, created_at, updated_at)
+         VALUES ('existing-expense', 'receipt-group', 'Before receipts', 1200,
+                 ?, '2026-07-29', 'food', ?, ?)`
+      )
+      .run(boot.ownerPartyId, now, now);
+    seeded.close();
+
+    rewindVaultTo(path.join(dir, "vault.db"), 4);
+
+    const upgraded = openVaultDb({ dir });
+    expect(
+      upgraded.vault
+        .prepare(
+          `SELECT description, amount_minor FROM tally_expense
+            WHERE expense_id = 'existing-expense'`
+        )
+        .get()
+    ).toMatchObject({
+      description: "Before receipts",
+      amount_minor: 1200,
+    });
+    expect(
+      upgraded.vault
+        .prepare(
+          `SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name = 'tally_expense_receipt'`
+        )
+        .get()
+    ).toBeTruthy();
     expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
       VAULT_MIGRATIONS.length
     );

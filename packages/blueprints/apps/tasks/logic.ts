@@ -112,6 +112,18 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       return undefined;
     }
     const executed = narrate(outcome);
+    if (
+      (outcome?.status === "executed" || outcome?.status === "queued") &&
+      (action === "add" || action === "edit") &&
+      input.remind_before_min != null
+    ) {
+      window.dispatchEvent(new Event("centraid:notification-value"));
+      if (window.parent !== window)
+        window.parent.postMessage(
+          { type: "centraid:notification-value" },
+          window.location.origin
+        );
+    }
     if (outcome?.status === "parked") {
       markPending(action, input, outcome);
       toast("Sent to the owner for confirmation.");

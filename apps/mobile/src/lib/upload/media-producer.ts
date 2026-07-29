@@ -42,8 +42,33 @@ export interface BackupDocumentInput {
   mediaType: string;
   plaintextSize: number;
   folderId?: string;
+  /** User-reviewed local OCR text; becomes the document's searchable derivative. */
+  extractedText?: string;
   /** F10: see {@link DeviceMediaInput.deleteSourceAfterSettle}. */
   deleteSourceAfterSettle?: boolean;
+}
+
+export interface ReceiptExpenseInput {
+  localUri: string;
+  targetVaultId?: string;
+  filename: string;
+  mediaType: string;
+  plaintextSize: number;
+  deleteSourceAfterSettle?: boolean;
+  group_id: string;
+  description: string;
+  amount_minor: number;
+  paid_by: string;
+  spent_on: string;
+  category: string;
+  ocr_text: string;
+  splits: Array<{ party_id: string; share_minor: number }>;
+  line_items: Array<{
+    kind: "item" | "tax" | "tip";
+    description: string;
+    amount_minor: number;
+    allocations: Array<{ party_id: string; share_minor: number }>;
+  }>;
 }
 
 function openQueue(gatewayBase: string): UploadQueue {
@@ -88,6 +113,11 @@ async function drainToSettlement(
   if (item?.state === "failed") {
     throw new Error(
       `backup of ${sha256} did not settle: ${item.lastError ?? "unknown error"}`
+    );
+  }
+  if (item && queue.hasFollowupForItem(item.itemId)) {
+    throw new Error(
+      `backup of ${sha256} settled, but its canonical record was not accepted`
     );
   }
   if (source.deleteAfterSettle && item?.state === "settled")
@@ -202,6 +232,51 @@ export async function backupDocument(
           staged_sha: addressed.sha256,
           title: input.title,
           ...(input.folderId ? { folder_id: input.folderId } : {}),
+          ...(input.extractedText
+            ? { extracted_text: input.extractedText }
+            : {}),
+        },
+      })
+    );
+    return await drainToSettlement(session, gatewayBase, queue, item.sha256, {
+      localUri: input.localUri,
+      deleteAfterSettle: input.deleteSourceAfterSettle ?? false,
+    });
+  } finally {
+    queue.close();
+  }
+}
+
+/** Publish one reviewed receipt atomically after its bytes settle in the CAS. */
+export async function backupReceiptExpense(
+  session: MobileReplicaSession,
+  gatewayBase: string,
+  input: ReceiptExpenseInput
+): Promise<string> {
+  const queue = openQueue(gatewayBase);
+  try {
+    const item = await queue.enqueue(
+      {
+        localUri: input.localUri,
+        ...(input.targetVaultId ? { targetVaultId: input.targetVaultId } : {}),
+        filename: input.filename,
+        mediaType: input.mediaType,
+        plaintextSize: input.plaintextSize,
+      },
+      (addressed) => ({
+        shape: "tally",
+        action: "add-receipt-expense",
+        input: {
+          staged_sha: addressed.sha256,
+          group_id: input.group_id,
+          description: input.description,
+          amount_minor: input.amount_minor,
+          paid_by: input.paid_by,
+          spent_on: input.spent_on,
+          category: input.category,
+          ocr_text: input.ocr_text,
+          splits: input.splits,
+          line_items: input.line_items,
         },
       })
     );

@@ -287,6 +287,16 @@ export class UploadQueueStore {
       .map(toUploadFollowup);
   }
 
+  /** True until this blob's canonical app mutation is durably accepted. */
+  hasFollowupForItem(itemId: string): boolean {
+    return (
+      (this.driver.all<{ count: number }>(
+        "SELECT COUNT(*) AS count FROM upload_followup WHERE item_id = ?",
+        [itemId]
+      )[0]?.count ?? 0) > 0
+    );
+  }
+
   /** Count one failed replay attempt and return the new total (F4). */
   countFollowupAttempt(followupId: number): number {
     this.driver.run(

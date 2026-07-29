@@ -120,3 +120,40 @@ export function computeDueReminders(
 
   return out.sort((a, b) => a.at.localeCompare(b.at));
 }
+
+/** Earliest future fire instant, used by the gateway's durable wake scheduler. */
+export function nextReminderFireAt(
+  db: VaultDb,
+  nowIso: string
+): string | undefined {
+  const now = Date.parse(nowIso);
+  let next = Number.POSITIVE_INFINITY;
+  const taskRows = db.vault
+    .prepare(
+      `SELECT task_id, title, due_at, remind_before_min FROM schedule_task
+        WHERE status IN ('needs-action','in-process')
+          AND due_at IS NOT NULL AND remind_before_min IS NOT NULL`
+    )
+    .all() as unknown as TaskReminderRow[];
+  for (const task of taskRows) {
+    const fireAt = Date.parse(task.due_at) - task.remind_before_min * 60_000;
+    if (Number.isFinite(fireAt) && fireAt > now && fireAt < next) next = fireAt;
+  }
+  const eventRows = db.vault
+    .prepare(
+      `SELECT e.event_id AS event_id, e.summary AS summary,
+              e.dtstart AS dtstart, x.reminders_json AS reminders_json
+         FROM core_event e JOIN schedule_event_ext x ON x.event_id = e.event_id
+        WHERE e.status != 'cancelled' AND x.reminders_json IS NOT NULL`
+    )
+    .all() as unknown as EventReminderRow[];
+  for (const event of eventRows) {
+    const start = Date.parse(event.dtstart);
+    if (!Number.isFinite(start)) continue;
+    for (const reminder of parseReminders(event.reminders_json)) {
+      const fireAt = start - reminder.minutes_before * 60_000;
+      if (fireAt > now && fireAt < next) next = fireAt;
+    }
+  }
+  return Number.isFinite(next) ? new Date(next).toISOString() : undefined;
+}
