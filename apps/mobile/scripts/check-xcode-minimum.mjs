@@ -13,6 +13,21 @@ const helpersPath = path.join(
   "cocoapods",
   "helpers.rb"
 );
+const expoModulesJsiPackagePath = path.join(
+  repoRoot,
+  "node_modules",
+  "expo-modules-jsi",
+  "apple",
+  "Package.swift"
+);
+
+/**
+ * Expo SDK 56+/57 ship expo-modules-jsi with `swift-tools-version: 6.2` and
+ * document Xcode 26.4+ (Swift 6.3). Older hosts fail the JSI xcframework
+ * build with a misleading empty "Could not resolve package dependencies"
+ * footer (see #620 / run 30417451436 on Xcode 16.4).
+ */
+export const EXPO_MODULES_JSI_MIN_XCODE = "26.4";
 
 export function requiredXcodeVersion(helpers) {
   const match =
@@ -23,6 +38,29 @@ export function requiredXcodeVersion(helpers) {
     throw new Error("React Native minimum Xcode version could not be parsed");
   }
   return match.groups.version;
+}
+
+export function expoModulesJsiSwiftToolsVersion(packageSwift) {
+  const match =
+    /^\/\/\s*swift-tools-version:\s*(?<version>\d+(?:\.\d+)*)/mu.exec(
+      packageSwift
+    );
+  if (!match?.groups?.version) {
+    throw new Error(
+      "expo-modules-jsi swift-tools-version could not be parsed from Package.swift"
+    );
+  }
+  return match.groups.version;
+}
+
+/**
+ * When expo-modules-jsi declares Swift tools ≥ 6.2, require Expo's documented
+ * Xcode floor. Absent / older Package.swift falls back to React Native alone.
+ */
+export function expoModulesJsiMinXcode(packageSwift) {
+  const tools = expoModulesJsiSwiftToolsVersion(packageSwift);
+  if (versionAtLeast(tools, "6.2")) return EXPO_MODULES_JSI_MIN_XCODE;
+  return null;
 }
 
 export function installedXcodeVersion(output) {
@@ -41,6 +79,12 @@ export function versionAtLeast(actual, required) {
     if (delta !== 0) return delta > 0;
   }
   return true;
+}
+
+export function maxVersion(...versions) {
+  return versions.reduce((best, next) =>
+    versionAtLeast(next, best) ? next : best
+  );
 }
 
 async function recordInfraMismatch(message) {
@@ -66,19 +110,36 @@ async function recordInfraMismatch(message) {
 
 export async function checkXcodeMinimum(options = {}) {
   const helpers = options.helpers ?? (await readFile(helpersPath, "utf8"));
+  const packageSwift =
+    options.packageSwift ?? (await readFile(expoModulesJsiPackagePath, "utf8"));
   const xcodeOutput =
     options.xcodeOutput ??
     execFileSync("xcodebuild", ["-version"], {
       encoding: "utf8",
     });
-  const required = requiredXcodeVersion(helpers);
+  const reactNativeRequired = requiredXcodeVersion(helpers);
+  const expoRequired = expoModulesJsiMinXcode(packageSwift);
+  const required = expoRequired
+    ? maxVersion(reactNativeRequired, expoRequired)
+    : reactNativeRequired;
   const actual = installedXcodeVersion(xcodeOutput);
   if (!versionAtLeast(actual, required)) {
-    const message = `runner Xcode ${actual} is older than React Native's required ${required}`;
+    const parts = [`React Native ${reactNativeRequired}`];
+    if (expoRequired) {
+      parts.push(
+        `expo-modules-jsi Swift tools ${expoModulesJsiSwiftToolsVersion(packageSwift)} → Xcode ${expoRequired}`
+      );
+    }
+    const message = `runner Xcode ${actual} is older than required ${required} (${parts.join("; ")})`;
     await recordInfraMismatch(message);
     throw new Error(message);
   }
-  return { actual, required };
+  return {
+    actual,
+    required,
+    reactNativeRequired,
+    expoRequired,
+  };
 }
 
 if (
@@ -87,8 +148,13 @@ if (
 ) {
   try {
     const result = await checkXcodeMinimum();
+    const extras = [];
+    if (result.expoRequired) {
+      extras.push(`expo-modules-jsi floor ${result.expoRequired}`);
+    }
     console.log(
-      `xcode-compat: installed ${result.actual}, required ${result.required}`
+      `xcode-compat: installed ${result.actual}, required ${result.required}` +
+        (extras.length ? ` (${extras.join(", ")})` : "")
     );
   } catch (error) {
     console.error(

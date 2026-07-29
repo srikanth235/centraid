@@ -3,7 +3,11 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 import {
+  EXPO_MODULES_JSI_MIN_XCODE,
+  expoModulesJsiMinXcode,
+  expoModulesJsiSwiftToolsVersion,
   installedXcodeVersion,
+  maxVersion,
   requiredXcodeVersion,
   versionAtLeast,
 } from "./check-xcode-minimum.mjs";
@@ -80,5 +84,21 @@ describe("native state guards", () => {
     );
     expect(versionAtLeast("16.4", "16.1")).toBe(true);
     expect(versionAtLeast("16.0", "16.1")).toBe(false);
+  });
+
+  test("raises the floor when expo-modules-jsi needs Swift tools 6.2", () => {
+    const packageSwift = `// swift-tools-version: 6.2
+import PackageDescription
+`;
+    expect(expoModulesJsiSwiftToolsVersion(packageSwift)).toBe("6.2");
+    expect(expoModulesJsiMinXcode(packageSwift)).toBe(
+      EXPO_MODULES_JSI_MIN_XCODE
+    );
+    expect(maxVersion("16.1", EXPO_MODULES_JSI_MIN_XCODE)).toBe(
+      EXPO_MODULES_JSI_MIN_XCODE
+    );
+    expect(versionAtLeast("16.4", EXPO_MODULES_JSI_MIN_XCODE)).toBe(false);
+    expect(versionAtLeast("26.4", EXPO_MODULES_JSI_MIN_XCODE)).toBe(true);
+    expect(versionAtLeast("26.5", EXPO_MODULES_JSI_MIN_XCODE)).toBe(true);
   });
 });
