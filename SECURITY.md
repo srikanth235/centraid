@@ -61,6 +61,21 @@ reveals, detail models, search results, generated values, and the exact secret
 it last placed on the clipboard. This does not protect against malware or root
 inside the running gateway process, and Companion autofill remains a separate,
 origin-bound device-gesture reveal lane rather than reusing Locker UI tokens.
+The native Locker cover uses the same online-only authentication RPC: it never
+puts a passphrase, device credential, session token, item permit, or revealed
+secret into the mobile replica or durable intent outbox. An optional biometric
+credential is a random device secret protected by SecureStore with
+`requireAuthentication`; the gateway stores only its vault-key-peppered
+verifier. Native Locker masks the app switcher, relocks on background, and
+clears copied secrets after 30 seconds.
+
+**Mobile device lock (issue #630).** The phone can require platform
+authentication before mounting the replica or hydrating gateway credentials.
+Its gate value is device-only SecureStore material with
+`requireAuthentication`; backgrounding clears the JS credential cache and
+unmounts the replica session behind an opaque lock surface. This is defense in
+depth over iOS Data Protection / Android credential encryption, not protection
+from a rooted device or malware running after successful user authentication.
 
 ### Members, households, and the v0 storage premise (#599)
 
@@ -120,7 +135,8 @@ Posture after issue **#504 batch 0** (fixed; do not document the old reflective-
 
 Treat the following as **open**, not as shipping guarantees:
 
-- **Platform secure storage** for all mobile secrets (J4 decided; verify before store submission).
+- Store-submission verification of platform secure-storage behavior on the
+  supported iOS and Android device matrix.
 - Comprehensive **renderer/GPU crash** isolation on desktop (K12).
 - Hard **capability walls** on every client surface (C1) — protocol policy is set; not every feature may be gated yet.
 - Extension pairing surface ([#462](https://github.com/srikanth235/centraid/issues/462)) — must follow C1–C3 before ship.

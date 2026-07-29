@@ -5,6 +5,7 @@
 //   ├─ Photos        → PhotosStack  (timeline, lightbox, library/search/backup)
 //   ├─ Docs          → DocsStack    (drive, viewer)
 //   ├─ Agenda        → AgendaStack  (calendar, event)
+//   ├─ Locker        → LockerHome   (native authenticated secrets cover)
 //   ├─ AppDetail     → AppDetailScreen (remote-app WebView cover)
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
 //   ├─ Automations   → AutomationsScreen (list + run the space's automations)
@@ -60,6 +61,7 @@ export type RootStackParamList = {
   Photos: NavigatorScreenParams<PhotosStackParamList>;
   Docs: NavigatorScreenParams<DocsStackParamList>;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
+  Locker: undefined;
   AppDetail: { appId: string };
   Assistant: undefined;
   Automations: undefined;
@@ -73,6 +75,7 @@ export type RootScreenProps<T extends keyof RootStackParamList> =
 // Root-level screens (no nested stack of their own).
 export type HomeScreenProps = RootScreenProps<"Home">;
 export type AppDetailScreenProps = RootScreenProps<"AppDetail">;
+export type LockerScreenProps = RootScreenProps<"Locker">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
 export type AutomationsScreenProps = RootScreenProps<"Automations">;
 export type InsightsScreenProps = RootScreenProps<"Insights">;

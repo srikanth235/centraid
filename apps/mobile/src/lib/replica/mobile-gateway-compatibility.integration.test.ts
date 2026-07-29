@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "./mobile-gateway-compatibility-core";
 
 const storage = vi.hoisted(() => new Map<string, string>());

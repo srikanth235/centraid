@@ -149,6 +149,27 @@ export function appLiveUrl(base: string, appId: string): string {
   return `${base}/centraid/${encodeURIComponent(appId)}/`;
 }
 
+/**
+ * Invoke one online-only app query from a first-class native cover. The
+ * request takes the same app-scoped RPC path as the WebView bridge; callers
+ * keep passphrases/session tokens out of the replica and durable intent queue.
+ */
+export async function appQuery<T>(
+  appId: string,
+  query: string,
+  input: Record<string, unknown> = {}
+): Promise<T> {
+  const base = await requireGatewayBase();
+  return fetchJson<T>(
+    `${base}/centraid/${encodeURIComponent(appId)}/queries/${encodeURIComponent(query)}`,
+    {
+      body: JSON.stringify({ input }),
+      headers: apiHeaders({ "content-type": "application/json" }),
+      method: "POST",
+    }
+  );
+}
+
 async function fetchOrThrow(
   href: string,
   init?: RequestInit

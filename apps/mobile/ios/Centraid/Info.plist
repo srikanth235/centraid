@@ -53,6 +53,8 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>Centraid uses the camera to scan the pairing QR code shown on your desktop.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Centraid uses Face ID to protect the local vault replica and unlock Locker secrets.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>Centraid connects to your desktop's gateway over your local Wi-Fi to load the apps you've built.</string>
     <key>NSMicrophoneUsageDescription</key>

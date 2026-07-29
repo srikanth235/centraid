@@ -34,6 +34,7 @@ import AutomationsScreen from "./src/apps/automations/Automations";
 import DocsHome from "./src/apps/docs/DocsHome";
 import DocumentViewer from "./src/apps/docs/DocumentViewer";
 import InsightsScreen from "./src/apps/insights/Insights";
+import LockerHome from "./src/apps/locker/LockerHome";
 import AlbumDetail from "./src/apps/photos/AlbumDetail";
 import BackupHealth from "./src/apps/photos/BackupHealth";
 import DuplicateReview from "./src/apps/photos/DuplicateReview";
@@ -51,6 +52,7 @@ import {
   ReplicaProvider,
   useReplica,
 } from "./src/kit/replica/ReplicaProvider";
+import { AppLockProvider } from "./src/kit/security/AppLock";
 import {
   hydrateAppearance,
   navThemeFor,
@@ -359,80 +361,93 @@ export default function App(): React.JSX.Element | null {
             <ShareIntentProvider
               options={{ scheme: "centraid", resetOnBackground: false }}
             >
-              <ReplicaProvider>
-                <ReplicaCompatibilityGate>
-                  <UploadReconciliation />
-                  <ShareIntentIngest />
-                  {/* The replica error banner is only meaningful inside the app
+              <AppLockProvider>
+                <ReplicaProvider>
+                  <ReplicaCompatibilityGate>
+                    <UploadReconciliation />
+                    <ShareIntentIngest />
+                    {/* The replica error banner is only meaningful inside the app
                       shell — during onboarding the user hasn't paired yet, so a
                       "couldn't open replica" banner would just be noise. */}
-                  {onboarded ? <ReplicaErrorBanner /> : null}
-                  {onboarded ? (
-                    <NavigationContainer theme={navThemeFor(scheme)}>
-                      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-                      <RootStack.Navigator
-                        screenOptions={{ headerShown: false }}
-                        // `selection` haptic when a cover opens — preserves the
-                        // vocabulary the old tabPress listener gave, and the one
-                        // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
-                        // `closing` guards it to the open transition, not dismissal.
-                        screenListeners={{
-                          transitionStart: (e) => {
-                            if (!e.data.closing) void Haptics.selectionAsync();
-                          },
-                        }}
-                      >
-                        <RootStack.Screen name="Home" component={HomeScreen} />
-                        <RootStack.Screen
-                          name="Photos"
-                          component={PhotosNavigator}
-                          options={COVER_OPTIONS}
+                    {onboarded ? <ReplicaErrorBanner /> : null}
+                    {onboarded ? (
+                      <NavigationContainer theme={navThemeFor(scheme)}>
+                        <StatusBar
+                          style={scheme === "dark" ? "light" : "dark"}
                         />
-                        <RootStack.Screen
-                          name="Docs"
-                          component={DocsNavigator}
-                          options={COVER_OPTIONS}
-                        />
-                        <RootStack.Screen
-                          name="Agenda"
-                          component={AgendaNavigator}
-                          options={COVER_OPTIONS}
-                        />
-                        <RootStack.Screen
-                          name="AppDetail"
-                          component={AppDetailScreen}
-                          options={COVER_OPTIONS}
-                        />
-                        <RootStack.Screen
-                          name="Assistant"
-                          component={AssistantScreen}
-                          options={COVER_OPTIONS}
-                        />
-                        <RootStack.Screen
-                          name="Automations"
-                          component={AutomationsScreen}
-                          options={COVER_OPTIONS}
-                        />
-                        <RootStack.Screen
-                          name="Insights"
-                          component={InsightsScreen}
-                          options={COVER_OPTIONS}
-                        />
-                        <RootStack.Screen
-                          name="Settings"
-                          component={SettingsNavigator}
-                          options={COVER_OPTIONS}
-                        />
-                      </RootStack.Navigator>
-                    </NavigationContainer>
-                  ) : (
-                    <>
-                      <StatusBar style="light" />
-                      <OnboardingScreen onDone={() => setOnboarded(true)} />
-                    </>
-                  )}
-                </ReplicaCompatibilityGate>
-              </ReplicaProvider>
+                        <RootStack.Navigator
+                          screenOptions={{ headerShown: false }}
+                          // `selection` haptic when a cover opens — preserves the
+                          // vocabulary the old tabPress listener gave, and the one
+                          // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
+                          // `closing` guards it to the open transition, not dismissal.
+                          screenListeners={{
+                            transitionStart: (e) => {
+                              if (!e.data.closing)
+                                void Haptics.selectionAsync();
+                            },
+                          }}
+                        >
+                          <RootStack.Screen
+                            name="Home"
+                            component={HomeScreen}
+                          />
+                          <RootStack.Screen
+                            name="Photos"
+                            component={PhotosNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Docs"
+                            component={DocsNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Agenda"
+                            component={AgendaNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Locker"
+                            component={LockerHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="AppDetail"
+                            component={AppDetailScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Assistant"
+                            component={AssistantScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Automations"
+                            component={AutomationsScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Insights"
+                            component={InsightsScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Settings"
+                            component={SettingsNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                        </RootStack.Navigator>
+                      </NavigationContainer>
+                    ) : (
+                      <>
+                        <StatusBar style="light" />
+                        <OnboardingScreen onDone={() => setOnboarded(true)} />
+                      </>
+                    )}
+                  </ReplicaCompatibilityGate>
+                </ReplicaProvider>
+              </AppLockProvider>
             </ShareIntentProvider>
           </View>
         </SafeAreaProvider>

@@ -47,11 +47,12 @@ describe(buildLauncherItems, () => {
     const natives = items.filter((itLocal) =>
       NATIVE_APP_IDS.has(itLocal.meta.id)
     );
-    expect(natives).toHaveLength(3);
+    expect(natives).toHaveLength(4);
     expect(natives.every((itLocal) => itLocal.installed)).toBe(true);
     expect(natives.map((itLocal) => itLocal.route.kind).sort()).toStrictEqual([
       "agenda",
       "docs",
+      "locker",
       "photos",
     ]);
   });

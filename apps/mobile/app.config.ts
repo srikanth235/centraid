@@ -75,6 +75,8 @@ export default function createExpoConfig({
       buildNumber: String(BUILD),
       infoPlist: {
         UIBackgroundModes: ["processing", "remote-notification"],
+        NSFaceIDUsageDescription:
+          "Centraid uses Face ID to protect the local vault replica and unlock Locker secrets.",
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: false,
           NSAllowsLocalNetworking: true,

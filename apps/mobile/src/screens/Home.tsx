@@ -188,6 +188,9 @@ export default function HomeScreen({
         case "agenda":
           navigation.navigate("Agenda", { screen: "AgendaHome" });
           break;
+        case "locker":
+          navigation.navigate("Locker");
+          break;
         case "app":
           navigation.navigate("AppDetail", { appId: route.appId });
           break;

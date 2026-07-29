@@ -129,6 +129,20 @@ contains no blob originals; a future stronger app-layer scheme must preserve
 cross-database search and publish measured cold/search costs before replacing
 this decision.
 
+An optional biometric app lock adds a user-presence layer before this read
+plane is mounted. Its gate is stored with SecureStore
+`requireAuthentication`; moving the app out of the foreground clears the
+decrypted credential cache, unmounts replica sessions, and paints an opaque
+switcher mask. This complements the OS at-rest controls above—it does not turn
+the replica into an independently encrypted database.
+
+Locker is stricter than the ordinary replica plane. Its native cover performs
+authentication and reveal through online-only app queries. Passphrases,
+biometric device secrets, memory-session tokens, one-shot item permits, and
+revealed fields never enter replica rows or durable intents. The local
+biometric secret is random, device-only SecureStore material; only a
+vault-key-peppered verifier reaches the gateway database.
+
 ## Performance guardrails
 
 The checked 50,000-row fixture spans 2016–2025 across four mounted household

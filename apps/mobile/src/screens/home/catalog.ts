@@ -22,6 +22,7 @@ export type LauncherRoute =
   | { kind: "photos" }
   | { kind: "docs" }
   | { kind: "agenda" }
+  | { kind: "locker" }
   | { kind: "app"; appId: string }
   | { kind: "pair" };
 
@@ -59,6 +60,13 @@ const NATIVE_APPS: readonly AppMetaResolved[] = [
     iconKey: "Calendar",
     colorKey: "indigo",
   }),
+  resolveAppMeta({
+    id: "locker",
+    name: "Locker",
+    description: "Passwords, codes and secrets under custody.",
+    iconKey: "Key",
+    colorKey: "slate",
+  }),
 ];
 
 /** Native app ids — Home uses this to drop native rows out of the live listing. */
@@ -70,6 +78,7 @@ const NATIVE_ROUTES: Record<string, LauncherRoute> = {
   photos: { kind: "photos" },
   docs: { kind: "docs" },
   agenda: { kind: "agenda" },
+  locker: { kind: "locker" },
 };
 
 // The five gateway apps the launcher always advertises. Glyphs are picked from
@@ -100,13 +109,6 @@ const GATEWAY_CATALOG: readonly AppMetaResolved[] = [
     description: "Your personal CRM — contacts and circles.",
     iconKey: "Users",
     colorKey: "rose",
-  }),
-  resolveAppMeta({
-    id: "locker",
-    name: "Locker",
-    description: "Passwords, codes and secrets under custody.",
-    iconKey: "Key",
-    colorKey: "slate",
   }),
   resolveAppMeta({
     id: "tally",
