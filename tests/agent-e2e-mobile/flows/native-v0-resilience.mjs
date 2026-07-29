@@ -1,5 +1,26 @@
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
+// `retryTapIfNoChange` handles a truly unchanged hierarchy, but launcher
+// controls animate their press state. That animation can make Maestro consider
+// an ignored iOS tap a successful hierarchy change even though the destination
+// never opened. Re-check the source control after Maestro settles and retry
+// only while it is still visible. Two bounded fallbacks keep the destination
+// marker authoritative: a real navigation/regression still fails below.
+function retryableTapCommands(selector, sourceSelector = selector) {
+  const conditionalRetry = `- runFlow:
+    when:
+      visible: "${sourceSelector}"
+    commands:
+      - tapOn:
+          text: "${selector}"
+          retryTapIfNoChange: true`;
+  return `- tapOn:
+    text: "${selector}"
+    retryTapIfNoChange: true
+${conditionalRetry}
+${conditionalRetry}`;
+}
+
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
 // covers opened from Home's launcher tiles; Settings is opened from the space
@@ -66,18 +87,14 @@ const SURFACES = [
   {
     marker: "APPEARANCE",
     openCommands: [
-      "- tapOn:",
-      '    text: "Open space menu"',
-      "    retryTapIfNoChange: true",
+      retryableTapCommands("Open space menu"),
       // Wait for the drawer to finish opening before touching its rows.
       '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
       // The row's accessible name is ", Settings" (icon + label collapsed into
       // one element), but Maestro will not match a selector that starts with
       // the comma — `.*Settings` is what actually resolves, and with the modal
       // drawer open the dock underneath is not reachable anyway.
-      "- tapOn:",
-      '    text: ".*Settings"',
-      "    retryTapIfNoChange: true",
+      retryableTapCommands(".*Settings", "GO TO"),
     ].join("\n"),
     name: "settings",
   },
@@ -90,10 +107,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
     const openCommands =
-      surface.openCommands ??
-      `- tapOn:
-    text: "${surface.open}"
-    retryTapIfNoChange: true`;
+      surface.openCommands ?? retryableTapCommands(surface.open);
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---

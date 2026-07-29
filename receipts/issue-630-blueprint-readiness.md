@@ -355,9 +355,12 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   two enabled controls still on their source screens after Maestro reported a
   completed tap. Onboarding primary actions now publish explicit button
   semantics, and every critical onboarding, launcher, and Settings transition
-  uses Maestro's retry-on-no-hierarchy-change behavior. This preserves the
-  product interaction while making ignored early iOS automation taps
-  observable and recoverable.
+  uses Maestro's retry-on-no-hierarchy-change behavior. Because launcher press
+  animations themselves change the hierarchy, the cover journey additionally
+  retries only while its source control remains visible, with a bounded attempt
+  count and the destination marker still mandatory. This preserves the product
+  interaction while making ignored early iOS automation taps observable and
+  recoverable without accepting a vacuous pass.
 
 ### Foundations, measurement, and trust
 
@@ -548,7 +551,14 @@ bun run check:pr:full
   that the Photos tile and a later `Enter Centraid` control were visible,
   enabled, and unchanged after Maestro acknowledged their taps, which led to
   the explicit accessibility semantics and retry-on-no-change correction above.
-  The final corrected exact-HEAD green run is recorded below before audit.
+- [Exact-HEAD iOS diagnostic run 30490367146](https://github.com/srikanth235/centraid/actions/runs/30490367146)
+  passed fresh onboarding, both direct named-roster completions, and the full
+  20-relaunch volume proof at `8fbf32c3481a54ce0924e7b269dd1bb2e3acf347`.
+  Its native journey still stopped on the Photos source screen because the
+  launcher's press-scale animation counted as a hierarchy change and suppressed
+  Maestro's built-in retry. That retained evidence led to the bounded
+  source-visible fallback above. The final corrected exact-HEAD green run is
+  recorded below before audit.
 - Fresh-context audit — pending final re-audit below.
 
 ## Accounting
@@ -743,6 +753,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785352700-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 97066 | 0 | 1736960 | 1617 | 98683 | 0.7012 | 8014087 | 0 | 367663360 | 1026967 | docs(receipt): record reconciled issue gate (#630) |
 | codex-019fad18-4c1-1785356247-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 373734 | 0 | 14563584 | 18216 | 391950 | 4.8485 | 8387821 | 0 | 382226944 | 1045183 | fix(mobile): honor both pairing identity exits (#630) |
 | codex-019fad18-4c1-1785358474-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 234988 | 0 | 12203520 | 13060 | 248048 | 3.8342 | 8622809 | 0 | 394430464 | 1058243 | fix(mobile): retry ignored native journey taps (#630) |
+| codex-019fad18-4c1-1785361269-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 258412 | 0 | 15353344 | 12038 | 270450 | 4.6649 | 8881221 | 0 | 409783808 | 1070281 | fix(mobile): retry animated launcher taps (#630) |
 
 ## Steering
 
