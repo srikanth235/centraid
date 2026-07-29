@@ -46,6 +46,10 @@ function readMobilePackageVersion(): string {
 
 const VERSION = readMobilePackageVersion();
 const BUILD = nativeBuildNumber(VERSION);
+const EAS_PROJECT_ID =
+  process.env.EAS_PROJECT_ID?.trim() === ""
+    ? undefined
+    : process.env.EAS_PROJECT_ID?.trim();
 
 export default function createExpoConfig({
   config,
@@ -88,15 +92,19 @@ export default function createExpoConfig({
     runtimeVersion: {
       policy: "appVersion",
     },
-    // J7 / #501 — dormant OTA hotfix lane only. No eas update in CI.
-    // Replace placeholder when Expo project is enrolled (EAS_PROJECT_ID secret).
-    updates: {
-      checkAutomatically: "ON_ERROR_RECOVERY",
-      url:
-        process.env.EAS_PROJECT_ID && process.env.EAS_PROJECT_ID !== ""
-          ? `https://u.expo.dev/${process.env.EAS_PROJECT_ID}`
-          : "https://u.expo.dev/placeholder-centraid-mobile",
-    },
+    // J7 / #501 — routine updates are store-only. The emergency OTA lane is
+    // explicitly disabled until the real Expo project id is enrolled; no
+    // placeholder endpoint or dormant native updater ships.
+    updates: EAS_PROJECT_ID
+      ? {
+          enabled: true,
+          checkAutomatically: "ON_ERROR_RECOVERY",
+          url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+        }
+      : {
+          enabled: false,
+          checkAutomatically: "NEVER",
+        },
     assetBundlePatterns: ["**/*"],
     plugins: [
       "expo-notifications",
@@ -154,9 +162,8 @@ export default function createExpoConfig({
       recurrencePolicy: "bounded-local-expansion",
       // Expose for tests / tooling that cannot import version-core through Expo.
       nativeBuildNumber: BUILD,
-      eas: {
-        projectId: process.env.EAS_PROJECT_ID || "placeholder-centraid-mobile",
-      },
+      updateChannel: EAS_PROJECT_ID ? "eas-hotfix" : "store-only",
+      ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
     },
   };
 }

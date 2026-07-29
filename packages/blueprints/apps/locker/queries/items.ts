@@ -258,6 +258,17 @@ export default async function itemsHandler({
   const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 300, 20), 2000);
   try {
+    const authentication = (await ctx.vault.authenticate({
+      operation: "status",
+      sessionToken: String(input?.auth_session ?? ""),
+    })) as { authenticated?: boolean; configured?: boolean };
+    if (!authentication.authenticated) {
+      return {
+        items: [],
+        authRequired: true,
+        configured: authentication.configured ?? false,
+      };
+    }
     const res = await ctx.vault.read({
       entity: "locker.item",
       where: [{ column: "deleted_at", op: "is-null" }],

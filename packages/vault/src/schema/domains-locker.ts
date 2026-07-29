@@ -90,3 +90,27 @@ CREATE TABLE IF NOT EXISTS locker_item_alias (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS locker_item_alias_item_idx ON locker_item_alias(item_id);
 `;
+
+// Locker's user-presence credential store (issue #630). The verifier is
+// derived from a vault-key HMAC of the credential before scrypt, so a copied
+// vault database is not an offline passphrase oracle: verification also needs
+// the separately-custodied seal key. Live unlock and per-item permits are
+// deliberately memory-only in gateway/locker-auth.ts and therefore disappear
+// on restart, background lock, or inactivity.
+//
+// This is its own forward migration rung. Unlike the pre-release base schema,
+// an existing vault may already contain Locker data when #630 lands; adding
+// authentication must preserve it rather than ask the owner to erase it.
+export const LOCKER_AUTH_DDL = `
+CREATE TABLE locker_auth_credential (
+  credential_id TEXT PRIMARY KEY,
+  kind          TEXT NOT NULL CHECK (kind IN ('passphrase','device')),
+  label         TEXT NOT NULL,
+  salt          BLOB NOT NULL,
+  verifier      BLOB NOT NULL,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
+) STRICT;
+CREATE INDEX locker_auth_credential_kind_idx
+  ON locker_auth_credential(kind);
+`;

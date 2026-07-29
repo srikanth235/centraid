@@ -8,7 +8,7 @@
   flex-direction: column;
   gap: 0.6rem;
   width: min(34rem, 92vw);
-  color: #fff;
+  color: var(--on-accent);
 }
 .canvasWrap {
   position: relative;
@@ -30,7 +30,7 @@
 }
 .cropBox {
   position: absolute;
-  border: 2px dashed #fff;
+  border: 2px dashed var(--on-accent);
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
   pointer-events: none;
 }
@@ -43,7 +43,7 @@
 .toolbar :global(.kit-btn) {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  color: var(--on-accent);
 }
 .toolbar :global(.kit-btn):hover {
   background: rgba(255, 255, 255, 0.16);
@@ -51,7 +51,7 @@
 .toolbar :global(.kit-btn.primary) {
   background: var(--accent-deep);
   border-color: transparent;
-  color: #fff;
+  color: var(--on-accent);
 }
 .trashToggle {
   display: flex;

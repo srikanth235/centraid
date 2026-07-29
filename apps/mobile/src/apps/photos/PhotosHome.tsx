@@ -30,9 +30,7 @@ import {
 } from "./device-media";
 import type { DeviceOriginal } from "./device-media";
 import { imageSource } from "./media-source";
-import PhotosAskView from "./PhotosAskView";
 import PhotosCollectionsView from "./PhotosCollectionsView";
-import PhotosCreateView from "./PhotosCreateView";
 import PhotosDrawer from "./PhotosDrawer";
 import PhotoTimeline from "./PhotoTimeline";
 import { onThisDay } from "./timeline-model";
@@ -42,15 +40,15 @@ import { usePhotoTimeline } from "./timeline-source";
 // distinct from the theme's blue `accent` used elsewhere on this screen.
 const NAV_ACTIVE = "#B47B3F";
 
-type PhotosView = "photos" | "collections" | "create" | "ask";
+type PhotosView = "photos" | "collections";
 
 // Icon-only destinations inside the glass pill — the mini-app's OWN sections and
 // nothing else. Leaving Photos for the Centraid springboard is a separate,
 // system-tinted key detached to the LEFT of the pill (never a "home" tab in
 // here: in a super-app a house glyph is ambiguous — it reads as either this
 // app's home or the launcher's). The pill's first tab, `photos`, IS this app's
-// home (its full library); the active tab wears a raised disc. `create` is the
-// detached "+" FAB on the RIGHT — the screen's one primary action.
+// home (its full library); the active tab wears a raised disc. Search and
+// album creation are real routes, kept outside the section switcher.
 const PILL_ITEMS: Array<{
   key: string;
   icon: keyof typeof Feather.glyphMap;
@@ -64,7 +62,6 @@ const PILL_ITEMS: Array<{
     label: "Collections",
     view: "collections",
   },
-  { key: "ask", icon: "message-circle", label: "Ask", view: "ask" },
 ];
 
 export default function PhotosHome({
@@ -317,8 +314,8 @@ export default function PhotosHome({
             </Text>
           </Pressable>
           <Pressable
-            accessibilityLabel="Ask about your photos"
-            onPress={() => setView("ask")}
+            accessibilityLabel="Search photos and moments"
+            onPress={() => navigation.navigate("PhotosSearch")}
             style={styles.sparkleBtn}
           >
             <Feather name="star" size={22} color={colors.accent} />
@@ -415,12 +412,8 @@ export default function PhotosHome({
               />
             )}
           </>
-        ) : view === "collections" ? (
-          <PhotosCollectionsView navigation={navigation} />
-        ) : view === "create" ? (
-          <PhotosCreateView />
         ) : (
-          <PhotosAskView navigation={navigation} />
+          <PhotosCollectionsView navigation={navigation} />
         )}
       </View>
 
@@ -479,16 +472,11 @@ export default function PhotosHome({
                 glass pill, echoing the reference's stand-alone "+". */}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Create"
-              accessibilityState={{ selected: view === "create" }}
-              onPress={() => setView("create")}
+              accessibilityLabel="Create album"
+              onPress={() => navigation.navigate("PhotosLibrary")}
               style={({ pressed }) => [
                 styles.fab,
                 { backgroundColor: colors.ink },
-                view === "create" && {
-                  borderColor: NAV_ACTIVE,
-                  borderWidth: 2,
-                },
                 pressed && styles.fabPressed,
               ]}
             >

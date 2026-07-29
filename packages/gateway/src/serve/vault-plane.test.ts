@@ -137,6 +137,77 @@ describe("vault-plane", () => {
     foreign.stop();
   });
 
+  test("Locker app reveals require an expiring one-time user-presence permit", async () => {
+    const plane = openPlane(await tempDir("locker-auth-plane-"));
+    plane.installApp("locker", "Locker");
+    plane.approveGrant("locker", {
+      purpose: "dpv:ServiceProvision",
+      scopes: [{ schema: "locker", table: "item", verbs: "reveal" }],
+    });
+    const added = plane.gateway.invoke(plane.ownerCredential, {
+      command: "locker.add_item",
+      input: {
+        type: "login",
+        title: "example.com",
+        password: "permit-protected-secret",
+        url: "https://example.com",
+      },
+      purpose: "dpv:ServiceProvision",
+    });
+    expect(added.status).toBe("executed");
+    const itemId = (added as { output: { item_id: string } }).output.item_id;
+    const bridge = plane.bridgeFor("locker");
+    const reveal = (authentication?: {
+      sessionToken?: string;
+      itemToken?: string;
+    }) =>
+      bridge({
+        op: "reveal",
+        payload: {
+          entity: "locker.item",
+          entityId: itemId,
+          columns: ["password"],
+          authentication,
+          purpose: "dpv:ServiceProvision",
+        },
+      });
+
+    await expect(reveal()).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/locked/u),
+    });
+    const configured = await bridge({
+      op: "authenticate",
+      payload: {
+        operation: "configure",
+        secret: "correct horse battery staple",
+      },
+    });
+    expect(configured.ok).toBe(true);
+    const sessionToken = (configured.result as { sessionToken: string })
+      .sessionToken;
+    const authorized = await bridge({
+      op: "authenticate",
+      payload: {
+        operation: "authorize-item",
+        sessionToken,
+        secret: "correct horse battery staple",
+        itemId,
+      },
+    });
+    const itemToken = (authorized.result as { itemToken: string }).itemToken;
+    await expect(reveal({ sessionToken, itemToken })).resolves.toMatchObject({
+      ok: true,
+      result: {
+        values: { password: "permit-protected-secret" },
+      },
+    });
+    await expect(reveal({ sessionToken, itemToken })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/authorization expired/u),
+    });
+  });
+
   test("a WAL-disabled vault plane never checkpoints another process's stream on stop", async () => {
     const dir = await tempDir();
     const plane = openVaultPlane({

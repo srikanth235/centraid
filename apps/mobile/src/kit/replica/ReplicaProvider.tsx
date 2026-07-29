@@ -19,6 +19,8 @@ import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import { getDesktopName } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
+import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
+import type { MobileCompatibilityDisposition } from "../../lib/replica/mobile-gateway-compatibility-core";
 import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { MultiVaultReplicaSession } from "../../lib/replica/multi-vault-session";
@@ -83,6 +85,8 @@ export interface ReplicaContextValue {
   bootstrapProgress?: readonly ReplicaBootstrapProgress[];
   /** Re-resolve the gateway and pull every mounted source. */
   refresh?: () => Promise<void>;
+  /** C1(b) is a blocking wall: no route-specific degraded modes on skew. */
+  compatibility?: MobileCompatibilityDisposition;
   error?: string;
 }
 
@@ -534,6 +538,10 @@ export function ReplicaProvider({
         void refresh();
       } catch (error) {
         if (!cancelled) {
+          const compatibility =
+            error instanceof MobileGatewayCompatibilityError
+              ? error.disposition
+              : undefined;
           setBuilt({
             gatewayKey,
             value: {
@@ -542,6 +550,7 @@ export function ReplicaProvider({
               online: false,
               reachability: "gateway-asleep",
               refresh: async () => setRetryNonce((current) => current + 1),
+              ...(compatibility ? { compatibility } : {}),
               error: error instanceof Error ? error.message : String(error),
             },
           });

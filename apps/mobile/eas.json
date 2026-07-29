@@ -40,18 +40,12 @@
       "android": {
         "track": "internal",
         "releaseStatus": "draft"
-      },
-      "ios": {
-        "ascAppId": "REPLACE_AFTER_APP_STORE_CONNECT"
       }
     },
     "production": {
       "android": {
         "track": "internal",
         "releaseStatus": "draft"
-      },
-      "ios": {
-        "ascAppId": "REPLACE_AFTER_APP_STORE_CONNECT"
       }
     }
   }

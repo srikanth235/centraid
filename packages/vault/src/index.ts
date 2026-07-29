@@ -9,6 +9,14 @@ export {
   type OpenVaultOptions,
   type BlobStoreSettings,
 } from "./db.js";
+export {
+  LockerAuthentication,
+  LOCKER_ITEM_PERMIT_MS,
+  LOCKER_PRIMARY_CREDENTIAL_ID,
+  LOCKER_SESSION_TIMEOUT_MS,
+  type LockerAuthRequest,
+  type LockerAuthResult,
+} from "./gateway/locker-auth.js";
 export * from "./backup-policy.js";
 export {
   isDiskFullError,

@@ -21,8 +21,6 @@ import {
   TRAILER_BYTES,
   unsealFrame,
 } from "../../../../../packages/vault/src/blob/seal-frames.js";
-import { webCryptoUploadCrypto } from "./crypto";
-import { enqueueLocalFile } from "./enqueue";
 import {
   FAKE_GATEWAY,
   FakeGateway,
@@ -30,7 +28,9 @@ import {
   Killer,
   UploadKillSignalError,
   fakeBlobStoreFetch,
-} from "./fake-direct-transfer";
+} from "../../../test/fixtures/fake-direct-transfer";
+import { webCryptoUploadCrypto } from "./crypto";
+import { enqueueLocalFile } from "./enqueue";
 import { bytesFileSource } from "./file-source";
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
 import { UploadQueueStore } from "./store";

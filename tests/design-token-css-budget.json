@@ -1,0 +1,179 @@
+{
+  "packages/client/src/react/screens/AppSettingsPanel.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/screens/ApprovalsScreen.module.css": {
+    "rawHex": 20,
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/screens/AssistantScreen.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/screens/AutomationEditorScreen.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/screens/AutomationTemplatesScreen.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/screens/AutomationThreadScreen.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/screens/BuilderChatPane.module.css": {
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/screens/DevicePairPanel.module.css": {
+    "rawHex": 3
+  },
+  "packages/client/src/react/screens/DevicesCard.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/screens/GatewayScreen.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/screens/HomeScreen.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/screens/ImportScreen.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/screens/InsightsScreen.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/screens/OnboardingScreen.module.css": {
+    "rawHex": 20,
+    "literalFontFamily": 5
+  },
+  "packages/client/src/react/screens/PaletteScreen.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/screens/PhoneScreen.module.css": {
+    "rawHex": 3
+  },
+  "packages/client/src/react/screens/RecoverScreen.module.css": {
+    "rawHex": 26,
+    "literalFontFamily": 7
+  },
+  "packages/client/src/react/screens/SettingsAppearanceScreen.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/screens/SettingsConnectionsScreen.module.css": {
+    "rawHex": 15
+  },
+  "packages/client/src/react/screens/WhatsNewModal.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/screens/settings-controls.module.css": {
+    "rawHex": 1,
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/shell/automationTemplatePreview.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/shell/chrome.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/shell/routes/AppViewRoute.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/shell/routes/InlineAppRoute.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/shell/routes/SettingsRoute.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/shell/routes/SpaceModal.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/shell/routes/assistantRich.module.css": {
+    "rawHex": 4
+  },
+  "packages/client/src/react/shell/routes/builder/BuilderAutomationPane.module.css": {
+    "literalFontFamily": 4
+  },
+  "packages/client/src/react/shell/routes/builder/BuilderCloud.module.css": {
+    "rawHex": 15,
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/shell/routes/builder/BuilderCode.module.css": {
+    "rawHex": 12,
+    "literalFontFamily": 4
+  },
+  "packages/client/src/react/shell/routes/builder/BuilderPreview.module.css": {
+    "rawHex": 7
+  },
+  "packages/client/src/react/shell/routes/builder/BuilderShell.module.css": {
+    "rawHex": 4,
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/shell/templatePreview.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/styles/automation.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/styles/pageEmpty.module.css": {
+    "rawHex": 1
+  },
+  "packages/client/src/react/styles/toolGroup.module.css": {
+    "rawHex": 3,
+    "literalFontFamily": 1
+  },
+  "packages/client/src/react/styles/vault.module.css": {
+    "rawHex": 2
+  },
+  "packages/client/src/react/ui/AppCard.module.css": {
+    "rawHex": 1
+  },
+  "packages/blueprints/apps/agenda/Chrome.module.css": {
+    "rawHex": 4
+  },
+  "packages/blueprints/apps/agenda/components/MonthView.module.css": {
+    "rawHex": 2
+  },
+  "packages/blueprints/apps/agenda/components/Sidebar.module.css": {
+    "rawHex": 3
+  },
+  "packages/blueprints/apps/agenda/components/WeekView.module.css": {
+    "rawHex": 4
+  },
+  "packages/blueprints/apps/docs/Chrome.module.css": {
+    "rawHex": 22
+  },
+  "packages/blueprints/apps/docs/components/Details.module.css": {
+    "rawHex": 1
+  },
+  "packages/blueprints/apps/docs/components/QuickLook.module.css": {
+    "rawHex": 8
+  },
+  "packages/blueprints/apps/docs/components/shared.module.css": {
+    "rawHex": 2
+  },
+  "packages/blueprints/apps/locker/Chrome.module.css": {
+    "rawHex": 1
+  },
+  "packages/blueprints/apps/locker/components/Generator.module.css": {
+    "rawHex": 1
+  },
+  "packages/blueprints/apps/locker/components/Sidebar.module.css": {
+    "rawHex": 3
+  },
+  "packages/blueprints/apps/locker/components/shared.module.css": {
+    "rawHex": 2
+  },
+  "packages/blueprints/apps/notes/Chrome.module.css": {
+    "rawHex": 2
+  },
+  "packages/blueprints/apps/people/Chrome.module.css": {
+    "rawHex": 18
+  },
+  "packages/blueprints/apps/tally/Chrome.module.css": {
+    "rawHex": 8
+  },
+  "packages/blueprints/apps/tasks/Chrome.module.css": {
+    "rawHex": 1
+  },
+  "packages/blueprints/kit/kit.css": {
+    "rawHex": 160,
+    "literalFontFamily": 2
+  }
+}

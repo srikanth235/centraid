@@ -163,6 +163,7 @@ export function buildInlineCtx(
     describe: effect("describe"),
     parked: effect("parked"),
     reveal: effect("reveal"),
+    authenticate: effect("authenticate"),
     content: effect("content"),
     changes: effect("changes"),
   };

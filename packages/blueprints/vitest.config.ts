@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { nodeProject } from "@centraid/test-kit/vitest";
 
 // Project config for @centraid/blueprints. Coverage + the unified run live in the root.
@@ -9,8 +11,16 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 // CSS-modules transform from hijacking the `.module.css` import and handing the
 // app a bogus class map; do not "simplify" it back to a plain `.module.css`.
 export default nodeProject({
+  resolve: {
+    alias: [
+      {
+        find: /^\.\/kit\.ts$/u,
+        replacement: path.join(import.meta.dirname, "kit/kit.ts"),
+      },
+    ],
+  },
   test: {
     name: "@centraid/blueprints",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "apps/**/*.test.ts"],
   },
 });

@@ -1,14 +1,8 @@
-// The schema ladder for vault.db and journal.db — collapsed to ONE rung.
-//
-// Centraid is pre-release (v0): there is no backward compatibility and no
-// data migration story yet, so the ladder does not accumulate patch rungs.
-// Every schema module carries its FINAL shape and the single migration
-// composes them in dependency order; a shape change edits the module in
-// place and an existing dev vault is recreated, not migrated. When v1 ships
-// and vaults hold data that must survive upgrades, rungs return — forward-
-// only, replay-safe, one per release (rule R07) — on top of this base.
-//
-// Tracked via PRAGMA user_version exactly as before; migrate() is unchanged.
+// The forward-only schema ladder for vault.db and journal.db. The first rung
+// remains the v0 base composed in dependency order. Issue #630 is the point at
+// which real owner data must survive blueprint schema work, so every later
+// shape change is an ordered, replay-safe rung instead of editing the base.
+// Tracked via PRAGMA user_version; migrate() applies each rung transactionally.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -23,7 +17,11 @@ import {
   SCHEDULE_DDL,
 } from "./domains-health-finance-schedule.js";
 import { HOME_DDL, BUSINESS_DDL } from "./domains-home-business.js";
-import { LOCKER_ALIAS_DDL, LOCKER_DDL } from "./domains-locker.js";
+import {
+  LOCKER_ALIAS_DDL,
+  LOCKER_AUTH_DDL,
+  LOCKER_DDL,
+} from "./domains-locker.js";
 import { PEOPLE_DDL } from "./domains-people.js";
 import {
   SOCIAL_DDL,
@@ -95,6 +93,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     BLOB_TRANSFER_DDL,
     BLOB_DDL,
   ].join("\n"),
+  LOCKER_AUTH_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

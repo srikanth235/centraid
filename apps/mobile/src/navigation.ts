@@ -9,8 +9,7 @@
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
 //   ├─ Automations   → AutomationsScreen (list + run the space's automations)
 //   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
-//   ├─ Settings      → SettingsStack (Settings, Approvals)
-//   └─ MobileFallback (desktop-builder fallback modal)
+//   └─ Settings      → SettingsStack (Settings, Approvals)
 //
 // There is no bottom-tab navigator: the apps are full-screen covers that slide
 // up over Home and dismiss with the native swipe-down gesture. Each nested-stack
@@ -66,7 +65,6 @@ export type RootStackParamList = {
   Automations: undefined;
   Insights: undefined;
   Settings: NavigatorScreenParams<SettingsStackParamList>;
-  MobileFallback: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> =

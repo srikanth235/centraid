@@ -111,6 +111,8 @@ import {
   scalarPrimaryKeyColumn,
 } from "./filters.js";
 import { authenticate } from "./identity.js";
+import { LockerAuthentication } from "./locker-auth.js";
+import type { LockerAuthRequest, LockerAuthResult } from "./locker-auth.js";
 import { exportVault } from "./portability.js";
 import type { VaultExport } from "./portability.js";
 import { searchEntity } from "./search.js";
@@ -203,12 +205,28 @@ export type InvocationBatchResult<T> =
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (issue #293). */
   private readonly commands = new Map<string, RegisteredCommand>();
+  private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
 
   constructor(
     private readonly db: VaultDb,
     private readonly deps: GatewayDeps = {}
-  ) {}
+  ) {
+    this.lockerAuthentication = new LockerAuthentication(db);
+  }
+
+  /** Host-only Locker authentication plane; app bridges restrict the caller. */
+  authenticateLocker(request: LockerAuthRequest): LockerAuthResult {
+    return this.lockerAuthentication.handle(request);
+  }
+
+  /** Consume the one-time permit before a Locker UI reveal. */
+  authorizeLockerReveal(
+    authentication: RevealRequest["authentication"],
+    itemId: string
+  ): void {
+    this.lockerAuthentication.consumeItemPermit(authentication, itemId);
+  }
 
   /**
    * Run one short arrival window inside a shared vault + journal commit pair.

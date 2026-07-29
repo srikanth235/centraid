@@ -238,7 +238,7 @@ jobs:
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if curl -fsS http://127.0.0.1:18789/centraid/_apps; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -397,11 +397,10 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # #496 PC1 — Android home-loads at least every nightly (macOS minutes free on
-  # public repos). Leaner than iOS: only home-loads; longer paths stay on iOS.
-  # Flake budget: one retry at the flow harness; job failure still reds nightly.
-  # macos-15 is Apple Silicon → arm64-v8a AVD (x86_64 will not boot without HAX).
-  # Metro must be up before Maestro (harness hard-fails without it; iOS job does this).
+  # #496 PC1 / #630 — Android runs the same eight-app compatibility coverage as
+  # iOS: five WebView blueprints plus the three native v0 routes. Flake budget:
+  # one retry at the flow harness; job failure still reds nightly. Metro and the
+  # paired gateway must be up before Maestro.
   mobile-e2e-android:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android'
@@ -450,6 +449,19 @@ jobs:
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Build mobile workspace (host, before emulator)
         run: bunx turbo run build --filter=@centraid/mobile...
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bunx turbo run build --filter=@centraid/gateway
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
       - name: Start Metro
         working-directory: apps/mobile
         run: |

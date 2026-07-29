@@ -97,6 +97,22 @@ Settled **2026-07-27** in [#599](https://github.com/srikanth235/centraid/issues/
 - **Sharing is placement, not filtering.** Selective sharing projects rows/blobs into an audience vault (hardlinked CAS, `core_share_origin` provenance sidecar, single-DB transaction in the audience vault). Row-level ACLs are rejected as fail-open; **narrower vaults over finer roles** is the fence.
 - **v0 encryption posture: the local gateway is not an adversary.** Local blobs stay plaintext (`packages/vault/src/blob/local.ts`); sealing exists for untrusted remote storage and activates exactly when a storage/CAS provider is configured. Stolen-disk is the OS full-disk-encryption's job. Accepted, deferred loss: remote dedup of shared blobs (each vault seals under its own keys); local dedup is kept because the filesystem link count is the cross-vault refcount.
 
+## #630 — blueprint-readiness policies
+
+Settled **2026-07-29** in [#630](https://github.com/srikanth235/centraid/issues/630).
+The issue's Wave 0 exit text says “all six decisions,” but its checklist names
+seven; all seven are binding:
+
+| Topic | Decision |
+| --- | --- |
+| Schema migrations | **Real-vault-preserving migrations start now for blueprint-readiness data.** F1 remains the general pre-1.0 compatibility posture, but it is not permission to erase a person's real vault. New #630 tables/columns use the existing ordered `packages/vault/src/schema/migrate.ts` machinery, prove upgrade from the previous user version, and never require erase/re-import. |
+| Backup and restore | **Schema and recovery land atomically.** A change that creates versions, recurrence exceptions, notification registrations, sync cursors, or household grants also proves snapshot/restore and restore-after-erase retain them. Whole-database backup is not sufficient evidence by assertion; the recovery test seeds and reads the new rows. |
+| Notification permission | **Prompt at the first reminder, never at launch.** The action that creates a first reminder explains the value, then requests OS permission. A denial leaves the reminder visible with an actionable Settings path and does not nag on later launches. |
+| Local OCR | **Device-native first, bounded gateway backstop.** iOS uses Vision text recognition and Android uses ML Kit on-device recognition; the PWA/manual gateway path uses a local Tesseract-compatible worker. Gateway work is one document at a time, capped at 20 megapixels / 25 MiB, with a Raspberry Pi 4-class 4 GiB host as the supported low-end floor. No image or recognized text leaves the user's devices. |
+| Quick-add routing | **Heuristics first, agent fallback.** Deterministic, offline rules route unambiguous task/expense/note/event text immediately; ambiguous input asks the local agent for a classified preview. Nothing commits before the user sees the destination and parsed fields. |
+| Google OAuth | **BYO-client first for Calendar/Contacts.** The shared Assist client does not request these sensitive scopes until Google's production verification evidence is accepted. BYO remains functional throughout and uses the same connector/sync contract. |
+| Push topology | **Expo Push Service is a wake-only relay, with local fallback.** The relay receives device tokens, timing, an opaque registration id, and a content-free wake/deep-link class—never titles, bodies, secrets, entity names, or sealed columns. The gateway remains canonical for content after open. Installations that disable the relay retain on-device scheduled notifications while the app is resident, with the availability limitation stated in Settings. |
+
 ## Related docs
 
 | Doc | Covers |

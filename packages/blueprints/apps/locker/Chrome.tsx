@@ -23,6 +23,7 @@ export interface ChromeProps {
   sideOpen: boolean;
   showList: boolean;
   denied: boolean;
+  locked: boolean;
   /** Stamped one frame after mount; ungates the drawer's slide transition. */
   ready: boolean;
   sidebar: ReactNode;
@@ -52,27 +53,35 @@ export function Chrome(props: ChromeProps): ReactNode {
 
   return (
     <div className={frameClass}>
-      {/* Consent + notice banners — kept with their served ids so the reused
+      <div
+        className={styles.lockable}
+        inert={props.locked ? true : undefined}
+        aria-hidden={props.locked ? true : undefined}
+      >
+        {/* Consent + notice banners — kept with their served ids so the reused
           logic.ts (applyDenied / notice / readFailed) drives them by
           getElementById verbatim. Rendered once, never reconciled, so those
           imperative DOM writes are never clobbered. */}
-      <div id="consentBanner" className={styles.banner} hidden>
-        <strong>No vault access yet.</strong>{" "}
-        <span id="consentDetail">
-          Ask the owner to approve this app’s requested scopes in vault
-          settings.
-        </span>
-      </div>
-      <output
-        id="noticeBanner"
-        className={`${styles.banner} ${styles.notice}`}
-        aria-live="polite"
-        hidden
-      />
+        <div id="consentBanner" className={styles.banner} hidden>
+          <strong>No vault access yet.</strong>{" "}
+          <span id="consentDetail">
+            Ask the owner to approve this app’s requested scopes in vault
+            settings.
+          </span>
+        </div>
+        <output
+          id="noticeBanner"
+          className={`${styles.banner} ${styles.notice}`}
+          aria-live="polite"
+          hidden
+        />
 
-      {props.sidebar}
-      {props.list}
-      {props.detail}
+        {props.sidebar}
+        {props.list}
+        {props.detail}
+
+        <div className={styles.askMount} data-ask-mount />
+      </div>
 
       {/* Overlay layer — `data-kit-host` is display:contents (kit.css), so the
           lock screen / generator / edit modal overlays participate as if direct
@@ -80,8 +89,6 @@ export function Chrome(props: ChromeProps): ReactNode {
           against .appRoot). Order matches the served DOM: the generator can be
           opened from inside the edit modal, and the modal paints after it. */}
       <div data-kit-host>{props.overlays}</div>
-
-      <div className={styles.askMount} data-ask-mount />
     </div>
   );
 }

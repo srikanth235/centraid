@@ -42,6 +42,12 @@
   contain: layout;
 }
 
+/* Layout-transparent wrapper whose subtree can be made inert while the
+   authentication surface remains interactive. */
+.lockable {
+  display: contents;
+}
+
 /* Dark overrides for the folded locker tokens — mirrors app.css's dark block.
    Emitted for both the explicit [data-theme='dark'] and the standalone
    prefers-color-scheme fallback, the same two-selector shape the token layer

@@ -504,8 +504,19 @@ export function describeAppBoot(
         };
         window.centraid = {
           appId: app,
-          read: () => {
+          read: (request?: {
+            query?: string;
+            input?: Record<string, unknown>;
+          }) => {
             readCalls += 1;
+            if (app === "locker" && request?.query === "auth") {
+              return Promise.resolve({
+                ok: true,
+                configured: true,
+                authenticated: true,
+                sessionToken: "app-boot-user-present-session",
+              });
+            }
             const error = nextReadError;
             nextReadError = undefined;
             const result = error

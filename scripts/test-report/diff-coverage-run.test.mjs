@@ -71,6 +71,9 @@ describe("workspaceDirOf", () => {
     expect(workspaceDirOf("apps/mobile/src/lib/upload/enqueue.ts")).toBe(
       "apps/mobile"
     );
+    expect(
+      workspaceDirOf("packages/blueprints/apps/tasks/handlers/create.ts")
+    ).toBe("packages/blueprints");
   });
 
   test("root-level and non-workspace paths own no project", () => {

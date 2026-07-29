@@ -58,7 +58,7 @@
   height: 30px;
   border-radius: 8px;
   background: var(--accent-deep);
-  color: #fff;
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -88,7 +88,7 @@
   border: none;
   border-radius: var(--r-md);
   background: var(--accent-deep);
-  color: #fff;
+  color: var(--on-accent);
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
 }

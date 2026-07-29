@@ -48,6 +48,8 @@ function lightProps(): Record<string, string> {
     // no font loading). Deliberately NOT the desktop's `fontStacks`.
     "--font-sans":
       "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+    "--font-serif":
+      "'New York', 'Iowan Old Style', Georgia, Cambria, ui-serif, serif",
     "--font-title": "var(--font-sans)",
     "--mono":
       "ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace",
@@ -93,6 +95,7 @@ function lightProps(): Record<string, string> {
     "--line-strong": "hsl(var(--app-hue) 19% 13% / 0.165)",
 
     "--danger": "#c8382f",
+    "--warning": "#9a6b1f",
 
     // Radii — hard-edged cards; buttons/chips are kit pills (kit.css).
     "--r-card": `${radii.xl}px`,
@@ -165,6 +168,7 @@ function darkProps(): Record<string, string> {
     "--line-strong": "hsl(var(--app-hue) 26% 76% / 0.2)",
 
     "--danger": "#f0645b",
+    "--warning": "#e0a94a",
 
     "--accent-deep":
       "color-mix(in oklab, var(--_accent) 82%, hsl(var(--app-hue) 60% 96%))",

@@ -199,6 +199,7 @@ describe("backup", () => {
     bigBlobBytes: Buffer;
     lockerItemId: string;
     lockerPlaintext: string;
+    lockerPassphrase: string;
     outboxItemId: string;
   }
 
@@ -349,6 +350,15 @@ describe("backup", () => {
       password: lockerPlaintext,
     });
     const lockerItemId = lockerOut["item_id"] as string;
+    const lockerPassphrase = "a second horse guards this vault";
+    const lockerAuth = h.plane.gateway.authenticateLocker({
+      operation: "configure",
+      secret: lockerPassphrase,
+    });
+    if (!lockerAuth.ok)
+      throw new Error(
+        `Locker auth setup failed: ${JSON.stringify(lockerAuth)}`
+      );
 
     const { itemId: outboxItemId } = seedApprovedOutboxItem(h.plane);
 
@@ -360,6 +370,7 @@ describe("backup", () => {
       bigBlobBytes,
       lockerItemId,
       lockerPlaintext,
+      lockerPassphrase,
       outboxItemId,
     };
 
@@ -571,6 +582,27 @@ describe("backup", () => {
         lockerRow.password
       );
       expect(decrypted).toBe(h.seeded.lockerPlaintext);
+
+      // The #630 user-presence boundary is durable, while its capabilities
+      // are not: the verifier restores with the vault DEK, but the source
+      // gateway's live session was memory-only and must not survive.
+      expect(
+        plane.gateway.authenticateLocker({ operation: "status" })
+      ).toMatchObject({
+        ok: true,
+        configured: true,
+        authenticated: false,
+      });
+      expect(
+        plane.gateway.authenticateLocker({
+          operation: "unlock",
+          secret: h.seeded.lockerPassphrase,
+        })
+      ).toMatchObject({
+        ok: true,
+        configured: true,
+        authenticated: true,
+      });
     } finally {
       adoptedRegistry.stop();
     }

@@ -558,20 +558,28 @@ describe("admin scenarios", () => {
       layout,
       vaults: () => registry,
       logger: silentLogger,
+      loopbackEndpointId: "ep-host-custody",
     });
 
-    // No headers → not a device transport (shared bearer).
-    const bare = { headers: {} } as unknown as http.IncomingMessage;
+    const bare = {
+      headers: {},
+      socket: { remoteAddress: "10.0.0.1" },
+    } as unknown as http.IncomingMessage;
     expect(plane.deviceAccess.deviceKeyFor(bare)).toBeUndefined();
 
-    // Device header WITHOUT the process proof → refused (a bearer-holder
-    // cannot stamp an identity).
+    // Kernel-observed loopback uses host custody; Iroh still proves remotes.
+    const loopback = {
+      headers: {},
+      socket: { remoteAddress: "127.0.0.1" },
+    } as unknown as http.IncomingMessage;
+    expect(plane.deviceAccess.deviceKeyFor(loopback)).toBe("ep-host-custody");
+
+    // A device header without the process proof is refused.
     const spoof = {
       headers: { [DEVICE_HEADER]: "ep-known", [DEVICE_PROOF_HEADER]: "forged" },
     } as unknown as http.IncomingMessage;
     expect(plane.deviceAccess.deviceKeyFor(spoof)).toBeUndefined();
 
-    // Enrollment lookup works regardless of proof.
     expect(plane.deviceAccess.vaultsFor("ep-known")).toStrictEqual([vaultId]);
     expect(plane.deviceAccess.vaultsFor("ep-nobody")).toStrictEqual([]);
     registry.stop();

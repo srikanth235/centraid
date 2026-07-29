@@ -6,15 +6,15 @@ import path from "node:path";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { frameCountFor, partCountFor, sealedSizeFor } from "./cbsf";
-import { webCryptoUploadCrypto } from "./crypto";
 import {
   FAKE_GATEWAY,
   FakeGateway,
   FakeProvider,
   Killer,
   fakeBlobStoreFetch,
-} from "./fake-direct-transfer";
+} from "../../../test/fixtures/fake-direct-transfer";
+import { frameCountFor, partCountFor, sealedSizeFor } from "./cbsf";
+import { webCryptoUploadCrypto } from "./crypto";
 import { bytesFileSource } from "./file-source";
 import { DirectTransferError } from "./gateway-client";
 import type { DirectTransferClient } from "./gateway-client";

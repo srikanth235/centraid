@@ -25,8 +25,8 @@ import type {
   DirectTransferClient,
   MultipartPartReceipt,
   SettlementReceipt,
-} from "./gateway-client";
-import { DirectTransferError } from "./gateway-client";
+} from "../../src/lib/upload/gateway-client";
+import { DirectTransferError } from "../../src/lib/upload/gateway-client";
 
 export const FAKE_ENDPOINT = "https://s3.example.test";
 export const FAKE_BUCKET = "centraid-blobs";

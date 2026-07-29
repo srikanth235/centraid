@@ -82,7 +82,9 @@ interface VaultCallMessage {
     | "parked"
     | "changes"
     | "resolve"
-    | "reveal";
+    | "reveal"
+    | "authenticate"
+    | "content";
   payload: unknown;
 }
 
@@ -206,6 +208,14 @@ const vault = {
   /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (issue #293). */
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
+  },
+  /** Locker-only, memory-session user-presence authentication (#630). */
+  authenticate(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall("authenticate", request);
+  },
+  /** Size-bounded derivative content fetch. */
+  content(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall("content", request);
   },
 };
 

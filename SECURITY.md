@@ -49,6 +49,19 @@ There is **no multi-tenant server** and no Centraid-operated cloud that can read
 
 **KeyStore boundary (issue #555).** `keys/` is the only secret-bearing directory inside the gateway data dir, and every file there is an authenticated encrypted envelope. Desktop custody roots the wrapping key in Electron `safeStorage`; systemd/launchd services use system credentials. A manually launched headless gateway falls back, with a warning, to one external `0600` host credential under the platform configuration directory. Copying the gateway data dir alone therefore does not copy a usable wrapping key. This remains a host-account/filesystem-permission boundary—not protection from an attacker controlling the running process—and operators should use full-disk encryption. Vault DEKs are independent, never derived from the backup keyring, and never stored in `gateway.db` or snapshots. The passphrase-wrapped recovery kit is the only off-box bundle of backed-up-vault DEKs and the backup keyring; since #603 it is a deliberate **backup-plane export** (`backup kit` / the Backup screen), never something first run mints on the owner's behalf.
 
+**Locker user-presence boundary (issue #630).** Locker is an additional
+application-level gate inside an already authenticated vault session. It boots
+locked. A passphrase verifier in `locker_auth_credential` is derived from
+`HMAC(vault DEK, credential)` and then scrypt-hardened with a random salt, so a
+copied `vault.db` is not by itself an offline passphrase oracle. Successful
+verification mints only memory-resident, inactivity-bounded sessions and
+single-item, short-lived, one-use reveal permits. Backgrounding, explicit lock,
+gateway restart, or timeout destroys those capabilities; the UI also erases
+reveals, detail models, search results, generated values, and the exact secret
+it last placed on the clipboard. This does not protect against malware or root
+inside the running gateway process, and Companion autofill remains a separate,
+origin-bound device-gesture reveal lane rather than reusing Locker UI tokens.
+
 ### Members, households, and the v0 storage premise (#599)
 
 - **Five-layer model.** L0 custody (the box; landlord bearer; an exported backup recovery kit) · L1 authentication (iroh device keys — the only cryptographically provable layer) · L2 principals (**members** and agents) · L3 authorization (`(member, vault) → role`; devices inherit) · L4 attribution (the journal records the acting member — and the agent when one acted — whenever a principal is known; scheduler-fired automations carry none). A vault owner is not root; being co-owner of a shared vault grants zero access to anyone's personal vault. Root remains host custody (L0).

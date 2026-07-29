@@ -65,9 +65,14 @@ Probe without printing values: `bun run release:verify-secrets`.
 ## 4. Expo / EAS (mobile build + submit)
 
 - [ ] Create Expo account + EAS project for `apps/mobile`.
-- [ ] Set `EAS_PROJECT_ID` (replaces `placeholder-centraid-mobile` in updates URL when ready).
+- [ ] Set `EAS_PROJECT_ID` to enable the emergency EAS hotfix lane. Without it,
+      generated app config deliberately sets `updates.enabled = false` and
+      routine releases remain store-only.
 - [ ] Store `EXPO_TOKEN` in GitHub Actions for `lane-release-mobile.yml` (reached via `release.yml`).
-- [ ] Fill `ascAppId` placeholders in `apps/mobile/eas.json` after App Store Connect app exists.
+- [ ] Add the real numeric `ascAppId` to the iOS submit profiles in
+      `apps/mobile/eas.json` after the App Store Connect app exists. Until then,
+      iOS non-interactive submission is intentionally not configured; no fake
+      store id ships.
 - [ ] **Do not** add routine `eas update` to CI (J7 — dormant hotfix lane only).
 
 | Name | Purpose |

@@ -1,3 +1,6 @@
+// governance: allow-repo-hygiene file-size-limit — Locker's authentication,
+// inactivity/background erasure, and mutable UI state form one React lifecycle;
+// splitting those invariants across owners would make secret cleanup fail-open.
 // Locker — query-free React tree (issue #505). Holds the `Root` component and
 // every constant, helper and type it needs that does NOT depend on the
 // node-side `./queries/*` handler modules. The shell's InlineAppModule
@@ -29,6 +32,7 @@ import {
   readFailed,
 } from "./kit.ts";
 import {
+  clearSecretClipboard,
   copy,
   createLogic,
   catCounts,
@@ -89,7 +93,13 @@ function makeState(): AppState {
     narrow: false,
     sideOpen: false,
     showList: true,
-    locked: false,
+    locked: true,
+    authConfigured: null,
+    authSession: null,
+    authBusy: false,
+    authError: "",
+    pendingItemId: null,
+    reauthOpen: false,
     gen: false,
     genLen: 20,
     genNum: true,
@@ -104,6 +114,35 @@ function makeState(): AppState {
   };
 }
 
+/**
+ * Erase every secret-bearing or secret-derived client value when the gateway
+ * says the session is no longer valid. Keeping this outside the component lets
+ * the refresh-expiry path and the explicit lock path share the same invariant.
+ */
+function wipeSecretState(state: AppState, data: AppData): void {
+  state.locked = true;
+  state.authSession = null;
+  state.authBusy = false;
+  state.authError = "";
+  state.pendingItemId = null;
+  state.reauthOpen = false;
+  state.selectedId = null;
+  state.detail = null;
+  state.detailLoading = false;
+  state.reveal = {};
+  state.edit = null;
+  state.gen = false;
+  state.genValue = "";
+  state.genApply = null;
+  state.search = "";
+  state.searchResults = null;
+  state.trashRows = [];
+  state.watch = { compromised: 0, weak: 0, reused: 0, items: [] };
+  data.items = [];
+  data.truncated = false;
+  clearSecretClipboard();
+}
+
 interface ItemsPayload {
   items?: LockerRow[];
   truncated?: boolean;
@@ -114,6 +153,20 @@ interface ItemsPayload {
     reused?: number;
     items?: LockerRow[];
   };
+  authRequired?: boolean;
+  configured?: boolean;
+}
+
+interface AuthPayload {
+  ok: boolean;
+  configured: boolean;
+  authenticated?: boolean;
+  sessionToken?: string;
+  itemToken?: string;
+  expiresAt?: string;
+  retryAfterMs?: number;
+  code?: string;
+  message?: string;
 }
 
 export function Root({ rootRef }: InlineAppProps): ReactNode {
@@ -133,15 +186,22 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     const state = stateRef.current;
     const data = dataRef.current;
     const logic = logicRef.current!;
+    if (!state.authSession || state.locked) return;
     let next: ItemsPayload;
     try {
       next = await window.centraid.read<ItemsPayload>({
         query: "items",
-        input: { limit: 300 },
+        input: { limit: 300, auth_session: state.authSession },
       });
     } catch {
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
+      return;
+    }
+    if (next.authRequired) {
+      state.authConfigured = next.configured ?? state.authConfigured;
+      wipeSecretState(state, data);
+      bump();
       return;
     }
     if (state.readFailedShown) {
@@ -200,6 +260,124 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     });
   }
   const logic = logicRef.current;
+
+  const clearSecretState = useCallback(() => {
+    wipeSecretState(stateRef.current, dataRef.current);
+    bump();
+  }, []);
+
+  const authenticate = useCallback(
+    async (input: Record<string, unknown>): Promise<AuthPayload> =>
+      window.centraid.read<AuthPayload>({ query: "auth", input }),
+    []
+  );
+
+  const lockNow = useCallback(
+    (notifyHost = true) => {
+      const sessionToken = stateRef.current.authSession;
+      clearSecretState();
+      if (notifyHost && sessionToken) {
+        void authenticate({
+          operation: "lock",
+          sessionToken,
+        }).catch(() => {});
+      }
+    },
+    [authenticate, clearSecretState]
+  );
+
+  const submitUnlock = useCallback(
+    async (secret: string) => {
+      const state = stateRef.current;
+      state.authBusy = true;
+      state.authError = "";
+      bump();
+      let result: AuthPayload;
+      try {
+        result = await authenticate({
+          operation: state.authConfigured === false ? "configure" : "unlock",
+          secret,
+        });
+      } catch {
+        result = {
+          ok: false,
+          configured: state.authConfigured ?? false,
+          message: "Locker authentication needs an online gateway.",
+        };
+      }
+      state.authBusy = false;
+      state.authConfigured = result.configured;
+      if (!result.ok || !result.sessionToken) {
+        state.authError =
+          result.message ??
+          (result.retryAfterMs
+            ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+            : "The passphrase was not accepted.");
+        bump();
+        return;
+      }
+      state.authSession = result.sessionToken;
+      state.locked = false;
+      state.authError = "";
+      bump();
+      await refresh();
+    },
+    [authenticate, refresh]
+  );
+
+  const submitItemAuthorization = useCallback(
+    async (secret: string) => {
+      const state = stateRef.current;
+      const itemId = state.pendingItemId;
+      const sessionToken = state.authSession;
+      if (!itemId || !sessionToken) {
+        lockNow();
+        return;
+      }
+      state.authBusy = true;
+      state.authError = "";
+      bump();
+      let result: AuthPayload;
+      try {
+        result = await authenticate({
+          operation: "authorize-item",
+          sessionToken,
+          secret,
+          itemId,
+        });
+      } catch {
+        result = {
+          ok: false,
+          configured: true,
+          message: "Re-authentication needs an online gateway.",
+        };
+      }
+      state.authBusy = false;
+      if (result.code === "SESSION_EXPIRED") {
+        lockNow(false);
+        return;
+      }
+      if (!result.ok || !result.itemToken) {
+        state.authError =
+          result.message ??
+          (result.retryAfterMs
+            ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+            : "The passphrase was not accepted.");
+        bump();
+        return;
+      }
+      state.pendingItemId = null;
+      state.reauthOpen = false;
+      state.authError = "";
+      bump();
+      await logicRef.current!.selectItem(
+        itemId,
+        sessionToken,
+        result.itemToken
+      );
+    },
+    [authenticate, lockNow]
+  );
 
   const setRoot = useCallback(
     (el: HTMLDivElement | null) => {
@@ -323,7 +501,31 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           bump();
         })
       : () => {};
-    void refresh();
+    void authenticate({ operation: "status" })
+      .then((status) => {
+        const state = stateRef.current;
+        state.authConfigured = status.configured;
+        // `status` normally receives no token and therefore boots locked.
+        // A host may resume an already user-present in-memory session (the
+        // local app-boot harness exercises this path); persisted tokens can
+        // never do so because the gateway forgets them on restart.
+        state.locked = !(status.authenticated && status.sessionToken);
+        state.authSession =
+          status.authenticated && status.sessionToken
+            ? status.sessionToken
+            : null;
+        state.authError = status.ok
+          ? ""
+          : (status.message ?? "Locker authentication is unavailable.");
+        bump();
+        if (!state.locked) void refresh();
+      })
+      .catch(() => {
+        const state = stateRef.current;
+        state.authConfigured = null;
+        state.authError = "Locker authentication needs an online gateway.";
+        bump();
+      });
     return () => {
       window.removeEventListener("keydown", onKey);
       stopDoorbell();
@@ -331,7 +533,35 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       stopWidth();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
-  }, []);
+  }, [authenticate, closeEdit, refresh]);
+
+  // A live Locker session lasts at most five inactive minutes. Any background
+  // transition locks immediately; foreground interaction only resets the
+  // local timer while a host session exists.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      if (timer) clearTimeout(timer);
+      const state = stateRef.current;
+      if (!state.locked && state.authSession) {
+        timer = setTimeout(() => lockNow(), 5 * 60 * 1000);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") lockNow();
+      else arm();
+    };
+    window.addEventListener("pointerdown", arm, { passive: true });
+    window.addEventListener("keydown", arm);
+    document.addEventListener("visibilitychange", onVisibility);
+    arm();
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("pointerdown", arm);
+      window.removeEventListener("keydown", arm);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [lockNow]);
 
   const state = stateRef.current;
   const data = dataRef.current;
@@ -358,6 +588,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         sideOpen={state.sideOpen}
         showList={state.showList}
         denied={state.denied}
+        locked={state.locked || state.reauthOpen}
         ready={ready}
         sidebar={
           <LockerSidebar
@@ -373,10 +604,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               state.sideOpen = false;
               bump();
             }}
-            onLock={() => {
-              state.locked = true;
-              bump();
-            }}
+            onLock={() => lockNow()}
             onToggleTheme={() => logic.toggleTheme()}
           />
         }
@@ -391,7 +619,12 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               state.sideOpen = true;
               bump();
             }}
-            onSelect={(id) => logic.selectItem(id)}
+            onSelect={(id) => {
+              state.pendingItemId = id;
+              state.reauthOpen = true;
+              state.authError = "";
+              bump();
+            }}
             onSearchInput={(value) => {
               state.search = value;
               bump();
@@ -418,7 +651,12 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               state.detail = null;
               bump();
             }}
-            onSelect={(id) => logic.selectItem(id)}
+            onSelect={(id) => {
+              state.pendingItemId = id;
+              state.reauthOpen = true;
+              state.authError = "";
+              bump();
+            }}
             onToggleReveal={(fid) => logic.toggleReveal(fid)}
             onToggleFav={(sel) => logic.toggleFav(sel)}
             onEdit={openEdit}
@@ -431,8 +669,23 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           <>
             {state.locked ? (
               <LockScreen
-                onUnlock={() => {
-                  state.locked = false;
+                configured={state.authConfigured}
+                busy={state.authBusy}
+                error={state.authError}
+                onSubmit={submitUnlock}
+              />
+            ) : null}
+            {!state.locked && state.reauthOpen ? (
+              <LockScreen
+                mode="item"
+                configured={true}
+                busy={state.authBusy}
+                error={state.authError}
+                onSubmit={submitItemAuthorization}
+                onCancel={() => {
+                  state.pendingItemId = null;
+                  state.reauthOpen = false;
+                  state.authError = "";
                   bump();
                 }}
               />

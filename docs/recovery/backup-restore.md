@@ -12,6 +12,31 @@ When backup, restore, or blank-machine `recover` strands mid-flight. Product pat
 | Keys | Sealing keys / recovery kit are outside casual vault copy — need the kit + provider credentials |
 | The kit is an **export**, not a first-run artifact | Since issue #603 nothing mints a kit for you. Export it deliberately (`centraid-gateway backup kit --out …`, or the Backup screen) *before* you need it |
 
+## Schema-change recovery checklist
+
+Every change that creates a durable table or column must complete this checklist
+in the same PR; “the SQLite file is copied” is not evidence on its own:
+
+- add an ordered migration from the immediately previous `user_version` and
+  prove an existing populated vault upgrades without erase/re-import;
+- seed the new data in the backup integration fixture, restore it to a side
+  directory, and assert the exact rows and references are readable;
+- seed the same data in the restore-after-erase recovery fixture and assert it
+  survives kit/provider recovery after the live DEK has been destroyed;
+- include new blob/content references in GC-root enumeration and integrity
+  manifests where applicable;
+- verify an older binary refuses a newer storage/protocol epoch before
+  downloading or mutating recovery material.
+
+For issue #630, `locker_auth_credential` is the first post-base vault migration
+and is the preservation canary for this rule. The migration test starts from a
+populated v1 Locker, adds the credential table at v2, and proves the existing
+item is unchanged. Backup and restore fixtures must seed the credential row as
+well as a Locker item: restoring only `locker_item` would silently reset the
+owner's user-presence boundary. The verifier is usable only with the restored
+vault DEK; neither its source passphrase nor any live Locker session/item permit
+belongs in a snapshot, recovery kit, journal, or receipt.
+
 The recovery-kit passphrase wrap is **load-bearing key custody**, not a
 convenience. The kit contains the backup keyring and backed-up vault DEKs;
 without its password those keys remain unavailable even when the wrapped file

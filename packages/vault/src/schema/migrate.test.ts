@@ -144,6 +144,49 @@ describe("schema/migrate", () => {
     db.close();
   });
 
+  test("v1 Locker data survives the user-presence credential migration", () => {
+    const dir = tempDirSync();
+    const seeded = openVaultDb({ dir });
+    seeded.vault
+      .prepare(
+        `INSERT INTO locker_item
+          (item_id, type, title, created_at, updated_at)
+         VALUES ('existing-login', 'login', 'Before auth', ?, ?)`
+      )
+      .run("2026-07-29T00:00:00.000Z", "2026-07-29T00:00:00.000Z");
+    seeded.close();
+
+    // Reconstruct the exact previous schema frontier: the populated Locker
+    // base rung exists, while #630's credential table does not.
+    const prior = new DatabaseSync(path.join(dir, "vault.db"));
+    prior.exec(`
+      DROP TABLE locker_auth_credential;
+      PRAGMA user_version = 1;
+    `);
+    prior.close();
+
+    const upgraded = openVaultDb({ dir });
+    expect(
+      upgraded.vault
+        .prepare(
+          `SELECT type, title FROM locker_item WHERE item_id = 'existing-login'`
+        )
+        .get()
+    ).toStrictEqual({ type: "login", title: "Before auth" });
+    expect(
+      upgraded.vault
+        .prepare(
+          `SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name = 'locker_auth_credential'`
+        )
+        .get()
+    ).toStrictEqual({ name: "locker_auth_credential" });
+    expect(userVersionOf(path.join(dir, "vault.db"))).toBe(
+      VAULT_MIGRATIONS.length
+    );
+    upgraded.close();
+  });
+
   test("the orphan-grace tombstone table exists on a fresh vault (issue #439 R4)", () => {
     const db = openVaultDb();
     // `blob_orphan` is plumbing (like blob_replica/blob_access), not a registered

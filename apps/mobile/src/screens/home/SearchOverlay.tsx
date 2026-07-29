@@ -8,6 +8,7 @@
 // Pressable, and the content layer is `box-none`, so a tap on empty space falls
 // through to close while taps on the input / a tile / Cancel are handled.
 
+import { BlurView } from "expo-blur";
 import React, { useMemo, useState } from "react";
 import {
   Pressable,
@@ -28,12 +29,12 @@ import LauncherGrid from "./LauncherGrid";
 
 const H_PADDING = 20;
 
-// Full-screen scrim. The original layered an expo-blur BlurView beneath this
-// film; that native module isn't wired into this build yet (deferred polish),
-// so the scrim runs near-opaque to stay legible over any content beneath it.
+// Full-screen live blur plus a translucent scheme film. expo-blur is a native
+// dependency of the shipped app (also used by GlassBar), so this surface
+// exercises the same compiled material instead of carrying a stale fallback.
 const TINT: Record<Scheme, string> = {
-  light: "rgba(241, 236, 225, 0.97)",
-  dark: "rgba(16, 19, 24, 0.97)",
+  light: "rgba(241, 236, 225, 0.82)",
+  dark: "rgba(16, 19, 24, 0.86)",
 };
 
 export interface SearchOverlayProps {
@@ -60,6 +61,12 @@ export default function SearchOverlay({
 
   return (
     <View style={StyleSheet.absoluteFill}>
+      <BlurView
+        intensity={60}
+        tint={scheme === "dark" ? "dark" : "light"}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <View
         style={[StyleSheet.absoluteFill, { backgroundColor: TINT[scheme] }]}
         pointerEvents="none"
