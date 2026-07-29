@@ -48,12 +48,12 @@ can be aligned in a later crate bump — iroh keeps wire compat within 1.x.
 **official** `IrohLib.xcframework.zip` from the iroh-ffi release matching the
 podspec's `iroh_tag` (currently
 [v1.1.0](https://github.com/n0-computer/iroh-ffi/releases/tag/v1.1.0);
-SHA-256 pinned to upstream `Package.swift`'s `releaseChecksum`, and a
-`.iroh-version` marker forces a refetch when the tag is bumped) plus the
-generated `IrohLib.swift`. This is the same prebuilt binary the upstream
-SwiftPM package (product `IrohLib`) resolves — we pull it through CocoaPods
-because Expo integrates local modules as `:path` pods. No bytes in git, no
-bespoke fetch script.
+SHA-256 pinned to upstream `Package.swift`'s `releaseChecksum`) plus the
+generated `IrohLib.swift`, whose SHA-256 is pinned separately. A
+`.iroh-version` marker forces a refetch when the tag is bumped. This is the
+same prebuilt binary the upstream SwiftPM package (product `IrohLib`) resolves
+— we pull it through CocoaPods because Expo integrates local modules as
+`:path` pods. No bytes in git, no bespoke fetch script.
 
 > CocoaPods runs `prepare_command` when a pod is *downloaded*; for a `:path`
 > development pod some CocoaPods versions skip it. If `pod install` (run by

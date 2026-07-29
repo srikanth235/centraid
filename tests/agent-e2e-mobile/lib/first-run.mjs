@@ -16,33 +16,7 @@
  */
 export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
     when:
-      visible: "Continue"
+      visible: "^Continue$"
     commands:
-      - tapOn: "Continue"
+      - tapOn: "^Continue$"
 `;
-
-/**
- * First-run onboarding (`src/screens/Onboarding.tsx`) renders ahead of the tab
- * shell whenever `profile.onboarded` is false — and `launchApp: {clearState:
- * true}` wipes that AsyncStorage flag, so a fresh Android launch always lands on
- * the "Welcome to Centraid" flow, not Home. iOS persists the flag across its
- * simulator, so it goes straight to Home — which is why only Android surfaced
- * this (#535). Its header "Skip" button (`Onboarding.tsx`, shown on every step
- * before `done`) calls `setOnboarded(true)` and drops straight to Home.
- *
- * Returns the YAML to WAIT for that button and tap it — the wait matters: a
- * point-in-time `runFlow: when visible` fires the instant `launchApp` returns,
- * before the JS bundle has painted onboarding, so it saw nothing and no-op'd
- * (the app then sat on onboarding until the Home assertion timed out — CI run
- * 30093591058). `timeoutMs` is the caller's first-launch budget (bundle fetch +
- * render). Empty string on non-Android platforms, so iOS's Home assertion — the
- * next step after this in every caller — is unchanged.
- */
-export function skipOnboarding(platform, timeoutMs) {
-  if (platform !== "android") return "";
-  return `- extendedWaitUntil:
-    visible: "Skip"
-    timeout: ${timeoutMs}
-- tapOn: "Skip"
-`;
-}

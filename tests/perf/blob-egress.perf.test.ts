@@ -6,18 +6,18 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, onTestFinished, test } from "vitest";
 
-import { openVaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
+import { openVaultRegistry } from "../../packages/gateway/src/serve/vault-registry.js";
 
 const OWNER = "tests/perf/blob-egress.perf.test.ts";
 
 describe("blob-egress.perf", () => {
   test("large local blob egress produces a first byte without whole-file buffering", async () => {
-    const directory = await tempDir("blob-egress-");
+    const registryDirectory = await tempDir("blob-egress-");
     // Seed outside the measured child. Its allocator has therefore never owned
     // the payload when it records the RSS baseline; a route that reads the whole
     // file must ask the OS for those pages instead of reusing seed-time slabs.
-    const seed = openVaultPlane({
-      dir: directory,
+    const registry = openVaultRegistry({
+      rootDir: registryDirectory,
       logger: {
         info: () => undefined,
         warn: () => undefined,
@@ -25,6 +25,9 @@ describe("blob-egress.perf", () => {
       },
       ownerName: "Perf owner",
     });
+    const vault = registry.create();
+    const seed = registry.get(vault.vaultId)!;
+    const directory = path.join(registryDirectory, vault.vaultId);
     const bytes = Buffer.alloc(128 * 1024 * 1024, 0x5a);
     const staged = seed.gateway.stageBlob(seed.ownerCredential, {
       bytes,
@@ -41,7 +44,7 @@ describe("blob-egress.perf", () => {
     const contentId = String(
       (attached.output as { content_id: unknown }).content_id
     );
-    await seed.stop();
+    registry.stop();
 
     const child = fork(
       path.resolve("tests/perf/fixtures/blob-egress-server.mjs"),

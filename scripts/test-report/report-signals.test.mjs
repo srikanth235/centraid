@@ -1,14 +1,18 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  agedInfraMismatches,
+  cellIdentityRegressions,
   cellsMissingRatchet,
+  collectPlaywrightEvidence,
   detectDefaultCiEnvGate,
   extractUnhandledErrors,
-  filterFloorConfigEntries,
+  findUnmatchedOwners,
   findUnmappedEvidence,
-  mergeLaneMarkers,
   reconcileJobConclusions,
+  resolvePlaywrightOwner,
   summarizeCellStates,
+  sustainedRatchetCandidates,
 } from "./report-signals.mjs";
 import {
   REPORT_COMMENT_MARKER,
@@ -16,7 +20,6 @@ import {
   publicReportUrl,
   renderSummaryMarkdown,
 } from "./summary-markdown.mjs";
-import { validateMatrix } from "./validate-matrix.mjs";
 
 describe("extractUnhandledErrors", () => {
   test("reads explicit unhandledErrors array from vitest JSON", () => {
@@ -63,6 +66,51 @@ describe("extractUnhandledErrors", () => {
   });
 });
 
+describe("durable floor and infrastructure ratchets", () => {
+  test("proposes a floor only after the candidate is sustained for three runs", () => {
+    const history = [
+      { floorSeries: { "coverage:repo-wide:lines": 80 } },
+      { floorSeries: { "coverage:repo-wide:lines": 81 } },
+    ];
+    expect(
+      sustainedRatchetCandidates(
+        { "coverage:repo-wide:lines": 82 },
+        history,
+        { "coverage:repo-wide:lines": 71 },
+        { sustainedRuns: 3, marginPoints: 2 }
+      )
+    ).toEqual([
+      {
+        key: "coverage:repo-wide:lines",
+        floor: 71,
+        candidate: 78,
+        values: [80, 81, 82],
+      },
+    ]);
+    expect(
+      sustainedRatchetCandidates(
+        { "coverage:repo-wide:lines": 82 },
+        history.slice(1),
+        { "coverage:repo-wide:lines": 71 },
+        { sustainedRuns: 3, marginPoints: 2 }
+      )
+    ).toEqual([]);
+  });
+
+  test("alarms when the same infra mismatch occupies three consecutive runs", () => {
+    expect(
+      agedInfraMismatches(
+        ["mobile:journey"],
+        [
+          { infraMismatchCellIds: ["mobile:journey"] },
+          { infraMismatchCellIds: ["mobile:journey"] },
+        ],
+        { maxConsecutiveRuns: 3 }
+      )
+    ).toEqual(["mobile:journey"]);
+  });
+});
+
 describe("summarizeCellStates", () => {
   test("separates failed from missing (lane ran vs not run)", () => {
     const counts = summarizeCellStates([
@@ -78,6 +126,61 @@ describe("summarizeCellStates", () => {
     expect(counts.cellsMissing).toBe(3);
     expect(counts.cellsPassed).toBe(1);
     expect(counts.cellsSkipped).toBe(1);
+  });
+});
+
+describe("Playwright evidence", () => {
+  test("resolves bare suite basenames against Playwright config.rootDir", () => {
+    expect(
+      resolvePlaywrightOwner("web-pwa.spec.ts", {
+        repoRoot: "/repo",
+        configRoot: "/repo/apps/web/tests/e2e",
+        registeredOwners: ["apps/web/tests/e2e/web-pwa.spec.ts"],
+      })
+    ).toBe("apps/web/tests/e2e/web-pwa.spec.ts");
+  });
+
+  test("falls back to a unique registered suffix when rootDir is unavailable", () => {
+    expect(
+      resolvePlaywrightOwner("web-pwa.spec.ts", {
+        registeredOwners: ["apps/web/tests/e2e/web-pwa.spec.ts"],
+      })
+    ).toBe("apps/web/tests/e2e/web-pwa.spec.ts");
+  });
+
+  test("uses Playwright flaky classification instead of flattening retry failure", () => {
+    const [result] = collectPlaywrightEvidence({
+      suites: [
+        {
+          file: "web-pwa.spec.ts",
+          specs: [
+            {
+              tests: [
+                {
+                  status: "flaky",
+                  results: [
+                    {
+                      status: "failed",
+                      retry: 0,
+                      duration: 10,
+                      error: { message: "first attempt failed" },
+                    },
+                    { status: "passed", retry: 1, duration: 8 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(result).toMatchObject({
+      owner: "web-pwa.spec.ts",
+      status: "flaky",
+      retries: 1,
+      error: "first attempt failed",
+      duration: 18,
+    });
   });
 });
 
@@ -118,6 +221,18 @@ test('FsBlobStore.putSync against a REAL full filesystem', (t) => {
     expect(
       detectDefaultCiEnvGate(`test('works', () => { expect(1).toBe(1); });`)
     ).toBeNull();
+  });
+
+  test("fails closed on an unrecognized env-gated skip shape", () => {
+    expect(
+      detectDefaultCiEnvGate(`
+        const gate = process.env.CENTRAID_ODD_GATE;
+        describe.skipIf(Boolean(gate))("x", () => {});
+      `)
+    ).toEqual({
+      env: "CENTRAID_ODD_GATE",
+      kind: "unparseable-env-gate",
+    });
   });
 });
 
@@ -234,6 +349,20 @@ describe("findUnmappedEvidence", () => {
   });
 });
 
+describe("findUnmatchedOwners", () => {
+  test("names declared owners that produced no evidence key", () => {
+    expect(
+      findUnmatchedOwners([{ owner: "tests/a.test.ts", status: "passed" }], {
+        cellOwners: {
+          "a.correctness": { owner: "tests/a.test.ts", tier: "unit" },
+          "b.correctness": { owner: "tests/b.test.ts", tier: "unit" },
+        },
+        flows: [{ owner: "tests/c.test.ts" }],
+      })
+    ).toEqual(["tests/b.test.ts", "tests/c.test.ts"]);
+  });
+});
+
 describe("reconcileJobConclusions", () => {
   test("flags silent all-clear when needs jobs failed but summary.failed is 0", () => {
     const recon = reconcileJobConclusions(
@@ -277,69 +406,24 @@ describe("cellsMissingRatchet", () => {
   });
 });
 
-describe("filterFloorConfigEntries", () => {
-  test("drops _comment and non-scope meta keys", () => {
-    const entries = filterFloorConfigEntries({
-      _comment: "seed floors",
-      approvedDeviation: { reason: "x" },
-      lines: 70,
-      "packages/gateway/**": { lines: 80 },
-    });
-    expect(entries.map(([k]) => k).sort()).toEqual([
-      "lines",
-      "packages/gateway/**",
-    ]);
-  });
-});
-
-describe("mergeLaneMarkers", () => {
-  test("merges per-lane shards without last-write-win loss", () => {
+describe("cellIdentityRegressions", () => {
+  test("detects replacement grey/red cells even when aggregate counts are flat", () => {
     expect(
-      mergeLaneMarkers([
-        { "desktop-playwright": "2026-07-24T01:00:00.000Z" },
-        { "web-playwright": "2026-07-24T02:00:00.000Z" },
-        { "desktop-playwright": "2026-07-24T03:00:00.000Z" },
-      ])
-    ).toEqual({
-      "desktop-playwright": "2026-07-24T03:00:00.000Z",
-      "web-playwright": "2026-07-24T02:00:00.000Z",
-    });
-  });
-});
-
-describe("validateMatrix skip notes (#535)", () => {
-  test("fails when a skip cell has no matrix.notes rationale", async () => {
-    const matrix = {
-      dimensions: [{ id: "journey", label: "Journey", lane: "e2e" }],
-      surfaces: [
-        { id: "mobile", label: "Mobile", assessment: { journey: "skip" } },
-      ],
-      cellOwners: { "mobile.journey": null },
-      flows: [],
-      notes: {},
-    };
-    const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(
-      errors.some(
-        (e) => e.includes("mobile.journey") && e.includes("matrix.notes")
+      cellIdentityRegressions(
+        {
+          missingCellIds: ["fixed-replacement", "still-grey"],
+          failedCellIds: ["new-red"],
+        },
+        [
+          {
+            missingCellIds: ["old-fixed", "still-grey"],
+            failedCellIds: ["old-red"],
+          },
+        ]
       )
-    ).toBe(true);
-  });
-
-  test("accepts a skip cell with a one-line note", async () => {
-    const matrix = {
-      dimensions: [{ id: "journey", label: "Journey", lane: "e2e" }],
-      surfaces: [
-        { id: "mobile", label: "Mobile", assessment: { journey: "skip" } },
-      ],
-      cellOwners: { "mobile.journey": null },
-      flows: [],
-      notes: {
-        "mobile.journey":
-          "Delegated to consuming surface; no native journey surface.",
-      },
-    };
-    const { errors } = await validateMatrix(matrix, { checkFiles: false });
-    expect(errors.filter((e) => e.includes("matrix.notes"))).toEqual([]);
+    ).toEqual({
+      newMissing: ["fixed-replacement"],
+      newFailed: ["new-red"],
+    });
   });
 });

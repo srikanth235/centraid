@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * Print the {@link https://docs.expo.dev/versions/latest/sdk/fingerprint/ @expo/fingerprint}
@@ -26,25 +27,63 @@ import path from "node:path";
  */
 import { createFingerprintAsync } from "@expo/fingerprint";
 
-const platform = process.argv[2];
-if (platform !== "ios" && platform !== "android") {
-  process.stderr.write("usage: native-fingerprint.mjs <ios|android>\n");
-  process.exit(2);
-}
-
 // scripts/ → apps/mobile. Resolve relative to this file, not cwd: gradle and
 // the monorepo root both invoke Expo tooling from different cwds (see the same
 // note in app.config.ts).
 const projectRoot = path.resolve(import.meta.dirname, "..");
 
-const fingerprint = await createFingerprintAsync(projectRoot, {
-  platforms: [platform],
-});
-// Guard against a silent empty digest becoming a constant (always-hit) key.
-if (!fingerprint.hash || fingerprint.sources.length === 0) {
-  process.stderr.write(
-    `::error::empty ${platform} fingerprint — refusing to emit a constant key\n`
-  );
-  process.exit(1);
+export async function fingerprintForPlatform(platform) {
+  if (platform !== "ios" && platform !== "android") {
+    throw new Error(`unsupported native fingerprint platform: ${platform}`);
+  }
+  const fingerprint = await createFingerprintAsync(projectRoot, {
+    platforms: [platform],
+    // The committed expectation is the ratchet output, not an input. Including
+    // it would make every refresh self-referential and impossible to settle.
+    ignorePaths: [
+      "native-fingerprints.json",
+      // Kotlin 2.1 writes local daemon error reports here during a native
+      // compile. They describe the machine/build attempt, not binary inputs,
+      // and Expo's defaults do not yet exclude this directory. Without this,
+      // merely running the compile gate changes the next cache key.
+      "android/.kotlin/**/*",
+      // CocoaPods reconstructs these git-ignored Iroh bindings from the tag
+      // and checksum pinned in CentraidTunnel.podspec. Hashing the downloaded
+      // products as well as that recipe makes the result depend on whether
+      // `pod install` has run, so a clean CI checkout and a built worktree
+      // disagree even though their native inputs are identical.
+      "modules/centraid-tunnel/ios/Iroh.xcframework/**/*",
+      "modules/centraid-tunnel/ios/IrohLib.swift",
+      "modules/centraid-tunnel/ios/.iroh-version",
+      // The react-native-maps pod install rewrites this one-line marker from
+      // its package default to the app's Google Maps setting. The app config
+      // and package sources remain hashed; the reconstructed marker must not
+      // make either platform's identity depend on whether CocoaPods has run.
+      "../../node_modules/react-native-maps/ios/AirMaps/RNMapsDefines.h",
+    ],
+  });
+  // Guard against a silent empty digest becoming a constant (always-hit) key.
+  if (!fingerprint.hash || fingerprint.sources.length === 0) {
+    throw new Error(
+      `empty ${platform} fingerprint — refusing to emit a constant key`
+    );
+  }
+  return fingerprint.hash;
 }
-process.stdout.write(fingerprint.hash);
+
+if (
+  process.argv[1] &&
+  pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url
+) {
+  const platform = process.argv[2];
+  if (platform !== "ios" && platform !== "android") {
+    process.stderr.write("usage: native-fingerprint.mjs <ios|android>\n");
+    process.exit(2);
+  }
+  try {
+    process.stdout.write(await fingerprintForPlatform(platform));
+  } catch (error) {
+    process.stderr.write(`::error::${error.message}\n`);
+    process.exit(1);
+  }
+}

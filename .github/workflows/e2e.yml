@@ -189,6 +189,9 @@ jobs:
           xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
           echo "iOS native fingerprint: fp=$fp toolchain(xc)=$xc"
+      - name: Assert runner Xcode satisfies React Native
+        working-directory: apps/mobile
+        run: bun run ci:xcode
       - name: Build and start the tokenless mobile test gateway
         # Scoped to the gateway's dependency subgraph instead of a full
         # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
@@ -276,7 +279,31 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          # The macos-15-arm64 hosted runner exposes only 3 cores. Xcode's
+          # default scheduler repeatedly vanished mid-ReactCodegen with zero compiler
+          # errors, then Expo surfaced exit 65 plus a misleading
+          # package-dependency footer. The same checkout builds locally, making
+          # hosted resource pressure the leading diagnosis. A two-task cap still
+          # terminated in run 30409157675, so serialize compile tasks for the
+          # cache-miss build to minimize its peak memory pressure. Run
+          # 30411945707 then made substantially more progress under that cap but
+          # still ended with "0 error(s)" and exit 65. Preserve its incremental
+          # DerivedData and retry exactly once for that zero-diagnostic hosted
+          # termination. A real compiler error, or a second termination, stays
+          # red; this is not a product-test retry.
+          defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks -int 1
+          first_log="$RUNNER_TEMP/centraid-ios-build-attempt-1.log"
+          set +e
+          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler 2>&1 | tee "$first_log"
+          first_status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$first_status" -ne 0 ]; then
+            if ! grep -Fq '0 error(s), and' "$first_log"; then
+              exit "$first_status"
+            fi
+            echo "::warning::Xcode ended without a compiler error; retrying once against incremental DerivedData"
+            bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          fi
           # Copy the product out of derived data into the cached location. Fail
           # hard if it cannot be found: caching an empty directory would turn
           # every later run into a silent no-install.
@@ -337,7 +364,16 @@ jobs:
           node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+          node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
           exit "$ec"
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
       # Single-root evidence upload only — dual path (artifacts/ + runs/) made
       # upload-artifact v4 LCA-nest as artifacts/artifacts/e2e after merge-multiple
       # download, which generate.mjs never reads (#535 F1).
@@ -633,6 +669,60 @@ jobs:
           path: artifacts/
           retention-days: 14
 
+  # #587 C1 — performance and scale are an independent parallel lane. New
+  # rigs cannot consume the report job's 35-minute budget or prevent coverage
+  # and report rendering from starting when this lane is red.
+  quality-performance-scale:
+    needs: [web-e2e]
+    if: >
+      always() && (
+        github.event_name != 'workflow_dispatch' ||
+        github.event.inputs.suite == 'all' ||
+        github.event.inputs.suite == 'report'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - name: Restore web waterfall evidence
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-evidence-web
+          path: artifacts
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            artifacts/perf
+            artifacts/scale
+          key: quality-history-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: quality-history-${{ runner.os }}-
+      - run: sudo apt-get update && sudo apt-get install -y strace
+      - run: bun run build
+      - id: perf
+        continue-on-error: true
+        run: bun run test:perf
+      - id: scale
+        continue-on-error: true
+        run: bun run test:scale
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-quality
+          path: artifacts/
+          retention-days: 14
+      - name: Enforce the quality-lane budget results
+        if: always()
+        run: |
+          echo "perf=${{ steps.perf.outcome }}"
+          echo "scale=${{ steps.scale.outcome }}"
+          if [ "${{ steps.perf.outcome }}" != "success" ] || \
+             [ "${{ steps.scale.outcome }}" != "success" ]; then
+            echo "::error::Nightly performance/scale lane failed"
+            exit 1
+          fi
+
   test-health-report:
     needs:
       [
@@ -644,6 +734,7 @@ jobs:
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
+        quality-performance-scale,
       ]
     if: >
       always() && (
@@ -666,26 +757,12 @@ jobs:
           pattern: nightly-evidence-*
           path: artifacts
           merge-multiple: true
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            artifacts/perf
-            artifacts/scale
-          key: quality-history-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: quality-history-${{ runner.os }}-
-      - run: sudo apt-get update && sudo apt-get install -y strace
       - run: bun run build
       # #545 A1 — keep continue-on-error so the report still generates when a
       # quality lane fails; a post-step re-reads outcomes and fails the job.
       - id: coverage
         continue-on-error: true
         run: bun run coverage
-      - id: perf
-        continue-on-error: true
-        run: bun run test:perf
-      - id: scale
-        continue-on-error: true
-        run: bun run test:scale
       # Durable trend source: the append-only summary series committed to
       # gh-pages. Unlike the quality-history cache above it is never evicted.
       - name: Restore durable report history (gh-pages)
@@ -718,19 +795,17 @@ jobs:
           printf '%s\n' "$NEEDS_JSON" > artifacts/test-results/job-conclusions.json
       - name: Generate full nightly report
         if: always()
+        env:
+          TEST_REPORT_SCOPE: nightly
         run: bun run test:report
-      # #545 A1 — mirror ci.yml check aggregator: coverage/perf/scale must fail
-      # the job so nightly-failure-issue can fire (needs.*.result == failure).
+      # Coverage still runs here so the report can render on failure. Perf and
+      # scale have their own required nightly job above (#587 C1).
       - name: Fail if quality lanes failed
         if: always()
         run: |
           echo "coverage=${{ steps.coverage.outcome }}"
-          echo "perf=${{ steps.perf.outcome }}"
-          echo "scale=${{ steps.scale.outcome }}"
-          if [ "${{ steps.coverage.outcome }}" != "success" ] || \
-             [ "${{ steps.perf.outcome }}" != "success" ] || \
-             [ "${{ steps.scale.outcome }}" != "success" ]; then
-            echo "::error::Nightly quality lane failed (coverage/perf/scale) — see steps above"
+          if [ "${{ steps.coverage.outcome }}" != "success" ]; then
+            echo "::error::Nightly coverage lane failed — see step above"
             exit 1
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -900,6 +975,7 @@ jobs:
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
+        quality-performance-scale,
         test-health-report,
       ]
     # #557 — `cancelled` counts as red. A runner that dies or a job aborted
@@ -919,6 +995,14 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download report summary for cell-level delta
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-test-health-report
+          path: dist/test-report
+      - name: Prepare cell-level delta
+        run: node scripts/ci/report-cell-delta.mjs --summary dist/test-report/summary.json --output /tmp/cell-delta.md
       - name: Resolve this run's immutable report slot
         id: slug
         env:
@@ -960,8 +1044,13 @@ jobs:
           - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
           - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
           - mutation-testing: \`${{ needs.mutation-testing.result }}\`
+          - quality-performance-scale: \`${{ needs.quality-performance-scale.result }}\`
           - test-health-report: \`${{ needs.test-health-report.result }}\`
 
+          ### Cell-level delta
+          EOF
+          cat /tmp/cell-delta.md >> /tmp/nightly-red.md
+          cat >> /tmp/nightly-red.md <<EOF
           _Auto-filed by e2e.yml \`nightly-failure-issue\`. Prefer updating this issue over opening duplicates._
           EOF
           node scripts/ci/file-tracking-issue.mjs \

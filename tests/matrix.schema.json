@@ -4,6 +4,10 @@
   "required": [
     "version",
     "legend",
+    "trackingIssues",
+    "gaps",
+    "revisitTriggers",
+    "workspaceSurfaces",
     "cellOwners",
     "dimensions",
     "surfaces",
@@ -12,6 +16,45 @@
   "properties": {
     "version": { "type": "integer", "minimum": 1 },
     "legend": { "type": "object" },
+    "trackingIssues": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["url", "state"],
+        "additionalProperties": false,
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "state": { "enum": ["open", "closed"] }
+        }
+      }
+    },
+    "gaps": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["trackingIssue"],
+        "additionalProperties": false,
+        "properties": {
+          "trackingIssue": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "revisitTriggers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["glob", "trackingIssue"],
+        "additionalProperties": false,
+        "properties": {
+          "glob": { "type": "string", "minLength": 1 },
+          "trackingIssue": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "workspaceSurfaces": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
     "cellOwners": {
       "type": "object",
       "additionalProperties": {

@@ -131,16 +131,20 @@ await runFlow('my-flow', async (ctx) => {
 ctx surface:
 
 - `ctx.state` — `{ runId, runDir, screenshotsDir, flowsDir, udid, appId }`
-- `ctx.run(yaml, hint?)` — execute a Maestro YAML chunk. Each call
+- `ctx.run(yaml, hint?, options?)` — execute a Maestro YAML chunk. Each call
   spawns `maestro test` once (~hundreds of ms overhead), so batch
-  many directives per call rather than one-per-action.
+  many directives per call rather than one-per-action. The harness uses the
+  internal `sensitive` option only for capability-bearing input; it suppresses
+  console/debug retention and keeps the live value in a `MAESTRO_*` variable.
 - `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with
   a 300ms pre-stop delay (analogous to the desktop harness's flushMs
   before SIGTERM, gives AsyncStorage time to flush).
-- `ctx.configureGateway(url?, token?)` — clear app state, then save the
-  declared gateway through the real Settings → Advanced UI. Journeys that
+- `ctx.configureGateway(url?, token?)` — clear app state, mint a run-unique
+  write-role member ticket from the declared gateway, redeem it through the
+  real ticket-only onboarding UI, and complete the test profile. Journeys that
   need a gateway call this themselves so their prerequisites do not depend on
-  execution order.
+  execution order. Live tickets and their Maestro diagnostics are never kept
+  in uploaded run artifacts.
 - `ctx.note(msg)` — record an observation; surfaces under `## Notes`
   in `verdict.md`.
 

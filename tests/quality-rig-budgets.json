@@ -1,0 +1,47 @@
+{
+  "_comment": "Issue #587 C1 initial budgets. Each rig records wall-clock nightly; after 10 samples it fails above 3x the trailing median. No invented absolute latency budget is active before the distribution exists.",
+  "minimumSamples": 10,
+  "regressionMultiplier": 3,
+  "rigs": {
+    "tests/perf/backup-throughput.perf.test.ts": {
+      "lane": "perf",
+      "volume": "32 MiB encrypt + verify"
+    },
+    "tests/perf/app-engine-handler.perf.test.ts": {
+      "lane": "perf",
+      "volume": "20 isolated handlers"
+    },
+    "tests/perf/automation-fire.perf.test.ts": {
+      "lane": "perf",
+      "volume": "10 automation fires"
+    },
+    "tests/perf/agent-turn.perf.test.ts": {
+      "lane": "perf",
+      "volume": "2,000 runner dispatches"
+    },
+    "tests/scale/agent-sessions.scale.test.ts": {
+      "lane": "scale",
+      "volume": "256 concurrent sessions"
+    },
+    "tests/scale/blueprint-clones.scale.test.ts": {
+      "lane": "scale",
+      "volume": "1,000 app clones"
+    },
+    "tests/scale/desktop-windows.scale.test.ts": {
+      "lane": "scale",
+      "volume": "128 windows × 500 events"
+    },
+    "tests/scale/web-tabs.scale.test.ts": {
+      "lane": "scale",
+      "volume": "64 tab contexts"
+    },
+    "tests/agent-e2e-mobile/flows/volume-proof.mjs": {
+      "lane": "scale",
+      "volume": "20 on-device relaunches"
+    },
+    "tests/scale/tunnel-pairs.scale.test.ts": {
+      "lane": "scale",
+      "volume": "200 paired devices"
+    }
+  }
+}

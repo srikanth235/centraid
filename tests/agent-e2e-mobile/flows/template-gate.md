@@ -14,18 +14,18 @@ phone is a regression this flow catches.
   HTTP. Base + token come from env:
   - `MAESTRO_GATEWAY_URL` (default `http://127.0.0.1:18789`)
   - `MAESTRO_GATEWAY_TOKEN` (omit when the dev gateway runs token-less)
-- **The phone must reach the same gateway.** The flow clears app state and
-  saves `MAESTRO_GATEWAY_URL` (plus the optional token) through the real
-  Settings → Advanced UI before installing. Nightly CI supplies a loopback-only,
-  tokenless real gateway host because a manual-mode WebView cannot attach a
-  bearer. A real phone may instead use its paired tunnel in exploratory runs.
+- **The phone must reach the same gateway.** The flow clears app state, mints a
+  run-unique write-role member ticket from `MAESTRO_GATEWAY_URL`, and redeems it
+  through the real ticket-only onboarding UI before installing. Nightly CI
+  supplies a loopback-only, tokenless real gateway host for host-side setup;
+  the phone uses the paired iroh tunnel.
 - Optional: `MAESTRO_TEMPLATES=notes,tasks` to gate a subset (useful on
   iOS, where long flows hit driver disconnects — see README caveats;
   prefer Android for the full sweep).
 
 **Steps (per template):**
 
-1. Clear state and save the declared gateway through Settings → Advanced.
+1. Clear state, redeem a fresh gateway ticket, and complete the test profile.
 2. Up front: `POST /centraid/_apps/_install` with `{templateId}` for every
    gated UI template. Install, not clone: since #434 a bundled blueprint app is
    registered IN PLACE — a consent row plus grants, copying no code — and

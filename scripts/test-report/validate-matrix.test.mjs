@@ -46,6 +46,7 @@ describe("validateMatrix", () => {
   test("accepts a minimal well-formed matrix", async () => {
     const { errors } = await validateMatrix(baseMatrix(), {
       checkEnvGates: false,
+      checkWorkspaceCompleteness: false,
     });
     expect(errors).toEqual([]);
   });

@@ -275,7 +275,10 @@ test("10.1 — Discover renders template cards", async () => {
 test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
     {
-      id: "digest",
+      // Automation Discover intentionally exposes only the v0 curated IDs.
+      // Keep this fixture on that public catalog contract; a made-up id is
+      // correctly filtered out before the card reaches the page.
+      id: "obligation-extractor",
       name: "Daily Digest",
       desc: "Summarize the day",
       colorKey: "violet",

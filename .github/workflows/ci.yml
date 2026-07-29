@@ -60,6 +60,7 @@ jobs:
       iroh-wasm: ${{ steps.filter.outputs.iroh-wasm }}
       extension: ${{ steps.filter.outputs.extension }}
       oauth-worker: ${{ steps.filter.outputs.oauth-worker }}
+      mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
@@ -124,6 +125,15 @@ jobs:
             oauth-worker:
               - 'apps/oauth-worker/**'
               - 'packages/gateway/src/serve/assist-oauth.ts'
+            # #587 E22/F26/F27 — Bun workspace resolution means a root-only
+            # dependency change can break Metro or the committed native trees.
+            mobile:
+              - 'package.json'
+              - 'bun.lock'
+              - 'apps/mobile/**'
+              - 'packages/client/**'
+              - 'packages/design-tokens/**'
+              - '.github/workflows/ci.yml'
 
   static:
     runs-on: ubuntu-latest
@@ -417,6 +427,30 @@ jobs:
     if: needs.changes.outputs.gateway == 'true' || needs.changes.outputs.all == 'true'
     uses: ./.github/workflows/lane-gateway-package.yml
 
+  # Required-check-capable mobile liveness gate (#587 E22–E23/F26–F29).
+  # This runs on Ubuntu and fails before an expensive macOS native build.
+  mobile-smoke:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Check Expo's compatibility map
+        continue-on-error: true
+        run: bun run --cwd apps/mobile ci:versions
+      - name: Verify native locks, paths, and fingerprint ratchets
+        run: bun run --cwd apps/mobile ci:native-state
+      - name: Bundle iOS and Android through Metro
+        run: bun run --cwd apps/mobile ci:bundle
+      - name: Compile the Android application and native modules
+        run: bun run --cwd apps/mobile ci:android-native
+
   docs:
     needs: changes
     if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.all == 'true'
@@ -558,6 +592,7 @@ jobs:
         mutation-pr,
         client-e2e,
         gateway-package,
+        mobile-smoke,
         docs,
         web-build,
         iroh-wasm,

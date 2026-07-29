@@ -11,11 +11,12 @@ by its own label: the label is in the tab bar on every screen, so
 `tapOn: "Docs"` + `assertVisible: "Docs"` passes even when the tap does nothing.
 
 **Setup:** install a development build, start Metro, and expose a reachable
-gateway through `MAESTRO_GATEWAY_URL`. The flow clears app state and saves that
-gateway through Settings → Advanced before exercising the shell. For the manual
-matrix, grant photo-library permission and seed at least one local photo, one
-document, and one calendar event. Run the 50k deterministic fixture with
-`cd apps/mobile && bun test timeline-50k` before the device flow.
+gateway through `MAESTRO_GATEWAY_URL`. The flow clears app state, mints a
+run-unique write-role member ticket, and redeems it through ticket-only
+onboarding before exercising the shell. For the manual matrix, grant
+photo-library permission and seed at least one local photo, one document, and
+one calendar event. Run the 50k deterministic fixture with `cd apps/mobile &&
+bun test timeline-50k` before the device flow.
 
 **Automated steps:** configure the declared gateway; launch without clearing
 state; visit all five tabs; open Photos again; force-stop and relaunch without

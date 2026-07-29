@@ -310,6 +310,86 @@ suite red after the React/CSS-modules migrations — hard-coded selectors like
 #225-class silent rot — while the per-PR loop stayed green. Grey (or expired)
 evidence in the report is the standing guard against that class of drift.
 
+The full nightly has a stricter contract than a PR/main report: **zero grey**.
+Every declared owner must emit matchable evidence, every lane must run, and an
+owner may not die silently. PR/main reports may remain grey because the nightly
+lanes deliberately do not run there. A matrix `skip` means structural N/A for
+the product; missing but valuable proof is a `gap` with a live tracking issue.
+`partial` means real evidence exists but the cell note names the precise depth
+still missing. Performance harnesses live in `tests/perf/`, scale rigs in
+`tests/scale/`, and both write `recordQualityResult` evidence whose `OWNER`
+matches `tests/matrix.json` exactly.
+
+### Quality-dimension decisions (#587 D21)
+
+- **Supply chain:** accepted as a cross-cutting gate, not a matrix column. The
+  lockfile linter and dependency-review job already own it; duplicating the
+  same result 15 times would imply per-surface evidence that does not exist.
+- **Bundle/app weight:** accepted for a follow-up lane and tracking issue.
+  Desktop, web, and mobile have materially different artifacts and need
+  measured baselines before budgets can be honest.
+- **Accessibility:** accepted for a follow-up lane and tracking issue. It
+  belongs in the matrix because failures are surface-specific; the first work
+  should establish web/desktop automated coverage and the mobile device path.
+
+The report also consumes `QUALITY.md`'s `## Open` section so field-observed
+problems sit beside laboratory evidence instead of living in a separate,
+unseen ledger.
+
+### Mobile liveness and native consistency (#587 E/F)
+
+A green mobile unit lane proves correctness of the code paths it executes; it
+does **not** prove that Metro can transform/resolve the app or that either
+native project builds. Expo/React Native peer ranges can accept incompatible
+major Babel versions at install time. The required PR `mobile-smoke` job is the
+compensating control: it runs Expo's compatibility check as an advisory, then
+requires iOS and Android Metro exports plus compilation of the Android
+application and its native modules to succeed. `expo install --check`
+currently catches Expo's bundled-native-module version drift, but it does not model the
+Babel-core/runtime constraints that broke #565 or Kotlin members added by a
+new Expo Module base class. Metro catches the transform-time and resolve-time
+failures; the Kotlin compile catches native source/API collisions.
+
+Dependabot continues to propose production major-version updates. Patch and
+minor updates stay grouped for noise control; each major arrives in its own PR
+so the test suite can identify precisely which upgrade works and which one
+breaks a compatibility contract. A failing gate is evidence about that proposed
+upgrade, not a policy that majors are forbidden.
+
+The same job verifies the committed iOS Pod lock against resolved Expo and
+React Native, including `React-Core`, `React-Core-prebuilt`,
+`ReactNativeDependencies`, and Hermes; rejects machine/worktree-shaped native
+paths; and compares both platforms with
+`apps/mobile/native-fingerprints.json`. A native dependency, SDK,
+config-plugin, or generated-project change therefore requires an explicit
+fingerprint rebaseline after reviewing the native diff.
+The fingerprint hashes the Iroh tag and separate framework/Swift checksums in
+`CentraidTunnel.podspec`, not its git-ignored reconstructed framework and
+Swift binding; running CocoaPods must not change the same checkout's native
+input identity. It likewise hashes the app's maps configuration and the
+`react-native-maps` package, but not the package's `RNMapsDefines.h` marker
+that CocoaPods rewrites from those inputs.
+
+The nightly iOS cold build serializes Xcode compile tasks. The three-core
+hosted runner repeatedly terminated this 154-target workspace mid-build with
+zero compiler errors, which Expo then presented as an exit-65
+package-dependency failure; a two-task cap still terminated in run
+30409157675, and the serialized attempt in 30411945707 progressed farther but
+ended with the same zero-error signature. Hosted resource pressure is the
+leading diagnosis. The workflow preserves the partial DerivedData and retries
+exactly once only when Expo's first attempt reports `0 error(s)`; ordinary
+compiler failures do not retry, and a failed incremental attempt remains red.
+
+Android decisions mirror iOS where the artifact exists: Android uses the same
+fingerprint ratchet and path-safe `require.resolve` project configuration.
+There is no separately committed Android dependency-resolution lock equivalent
+to `Podfile.lock`, so F26 is structurally N/A there; Gradle resolves against the
+root Bun install, Metro smoke, and PR-time tunnel-module compile. The nightly
+Android toolchain remains separately pinned by its JDK/Gradle setup; unlike
+iOS, React Native exposes no single checked-in minimum-host-version contract to
+compare before Gradle configuration, so E24's explicit minimum-version
+preflight is iOS-only.
+
 ## Unified report
 
 [`scripts/test-report`](scripts/test-report) ingests the matrix, Vitest JSON,
