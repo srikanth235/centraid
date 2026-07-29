@@ -530,7 +530,12 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - extendedWaitUntil:
     visible: "You're all set, (Nightly|Mobile)[.]"
     timeout: 60000
-- tapOn: "Enter Centraid"
+# iOS can acknowledge an accessibility tap before the RN Pressable is ready
+# and leave this screen unchanged. Retrying only when the hierarchy does not
+# change keeps the action idempotent while proving that Home really opened.
+- tapOn:
+    text: "Enter Centraid"
+    retryTapIfNoChange: true
 # The springboard Home has no tagline — "YOUR APPS" is the rail label above the
 # launcher grid (apps/mobile/src/screens/Home.tsx) and is the only Home-unique
 # string that survives every gateway state (the grid renders even with no apps).

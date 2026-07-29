@@ -350,6 +350,14 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   proves either the named-roster direct completion or the unnamed-member form,
   keeps the live ticket confined to a separate sensitive Maestro chunk, and
   documents the two valid exits plus the actual eight-cover native matrix.
+- The next exact-HEAD iOS diagnostic cleared both identity exits and reached the
+  native covers. Its retained screenshots and accessibility hierarchies showed
+  two enabled controls still on their source screens after Maestro reported a
+  completed tap. Onboarding primary actions now publish explicit button
+  semantics, and every critical onboarding, launcher, and Settings transition
+  uses Maestro's retry-on-no-hierarchy-change behavior. This preserves the
+  product interaction while making ignored early iOS automation taps
+  observable and recoverable.
 
 ### Foundations, measurement, and trust
 
@@ -533,8 +541,14 @@ bun run check:pr:full
   reached the real mobile journeys at `743af03a9c959e18a9d7bbeaced4517df99d50cd`;
   its three paired flows consistently exposed the obsolete unconditional
   profile-form wait described above while the native build and fresh
-  ticket-only entry passed. The corrected exact-HEAD run is recorded below
-  before audit.
+  ticket-only entry passed.
+- [Exact-HEAD iOS diagnostic run 30487948087](https://github.com/srikanth235/centraid/actions/runs/30487948087)
+  reached direct named-roster completion and the native cover journey at
+  `abb01e9b3d7f5eac07d5587ea0c07deb40609639`. The retained hierarchy proved
+  that the Photos tile and a later `Enter Centraid` control were visible,
+  enabled, and unchanged after Maestro acknowledged their taps, which led to
+  the explicit accessibility semantics and retry-on-no-change correction above.
+  The final corrected exact-HEAD green run is recorded below before audit.
 - Fresh-context audit — pending final re-audit below.
 
 ## Accounting
@@ -728,6 +742,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785352224-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 18562 | 0 | 198144 | 805 | 19367 | 0.1080 | 7917021 | 0 | 365926400 | 1025350 | test(gateway): narrow optional lock diagnostics (#630) |
 | codex-019fad18-4c1-1785352700-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 97066 | 0 | 1736960 | 1617 | 98683 | 0.7012 | 8014087 | 0 | 367663360 | 1026967 | docs(receipt): record reconciled issue gate (#630) |
 | codex-019fad18-4c1-1785356247-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 373734 | 0 | 14563584 | 18216 | 391950 | 4.8485 | 8387821 | 0 | 382226944 | 1045183 | fix(mobile): honor both pairing identity exits (#630) |
+| codex-019fad18-4c1-1785358474-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 234988 | 0 | 12203520 | 13060 | 248048 | 3.8342 | 8622809 | 0 | 394430464 | 1058243 | fix(mobile): retry ignored native journey taps (#630) |
 
 ## Steering
 

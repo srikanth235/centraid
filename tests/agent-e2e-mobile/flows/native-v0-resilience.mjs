@@ -17,38 +17,38 @@ const SURFACES = [
   // "Search photos & moments" — a bare "Search photos" matches neither.
   {
     marker: "Search photos.*",
-    open: '- tapOn: "Open Photos"',
+    open: "Open Photos",
     name: "photos",
   },
   {
     marker: "Add document or folder",
-    open: '- tapOn: "Open Docs"',
+    open: "Open Docs",
     name: "docs",
   },
-  { marker: "Create event", open: '- tapOn: "Open Agenda"', name: "agenda" },
+  { marker: "Create event", open: "Open Agenda", name: "agenda" },
   {
     marker: "New task title",
-    open: '- tapOn: "Open Tasks"',
+    open: "Open Tasks",
     name: "tasks",
   },
   {
     marker: "Person name",
-    open: '- tapOn: "Open People"',
+    open: "Open People",
     name: "people",
   },
   {
     marker: "Search notes",
-    open: '- tapOn: "Open Notes"',
+    open: "Open Notes",
     name: "notes",
   },
   {
     marker: "Fixed-point multi-currency ledger, available offline",
-    open: '- tapOn: "Open Tally"',
+    open: "Open Tally",
     name: "tally",
   },
   {
     marker: "Secrets stay online-only",
-    open: '- tapOn: "Open Locker"',
+    open: "Open Locker",
     name: "locker",
   },
   // Settings is opened from the Space drawer, not the dock. The dock sits at
@@ -65,15 +65,19 @@ const SURFACES = [
   // it, so it proves arrival without a scroll.
   {
     marker: "APPEARANCE",
-    open: [
-      '- tapOn: "Open space menu"',
+    openCommands: [
+      "- tapOn:",
+      '    text: "Open space menu"',
+      "    retryTapIfNoChange: true",
       // Wait for the drawer to finish opening before touching its rows.
       '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
       // The row's accessible name is ", Settings" (icon + label collapsed into
       // one element), but Maestro will not match a selector that starts with
       // the comma — `.*Settings` is what actually resolves, and with the modal
       // drawer open the dock underneath is not reachable anyway.
-      '- tapOn: ".*Settings"',
+      "- tapOn:",
+      '    text: ".*Settings"',
+      "    retryTapIfNoChange: true",
     ].join("\n"),
     name: "settings",
   },
@@ -85,6 +89,11 @@ await runFlow("native-v0-resilience", async (ctx) => {
   const visitNext = async (index) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
+    const openCommands =
+      surface.openCommands ??
+      `- tapOn:
+    text: "${surface.open}"
+    retryTapIfNoChange: true`;
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
@@ -94,7 +103,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
 - extendedWaitUntil:
     visible: "YOUR APPS"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${surface.open}
+${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
     timeout: 20000
