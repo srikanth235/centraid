@@ -342,6 +342,14 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   non-responsiveness, and recovery remain mandatory, while an `lsof` PID is
   validated when available instead of becoming load-sensitive under the full
   parallel suite.
+- The first exact-HEAD iOS run exposed one stale journey assumption after the
+  #634 reconciliation: a ticket-created member named `Mobile E2E …` correctly
+  skips the “Who’s using this phone?” form, but the shared harness waited only
+  for that form. The recommended resolution preserves #634's single-identity
+  behavior instead of forcing a redundant profile prompt: the harness now
+  proves either the named-roster direct completion or the unnamed-member form,
+  keeps the live ticket confined to a separate sensitive Maestro chunk, and
+  documents the two valid exits plus the actual eight-cover native matrix.
 
 ### Foundations, measurement, and trust
 
@@ -509,6 +517,10 @@ bun run check:pr:full
 - `bun run --cwd apps/mobile ci:bundle` — iOS and Android production bundles.
 - `bun run --cwd apps/mobile ci:android-native` — 459 tasks, Kotlin compile
   successful.
+- `bun run --cwd apps/mobile test -- src/screens/Onboarding.test.tsx` — 7/7
+  identity/onboarding tests passing.
+- `bun run lint:e2e-flows` — 32 non-vacuous Maestro steps across four enforced
+  mobile flow sources.
 - Focused protocol/gateway/client/mobile Wave 6 suites — 47 tests passing.
 - Focused household placement/custody suites — 6 tests passing.
 - Focused blueprint boot, reachability, state-honesty, untrusted rendering,
@@ -517,6 +529,12 @@ bun run check:pr:full
 - `bun run check:pr:full` — green: all static, affected/full test, and
   diff-coverage gates; 781 coverage test files, 6,365 passing tests, and 84.9%
   changed-line coverage against the 80% floor.
+- [Exact-HEAD iOS diagnostic run 30484657810](https://github.com/srikanth235/centraid/actions/runs/30484657810)
+  reached the real mobile journeys at `743af03a9c959e18a9d7bbeaced4517df99d50cd`;
+  its three paired flows consistently exposed the obsolete unconditional
+  profile-form wait described above while the native build and fresh
+  ticket-only entry passed. The corrected exact-HEAD run is recorded below
+  before audit.
 - Fresh-context audit — pending final re-audit below.
 
 ## Accounting
@@ -709,6 +727,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785352146-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 3175 | 0 | 125952 | 557 | 3732 | 0.0478 | 7898459 | 0 | 365728256 | 1024545 | test(gateway): make lock PID enrichment load-safe (#630) |
 | codex-019fad18-4c1-1785352224-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 18562 | 0 | 198144 | 805 | 19367 | 0.1080 | 7917021 | 0 | 365926400 | 1025350 | test(gateway): narrow optional lock diagnostics (#630) |
 | codex-019fad18-4c1-1785352700-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 97066 | 0 | 1736960 | 1617 | 98683 | 0.7012 | 8014087 | 0 | 367663360 | 1026967 | docs(receipt): record reconciled issue gate (#630) |
+| codex-019fad18-4c1-1785356247-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 373734 | 0 | 14563584 | 18216 | 391950 | 4.8485 | 8387821 | 0 | 382226944 | 1045183 | fix(mobile): honor both pairing identity exits (#630) |
 
 ## Steering
 

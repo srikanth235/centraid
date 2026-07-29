@@ -155,6 +155,11 @@ rest are review judgment.
   Android (UIAutomator2) is more stable — when a flow needs to be
   long, validate it on Android first. See "Known caveats" in
   [README.md](README.md#known-caveats).
+- **Pairing has two valid identity exits.** A ticket can enroll a roster member
+  whose name is already known; onboarding then skips the profile form and goes
+  directly to the personalized Done screen. An unnamed member still sees the
+  profile form. Shared pairing helpers must accept and prove both branches
+  instead of waiting unconditionally for “Who’s using this phone?”.
 - **Selectors prefer accessibility text over coordinates.** RN
   components expose `accessibilityLabel` as the iOS-level
   accessibility text — Maestro's `tapOn: { text: "..." }` matches

@@ -329,7 +329,7 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway()  clear state, mint/redeem a ticket, and complete onboarding
+ *   ctx.configureGateway()  clear state, mint/redeem a ticket, and complete either valid identity branch
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
@@ -460,9 +460,11 @@ export async function runFlow(slug, fn) {
     const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
     // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket, then create its member profile. The
-    // gateway URL is used only by the host-side harness to mint that ticket;
-    // the phone reaches the gateway through the ticket's iroh endpoint.
+    // a real one-time pairing ticket. #634 made the profile step conditional:
+    // a named roster member goes straight to Done, while an unnamed member is
+    // asked for a profile. The gateway URL is used only by the host-side
+    // harness to mint that ticket; the phone reaches the gateway through the
+    // ticket's iroh endpoint.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -496,17 +498,37 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # Redemption dials the gateway over iroh; on a cold simulator that handshake is
 # the slowest step in the journey, so budget for the network, not the render.
 - extendedWaitUntil:
-    visible: "Who's using this phone?"
+    visible: "Who's using this phone[?]|You're all set, Mobile[.]"
     timeout: 90000
-- tapOn: "Your name"
+`,
+      "configure-gateway",
+      {
+        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+        sensitive: true,
+      }
+    );
+
+    // A second, non-sensitive Maestro chunk keeps the pairing capability out
+    // of retained diagnostics while proving both legitimate identity paths.
+    // Tickets minted above deliberately name their member "Mobile E2E …", so
+    // the normal branch skips the form and greets "Mobile"; the conditional
+    // form path remains covered for gateways that return no roster name.
+    await ctx.run(
+      `appId: ${state.appId}
+---
+- runFlow:
+    when:
+      visible: "Who's using this phone[?]"
+    commands:
+      - tapOn: "Your name"
 # e2e-lint-allow: unasserted-input — React Native TextInput values are not
 # reliably Maestro-matchable; the personalized done heading below proves the
 # submitted profile name end to end.
-- inputText: "Nightly"
-- hideKeyboard
-- tapOn: "Continue"
+      - inputText: "Nightly"
+      - hideKeyboard
+      - tapOn: "Continue"
 - extendedWaitUntil:
-    visible: "You're all set, Nightly."
+    visible: "You're all set, (Nightly|Mobile)[.]"
     timeout: 60000
 - tapOn: "Enter Centraid"
 # The springboard Home has no tagline — "YOUR APPS" is the rail label above the
@@ -516,11 +538,7 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     visible: "YOUR APPS"
     timeout: 30000
 `,
-      "configure-gateway",
-      {
-        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
-        sensitive: true,
-      }
+      "complete-onboarding"
     );
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
   };
