@@ -69,6 +69,7 @@ export function LockerList({
   onSelect,
   onSearchInput,
   onClearSearch,
+  onNewItem,
 }: {
   pool: LockerRow[];
   listTitle: string;
@@ -79,6 +80,7 @@ export function LockerList({
   onSelect: (id: string) => void;
   onSearchInput: (value: string) => void;
   onClearSearch: () => void;
+  onNewItem: () => void;
 }) {
   return (
     <section className={styles.list}>
@@ -114,22 +116,29 @@ export function LockerList({
       </div>
       <div className={styles.items}>
         {pool.length === 0 ? (
-          <div className={shared.listEmpty}>
-            <div className={shared.ic}>
+          <div className="kit-empty">
+            <div className="kit-empty-icon">
               <Icon
                 name={search.trim() ? "search" : "lock"}
                 sw={1.6}
                 size={20}
               />
             </div>
-            <div className={shared.listEmptyTitle}>
+            <div className="kit-empty-title">
               {search.trim() ? "No matches" : "Nothing here"}
             </div>
-            <div className={shared.listEmptySub}>
+            <div className="kit-empty-sub">
               {search.trim()
                 ? "Try a different search term."
                 : "Add a login, card, or note to get started."}
             </div>
+            <button
+              type="button"
+              className="kit-btn"
+              onClick={search.trim() ? onClearSearch : onNewItem}
+            >
+              {search.trim() ? "Clear search" : "Add item"}
+            </button>
           </div>
         ) : (
           pool.map((item) => (

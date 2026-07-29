@@ -18,8 +18,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useTheme } from "../../kit/theme";
+import { optimisticRowId } from "../../lib/replica/optimistic";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";
@@ -215,14 +217,40 @@ export default function DocsHome({
   const createFolder = async (): Promise<void> => {
     if (!session || !folderName.trim()) return;
     try {
+      const predictedFolderId = optimisticRowId("folder");
       const result = await session.write("docs", {
         action: "create-folder",
         input: { name: folderName.trim() },
+        ...(drive.folderSchemeId && drive.rootFolderId
+          ? {
+              optimistic: [
+                {
+                  op: "upsert" as const,
+                  entity: "core.concept",
+                  rowId: predictedFolderId,
+                  values: {
+                    concept_id: predictedFolderId,
+                    scheme_id: drive.folderSchemeId,
+                    notation: predictedFolderId,
+                    pref_label: folderName.trim(),
+                    alt_labels_json: null,
+                    broader_concept_id: drive.rootFolderId,
+                    definition: null,
+                  },
+                },
+              ],
+            }
+          : {}),
       });
       setFolderName("");
       setAddOpen(false);
-      if (result.status === "parked" || result.status === "queued") {
+      if (result.status === "parked") {
         navigation.navigate("Settings", { screen: "Approvals" });
+      } else if (result.status === "queued") {
+        Alert.alert(
+          "Saved offline",
+          "The folder will appear everywhere after the gateway reconnects."
+        );
       } else if (result.status === "denied" || result.status === "failed") {
         Alert.alert(
           "Folder not created",
@@ -386,7 +414,7 @@ export default function DocsHome({
 
       <FlatList
         key={view}
-        data={items}
+        data={drive.connection === "unavailable" ? [] : items}
         numColumns={view === "grid" ? 2 : 1}
         columnWrapperStyle={view === "grid" ? styles.gridRow : undefined}
         keyExtractor={(item) =>
@@ -400,30 +428,45 @@ export default function DocsHome({
         ]}
         refreshing={refreshing}
         onRefresh={() => void refreshLibrary()}
+        ListHeaderComponent={
+          <ReplicaStateCard
+            connection={drive.connection}
+            error={drive.error}
+            unavailableReason={drive.unavailableReason}
+            noun="Docs"
+            onRetry={() => void refreshLibrary()}
+          />
+        }
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Feather
-              name={filter === "trash" ? "trash-2" : "file-text"}
-              size={32}
-              color={colors.accent}
-            />
-            <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-              {drive.loading
-                ? "Opening your drive…"
-                : searchError
-                  ? searchError
-                  : query
-                    ? "No matching documents"
-                    : "Nothing here yet"}
-            </Text>
-            <Text style={[styles.empty, { color: colors.ink2 }]}>
-              {searchError
-                ? "Reconnect and try your search again."
-                : filter === "trash"
-                  ? "Deleted documents will remain recoverable here."
-                  : "Import a file or create a folder to get started."}
-            </Text>
-          </View>
+          drive.connection === "unavailable" || drive.error ? null : (
+            <View style={styles.emptyWrap}>
+              <Feather
+                name={filter === "trash" ? "trash-2" : "file-text"}
+                size={32}
+                color={colors.accent}
+              />
+              <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+                {drive.loading
+                  ? "Opening your drive…"
+                  : searchError
+                    ? searchError
+                    : query
+                      ? "No matching documents"
+                      : drive.connection === "offline"
+                        ? "No documents are cached here"
+                        : "Nothing here yet"}
+              </Text>
+              <Text style={[styles.empty, { color: colors.ink2 }]}>
+                {searchError
+                  ? "Reconnect and try your search again."
+                  : drive.connection === "offline"
+                    ? "Reconnect to check the vault or pull newer documents."
+                    : filter === "trash"
+                      ? "Deleted documents will remain recoverable here."
+                      : "Import a file or create a folder to get started."}
+              </Text>
+            </View>
+          )
         }
         renderItem={({ item }) =>
           view === "grid" ? (

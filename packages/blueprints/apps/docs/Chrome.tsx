@@ -16,6 +16,7 @@
 // no-op class toggle.
 import type { KeyboardEvent, ReactNode } from "react";
 
+import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
 import type { AppState } from "./types.ts";
 
 import styles from "./Chrome.module.css";
@@ -308,6 +309,7 @@ export function Chrome(props: ChromeProps): ReactNode {
           <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
             <strong>No vault access yet.</strong>{" "}
             <span>{props.consent.message}</span>
+            <VaultAccessButton />
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,

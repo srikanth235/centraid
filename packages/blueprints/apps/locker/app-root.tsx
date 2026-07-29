@@ -171,6 +171,7 @@ interface AuthPayload {
 
 export function Root({ rootRef }: InlineAppProps): ReactNode {
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [loaded, setLoaded] = useState(false);
   // Gates the drawer's slide transition: false until one frame after mount so
   // the pre-paint narrow snap (useLayoutEffect below) applies with no animation.
   const [ready, setReady] = useState(false);
@@ -196,11 +197,13 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     } catch {
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
+      setLoaded(true);
       return;
     }
     if (next.authRequired) {
       state.authConfigured = next.configured ?? state.authConfigured;
       wipeSecretState(state, data);
+      setLoaded(true);
       bump();
       return;
     }
@@ -210,6 +213,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     }
     if (next?.vaultDenied) {
       logic.applyDenied(next.vaultDenied);
+      setLoaded(true);
       return;
     }
     state.denied = false;
@@ -248,6 +252,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       state.selectedId = null;
       state.detail = null;
     }
+    setLoaded(true);
     bump();
   }, []);
 
@@ -319,6 +324,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       state.authSession = result.sessionToken;
       state.locked = false;
       state.authError = "";
+      setLoaded(false);
       bump();
       await refresh();
     },
@@ -585,6 +591,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     >
       <Chrome
         narrow={state.narrow}
+        loading={!state.locked && !loaded}
         sideOpen={state.sideOpen}
         showList={state.showList}
         denied={state.denied}
@@ -631,6 +638,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               logic.applySearchInput(value);
             }}
             onClearSearch={() => logic.clearSearch()}
+            onNewItem={openNew}
           />
         }
         detail={

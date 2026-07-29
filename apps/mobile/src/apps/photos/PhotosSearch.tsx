@@ -13,6 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { family, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotoTimeline from "./PhotoTimeline";
@@ -24,6 +26,7 @@ export default function PhotosSearch({
 }: PhotosScreenProps<"PhotosSearch">): React.JSX.Element {
   const { colors } = useTheme();
   const { session, online } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const { assets } = usePhotoTimeline();
   const [term, setTerm] = useState("");
   const [contentIds, setContentIds] = useState<Set<string>>();
@@ -168,6 +171,7 @@ export default function PhotosSearch({
           />
         </View>
       </View>
+      <ReplicaStatusBar />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -329,6 +333,8 @@ export default function PhotosSearch({
           onOpen={(asset) =>
             navigation.navigate("PhotoLightbox", { assetId: asset.id })
           }
+          refreshing={refreshing}
+          onRefresh={refreshNow}
         />
       ) : (
         <View style={styles.empty}>

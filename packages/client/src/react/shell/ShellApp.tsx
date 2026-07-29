@@ -43,6 +43,8 @@ export interface ShellAppProps {
    *  wire document-level shortcuts + external re-scope (gateway/vault change)
    *  against live navigation without owning the router. */
   onNavReady?: (nav: ShellNav) => void;
+  /** Persistent connection/sync state, including over full-bleed app covers. */
+  statusBanner?: ReactNode;
 }
 
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
@@ -57,6 +59,7 @@ export default function ShellApp({
   sidebarOpen: sidebarOpenProp,
   onSidebarOpenChange,
   onNavReady,
+  statusBanner,
 }: ShellAppProps): JSX.Element {
   const [state, dispatch] = useReducer(routerReducer, INITIAL_ROUTER, (init) =>
     routerReducer(init, { type: "navigate", route: initialRoute })
@@ -95,13 +98,20 @@ export default function ShellApp({
 
   // Full-bleed routes render their own window frame (app view / builder),
   // so the shell frame steps aside entirely.
-  if (isFullBleed(route)) return <>{screen}</>;
+  if (isFullBleed(route))
+    return (
+      <>
+        {statusBanner}
+        {screen}
+      </>
+    );
 
   return (
     <ShellFrame
       sidebarOpen={sidebarOpen}
       onToggleSidebar={toggleSidebar}
       sidebar={renderSidebar(nav)}
+      statusBanner={statusBanner}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
       onBack={() => nav.back()}

@@ -110,12 +110,14 @@ export function ScheduleView({
   pendingCancelIds,
   search,
   onEventOpen,
+  onEmptyAction,
 }: {
   events: AgEvent[];
   colorFor: ColorFor;
   pendingCancelIds: Set<string>;
   search: string;
   onEventOpen: (ev: AgEvent) => void;
+  onEmptyAction: () => void;
 }) {
   const byDay = bucketByDay(events);
   const keys = [...byDay.keys()].sort();
@@ -147,6 +149,9 @@ export function ScheduleView({
               ? "Try another title, or clear the search."
               : "Propose an event above, or jump ahead to a busier month."}
           </div>
+          <button type="button" className="kit-btn" onClick={onEmptyAction}>
+            {searching ? "Clear search" : "Create event"}
+          </button>
         </div>
       ) : null}
     </div>

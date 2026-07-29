@@ -68,6 +68,7 @@ export interface ShellFrameProps {
   onToggleSidebar: () => void;
   sidebar: ReactNode;
   children: ReactNode;
+  statusBanner?: ReactNode;
   canGoBack?: boolean;
   canGoForward?: boolean;
   onBack?: () => void;
@@ -202,6 +203,7 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
         >
           {tlMainContent}
         </div>
+        {props.statusBanner}
         {props.children}
       </div>
     </div>

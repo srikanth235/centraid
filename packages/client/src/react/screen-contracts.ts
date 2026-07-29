@@ -1510,6 +1510,8 @@ export interface AppSettingsSnapshot {
   orders: AppOrderDTO[];
 }
 export interface AppSettingsBridgeProps {
+  /** Initial settings destination for direct recovery links from an app. */
+  initialTab?: "appearance" | "vault";
   onReady: (update: (s: AppSettingsSnapshot) => void) => void;
   onClose: () => void;
   onKnobCommit: (key: string, value: string) => void;

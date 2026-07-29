@@ -81,6 +81,7 @@ interface LibraryPayload {
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [loaded, setLoaded] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -113,6 +114,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // A broken vault must not look like an empty one.
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
+      setLoaded(true);
       return;
     }
     if (state.readFailedShown) {
@@ -127,6 +129,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       data.notebooks = [];
       data.tags = [];
       state.editorId = null;
+      setLoaded(true);
       bump();
       return;
     }
@@ -154,6 +157,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     }
     if (state.editorId && !logic?.findNote(state.editorId))
       state.editorId = null;
+    setLoaded(true);
     bump();
   }, []);
 
@@ -344,6 +348,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     >
       <Chrome
         narrow={narrow}
+        loading={!loaded}
         sideOpen={sideOpen}
         view={state.view}
         consent={consentRef.current}
@@ -441,6 +446,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             pendingNoteIds={state.pendingNoteIds}
             footer={footer}
             onShowMore={showMore}
+            onEmptyAction={() => {
+              if (state.search) clearSearchInput();
+              else focusQuickAdd();
+            }}
             onOpenNote={(noteId) => logic.openEditor(noteId)}
             onTogglePin={(note) => logic.togglePin(note)}
           />

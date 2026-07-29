@@ -91,6 +91,8 @@ import {
   useUpdateStatus,
 } from "./useUpdateStatus.js";
 
+import chrome from "./chrome.module.css";
+
 // Build the ShellActions surface for the current render. Navigation + toast +
 // confirm are live; the remaining overlay actions (⌘K palette, the generic app
 // context menu) are wired as their clusters land — until then they route to the
@@ -246,7 +248,8 @@ export default function App(): JSX.Element {
       }
     })();
   }, []);
-  const gatewayStatus = useGatewayRuntime()?.status;
+  const gatewayRuntime = useGatewayRuntime();
+  const gatewayStatus = gatewayRuntime?.status;
   // Dev flag (issue #434, Phase 3): the builder + every entry point into it are
   // hidden from the first release unless this is set. Threaded into ShellActions
   // (menus/palette read it), used to gate drafts + the "Build new" affordances
@@ -318,7 +321,11 @@ export default function App(): JSX.Element {
     (window as unknown as { Centraid: unknown }).Centraid = {
       openApp: (id: string) => navRef.current?.navigate({ kind: "app", id }),
       openSettings: go({ kind: "settings" }),
-      openSearch: () => {},
+      openAppVaultSettings: () =>
+        window.dispatchEvent(
+          new CustomEvent("centraid:open-app-vault-settings")
+        ),
+      openSearch: () => setPaletteOpen(true),
       openDiscover: go({ kind: "discover" }),
       openStarred: go({ kind: "starred" }),
       openAutomations: go({ kind: "automations" }),
@@ -899,6 +906,28 @@ export default function App(): JSX.Element {
         sidebarOpen={prefs.sidebarOpen}
         onSidebarOpenChange={(open) => setPrefs({ sidebarOpen: open })}
         renderSidebar={renderSidebar}
+        statusBanner={
+          gatewayStatus === "down" ? (
+            <output className={chrome.connectionBanner}>
+              <span>
+                Offline · changes stay on this device until sync resumes
+              </span>
+              <button
+                type="button"
+                onClick={() => navRef.current?.navigate({ kind: "gateway" })}
+              >
+                Check gateway
+              </button>
+            </output>
+          ) : gatewayStatus === "up" ? (
+            <output
+              className={chrome.syncIndicator}
+              aria-label="Sync status: connected"
+            >
+              Synced
+            </output>
+          ) : null
+        }
         onNavReady={(nav) => {
           navRef.current = nav;
         }}

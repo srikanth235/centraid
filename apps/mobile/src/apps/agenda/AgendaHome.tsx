@@ -15,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useTheme } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
 import { styles } from "./AgendaHome.styles";
@@ -45,13 +47,14 @@ export default function AgendaHome({
   navigation,
 }: AgendaScreenProps<"AgendaHome">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const { session, refresh } = useReplica();
   const [cursor, setCursor] = useState(new Date());
   const [mode, setMode] = useState<ViewMode>("agenda");
   const [createOpen, setCreateOpen] = useState(false);
   const [summary, setSummary] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [hiddenCalendars, setHiddenCalendars] = useState(new Set<string>());
   const [startPreset, setStartPreset] = useState<"next-hour" | "tomorrow">(
     "next-hour"
@@ -141,8 +144,21 @@ export default function AgendaHome({
     });
     setSummary("");
     setCreateOpen(false);
-    if (result.status === "parked" || result.status === "queued")
+    if (result.status === "parked")
       navigation.navigate("Settings", { screen: "Approvals" });
+    else if (result.status === "queued")
+      Alert.alert(
+        "Saved offline",
+        "This event will sync automatically when the gateway reconnects."
+      );
+  };
+  const refreshAgenda = async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      await refresh?.();
+    } finally {
+      setRefreshing(false);
+    }
   };
   const move = (direction: number): void => {
     const next = new Date(cursor);
@@ -191,6 +207,7 @@ export default function AgendaHome({
           </Pressable>
         </View>
       </View>
+      <ReplicaStatusBar />
       {searchOpen ? (
         <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
           <Feather name="search" size={16} color={colors.ink2} />
@@ -312,15 +329,30 @@ export default function AgendaHome({
         <WeekStrip start={range[0]} events={visibleEvents} colors={colors} />
       ) : null}
       <FlatList
-        data={agendaRows}
+        data={agenda.connection === "unavailable" ? [] : agendaRows}
         keyExtractor={(row) => row.key}
         contentContainerStyle={styles.list}
+        refreshing={refreshing}
+        onRefresh={() => void refreshAgenda()}
+        ListHeaderComponent={
+          <ReplicaStateCard
+            connection={agenda.connection}
+            error={agenda.error}
+            unavailableReason={agenda.unavailableReason}
+            noun="Calendar"
+            onRetry={() => void refreshAgenda()}
+          />
+        }
         ListEmptyComponent={
-          <Text style={[styles.empty, { color: colors.ink2 }]}>
-            {agenda.loading
-              ? "Opening your calendar…"
-              : "Nothing scheduled in this range."}
-          </Text>
+          agenda.connection === "unavailable" || agenda.error ? null : (
+            <Text style={[styles.empty, { color: colors.ink2 }]}>
+              {agenda.loading
+                ? "Opening your calendar…"
+                : agenda.connection === "offline"
+                  ? "No cached events in this range. Reconnect to check the vault."
+                  : "Nothing scheduled in this range."}
+            </Text>
+          )
         }
         renderItem={({ item }) =>
           item.kind === "day" ? (

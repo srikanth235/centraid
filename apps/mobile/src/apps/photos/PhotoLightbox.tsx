@@ -25,6 +25,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import OptionSheet from "../../kit/components/OptionSheet";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
@@ -219,16 +224,19 @@ export default function PhotoLightbox({
     if (!session || current?.canWrite !== true) return;
     const sourceVaultId = current.sourceVaultId;
     if (!sourceVaultId) return;
-    const result = await session.writeTo(sourceVaultId, "photos", {
-      action,
-      input,
-      ...(optimistic ? { optimistic } : {}),
-    });
-    if (result.status === "parked")
-      Alert.alert(
-        "Awaiting approval",
-        result.reason ?? "The change is ready for owner approval."
-      );
+    try {
+      const result = await session.writeTo(sourceVaultId, "photos", {
+        action,
+        input,
+        ...(optimistic ? { optimistic } : {}),
+      });
+      surfaceWriteOutcome(result, {
+        onParked: () =>
+          navigation.navigate("Settings", { screen: "Approvals" }),
+      });
+    } catch (error) {
+      surfaceWriteFailure(error, "Photo change not saved");
+    }
   };
 
   const place = async (targetVaultId: string): Promise<void> => {
@@ -311,6 +319,7 @@ export default function PhotoLightbox({
             <Feather name="info" size={22} color="#fff" />
           </Pressable>
         </View>
+        <ReplicaStatusBar />
         <FlatList
           ref={list}
           data={assets}

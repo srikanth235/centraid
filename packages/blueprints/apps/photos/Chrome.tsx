@@ -20,6 +20,8 @@
 // route host). The served path (index.html + app.css) is untouched.
 import type { ReactNode } from "react";
 
+import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+
 import styles from "./Chrome.module.css";
 
 export interface ChromeSlots {
@@ -193,6 +195,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
             Ask the owner to approve this app&apos;s requested scopes in
             settings.
           </span>
+          <VaultAccessButton />
         </div>
         {/* <output>'s implicit role IS `status`, so the live region survives the
             tag swap; `.noticeBanner` restores the block box the <div> had. */}

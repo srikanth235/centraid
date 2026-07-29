@@ -74,6 +74,8 @@ declare global {
     renderHome: () => void;
     openShare: (app: AppMetaResolved) => void;
     openSettings: () => void | Promise<void>;
+    /** Open the running app's settings directly on its vault-access pane. */
+    openAppVaultSettings?: () => void;
     /**
      * Opens the per-app actions menu from outside `app.ts` (e.g. the
      * builder's sidebar rows). Resolves the id against the home shell's

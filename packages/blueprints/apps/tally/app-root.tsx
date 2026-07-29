@@ -348,6 +348,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         search={q}
         currency={dash.currency}
         onOpenDetail={handleOpenDetail}
+        onClearSearch={() => logic.clearSearch()}
       />
     );
   } else if (state.view === "dashboard") {
@@ -371,6 +372,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         viewData={state.viewData}
         me={dash.me}
         currency={dash.currency}
+        onAddExpense={handleOpenAddExpense}
       />
     );
   } else if (state.view === "group" || state.view === "friend") {
@@ -404,6 +406,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           viewData={viewData}
           currency={dash.currency}
           onOpenDetail={handleOpenDetail}
+          onAddExpense={handleOpenAddExpense}
         />
       </>
     );

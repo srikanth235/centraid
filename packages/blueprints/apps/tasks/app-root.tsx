@@ -115,6 +115,7 @@ interface BoardPayload {
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [loaded, setLoaded] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -144,6 +145,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     } catch {
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       state.readFailedShown = true;
+      setLoaded(true);
       return;
     }
     if (state.readFailedShown) {
@@ -157,6 +159,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       data.logbook = [];
       data.counts = {};
       state.detailId = null;
+      setLoaded(true);
       bump();
       return;
     }
@@ -167,6 +170,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     state.boardTruncated = Boolean(res?.truncated);
     if (state.detailId && !logic?.findTask(state.detailId))
       state.detailId = null;
+    setLoaded(true);
     bump();
   }, []);
 
@@ -331,6 +335,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     >
       <Chrome
         narrow={narrow}
+        loading={!loaded}
         sideOpen={sideOpen}
         title={title}
         sub={sub}
@@ -381,6 +386,16 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             pendingIds={state.pendingIds}
             footer={footer}
             onShowMore={showMore}
+            onEmptyAction={() => {
+              if (state.search) {
+                if (searchInputRef.current) searchInputRef.current.value = "";
+                logic.applySearchInput("");
+              } else {
+                if (state.view === "logbook") state.view = "today";
+                captureFocusRef.current?.();
+                bump();
+              }
+            }}
             onOpenDetail={openDetail}
             onToggle={(task) => logic.toggleComplete(task)}
           />

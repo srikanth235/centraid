@@ -6,12 +6,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { NativeReadRequest } from "../../lib/replica/native-session";
 import { useReplica } from "../replica/ReplicaProvider";
+import type { ReplicaContextValue } from "../replica/ReplicaProvider";
+import { replicaQueryConnection } from "./replica-query-state";
+import type { ReplicaQueryState } from "./replica-query-state";
 
-export interface ReplicaQueryState {
-  rows: Array<ReplicaRow & { __rowId: string }>;
-  loading: boolean;
-  error?: string;
-  refresh: () => Promise<void>;
+export {
+  combineReplicaQueryStates,
+  replicaQueryConnection,
+} from "./replica-query-state";
+export type {
+  CombinedReplicaQueryState,
+  ReplicaQueryConnection,
+  ReplicaQueryState,
+} from "./replica-query-state";
+
+function latestSync(scopes: ReplicaContextValue["scopes"]): string | undefined {
+  return scopes
+    ?.flatMap((scope) => (scope.updatedAt ? [scope.updatedAt] : []))
+    .toSorted((a, b) => b.localeCompare(a))[0];
 }
 
 /**
@@ -32,7 +44,8 @@ export function useReplicaQuery(
   appId: string,
   request: NativeReadRequest
 ): ReplicaQueryState {
-  const { session } = useReplica();
+  const replica = useReplica();
+  const { session } = replica;
   const [result, setResult] = useState<ReplicaReadWireResult>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -80,11 +93,19 @@ export function useReplicaQuery(
   // Map once per underlying result — a fresh array identity every render would
   // defeat every downstream memo (a 50k merge/re-sort on each selection tap).
   const rows = useMemo(() => mapReplicaRows(result), [result]);
+  const connection = replicaQueryConnection({
+    ready: replica.ready,
+    hasSession: session !== undefined,
+    reachability: replica.reachability,
+  });
+  const lastSyncedAt = latestSync(replica.scopes);
 
   return {
     rows,
-    // Without a session there is nothing in flight — never report "loading".
-    loading: session !== undefined && loading,
+    loading: connection === "loading" || (session !== undefined && loading),
+    connection,
+    ...(!session && replica.error ? { unavailableReason: replica.error } : {}),
+    ...(lastSyncedAt ? { lastSyncedAt } : {}),
     ...(error ? { error } : {}),
     refresh,
   };

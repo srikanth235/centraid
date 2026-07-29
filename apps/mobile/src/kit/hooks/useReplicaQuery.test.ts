@@ -1,46 +1,65 @@
-import type { ReplicaReadWireResult } from "@centraid/client/replica/native";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 
-import { mapReplicaRows } from "./useReplicaQuery";
+import {
+  combineReplicaQueryStates,
+  replicaQueryConnection,
+} from "./replica-query-state";
 
-// The hook drags in the ReplicaProvider's native module chain (op-sqlite,
-// expo-network); stub it so the pure mapper can be exercised under node.
-vi.mock(import("../replica/ReplicaProvider"), () => ({
-  useReplica: () => ({ ready: false, online: false }),
-}));
-
-const wire = (
-  rows: Array<{ rowId: string; values: Record<string, unknown> }>
-): ReplicaReadWireResult => ({ rows }) as unknown as ReplicaReadWireResult;
-
-describe(mapReplicaRows, () => {
-  test("projects values with the row id and preserves order", () => {
-    const mapped = mapReplicaRows(
-      wire([
-        { rowId: "r1", values: { title: "A" } },
-        { rowId: "r2", values: { title: "B" } },
-      ])
+describe("replica query connection state", () => {
+  test("never represents a missing session as an empty/current query", () => {
+    expect(replicaQueryConnection({ ready: true, hasSession: false })).toBe(
+      "unavailable"
     );
-    expect(mapped).toStrictEqual([
-      { title: "A", __rowId: "r1" },
-      { title: "B", __rowId: "r2" },
+  });
+
+  test("distinguishes boot, offline cache, active sync, and current data", () => {
+    expect(replicaQueryConnection({ ready: false, hasSession: false })).toBe(
+      "loading"
+    );
+    expect(
+      replicaQueryConnection({
+        ready: true,
+        hasSession: true,
+        reachability: "device-offline",
+      })
+    ).toBe("offline");
+    expect(
+      replicaQueryConnection({
+        ready: true,
+        hasSession: true,
+        reachability: "syncing",
+      })
+    ).toBe("syncing");
+    expect(
+      replicaQueryConnection({
+        ready: true,
+        hasSession: true,
+        reachability: "current",
+      })
+    ).toBe("current");
+  });
+
+  test("combines every per-entity error instead of hiding secondary failures", () => {
+    const state = combineReplicaQueryStates([
+      {
+        rows: [],
+        loading: false,
+        connection: "current",
+        refresh: async () => undefined,
+      },
+      {
+        rows: [],
+        loading: false,
+        connection: "offline",
+        error: "Attendees could not be read",
+        lastSyncedAt: "2026-07-29T10:00:00.000Z",
+        refresh: async () => undefined,
+      },
     ]);
-  });
-
-  test("empty and undefined results both yield an empty array", () => {
-    expect(mapReplicaRows(undefined)).toStrictEqual([]);
-    expect(mapReplicaRows(wire([]))).toStrictEqual([]);
-  });
-
-  test("is a pure transform of the underlying result — the memo identity anchor", () => {
-    // The hook holds `useMemo(() => mapReplicaRows(result), [result])`; the
-    // stability guarantee only holds if the same result maps to equal rows and
-    // the mapper never mutates its input (a fresh array every render was the bug).
-    const result = wire([{ rowId: "r1", values: { n: 1 } }]);
-    const first = mapReplicaRows(result);
-    const second = mapReplicaRows(result);
-    expect(first).not.toBe(second);
-    expect(first).toStrictEqual(second);
-    expect(result.rows).toHaveLength(1);
+    expect(state).toMatchObject({
+      connection: "offline",
+      error: "Attendees could not be read",
+      lastSyncedAt: "2026-07-29T10:00:00.000Z",
+    });
   });
 });

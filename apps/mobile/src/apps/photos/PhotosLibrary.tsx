@@ -7,6 +7,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -16,7 +17,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
+import { optimisticRowId } from "../../lib/replica/optimistic";
 import { sha256OfFile } from "../../lib/upload/enqueue";
 import { expoFileSource } from "../../lib/upload/expo-native";
 import { createNativeDigest } from "../../lib/upload/native-digest";
@@ -40,6 +48,7 @@ export default function PhotosLibrary({
 }: PhotosScreenProps<"PhotosLibrary">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
@@ -135,12 +144,42 @@ export default function PhotosLibrary({
 
   const createAlbum = async (): Promise<void> => {
     if (!session || !title.trim()) return;
-    await session.write("photos", {
-      action: "create-album",
-      input: { title: title.trim() },
-    });
-    setNewAlbum(false);
-    setTitle("");
+    const albumId = optimisticRowId("album");
+    const createdAt = new Date().toISOString();
+    try {
+      const result = await session.write("photos", {
+        action: "create-album",
+        input: { title: title.trim() },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.collection",
+            rowId: albumId,
+            values: {
+              collection_id: albumId,
+              owner_party_id: String(
+                collections.rows[0]?.owner_party_id ?? "local-owner"
+              ),
+              name: title.trim(),
+              cover_content_id: null,
+              parent_collection_id: null,
+              sort_order:
+                Math.max(
+                  0,
+                  ...collections.rows.map((row) => Number(row.sort_order ?? 0))
+                ) + 1,
+              created_at: createdAt,
+            },
+          },
+        ],
+      });
+      if (surfaceWriteOutcome(result)) {
+        setNewAlbum(false);
+        setTitle("");
+      }
+    } catch (error) {
+      surfaceWriteFailure(error, "Album not created");
+    }
   };
   // Re-hash the CURRENT bytes of one device copy. A photo edited in place after
   // backup keeps its ph:// id but holds new bytes; this is what catches that.
@@ -227,7 +266,19 @@ export default function PhotosLibrary({
     );
   };
   const requestEnrichment = async (): Promise<void> => {
-    await session?.write("photos", { action: "request-enrichment", input: {} });
+    if (!session) return;
+    try {
+      const result = await session.write("photos", {
+        action: "request-enrichment",
+        input: {},
+      });
+      surfaceWriteOutcome(result, {
+        queuedMessage:
+          "Enrichment will start automatically when the gateway reconnects.",
+      });
+    } catch (error) {
+      surfaceWriteFailure(error, "Enrichment not requested");
+    }
   };
 
   return (
@@ -244,7 +295,13 @@ export default function PhotosLibrary({
           <Feather name="plus" size={23} color={colors.accent} />
         </Pressable>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ReplicaStatusBar />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
+        }
+      >
         <Text style={[styles.section, { color: colors.ink2 }]}>
           YOUR LIBRARY
         </Text>

@@ -24,6 +24,25 @@ archive-bomb declarations. Ambiguity decision: formula-prefixed values are
 rejected in display-bearing CSV fields instead of being silently mutated;
 password cells remain byte-for-byte arbitrary secret data. -->
 
+<!-- Checkpoint: Wave 2 makes handler reachability and state honesty permanent.
+All manifested actions/queries now require a web and mobile caller or a
+rationale-bearing agent/extension/platform fallback. Mobile treats a missing
+session as unavailable, combines per-query errors, exposes freshness and pull
+refresh across all three covers and every Photos sub-screen, separates queued
+offline writes from parked approval intents, assigns stable double-tap intent
+IDs, validates optimistic mutations at enqueue, and surfaces every write
+outcome. Docs and Photos entity writes are optimistic. Design decision:
+document/photo upload and cross-vault placement are not represented by
+fabricated canonical rows before content IDs exist; their existing durable
+upload/placement queues and progress surfaces are the honest optimistic
+contract. Enrichment requests likewise surface their queue admission without
+inventing an entity. Web now has first-read skeletons and actionable empty
+states in every blueprint, all consent banners open the Vault permission pane
+directly, and the shell exposes persistent connectivity/sync state plus a real
+search/no-results path. Verification at this checkpoint: Blueprints 648,
+Client 1,438, and Mobile 268 tests pass; all three package typechecks and the
+mobile import-boundary lint pass. -->
+
 ### Costs
 
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
@@ -38,3 +57,4 @@ password cells remain byte-for-byte arbitrary secret data. -->
 | codex-019fad18-4c1-1785326867-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 10334 | 0 | 326912 | 509 | 10843 | 0.1152 | 2389068 | 0 | 113975296 | 308530 | feat(security): harden blueprint content and imports (#630) |
 | codex-019fad18-4c1-1785326903-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 2342 | 0 | 225792 | 161 | 2503 | 0.0647 | 2391410 | 0 | 114201088 | 308691 | feat(security): harden blueprint content and imports (#630) |
 | codex-019fad18-4c1-1785326968-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 2336 | 0 | 226816 | 270 | 2606 | 0.0666 | 2393746 | 0 | 114427904 | 308961 | feat(security): harden blueprint content and imports (#630) |
+| codex-019fad18-4c1-1785329594-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 559681 | 0 | 31398400 | 75630 | 635311 | 10.3833 | 2953427 | 0 | 145826304 | 384591 | feat(blueprints): make offline state honest and reachable (#630) |

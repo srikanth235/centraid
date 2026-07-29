@@ -10,10 +10,14 @@
 // after the shell, inside the token-scoped app root.
 import type { KeyboardEvent, ReactNode } from "react";
 
+import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
+import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+
 import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
+  loading: boolean;
   sideOpen: boolean;
   newMenuOpen: boolean;
   view: "grid" | "list";
@@ -305,6 +309,7 @@ export function Chrome(props: ChromeProps): ReactNode {
                 {props.consent.message ||
                   "Ask the owner to approve this app's requested scopes in vault settings."}
               </span>
+              <VaultAccessButton />
             </div>
           ) : null}
           {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
@@ -363,7 +368,9 @@ export function Chrome(props: ChromeProps): ReactNode {
             </div>
           ) : null}
 
-          <div className={styles.scroll}>{props.board}</div>
+          <div className={styles.scroll}>
+            {props.loading ? <LoadingSkeleton /> : props.board}
+          </div>
         </main>
       </div>
 

@@ -47,6 +47,7 @@ function mountRunsPane(
 export interface AppSettingsControllerProps {
   app: AppMetaResolvedType;
   appId: string;
+  initialTab?: "appearance" | "vault";
   onClose: () => void;
   onOpenAutomations: () => void;
   onOpenOrder: (ref: string) => void;
@@ -73,6 +74,7 @@ export interface AppSettingsControllerProps {
 export default function AppSettingsController({
   app,
   appId,
+  initialTab,
   onClose,
   onOpenAutomations,
   onOpenOrder,
@@ -267,6 +269,7 @@ export default function AppSettingsController({
 
   return (
     <AppSettingsPanel
+      initialTab={initialTab}
       onReady={(u) => {
         updater.current = u;
         u(buildSnapshot());

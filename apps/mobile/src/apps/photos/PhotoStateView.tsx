@@ -4,6 +4,12 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotoTimeline from "./PhotoTimeline";
@@ -16,6 +22,7 @@ export default function PhotoStateView({
 }: PhotosScreenProps<"PhotoStateView">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
   const [selection, setSelection] = useState(new Set<string>());
   const mode = route.params.mode;
@@ -43,22 +50,50 @@ export default function PhotoStateView({
     const applyNext = async (index: number): Promise<void> => {
       const asset = selectedAssets[index];
       if (!asset) return;
-      await session?.write(
+      if (!session) return;
+      const result = await session.write(
         "photos",
         mode === "trash"
-          ? { action: "restore", input: { asset_id: asset.assetId! } }
+          ? {
+              action: "restore",
+              input: { asset_id: asset.assetId! },
+              optimistic: [
+                {
+                  op: "upsert",
+                  entity: "media.media_asset",
+                  rowId: asset.assetId!,
+                  values: { deleted_at: null, purge_at: null },
+                },
+              ],
+            }
           : {
               action: "update-asset",
               input: {
                 asset_id: asset.assetId!,
                 ...(mode === "archive" ? { archived: 0 } : { favorite: 0 }),
               },
+              optimistic: [
+                {
+                  op: "upsert",
+                  entity: "media.media_asset",
+                  rowId: asset.assetId!,
+                  values:
+                    mode === "archive"
+                      ? { archived_at: null }
+                      : { favorite: 0 },
+                },
+              ],
             }
       );
+      surfaceWriteOutcome(result);
       return applyNext(index + 1);
     };
-    await applyNext(0);
-    setSelection(new Set());
+    try {
+      await applyNext(0);
+      setSelection(new Set());
+    } catch (error) {
+      surfaceWriteFailure(error, `${title} change not saved`);
+    }
   };
   return (
     <SafeAreaView
@@ -84,6 +119,7 @@ export default function PhotoStateView({
           </Pressable>
         ) : null}
       </View>
+      <ReplicaStatusBar />
       {assets.length ? (
         <PhotoTimeline
           sections={sectionPhotoAssets(
@@ -98,6 +134,8 @@ export default function PhotoStateView({
           onOpen={(asset) =>
             navigation.navigate("PhotoLightbox", { assetId: asset.id })
           }
+          refreshing={refreshing}
+          onRefresh={refreshNow}
         />
       ) : (
         <View style={styles.empty}>

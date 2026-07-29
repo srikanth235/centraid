@@ -67,8 +67,10 @@ export default function AgendaEvent({
     result: { status: string; reason?: string },
     verb: string
   ): void => {
-    if (result.status === "parked" || result.status === "queued") {
+    if (result.status === "parked") {
       setPending(`${verb} awaiting approval`);
+    } else if (result.status === "queued") {
+      setPending(`${verb} saved offline · will sync when connected`);
     } else if (result.status === "denied" || result.status === "failed") {
       Alert.alert(
         `${verb} not applied`,

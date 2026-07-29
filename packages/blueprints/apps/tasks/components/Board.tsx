@@ -54,6 +54,7 @@ export function Board({
   pendingIds,
   footer,
   onShowMore,
+  onEmptyAction,
   onOpenDetail,
   onToggle,
 }: {
@@ -70,6 +71,7 @@ export function Board({
   pendingIds: Set<string>;
   footer: { windowSize: number } | null;
   onShowMore: () => void;
+  onEmptyAction: () => void;
   onOpenDetail: (id: string) => void;
   onToggle: (task: Task) => Promise<boolean>;
 }) {
@@ -125,6 +127,9 @@ export function Board({
           </div>
           <div className="kit-empty-title">{emptyTitle}</div>
           <div className="kit-empty-sub">{emptySub}</div>
+          <button type="button" className="kit-btn" onClick={onEmptyAction}>
+            {search.trim() ? "Clear search" : "New task"}
+          </button>
         </div>
       ) : null}
 

@@ -22,6 +22,9 @@ export interface NativeDocument {
   scopeIds?: string[];
   scopeLabels?: string[];
   canWrite?: boolean;
+  raw?: ReplicaRow;
+  starTag?: ReplicaRow;
+  starredConceptId?: string;
 }
 
 const scalar = <T>(row: ReplicaRow, key: string): T | undefined =>
@@ -213,6 +216,12 @@ function buildScopeDrive(
       const contentId = scalar<string>(row, "current_content_id")!;
       const content = contentById.get(contentId) ?? {};
       const folder = folderByDocument.get(id);
+      const starredConceptId = scalar<string>(starred ?? {}, "concept_id");
+      const starTag = tagRows.find(
+        (tag) =>
+          scalar(tag, "target_id") === id &&
+          scalar(tag, "concept_id") === starredConceptId
+      );
       return {
         id,
         contentId,
@@ -233,6 +242,9 @@ function buildScopeDrive(
         starred: starredIds.has(id),
         trashed: Boolean(scalar(row, "deleted_at")),
         custody: custodyByContent.get(contentId),
+        raw: row,
+        ...(starTag ? { starTag } : {}),
+        ...(starredConceptId ? { starredConceptId } : {}),
       };
     }),
   };

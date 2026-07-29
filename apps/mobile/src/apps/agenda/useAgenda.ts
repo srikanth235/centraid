@@ -1,7 +1,10 @@
 import type { ReplicaRow } from "@centraid/client/replica/native";
 import { useMemo } from "react";
 
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import {
+  combineReplicaQueryStates,
+  useReplicaQuery,
+} from "../../kit/hooks/useReplicaQuery";
 import { expandEvent } from "./recurrence";
 
 const value = <T>(row: ReplicaRow, key: string): T | undefined =>
@@ -31,6 +34,13 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
     "agenda",
     useMemo(() => ({ entity: "core.vault" }), [])
   );
+  const queryState = combineReplicaQueryStates([
+    events,
+    attendees,
+    parties,
+    calendars,
+    vault,
+  ]);
   const rows = useMemo(
     () =>
       events.rows
@@ -67,7 +77,6 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
     parties: parties.rows,
     calendars: calendars.rows,
     ownerPartyId: value<string>(vault.rows[0] ?? {}, "owner_party_id"),
-    loading: events.loading,
-    error: events.error,
+    ...queryState,
   };
 }

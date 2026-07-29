@@ -15,8 +15,17 @@ import GlassBar from "../../kit/components/GlassBar";
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
+import {
+  optimisticRowId,
+  optimisticValues,
+} from "../../lib/replica/optimistic";
 import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
@@ -80,6 +89,10 @@ export default function PhotosHome({
   const collections = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.collection" }), [])
+  );
+  const entries = useReplicaQuery(
+    "photos",
+    useMemo(() => ({ entity: "core.collection_entry" }), [])
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   const hero = memories[0];
@@ -239,23 +252,62 @@ export default function PhotosHome({
         text: String(album.name ?? "Album"),
         onPress: () =>
           void (async () => {
+            if (!session) return;
             const assets = timeline.assets.filter(
               (item) => selection.has(item.id) && item.assetId
             );
             const addNext = async (index: number): Promise<void> => {
               const asset = assets[index];
               if (asset === undefined) return;
-              await session?.write("photos", {
+              const albumId = String(album.collection_id);
+              const entryId = optimisticRowId("album-entry");
+              const position =
+                entries.rows.filter(
+                  (row) => String(row.collection_id) === albumId
+                ).length + index;
+              const result = await session.write("photos", {
                 action: "add-to-album",
                 input: {
-                  album_id: String(album.collection_id),
+                  album_id: albumId,
                   asset_id: asset.assetId!,
                 },
+                optimistic: [
+                  {
+                    op: "upsert",
+                    entity: "core.collection_entry",
+                    rowId: entryId,
+                    values: {
+                      entry_id: entryId,
+                      collection_id: albumId,
+                      target_type: "media.media_asset",
+                      target_id: asset.assetId!,
+                      position,
+                      added_at: new Date().toISOString(),
+                    },
+                  },
+                  ...(album.cover_content_id == null && asset.contentId
+                    ? [
+                        {
+                          op: "upsert" as const,
+                          entity: "core.collection",
+                          rowId: albumId,
+                          values: optimisticValues(album, {
+                            cover_content_id: asset.contentId,
+                          }),
+                        },
+                      ]
+                    : []),
+                ],
               });
+              surfaceWriteOutcome(result);
               return addNext(index + 1);
             };
-            await addNext(0);
-            setSelection(new Set());
+            try {
+              await addNext(0);
+              setSelection(new Set());
+            } catch (error) {
+              surfaceWriteFailure(error, "Photos not added");
+            }
           })(),
       })),
       { text: "Cancel", style: "cancel" as const },
@@ -323,6 +375,13 @@ export default function PhotosHome({
         </View>
       )}
       <ReplicaStatusBar />
+      <ReplicaStateCard
+        connection={collections.connection}
+        error={collections.error ?? timeline.error}
+        unavailableReason={collections.unavailableReason}
+        noun="Photo vault"
+        onRetry={() => void refreshLibrary()}
+      />
 
       <View style={styles.body}>
         {view === "photos" ? (
@@ -392,11 +451,14 @@ export default function PhotosHome({
               <View style={styles.center}>
                 <Feather name="image" size={40} color={colors.accent} />
                 <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-                  Your library starts here
+                  {collections.connection === "offline"
+                    ? "No cached vault photos"
+                    : "Your library starts here"}
                 </Text>
                 <Text style={[styles.body2, { color: colors.ink2 }]}>
-                  Camera-roll photos appear instantly; long-press any item to
-                  back it up.
+                  {collections.connection === "offline"
+                    ? "Camera-roll photos remain available. Reconnect to check the vault."
+                    : "Camera-roll photos appear instantly; long-press any item to back it up."}
                 </Text>
               </View>
             ) : (

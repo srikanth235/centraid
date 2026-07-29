@@ -16,10 +16,14 @@
 // route host).
 import type { ReactNode } from "react";
 
+import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
+import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+
 import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
+  loading: boolean;
   sideOpen: boolean;
   showList: boolean;
   denied: boolean;
@@ -68,6 +72,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             Ask the owner to approve this app’s requested scopes in vault
             settings.
           </span>
+          <VaultAccessButton />
         </div>
         <output
           id="noticeBanner"
@@ -76,9 +81,15 @@ export function Chrome(props: ChromeProps): ReactNode {
           hidden
         />
 
-        {props.sidebar}
-        {props.list}
-        {props.detail}
+        {props.loading ? (
+          <LoadingSkeleton />
+        ) : (
+          <>
+            {props.sidebar}
+            {props.list}
+            {props.detail}
+          </>
+        )}
 
         <div className={styles.askMount} data-ask-mount />
       </div>

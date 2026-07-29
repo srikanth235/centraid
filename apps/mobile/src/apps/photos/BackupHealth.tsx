@@ -6,6 +6,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Switch,
   Text,
@@ -14,6 +15,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
@@ -76,6 +79,7 @@ export default function BackupHealth({
 }: PhotosScreenProps<"BackupHealth">): React.JSX.Element {
   const { colors } = useTheme();
   const { gatewayBase, online, session, vaultId } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
   // Album titles are async getters in the Next API, so they are read once here
   // rather than during render. The asset count legacy albums carried has no
@@ -252,7 +256,13 @@ export default function BackupHealth({
         <Text style={[styles.title, { color: colors.ink }]}>Backup health</Text>
         <View style={{ width: 26 }} />
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ReplicaStatusBar />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
+        }
+      >
         <View
           style={[
             styles.hero,

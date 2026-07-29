@@ -14,7 +14,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
+import { optimisticValues } from "../../lib/replica/optimistic";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import PhotoTimeline from "./PhotoTimeline";
@@ -29,6 +36,7 @@ export default function AlbumDetail({
 }: PhotosScreenProps<"AlbumDetail">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
@@ -81,31 +89,59 @@ export default function AlbumDetail({
     const removeNext = async (index: number): Promise<void> => {
       const asset = selectedAssets[index];
       if (!asset) return;
-      await session?.write("photos", {
+      const entry = entries.rows.find(
+        (row) =>
+          row.collection_id === route.params.albumId &&
+          row.target_id === asset.assetId
+      );
+      if (!session) return;
+      const result = await session.write("photos", {
         action: "remove-from-album",
         input: { album_id: route.params.albumId, asset_id: asset.assetId! },
+        ...(entry
+          ? {
+              optimistic: [
+                {
+                  op: "delete" as const,
+                  entity: "core.collection_entry",
+                  rowId: String(entry.entry_id),
+                },
+              ],
+            }
+          : {}),
       });
+      surfaceWriteOutcome(result);
       return removeNext(index + 1);
     };
-    await removeNext(0);
-    setSelection(new Set());
+    try {
+      await removeNext(0);
+      setSelection(new Set());
+    } catch (error) {
+      surfaceWriteFailure(error, "Photos not removed");
+    }
   };
   const setCover = async (): Promise<void> => {
     const selected = assets.find((item) => selection.has(item.id));
     if (!selected?.assetId || !selected.contentId || !album || !session) return;
-    await session.write("photos", {
-      action: "set-album-cover",
-      input: { album_id: route.params.albumId, asset_id: selected.assetId },
-      optimistic: [
-        {
-          op: "upsert",
-          entity: "core.collection",
-          rowId: route.params.albumId,
-          values: { ...album, cover_content_id: selected.contentId },
-        },
-      ],
-    });
-    setSelection(new Set());
+    try {
+      const result = await session.write("photos", {
+        action: "set-album-cover",
+        input: { album_id: route.params.albumId, asset_id: selected.assetId },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.collection",
+            rowId: route.params.albumId,
+            values: optimisticValues(album, {
+              cover_content_id: selected.contentId,
+            }),
+          },
+        ],
+      });
+      if (surfaceWriteOutcome(result)) setSelection(new Set());
+    } catch (error) {
+      surfaceWriteFailure(error, "Album cover not changed");
+    }
   };
   const deleteAlbum = (): void =>
     Alert.alert("Delete album?", "Photos stay in the library.", [
@@ -113,23 +149,51 @@ export default function AlbumDetail({
       {
         text: "Delete",
         style: "destructive",
-        onPress: () =>
+        onPress: () => {
+          if (!session) return;
           void session
-            ?.write("photos", {
+            .write("photos", {
               action: "delete-album",
               input: { album_id: route.params.albumId },
+              optimistic: [
+                {
+                  op: "delete",
+                  entity: "core.collection",
+                  rowId: route.params.albumId,
+                },
+              ],
             })
-            .then(() => navigation.goBack()),
+            .then((result) => {
+              if (surfaceWriteOutcome(result)) navigation.goBack();
+            })
+            .catch((error: unknown) =>
+              surfaceWriteFailure(error, "Album not deleted")
+            );
+        },
       },
     ]);
   const rename = async (): Promise<void> => {
-    if (!name.trim()) return;
-    await session?.write("photos", {
-      action: "rename-album",
-      input: { album_id: route.params.albumId, title: name.trim() },
-    });
-    setRenameOpen(false);
-    setName("");
+    if (!name.trim() || !album || !session) return;
+    try {
+      const result = await session.write("photos", {
+        action: "rename-album",
+        input: { album_id: route.params.albumId, title: name.trim() },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.collection",
+            rowId: route.params.albumId,
+            values: optimisticValues(album, { name: name.trim() }),
+          },
+        ],
+      });
+      if (surfaceWriteOutcome(result)) {
+        setRenameOpen(false);
+        setName("");
+      }
+    } catch (error) {
+      surfaceWriteFailure(error, "Album not renamed");
+    }
   };
   return (
     <SafeAreaView
@@ -179,6 +243,7 @@ export default function AlbumDetail({
           </View>
         )}
       </View>
+      <ReplicaStatusBar />
       <View style={[styles.keepRow, { borderBottomColor: colors.line }]}>
         <View style={styles.copy}>
           <Text style={[styles.keepTitle, { color: colors.ink }]}>
@@ -202,6 +267,8 @@ export default function AlbumDetail({
           onOpen={(asset) =>
             navigation.navigate("PhotoLightbox", { assetId: asset.id })
           }
+          refreshing={refreshing}
+          onRefresh={refreshNow}
         />
       ) : (
         <View style={styles.empty}>

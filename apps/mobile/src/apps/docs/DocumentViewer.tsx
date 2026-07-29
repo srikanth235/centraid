@@ -12,6 +12,11 @@ import OptionSheet from "../../kit/components/OptionSheet";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { family, useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
+import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
+import {
+  optimisticRowId,
+  optimisticValues,
+} from "../../lib/replica/optimistic";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument } from "./docs-model";
 import { useDocsLibrary } from "./useDocsLibrary";
@@ -78,9 +83,53 @@ export default function DocumentViewer({
     )
       return;
     try {
+      const now = new Date().toISOString();
+      const optimistic: NativeOptimisticMutation[] =
+        name === "trash" && document.raw
+          ? [
+              {
+                op: "upsert",
+                entity: "core.document",
+                rowId: document.rawId ?? document.id,
+                values: optimisticValues(document.raw, {
+                  deleted_at: now,
+                  updated_at: now,
+                }),
+              },
+            ]
+          : name === "unstar" && document.starTag
+            ? [
+                {
+                  op: "delete",
+                  entity: "core.tag",
+                  rowId: String(document.starTag.tag_id),
+                },
+              ]
+            : name === "star" && document.starredConceptId
+              ? (() => {
+                  const tagId = optimisticRowId("star");
+                  return [
+                    {
+                      op: "upsert" as const,
+                      entity: "core.tag",
+                      rowId: tagId,
+                      values: {
+                        tag_id: tagId,
+                        target_type: "core.document",
+                        target_id: document.rawId ?? document.id,
+                        concept_id: document.starredConceptId,
+                        tagged_by_party_id: null,
+                        confidence: null,
+                        tagged_at: now,
+                      },
+                    },
+                  ];
+                })()
+              : [];
       const write = {
         action: name,
         input: { document_id: document.rawId ?? document.id },
+        optimistic,
       };
       const result = await session.writeTo(
         document.sourceVaultId,
@@ -90,8 +139,13 @@ export default function DocumentViewer({
       // A parked write (e.g. moving to trash is medium-risk) must surface for
       // Approve/Discard rather than silently vanish (M5); denials/failures are
       // shown, not swallowed.
-      if (result.status === "parked" || result.status === "queued") {
+      if (result.status === "parked") {
         navigation.navigate("Settings", { screen: "Approvals" });
+      } else if (result.status === "queued") {
+        Alert.alert(
+          "Saved offline",
+          "This change will sync automatically when the gateway reconnects."
+        );
       } else if (result.status === "denied" || result.status === "failed") {
         Alert.alert(
           "Not applied",

@@ -131,6 +131,7 @@ const SORT_NAMES: Record<AppState["sortKey"], string> = {
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [loaded, setLoaded] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -162,6 +163,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     } catch {
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       readFailedShownRef.current = true;
+      setLoaded(true);
       return;
     }
     if (readFailedShownRef.current) {
@@ -171,6 +173,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const denied = next?.vaultDenied;
     consentRef.current = denied ? { message: denied.message ?? "" } : null;
     if (denied) {
+      setLoaded(true);
       bump();
       return;
     }
@@ -191,6 +194,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       state.detailsId = null;
       state.detailPerson = null;
     }
+    setLoaded(true);
     bump();
   }, []);
 
@@ -466,6 +470,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           <div className="kit-empty-sub">
             Deleted people stay recoverable here for 30 days.
           </div>
+          <button
+            type="button"
+            className="kit-btn"
+            onClick={() => handleSelectNav({ kind: "all" })}
+          >
+            View people
+          </button>
         </div>
       ) : (
         <div className={styles.grid}>
@@ -499,6 +510,32 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         </div>
         <div className="kit-empty-title">{emptyTitle}</div>
         <div className="kit-empty-sub">{emptySub}</div>
+        <button
+          type="button"
+          className="kit-btn"
+          onClick={() => {
+            if (searching) {
+              const input = document.querySelector(
+                "#searchInput"
+              ) as HTMLInputElement | null;
+              if (input) input.value = "";
+              state.searchSeq += 1;
+              state.search = "";
+              state.searchResults = null;
+              bump();
+            } else if (nav.kind === "reconnect") {
+              handleSelectNav({ kind: "all" });
+            } else {
+              handleOpenAddModal();
+            }
+          }}
+        >
+          {searching
+            ? "Clear search"
+            : nav.kind === "reconnect"
+              ? "View everyone"
+              : "Add person"}
+        </button>
       </div>
     );
   } else {
@@ -677,6 +714,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     >
       <Chrome
         narrow={narrow}
+        loading={!loaded}
         sideOpen={sideOpen}
         newMenuOpen={state.newMenuOpen}
         view={state.view}

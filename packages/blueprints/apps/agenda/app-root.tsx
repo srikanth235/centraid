@@ -114,6 +114,7 @@ function makeState(view: ViewKind): AppState {
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [loaded, setLoaded] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -168,6 +169,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         data.calendars = [];
         data.calById = new Map();
         state.detailEventId = null;
+        setLoaded(true);
         bump();
         return;
       }
@@ -179,6 +181,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       );
       if (state.detailEventId && !logic.findEvent(state.detailEventId))
         state.detailEventId = null;
+      setLoaded(true);
       bump();
     };
 
@@ -242,6 +245,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // A broken vault must not look like an empty one.
       readFailed(byId("noticeBanner"));
       state.readFailedShown = true;
+      setLoaded(true);
       return;
     }
     applyLoadedData(canvasData, miniData);
@@ -558,6 +562,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         pendingCancelIds={state.pendingCancelIds}
         search={state.search}
         onEventOpen={openEventDetail}
+        onEmptyAction={() => {
+          if (state.search) {
+            if (searchInputRef.current) searchInputRef.current.value = "";
+            logic.clearSearch();
+          } else {
+            openCreate(null);
+          }
+        }}
       />
     );
   }
@@ -602,6 +614,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div ref={setRoot} className={styles.root}>
       <Chrome
         narrow={narrow}
+        loading={!loaded}
         sideOpen={sideOpen}
         onOpenSide={() => setSideOpen(true)}
         onCloseSide={() => setSideOpen(false)}

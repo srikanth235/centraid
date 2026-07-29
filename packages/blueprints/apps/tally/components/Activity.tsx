@@ -65,10 +65,12 @@ export function ActivityFeed({
   viewData,
   me,
   currency,
+  onAddExpense,
 }: {
   viewData: ViewData | null;
   me: string | null;
   currency: string;
+  onAddExpense: () => void;
 }) {
   if (!viewData) {
     return (
@@ -80,10 +82,14 @@ export function ActivityFeed({
   const items = viewData.activity ?? [];
   if (items.length === 0) {
     return (
-      <div className={shared.explist}>
-        <div className={shared.emptyRow} style={{ padding: "40px 16px" }}>
-          Nothing has happened yet.
+      <div className="kit-empty">
+        <div className="kit-empty-title">Nothing has happened yet</div>
+        <div className="kit-empty-sub">
+          Expenses and settlements will appear here.
         </div>
+        <button type="button" className="kit-btn" onClick={onAddExpense}>
+          Add expense
+        </button>
       </div>
     );
   }

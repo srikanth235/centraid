@@ -239,24 +239,14 @@ export function Dashboard({
       </div>
       <div className={styles.sectionTitle}>Your groups</div>
       {groups.length === 0 ? (
-        <div className={styles.card}>
-          <div className={shared.emptyRow} style={{ padding: "28px 16px" }}>
-            No groups yet.
-            <button
-              type="button"
-              style={{
-                border: "none",
-                background: "none",
-                color: "var(--accd)",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-              onClick={onOpenNewGroup}
-            >
-              Create one
-            </button>
-            to start splitting.
+        <div className="kit-empty">
+          <div className="kit-empty-title">No groups yet</div>
+          <div className="kit-empty-sub">
+            Create one to start splitting shared expenses.
           </div>
+          <button type="button" className="kit-btn" onClick={onOpenNewGroup}>
+            Create group
+          </button>
         </div>
       ) : (
         <div className={styles.groupgrid}>

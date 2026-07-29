@@ -236,9 +236,10 @@ export default function AppSettingsPanel(
     bundled,
     onMountRuns,
     onMountVault,
+    initialTab = "appearance",
   } = props;
   const [snap, setSnap] = useState<AppSettingsSnapshot | null>(null);
-  const [tab, setTab] = useState<Tab>("appearance");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const vaultMounted = useRef(false);
 

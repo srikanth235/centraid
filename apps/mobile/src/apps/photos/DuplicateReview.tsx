@@ -3,6 +3,8 @@ import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { family, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotoTimeline from "./PhotoTimeline";
@@ -14,6 +16,7 @@ export default function DuplicateReview({
 }: PhotosScreenProps<"DuplicateReview">): React.JSX.Element {
   const { colors } = useTheme();
   const timeline = usePhotoTimeline();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const hints = useMemo(
     () => timeline.assets.filter((asset) => asset.duplicateHint),
     [timeline.assets]
@@ -40,6 +43,7 @@ export default function DuplicateReview({
           {hints.length}
         </Text>
       </View>
+      <ReplicaStatusBar />
       {sections.length ? (
         <PhotoTimeline
           sections={sections}
@@ -48,6 +52,8 @@ export default function DuplicateReview({
           onOpen={(asset) =>
             navigation.navigate("PhotoLightbox", { assetId: asset.id })
           }
+          refreshing={refreshing}
+          onRefresh={refreshNow}
         />
       ) : (
         <View style={styles.empty}>
