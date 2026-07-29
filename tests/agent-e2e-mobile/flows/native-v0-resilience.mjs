@@ -1,25 +1,5 @@
+import { retryableTapCommands } from "../lib/first-run.mjs";
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
-
-// `retryTapIfNoChange` handles a truly unchanged hierarchy, but launcher
-// controls animate their press state. That animation can make Maestro consider
-// an ignored iOS tap a successful hierarchy change even though the destination
-// never opened. Re-check the source control after Maestro settles and retry
-// only while it is still visible. Two bounded fallbacks keep the destination
-// marker authoritative: a real navigation/regression still fails below.
-function retryableTapCommands(selector, sourceSelector = selector) {
-  const conditionalRetry = `- runFlow:
-    when:
-      visible: "${sourceSelector}"
-    commands:
-      - tapOn:
-          text: "${selector}"
-          retryTapIfNoChange: true`;
-  return `- tapOn:
-    text: "${selector}"
-    retryTapIfNoChange: true
-${conditionalRetry}
-${conditionalRetry}`;
-}
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen

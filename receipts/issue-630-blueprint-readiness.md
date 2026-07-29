@@ -355,12 +355,12 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   two enabled controls still on their source screens after Maestro reported a
   completed tap. Onboarding primary actions now publish explicit button
   semantics, and every critical onboarding, launcher, and Settings transition
-  uses Maestro's retry-on-no-hierarchy-change behavior. Because launcher press
-  animations themselves change the hierarchy, the cover journey additionally
-  retries only while its source control remains visible, with a bounded attempt
-  count and the destination marker still mandatory. This preserves the product
-  interaction while making ignored early iOS automation taps observable and
-  recoverable without accepting a vacuous pass.
+  uses Maestro's retry-on-no-hierarchy-change behavior. Because press animations
+  themselves change the hierarchy, the shared paired-onboarding exit and cover
+  journey additionally retry only while their source control remains visible,
+  with a bounded attempt count and the destination marker still mandatory. This
+  preserves the product interaction while making ignored early iOS automation
+  taps observable and recoverable without accepting a vacuous pass.
 
 ### Foundations, measurement, and trust
 
@@ -530,7 +530,7 @@ bun run check:pr:full
   successful.
 - `bun run --cwd apps/mobile test -- src/screens/Onboarding.test.tsx` — 7/7
   identity/onboarding tests passing.
-- `bun run lint:e2e-flows` — 32 non-vacuous Maestro steps across four enforced
+- `bun run lint:e2e-flows` — 33 non-vacuous Maestro steps across five enforced
   mobile flow sources.
 - Focused protocol/gateway/client/mobile Wave 6 suites — 47 tests passing.
 - Focused household placement/custody suites — 6 tests passing.
@@ -559,6 +559,13 @@ bun run check:pr:full
   Maestro's built-in retry. That retained evidence led to the bounded
   source-visible fallback above. The final corrected exact-HEAD green run is
   recorded below before audit.
+- [Exact-HEAD iOS diagnostic run 30493381148](https://github.com/srikanth235/centraid/actions/runs/30493381148)
+  ran at `8765f2f1b06cb8778c79b9d7437ff6b5151f664f`. Its fresh ticket-only
+  entry passed, while all three paired journeys retained the same enabled
+  `Enter Centraid` source screen after Maestro acknowledged the tap. This
+  confirmed that the press-animation false-success pattern also affects the
+  shared onboarding exit and led to the shared bounded retry helper above.
+  The final corrected exact-HEAD green run is recorded below before audit.
 - Fresh-context audit — pending final re-audit below.
 
 ## Accounting
@@ -754,6 +761,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785356247-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 373734 | 0 | 14563584 | 18216 | 391950 | 4.8485 | 8387821 | 0 | 382226944 | 1045183 | fix(mobile): honor both pairing identity exits (#630) |
 | codex-019fad18-4c1-1785358474-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 234988 | 0 | 12203520 | 13060 | 248048 | 3.8342 | 8622809 | 0 | 394430464 | 1058243 | fix(mobile): retry ignored native journey taps (#630) |
 | codex-019fad18-4c1-1785361269-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 258412 | 0 | 15353344 | 12038 | 270450 | 4.6649 | 8881221 | 0 | 409783808 | 1070281 | fix(mobile): retry animated launcher taps (#630) |
+| codex-019fad18-4c1-1785363563-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 141366 | 0 | 5158656 | 10885 | 152251 | 1.8064 | 9022587 | 0 | 414942464 | 1081166 | fix(mobile): retry animated onboarding exit (#630) |
 
 ## Steering
 

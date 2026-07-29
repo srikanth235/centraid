@@ -23,7 +23,10 @@ import {
   defaultRunId,
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
-import { DISMISS_KEYBOARD_ONBOARDING } from "./first-run.mjs";
+import {
+  DISMISS_KEYBOARD_ONBOARDING,
+  retryableTapCommands,
+} from "./first-run.mjs";
 import {
   METRO_ORIGIN,
   METRO_PORT,
@@ -530,12 +533,11 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - extendedWaitUntil:
     visible: "You're all set, (Nightly|Mobile)[.]"
     timeout: 60000
-# iOS can acknowledge an accessibility tap before the RN Pressable is ready
-# and leave this screen unchanged. Retrying only when the hierarchy does not
-# change keeps the action idempotent while proving that Home really opened.
-- tapOn:
-    text: "Enter Centraid"
-    retryTapIfNoChange: true
+# iOS can acknowledge an accessibility tap before the RN Pressable is ready.
+# The button's press animation changes the hierarchy even if navigation was
+# ignored, so retry only while the source control remains visible. The Home
+# marker below remains mandatory and prevents a vacuous pass.
+${retryableTapCommands("Enter Centraid")}
 # The springboard Home has no tagline — "YOUR APPS" is the rail label above the
 # launcher grid (apps/mobile/src/screens/Home.tsx) and is the only Home-unique
 # string that survives every gateway state (the grid renders even with no apps).
