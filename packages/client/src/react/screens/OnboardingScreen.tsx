@@ -175,7 +175,14 @@ export default function OnboardingScreen({
   /**
    * Last gate before the shell: ask the roster who this device acts as. A
    * member that already has a name needs no introduction, so onboarding ends
-   * here; a placeholder one gets the identity step.
+   * here; anyone else gets the identity step.
+   *
+   * "Anyone else" includes a roster this client cannot read at all — a gateway
+   * with no device plane answers 404. Skipping the question there would finish
+   * first run with an EMPTY name, which is both a worse product (nobody is
+   * ever asked) and an outright bug (the host then tries to rename the
+   * Personal vault to ""). Asking is always safe: a name we didn't need costs
+   * one screen, a name we never collected costs the identity.
    */
   const identityOrFinish = (result: ConnectFlowResult): void => {
     setSubmitting(true);
@@ -183,14 +190,14 @@ export default function OnboardingScreen({
       .catch(() => undefined)
       .then((profile) => {
         setSubmitting(false);
-        // A roster this client cannot read is not a reason to block the shell;
-        // the name stays askable from Settings → Profile.
-        if (!profile || isNameSet(profile)) {
+        if (profile && isNameSet(profile)) {
           finish(result);
           return;
         }
-        setSelfMemberId(profile.memberId);
-        setAvatarColor(profile.avatarColor);
+        if (profile) {
+          setSelfMemberId(profile.memberId);
+          setAvatarColor(profile.avatarColor);
+        }
         setPendingResult(result);
         setStep("identity");
       });

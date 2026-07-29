@@ -171,6 +171,26 @@ describe("OnboardingScreen scenarios", () => {
       expect(onComplete.mock.calls[0]?.[0].memberId).toBeUndefined();
     });
 
+    // A gateway with no device plane answers 404, so the roster reads as
+    // empty. Skipping the question there would finish first run nameless —
+    // and the host would then try to rename the Personal vault to "".
+    it("still asks when the roster cannot be read at all", async () => {
+      listGatewayDevicesMock.mockResolvedValue([] as never);
+      const onComplete = onCompleteMock().mockResolvedValue(undefined);
+      const el = mount({ path: "fresh", onComplete });
+      await flush(5);
+      expect(el.textContent).toContain("Make yourself");
+      expect(onComplete).not.toHaveBeenCalled();
+      typeName(el.querySelector(".input") as HTMLInputElement, "Ada");
+      click(el.querySelector(".cta"));
+      await flush(4);
+      expect(onComplete).toHaveBeenCalledWith(
+        expect.objectContaining({ displayName: "Ada" })
+      );
+      // Nobody to rename — the roster is the thing we could not read.
+      expect(onComplete.mock.calls[0]?.[0].memberId).toBeUndefined();
+    });
+
     it("selects a swatch on click", async () => {
       const el = mount({ path: "fresh", onComplete: onCompleteMock() });
       await flush(4);

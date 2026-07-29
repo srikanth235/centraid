@@ -165,7 +165,7 @@ void (async (): Promise<void> => {
             );
           }
           resetGatewayAuthCache();
-          if (path === "fresh" && vaultId && ownerVault) {
+          if (path === "fresh" && vaultId && ownerVault && displayName) {
             // The auto-founded owner vault ships as "Personal"; first run
             // makes it theirs. `ownerVault` is false when this run landed on
             // a reinstall's existing data, where the fallback vault is the
@@ -173,7 +173,9 @@ void (async (): Promise<void> => {
             // (issue #603 C10). Deliberately non-fatal — the user is already
             // in, and a generically-named space is a cosmetic problem they
             // can fix in Settings, not a reason to block onboarding. Logged
-            // rather than swallowed so it is diagnosable.
+            // rather than swallowed so it is diagnosable. Gated on a non-empty
+            // `displayName` because the gateway rejects a blank vault name —
+            // a run that never asked for one must leave "Personal" alone.
             await updateVault({
               vaultId,
               name: displayName,

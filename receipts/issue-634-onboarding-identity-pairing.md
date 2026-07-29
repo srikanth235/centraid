@@ -226,6 +226,7 @@ step fixes the scenarios turned up.
 `tests/onboarding-scenarios.md` (new — the superset scenario checklist across
 all three surfaces),
 `apps/desktop/tests/e2e/onboarding-home.spec.ts`,
+`apps/desktop/tests/e2e/settings-gateways.spec.ts`,
 `apps/desktop/src/main/gateway-monitor.ts`,
 `tests/agent-e2e-mobile/lib/harness.mjs`,
 `tests/agent-e2e-mobile/lib/metro.mjs`,
@@ -250,6 +251,20 @@ seams the scenarios needed — vault registry, vault-plane host surface,
 enrollment store, invitation routes, and the `device-admin` CLI. The docs
 updates record the worktree/port conventions and the pairing recovery steps the
 runs exercised.
+
+### What CI caught that local gates did not
+
+The desktop Playwright lane runs against a mock gateway that has no device
+plane, so `GET /centraid/_gateway/devices` answers 404 and the roster reads as
+empty. `identityOrFinish` treated "cannot read the roster" the same as "the
+roster already knows you" and finished first run with an EMPTY name — which
+the host then tried to write as the Personal vault's name, drawing a 400
+`bad_name`. Unreadable now falls to ASKING (`OnboardingScreen.tsx`), because a
+name we did not need costs one screen and a name we never collected costs the
+identity; `boot.tsx` additionally refuses to rename a vault to "". Covered by a
+new unit test. The two settings specs were realigned to the surfaces this
+change actually moved: Settings opens from the account menu now, and it is an
+overlay, so the page underneath keeps its own `<h1>` mounted.
 
 ## Decisions
 
@@ -354,6 +369,21 @@ node packages/gateway/dist/cli/cli.js serve --data-dir ./gwnew --host 127.0.0.1 
   `SS` avatar. Web Household then showed **1 person · 3 devices** — both phone
   pairings under the same member, no duplicate created.
 
+CI then ran the gate that is deliberately not local — the desktop Playwright
+lane — and it found two real regressions this commit had caused (see *What CI
+caught*). After the fixes the whole lane is green locally:
+
+```sh
+bun run --cwd apps/desktop build
+npx playwright test -c tests/e2e/playwright.config.ts
+```
+
+The `verify` job's per-PR perf gate also failed on `eventLoop.peakP99Ms`
+(310 ms and 352 ms across its two attempts, ceiling 150 ms; main measured
+69 ms). Locally on this branch the same benchmark reports **57.8 ms** — under
+both main's number and the ceiling — so this reads as runner load, not a
+branch regression. CI's re-run is the authority.
+
 ## Accounting
 
 ### Steering
@@ -378,6 +408,7 @@ node packages/gateway/dist/cli/cli.js serve --data-dir ./gwnew --host 127.0.0.1 
 | claude-code-820a2fd7-6eb-1785342611-1 | claude-code | 820a2fd7-6eb1-465e-b979-3d07e5bc7187 | #634 | claude-opus-5 | 17 | 9159 | 3295667 | 2138 | 11314 | 1.7586 | 2124 | 3178959 | 290781009 | 449933 |  |
 | claude-code-820a2fd7-6eb-1785342679-1 | claude-code | 820a2fd7-6eb1-465e-b979-3d07e5bc7187 | #634 | claude-opus-5 | 2 | 340 | 332381 | 138 | 480 | 0.1718 | 2126 | 3179299 | 291113390 | 450071 |  |
 | claude-code-820a2fd7-6eb-1785342745-1 | claude-code | 820a2fd7-6eb1-465e-b979-3d07e5bc7187 | #634 | claude-opus-5 | 4 | 2936 | 665442 | 884 | 3824 | 0.3732 | 2130 | 3182235 | 291778832 | 450955 |  |
+| claude-code-820a2fd7-6eb-1785347486-1 | claude-code | 820a2fd7-6eb1-465e-b979-3d07e5bc7187 | #634 | claude-opus-5 | 1856 | 2651376 | 271555853 | 366177 | 3019409 | 161.5127 | 3986 | 5833611 | 563334685 | 817132 | fix(onboarding): ask for a name when the roster is unreadable (#634)The desktop  |
 ## Steering
 
 (1) **Every human-steering event in the transcript is recorded as a row.** PASS. The transcript contains six steering events: three interrupts (messages 12, 14, 28 marked "[Request interrupted by user]") and three corrections (message 11 "wait...fold profile into space...no need of settings", message 13 "just add profile as another tab...no need to fold it into space", and message 35 "do single commit pleasse"). All six are recorded in the Steering table above with distinct `(session, ordinal)` pairs and appropriate type/tier assignments.
