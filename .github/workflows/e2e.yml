@@ -135,7 +135,11 @@ jobs:
   mobile-e2e-ios:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
-    runs-on: macos-15
+    # macos-15 defaults to Xcode 16.4 and only ships up to 26.3. Expo SDK 57's
+    # expo-modules-jsi needs Swift tools 6.2 / Xcode 26.4+ (#620); on 16.4 the
+    # JSI xcframework step exits 65 with an empty "Could not resolve package
+    # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,6 +147,32 @@ jobs:
         with:
           node-version: "22"
       - uses: ./.github/actions/setup
+      - name: Select Xcode 26.4 or newer
+        run: |
+          set -euo pipefail
+          # Prefer the newest installed ≥26.4 so image rolls stay green without
+          # pinning a patch. Fail loud if the image dropped below Expo's floor.
+          selected=""
+          for app in $(ls -d /Applications/Xcode_26.*.app 2>/dev/null | sort -V -r); do
+            version="${app#/Applications/Xcode_}"
+            version="${version%.app}"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            if [ "$major" -gt 26 ] || { [ "$major" -eq 26 ] && [ "$minor" -ge 4 ]; }; then
+              selected="$app"
+              break
+            fi
+          done
+          test -n "$selected" || {
+            echo "::error::no Xcode ≥26.4 under /Applications (ExpoModulesJSI floor)"
+            ls -d /Applications/Xcode*.app || true
+            exit 1
+          }
+          echo "selecting $selected"
+          sudo xcode-select -s "$selected"
+          xcodebuild -version
+          swift --version
       # The iOS dev build is cached and reused whenever nothing that changes the
       # *native binary* changed. A JS/TS commit is served live by Metro, so it
       # must not pay the ~32-minute compile; a config-plugin, native-module,
@@ -162,7 +192,7 @@ jobs:
       #             The hashing lives in apps/mobile/scripts/native-fingerprint.mjs.
       #   xc<hash>  the host toolchain (Xcode build + iphonesimulator SDK).
       #             @expo/fingerprint hashes the PROJECT, not the MACHINE — so a
-      #             binary built by a newer Xcode after a macos-15 image roll must
+      #             binary built by a newer Xcode after a macos image roll must
       #             still not be reused; this component forces that rebuild. It
       #             subsumes the old key's raw ImageOS (the Xcode/SDK version is
       #             the part of the image that actually matters here).
@@ -189,7 +219,7 @@ jobs:
           xc="$(printf '%s\n%s\n' "$xcode" "$sdk" | shasum -a 256 | cut -d' ' -f1)"
           echo "hash=xc${xc:0:12}-fp${fp}" >> "$GITHUB_OUTPUT"
           echo "iOS native fingerprint: fp=$fp toolchain(xc)=$xc"
-      - name: Assert runner Xcode satisfies React Native
+      - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
       - name: Build and start the tokenless mobile test gateway
@@ -279,31 +309,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -euo pipefail
-          # The macos-15-arm64 hosted runner exposes only 3 cores. Xcode's
-          # default scheduler repeatedly vanished mid-ReactCodegen with zero compiler
-          # errors, then Expo surfaced exit 65 plus a misleading
-          # package-dependency footer. The same checkout builds locally, making
-          # hosted resource pressure the leading diagnosis. A two-task cap still
-          # terminated in run 30409157675, so serialize compile tasks for the
-          # cache-miss build to minimize its peak memory pressure. Run
-          # 30411945707 then made substantially more progress under that cap but
-          # still ended with "0 error(s)" and exit 65. Preserve its incremental
-          # DerivedData and retry exactly once for that zero-diagnostic hosted
-          # termination. A real compiler error, or a second termination, stays
-          # red; this is not a product-test retry.
-          defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks -int 1
-          first_log="$RUNNER_TEMP/centraid-ios-build-attempt-1.log"
-          set +e
-          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler 2>&1 | tee "$first_log"
-          first_status="${PIPESTATUS[0]}"
-          set -e
-          if [ "$first_status" -ne 0 ]; then
-            if ! grep -Fq '0 error(s), and' "$first_log"; then
-              exit "$first_status"
-            fi
-            echo "::warning::Xcode ended without a compiler error; retrying once against incremental DerivedData"
-            bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
-          fi
+          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
           # Copy the product out of derived data into the cached location. Fail
           # hard if it cannot be found: caching an empty directory would turn
           # every later run into a silent no-install.

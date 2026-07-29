@@ -370,15 +370,15 @@ input identity. It likewise hashes the app's maps configuration and the
 `react-native-maps` package, but not the package's `RNMapsDefines.h` marker
 that CocoaPods rewrites from those inputs.
 
-The nightly iOS cold build serializes Xcode compile tasks. The three-core
-hosted runner repeatedly terminated this 154-target workspace mid-build with
-zero compiler errors, which Expo then presented as an exit-65
-package-dependency failure; a two-task cap still terminated in run
-30409157675, and the serialized attempt in 30411945707 progressed farther but
-ended with the same zero-error signature. Hosted resource pressure is the
-leading diagnosis. The workflow preserves the partial DerivedData and retries
-exactly once only when Expo's first attempt reports `0 error(s)`; ordinary
-compiler failures do not retry, and a failed incremental attempt remains red.
+The nightly iOS lane runs on `macos-26` and selects Xcode ≥26.4 before the
+build. Expo SDK 57's `expo-modules-jsi` declares `swift-tools-version: 6.2`
+and documents Xcode 26.4+ (Swift 6.3); `macos-15`'s default Xcode 16.4
+satisfies React Native's 16.1 floor but fails the JSI xcframework step with
+exit 65 and an empty "Could not resolve package dependencies" footer
+(run 30417451436). `apps/mobile/scripts/check-xcode-minimum.mjs` takes the
+max of React Native's helper minimum and that ExpoModulesJSI floor so a
+future image roll that drops below 26.4 fails as an `infra-mismatch` before
+the cold build.
 
 Android decisions mirror iOS where the artifact exists: Android uses the same
 fingerprint ratchet and path-safe `require.resolve` project configuration.
