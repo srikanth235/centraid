@@ -271,13 +271,15 @@ export function applyRecurrenceExceptions(
   );
   const futureExceptions = exceptions
     .filter((exception) => exception.scope === "future")
-    .toSorted((left, right) =>
+    .sort((left, right) =>
       left.originalStart.localeCompare(right.originalStart)
     );
   return instances.flatMap((instance) => {
-    const future = futureExceptions.findLast(
-      (candidate) => candidate.originalStart <= instance.originalStart
-    );
+    let future: RecurrenceException | undefined;
+    for (const candidate of futureExceptions) {
+      if (candidate.originalStart > instance.originalStart) break;
+      future = candidate;
+    }
     const exception =
       occurrenceExceptions.get(instance.originalStart) ?? future;
     if (!exception) return [instance];

@@ -86,14 +86,14 @@ export default function PeopleHome({
             name: text(party, "display_name") || "Unnamed person",
           } as PersonRow;
         })
-        .toSorted((a, b) => String(a.name).localeCompare(String(b.name))),
+        .sort((a, b) => String(a.name).localeCompare(String(b.name))),
     [parties.rows, profiles.rows]
   );
   const selected =
     people.find((person) => person.party_id === selectedId) ?? people[0];
   const selectedChannels = channels.rows
     .filter((channel) => channel.party_id === selected?.party_id)
-    .toSorted(
+    .sort(
       (a, b) =>
         Number(b.is_preferred ?? 0) - Number(a.is_preferred ?? 0) ||
         String(a.kind).localeCompare(String(b.kind))

@@ -142,7 +142,7 @@ export default function TasksHome({
         .filter(
           (row) => row.status === "needs-action" || row.status === "in-process"
         )
-        .toSorted(
+        .sort(
           (a, b) =>
             Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0) ||
             String(a.task_id).localeCompare(String(b.task_id))

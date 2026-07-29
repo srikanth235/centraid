@@ -100,7 +100,7 @@ export function buildNotes(
         ),
       };
     })
-    .toSorted(
+    .sort(
       (left, right) =>
         Number(right.pinned) - Number(left.pinned) ||
         right.updatedAt.localeCompare(left.updatedAt)

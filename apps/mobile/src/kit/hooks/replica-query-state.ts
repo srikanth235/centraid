@@ -55,7 +55,7 @@ export function combineReplicaQueryStates(
   const connection =
     states
       .map((state) => state.connection)
-      .toSorted((a, b) => CONNECTION_PRIORITY[b] - CONNECTION_PRIORITY[a])[0] ??
+      .sort((a, b) => CONNECTION_PRIORITY[b] - CONNECTION_PRIORITY[a])[0] ??
     "loading";
   const error = states.find((state) => state.error)?.error;
   const unavailableReason = states.find(
@@ -63,7 +63,7 @@ export function combineReplicaQueryStates(
   )?.unavailableReason;
   const lastSyncedAt = states
     .flatMap((state) => (state.lastSyncedAt ? [state.lastSyncedAt] : []))
-    .toSorted((a, b) => b.localeCompare(a))[0];
+    .sort((a, b) => b.localeCompare(a))[0];
   return {
     loading: states.some((state) => state.loading),
     connection,

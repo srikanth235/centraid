@@ -303,6 +303,30 @@ export default defineConfig({
       },
     },
     {
+      // The mobile app and time-engine execute in Hermes. The Expo 57 / RN
+      // 0.86 runtime used by the reviewed iOS build does not implement these
+      // ES2023 Array helpers: `toSorted` caused the native Photos cover to
+      // redbox in the exact-HEAD journey, and time-engine is bundled into
+      // native Agenda/Tally. Keep compatibility mechanical rather than relying
+      // on Node-based unit tests, whose newer Array prototype masks the bug.
+      files: ["apps/mobile/src/**", "packages/time-engine/src/**"],
+      rules: {
+        "no-restricted-properties": [
+          "error",
+          {
+            property: "toSorted",
+            message:
+              "The reviewed Hermes runtime does not implement Array.prototype.toSorted; sort a fresh array with .sort instead.",
+          },
+          {
+            property: "findLast",
+            message:
+              "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
+          },
+        ],
+      },
+    },
+    {
       files: ["packages/blueprints/kit/**", "packages/blueprints/apps/**"],
       rules: {
         "typescript/no-explicit-any": "off",

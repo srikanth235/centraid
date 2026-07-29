@@ -17,9 +17,12 @@ export type {
 } from "./replica-query-state";
 
 function latestSync(scopes: ReplicaContextValue["scopes"]): string | undefined {
+  // Hermes in the supported Expo runtime does not expose ES2023 `toSorted`.
+  // `flatMap` already returns a fresh array, so the compatibility-safe in-place
+  // sort cannot mutate replica state.
   return scopes
     ?.flatMap((scope) => (scope.updatedAt ? [scope.updatedAt] : []))
-    .toSorted((a, b) => b.localeCompare(a))[0];
+    .sort((a, b) => b.localeCompare(a))[0];
 }
 
 /**

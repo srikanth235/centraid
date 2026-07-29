@@ -144,9 +144,7 @@ export default function TallyHome({
   })();
   const expenseRows = expenses.rows
     .filter((row) => !row.deleted_at)
-    .toSorted((a, b) =>
-      asString(b.spent_on).localeCompare(asString(a.spent_on))
-    );
+    .sort((a, b) => asString(b.spent_on).localeCompare(asString(a.spent_on)));
 
   const write = async (action: string, input: Record<string, ReplicaValue>) => {
     if (!session) return undefined;

@@ -361,6 +361,14 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   with a bounded attempt count and the destination marker still mandatory. This
   preserves the product interaction while making ignored early iOS automation
   taps observable and recoverable without accepting a vacuous pass.
+- The subsequent exact-HEAD journey cleared every paired onboarding exit and
+  the 20-relaunch proof, then exposed a native Photos redbox:
+  `Array.prototype.toSorted` is undefined in the reviewed Hermes runtime.
+  Replaced ES2023 `toSorted` throughout the mobile source and the
+  mobile-imported time engine with compatibility-safe sorting of fresh arrays,
+  replaced the time engine's `findLast` with an explicit ordered scan, and added
+  a scoped lint rule so newer Node-based unit tests cannot mask either
+  unsupported Hermes API again.
 
 ### Foundations, measurement, and trust
 
@@ -566,6 +574,12 @@ bun run check:pr:full
   confirmed that the press-animation false-success pattern also affects the
   shared onboarding exit and led to the shared bounded retry helper above.
   The final corrected exact-HEAD green run is recorded below before audit.
+- [Exact-HEAD iOS diagnostic run 30495781491](https://github.com/srikanth235/centraid/actions/runs/30495781491)
+  ran at `19e017a13becf1075a28f900a46398f873e5da40`; fresh onboarding,
+  all three paired exits, and all 20 relaunches passed. The native Photos cover
+  then rendered a retained Hermes redbox at `useReplicaQuery.ts` because
+  `toSorted` was undefined, leading to the compatibility ratchet above. The
+  final corrected exact-HEAD green run is recorded below before audit.
 - Fresh-context audit — pending final re-audit below.
 
 ## Accounting
@@ -762,6 +776,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785358474-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 234988 | 0 | 12203520 | 13060 | 248048 | 3.8342 | 8622809 | 0 | 394430464 | 1058243 | fix(mobile): retry ignored native journey taps (#630) |
 | codex-019fad18-4c1-1785361269-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 258412 | 0 | 15353344 | 12038 | 270450 | 4.6649 | 8881221 | 0 | 409783808 | 1070281 | fix(mobile): retry animated launcher taps (#630) |
 | codex-019fad18-4c1-1785363563-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 141366 | 0 | 5158656 | 10885 | 152251 | 1.8064 | 9022587 | 0 | 414942464 | 1081166 | fix(mobile): retry animated onboarding exit (#630) |
+| codex-019fad18-4c1-1785366656-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 267202 | 0 | 15006976 | 13845 | 281047 | 4.6274 | 9289789 | 0 | 429949440 | 1095011 | fix(mobile): keep native covers Hermes compatible (#630) |
 
 ## Steering
 
