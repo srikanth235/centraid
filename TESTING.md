@@ -371,11 +371,14 @@ input identity. It likewise hashes the app's maps configuration and the
 that CocoaPods rewrites from those inputs.
 
 The nightly iOS cold build serializes Xcode compile tasks. The three-core
-hosted runner repeatedly terminated this 154-target workspace mid-codegen with
+hosted runner repeatedly terminated this 154-target workspace mid-build with
 zero compiler errors, which Expo then presented as an exit-65
 package-dependency failure; a two-task cap still terminated in run
-30409157675. Hosted resource pressure is the leading diagnosis; serialization
-minimizes peak concurrency and must be verified on a cache-miss run.
+30409157675, and the serialized attempt in 30411945707 progressed farther but
+ended with the same zero-error signature. Hosted resource pressure is the
+leading diagnosis. The workflow preserves the partial DerivedData and retries
+exactly once only when Expo's first attempt reports `0 error(s)`; ordinary
+compiler failures do not retry, and a failed incremental attempt remains red.
 
 Android decisions mirror iOS where the artifact exists: Android uses the same
 fingerprint ratchet and path-safe `require.resolve` project configuration.

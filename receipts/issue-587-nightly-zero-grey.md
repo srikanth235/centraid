@@ -214,16 +214,20 @@ binding procedure and checksum contract are recorded in
 maps configuration. The marker is now excluded for both platform fingerprints
 while the app configuration and installed package remain hashed.
 
-Three independent macOS hosted runs (30404358270, 30407693912, and
-30409157675) stopped the 154-target iOS cold build mid-ReactCodegen with zero
-compiler errors before Expo emitted exit 65 and a misleading
-package-dependency footer; the identical repository-script build completed
-locally. Hosted resource pressure is the leading diagnosis, not yet a proven
-cause. The third run proved a two-task cap insufficient, so
-`.github/workflows/e2e.yml` now serializes Xcode compile tasks on the
-three-core runner. `TESTING.md` records the mitigation so it is not removed as
-an unexplained slowdown. A cache-miss hosted success remains required before
-checking the nightly acceptance items below.
+Four independent macOS hosted runs (30404358270, 30407693912, 30409157675, and
+30411945707) stopped the 154-target iOS cold build with zero compiler errors
+before Expo emitted exit 65 and a misleading package-dependency footer; the
+identical repository-script build completed locally. Hosted resource pressure
+is the leading diagnosis, not yet a proven cause. The third run proved a
+two-task cap insufficient; serialization let the fourth run progress farther
+but did not eliminate the zero-error termination.
+`.github/workflows/e2e.yml` therefore serializes compile tasks and, only for
+that exact zero-diagnostic signature, retries once against the partial
+DerivedData already produced on the runner. Real compiler errors do not retry,
+and a failed incremental attempt remains red. `TESTING.md` records the bounded
+recovery so it is not generalized into product-test retries. A cache-miss
+hosted success remains required before checking the nightly acceptance items
+below.
 
 The same full-nightly evidence exposed a stale mobile journey contract after
 #603 made pairing-ticket enrollment mandatory. The old
@@ -471,6 +475,7 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785282371-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 176501 | 0 | 16274944 | 14348 | 190849 | 4.7252 | 2438747 | 0 | 167431936 | 237734 | ci(mobile): bound Xcode cold-build concurrency (#587) |
 | codex-019fa9f8-a97-1785282421-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 2139 | 0 | 628992 | 191 | 2330 | 0.1655 | 2440886 | 0 | 168060928 | 237925 | ci(mobile): bound Xcode cold-build concurrency (#587) -m governance: allow-toolc |
 | codex-019fa9f8-a97-1785285672-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 416690 | 0 | 36680192 | 35519 | 452209 | 10.7446 | 2857576 | 0 | 204741120 | 273444 | test(mobile): follow ticket-only onboarding (#587) -m governance: allow-toolchai |
+| codex-019fa9f8-a97-1785287040-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 217373 | 0 | 13805056 | 9954 | 227327 | 4.1440 | 3074949 | 0 | 218546176 | 283398 | ci(mobile): recover zero-error Xcode exits (#587) -m governance: allow-toolchain |
 
 ### Steering
 

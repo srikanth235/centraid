@@ -285,9 +285,25 @@ jobs:
           # package-dependency footer. The same checkout builds locally, making
           # hosted resource pressure the leading diagnosis. A two-task cap still
           # terminated in run 30409157675, so serialize compile tasks for the
-          # cache-miss build to minimize its peak memory pressure.
+          # cache-miss build to minimize its peak memory pressure. Run
+          # 30411945707 then made substantially more progress under that cap but
+          # still ended with "0 error(s)" and exit 65. Preserve its incremental
+          # DerivedData and retry exactly once for that zero-diagnostic hosted
+          # termination. A real compiler error, or a second termination, stays
+          # red; this is not a product-test retry.
           defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks -int 1
-          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          first_log="$RUNNER_TEMP/centraid-ios-build-attempt-1.log"
+          set +e
+          bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler 2>&1 | tee "$first_log"
+          first_status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$first_status" -ne 0 ]; then
+            if ! grep -Fq '0 error(s), and' "$first_log"; then
+              exit "$first_status"
+            fi
+            echo "::warning::Xcode ended without a compiler error; retrying once against incremental DerivedData"
+            bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
+          fi
           # Copy the product out of derived data into the cached location. Fail
           # hard if it cannot be found: caching an empty directory would turn
           # every later run into a silent no-install.
