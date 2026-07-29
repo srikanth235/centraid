@@ -206,6 +206,7 @@
   13,726-byte p95; recent-90-day plus 5%-favorite retention projects 12,820,084
   bytes per source, within the shared 128 MiB per-source budget.
 
+- **Metro resolves `@centraid/protocol` from source for native (`react-native` export) so mobile-smoke `ci:bundle` does not require a prebuilt dist.**
 - **CI green for PR #631 (verify coverage, mobile-smoke native fingerprint, gateway-package design-tokens build).** Added real unit coverage for the shipped push registration route and `PushWakeRelay` (opaque Expo wake payloads, debounce, revoked-audience filtering, delivery failure swallow). Ratcheted `apps/mobile/native-fingerprints.json` iOS hash to the CI-computed native identity after expo-background-task / expo-task-manager / centraid-storage landed. Dropped unnecessary `types: ["node"]` from `packages/design-tokens/tsconfig.json` so the gateway Docker build no longer fails looking for `@types/node` on a pure token package.
 
 The full changed-file inventory is:
@@ -213,6 +214,7 @@ The full changed-file inventory is:
 ```text
 AGENTS.md
 packages/design-tokens/tsconfig.json
+packages/protocol/package.json
 apps/mobile/App.tsx
 apps/mobile/android/app/src/main/AndroidManifest.xml
 apps/mobile/app.config.ts
