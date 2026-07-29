@@ -74,7 +74,7 @@
     "thumbhash": "^0.1.1"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^8.0.1",
     "@centraid/test-kit": "workspace:*",
     "@expo/fingerprint": "~0.20.6",
     "@types/jpeg-js": "^0.3.7",
