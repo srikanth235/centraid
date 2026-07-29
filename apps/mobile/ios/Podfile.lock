@@ -21,6 +21,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - CentraidStorage (0.1.0):
+    - ExpoModulesCore
   - CentraidTunnel (0.1.0):
     - ExpoModulesCore
   - EASClient (57.0.1):
@@ -60,6 +62,9 @@ PODS:
     - Yoga
   - ExpoAsset (57.0.7):
     - ExpoModulesCore
+  - ExpoBackgroundTask (57.0.6):
+    - ExpoModulesCore
+    - ExpoTaskManager
   - ExpoBattery (57.0.1):
     - ExpoModulesCore
   - ExpoBlur (57.0.2):
@@ -148,6 +153,9 @@ PODS:
     - ExpoModulesCore
   - ExpoSplashScreen (57.0.5):
     - ExpoModulesCore
+  - ExpoTaskManager (57.0.6):
+    - ExpoModulesCore
+    - UMAppLoader
   - ExpoVideo (57.0.2):
     - ExpoModulesCore
   - ExpoVideoThumbnails (57.0.1):
@@ -2551,6 +2559,7 @@ PODS:
   - SDWebImageWebPCoder (0.14.6):
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.17)
+  - UMAppLoader (57.0.1)
   - Yoga (0.0.0)
   - ZXingObjC/Core (3.6.9)
   - ZXingObjC/OneD (3.6.9):
@@ -2560,6 +2569,7 @@ PODS:
 
 DEPENDENCIES:
   - "AsyncStorage (from `../../../node_modules/@react-native-async-storage/async-storage`)"
+  - CentraidStorage (from `../modules/centraid-storage/ios`)
   - CentraidTunnel (from `../modules/centraid-tunnel/ios`)
   - EASClient (from `../../../node_modules/expo-eas-client/ios`)
   - EXApplication (from `../../../node_modules/expo-application/ios`)
@@ -2568,6 +2578,7 @@ DEPENDENCIES:
   - EXManifests (from `../../../node_modules/expo-manifests/ios`)
   - Expo (from `../../../node_modules/expo`)
   - ExpoAsset (from `../../../node_modules/expo-asset/ios`)
+  - ExpoBackgroundTask (from `../../../node_modules/expo-background-task/ios`)
   - ExpoBattery (from `../../../node_modules/expo-battery/ios`)
   - ExpoBlur (from `../../../node_modules/expo-blur/ios`)
   - ExpoCamera (from `../../../node_modules/expo-camera/ios`)
@@ -2594,6 +2605,7 @@ DEPENDENCIES:
   - ExpoShareIntentModule (from `../../../node_modules/expo-share-intent/ios`)
   - ExpoSharing (from `../../../node_modules/expo-sharing/ios`)
   - ExpoSplashScreen (from `../../../node_modules/expo-splash-screen/ios`)
+  - ExpoTaskManager (from `../../../node_modules/expo-task-manager/ios`)
   - ExpoVideo (from `../../../node_modules/expo-video/ios`)
   - ExpoVideoThumbnails (from `../../../node_modules/expo-video-thumbnails/ios`)
   - EXStructuredHeaders (from `../../../node_modules/expo-structured-headers/ios`)
@@ -2686,6 +2698,7 @@ DEPENDENCIES:
   - RNScreens (from `../../../node_modules/react-native-screens`)
   - RNSVG (from `../../../node_modules/react-native-svg`)
   - RNWorklets (from `../../../node_modules/react-native-worklets`)
+  - UMAppLoader (from `../../../node_modules/unimodules-app-loader/ios`)
   - Yoga (from `../../../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
@@ -2704,6 +2717,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   AsyncStorage:
     :path: "../../../node_modules/@react-native-async-storage/async-storage"
+  CentraidStorage:
+    :path: "../modules/centraid-storage/ios"
   CentraidTunnel:
     :path: "../modules/centraid-tunnel/ios"
   EASClient:
@@ -2720,6 +2735,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo"
   ExpoAsset:
     :path: "../../../node_modules/expo-asset/ios"
+  ExpoBackgroundTask:
+    :path: "../../../node_modules/expo-background-task/ios"
   ExpoBattery:
     :path: "../../../node_modules/expo-battery/ios"
   ExpoBlur:
@@ -2772,6 +2789,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-sharing/ios"
   ExpoSplashScreen:
     :path: "../../../node_modules/expo-splash-screen/ios"
+  ExpoTaskManager:
+    :path: "../../../node_modules/expo-task-manager/ios"
   ExpoVideo:
     :path: "../../../node_modules/expo-video/ios"
   ExpoVideoThumbnails:
@@ -2955,12 +2974,15 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native-svg"
   RNWorklets:
     :path: "../../../node_modules/react-native-worklets"
+  UMAppLoader:
+    :path: "../../../node_modules/unimodules-app-loader/ios"
   Yoga:
     :path: "../../../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
   AsyncStorage: 163ab23f6aa37a58b7f2379d0b4ee7ac84d6655c
-  CentraidTunnel: 0a7e3cbe0600f9db3ca06566864f41e89fb8b08e
+  CentraidStorage: 042014182213c2ee7b71bf1c6aded6ab3ec2c1ee
+  CentraidTunnel: 22901955e3c8708cf3e297f60e0c8a1b952b514c
   EASClient: 81f44ce9f07ec3d01606507213d21510a5f97388
   EXApplication: bbd517d50878ca1d121fb3843392beb210181e28
   EXConstants: fa5647482320b7bde855057f8b86580456d4b9f0
@@ -2968,6 +2990,7 @@ SPEC CHECKSUMS:
   EXManifests: f9888c0bf5aaa6ddb7e3d4b224d6d54ac4ca84a4
   Expo: 4a3b7c95f7f7251c884c75699d60d653555ff9b9
   ExpoAsset: 98143758ff37e14c9ff2a4e7673097db00473011
+  ExpoBackgroundTask: 71d60c205b05753d0ece4b282b2124e3ae9005c1
   ExpoBattery: cb4f978965f2d14d06f2d36293c2deedee6616b0
   ExpoBlur: 69e67b4fbfed6f7325377af2aefa8aa4f00cd2af
   ExpoCamera: a5e9d9ce2fc06689eb2dd676f1f8d5f22f8aa292
@@ -2994,13 +3017,14 @@ SPEC CHECKSUMS:
   ExpoShareIntentModule: a25f480ab6e1389406e65973cef42b8f75f16755
   ExpoSharing: c13f24ffc10753e229c2e7bdcaf45cfb7287684c
   ExpoSplashScreen: 247464c0fe484f766892db0d66c3fe54f92a624e
+  ExpoTaskManager: f68326227852a30148700965c37c058c1473c6a2
   ExpoVideo: b1d9a325ddcd4f3ed8ccb374c01b688e98bc6a04
   ExpoVideoThumbnails: 0a7d37113fe51af5c302461ad0344dc529161316
   EXStructuredHeaders: 1423c3602a30eb078e03b63b251ef912267dd4c0
   EXUpdates: cbdbe424e30c11983c2841930050114c1b8bea0c
   EXUpdatesInterface: 92d2aa5194b6fb93ca8ab749db75665cb28b2e60
   FBLazyVector: 3c3be9a019176b5699455f7f66c5444b78a411c6
-  hermes-engine: bb4f16fd9852151f7d10b8e31fc77abab904320b
+  hermes-engine: 9052ccd34e5f375bf5e93b4f6e059cac41641a6e
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
@@ -3094,6 +3118,7 @@ SPEC CHECKSUMS:
   SDWebImageAVIFCoder: afe194a084e851f70228e4be35ef651df0fc5c57
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
+  UMAppLoader: 173cb90a3039aa9c1b84bace4487e1907a4a5a39
   Yoga: 9891cfb1c680f64de9c41b09e7453dea33454d2b
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 

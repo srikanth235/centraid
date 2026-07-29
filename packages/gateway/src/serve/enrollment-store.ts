@@ -370,6 +370,18 @@ export class EnrollmentStore {
     return row ? toEnrollment(row) : undefined;
   }
 
+  /** Durable proof that this device previously mounted the scope. */
+  hadReplicaScope(endpointId: string, vaultId: string): boolean {
+    return Boolean(
+      this.gatewayDatabase.db
+        .prepare(
+          `SELECT 1 FROM device_checkpoints
+            WHERE endpoint_id = ? AND vault_id = ?`
+        )
+        .get(endpointId, vaultId)
+    );
+  }
+
   resetCheckpoint(
     endpointId: string,
     vaultId: string,

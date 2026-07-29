@@ -75,7 +75,7 @@ export default function BackupHealth({
   navigation,
 }: PhotosScreenProps<"BackupHealth">): React.JSX.Element {
   const { colors } = useTheme();
-  const { gatewayBase, online, session } = useReplica();
+  const { gatewayBase, online, session, vaultId } = useReplica();
   const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
   // Album titles are async getters in the Next API, so they are read once here
   // rather than during render. The asset count legacy albums carried has no
@@ -173,6 +173,7 @@ export default function BackupHealth({
         const companion = await liveVideoUri(original.asset);
         await backupDeviceMedia(session, gatewayBase, {
           localUri: original.uri,
+          ...(vaultId ? { targetVaultId: vaultId } : {}),
           ...(metadata.filename ? { filename: metadata.filename } : {}),
           mediaType: isVideo ? "video/mp4" : "image/jpeg",
           plaintextSize: new File(original.uri).size,
@@ -187,6 +188,7 @@ export default function BackupHealth({
           const companionFile = new File(companion);
           await backupDeviceMedia(session, gatewayBase, {
             localUri: companion,
+            ...(vaultId ? { targetVaultId: vaultId } : {}),
             // The Next API extracts the Live Photo's video to a file rather
             // than exposing a paired asset, so its dimensions and duration
             // are not on offer — only the name and the bytes.

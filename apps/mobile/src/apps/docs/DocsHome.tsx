@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useTheme } from "../../kit/theme";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
@@ -45,7 +46,7 @@ export default function DocsHome({
   navigation,
 }: DocsScreenProps<"DocsHome">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session, gatewayBase } = useReplica();
+  const { session, gatewayBase, vaultId, refresh } = useReplica();
   const drive = useDocsLibrary();
   const folderId = route.params?.folderId;
   const [query, setQuery] = useState("");
@@ -62,6 +63,15 @@ export default function DocsHome({
   const [view, setView] = useState<ViewMode>("list");
   const [addOpen, setAddOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshLibrary = async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      await refresh?.();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const needle = query.trim();
@@ -80,7 +90,15 @@ export default function DocsHome({
             setSearched({
               query: needle,
               ids: new Set(
-                result.rows.map((row) => String(row.values.document_id))
+                result.rows
+                  .map((row) => String(row.values.document_id))
+                  .map((id, index) => {
+                    const scopeId =
+                      result.rows[index]?.values.__centraidScopeId;
+                    return typeof scopeId === "string"
+                      ? `${scopeId}:${id}`
+                      : id;
+                  })
               ),
             });
           })
@@ -184,6 +202,7 @@ export default function DocsHome({
       if (!asset) return;
       await backupDocument(session, gatewayBase, {
         localUri: asset.uri,
+        ...(vaultId ? { targetVaultId: vaultId } : {}),
         title: asset.name,
         mediaType: asset.mimeType ?? "application/octet-stream",
         plaintextSize: asset.size ?? new File(asset.uri).size,
@@ -260,6 +279,7 @@ export default function DocsHome({
           <Feather name="plus" size={24} color={colors.accent} />
         </Pressable>
       </View>
+      <ReplicaStatusBar />
 
       <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
         <Feather name="search" size={17} color={colors.ink2} />
@@ -378,6 +398,8 @@ export default function DocsHome({
           styles.list,
           view === "grid" && styles.gridList,
         ]}
+        refreshing={refreshing}
+        onRefresh={() => void refreshLibrary()}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Feather

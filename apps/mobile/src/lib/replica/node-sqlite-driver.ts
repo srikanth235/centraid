@@ -10,7 +10,11 @@ import type {
 } from "@centraid/client/replica/native";
 
 export class NodeSqliteDriver implements ReplicaSqliteDriver {
-  private readonly db = new DatabaseSync(":memory:");
+  private readonly db: DatabaseSync;
+
+  constructor(filename = ":memory:") {
+    this.db = new DatabaseSync(filename);
+  }
 
   run(sql: string, bind: readonly ReplicaBindValue[] = []): void {
     this.db.prepare(sql).run(...bind);

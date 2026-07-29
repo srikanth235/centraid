@@ -112,6 +112,8 @@ export interface FetchReplicaBootstrapPageOptions {
   after?: string;
   fetcher?: ReplicaFetcher;
   signal?: AbortSignal;
+  /** Page 1 may prioritize the newest visible Photos/Docs era. */
+  priority?: "newest";
 }
 
 /**
@@ -128,6 +130,7 @@ export async function fetchReplicaBootstrapPage(
   if (options.window !== undefined)
     params.set("window", String(options.window));
   if (options.after !== undefined) params.set("after", options.after);
+  if (options.priority !== undefined) params.set("priority", options.priority);
   // Neither param present would silently fall back to the single-shot envelope.
   if ([...params].length === 0)
     params.set("window", String(DEFAULT_REPLICA_BOOTSTRAP_WINDOW));

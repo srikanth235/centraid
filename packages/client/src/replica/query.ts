@@ -311,7 +311,10 @@ export function evaluateReplicaRead(
   if (!Number.isSafeInteger(requestedLimit)) {
     throw new ReplicaProtocolError("Read limit must be a safe integer");
   }
-  const limit = Math.min(Math.max(requestedLimit, 1), 10_000);
+  // A ten-year native Photos library legitimately exceeds 10k rows. This is
+  // local SQLite-derived data (not one network response); bootstrap and wire
+  // routes keep their independent authenticated work limits.
+  const limit = Math.min(Math.max(requestedLimit, 1), 100_000);
   return rows.slice(0, limit);
 }
 

@@ -1,6 +1,6 @@
 import type { ReplicaValue } from "@centraid/client/replica/native";
 
-import type { NativeReplicaSession } from "../replica/native-session";
+import type { MobileReplicaSession } from "../replica/native-session";
 import {
   cleanupDeviceDerivatives,
   contributeDeviceDerivatives,
@@ -29,7 +29,7 @@ export interface FollowupReplaySummary {
  */
 export async function replaySettledUploadFollowups(
   queue: UploadQueue,
-  session: NativeReplicaSession,
+  session: MobileReplicaSession,
   gatewayBase: string
 ): Promise<FollowupReplaySummary> {
   let replayed = 0;
@@ -57,11 +57,16 @@ export async function replaySettledUploadFollowups(
           followup.derivatives
         );
       }
-      await session.write(followup.shape, {
+      const write = {
         action: followup.action,
         input: followup.input as ReplicaValue,
         intentId: followup.intentId,
-      });
+      };
+      if (followup.targetVaultId && session.writeTo) {
+        await session.writeTo(followup.targetVaultId, followup.shape, write);
+      } else {
+        await session.write(followup.shape, write);
+      }
       queue.clearFollowup(followup.followupId);
       if (followup.derivatives) cleanupDeviceDerivatives(followup.derivatives);
       replayed += 1;

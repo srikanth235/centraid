@@ -1,6 +1,5 @@
 import { Feather } from "@expo/vector-icons";
 import { File, Paths } from "expo-file-system";
-import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
@@ -23,6 +22,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import OptionSheet from "../../kit/components/OptionSheet";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { useTheme } from "../../kit/theme";
@@ -33,6 +33,7 @@ import { InCloudOriginalError, openDeviceOriginal } from "./device-media";
 import { buildDismissGesture, buildZoomGesture } from "./lightbox-gestures";
 import { imageSource, videoSource } from "./media-source";
 import { styles } from "./PhotoLightbox.styles";
+import { PhotoLightboxToolbar } from "./PhotoLightboxToolbar";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -154,7 +155,7 @@ export default function PhotoLightbox({
 }: PhotosScreenProps<"PhotoLightbox">): React.JSX.Element {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
-  const { session } = useReplica();
+  const { session, scopes = [] } = useReplica();
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
@@ -174,6 +175,7 @@ export default function PhotoLightbox({
   const [currentId, setCurrentId] = useState(route.params.assetId);
   const [infoOpen, setInfoOpen] = useState(false);
   const [slideshow, setSlideshow] = useState(false);
+  const [placementKind, setPlacementKind] = useState<"add" | "move">();
   const list = useRef<FlatList<PhotoAsset>>(null);
   const index = assets.findIndex((asset) => asset.id === currentId);
   const current = index >= 0 ? assets[index] : undefined;
@@ -214,8 +216,10 @@ export default function PhotoLightbox({
     input: Record<string, string | number>,
     optimistic?: NativeOptimisticMutation[]
   ): Promise<void> => {
-    if (!session) return;
-    const result = await session.write("photos", {
+    if (!session || current?.canWrite !== true) return;
+    const sourceVaultId = current.sourceVaultId;
+    if (!sourceVaultId) return;
+    const result = await session.writeTo(sourceVaultId, "photos", {
       action,
       input,
       ...(optimistic ? { optimistic } : {}),
@@ -225,6 +229,28 @@ export default function PhotoLightbox({
         "Awaiting approval",
         result.reason ?? "The change is ready for owner approval."
       );
+  };
+
+  const place = async (targetVaultId: string): Promise<void> => {
+    const kind = placementKind;
+    setPlacementKind(undefined);
+    const sourceVaultId = current?.sourceVaultId;
+    if (!session || !kind || !current?.assetId || !sourceVaultId) return;
+    const result = await session.place({
+      kind,
+      itemType: "media.media_asset",
+      itemId: current.assetId,
+      sourceVaultId,
+      targetVaultId,
+    });
+    Alert.alert(
+      result.status === "executed" ? "Placement complete" : "Placement queued",
+      result.status === "executed"
+        ? kind === "move"
+          ? "The target copy committed before the source was removed."
+          : "The photo is now available in both vaults."
+        : "This will resume automatically when the gateway is reachable."
+    );
   };
 
   const exportAsset = async (save: boolean): Promise<void> => {
@@ -313,105 +339,14 @@ export default function PhotoLightbox({
           )}
           showsHorizontalScrollIndicator={false}
         />
-        <View style={styles.toolbar}>
-          <Pressable onPress={() => setSlideshow((value) => !value)}>
-            <Feather
-              name={slideshow ? "pause" : "play"}
-              size={22}
-              color="#fff"
-            />
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              void Haptics.selectionAsync();
-              void write(
-                "update-asset",
-                {
-                  asset_id: current.assetId!,
-                  favorite: current.favorite ? 0 : 1,
-                },
-                [
-                  {
-                    op: "upsert",
-                    entity: "media.media_asset",
-                    rowId: current.assetId!,
-                    values: { favorite: current.favorite ? 0 : 1 },
-                  },
-                ]
-              );
-            }}
-            disabled={!current.assetId}
-          >
-            <Feather
-              name="heart"
-              size={23}
-              color={current.favorite ? "#ff625f" : "#fff"}
-            />
-          </Pressable>
-          <Pressable onPress={() => runExport(false)}>
-            <Feather name="share" size={23} color="#fff" />
-          </Pressable>
-          <Pressable onPress={() => runExport(true)}>
-            <Feather name="download" size={23} color="#fff" />
-          </Pressable>
-          <Pressable
-            disabled={!current.assetId}
-            onPress={() =>
-              void write(
-                "update-asset",
-                {
-                  asset_id: current.assetId!,
-                  archived: current.archived ? 0 : 1,
-                },
-                [
-                  {
-                    op: "upsert",
-                    entity: "media.media_asset",
-                    rowId: current.assetId!,
-                    values: {
-                      archived_at: current.archived
-                        ? null
-                        : new Date().toISOString(),
-                    },
-                  },
-                ]
-              )
-            }
-          >
-            <Feather name="archive" size={23} color="#fff" />
-          </Pressable>
-          <Pressable
-            disabled={!current.assetId}
-            onPress={() =>
-              Alert.alert(
-                "Move to trash?",
-                "The device original is never deleted by this action.",
-                [
-                  { text: "Cancel" },
-                  {
-                    text: "Trash",
-                    style: "destructive",
-                    onPress: () =>
-                      void write(
-                        "delete-asset",
-                        { asset_id: current.assetId! },
-                        [
-                          {
-                            op: "upsert",
-                            entity: "media.media_asset",
-                            rowId: current.assetId!,
-                            values: { deleted_at: new Date().toISOString() },
-                          },
-                        ]
-                      ),
-                  },
-                ]
-              )
-            }
-          >
-            <Feather name="trash-2" size={23} color="#fff" />
-          </Pressable>
-        </View>
+        <PhotoLightboxToolbar
+          asset={current}
+          slideshow={slideshow}
+          onToggleSlideshow={() => setSlideshow((value) => !value)}
+          onExport={runExport}
+          onPlacement={setPlacementKind}
+          onWrite={write}
+        />
         <Modal
           transparent
           animationType="slide"
@@ -462,7 +397,12 @@ export default function PhotoLightbox({
               ["Albums", albumNames.length ? albumNames.join(", ") : "None"],
               ["SHA-256", current.sha256 ?? "Pending backup"],
               ["Backup", current.backupState],
-              ["Source", current.source],
+              [
+                "Source",
+                current.scopeLabels?.length
+                  ? current.scopeLabels.join(" · ")
+                  : current.source,
+              ],
             ].map(([label, value]) => (
               <View key={label} style={styles.infoRow}>
                 <Text style={[styles.infoLabel, { color: colors.ink2 }]}>
@@ -492,22 +432,22 @@ export default function PhotoLightbox({
             ) : null}
             {current.assetId && places.rows.length ? (
               <View style={styles.placeActions}>
-                {places.rows.slice(0, 3).map((place) => (
+                {places.rows.slice(0, 3).map((placeRow) => (
                   <Pressable
-                    key={place.__rowId}
+                    key={placeRow.__rowId}
                     onPress={() =>
                       void write(
                         "set-place",
                         {
                           asset_id: current.assetId!,
-                          place_id: String(place.place_id),
+                          place_id: String(placeRow.place_id),
                         },
                         [
                           {
                             op: "upsert",
                             entity: "media.media_asset",
                             rowId: current.assetId!,
-                            values: { place_id: String(place.place_id) },
+                            values: { place_id: String(placeRow.place_id) },
                           },
                         ]
                       )
@@ -546,6 +486,26 @@ export default function PhotoLightbox({
             ) : null}
           </View>
         </Modal>
+        <OptionSheet
+          visible={placementKind !== undefined}
+          title={`${placementKind === "move" ? "Move" : "Add"} to…`}
+          options={scopes
+            .filter(
+              (scope) =>
+                scope.role !== "read" &&
+                !current.scopeIds?.includes(scope.vaultId)
+            )
+            .map((scope) => ({
+              id: scope.vaultId,
+              label: scope.label,
+              detail:
+                placementKind === "move"
+                  ? "Target commits before source removal"
+                  : "Keep in both vaults",
+            }))}
+          onSelect={(vaultId) => void place(vaultId)}
+          onClose={() => setPlacementKind(undefined)}
+        />
       </SafeAreaView>
     </GestureDetector>
   );

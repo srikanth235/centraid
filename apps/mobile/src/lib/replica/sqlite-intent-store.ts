@@ -21,10 +21,36 @@ const DDL = `
     key TEXT PRIMARY KEY,
     value INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS replica_intent_attention (
+    intent_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    app_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL
+  );
 `;
 
 interface StoredIntentRow {
   record_json: string;
+}
+
+export interface NativeIntentAttention {
+  intentId: string;
+  status: "denied" | "failed";
+  appId: string;
+  action: string;
+  reason?: string;
+  createdAt: string;
+}
+
+interface AttentionRow {
+  intent_id: string;
+  status: "denied" | "failed";
+  app_id: string;
+  action: string;
+  reason: string | null;
+  created_at: string;
 }
 
 /**
@@ -118,6 +144,23 @@ export class SqliteIntentStore implements IntentRecordStore {
   ): Promise<ReplicaIntent> {
     return this.transaction(() => {
       const settled = this.applyPatch(intentId, allowed, patch, "settle");
+      if (settled.state === "denied" || settled.state === "failed") {
+        this.driver.run(
+          `INSERT INTO replica_intent_attention
+             (intent_id, status, app_id, action, reason, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(intent_id) DO UPDATE SET
+             status = excluded.status, reason = excluded.reason`,
+          [
+            settled.intentId,
+            settled.state,
+            settled.appId,
+            settled.action,
+            settled.reason ?? null,
+            new Date().toISOString(),
+          ]
+        );
+      }
       this.driver.run("DELETE FROM replica_intent_outbox WHERE intent_id = ?", [
         intentId,
       ]);
@@ -129,8 +172,32 @@ export class SqliteIntentStore implements IntentRecordStore {
     this.transaction(() => {
       this.driver.run("DELETE FROM replica_intent_outbox", []);
       this.driver.run("DELETE FROM replica_intent_meta", []);
+      this.driver.run("DELETE FROM replica_intent_attention", []);
       return undefined;
     });
+  }
+
+  attention(): NativeIntentAttention[] {
+    return this.driver
+      .all<AttentionRow>(
+        `SELECT intent_id, status, app_id, action, reason, created_at
+           FROM replica_intent_attention ORDER BY created_at DESC`
+      )
+      .map((row) => ({
+        intentId: row.intent_id,
+        status: row.status,
+        appId: row.app_id,
+        action: row.action,
+        ...(row.reason ? { reason: row.reason } : {}),
+        createdAt: row.created_at,
+      }));
+  }
+
+  dismissAttention(intentId: string): void {
+    this.driver.run(
+      "DELETE FROM replica_intent_attention WHERE intent_id = ?",
+      [intentId]
+    );
   }
 
   close(): void {

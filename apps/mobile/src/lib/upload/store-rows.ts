@@ -13,6 +13,7 @@ export interface ItemRow {
   item_id: string;
   sha256: string;
   local_uri: string;
+  target_vault_id: string | null;
   media_type: string | null;
   filename: string | null;
   plaintext_size: number;
@@ -38,6 +39,9 @@ export function toItem(row: ItemRow): UploadItem {
     itemId: row.item_id,
     sha256: row.sha256,
     localUri: row.local_uri,
+    ...(row.target_vault_id === null
+      ? {}
+      : { targetVaultId: row.target_vault_id }),
     ...(row.media_type === null ? {} : { mediaType: row.media_type }),
     ...(row.filename === null ? {} : { filename: row.filename }),
     plaintextSize: row.plaintext_size,

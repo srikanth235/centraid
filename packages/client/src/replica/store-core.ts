@@ -96,6 +96,8 @@ interface StoredBootstrapProgress {
   protocol_version: number;
   vault_id: string;
   schema_epoch: string;
+  cursor_epoch: string | null;
+  cursor_seq: number | null;
 }
 
 interface StoredSearchRow extends StoredRow {
@@ -103,7 +105,7 @@ interface StoredSearchRow extends StoredRow {
   snippet: string | null;
 }
 
-const LOCAL_REPLICA_SCHEMA_VERSION = 4;
+const LOCAL_REPLICA_SCHEMA_VERSION = 5;
 
 const DDL = `
   CREATE TABLE IF NOT EXISTS replica_bootstrap_progress (
@@ -111,6 +113,8 @@ const DDL = `
     protocol_version INTEGER NOT NULL,
     vault_id TEXT NOT NULL,
     schema_epoch TEXT NOT NULL
+    ,cursor_epoch TEXT
+    ,cursor_seq INTEGER
   );
   CREATE TABLE IF NOT EXISTS replica_meta (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -264,6 +268,21 @@ export class ReplicaSqliteStore {
   }
 
   /**
+   * Publish the first window as an explicitly partial preview. `status()` still
+   * reports no durable cursor, so a crash restarts bootstrap; reads may paint
+   * the newest landed era while lazy backfill continues.
+   */
+  bootstrapPreview(cursor: ReplicaCursor): void {
+    this.requireBootstrapProgress();
+    validateCursor(cursor);
+    this.run(
+      `UPDATE replica_bootstrap_progress
+          SET cursor_epoch = ?, cursor_seq = ? WHERE singleton = 1`,
+      [cursor.epoch, cursor.seq]
+    );
+  }
+
+  /**
    * Seal the windowed bootstrap at `cursor` — the PAGE-1 cursor, which is the
    * minimum across pages. Later pages were read from their own snapshots, so the
    * caller must replay the change log from this cursor to converge; committing
@@ -288,7 +307,7 @@ export class ReplicaSqliteStore {
   }
 
   applyChanges(batch: ReplicaChangeBatch): ApplyChangesResult {
-    const meta = this.meta();
+    const meta = this.meta() ?? this.previewMeta();
     if (!meta) throw new ReplicaRebootstrapRequiredError("not-bootstrapped");
     validateCursor(batch.from);
     validateCursor(batch.to);
@@ -337,7 +356,7 @@ export class ReplicaSqliteStore {
     mutations: OptimisticMutation[] = [],
     now: Date = new Date()
   ): ReplicaReadWireResult {
-    const meta = this.meta();
+    const meta = this.meta() ?? this.previewMeta();
     if (!meta) throw new ReplicaRebootstrapRequiredError("not-bootstrapped");
     const schema = this.schema(request.shapeId, request.entity);
     if (!schema) {
@@ -590,6 +609,22 @@ export class ReplicaSqliteStore {
 
   private meta(): MetaRow | undefined {
     return this.one<MetaRow>("SELECT * FROM replica_meta WHERE singleton = 1");
+  }
+
+  private previewMeta(): MetaRow | undefined {
+    const row = this.one<StoredBootstrapProgress>(
+      `SELECT protocol_version, vault_id, schema_epoch, cursor_epoch, cursor_seq
+         FROM replica_bootstrap_progress WHERE singleton = 1`
+    );
+    if (!row || row.cursor_epoch === null || row.cursor_seq === null)
+      return undefined;
+    return {
+      protocol_version: row.protocol_version,
+      vault_id: row.vault_id,
+      schema_epoch: row.schema_epoch,
+      cursor_epoch: row.cursor_epoch,
+      cursor_seq: row.cursor_seq,
+    };
   }
 
   private schema(

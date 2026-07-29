@@ -70,6 +70,39 @@ describe("native Photos timeline model", () => {
     expect(rows[0]?.localIds).toStrictEqual(["local-a", "local-b"]);
   });
 
+  test("same-sha vault copies keep one writable source and its matching id", () => {
+    const rows = mergePhotoAssets(
+      [],
+      [
+        photo("personal-row", {
+          assetId: "asset-personal",
+          sha256: "same",
+          source: "replica",
+          sourceVaultId: "personal",
+          scopeIds: ["personal"],
+          canWrite: false,
+        }),
+        photo("family-row", {
+          assetId: "asset-family",
+          sha256: "same",
+          source: "replica",
+          sourceVaultId: "family",
+          scopeIds: ["family"],
+          writableScopeIds: ["family"],
+          canWrite: true,
+        }),
+      ]
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      assetId: "asset-family",
+      sourceVaultId: "family",
+      canWrite: true,
+    });
+    expect(rows[0]?.scopeIds).toStrictEqual(["personal", "family"]);
+  });
+
   test("sections by capture-local day using tzOffsetMin, not the raw UTC slice", () => {
     // 03:00 UTC in PDT (-420 min) is the previous evening, so it files a day earlier.
     const sections = sectionPhotoAssets([

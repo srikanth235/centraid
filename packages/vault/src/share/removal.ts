@@ -92,6 +92,14 @@ export function deleteProjectedClosure(
   let contentId: string;
   if (itemType === "core.content_item") {
     contentId = itemId;
+  } else if (itemType === "core.document") {
+    const document = audience
+      .prepare(
+        "SELECT current_content_id FROM core_document WHERE document_id = ?"
+      )
+      .get(itemId) as { current_content_id: string } | undefined;
+    if (!document) return ABSENT;
+    contentId = document.current_content_id;
   } else {
     const asset = audience
       .prepare("SELECT content_id FROM media_media_asset WHERE asset_id = ?")
@@ -118,6 +126,10 @@ export function deleteProjectedClosure(
   if (itemType === "media.media_asset") {
     audience
       .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .run(itemId);
+  } else if (itemType === "core.document") {
+    audience
+      .prepare("DELETE FROM core_document WHERE document_id = ?")
       .run(itemId);
   }
   audience

@@ -70,7 +70,7 @@ export default function createExpoConfig({
       bundleIdentifier: "dev.centraid.mobile",
       buildNumber: String(BUILD),
       infoPlist: {
-        UIBackgroundModes: ["processing"],
+        UIBackgroundModes: ["processing", "remote-notification"],
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: false,
           NSAllowsLocalNetworking: true,
@@ -100,6 +100,7 @@ export default function createExpoConfig({
     assetBundlePatterns: ["**/*"],
     plugins: [
       "expo-notifications",
+      "expo-background-task",
       "expo-secure-store",
       "expo-updates",
       [

@@ -298,6 +298,28 @@ export default function SettingsScreen({
           </Pressable>
         </SettingsSection>
 
+        <SettingsSection label="Storage">
+          <Pressable
+            onPress={() => navigation.navigate("PhoneStorage")}
+            style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+            accessibilityLabel="Phone storage"
+          >
+            <Icon
+              name="Folder"
+              size={18}
+              color={colors.ink2}
+              strokeWidth={1.75}
+            />
+            <Text style={styles.rowLabel}>Vault storage on this phone</Text>
+            <Icon
+              name="ChevronRight"
+              size={16}
+              color={colors.ink3}
+              strokeWidth={1.75}
+            />
+          </Pressable>
+        </SettingsSection>
+
         <SettingsSection label="Advanced (developer)">
           <Pressable
             onPress={() => setAdvancedOpen((v) => !v)}

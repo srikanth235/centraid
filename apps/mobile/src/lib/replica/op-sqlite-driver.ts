@@ -69,13 +69,41 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
  */
 export async function openNativeReplicaDriver(
   identity: ReplicaIdentity,
-  digest?: ReplicaDigest
+  digest?: ReplicaDigest,
+  location?: string
 ): Promise<OpSqliteDriver> {
-  const name = (await replicaDatabaseName(identity, digest)).replace(
-    /^\/+/u,
-    ""
+  const name = await nativeReplicaDatabaseName(identity, digest);
+  return OpSqliteDriver.open({ name, ...(location ? { location } : {}) });
+}
+
+export async function nativeReplicaDatabaseName(
+  identity: ReplicaIdentity,
+  digest?: ReplicaDigest
+): Promise<string> {
+  return (await replicaDatabaseName(identity, digest)).replace(/^\/+/u, "");
+}
+
+/** Absolute path used by SQLite ATTACH when a durable native location exists. */
+export async function nativeReplicaDatabasePath(
+  identity: ReplicaIdentity,
+  digest?: ReplicaDigest,
+  location?: string
+): Promise<string> {
+  const name = await nativeReplicaDatabaseName(identity, digest);
+  return location ? `${location.replace(/\/+$/u, "")}/${name}` : name;
+}
+
+/** The gateway-scoped database that owns the one multi-ATTACH read handle. */
+export async function openMountedReplicaReaderDriver(
+  gatewayId: string,
+  digest?: ReplicaDigest,
+  location?: string
+): Promise<OpSqliteDriver> {
+  const name = await nativeReplicaDatabaseName(
+    { gatewayId, vaultId: "__mounted__" },
+    digest
   );
-  return OpSqliteDriver.open({ name });
+  return OpSqliteDriver.open({ name, ...(location ? { location } : {}) });
 }
 
 /** Split a SQL script into executable statements, ignoring blank fragments. */

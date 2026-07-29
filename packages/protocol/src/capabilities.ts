@@ -29,6 +29,18 @@ export interface GatewayCapabilities {
    */
   // COMPAT(automation-turns-capability): added 2026-07-24; drop optionality when the protocol floor requires #541.
   automationTurns?: boolean;
+  /**
+   * One authenticated stream may carry changes for several mounted vaults.
+   * Optional for compatibility with gateways predating issue #628.
+   */
+  // COMPAT(multi-vault-replica-capability): added 2026-07-29; drop optionality when the protocol floor requires #628.
+  multiVaultReplica?: boolean;
+  /**
+   * Idempotent cross-vault add/move placement intents are available.
+   * Optional for compatibility with gateways predating issue #628.
+   */
+  // COMPAT(cross-vault-placement-capability): added 2026-07-29; drop optionality when the protocol floor requires #628.
+  crossVaultPlacements?: boolean;
 }
 
 /** Default capability surface for a modern loopback/daemon gateway. */
@@ -39,6 +51,8 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   backupWal: true,
   assistOAuth: false,
   automationTurns: true,
+  multiVaultReplica: true,
+  crossVaultPlacements: true,
 });
 
 export function isGatewayCapabilities(
@@ -52,6 +66,11 @@ export function isGatewayCapabilities(
     typeof c.tunnel === "boolean" &&
     typeof c.backupWal === "boolean" &&
     (c.assistOAuth === undefined || typeof c.assistOAuth === "boolean") &&
-    (c.automationTurns === undefined || typeof c.automationTurns === "boolean")
+    (c.automationTurns === undefined ||
+      typeof c.automationTurns === "boolean") &&
+    (c.multiVaultReplica === undefined ||
+      typeof c.multiVaultReplica === "boolean") &&
+    (c.crossVaultPlacements === undefined ||
+      typeof c.crossVaultPlacements === "boolean")
   );
 }

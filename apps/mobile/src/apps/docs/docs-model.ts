@@ -7,6 +7,7 @@ export interface NativeFolder {
 }
 export interface NativeDocument {
   id: string;
+  rawId?: string;
   contentId: string;
   title: string;
   mediaType: string;
@@ -16,12 +17,111 @@ export interface NativeDocument {
   starred: boolean;
   trashed: boolean;
   custody?: string;
+  sha256?: string;
+  sourceVaultId?: string;
+  scopeIds?: string[];
+  scopeLabels?: string[];
+  canWrite?: boolean;
 }
 
 const scalar = <T>(row: ReplicaRow, key: string): T | undefined =>
   row[key] as T | undefined;
 
 export function buildDrive(
+  documentRows: ReplicaRow[],
+  contentRows: ReplicaRow[],
+  tagRows: ReplicaRow[],
+  conceptRows: ReplicaRow[],
+  schemeRows: ReplicaRow[],
+  custodyRows: ReplicaRow[]
+): { folders: NativeFolder[]; documents: NativeDocument[] } {
+  const scopeIds = new Set(
+    documentRows.map(scopeOf).filter((value): value is string => Boolean(value))
+  );
+  if (scopeIds.size === 0) {
+    return buildScopeDrive(
+      documentRows,
+      contentRows,
+      tagRows,
+      conceptRows,
+      schemeRows,
+      custodyRows
+    );
+  }
+  const folders: NativeFolder[] = [];
+  const documents: NativeDocument[] = [];
+  for (const scopeId of scopeIds) {
+    const within = (row: ReplicaRow): boolean => scopeOf(row) === scopeId;
+    const drive = buildScopeDrive(
+      documentRows.filter(within),
+      contentRows.filter(within),
+      tagRows.filter(within),
+      conceptRows.filter(within),
+      schemeRows.filter(within),
+      custodyRows.filter(within)
+    );
+    folders.push(
+      ...drive.folders.map((folder) => ({
+        ...folder,
+        id: scoped(scopeId, folder.id),
+        ...(folder.parentId
+          ? { parentId: scoped(scopeId, folder.parentId) }
+          : {}),
+      }))
+    );
+    for (const document of drive.documents) {
+      const source = documentRows.find(
+        (row) => scalar(row, "document_id") === document.id && within(row)
+      );
+      const content = contentRows.find(
+        (row) => scalar(row, "content_id") === document.contentId && within(row)
+      );
+      documents.push({
+        ...document,
+        rawId: document.id,
+        id: scoped(scopeId, document.id),
+        ...(document.folderId
+          ? { folderId: scoped(scopeId, document.folderId) }
+          : {}),
+        sha256: scalar<string>(content ?? {}, "sha256"),
+        sourceVaultId: scopeId,
+        scopeIds: scalar<string[]>(source ?? {}, "__centraidScopeIds") ?? [
+          scopeId,
+        ],
+        scopeLabels: [
+          scalar<string>(source ?? {}, "__centraidScopeLabel") ?? "Vault",
+        ],
+        canWrite: scalar<boolean>(source ?? {}, "__centraidCanWrite") ?? false,
+      });
+    }
+  }
+  const deduped = new Map<string, NativeDocument>();
+  for (const document of documents) {
+    const key = document.sha256
+      ? `sha:${document.sha256}`
+      : `id:${document.id}`;
+    const held = deduped.get(key);
+    if (!held) {
+      deduped.set(key, document);
+      continue;
+    }
+    const canonical =
+      held.canWrite === true || document.canWrite !== true ? held : document;
+    canonical.scopeIds = unique([
+      ...(held.scopeIds ?? []),
+      ...(document.scopeIds ?? []),
+    ]);
+    canonical.scopeLabels = unique([
+      ...(held.scopeLabels ?? []),
+      ...(document.scopeLabels ?? []),
+    ]);
+    canonical.canWrite = held.canWrite === true || document.canWrite === true;
+    deduped.set(key, canonical);
+  }
+  return { folders, documents: [...deduped.values()] };
+}
+
+function buildScopeDrive(
   documentRows: ReplicaRow[],
   contentRows: ReplicaRow[],
   tagRows: ReplicaRow[],
@@ -136,4 +236,16 @@ export function buildDrive(
       };
     }),
   };
+}
+
+function scopeOf(row: ReplicaRow): string | undefined {
+  return scalar<string>(row, "__centraidScopeId");
+}
+
+function scoped(scopeId: string, id: string): string {
+  return `${scopeId}:${id}`;
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }

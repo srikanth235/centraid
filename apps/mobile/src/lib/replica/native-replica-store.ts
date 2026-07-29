@@ -63,6 +63,11 @@ export class NativeReplicaStore implements ReplicaStore {
     return Promise.resolve(undefined);
   }
 
+  bootstrapPreview(cursor: ReplicaCursor): Promise<undefined> {
+    this.core.bootstrapPreview(cursor);
+    return Promise.resolve(undefined);
+  }
+
   bootstrapCommit(cursor: ReplicaCursor): Promise<ReplicaCursor> {
     return Promise.resolve(this.core.bootstrapCommit(cursor));
   }

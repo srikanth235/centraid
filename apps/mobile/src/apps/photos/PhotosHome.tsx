@@ -15,7 +15,9 @@ import GlassBar from "../../kit/components/GlassBar";
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { family, useTheme } from "../../kit/theme";
+import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
 import SpacesSwitcher from "../../screens/home/SpacesSwitcher";
@@ -70,19 +72,48 @@ export default function PhotosHome({
 }: PhotosScreenProps<"PhotosHome">): React.JSX.Element {
   const { colors, scheme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { session, gatewayBase } = useReplica();
+  const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
   const [view, setView] = useState<PhotosView>("photos");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [spacesOpen, setSpacesOpen] = useState(false);
   const [selection, setSelection] = useState(new Set<string>());
   const [backingUp, setBackingUp] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const collections = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.collection" }), [])
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   const hero = memories[0];
+  const refreshLibrary = async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      await refresh?.();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!gatewayBase) return;
+    void refreshPinnedThumbnailPack(
+      timeline.assets.flatMap((asset) => {
+        if (!asset.contentId || asset.source === "device") return [];
+        return (asset.scopeIds ?? []).map((scopeId) => ({
+          contentId: asset.contentId!,
+          scopeId,
+          uri: `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
+            scopeId
+          )}/${encodeURIComponent(asset.contentId!)}?variant=${
+            asset.kind === "video" ? "poster" : "thumb"
+          }`,
+          capturedAt: asset.capturedAt,
+          favorite: asset.favorite,
+        }));
+      })
+    );
+  }, [gatewayBase, timeline.assets]);
 
   useEffect(() => {
     if (memories.length === 0) return;
@@ -144,6 +175,7 @@ export default function PhotosHome({
         const companion = await liveVideoUri(original.asset);
         await backupDeviceMedia(session, gatewayBase, {
           localUri: original.uri,
+          ...(vaultId ? { targetVaultId: vaultId } : {}),
           filename: asset.filename,
           mediaType: asset.kind === "video" ? "video/mp4" : "image/jpeg",
           plaintextSize: new File(original.uri).size,
@@ -162,6 +194,7 @@ export default function PhotosHome({
           const companionFile = new File(companion);
           await backupDeviceMedia(session, gatewayBase, {
             localUri: companion,
+            ...(vaultId ? { targetVaultId: vaultId } : {}),
             // The Next API hands back an extracted file, not a paired asset, so
             // the companion's name comes from that file and its dimensions and
             // duration are simply not on offer.
@@ -292,6 +325,7 @@ export default function PhotosHome({
           </Pressable>
         </View>
       )}
+      <ReplicaStatusBar />
 
       <View style={styles.body}>
         {view === "photos" ? (
@@ -372,6 +406,8 @@ export default function PhotosHome({
               <PhotoTimeline
                 sections={timeline.sections}
                 selection={selection}
+                refreshing={refreshing}
+                onRefresh={() => void refreshLibrary()}
                 onSelectionChange={setSelection}
                 onOpen={(asset) =>
                   navigation.navigate("PhotoLightbox", { assetId: asset.id })

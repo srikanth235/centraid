@@ -46,12 +46,14 @@ export {
 export {
   shareToVault,
   unshareFromVault,
+  moveOutOfVault,
   readShareOrigin,
   type ShareVaultRef,
   type ShareToVaultInput,
   type ShareToVaultResult,
   type UnshareFromVaultInput,
   type UnshareFromVaultResult,
+  type MoveOutOfVaultInput,
   type ShareOriginRecord,
 } from "./share/placement.js";
 export {

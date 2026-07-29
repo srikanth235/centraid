@@ -2,7 +2,7 @@ import { File } from "expo-file-system";
 
 import { Store } from "../../storage";
 import { authHeader } from "../gateway";
-import type { NativeReplicaSession } from "../replica/native-session";
+import type { MobileReplicaSession } from "../replica/native-session";
 import { generateDeviceDerivatives } from "./derivatives-native";
 import { withDrainLock } from "./drain-lock";
 import { sha256OfFile } from "./enqueue";
@@ -15,6 +15,7 @@ import { UploadQueue } from "./native-queue";
 
 export interface DeviceMediaInput {
   localUri: string;
+  targetVaultId?: string;
   filename?: string;
   mediaType: string;
   plaintextSize: number;
@@ -36,6 +37,7 @@ export interface DeviceMediaInput {
 
 export interface BackupDocumentInput {
   localUri: string;
+  targetVaultId?: string;
   title: string;
   mediaType: string;
   plaintextSize: number;
@@ -62,7 +64,7 @@ function openQueue(gatewayBase: string): UploadQueue {
  * success over a stuck row (F6).
  */
 async function drainToSettlement(
-  session: NativeReplicaSession,
+  session: MobileReplicaSession,
   gatewayBase: string,
   queue: UploadQueue,
   sha256: string,
@@ -109,7 +111,7 @@ function deleteSource(localUri: string): void {
  * upsert by (parent, variant), and the replica intent is payload-idempotent.
  */
 export async function backupDeviceMedia(
-  session: NativeReplicaSession,
+  session: MobileReplicaSession,
   gatewayBase: string,
   input: DeviceMediaInput
 ): Promise<string> {
@@ -132,6 +134,7 @@ export async function backupDeviceMedia(
     const item = await queue.enqueue(
       {
         localUri: input.localUri,
+        ...(input.targetVaultId ? { targetVaultId: input.targetVaultId } : {}),
         mediaType: input.mediaType,
         ...(input.filename ? { filename: input.filename } : {}),
         plaintextSize: input.plaintextSize,
@@ -178,7 +181,7 @@ export async function backupDeviceMedia(
 
 /** Docs producer: same sha queue and transfer path, different canonical intent. */
 export async function backupDocument(
-  session: NativeReplicaSession,
+  session: MobileReplicaSession,
   gatewayBase: string,
   input: BackupDocumentInput
 ): Promise<string> {
@@ -187,6 +190,7 @@ export async function backupDocument(
     const item = await queue.enqueue(
       {
         localUri: input.localUri,
+        ...(input.targetVaultId ? { targetVaultId: input.targetVaultId } : {}),
         filename: input.title,
         mediaType: input.mediaType,
         plaintextSize: input.plaintextSize,

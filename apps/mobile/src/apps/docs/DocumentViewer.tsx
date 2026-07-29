@@ -3,11 +3,12 @@ import { File, Paths } from "expo-file-system";
 import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { VideoView, useVideoPlayer } from "expo-video";
-import React from "react";
+import React, { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
+import OptionSheet from "../../kit/components/OptionSheet";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { family, useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
@@ -56,22 +57,36 @@ export default function DocumentViewer({
   navigation,
 }: DocsScreenProps<"DocumentViewer">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session, gatewayBase } = useReplica();
+  const { session, gatewayBase, scopes = [] } = useReplica();
+  const [placementKind, setPlacementKind] = useState<"add" | "move">();
   const drive = useDocsLibrary();
   const document = drive.documents.find(
     (item) => item.id === route.params.documentId
   );
   const url =
     document && gatewayBase
-      ? `${gatewayBase}/centraid/_vault/blobs/${encodeURIComponent(document.contentId)}${document.mediaType.startsWith("image/") || document.mediaType === "application/pdf" ? "?variant=preview" : ""}`
+      ? `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
+          document.sourceVaultId ?? ""
+        )}/${encodeURIComponent(document.contentId)}${document.mediaType.startsWith("image/") || document.mediaType === "application/pdf" ? "?variant=preview" : ""}`
       : "";
   const action = async (name: string): Promise<void> => {
-    if (!document || !session) return;
+    if (
+      !document ||
+      !session ||
+      document.canWrite !== true ||
+      !document.sourceVaultId
+    )
+      return;
     try {
-      const result = await session.write("docs", {
+      const write = {
         action: name,
-        input: { document_id: document.id },
-      });
+        input: { document_id: document.rawId ?? document.id },
+      };
+      const result = await session.writeTo(
+        document.sourceVaultId,
+        "docs",
+        write
+      );
       // A parked write (e.g. moving to trash is medium-risk) must surface for
       // Approve/Discard rather than silently vanish (M5); denials/failures are
       // shown, not swallowed.
@@ -89,6 +104,25 @@ export default function DocumentViewer({
         error instanceof Error ? error.message : "Please try again."
       );
     }
+  };
+  const place = async (targetVaultId: string): Promise<void> => {
+    const kind = placementKind;
+    setPlacementKind(undefined);
+    if (!kind || !document?.sourceVaultId || !session) return;
+    const result = await session.place({
+      kind,
+      itemType: "core.document",
+      itemId: document.rawId ?? document.id,
+      sourceVaultId: document.sourceVaultId,
+      targetVaultId,
+    });
+    Alert.alert(
+      result.status === "executed" ? "Placement complete" : "Placement queued",
+      result.reason ??
+        (result.status === "executed"
+          ? "The document is available in the selected vault."
+          : "It will resume automatically when the gateway is reachable.")
+    );
   };
   const share = async (): Promise<void> => {
     if (!document || !url) return;
@@ -121,18 +155,40 @@ export default function DocumentViewer({
       <Viewer document={document} url={url} />
       <View style={[styles.toolbar, { borderTopColor: colors.line }]}>
         <Pressable
+          disabled={document.canWrite !== true}
           onPress={() => void action(document.starred ? "unstar" : "star")}
         >
           <Feather
             name="star"
             size={21}
-            color={document.starred ? "#d99b18" : colors.ink2}
+            color={
+              document.canWrite === true
+                ? document.starred
+                  ? "#d99b18"
+                  : colors.ink2
+                : colors.ink3
+            }
           />
         </Pressable>
         <Text style={[styles.meta, { color: colors.ink2 }]}>
-          {document.mediaType} · {document.custody ?? "local"}
+          {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
+          · {document.custody ?? "local"}
         </Text>
+        <Pressable onPress={() => setPlacementKind("add")}>
+          <Feather name="copy" size={20} color={colors.accent} />
+        </Pressable>
         <Pressable
+          disabled={document.canWrite !== true}
+          onPress={() => setPlacementKind("move")}
+        >
+          <Feather
+            name="folder-plus"
+            size={20}
+            color={document.canWrite === true ? colors.accent : colors.ink3}
+          />
+        </Pressable>
+        <Pressable
+          disabled={document.canWrite !== true}
           onPress={() =>
             Alert.alert(
               "Move to trash?",
@@ -148,9 +204,33 @@ export default function DocumentViewer({
             )
           }
         >
-          <Feather name="trash-2" size={20} color={colors.danger} />
+          <Feather
+            name="trash-2"
+            size={20}
+            color={document.canWrite === true ? colors.danger : colors.ink3}
+          />
         </Pressable>
       </View>
+      <OptionSheet
+        visible={placementKind !== undefined}
+        title={`${placementKind === "move" ? "Move" : "Add"} to…`}
+        options={scopes
+          .filter(
+            (scope) =>
+              scope.role !== "read" &&
+              !document.scopeIds?.includes(scope.vaultId)
+          )
+          .map((scope) => ({
+            id: scope.vaultId,
+            label: scope.label,
+            detail:
+              placementKind === "move"
+                ? "Target commits before source removal"
+                : "Keep in both vaults",
+          }))}
+        onSelect={(vaultId) => void place(vaultId)}
+        onClose={() => setPlacementKind(undefined)}
+      />
     </SafeAreaView>
   );
 }

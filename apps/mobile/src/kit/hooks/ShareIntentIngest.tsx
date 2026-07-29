@@ -14,7 +14,7 @@ import { ShareIntentGate, processShareIntent } from "./share-ingest";
 export function ShareIntentIngest(): null {
   const { hasShareIntent, shareIntent, resetShareIntent } =
     useShareIntentContext();
-  const { session, gatewayBase } = useReplica();
+  const { session, gatewayBase, vaultId } = useReplica();
   // One gate across renders: a re-render while an ingest is still in flight must
   // not spawn a second pass over the same files (#431 F9). The memoized gate
   // has mount lifetime without a render-time ref read/write.
@@ -32,7 +32,8 @@ export function ShareIntentIngest(): null {
         },
         session,
         gatewayBase,
-        shareIntent
+        shareIntent,
+        vaultId
       )
     );
   }, [
@@ -42,6 +43,7 @@ export function ShareIntentIngest(): null {
     resetShareIntent,
     session,
     shareIntent,
+    vaultId,
   ]);
   return null;
 }

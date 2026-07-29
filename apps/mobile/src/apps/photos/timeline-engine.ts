@@ -14,7 +14,8 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 import * as MediaLibrary from "expo-media-library";
 
 import { authHeader } from "../../lib/gateway";
-import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import type { MobileReplicaSession } from "../../lib/replica/native-session";
+import { pinnedThumbnailUri } from "../../lib/replica/thumbnail-pack";
 import { UploadQueue } from "../../lib/upload/native-queue";
 import { capturedAtIso, durationSeconds } from "./device-media";
 import { mergePhotoAssets, sectionPhotoAssets } from "./timeline-model";
@@ -64,7 +65,7 @@ function parseExif(raw?: string): Record<string, unknown> | undefined {
 class PhotoTimelineEngine {
   #subscribers = new Set<() => void>();
   #refs = 0;
-  #session?: NativeReplicaSession;
+  #session?: MobileReplicaSession;
   #gatewayBase?: string;
   #generation = 0;
   #unsubscribe?: () => void;
@@ -111,7 +112,7 @@ class PhotoTimelineEngine {
   }
 
   setSession(
-    session: NativeReplicaSession | undefined,
+    session: MobileReplicaSession | undefined,
     gatewayBase: string | undefined
   ): void {
     const sessionChanged = session !== this.#session;
@@ -181,7 +182,9 @@ class PhotoTimelineEngine {
     const generation = this.#generation;
     try {
       const [assets, content, derivatives, phashes] = await Promise.all(
-        REPLICA_ENTITIES.map((entity) => session.read("photos", { entity }))
+        REPLICA_ENTITIES.map((entity) =>
+          session.read("photos", { entity, limit: 100_000 })
+        )
       );
       if (generation !== this.#generation) return;
       this.#assetRows = assets!.rows.map((row) => row.values);
@@ -339,8 +342,14 @@ class PhotoTimelineEngine {
       );
       const kind = (value<string>(asset, "kind") ??
         "photo") as PhotoAsset["kind"];
+      const scopeId =
+        value<string>(asset, "__centraidScopeId") ??
+        value<string>(item!, "__centraidScopeId") ??
+        "";
       const original = base
-        ? `${base}/centraid/_vault/blobs/${encodeURIComponent(contentId)}`
+        ? `${base}/centraid/_gateway/blobs/${encodeURIComponent(
+            scopeId
+          )}/${encodeURIComponent(contentId)}`
         : "";
       const thumb = base
         ? `${original}?variant=${kind === "video" ? "poster" : "thumb"}`
@@ -356,7 +365,7 @@ class PhotoTimelineEngine {
           contentId,
           placeId: value<string>(asset, "place_id"),
           captureGroupId: value<string>(asset, "capture_group_id"),
-          uri: thumb,
+          uri: pinnedThumbnailUri(scopeId, contentId) ?? thumb,
           previewUri: base ? `${original}?variant=preview` : original,
           originalUri: original,
           filename: value<string>(item!, "title"),
@@ -378,6 +387,26 @@ class PhotoTimelineEngine {
           deleted: Boolean(value<string>(asset, "deleted_at")),
           backupState: "remote-only",
           source: "replica",
+          sourceVaultId: scopeId,
+          scopeIds:
+            value<string[]>(asset, "__centraidScopeIds") ??
+            value<string[]>(item!, "__centraidScopeIds") ??
+            [],
+          scopeLabels: [
+            ...(value<string[]>(item!, "__centraidScopeLabels") ?? [
+              value<string>(asset, "__centraidScopeLabel") ??
+                value<string>(item!, "__centraidScopeLabel") ??
+                "Vault",
+            ]),
+          ],
+          writableScopeIds:
+            value<string[]>(asset, "__centraidWritableScopeIds") ??
+            value<string[]>(item!, "__centraidWritableScopeIds") ??
+            [],
+          canWrite:
+            value<boolean>(asset, "__centraidCanWrite") ??
+            value<boolean>(item!, "__centraidCanWrite") ??
+            false,
         },
       ];
     });

@@ -41,6 +41,13 @@ export interface PhotoAsset {
   verifiedCasAck?: boolean;
   duplicateHint?: boolean;
   source: "device" | "replica" | "merged";
+  /** Vault whose payload supplied `assetId`; writes must keep this pair. */
+  sourceVaultId?: string;
+  /** Vault provenance badges for a sha-deduped timeline item. */
+  scopeIds?: string[];
+  scopeLabels?: string[];
+  writableScopeIds?: string[];
+  canWrite?: boolean;
 }
 
 export interface PhotoSection {
@@ -64,11 +71,40 @@ export function mergePhotoAssets(
   device: PhotoAsset[],
   remote: PhotoAsset[]
 ): PhotoAsset[] {
-  const merged = [...remote];
+  const merged: PhotoAsset[] = [];
+  const remoteIndex = new Map<string, number>();
+  for (const asset of remote) {
+    const key = asset.sha256 ? `sha:${asset.sha256}` : `id:${asset.id}`;
+    const position = remoteIndex.get(key);
+    if (position === undefined) {
+      remoteIndex.set(key, merged.length);
+      merged.push(asset);
+      continue;
+    }
+    const current = merged[position]!;
+    const canonical =
+      current.canWrite !== true && asset.canWrite === true ? asset : current;
+    merged[position] = {
+      ...canonical,
+      scopeIds: unique([
+        ...(current.scopeIds ?? []),
+        ...(asset.scopeIds ?? []),
+      ]),
+      scopeLabels: unique([
+        ...(current.scopeLabels ?? []),
+        ...(asset.scopeLabels ?? []),
+      ]),
+      writableScopeIds: unique([
+        ...(current.writableScopeIds ?? []),
+        ...(asset.writableScopeIds ?? []),
+      ]),
+      canWrite: current.canWrite === true || asset.canWrite === true,
+    };
+  }
   // sha → position in `merged`, so a second device copy of one sha folds onto
   // the same row instead of `indexOf(same)` returning -1 and dropping it. O(n).
   const indexBySha = new Map<string, number>();
-  remote.forEach((asset, index) => {
+  merged.forEach((asset, index) => {
     if (asset.sha256 !== undefined && !indexBySha.has(asset.sha256))
       indexBySha.set(asset.sha256, index);
   });
@@ -151,6 +187,10 @@ export function mergePhotoAssets(
       : undefined;
     return [{ ...asset, ...(liveVideoUri ? { liveVideoUri } : {}) }];
   });
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 /**

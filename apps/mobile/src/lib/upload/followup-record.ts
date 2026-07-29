@@ -19,6 +19,7 @@ export interface UploadFollowup extends NewUploadFollowup {
   intentId: string;
   /** Replay attempts so far; drives the poison threshold (F4). */
   attempts: number;
+  targetVaultId?: string;
 }
 
 export type UploadFollowupFactory = (
@@ -36,6 +37,7 @@ export interface PersistedUploadFollowupRow {
   attempts: number;
   poisoned_at: string | null;
   last_error: string | null;
+  target_vault_id?: string | null;
 }
 
 export function toUploadFollowup(
@@ -49,6 +51,9 @@ export function toUploadFollowup(
     action: row.action,
     input: JSON.parse(row.input_json) as Record<string, unknown>,
     attempts: row.attempts ?? 0,
+    ...(typeof row.target_vault_id === "string"
+      ? { targetVaultId: row.target_vault_id }
+      : {}),
     ...(row.derivatives_json === null
       ? {}
       : {
