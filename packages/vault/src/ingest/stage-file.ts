@@ -9,6 +9,7 @@ import type { VaultDb } from "../db.js";
 import type { Identity } from "../gateway/types.js";
 import { parseCsvRows, parseTransactionsCsv } from "./csv.js";
 import { parseIcs } from "./ics.js";
+import { parseMarkdownNote } from "./markdown.js";
 import { parseMbox, threadKey } from "./mbox.js";
 import { isPasswordsCsvHeader, parsePasswordsCsv } from "./passwords-csv.js";
 import { PUBLISHERS } from "./publishers.js";
@@ -18,6 +19,7 @@ import type {
   MessagePayload,
   PartyPayload,
   TransactionPayload,
+  NotePayload,
 } from "./publishers.js";
 import { ensureConnection, stageCandidates } from "./staging.js";
 import type { StageCandidate, StageResult } from "./staging.js";
@@ -214,6 +216,21 @@ function passwordCandidates(text: string): StageCandidate[] {
   }));
 }
 
+function markdownCandidates(filename: string, text: string): StageCandidate[] {
+  const note = parseMarkdownNote({ path: filename, text });
+  return [
+    {
+      entityType: "knowledge.note",
+      externalId: note.externalId,
+      payload: {
+        title: note.title,
+        body: note.body,
+        path: note.path,
+      } satisfies NotePayload as unknown as Record<string, unknown>,
+    },
+  ];
+}
+
 /** CSVs route by CONTENT: a password column means a password-manager export. */
 function csvCandidates(
   text: string,
@@ -260,6 +277,9 @@ function candidatesFor(
       return messageCandidates(db, text, opts.stagedShas);
     case "csv":
       return csvCandidates(text, opts);
+    case "md":
+    case "markdown":
+      return markdownCandidates(filename, text);
     default:
       return null;
   }
@@ -310,7 +330,7 @@ export function stageFile(
     });
     if (routed === null) {
       throw new Error(
-        `no importer for "${options.filename}" — supported: .ics, .vcf, .mbox, .csv, .zip`
+        `no importer for "${options.filename}" — supported: .ics, .vcf, .mbox, .csv, .md, .zip`
       );
     }
     kind = `file.${extension(options.filename) === "vcard" ? "vcf" : extension(options.filename)}`;

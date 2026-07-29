@@ -5,6 +5,7 @@ import type {
 import type { PaletteGroupDTO, PaletteRowDTO } from "../../screen-contracts.js";
 import { iconSvg } from "../iconSvg.js";
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
+import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
 
 // The ⌘K command palette's data driver — the React successor to the vanilla
 // app-palette.ts `buildGroups`. Given the current query it returns grouped
@@ -41,6 +42,8 @@ export interface PaletteDeps {
    * so callers (and older tests) without a search source still work.
    */
   conversationSearch?: PaletteConversationSearch;
+  /** FTS5 results across the eight bundled blueprint entity types. */
+  entitySearch?: PaletteEntitySearch;
 }
 
 /** Flatten an FTS `snippet()` string to plain palette-sub text (drop `⟦`/`⟧`). */
@@ -108,6 +111,35 @@ export function buildPaletteGroups(
             run: () => {
               deps.onClose();
               deps.navigate({ kind: "assistant", conversationId: h.id });
+            },
+          })
+        ),
+      });
+    }
+  }
+
+  if (q && deps.entitySearch) {
+    deps.entitySearch.ensure(query);
+    const hits = deps.entitySearch.results(query);
+    const byApp = new Map<string, typeof hits>();
+    for (const hit of hits) {
+      const rows = byApp.get(hit.appLabel) ?? [];
+      rows.push(hit);
+      byApp.set(hit.appLabel, rows);
+    }
+    for (const [appLabel, rows] of byApp) {
+      groups.push({
+        group: appLabel,
+        items: rows.slice(0, 6).map(
+          (hit): PaletteRowDTO => ({
+            variant: "action",
+            label: hit.label,
+            sub: hit.snippet || hit.entity,
+            meta: hit.appLabel,
+            iconHtml: iconSvg("Search"),
+            run: () => {
+              deps.onClose();
+              deps.navigate({ kind: "app", id: hit.appId });
             },
           })
         ),

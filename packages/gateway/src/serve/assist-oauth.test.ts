@@ -66,15 +66,15 @@ describe("Assist scope tiers", () => {
     expect(
       assistScopes(
         [
-          "https://www.googleapis.com/auth/calendar.readonly",
-          "https://www.googleapis.com/auth/calendar.readonly",
-          "https://www.googleapis.com/auth/contacts.readonly",
+          "https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/contacts",
         ],
         config
       )
     ).toStrictEqual([
-      "https://www.googleapis.com/auth/calendar.readonly",
-      "https://www.googleapis.com/auth/contacts.readonly",
+      "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/contacts",
     ]);
     expect(() => assistScopes(["openid"], config)).toThrow(
       /not part of a Centraid Assist tier/u

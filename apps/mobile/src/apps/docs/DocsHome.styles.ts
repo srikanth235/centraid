@@ -72,6 +72,7 @@ export const styles = StyleSheet.create({
     width: "48.5%",
   },
   gridList: { paddingTop: 4 },
+  gridMenu: { position: "absolute", right: 9, top: 9, zIndex: 1 },
   gridPreview: {
     alignItems: "center",
     borderRadius: 10,

@@ -5,6 +5,7 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { queueProviderWriteback } from "./provider-writeback.js";
 import { registerScheduleOrganizeCommands } from "./schedule-organize.js";
 
 const PROPOSE_EVENT: CommandDefinition = {
@@ -266,6 +267,7 @@ function rescheduleEvent(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(input.dtstart, input.dtend, sequence, ctx.now, input.event_id);
   ctx.wrote("core.event", input.event_id);
+  queueProviderWriteback(ctx, "core.event", input.event_id, ["start", "end"]);
   ctx.cite({
     claim: `rescheduled to [${input.dtstart}, ${input.dtend}) as revision ${sequence}`,
     entityType: "core.event",
@@ -419,6 +421,7 @@ function cancelEvent(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(sequence, ctx.now, input.event_id);
   ctx.wrote("core.event", input.event_id);
+  queueProviderWriteback(ctx, "core.event", input.event_id, ["status"]);
   ctx.cite({
     claim: `event ${input.event_id} cancelled as revision ${sequence}`,
     entityType: "core.event",

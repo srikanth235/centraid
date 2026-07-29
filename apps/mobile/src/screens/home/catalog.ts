@@ -2,11 +2,9 @@
 //
 // The springboard now shows all eight first-party apps *always*, whether or not
 // a desktop is paired: the three native covers (Photos / Docs / Agenda) plus the
-// five gateway-hosted apps (Tasks / Notes / People / Locker / Tally). The native
-// three ship in the binary; the gateway five only *open* once the app they front
-// has been installed on the paired desktop. When they haven't, the tile still
-// renders — dimmed, "on your desktop" — so the phone advertises the full surface
-// and routes an early tap to pairing rather than hiding the app entirely.
+// five native domain covers (Tasks / Notes / People / Locker / Tally). All
+// eight ship in the binary and read the encrypted replica, while user-created
+// apps still open through the gateway-hosted compatibility cover.
 //
 // This module is pure (no React / navigation imports) so the merge rule stays
 // unit-testable and the routing decision lives in exactly one place.
@@ -25,6 +23,7 @@ export type LauncherRoute =
   | { kind: "locker" }
   | { kind: "tasks" }
   | { kind: "people" }
+  | { kind: "notes" }
   | { kind: "tally" }
   | { kind: "app"; appId: string }
   | { kind: "pair" };
@@ -71,6 +70,13 @@ const NATIVE_APPS: readonly AppMetaResolved[] = [
     colorKey: "rose",
   }),
   resolveAppMeta({
+    id: "notes",
+    name: "Notes",
+    description: "Portable CommonMark, wikilinks and backlinks.",
+    iconKey: "Journal",
+    colorKey: "amber",
+  }),
+  resolveAppMeta({
     id: "tally",
     name: "Tally",
     description: "Multi-currency expenses and recurring shared costs.",
@@ -105,25 +111,13 @@ const NATIVE_ROUTES: Record<string, LauncherRoute> = {
   locker: { kind: "locker" },
   tasks: { kind: "tasks" },
   people: { kind: "people" },
+  notes: { kind: "notes" },
   tally: { kind: "tally" },
 };
 
-// The five gateway apps the launcher always advertises. Glyphs are picked from
-// @centraid/design-tokens `icons` — the closest silhouette where an exact match
-// doesn't exist: Tasks→Todo (checklist), Notes→Journal, People→Users,
-// Locker→Key (its vault), Tally→Coin (its ledger). Colours are just distinct
-// hues for the derived metadata; the engraved emblem stays monochrome. These
-// ids match the desktop blueprint app ids, so once installed the live listing
-// merges over this entry by id (see buildLauncherItems).
-const GATEWAY_CATALOG: readonly AppMetaResolved[] = [
-  resolveAppMeta({
-    id: "notes",
-    name: "Notes",
-    description: "Quick capture and long-form writing.",
-    iconKey: "Journal",
-    colorKey: "amber",
-  }),
-];
+// Every bundled blueprint now has a native cover. User-created apps discovered
+// from the gateway are appended below and keep the AppDetail compatibility path.
+const GATEWAY_CATALOG: readonly AppMetaResolved[] = [];
 
 /**
  * Compose the grid: native three, then the five catalog apps merged over the

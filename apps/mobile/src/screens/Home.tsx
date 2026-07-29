@@ -197,6 +197,9 @@ export default function HomeScreen({
         case "people":
           navigation.navigate("People");
           break;
+        case "notes":
+          navigation.navigate("Notes");
+          break;
         case "tally":
           navigation.navigate("Tally");
           break;

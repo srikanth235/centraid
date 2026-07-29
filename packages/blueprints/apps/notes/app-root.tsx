@@ -491,6 +491,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               }
               onAddTag={(noteId, label) => logic.addTag(noteId, label)}
               onRemoveTag={(tagId) => logic.removeTag(tagId)}
+              onLink={(noteId, target, anchor) =>
+                logic.linkNote(noteId, target, anchor)
+              }
             />
           ) : null
         }

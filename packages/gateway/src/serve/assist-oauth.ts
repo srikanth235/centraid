@@ -16,8 +16,8 @@ export const ASSIST_DEVELOPMENT_WORKER_ORIGIN = "http://127.0.0.1:8787";
 
 export const GOOGLE_ASSIST_SCOPE_TIERS = Object.freeze({
   standard: Object.freeze([
-    "https://www.googleapis.com/auth/calendar.readonly",
-    "https://www.googleapis.com/auth/contacts.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/contacts",
   ]),
   restricted: Object.freeze([
     "https://www.googleapis.com/auth/gmail.readonly",

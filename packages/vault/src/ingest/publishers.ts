@@ -8,6 +8,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { promoteStagedBlob } from "../blob/promote.js";
+import { assertTextBodyWithinBudget } from "../commands/inline-body-guard.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
@@ -165,6 +166,27 @@ function partyByIdentifiers(
   return null;
 }
 
+function ensurePeopleProfile(
+  vault: DatabaseSync,
+  partyId: string,
+  now: string
+): PublishedWrite[] {
+  const existing = vault
+    .prepare("SELECT profile_id FROM people_profile WHERE party_id = ?")
+    .get(partyId);
+  if (existing) return [];
+  const profileId = uuidv7();
+  vault
+    .prepare(
+      `INSERT INTO people_profile
+         (profile_id, party_id, role, avatar_color, cadence_days,
+          last_contacted_at, met, created_at, updated_at)
+       VALUES (?, ?, NULL, NULL, 30, NULL, NULL, ?, ?)`
+    )
+    .run(profileId, partyId, now, now);
+  return [{ type: "people.profile", id: profileId }];
+}
+
 const partyPublisher: Publisher = {
   entityType: "core.party",
   probe(vault, payload) {
@@ -202,14 +224,22 @@ const partyPublisher: Publisher = {
       .run(partyId, p.fn, p.sortName, p.bday, now, now, ONTOLOGY_VERSION);
     return {
       entityId: partyId,
-      wrote: bindIdentifiers(vault, partyId, p.identifiers),
+      wrote: [
+        ...bindIdentifiers(vault, partyId, p.identifiers),
+        ...ensurePeopleProfile(vault, partyId, now),
+      ],
     };
   },
-  update(vault, entityId, payload) {
+  update(vault, entityId, payload, now) {
     const p = assertPayload<PartyPayload>("PartyPayload", payload);
     // The vault wins: an import never rewrites a person's name or birthday —
     // it only backfills handles the vault has never seen.
-    return { wrote: bindIdentifiers(vault, entityId, p.identifiers) };
+    return {
+      wrote: [
+        ...bindIdentifiers(vault, entityId, p.identifiers),
+        ...ensurePeopleProfile(vault, entityId, now),
+      ],
+    };
   },
 };
 
@@ -566,6 +596,171 @@ const lockerItemPublisher: Publisher = {
   },
 };
 
+// ── knowledge.note (Markdown directory) ─────────────────────────────────
+
+export interface NotePayload {
+  title: string;
+  body: string;
+  /** Relative file path; parent segments become nested notebooks. */
+  path: string;
+}
+
+function noteContent(
+  vault: DatabaseSync,
+  ownerPartyId: string,
+  body: string,
+  now: string
+): { id: string; wrote: PublishedWrite[] } {
+  assertTextBodyWithinBudget(body, "text/markdown");
+  const sha = sha256Hex(body);
+  const existing = vault
+    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
+    .get(sha) as { content_id: string } | undefined;
+  if (existing) return { id: existing.content_id, wrote: [] };
+  const id = uuidv7();
+  vault
+    .prepare(
+      `INSERT INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, title, language,
+          creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+       VALUES (?, 'text/markdown', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
+    )
+    .run(
+      id,
+      `data:text/markdown;charset=utf-8,${encodeURIComponent(body)}`,
+      sha,
+      Buffer.byteLength(body, "utf8"),
+      ownerPartyId,
+      now
+    );
+  return { id, wrote: [{ type: "core.content_item", id }] };
+}
+
+function placeImportedNote(
+  vault: DatabaseSync,
+  ownerPartyId: string,
+  noteId: string,
+  path: string,
+  now: string
+): PublishedWrite[] {
+  const segments = path.replaceAll("\\", "/").split("/").slice(0, -1);
+  const wrote: PublishedWrite[] = [];
+  let parent: string | null = null;
+  for (const name of segments) {
+    if (!name || name === "." || name === "..") continue;
+    const existing = vault
+      .prepare(
+        `SELECT collection_id FROM core_collection
+          WHERE owner_party_id = ? AND name = ?
+            AND ((parent_collection_id IS NULL AND ? IS NULL) OR parent_collection_id = ?)
+          ORDER BY collection_id LIMIT 1`
+      )
+      .get(ownerPartyId, name, parent, parent) as
+      | { collection_id: string }
+      | undefined;
+    if (existing) {
+      parent = existing.collection_id;
+      continue;
+    }
+    const collectionId = uuidv7();
+    const order = vault
+      .prepare(
+        `SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM core_collection
+          WHERE owner_party_id = ?
+            AND ((parent_collection_id IS NULL AND ? IS NULL) OR parent_collection_id = ?)`
+      )
+      .get(ownerPartyId, parent, parent) as { n: number };
+    vault
+      .prepare(
+        `INSERT INTO core_collection
+           (collection_id, owner_party_id, name, cover_content_id, parent_collection_id, sort_order, created_at)
+         VALUES (?, ?, ?, NULL, ?, ?, ?)`
+      )
+      .run(collectionId, ownerPartyId, name, parent, order.n, now);
+    wrote.push({ type: "core.collection", id: collectionId });
+    parent = collectionId;
+  }
+  if (parent) {
+    const entryId = uuidv7();
+    const position = vault
+      .prepare(
+        "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM core_collection_entry WHERE collection_id = ?"
+      )
+      .get(parent) as { n: number };
+    vault
+      .prepare(
+        `INSERT OR IGNORE INTO core_collection_entry
+           (entry_id, collection_id, target_type, target_id, position, added_at)
+         VALUES (?, ?, 'knowledge.note', ?, ?, ?)`
+      )
+      .run(entryId, parent, noteId, position.n, now);
+    const changes = vault.prepare("SELECT changes() AS n").get() as {
+      n: number;
+    };
+    if (changes.n > 0)
+      wrote.push({ type: "core.collection_entry", id: entryId });
+  }
+  return wrote;
+}
+
+const notePublisher: Publisher = {
+  entityType: "knowledge.note",
+  probe(vault, payload) {
+    const p = payload as unknown as NotePayload;
+    const bodySha = sha256Hex(p.body);
+    const existing = vault
+      .prepare(
+        `SELECT n.note_id, c.sha256
+           FROM knowledge_note n JOIN core_content_item c ON c.content_id = n.body_content_id
+          WHERE n.title = ? AND n.deleted_at IS NULL
+          ORDER BY n.updated_at DESC LIMIT 1`
+      )
+      .get(p.title) as { note_id: string; sha256: string } | undefined;
+    return existing
+      ? {
+          entityId: existing.note_id,
+          disposition: existing.sha256 === bodySha ? "skip" : "update",
+          note:
+            existing.sha256 === bodySha
+              ? "same title and Markdown body"
+              : "same title; vault body wins until publish review",
+        }
+      : null;
+  },
+  create(vault, ownerPartyId, payload, now) {
+    const p = assertPayload<NotePayload>("NotePayload", payload);
+    const noteId = uuidv7();
+    const content = noteContent(vault, ownerPartyId, p.body, now);
+    vault
+      .prepare(
+        `INSERT INTO knowledge_note
+           (note_id, author_party_id, title, body_content_id, format, pinned,
+            created_at, updated_at, deleted_at, purge_at)
+         VALUES (?, ?, ?, ?, 'markdown', 0, ?, ?, NULL, NULL)`
+      )
+      .run(noteId, ownerPartyId, p.title, content.id, now, now);
+    return {
+      entityId: noteId,
+      wrote: [
+        ...content.wrote,
+        ...placeImportedNote(vault, ownerPartyId, noteId, p.path, now),
+      ],
+    };
+  },
+  update(vault, entityId, payload, now, ownerPartyId) {
+    const p = assertPayload<NotePayload>("NotePayload", payload);
+    const content = noteContent(vault, ownerPartyId, p.body, now);
+    vault
+      .prepare(
+        `UPDATE knowledge_note
+            SET title = ?, body_content_id = ?, format = 'markdown', updated_at = ?
+          WHERE note_id = ?`
+      )
+      .run(p.title, content.id, now, entityId);
+    return { wrote: content.wrote };
+  },
+};
+
 /** The publisher registry the spine walks. */
 export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
   [
@@ -574,6 +769,7 @@ export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
     messagePublisher,
     transactionPublisher,
     lockerItemPublisher,
+    notePublisher,
     ...ENRICH_PUBLISHERS,
   ].map((p) => [p.entityType, p])
 );

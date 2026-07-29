@@ -62,6 +62,7 @@ import { inlineAppLoader } from "./routes/inlineApps.js";
 import InsightsRoute from "./routes/InsightsRoute.js";
 import { createPaletteConversationSearch } from "./routes/paletteConversationSearch.js";
 import { buildPaletteGroups } from "./routes/paletteData.js";
+import { createPaletteEntitySearch } from "./routes/paletteEntitySearch.js";
 import RenameGatewayModal from "./routes/RenameGatewayModal.js";
 import RunViewRoute from "./routes/RunViewRoute.js";
 import SettingsRoute from "./routes/SettingsRoute.js";
@@ -277,6 +278,7 @@ export default function App(): JSX.Element {
       }),
     []
   );
+  const paletteEntitySearch = useMemo(() => createPaletteEntitySearch(), []);
   const [gatewaySwitcherOpen, setGatewaySwitcherOpen] = useState(false);
   // The switcher's per-gateway actions (issue #382) — "Test connection…",
   // "Rename…" and the footer "Add gateway…" all open one of these small modals;
@@ -949,9 +951,11 @@ export default function App(): JSX.Element {
   const closePalette = useCallback(() => {
     setPaletteOpen(false);
     paletteConversationSearch.reset();
+    paletteEntitySearch.reset();
     // The refresh() belongs to the palette instance that is going away.
     paletteConversationSearch.setOnResults(null);
-  }, [paletteConversationSearch]);
+    paletteEntitySearch.setOnResults(null);
+  }, [paletteConversationSearch, paletteEntitySearch]);
 
   return (
     <>
@@ -1019,6 +1023,7 @@ export default function App(): JSX.Element {
           onClose={closePalette}
           onReady={(refreshLocal) => {
             paletteConversationSearch.setOnResults(refreshLocal);
+            paletteEntitySearch.setOnResults(refreshLocal);
           }}
           buildGroups={(query) =>
             buildPaletteGroups(query, {
@@ -1034,6 +1039,7 @@ export default function App(): JSX.Element {
                 }),
               onClose: closePalette,
               conversationSearch: paletteConversationSearch,
+              entitySearch: paletteEntitySearch,
             })
           }
         />

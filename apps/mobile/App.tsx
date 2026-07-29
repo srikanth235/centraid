@@ -37,6 +37,7 @@ import DocsHome from "./src/apps/docs/DocsHome";
 import DocumentViewer from "./src/apps/docs/DocumentViewer";
 import InsightsScreen from "./src/apps/insights/Insights";
 import LockerHome from "./src/apps/locker/LockerHome";
+import NotesHome from "./src/apps/notes/NotesHome";
 import PeopleHome from "./src/apps/people/PeopleHome";
 import AlbumDetail from "./src/apps/photos/AlbumDetail";
 import BackupHealth from "./src/apps/photos/BackupHealth";
@@ -177,6 +178,7 @@ const LINKING: LinkingOptions<RootStackParamList> = {
       Locker: "locker",
       Tasks: "apps/tasks",
       People: "apps/people",
+      Notes: "apps/notes",
       Tally: "apps/tally",
       AppDetail: "apps/:appId",
       Assistant: "assistant",
@@ -520,6 +522,11 @@ export default function App(): React.JSX.Element | null {
                           <RootStack.Screen
                             name="People"
                             component={PeopleHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Notes"
+                            component={NotesHome}
                             options={COVER_OPTIONS}
                           />
                           <RootStack.Screen

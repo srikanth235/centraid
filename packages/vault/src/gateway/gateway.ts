@@ -115,6 +115,8 @@ import { LockerAuthentication } from "./locker-auth.js";
 import type { LockerAuthRequest, LockerAuthResult } from "./locker-auth.js";
 import { exportVault } from "./portability.js";
 import type { VaultExport } from "./portability.js";
+import { exportPortableVault } from "./portable-export.js";
+import type { PortableExport } from "./portable-export.js";
 import { searchEntity } from "./search.js";
 import { runReadOnlySql, VAULT_SQL_DEFAULT_ROWS } from "./sql.js";
 import type { VaultSqlRequest, VaultSqlResult } from "./sql.js";
@@ -1906,6 +1908,14 @@ export class Gateway {
     if (owner.kind !== "owner-device")
       throw new GatewayError("consent", "only the owner exports the vault");
     return exportVault(this.db, owner);
+  }
+
+  /** Full portable bundle: canonical tables, readable adapters, blobs + hashes. */
+  async exportPortableVault(cred: Credential): Promise<PortableExport> {
+    const owner = this.identify(cred);
+    if (owner.kind !== "owner-device")
+      throw new GatewayError("consent", "only the owner exports the vault");
+    return exportPortableVault(this.db, owner);
   }
 
   listParked(): ParkedSummary[] {

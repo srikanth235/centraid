@@ -315,6 +315,78 @@ describe("staging", () => {
     expect(prov.n).toBeGreaterThanOrEqual(2);
   });
 
+  test("Markdown directory stages nested notes and validation failure is non-mutating", () => {
+    const beforeBatches = db.vault
+      .prepare("SELECT count(*) AS n FROM sync_import_batch")
+      .get() as { n: number };
+    expect(() =>
+      gw.stageImportFile(owner, {
+        filename: "broken.md",
+        data: '---\ntitle: "Broken"\n# no closing fence',
+      })
+    ).toThrow(/unterminated Markdown front matter/u);
+    expect(
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM knowledge_note").get() as {
+          n: number;
+        }
+      ).n
+    ).toBe(0);
+    expect(
+      (
+        db.vault
+          .prepare("SELECT count(*) AS n FROM sync_import_batch")
+          .get() as { n: number }
+      ).n
+    ).toBe(beforeBatches.n);
+
+    const zip = zipOf([
+      {
+        name: "Work/Launch.md",
+        text: [
+          "---",
+          'centraid-id: "note-from-export"',
+          'title: "Launch plan"',
+          "---",
+          "# Launch\n\nShip it.",
+        ].join("\n"),
+      },
+      { name: "Personal/旅行.md", text: "# 旅行\n\n京都へ行く。" },
+    ]);
+    const staged = gw.stageImportFile(owner, {
+      filename: "notes.zip",
+      data: zip,
+    });
+    expect(staged.staged.create).toBe(2);
+    expect(
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM knowledge_note").get() as {
+          n: number;
+        }
+      ).n
+    ).toBe(0);
+    gw.publishImport(owner, staged.batchId);
+    expect(
+      db.vault
+        .prepare(
+          `SELECT n.title, vault_content_text(c.media_type, c.content_uri) AS body
+             FROM knowledge_note n JOIN core_content_item c ON c.content_id = n.body_content_id
+            ORDER BY n.title`
+        )
+        .all()
+        .map((row) => ({ ...row }))
+    ).toStrictEqual([
+      { title: "Launch plan", body: "# Launch\n\nShip it." },
+      { title: "旅行", body: "# 旅行\n\n京都へ行く。" },
+    ]);
+    expect(
+      db.vault
+        .prepare("SELECT name FROM core_collection ORDER BY name")
+        .all()
+        .map((row) => row.name)
+    ).toStrictEqual(["Personal", "Work"]);
+  });
+
   test("imports stay owner-only (v0)", () => {
     expect(() =>
       gw.stageImportFile(

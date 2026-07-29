@@ -173,7 +173,7 @@ export default function PaletteScreen({
             className={styles.input}
             type="text"
             autoComplete="off"
-            placeholder="Search apps and conversations…"
+            placeholder="Search everything · use notes: or people: to filter"
             value={query}
             onChange={(e) => {
               setActive(0);
@@ -187,7 +187,7 @@ export default function PaletteScreen({
           {rows.length === 0 ? (
             <output className={styles.noResults}>
               <strong>No results</strong>
-              <span>Try an app name, conversation, or action.</span>
+              <span>Try an app, entity, conversation, or action.</span>
             </output>
           ) : null}
           {groups.map((g, groupIndex) => (

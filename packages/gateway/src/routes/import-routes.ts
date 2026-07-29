@@ -15,6 +15,8 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { writeZipEntries } from "@centraid/vault";
+
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { readJson, sendJson } from "./route-helpers.js";
@@ -22,6 +24,15 @@ import { readJson, sendJson } from "./route-helpers.js";
 const PREFIX = "/centraid/_vault/imports";
 /** Imports carry whole mailboxes / Takeout zips — cap well above chat bodies. */
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
+
+const TARGET_FIELDS: Readonly<Record<string, string>> = {
+  "core.event": "Calendar event",
+  "core.party": "Person + contact channels",
+  "core.transaction": "Finance transaction",
+  "knowledge.note": "Note + notebook path",
+  "locker.item": "Locker login",
+  "social.message": "Message + attachments",
+};
 
 function decodeImportBody(
   body: Record<string, unknown>,
@@ -65,6 +76,31 @@ function decodeImportBody(
   return data;
 }
 
+function markdownDirectory(body: Record<string, unknown>): {
+  filename: string;
+  data: Buffer;
+} | null {
+  if (!Array.isArray(body.files)) return null;
+  const directoryName = String(body.directoryName ?? "Markdown notes")
+    .replaceAll(/[^\p{L}\p{N} ._-]/gu, "-")
+    .slice(0, 120);
+  const files = body.files.map((value) => {
+    if (!value || typeof value !== "object")
+      throw new Error("directory files must be objects");
+    const item = value as Record<string, unknown>;
+    if (typeof item.path !== "string" || typeof item.text !== "string")
+      throw new Error("directory files require path and text");
+    if (!/\.md(?:own)?$/iu.test(item.path))
+      throw new Error(`directory contains unsupported file: ${item.path}`);
+    return { name: item.path, data: Buffer.from(item.text, "utf8") };
+  });
+  if (files.length === 0) throw new Error("Markdown directory is empty");
+  return {
+    filename: `${directoryName || "Markdown notes"}.zip`,
+    data: writeZipEntries(files),
+  };
+}
+
 export function makeImportRouteHandler(
   vaults: Pick<VaultRegistry, "current">
 ): RouteHandler {
@@ -85,10 +121,11 @@ export function makeImportRouteHandler(
     try {
       if (method === "POST" && segments.length === 0) {
         const body = await readJson(req, MAX_IMPORT_BYTES);
-        const filename = String(body.filename ?? "");
+        const directory = markdownDirectory(body);
+        const filename = directory?.filename ?? String(body.filename ?? "");
         if (!filename)
           return sendJson(res, 400, { error: "filename is required" });
-        const data = decodeImportBody(body, filename);
+        const data = directory?.data ?? decodeImportBody(body, filename);
         const result = plane.gateway.stageImportFile(owner, {
           filename,
           data,
@@ -100,6 +137,26 @@ export function makeImportRouteHandler(
             : {}),
         });
         return sendJson(res, 200, result);
+      }
+
+      if (
+        method === "GET" &&
+        segments.length === 1 &&
+        segments[0] === "export"
+      ) {
+        const exported = await plane.gateway.exportPortableVault(owner);
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/zip");
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${exported.filename}"`
+        );
+        res.setHeader("Content-Length", String(exported.bytes.length));
+        res.setHeader("X-Centraid-Export-Id", exported.exportId);
+        res.setHeader("X-Centraid-Receipt-Id", exported.receiptId);
+        res.end(exported.bytes);
+        return true;
       }
 
       if (method === "GET" && segments.length === 0) {
@@ -219,6 +276,14 @@ export function makeImportRouteHandler(
             disposition: r.disposition,
             note: r.note,
             publishedEntityId: r.published_entity_id,
+            mapping: `${Object.keys(
+              JSON.parse(String(r.payload_json ?? "{}")) as Record<
+                string,
+                unknown
+              >
+            ).join(
+              ", "
+            )} → ${TARGET_FIELDS[String(r.entity_type)] ?? String(r.entity_type)}`,
           })),
         });
       }

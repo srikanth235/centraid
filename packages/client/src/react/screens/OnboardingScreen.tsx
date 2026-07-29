@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import { vaultImportStage } from "../../gateway-client.js";
 import type { ConnectFlowResult } from "../shell/routes/connectFlow-core.js";
 import ConnectFlow from "../shell/routes/ConnectFlow.js";
 import { connectFreshLocalGateway } from "../shell/routes/connectFlowIO.js";
@@ -73,9 +74,9 @@ export default function OnboardingScreen({
   onComplete,
   onBack,
 }: OnboardingScreenProps): JSX.Element {
-  const [step, setStep] = useState<"identity" | "connect" | "service">(
-    "identity"
-  );
+  const [step, setStep] = useState<
+    "identity" | "connect" | "service" | "import"
+  >("identity");
   const [displayName, setDisplayName] = useState("");
   const [avatarColor, setAvatarColor] = useState<string>(
     () =>
@@ -88,6 +89,8 @@ export default function OnboardingScreen({
     null
   );
   const [keychainNote, setKeychainNote] = useState(false);
+  const [wantsImport, setWantsImport] = useState(false);
+  const [stagedCount, setStagedCount] = useState(0);
   const nameRef = useRef<HTMLInputElement>(null);
 
   // Where the OS keychain will prompt on the first secret write (dev/unsigned
@@ -169,6 +172,16 @@ export default function OnboardingScreen({
     })();
   };
 
+  const finishOrImport = (result: ConnectFlowResult): void => {
+    if (!wantsImport) {
+      finish(result);
+      return;
+    }
+    setPendingResult(result);
+    setSubmitting(false);
+    setStep("import");
+  };
+
   /**
    * After connect: for the local gateway, offer H5 OS service install
    * (default off). Remote gateways skip — service install is about the
@@ -184,13 +197,13 @@ export default function OnboardingScreen({
       setStep("service");
       return;
     }
-    finish(result);
+    finishOrImport(result);
   };
 
   const declineService = (): void => {
     if (!pendingResult) return;
     void window.CentraidApi.saveSettings?.({ offerGatewayService: false });
-    finish(pendingResult);
+    finishOrImport(pendingResult);
   };
 
   const acceptService = (): void => {
@@ -209,7 +222,7 @@ export default function OnboardingScreen({
           }
         }
         await window.CentraidApi.saveSettings?.({ offerGatewayService: true });
-        finish(pendingResult);
+        finishOrImport(pendingResult);
       } catch (caughtError) {
         setSubmitting(false);
         setError(
@@ -255,7 +268,7 @@ export default function OnboardingScreen({
               decides which space you land in.
             </p>
           </>
-        ) : (
+        ) : step === "service" ? (
           <>
             <h1 className={styles.title}>
               Keep your vault <em>reachable</em>?
@@ -265,6 +278,16 @@ export default function OnboardingScreen({
               stays up when Centraid is closed — phones and other devices can
               still reach your vault. Default is off; we never install this
               without asking.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className={styles.title}>
+              Bring your data <em>home</em>.
+            </h1>
+            <p className={styles.sub}>
+              Stage an export from another calendar, contacts, notes, mail, or
+              finance app. You stay in control of the final publish.
             </p>
           </>
         )}
@@ -338,6 +361,20 @@ export default function OnboardingScreen({
                 </label>
               ))}
             </div>
+            <label className={styles.importChoice}>
+              <input
+                type="checkbox"
+                checked={wantsImport}
+                onChange={(event) => setWantsImport(event.target.checked)}
+              />
+              <span>
+                I have data to import
+                <small>
+                  Preview ICS, vCard, CSV, Markdown, MBOX, or Takeout after
+                  connecting.
+                </small>
+              </span>
+            </label>
             <button
               type="button"
               className={styles.cta}
@@ -404,7 +441,7 @@ export default function OnboardingScreen({
               </div>
             ) : null}
           </div>
-        ) : (
+        ) : step === "service" ? (
           <div className={styles.form}>
             <button
               type="button"
@@ -424,6 +461,82 @@ export default function OnboardingScreen({
               onClick={declineService}
             >
               <span>Not now</span>
+            </button>
+            {error ? (
+              <div className={styles.error} role="alert">
+                {error}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className={styles.form}>
+            <label className={styles.importPicker} htmlFor="cd-onb-import">
+              <span>
+                {stagedCount > 0
+                  ? `${stagedCount} row${stagedCount === 1 ? "" : "s"} staged`
+                  : "Choose an export file…"}
+              </span>
+              <input
+                id="cd-onb-import"
+                type="file"
+                accept=".ics,.vcf,.vcard,.mbox,.csv,.md,.markdown,.zip"
+                disabled={submitting}
+                className={a11y.srControl}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  setSubmitting(true);
+                  setError(null);
+                  const extension =
+                    file.name.split(".").at(-1)?.toLowerCase() ?? "";
+                  void (async () => {
+                    const textKinds = new Set([
+                      "ics",
+                      "vcf",
+                      "vcard",
+                      "mbox",
+                      "csv",
+                      "md",
+                      "markdown",
+                    ]);
+                    const payload = textKinds.has(extension)
+                      ? { filename: file.name, text: await file.text() }
+                      : {
+                          filename: file.name,
+                          base64: btoa(
+                            Array.from(
+                              new Uint8Array(await file.arrayBuffer()),
+                              (byte) => String.fromCharCode(byte)
+                            ).join("")
+                          ),
+                        };
+                    const staged = await vaultImportStage(payload);
+                    setStagedCount((count) => count + staged.total);
+                  })()
+                    .catch((caughtError: unknown) =>
+                      setError(
+                        caughtError instanceof Error
+                          ? caughtError.message
+                          : "Import staging failed"
+                      )
+                    )
+                    .finally(() => setSubmitting(false));
+                }}
+              />
+            </label>
+            <p className={styles.keychainNote}>
+              This is a dry run. You will review field mappings and conflicts
+              before publishing; failed validation cannot change your vault.
+            </p>
+            <button
+              type="button"
+              className={styles.cta}
+              disabled={submitting || !pendingResult}
+              onClick={() => pendingResult && finish(pendingResult)}
+            >
+              <span>
+                {stagedCount > 0 ? "Review in Centraid" : "Skip for now"}
+              </span>
             </button>
             {error ? (
               <div className={styles.error} role="alert">

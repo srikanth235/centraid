@@ -2,8 +2,12 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 
 export interface NativeFolder {
   id: string;
+  rawId?: string;
   name: string;
   parentId?: string;
+  sourceVaultId?: string;
+  canWrite?: boolean;
+  raw?: ReplicaRow;
 }
 export interface NativeDocument {
   id: string;
@@ -23,6 +27,7 @@ export interface NativeDocument {
   scopeLabels?: string[];
   canWrite?: boolean;
   raw?: ReplicaRow;
+  folderTag?: ReplicaRow;
   starTag?: ReplicaRow;
   starredConceptId?: string;
 }
@@ -64,13 +69,23 @@ export function buildDrive(
       custodyRows.filter(within)
     );
     folders.push(
-      ...drive.folders.map((folder) => ({
-        ...folder,
-        id: scoped(scopeId, folder.id),
-        ...(folder.parentId
-          ? { parentId: scoped(scopeId, folder.parentId) }
-          : {}),
-      }))
+      ...drive.folders.map((folder) => {
+        const source = conceptRows.find(
+          (row) => scalar(row, "concept_id") === folder.id && within(row)
+        );
+        return {
+          ...folder,
+          rawId: folder.id,
+          id: scoped(scopeId, folder.id),
+          ...(folder.parentId
+            ? { parentId: scoped(scopeId, folder.parentId) }
+            : {}),
+          sourceVaultId: scopeId,
+          canWrite:
+            scalar<boolean>(source ?? {}, "__centraidCanWrite") ?? false,
+          raw: source,
+        };
+      })
     );
     for (const document of drive.documents) {
       const source = documentRows.find(
@@ -222,6 +237,11 @@ function buildScopeDrive(
           scalar(tag, "target_id") === id &&
           scalar(tag, "concept_id") === starredConceptId
       );
+      const folderTag = tagRows.find(
+        (tag) =>
+          scalar(tag, "target_id") === id &&
+          folderIds.has(scalar(tag, "concept_id"))
+      );
       return {
         id,
         contentId,
@@ -243,6 +263,7 @@ function buildScopeDrive(
         trashed: Boolean(scalar(row, "deleted_at")),
         custody: custodyByContent.get(contentId),
         raw: row,
+        ...(folderTag ? { folderTag } : {}),
         ...(starTag ? { starTag } : {}),
         ...(starredConceptId ? { starredConceptId } : {}),
       };

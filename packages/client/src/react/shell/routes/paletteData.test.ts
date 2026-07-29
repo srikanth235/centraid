@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
 import { buildPaletteGroups } from "./paletteData.js";
 import type { PaletteDeps } from "./paletteData.js";
+import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
 
 // `vi.mock` is hoisted above the import by vitest, so iconSvg's design-tokens
 // dependency resolves before paletteData.js loads.
@@ -154,6 +155,41 @@ describe("paletteData", () => {
           (g) => g.group === "Conversations"
         )
       ).toBeUndefined();
+    });
+
+    it("groups entity-aware vault hits by blueprint and supports navigation", () => {
+      const navigate = vi.fn<PaletteDeps["navigate"]>();
+      const onClose = vi.fn<PaletteDeps["onClose"]>();
+      const ensure = vi.fn<PaletteEntitySearch["ensure"]>();
+      const entitySearch: PaletteEntitySearch = {
+        ensure,
+        results: () => [
+          {
+            appId: "notes",
+            appLabel: "Notes",
+            entity: "knowledge.note",
+            id: "note-1",
+            label: "Café plans",
+            snippet: "旅行 ✨",
+          },
+        ],
+        reset: vi.fn<PaletteEntitySearch["reset"]>(),
+        setOnResults: vi.fn<PaletteEntitySearch["setOnResults"]>(),
+      };
+      const groups = buildPaletteGroups(
+        "notes: café",
+        deps({ entitySearch, navigate, onClose })
+      );
+      expect(ensure).toHaveBeenCalledWith("notes: café");
+      const notes = groups.find((group) => group.group === "Notes")!;
+      expect(notes.items[0]).toMatchObject({
+        label: "Café plans",
+        sub: "旅行 ✨",
+        meta: "Notes",
+      });
+      notes.items[0]!.run();
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(navigate).toHaveBeenCalledWith({ kind: "app", id: "notes" });
     });
   });
 });

@@ -102,6 +102,37 @@ America/New_York, and Australia/Sydney across a full year. Mobile and
 blueprint typechecks, mobile import boundaries, and the focused native suite
 are green. -->
 
+<!-- Checkpoint: Wave 5 uses one fail-before-publish staging contract for ICS,
+vCard, CSV, Markdown directories, and the integrity-checked full export ZIP.
+The export includes documents, immutable versions, notes, collections, tags,
+canonical content hashes, and a verification manifest; onboarding exposes a
+dry run and mapping preview before canonical publication. PWA directory
+selection uses File System Access when available and a multi-file fallback
+otherwise. Expo Docs uses the OS document provider and the durable background
+upload queue, with OS sharing as the device-file export adapter; rename, move,
+folder delete, trash, and restore are now reachable on mobile.
+
+Google Calendar and Contacts now use one provider-writeback contract with
+incremental cursors, entity/field provenance, conditional writes, deterministic
+conflict records, and approved outbox survival across revoke/reconnect. The
+shared Assist client requests the write scopes already selected in Wave 0; BYO
+clients remain available. Synthetic end-to-end coverage proves local edit →
+provider PATCH, a 403 authorization loss, token replacement, and replay.
+
+Wave 6's first compound surface also lands here because it shares the same
+portable data boundary: one FTS5 omnibox fans out across all eight blueprints
+on web and mobile with visible app filters and Unicode-preserving results.
+Notes is now a first-class native cover. Both editors preserve plain
+CommonMark source; reviewed `[[wikilinks]]` compile separately to temporal
+`core.link` rows and text anchors, support any non-secret blueprint entity,
+render backlinks, and leave unresolved links as readable, actionable text.
+
+Ambiguity decision: Markdown is normalized only from CRLF to LF. Centraid does
+not serialize a proprietary editor AST into the body, so round trips remain
+portable and wikilink graph metadata can be rebuilt or discarded without
+rewriting authored text. Google conflicts are persisted instead of applying a
+last-writer-wins guess. -->
+
 ### Costs
 
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
@@ -125,3 +156,5 @@ are green. -->
 | codex-019fad18-4c1-1785337630-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 9699 | 0 | 1854464 | 631 | 10330 | 0.4973 | 4449739 | 0 | 233004032 | 636110 | feat(time): unify recurrence and Agenda editing (#630) -m governance: allow-tool |
 | codex-019fad18-4c1-1785340357-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 482747 | 0 | 28319488 | 98138 | 580885 | 9.7588 | 4932486 | 0 | 261323520 | 734248 | feat(blueprints): complete organizational parity (#630) |
 | codex-019fad18-4c1-1785340549-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 34754 | 0 | 2243584 | 4721 | 39475 | 0.7186 | 4967240 | 0 | 263567104 | 738969 | feat(blueprints): complete organizational parity (#630) |
+| codex-019fad18-4c1-1785343725-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 801482 | 0 | 31281664 | 101002 | 902484 | 11.3392 | 5768722 | 0 | 294848768 | 839971 | feat(interop): add portable sync and linked search (#630) |
+| codex-019fad18-4c1-1785344044-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 45581 | 0 | 2689024 | 7155 | 52736 | 0.8935 | 5814303 | 0 | 297537792 | 847126 | feat(interop): add portable sync and linked search (#630) |

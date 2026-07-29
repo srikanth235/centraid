@@ -466,6 +466,26 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
+  async function linkNote(
+    noteId: string,
+    target: { type: string; id: string },
+    anchor: {
+      exact: string;
+      prefix: string;
+      suffix: string;
+      start: number;
+    }
+  ): Promise<void> {
+    const outcome = await act("link", {
+      note_id: noteId,
+      target_type: target.type,
+      target_id: target.id,
+      ...anchor,
+    });
+    if (narrate(outcome) || outcome?.status === "denied") await refresh();
+    else render();
+  }
+
   // ---------- Search ----------
 
   let searchSeq = 0;
@@ -534,6 +554,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     removeAttachment,
     addTag,
     removeTag,
+    linkNote,
     applySearchInput,
     clearSearch,
     clearPending,

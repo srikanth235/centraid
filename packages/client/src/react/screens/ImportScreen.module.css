@@ -35,6 +35,12 @@
   color: var(--text-secondary);
   flex: none;
 }
+.mapping {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  flex: 1;
+  min-width: 120px;
+}
 .connection {
   display: flex;
   align-items: center;

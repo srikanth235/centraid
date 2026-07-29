@@ -441,13 +441,16 @@ export interface VaultImportRow {
   disposition: "create" | "update" | "skip" | "merge-candidate";
   note: string | null;
   publishedEntityId: string | null;
+  mapping: string;
 }
 
 /** Stage a dropped file into a reviewable draft batch. */
 export async function vaultImportStage(input: {
-  filename: string;
+  filename?: string;
   text?: string;
   base64?: string;
+  directoryName?: string;
+  files?: { path: string; text: string }[];
   accountName?: string;
   currency?: string;
 }): Promise<{
@@ -464,6 +467,27 @@ export async function vaultImportStage(input: {
     body: JSON.stringify(input),
   });
   return readJson(res, "stage import");
+}
+
+/** Download the verified all-data portable bundle. */
+export async function vaultPortableExport(): Promise<{
+  blob: Blob;
+  filename: string;
+}> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, "/centraid/_vault/imports/export", {
+    method: "GET",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    await readJson(res, "export portable vault");
+    throw new Error("portable export failed");
+  }
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const filename =
+    /filename="(?<filename>[^"]+)"/u.exec(disposition)?.groups?.filename ??
+    "centraid-vault.zip";
+  return { blob: await res.blob(), filename };
 }
 
 /** Batches, newest first. */

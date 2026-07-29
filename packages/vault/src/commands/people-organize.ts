@@ -11,6 +11,7 @@ import {
   markEntityRevisionUndone,
   recordEntityRevision,
 } from "./entity-revisions.js";
+import { queueProviderWriteback } from "./provider-writeback.js";
 
 type ChannelKind = "phone" | "email" | "address" | "handle";
 
@@ -213,6 +214,11 @@ const SAVE_CHANNEL: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("social.contact_channel", channelId);
+    if (input.kind === "email" || input.kind === "phone") {
+      queueProviderWriteback(ctx, "core.party", input.party_id, [
+        input.kind === "email" ? "emailAddresses" : "phoneNumbers",
+      ]);
+    }
     return {
       channel_id: channelId,
       normalized_value: normalized,
@@ -267,6 +273,11 @@ const DELETE_CHANNEL: CommandDefinition = {
       .prepare("DELETE FROM social_contact_channel WHERE channel_id = ?")
       .run(channelId);
     ctx.wrote("social.contact_channel", channelId);
+    if (row.kind === "email" || row.kind === "phone") {
+      queueProviderWriteback(ctx, "core.party", row.party_id, [
+        row.kind === "email" ? "emailAddresses" : "phoneNumbers",
+      ]);
+    }
     return {
       channel_id: channelId,
       revision_id: revision.revisionId,
@@ -296,6 +307,11 @@ function restoreChannel(ctx: HandlerCtx, row: ChannelRow): void {
       ctx.now
     );
   ctx.wrote("social.contact_channel", row.channel_id);
+  if (row.kind === "email" || row.kind === "phone") {
+    queueProviderWriteback(ctx, "core.party", row.party_id, [
+      row.kind === "email" ? "emailAddresses" : "phoneNumbers",
+    ]);
+  }
 }
 
 const UNDO_CHANNEL: CommandDefinition = {

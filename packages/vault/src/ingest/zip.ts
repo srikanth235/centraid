@@ -47,6 +47,77 @@ function safeEntryName(name: string): boolean {
   );
 }
 
+/** CRC-32 (IEEE) used by the ZIP container. */
+function crc32(data: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Write a deterministic, uncompressed ZIP archive. Portable vault exports
+ * favor verifiability over compression: every entry's bytes hash exactly as
+ * stored, and the deliberately small writer has no streaming/data-descriptor
+ * ambiguity for importers on another machine.
+ */
+export function writeZipEntries(entries: readonly ZipEntry[]): Buffer {
+  if (entries.length > MAX_ZIP_ENTRIES)
+    throw new Error(`zip contains too many entries (max ${MAX_ZIP_ENTRIES})`);
+  const seen = new Set<string>();
+  const locals: Buffer[] = [];
+  const central: Buffer[] = [];
+  let localOffset = 0;
+  for (const entry of entries) {
+    if (!safeEntryName(entry.name) || entry.name.endsWith("/"))
+      throw new Error(`unsafe zip entry name: ${entry.name}`);
+    if (seen.has(entry.name))
+      throw new Error(`duplicate zip entry: ${entry.name}`);
+    seen.add(entry.name);
+    const name = Buffer.from(entry.name, "utf8");
+    const checksum = crc32(entry.data);
+    const local = Buffer.alloc(30 + name.length);
+    local.writeUInt32LE(LOCAL_SIG, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6); // UTF-8 names
+    local.writeUInt16LE(0, 8); // stored
+    local.writeUInt32LE(checksum, 14);
+    local.writeUInt32LE(entry.data.length, 18);
+    local.writeUInt32LE(entry.data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    name.copy(local, 30);
+    locals.push(local, entry.data);
+
+    const directory = Buffer.alloc(46 + name.length);
+    directory.writeUInt32LE(CDIR_SIG, 0);
+    directory.writeUInt16LE(20, 4);
+    directory.writeUInt16LE(20, 6);
+    directory.writeUInt16LE(0x0800, 8);
+    directory.writeUInt16LE(0, 10);
+    directory.writeUInt32LE(checksum, 16);
+    directory.writeUInt32LE(entry.data.length, 20);
+    directory.writeUInt32LE(entry.data.length, 24);
+    directory.writeUInt16LE(name.length, 28);
+    directory.writeUInt32LE(localOffset, 42);
+    name.copy(directory, 46);
+    central.push(directory);
+    localOffset += local.length + entry.data.length;
+  }
+  const centralOffset = localOffset;
+  const centralSize = central.reduce((sum, item) => sum + item.length, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(EOCD_SIG, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralSize, 12);
+  eocd.writeUInt32LE(centralOffset, 16);
+  return Buffer.concat([...locals, ...central, eocd]);
+}
+
 /** Extract every file entry (directories skipped). Throws on a non-zip. */
 export function readZipEntries(buffer: Buffer): ZipEntry[] {
   if (buffer.length < 22)

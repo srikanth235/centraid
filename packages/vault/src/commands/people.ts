@@ -31,6 +31,7 @@ import { setStarred, starredExistsSql } from "./flags.js";
 import { contentItemFor } from "./knowledge.js";
 import { RELATIONS_SCHEME_URI, RELATIONS_SCHEME_URI_SQL } from "./links.js";
 import { registerPeopleOrganizeCommands } from "./people-organize.js";
+import { queueProviderWriteback } from "./provider-writeback.js";
 
 // An https URI, not a urn: one — this literal interpolates into condition SQL,
 // where `:lists` would read as a named parameter (the issue-258 colon-literal
@@ -466,6 +467,8 @@ function editPerson(ctx: HandlerCtx): Record<string, unknown> {
       .get(input.party_id) as { profile_id: string } | undefined;
     if (profile) ctx.wrote("people.profile", profile.profile_id);
   }
+  if (input.display_name !== undefined)
+    queueProviderWriteback(ctx, "core.party", input.party_id, ["names"]);
   return {
     party_id: input.party_id,
     revision_id: revision.revisionId,
@@ -1184,6 +1187,9 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
           )
           .run(birthDate, ctx.now, input.party_id);
         ctx.wrote("core.party", input.party_id);
+        queueProviderWriteback(ctx, "core.party", input.party_id, [
+          "birthdays",
+        ]);
       }
       // Birthday is single-valued: keep any other "Birthday" rows for this
       // party in step so no two surfaces ever disagree on the MM-DD.

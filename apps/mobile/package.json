@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",
+    "@centraid/blueprints": "workspace:*",
     "@centraid/client": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
     "@centraid/protocol": "workspace:*",

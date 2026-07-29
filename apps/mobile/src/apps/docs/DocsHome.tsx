@@ -26,6 +26,7 @@ import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";
 import { styles } from "./DocsHome.styles";
+import DocsItemActions from "./DocsItemActions";
 import { GridItem, ListItem } from "./DocsLibraryItems";
 import type { DriveItem } from "./DocsLibraryItems";
 import { useDocsLibrary } from "./useDocsLibrary";
@@ -66,6 +67,7 @@ export default function DocsHome({
   const [addOpen, setAddOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<DriveItem>();
   const refreshLibrary = async (): Promise<void> => {
     setRefreshing(true);
     try {
@@ -212,7 +214,20 @@ export default function DocsHome({
       });
       return uploadNext(index + 1);
     };
-    await uploadNext(0);
+    try {
+      await uploadNext(0);
+      Alert.alert(
+        "Import started",
+        "Files are in the durable transfer queue. iOS and Android can continue the upload during an OS background sync."
+      );
+    } catch (error) {
+      Alert.alert(
+        "Import needs attention",
+        error instanceof Error
+          ? error.message
+          : "The durable queue will retry after reconnecting."
+      );
+    }
   };
   const createFolder = async (): Promise<void> => {
     if (!session || !folderName.trim()) return;
@@ -470,9 +485,19 @@ export default function DocsHome({
         }
         renderItem={({ item }) =>
           view === "grid" ? (
-            <GridItem item={item} navigation={navigation} colors={colors} />
+            <GridItem
+              item={item}
+              navigation={navigation}
+              colors={colors}
+              onMenu={setSelectedItem}
+            />
           ) : (
-            <ListItem item={item} navigation={navigation} colors={colors} />
+            <ListItem
+              item={item}
+              navigation={navigation}
+              colors={colors}
+              onMenu={setSelectedItem}
+            />
           )
         }
       />
@@ -546,6 +571,23 @@ export default function DocsHome({
           )}
         </View>
       </Modal>
+      <DocsItemActions
+        key={
+          selectedItem?.kind === "folder"
+            ? `folder:${selectedItem.folder.id}`
+            : selectedItem?.kind === "document"
+              ? `document:${selectedItem.document.id}`
+              : "closed"
+        }
+        item={selectedItem}
+        folders={drive.folders}
+        rootFolderId={drive.rootFolderId}
+        onClose={() => setSelectedItem(undefined)}
+        onParked={() =>
+          navigation.navigate("Settings", { screen: "Approvals" })
+        }
+        onChanged={refreshLibrary}
+      />
     </SafeAreaView>
   );
 }

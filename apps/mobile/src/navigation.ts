@@ -8,6 +8,7 @@
 //   ├─ Locker        → LockerHome   (native authenticated secrets cover)
 //   ├─ Tasks         → TasksHome    (native offline task organizer)
 //   ├─ People        → PeopleHome   (native offline contact organizer)
+//   ├─ Notes         → NotesHome    (native CommonMark + linked-data editor)
 //   ├─ Tally         → TallyHome    (native offline shared ledger)
 //   ├─ AppDetail     → AppDetailScreen (remote-app WebView cover)
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
@@ -80,6 +81,7 @@ export type RootStackParamList = {
   Locker: undefined;
   Tasks: undefined;
   People: undefined;
+  Notes: undefined;
   Tally: undefined;
   AppDetail: { appId: string };
   Assistant: undefined;
@@ -102,6 +104,7 @@ export type AppDetailScreenProps = RootScreenProps<"AppDetail">;
 export type LockerScreenProps = RootScreenProps<"Locker">;
 export type TasksScreenProps = RootScreenProps<"Tasks">;
 export type PeopleScreenProps = RootScreenProps<"People">;
+export type NotesScreenProps = RootScreenProps<"Notes">;
 export type TallyScreenProps = RootScreenProps<"Tally">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
 export type AutomationsScreenProps = RootScreenProps<"Automations">;

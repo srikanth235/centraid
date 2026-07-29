@@ -4,7 +4,7 @@ import { deflateRawSync } from "node:zlib";
 
 import { describe, expect, test } from "vitest";
 
-import { MAX_ZIP_ENTRY_BYTES, readZipEntries } from "./zip.js";
+import { MAX_ZIP_ENTRY_BYTES, readZipEntries, writeZipEntries } from "./zip.js";
 
 /** Build a tiny non-zip64 archive with one stored and one deflated file. */
 function buildZip(): Buffer {
@@ -91,6 +91,24 @@ function buildZip(): Buffer {
 }
 
 describe("zip", () => {
+  test("writeZipEntries round-trips deterministic UTF-8 paths and bytes", () => {
+    const input = [
+      { name: "notes/東京.md", data: Buffer.from("# 東京\n") },
+      { name: "calendar.ics", data: Buffer.from("BEGIN:VCALENDAR\r\n") },
+    ];
+    const first = writeZipEntries(input);
+    expect(writeZipEntries(input)).toStrictEqual(first);
+    expect(
+      readZipEntries(first).map((entry) => ({
+        name: entry.name,
+        text: entry.data.toString("utf8"),
+      }))
+    ).toStrictEqual([
+      { name: "notes/東京.md", text: "# 東京\n" },
+      { name: "calendar.ics", text: "BEGIN:VCALENDAR\r\n" },
+    ]);
+  });
+
   test("readZipEntries extracts stored and deflated files", () => {
     const entries = readZipEntries(buildZip());
     expect(entries.map((e) => e.name).sort()).toStrictEqual([

@@ -41,6 +41,16 @@ function toEventRow(event) {
         ? event.recurrence.join("\n")
         : null,
       status: event.status || "confirmed",
+      providerVersion: event.etag || null,
+      providerUpdatedAt: event.updated || null,
+      providerFields: [
+        "summary",
+        "description",
+        "start",
+        "end",
+        "recurrence",
+        "status",
+      ],
     },
   };
 }

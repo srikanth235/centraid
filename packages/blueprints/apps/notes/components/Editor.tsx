@@ -18,6 +18,7 @@ import { relTime, renderAttachments } from "../kit.ts";
 import type { Note, NotePatch, Notebook } from "../types.ts";
 import { History } from "./History.tsx";
 import { Icon } from "./Shared.tsx";
+import { WikiLinks } from "./WikiLinks.tsx";
 
 import styles from "./Editor.module.css";
 import shared from "./shared.module.css";
@@ -285,6 +286,7 @@ export function Editor({
   onRemoveAttachment,
   onAddTag,
   onRemoveTag,
+  onLink,
 }: {
   note: Note;
   trashed: boolean;
@@ -307,6 +309,16 @@ export function Editor({
   ) => Promise<VaultOutcome | undefined>;
   onAddTag: (noteId: string, label: string) => void;
   onRemoveTag: (tagId: string) => void;
+  onLink: (
+    noteId: string,
+    target: { type: string; id: string },
+    anchor: {
+      exact: string;
+      prefix: string;
+      suffix: string;
+      start: number;
+    }
+  ) => Promise<void>;
 }) {
   const [title, setTitle] = useState(note.title ?? "");
   const [body, setBody] = useState(note.body ?? "");
@@ -646,6 +658,14 @@ export function Editor({
               }
             />
           ) : null}
+
+          <WikiLinks
+            note={note}
+            body={body}
+            onLink={(target, anchor) =>
+              onLink(note.note_id, { type: target.type, id: target.id }, anchor)
+            }
+          />
 
           {trashed ? null : (
             <>

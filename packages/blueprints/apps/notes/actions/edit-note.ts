@@ -1,3 +1,5 @@
+import { normalizeCommonMark } from "../commonmark.ts";
+
 /**
  * Edit a note through the vault's typed command — partial update: only the
  * fields sent change, and a body edit re-points the note at a new (or
@@ -14,7 +16,7 @@ export default async function editNote({ body, ctx }: HandlerArgs) {
         ...(input.title == null ? {} : { title: String(input.title) }),
         ...(input.body_text == null
           ? {}
-          : { body_text: String(input.body_text) }),
+          : { body_text: normalizeCommonMark(input.body_text) }),
         ...(input.format == null ? {} : { format: String(input.format) }),
         ...(input.pinned == null ? {} : { pinned: Number(input.pinned) }),
       },

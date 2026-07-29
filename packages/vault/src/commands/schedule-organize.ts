@@ -1,5 +1,6 @@
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { queueProviderWriteback } from "./provider-writeback.js";
 
 const STRING = { type: "string", minLength: 1 } as const;
 
@@ -137,6 +138,20 @@ function editEvent(ctx: HandlerCtx): Record<string, unknown> {
 
   updateEventExtension(ctx, input);
   replaceAttendees(ctx, input);
+  queueProviderWriteback(
+    ctx,
+    "core.event",
+    input.event_id,
+    [
+      input.summary === undefined ? null : "summary",
+      input.description === undefined && !input.clear_description
+        ? null
+        : "description",
+      input.dtstart === undefined ? null : "start",
+      input.dtend === undefined ? null : "end",
+      input.rrule === undefined && !input.clear_rrule ? null : "recurrence",
+    ].filter((field): field is string => field !== null)
+  );
   return { event_id: input.event_id, sequence };
 }
 
@@ -256,6 +271,20 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
         )
         .run(...updates.map(([, value]) => value), ctx.now, input.event_id);
       ctx.wrote("core.event", input.event_id);
+      queueProviderWriteback(
+        ctx,
+        "core.event",
+        input.event_id,
+        updates.map(([column]) =>
+          column === "dtstart"
+            ? "start"
+            : column === "dtend"
+              ? "end"
+              : column === "rrule"
+                ? "recurrence"
+                : column
+        )
+      );
     }
     return { event_id: input.event_id, scope: input.scope };
   }

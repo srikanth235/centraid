@@ -99,7 +99,7 @@ describe("index", () => {
         redirect_uri: "https://oauth.centraid.dev/callback",
         state: STATE,
         browser_binding: BROWSER_BINDING,
-        scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+        scopes: ["https://www.googleapis.com/auth/calendar.events"],
         ...(receipt ? { receipt } : {}),
         ...bodyPatch,
       }),
@@ -154,7 +154,7 @@ describe("index", () => {
             refresh_token: "1//gateway-only",
             expires_in: 3600,
             token_type: "Bearer",
-            scope: "https://www.googleapis.com/auth/calendar.readonly",
+            scope: "https://www.googleapis.com/auth/calendar.events",
           });
         }
       );
@@ -173,7 +173,7 @@ describe("index", () => {
         refresh_token: "1//gateway-only",
         expires_in: 3600,
         token_type: "Bearer",
-        scope: "https://www.googleapis.com/auth/calendar.readonly",
+        scope: "https://www.googleapis.com/auth/calendar.events",
       });
       expect(upstream).toHaveBeenCalledOnce();
       expect(response.headers.get("cache-control")).toContain("no-store");
@@ -571,7 +571,7 @@ describe("index", () => {
       const missingToken = vi.fn<typeof fetch>(async () =>
         Response.json({
           token_type: "Bearer",
-          scope: "https://www.googleapis.com/auth/calendar.readonly",
+          scope: "https://www.googleapis.com/auth/calendar.events",
         })
       );
       const missing = await handleRequest(
@@ -622,7 +622,7 @@ describe("index", () => {
           access_token: "ya29.recovered",
           expires_in: 3600,
           token_type: "Bearer",
-          scope: "https://www.googleapis.com/auth/calendar.readonly",
+          scope: "https://www.googleapis.com/auth/calendar.events",
         })
       );
 

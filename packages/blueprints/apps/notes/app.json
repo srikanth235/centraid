@@ -36,6 +36,36 @@
       },
       {
         "schema": "core",
+        "table": "link_entities",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "schedule",
+        "table": "task",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "expense",
+        "verbs": "read"
+      },
+      {
+        "schema": "media",
+        "table": "media_asset",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "collection",
         "verbs": "read"
       },
@@ -452,6 +482,34 @@
       "writes": []
     },
     {
+      "name": "link",
+      "description": "Compile one reviewed CommonMark [[wikilink]] into a typed, temporal core.link reference with an optional text anchor.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": { "type": "string", "minLength": 1 },
+          "target_type": { "type": "string", "minLength": 1 },
+          "target_id": { "type": "string", "minLength": 1 },
+          "exact": { "type": "string", "minLength": 1 },
+          "prefix": { "type": "string" },
+          "suffix": { "type": "string" },
+          "start": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["note_id", "target_type", "target_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "attach",
       "description": "Pin a file (image, PDF, any media) to a note through core.attach; bytes are stored as a deduped canonical content item.",
       "confirmation": "none",
@@ -605,6 +663,24 @@
     }
   ],
   "queries": [
+    {
+      "name": "link-targets",
+      "description": "FTS5 powerbox search across notes, people, events, tasks, expenses, photos and documents; returns secret-free entity-aware link targets.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string", "minLength": 1 }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "targets": { "type": "array" }
+        }
+      }
+    },
     {
       "name": "library",
       "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, a short body preview (`preview`) and checklist tally (`check`), and tags (`[{tag_id, concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull, and never full bodies (the editor pulls those via `note`); `truncated` says older notes exist beyond the window.",

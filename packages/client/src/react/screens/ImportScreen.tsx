@@ -14,7 +14,56 @@ import appSettingsCss from "../styles/appSettings.module.css";
 import vault from "../styles/vault.module.css";
 import styles from "./ImportScreen.module.css";
 
-const TEXT_KINDS = new Set(["ics", "vcf", "vcard", "mbox", "csv"]);
+const TEXT_KINDS = new Set([
+  "ics",
+  "vcf",
+  "vcard",
+  "mbox",
+  "csv",
+  "md",
+  "markdown",
+]);
+
+interface DirectoryHandle {
+  name: string;
+  entries: () => AsyncIterableIterator<[string, DirectoryHandle | FileHandle]>;
+  kind: "directory";
+}
+
+interface FileHandle {
+  getFile: () => Promise<File>;
+  kind: "file";
+}
+
+async function markdownFilesFromHandle(
+  root: DirectoryHandle
+): Promise<{ path: string; text: string }[]> {
+  const files: { path: string; text: string }[] = [];
+  const visit = async (
+    directory: DirectoryHandle,
+    prefix: string
+  ): Promise<void> => {
+    for await (const [name, handle] of directory.entries()) {
+      const path = prefix ? `${prefix}/${name}` : name;
+      if (handle.kind === "directory") await visit(handle, path);
+      else if (/\.md(?:own)?$/iu.test(name))
+        files.push({ path, text: await (await handle.getFile()).text() });
+    }
+  };
+  await visit(root, "");
+  return files;
+}
+
+function download(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 function summaryLine(summary: Record<string, number>): string {
   const parts: string[] = [];
@@ -114,6 +163,7 @@ function DraftSection({
               {row.note ? (
                 <span className={styles.rowNote}>{row.note}</span>
               ) : null}
+              <span className={styles.mapping}>{row.mapping}</span>
             </div>
           ))}
           {rows.length > 12 ? (
@@ -164,6 +214,7 @@ export default function ImportScreen({
   publish,
   discard,
   setConnectionStatus,
+  exportPortable,
   showToast,
 }: ImportBridgeProps): JSX.Element {
   const [state, setState] = useState<
@@ -171,6 +222,7 @@ export default function ImportScreen({
   >("loading");
   const [picking, setPicking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const directoryRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(
     (): Promise<void> =>
@@ -214,6 +266,52 @@ export default function ImportScreen({
     })();
   };
 
+  const stageDirectory = (
+    directoryName: string,
+    files: { path: string; text: string }[]
+  ): void => {
+    setPicking(true);
+    void stage({ directoryName, files })
+      .then(async (total) => {
+        showToast?.(
+          `Staged ${total} note${total === 1 ? "" : "s"} — review mappings below`
+        );
+        await reload();
+      })
+      .catch((error: unknown) =>
+        showToast?.(
+          error instanceof Error ? error.message : "Directory import failed"
+        )
+      )
+      .finally(() => setPicking(false));
+  };
+
+  const chooseDirectory = (): void => {
+    const picker = (
+      window as Window & {
+        showDirectoryPicker?: () => Promise<DirectoryHandle>;
+      }
+    ).showDirectoryPicker;
+    if (!picker) {
+      directoryRef.current?.click();
+      return;
+    }
+    setPicking(true);
+    void picker()
+      .then(async (handle) => {
+        const files = await markdownFilesFromHandle(handle);
+        setPicking(false);
+        stageDirectory(handle.name, files);
+      })
+      .catch((error: unknown) => {
+        setPicking(false);
+        if (!(error instanceof DOMException && error.name === "AbortError"))
+          showToast?.(
+            error instanceof Error ? error.message : "Directory import failed"
+          );
+      });
+  };
+
   const act = (
     run: () => Promise<void>,
     okMsg: string,
@@ -251,9 +349,10 @@ export default function ImportScreen({
       <div className={appSettingsCss.appSettingsSection}>
         <div className={vault.label}>{`Import into · ${state.vaultName}`}</div>
         <Note>
-          Calendar (.ics), contacts (.vcf), mail (.mbox), bank statements (.csv)
-          or a Google Takeout (.zip). Files stage as a reviewable draft —
-          nothing lands until you publish.
+          Calendar (.ics), contacts (.vcf), mail (.mbox), bank statements
+          (.csv), Markdown notes (.md), or a Google Takeout (.zip). Files stage
+          with mapping and conflict previews — validation never changes the
+          vault, and nothing lands until you publish.
         </Note>
         <div className={vault.demoActions}>
           <button
@@ -268,10 +367,76 @@ export default function ImportScreen({
             ref={fileRef}
             type="file"
             className={styles.file}
-            accept=".ics,.vcf,.vcard,.mbox,.csv,.zip"
+            accept=".ics,.vcf,.vcard,.mbox,.csv,.md,.markdown,.zip"
             onChange={onFile}
           />
+          <button
+            type="button"
+            className={vault.grantBtn}
+            disabled={picking}
+            onClick={chooseDirectory}
+          >
+            Choose a Markdown folder…
+          </button>
+          <input
+            ref={(node) => {
+              directoryRef.current = node;
+              node?.setAttribute("webkitdirectory", "");
+            }}
+            type="file"
+            multiple
+            className={styles.file}
+            accept=".md,.markdown"
+            onChange={(event) => {
+              const selected = Array.from(event.target.files ?? []);
+              if (selected.length === 0) return;
+              const files = selected
+                .filter((file) => /\.md(?:own)?$/iu.test(file.name))
+                .map(async (file) => ({
+                  path:
+                    (file as File & { webkitRelativePath?: string })
+                      .webkitRelativePath || file.name,
+                  text: await file.text(),
+                }));
+              void Promise.all(files).then((ready) =>
+                stageDirectory(
+                  ready[0]?.path.split("/")[0] ?? "Markdown notes",
+                  ready
+                )
+              );
+            }}
+          />
         </div>
+      </div>
+
+      <div className={appSettingsCss.appSettingsSection}>
+        <div className={vault.label}>Take everything with you</div>
+        <Note>
+          Download a verified bundle with every canonical row, document version,
+          folder, tag, content byte, and readable ICS, vCard, CSV, and Markdown
+          adapters. The manifest hashes every file.
+        </Note>
+        <button
+          type="button"
+          className={vault.grantBtn}
+          disabled={picking}
+          onClick={() => {
+            setPicking(true);
+            void exportPortable()
+              .then((result) => {
+                download(result.blob, result.filename);
+                showToast?.("Portable vault export verified and ready");
+              })
+              .catch((error: unknown) =>
+                showToast?.(
+                  error instanceof Error ? error.message : "Export failed"
+                )
+              )
+              .finally(() => setPicking(false));
+          }}
+        >
+          Export portable vault…
+        </button>
       </div>
 
       {live.length > 0 ? (

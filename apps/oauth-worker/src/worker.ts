@@ -24,8 +24,8 @@ const ALLOWED_BROWSER_ORIGINS = new Set([
 const PRODUCTION_BINDING_COOKIE_PREFIX = "__Host-centraid-oauth-binding-";
 const DEVELOPMENT_BINDING_COOKIE_PREFIX = "centraid-oauth-binding-";
 const STANDARD_GOOGLE_SCOPES = new Set([
-  "https://www.googleapis.com/auth/calendar.readonly",
-  "https://www.googleapis.com/auth/contacts.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/contacts",
 ]);
 const RESTRICTED_GOOGLE_SCOPES = new Set([
   "https://www.googleapis.com/auth/gmail.readonly",

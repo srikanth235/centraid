@@ -598,7 +598,16 @@ export {
   parseCsvRows,
   type CsvTransaction,
 } from "./ingest/csv.js";
-export { readZipEntries, type ZipEntry } from "./ingest/zip.js";
+export {
+  readZipEntries,
+  writeZipEntries,
+  type ZipEntry,
+} from "./ingest/zip.js";
+export {
+  parseMarkdownNote,
+  serializeMarkdownNote,
+  type MarkdownNote,
+} from "./ingest/markdown.js";
 export {
   parseVcards,
   normalizeHandle,
@@ -615,6 +624,17 @@ export {
   canonicalJson,
   type VaultExport,
 } from "./gateway/portability.js";
+export {
+  exportPortableVault,
+  verifyPortableVault,
+  exportIcs,
+  exportVcards,
+  exportTransactionsCsv,
+  exportMarkdownDirectory,
+  type PortableExport,
+  type PortableManifest,
+  type PortableManifestFile,
+} from "./gateway/portable-export.js";
 export type { ViewDefinition, ViewJoin, ViewResult } from "./gateway/views.js";
 export {
   checkpointVault,
