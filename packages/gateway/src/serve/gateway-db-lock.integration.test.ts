@@ -117,7 +117,9 @@ describe("gateway-db-lock", () => {
     // identify the real holder and agree with the human-readable detail.
     expect([undefined, child.pid]).toContain(wedged.holderPid);
     expect(
-      wedged.holderPid === undefined || /OS holder pid/iu.test(wedged.detail)
+      wedged.holderPid === undefined ||
+        (typeof wedged.detail === "string" &&
+          /OS holder pid/iu.test(wedged.detail))
     ).toBe(true);
 
     child.kill("SIGKILL");

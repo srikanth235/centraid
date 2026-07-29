@@ -707,6 +707,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785351624-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 6744 | 0 | 1069568 | 1567 | 8311 | 0.3078 | 7816778 | 0 | 363012864 | 1021249 | fix(ui): preserve token ratchet after mainline merge (#630) |
 | codex-019fad18-4c1-1785352090-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 78506 | 0 | 2589440 | 2739 | 81245 | 0.8847 | 7895284 | 0 | 365602304 | 1023988 | test(gateway): make lock PID enrichment load-safe (#630) |
 | codex-019fad18-4c1-1785352146-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 3175 | 0 | 125952 | 557 | 3732 | 0.0478 | 7898459 | 0 | 365728256 | 1024545 | test(gateway): make lock PID enrichment load-safe (#630) |
+| codex-019fad18-4c1-1785352224-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 18562 | 0 | 198144 | 805 | 19367 | 0.1080 | 7917021 | 0 | 365926400 | 1025350 | test(gateway): narrow optional lock diagnostics (#630) |
 
 ## Steering
 
