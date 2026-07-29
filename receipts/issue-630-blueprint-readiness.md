@@ -337,6 +337,11 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   shared `--on-accent`/palette contract and removed the obsolete entries from
   `tests/design-token-css-budget.json`, preserving W0.8's zero-regression
   ratchet rather than relaxing it.
+- Aligned the gateway lock integration assertion with its documented
+  best-effort PID enrichment contract: lock ownership, daemon
+  non-responsiveness, and recovery remain mandatory, while an `lsof` PID is
+  validated when available instead of becoming load-sensitive under the full
+  parallel suite.
 
 ### Foundations, measurement, and trust
 
@@ -700,6 +705,8 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785351313-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 14266 | 0 | 514048 | 1081 | 15347 | 0.1804 | 7755338 | 0 | 358982400 | 1015116 | merge: reconcile onboarding mainline (#630) |
 | codex-019fad18-4c1-1785351530-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 54696 | 0 | 2960896 | 4566 | 59262 | 0.9455 | 7810034 | 0 | 361943296 | 1019682 | fix(ui): preserve token ratchet after mainline merge (#630) |
 | codex-019fad18-4c1-1785351624-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 6744 | 0 | 1069568 | 1567 | 8311 | 0.3078 | 7816778 | 0 | 363012864 | 1021249 | fix(ui): preserve token ratchet after mainline merge (#630) |
+| codex-019fad18-4c1-1785352090-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 78506 | 0 | 2589440 | 2739 | 81245 | 0.8847 | 7895284 | 0 | 365602304 | 1023988 | test(gateway): make lock PID enrichment load-safe (#630) |
+| codex-019fad18-4c1-1785352146-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 3175 | 0 | 125952 | 557 | 3732 | 0.0478 | 7898459 | 0 | 365728256 | 1024545 | test(gateway): make lock PID enrichment load-safe (#630) |
 
 ## Steering
 
