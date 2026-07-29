@@ -110,6 +110,7 @@ Issue #504 batch 1. **Mechanical:** route constants live in `@centraid/protocol`
 | `/centraid/_vault/*` | Vault | Status, blobs, replica, consent, … |
 | `/centraid/_apps/*` | Apps store | List, publish, web-session mint, … |
 | `/centraid/_web/*` | Browser sessions | Control cookie proxy, redeem |
+| `/centraid/_brief/*` | Daily brief feature | Content-minimized current-vault summary |
 | `/centraid/_agents/*`, `/centraid/_automations/*`, … | Feature planes | Same underscore-plane pattern |
 
 The underscore planes above are gateway-wide surfaces. A running **app** owns its own surface under `/centraid/<appId>/*` (static assets, `_changes`, `_query`, `_turn`, and the app RPC routes below); the reserved `_`-prefixed segments inside an app prefix are the app's control sub-routes.
@@ -132,6 +133,28 @@ The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0
 2. Request/response pairs stay under one plane; do not invent parallel `/v2` trees without epoch bump.
 3. Clients import `ROUTES` (and the app-path builders) from `@centraid/protocol` rather than string-copying paths.
 4. Wire schemas stay structural (C3); normalization is a named post-pass.
+
+### Blueprint-readiness feature contracts (#630)
+
+Mobile judges the normal gateway handshake before mounting a replica. The
+mutual protocol window and the required `multiVaultReplica` /
+`crossVaultPlacements` capabilities are evaluated once in
+`mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one
+“update gateway” or “update app” wall. Feature code does not retry older route
+shapes or silently fall back to an online-only client.
+
+Household placement uses the gateway control plane because one request names
+an origin and an audience vault. `gatewayPlacements` is the durable,
+link-token-idempotent client outbox ingress; `gatewayShare`,
+`gatewayShareRemove`, and `gatewayShareReceipts` are the explicit
+share/unshare/audit gestures. The gateway resolves both vault handles and
+member roles before entering either single-vault context.
+
+`briefToday` is a read-only feature-plane projection. The caller supplies an
+explicit local-day `[from,to)` range, date, and IANA time zone; the response is
+bounded events, due tasks, the day's photo count, and the owner's Tally net
+position. Notification schedulers may wake Home but must not copy those titles
+or balances into a push payload.
 
 ## Stream authority
 

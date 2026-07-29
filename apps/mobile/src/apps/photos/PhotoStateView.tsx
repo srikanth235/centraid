@@ -101,7 +101,11 @@ export default function PhotoStateView({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <View style={styles.copy}>
@@ -112,7 +116,11 @@ export default function PhotoStateView({
           </Text>
         </View>
         {selection.size ? (
-          <Pressable onPress={() => void apply()}>
+          <Pressable
+            accessibilityLabel={`${mode === "trash" ? "Restore" : "Remove"} ${selection.size} selected photos`}
+            accessibilityRole="button"
+            onPress={() => void apply()}
+          >
             <Text style={[styles.action, { color: colors.accent }]}>
               {mode === "trash" ? "Restore" : "Remove"}
             </Text>

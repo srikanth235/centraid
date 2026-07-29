@@ -100,7 +100,11 @@ export default function FaceReview({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text style={[styles.title, { color: colors.ink }]}>People review</Text>
@@ -190,6 +194,8 @@ export default function FaceReview({
               </View>
               {partyId ? (
                 <Pressable
+                  accessibilityLabel={`Confirm ${names.get(partyId) ?? "person"} for this face`}
+                  accessibilityRole="button"
                   onPress={() =>
                     void act("confirm-face", String(item.region_id), partyId)
                   }
@@ -198,6 +204,8 @@ export default function FaceReview({
                 </Pressable>
               ) : null}
               <Pressable
+                accessibilityLabel="Reject this face proposal"
+                accessibilityRole="button"
                 onPress={() => void act("reject-face", String(item.region_id))}
               >
                 <Feather name="x" size={21} color={colors.danger} />

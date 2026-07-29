@@ -47,12 +47,13 @@ describe(buildLauncherItems, () => {
     const natives = items.filter((itLocal) =>
       NATIVE_APP_IDS.has(itLocal.meta.id)
     );
-    expect(natives).toHaveLength(7);
+    expect(natives).toHaveLength(8);
     expect(natives.every((itLocal) => itLocal.installed)).toBe(true);
     expect(natives.map((itLocal) => itLocal.route.kind).sort()).toStrictEqual([
       "agenda",
       "docs",
       "locker",
+      "notes",
       "people",
       "photos",
       "tally",
@@ -60,13 +61,16 @@ describe(buildLauncherItems, () => {
     ]);
   });
 
-  it("dims uninstalled gateway catalog apps and routes them to pair", () => {
+  it("keeps every bundled blueprint available without a gateway catalog", () => {
     const items = buildLauncherItems([]);
     const notes = items.find((itLocal) => itLocal.meta.id === "notes");
-    expect(notes).toMatchObject({ installed: false, route: { kind: "pair" } });
+    expect(notes).toMatchObject({
+      installed: true,
+      route: { kind: "notes" },
+    });
   });
 
-  it("promotes installed catalog apps and keeps custom remote apps", () => {
+  it("keeps native routing authoritative and appends custom remote apps", () => {
     const remote = [
       meta("notes", "My Notes", "live"),
       meta("custom-app", "Custom", "user built"),
@@ -75,8 +79,8 @@ describe(buildLauncherItems, () => {
     const notes = items.find((itLocal) => itLocal.meta.id === "notes");
     expect(notes).toMatchObject({
       installed: true,
-      meta: expect.objectContaining({ name: "My Notes" }),
-      route: { kind: "app", appId: "notes" },
+      meta: expect.objectContaining({ name: "Notes" }),
+      route: { kind: "notes" },
     });
     const custom = items.find((itLocal) => itLocal.meta.id === "custom-app");
     expect(custom).toMatchObject({

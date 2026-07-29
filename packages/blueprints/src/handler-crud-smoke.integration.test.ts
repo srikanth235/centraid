@@ -116,6 +116,8 @@ function schemaFixture(schema: JsonSchema = {}, name = "value"): unknown {
     ? (schema.type.find((candidate) => candidate !== "null") ?? "null")
     : schema.type;
   switch (type) {
+    case undefined:
+      return stringFixture(name, schema);
     case "array":
       return [schemaFixture(schema.items, `${name}_item`)];
     case "boolean":

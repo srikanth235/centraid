@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
 import { toIsoUtc, toLocalInput } from "../format.ts";
@@ -12,6 +12,8 @@ import type {
 } from "../types.ts";
 
 import styles from "./EventEditor.module.css";
+
+const EMPTY_CALENDARS: Calendar[] = [];
 
 function parseReminders(value?: string | null): string {
   if (!value) return "";
@@ -41,7 +43,7 @@ function reminderRows(value: string): { minutes_before: number }[] {
 
 export function EventEditor({
   event,
-  calendars,
+  calendars = EMPTY_CALENDARS,
   onEdit,
   onEditOccurrence,
   onSaved,
@@ -73,6 +75,8 @@ export function EventEditor({
     parseReminders(event.reminders_json)
   );
   const [parties, setParties] = useState<PartyOption[]>([]);
+  const [partiesLoaded, setPartiesLoaded] = useState(false);
+  const [loadingParties, setLoadingParties] = useState(false);
   const [attendees, setAttendees] = useState(
     new Set((event.attendees ?? []).map((attendee) => attendee.party_id))
   );
@@ -82,20 +86,22 @@ export function EventEditor({
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    let active = true;
-    void window.centraid
-      .read<{ parties?: PartyOption[] }>({ query: "parties", input: {} })
-      .then((result) => {
-        if (active) setParties(result.parties ?? []);
-      })
-      .catch(() => {
-        if (active) setParties([]);
+  const loadParties = async (): Promise<void> => {
+    if (loadingParties || partiesLoaded) return;
+    setLoadingParties(true);
+    try {
+      const result = await window.centraid.read<{ parties?: PartyOption[] }>({
+        query: "parties",
+        input: {},
       });
-    return () => {
-      active = false;
-    };
-  }, []);
+      setParties(result.parties ?? []);
+    } catch {
+      setParties([]);
+    } finally {
+      setPartiesLoaded(true);
+      setLoadingParties(false);
+    }
+  };
 
   const originalStart = event.original_start ?? event.dtstart;
   const canScope = Boolean(event.rrule);
@@ -307,33 +313,49 @@ export function EventEditor({
           onChange={(change) => setReminders(change.target.value)}
         />
       </label>
-      {parties.length > 0 ? (
-        <div className={styles.field}>
-          <span>Attendees</span>
-          <div className={styles.guestList}>
-            {parties
-              .filter((party) => !party.is_you)
-              .map((party) => (
-                <button
-                  className={styles.guest}
-                  type="button"
-                  key={party.party_id}
-                  aria-pressed={attendees.has(party.party_id)}
-                  onClick={() =>
-                    setAttendees((current) => {
-                      const next = new Set(current);
-                      if (next.has(party.party_id)) next.delete(party.party_id);
-                      else next.add(party.party_id);
-                      return next;
-                    })
-                  }
-                >
-                  {displayText(party.name)}
-                </button>
-              ))}
+      {partiesLoaded ? (
+        parties.length > 0 ? (
+          <div className={styles.field}>
+            <span>Attendees</span>
+            <div className={styles.guestList}>
+              {parties
+                .filter((party) => !party.is_you)
+                .map((party) => (
+                  <button
+                    className={styles.guest}
+                    type="button"
+                    key={party.party_id}
+                    aria-pressed={attendees.has(party.party_id)}
+                    onClick={() =>
+                      setAttendees((current) => {
+                        const next = new Set(current);
+                        if (next.has(party.party_id))
+                          next.delete(party.party_id);
+                        else next.add(party.party_id);
+                        return next;
+                      })
+                    }
+                  >
+                    {displayText(party.name)}
+                  </button>
+                ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : (
+          <p className="muted small">
+            No other people are available to invite.
+          </p>
+        )
+      ) : (
+        <button
+          type="button"
+          className="kit-btn"
+          disabled={loadingParties}
+          onClick={() => void loadParties()}
+        >
+          {loadingParties ? "Loading attendees…" : "Choose attendees"}
+        </button>
+      )}
       <div className={styles.actions}>
         <button
           type="button"

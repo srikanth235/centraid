@@ -35,6 +35,7 @@ TARGETS=(
   packages/gateway
   packages/protocol
   packages/test-kit
+  packages/time-engine
   packages/tunnel
   packages/vault
   apps/desktop

@@ -48,6 +48,7 @@ describe("share-routes suite", () => {
     sid: string;
     contentId: string;
     bytes: Buffer;
+    database: GatewayDatabase;
   }
 
   /** A blob-backed content item, as any ingest path would leave one. */
@@ -127,6 +128,7 @@ describe("share-routes suite", () => {
 
     const handler = makeShareRouteHandler({
       enrollments,
+      gatewayDatabase: database,
       vaultFor: (vaultId) =>
         vaultId === "vault-priya"
           ? priyaVault
@@ -157,6 +159,7 @@ describe("share-routes suite", () => {
       sid: sid.memberId,
       contentId,
       bytes: Buffer.from("bytes-a"),
+      database,
     };
   }
 
@@ -205,8 +208,17 @@ describe("share-routes suite", () => {
     const result = (await response.json()) as {
       itemId: string;
       deduped: boolean;
+      accessReceiptId: string;
     };
     expect(result.deduped).toBe(false);
+    expect(result.accessReceiptId).toStrictEqual(expect.any(String));
+    expect(
+      f.database.db
+        .prepare(
+          "SELECT action, member_id FROM share_access_receipts WHERE receipt_id = ?"
+        )
+        .get(result.accessReceiptId)
+    ).toMatchObject({ action: "share", member_id: f.priya });
 
     // The audience can READ it: row and bytes both landed.
     const placed = f.familyVault.vault
@@ -279,12 +291,50 @@ describe("share-routes suite", () => {
     });
 
     expect(removed.status).toBe(200);
-    await expect(removed.json()).resolves.toMatchObject({ removed: true });
+    await expect(removed.json()).resolves.toMatchObject({
+      removed: true,
+      accessReceiptId: expect.any(String),
+    });
+    expect(
+      f.database.db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM share_access_receipts WHERE action = 'unshare'"
+        )
+        .get()
+    ).toMatchObject({ n: 1 });
     expect(countIn(f.familyVault, "core_content_item")).toBe(0);
     expect(countIn(f.priyaVault, "core_content_item")).toBe(1);
     expect(
       f.priyaVault.blobs.getSync(f.priyaVault.blobs.local.listSync()[0]!)
     ).toStrictEqual(f.bytes);
+  });
+
+  test("revoking the audience role blocks access without erasing its receipt", async () => {
+    const f = await harness();
+    const shared = await fetch(f.url, {
+      method: "POST",
+      headers: headers("priya-laptop"),
+      body: shareBody(f.contentId),
+    });
+    expect(shared.status).toBe(200);
+    const receiptId = String(
+      ((await shared.json()) as Record<string, unknown>).accessReceiptId
+    );
+
+    f.enrollments.members.clearGrant(f.priya, "vault-family");
+    const refused = await fetch(f.url, {
+      method: "POST",
+      headers: headers("priya-laptop"),
+      body: shareBody(f.contentId),
+    });
+    expect(refused.status).toBe(404);
+    expect(
+      f.database.db
+        .prepare(
+          "SELECT receipt_id, member_id FROM share_access_receipts WHERE receipt_id = ?"
+        )
+        .get(receiptId)
+    ).toMatchObject({ receipt_id: receiptId, member_id: f.priya });
   });
 
   // ---------------------------------------------------------------------------

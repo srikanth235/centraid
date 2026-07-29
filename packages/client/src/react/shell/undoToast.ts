@@ -42,6 +42,9 @@ export function showUndoToast(
   const toast = document.createElement("div");
   toast.className = toastCss.toast ?? "";
   toast.dataset.undoToast = "true";
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
+  toast.setAttribute("aria-atomic", "true");
 
   const text = document.createElement("span");
   text.textContent = message;

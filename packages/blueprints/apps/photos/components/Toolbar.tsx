@@ -1,3 +1,4 @@
+import { AudiencePlacement } from "../../_shared/AudiencePlacement.tsx";
 // The main pane's toolbar row: active-view title + subtitle, a back
 // affordance inside an album, "Add photos"/"New album" on the views that
 // want them, and the Select toggle. Pure view — app.tsx computes every
@@ -28,6 +29,7 @@ export function ToolbarView({
   ownScopeId,
   selectedScopeId,
   onSelectScope,
+  albumId,
 }: {
   title: string;
   subtitle: string;
@@ -46,6 +48,7 @@ export function ToolbarView({
   /** The selected chip, or null for "All". */
   selectedScopeId: string | null;
   onSelectScope: (scopeId: string | null) => void;
+  albumId?: string | null;
 }) {
   return (
     <div className={styles.toolbar}>
@@ -75,6 +78,13 @@ export function ToolbarView({
         ) : null}
       </div>
       <div className={styles.toolbarActions}>
+        {albumId ? (
+          <AudiencePlacement
+            itemType="core.collection"
+            itemId={albumId}
+            label="Share album"
+          />
+        ) : null}
         {showAddPhotos ? (
           <button
             type="button"

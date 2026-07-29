@@ -254,8 +254,30 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     });
     const stopFocus = onFocusRefresh(() => void refreshAll());
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== "Escape") return;
       const l = logicRef.current!;
+      const target = e.target;
+      const editing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (e.key === "/" && !editing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>("#searchInput")?.focus();
+        return;
+      }
+      if (
+        e.key.toLowerCase() === "n" &&
+        !editing &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !l.anyModalOpen()
+      ) {
+        e.preventDefault();
+        handleOpenAddExpense();
+        return;
+      }
+      if (e.key !== "Escape") return;
       if (l.anyModalOpen()) {
         l.closeAllModals();
         bump();

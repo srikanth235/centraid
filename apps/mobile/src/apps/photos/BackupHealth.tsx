@@ -252,7 +252,11 @@ export default function BackupHealth({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text style={[styles.title, { color: colors.ink }]}>Backup health</Text>
@@ -362,6 +366,12 @@ export default function BackupHealth({
           );
         })}
         <Pressable
+          accessibilityLabel="Back up selected albums now"
+          accessibilityRole="button"
+          accessibilityState={{
+            busy: running,
+            disabled: running || rules.selectedAlbums.length === 0,
+          }}
           disabled={running || rules.selectedAlbums.length === 0}
           style={[
             styles.settings,
@@ -405,6 +415,8 @@ export default function BackupHealth({
           ))}
         {Platform.OS === "android" ? (
           <Pressable
+            accessibilityLabel="Open battery optimization settings"
+            accessibilityRole="button"
             style={[styles.settings, { borderColor: colors.line }]}
             onPress={() => void Linking.openSettings()}
           >

@@ -196,19 +196,35 @@ export default function DocumentViewer({
       edges={["top", "bottom"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to documents"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text numberOfLines={1} style={[styles.title, { color: colors.ink }]}>
           {document.title}
         </Text>
-        <Pressable onPress={() => void share()}>
+        <Pressable
+          accessibilityLabel={`Share ${document.title}`}
+          accessibilityRole="button"
+          onPress={() => void share()}
+        >
           <Feather name="share" size={21} color={colors.accent} />
         </Pressable>
       </View>
       <Viewer document={document} url={url} />
       <View style={[styles.toolbar, { borderTopColor: colors.line }]}>
         <Pressable
+          accessibilityLabel={
+            document.starred ? "Remove document star" : "Star document"
+          }
+          accessibilityRole="button"
+          accessibilityState={{
+            disabled: document.canWrite !== true,
+            selected: document.starred,
+          }}
           disabled={document.canWrite !== true}
           onPress={() => void action(document.starred ? "unstar" : "star")}
         >
@@ -228,10 +244,17 @@ export default function DocumentViewer({
           {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
           · {document.custody ?? "local"}
         </Text>
-        <Pressable onPress={() => setPlacementKind("add")}>
+        <Pressable
+          accessibilityLabel="Add document to another vault"
+          accessibilityRole="button"
+          onPress={() => setPlacementKind("add")}
+        >
           <Feather name="copy" size={20} color={colors.accent} />
         </Pressable>
         <Pressable
+          accessibilityLabel="Move document to another vault"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: document.canWrite !== true }}
           disabled={document.canWrite !== true}
           onPress={() => setPlacementKind("move")}
         >
@@ -242,6 +265,9 @@ export default function DocumentViewer({
           />
         </Pressable>
         <Pressable
+          accessibilityLabel="Move document to trash"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: document.canWrite !== true }}
           disabled={document.canWrite !== true}
           onPress={() =>
             Alert.alert(

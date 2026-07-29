@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { AudiencePlacement } from "../../_shared/AudiencePlacement.tsx";
 import type { Friend, GroupMeta, Member } from "../types.ts";
 import { ArmedButton, KitAvatar } from "./Shared.tsx";
 
@@ -126,6 +127,7 @@ export function GroupManager({
         Members on an expense cannot be removed. A group can be deleted only
         after all of its expenses leave the trash grace window.
       </p>
+      <AudiencePlacement itemType="tally.group" itemId={group.group_id} />
       <div className={styles.danger}>
         <ArmedButton
           className="kit-btn danger"

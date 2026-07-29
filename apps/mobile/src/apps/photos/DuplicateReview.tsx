@@ -28,7 +28,11 @@ export default function DuplicateReview({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <View style={styles.copy}>

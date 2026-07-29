@@ -110,6 +110,16 @@ its database, thumbnail, and pending-upload components.
 `Free thumbnail cache` removes only reproducible thumbnails. Replica rows and
 pending changes are not cache and are never removed by that action.
 
+Low disk fails closed and preserves the last readable projection. op-sqlite's
+`SQLITE_FULL`/errcode 13 and OS `ENOSPC` variants are normalized into one
+actionable screen error: sync pauses, replica rows and pending intents remain
+untouched, and the person can free the reproducible thumbnail cache or other
+phone storage before retrying. Centraid never evicts canonical replica rows or
+queued writes to manufacture free space. The device contract test pins that
+classification and copy; the vault custody test fault-injects the same
+SQLite-full condition during `wal_checkpoint(TRUNCATE)` and requires the
+gateway disk-health tracker to turn red.
+
 ## Durable path and at-rest decision
 
 Replica databases, pending intents, upload queues, and thumbnail packs live in

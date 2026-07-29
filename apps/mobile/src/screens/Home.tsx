@@ -23,6 +23,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { family, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
+import { fetchDailyBrief } from "../lib/daily-brief";
+import type { DailyBrief } from "../lib/daily-brief";
 import {
   GatewayError,
   isOpenableApp,
@@ -38,6 +40,7 @@ import AttentionLine from "./home/AttentionLine";
 import type { ConnectionState } from "./home/AttentionLine";
 import { NATIVE_APP_IDS, buildLauncherItems } from "./home/catalog";
 import type { LauncherItem } from "./home/catalog";
+import DailyBriefCard from "./home/DailyBriefCard";
 import GlassDock from "./home/GlassDock";
 import GreetingHeader from "./home/GreetingHeader";
 import LauncherGrid from "./home/LauncherGrid";
@@ -59,7 +62,12 @@ const NO_APPS: readonly AppMetaResolved[] = [];
 type HomeState =
   | { kind: "loading" }
   | { kind: "no-gateway" }
-  | { kind: "ready"; apps: AppMetaResolved[]; automations: number }
+  | {
+      kind: "ready";
+      apps: AppMetaResolved[];
+      automations: number;
+      brief?: DailyBrief;
+    }
   | { kind: "error"; message: string };
 
 // The loader lives outside the component: it closes over nothing but the two
@@ -76,13 +84,16 @@ async function loadHome(
       setApprovals(0);
       return;
     }
-    const rows = await listAppRegistry();
+    const [rows, brief] = await Promise.all([
+      listAppRegistry(),
+      fetchDailyBrief().catch(() => undefined),
+    ]);
     const apps = rows
       .filter(isOpenableApp)
       .map(resolveAppMeta)
       .filter((app) => !NATIVE_APP_IDS.has(app.id));
     const automations = rows.filter((row) => row.kind === "automation").length;
-    setState({ apps, automations, kind: "ready" });
+    setState({ apps, automations, brief, kind: "ready" });
     // Approvals are secondary — never fail the whole load over them.
     try {
       setApprovals((await listParked()).length);
@@ -264,6 +275,17 @@ export default function HomeScreen({
             }
             onAutomations={() => navigation.navigate("Automations")}
             onPair={openSettings}
+          />
+          <DailyBriefCard
+            brief={state.kind === "ready" ? state.brief : undefined}
+            onEvents={() =>
+              navigation.navigate("Agenda", { screen: "AgendaHome" })
+            }
+            onTasks={() => navigation.navigate("Tasks")}
+            onPhotos={() =>
+              navigation.navigate("Photos", { screen: "PhotosHome" })
+            }
+            onTally={() => navigation.navigate("Tally")}
           />
 
           <Text style={styles.railLabel}>YOUR APPS</Text>

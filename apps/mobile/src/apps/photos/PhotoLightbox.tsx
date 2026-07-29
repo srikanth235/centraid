@@ -115,6 +115,8 @@ function MediaPage({
                   ? asset.previewUri || asset.uri
                   : asset.uri
             )}
+            cachePolicy="memory-disk"
+            recyclingKey={`${asset.id}:${quality}`}
             placeholder={
               asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
             }
@@ -134,6 +136,8 @@ function MediaPage({
       </GestureDetector>
       {companionUri ? (
         <Pressable
+          accessibilityLabel="Play Live Photo"
+          accessibilityRole="button"
           style={styles.liveButton}
           onPress={() => setPlayingLive(true)}
         >
@@ -143,6 +147,8 @@ function MediaPage({
       ) : null}
       {quality !== "original" && asset.originalUri !== asset.previewUri ? (
         <Pressable
+          accessibilityLabel="Load original photo"
+          accessibilityRole="button"
           style={styles.originalButton}
           onPress={() => setQuality("original")}
         >
@@ -309,13 +315,21 @@ export default function PhotoLightbox({
         edges={["top", "bottom"]}
       >
         <View style={styles.topbar}>
-          <Pressable onPress={() => navigation.goBack()}>
+          <Pressable
+            accessibilityLabel="Close photo viewer"
+            accessibilityRole="button"
+            onPress={() => navigation.goBack()}
+          >
             <Feather name="chevron-down" size={28} color="#fff" />
           </Pressable>
           <Text numberOfLines={1} style={styles.counter}>
             {index + 1} of {assets.length}
           </Text>
-          <Pressable onPress={() => setInfoOpen(true)}>
+          <Pressable
+            accessibilityLabel="Open photo information"
+            accessibilityRole="button"
+            onPress={() => setInfoOpen(true)}
+          >
             <Feather name="info" size={22} color="#fff" />
           </Pressable>
         </View>
@@ -363,6 +377,8 @@ export default function PhotoLightbox({
           onRequestClose={() => setInfoOpen(false)}
         >
           <Pressable
+            accessibilityLabel="Close photo information"
+            accessibilityRole="button"
             style={styles.modalBackdrop}
             onPress={() => setInfoOpen(false)}
           />
@@ -443,6 +459,8 @@ export default function PhotoLightbox({
               <View style={styles.placeActions}>
                 {places.rows.slice(0, 3).map((placeRow) => (
                   <Pressable
+                    accessibilityLabel={`Set photo place to ${String(placeRow.name ?? "place")}`}
+                    accessibilityRole="button"
                     key={placeRow.__rowId}
                     onPress={() =>
                       void write(
@@ -472,6 +490,8 @@ export default function PhotoLightbox({
                   </Pressable>
                 ))}
                 <Pressable
+                  accessibilityLabel="Remove photo place"
+                  accessibilityRole="button"
                   onPress={() =>
                     void write("set-place", { asset_id: current.assetId! }, [
                       {

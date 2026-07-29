@@ -12,6 +12,11 @@
   --kit-app-topbar-padding: 16px 26px;
 }
 
+.shell.shell :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .side {
   composes: kit-app-side from global;
 }

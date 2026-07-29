@@ -7,17 +7,6 @@ import type { DueReminder } from "./notification-model";
 
 const DELIVERED_KEYS = "centraid:delivered-reminder-keys:v1";
 
-export {
-  COMPLETE_TASK,
-  EVENT_CATEGORY,
-  INVITE_CATEGORY,
-  OPEN_ITEM,
-  SETTLE_BALANCE,
-  SNOOZE_TASK,
-  TALLY_CATEGORY,
-  TASK_CATEGORY,
-} from "./notification-model";
-
 export async function installNotificationCategories(): Promise<void> {
   await Promise.all([
     Notifications.setNotificationCategoryAsync(

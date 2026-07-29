@@ -37,6 +37,27 @@ UI-app **install-in-place** catalog. Its runtime code depends only on
 `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the
 `ScaffoldFile` contract).
 
+## Bundled-app readiness contract
+
+The eight bundled apps are one capability set across web/PWA, iOS, Android,
+and the assistant. Adding or changing a query/action therefore requires:
+
+1. a behavioral handler test against a real vault;
+2. a web dispatch site and a native dispatch site, or an explicit
+   `agent-only`, `extension-only`, or `platform-fallback` entry with a durable
+   rationale in `src/handler-reachability.test.ts`;
+3. honest loading, empty, offline, denied, and error presentation on the
+   consuming surface;
+4. an agent-invocable schema through `vault_invoke`, preserving consent,
+   `intentId`, outcome, and receipt semantics; and
+5. regeneration of `manifest.json` whenever shipped files or manifests move.
+
+The reachability gate is intentionally capability-by-capability, not a source
+coverage heuristic. WebView-backed covers may reuse the proved bundled React
+UI; native covers are scanned separately. A platform fallback means the
+always-available Assistant can invoke the exact same manifested handler—it is
+not permission for a stub or a silent missing control.
+
 ## Browser dependencies
 
 Built-in apps are bundled into the main client and use normal workspace/package

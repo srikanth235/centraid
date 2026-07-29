@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppHeader from "../../kit/components/AppHeader";
+import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import Icon from "../../kit/components/Icon";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { useTheme } from "../../kit/theme";
@@ -64,6 +65,7 @@ export default function LockerHome({
     null
   );
   const [detail, setDetail] = useState<LockerItem | null>(null);
+  const [shareItemId, setShareItemId] = useState("");
   const [pendingItem, setPendingItem] = useState<LockerRow | null>(null);
   const [itemPassphrase, setItemPassphrase] = useState("");
   const [itemError, setItemError] = useState<string>();
@@ -594,6 +596,18 @@ export default function LockerHome({
         styles={styles}
         onClose={() => setDetail(null)}
         onCopy={(value) => void copySecret(value)}
+        onShare={(itemId) => {
+          setDetail(null);
+          setShareItemId(itemId);
+        }}
+      />
+      <AudiencePlacementSheet
+        visible={Boolean(shareItemId)}
+        itemType="locker.item"
+        itemId={shareItemId}
+        sourceVaultId={replica.vaultId ?? ""}
+        noun="Locker item"
+        onClose={() => setShareItemId("")}
       />
       {masked ? (
         <View

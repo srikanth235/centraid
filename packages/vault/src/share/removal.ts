@@ -89,6 +89,18 @@ export function deleteProjectedClosure(
   itemType: ShareableItemType,
   itemId: string
 ): RemovalResult {
+  if (itemType === "locker.item") {
+    const removed = audience
+      .prepare("DELETE FROM locker_item WHERE item_id = ?")
+      .run(itemId).changes;
+    return removed > 0 ? { ...ABSENT, removed: true } : ABSENT;
+  }
+  if (itemType === "tally.group") {
+    return deleteTallyGroup(audience, itemId);
+  }
+  if (itemType === "core.collection") {
+    return deleteCollection(audience, itemId);
+  }
   let contentId: string;
   if (itemType === "core.content_item") {
     contentId = itemId;
@@ -142,4 +154,85 @@ export function deleteProjectedClosure(
       .run(contentId);
   }
   return { removed: true, contentItemRemoved, shas: [...shas] };
+}
+
+function deleteCollection(
+  audience: DatabaseSync,
+  itemId: string
+): RemovalResult {
+  const held = audience
+    .prepare("SELECT 1 FROM core_collection WHERE collection_id = ?")
+    .get(itemId);
+  if (!held) return ABSENT;
+  const entries = audience
+    .prepare(
+      "SELECT target_type, target_id FROM core_collection_entry WHERE collection_id = ?"
+    )
+    .all(itemId) as Array<{ target_type: string; target_id: string }>;
+  audience
+    .prepare("DELETE FROM core_collection_entry WHERE collection_id = ?")
+    .run(itemId);
+  audience
+    .prepare("DELETE FROM core_collection WHERE collection_id = ?")
+    .run(itemId);
+  const shas = new Set<string>();
+  let removedContent = false;
+  for (const entry of entries) {
+    if (
+      entry.target_type !== "media.media_asset" &&
+      entry.target_type !== "core.document" &&
+      entry.target_type !== "core.content_item"
+    )
+      continue;
+    const result = deleteProjectedClosure(
+      audience,
+      entry.target_type,
+      entry.target_id
+    );
+    removedContent ||= result.contentItemRemoved;
+    for (const sha of result.shas) shas.add(sha);
+  }
+  return {
+    removed: true,
+    contentItemRemoved: removedContent,
+    shas: [...shas],
+  };
+}
+
+function deleteTallyGroup(
+  audience: DatabaseSync,
+  itemId: string
+): RemovalResult {
+  const group = audience
+    .prepare("SELECT circle_id FROM tally_group WHERE group_id = ?")
+    .get(itemId) as { circle_id: string } | undefined;
+  if (!group) return ABSENT;
+  const templates = audience
+    .prepare(
+      "SELECT template_id FROM tally_recurring_expense WHERE group_id = ?"
+    )
+    .all(itemId) as Array<{ template_id: string }>;
+  for (const template of templates) {
+    audience
+      .prepare(
+        `DELETE FROM schedule_recurrence_exception
+          WHERE target_type = 'tally.recurring_expense' AND target_id = ?`
+      )
+      .run(template.template_id);
+  }
+  audience
+    .prepare("DELETE FROM tally_recurring_expense WHERE group_id = ?")
+    .run(itemId);
+  audience
+    .prepare("DELETE FROM tally_settlement WHERE group_id = ?")
+    .run(itemId);
+  audience.prepare("DELETE FROM tally_expense WHERE group_id = ?").run(itemId);
+  audience.prepare("DELETE FROM tally_group WHERE group_id = ?").run(itemId);
+  audience
+    .prepare("DELETE FROM social_circle_member WHERE circle_id = ?")
+    .run(group.circle_id);
+  audience
+    .prepare("DELETE FROM social_circle WHERE circle_id = ?")
+    .run(group.circle_id);
+  return { removed: true, contentItemRemoved: false, shas: [] };
 }

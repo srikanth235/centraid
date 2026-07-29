@@ -1,0 +1,26 @@
+.root {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2, 8px);
+}
+
+.root select {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 var(--sp-2, 8px);
+}
+
+.root select:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+.status {
+  flex-basis: 100%;
+  color: var(--ink-2);
+  font: var(--t-small);
+}

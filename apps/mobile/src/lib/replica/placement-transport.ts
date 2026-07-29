@@ -1,3 +1,5 @@
+import { ROUTES } from "@centraid/protocol";
+
 import { authHeader } from "../gateway";
 import type { PlacementIntent, PlacementRecord } from "./multi-vault-reader";
 
@@ -16,17 +18,14 @@ export async function postPlacement(
   baseUrl: string,
   input: PlacementIntent
 ): Promise<PlacementRecord> {
-  const response = await fetch(
-    new URL("/centraid/_gateway/placements", baseUrl),
-    {
-      method: "POST",
-      headers: {
-        ...authHeader(),
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(input),
-    }
-  );
+  const response = await fetch(new URL(ROUTES.gatewayPlacements, baseUrl), {
+    method: "POST",
+    headers: {
+      ...authHeader(),
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
   const body = (await response.json()) as
     | PlacementRecord
     | { message?: string };

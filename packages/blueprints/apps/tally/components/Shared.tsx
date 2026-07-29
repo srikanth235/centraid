@@ -1,7 +1,7 @@
 // Small shared presentational bits used across the sidebar/modals. Pure
 // functions of props — no app state. Same role as tasks/notes'
 // components/Shared.tsx.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FC, ReactNode } from "react";
 
 import shared from "./shared.module.css";
@@ -55,8 +55,35 @@ export function ModalBackdrop({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const prior =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    const first = dialog.querySelector<HTMLElement>(
+      "input, select, textarea, button:not([disabled]), a[href]"
+    );
+    first?.focus();
+    return () => {
+      if (dialog.open) dialog.close();
+      prior?.focus();
+    };
+  }, []);
   return (
-    <div className="kit-modal-back">
+    <dialog
+      ref={dialogRef}
+      className="kit-modal-back"
+      aria-modal="true"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
       <button
         type="button"
         className="kit-modal-scrim"
@@ -64,7 +91,7 @@ export function ModalBackdrop({
         onClick={onClose}
       />
       {children}
-    </div>
+    </dialog>
   );
 }
 

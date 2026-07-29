@@ -259,9 +259,17 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
         hidden
       />
 
-      <div id="lightbox" className={styles.lightbox} hidden>
+      <dialog
+        id="lightbox"
+        open
+        className={styles.lightbox}
+        aria-modal="true"
+        aria-label="Photo viewer"
+        tabIndex={-1}
+        hidden
+      >
         {slots.lightbox}
-      </div>
+      </dialog>
       {/* Native <dialog>, never `showModal()` — `open` is mandatory (a <dialog>
           without it is `display:none`) and app.tsx keeps driving visibility
           through the `hidden` attribute exactly as before. */}

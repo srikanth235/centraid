@@ -20,6 +20,11 @@
   --kit-app-drawer-width: 270px;
 }
 
+.shell.shell :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Dark override for the folded token — mirrors app.css's dark block, emitted for
    both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
    fallback (the same two-selector shape the token layer uses). */

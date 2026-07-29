@@ -452,6 +452,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           ownScopeId={ownId()}
           selectedScopeId={selectedScopeId}
           onSelectScope={selectScope}
+          albumId={inAlbum ? selectedAlbum : null}
         />
       );
     }

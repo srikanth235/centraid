@@ -51,6 +51,7 @@ describe("gateway-db scenarios", () => {
       "prefs",
       "push_registrations",
       "recovery_kit",
+      "share_access_receipts",
       "storage_connections",
       "storage_limits",
       "tickets",

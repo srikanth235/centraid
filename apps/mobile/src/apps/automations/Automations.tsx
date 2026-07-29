@@ -21,8 +21,12 @@ import {
 
 import HomeKey from "../../kit/components/HomeKey";
 import { spacing, useTheme } from "../../kit/theme";
-import { runAutomation } from "../../lib/automations";
-import type { AutomationRow } from "../../lib/automations";
+import {
+  cloneAutomationTemplate,
+  listAutomationTemplates,
+  runAutomation,
+} from "../../lib/automations";
+import type { AutomationRow, AutomationTemplate } from "../../lib/automations";
 import type { AutomationsScreenProps } from "../../navigation";
 import { makeStyles } from "./Automations.styles";
 import { useAutomations } from "./useAutomations";
@@ -35,6 +39,42 @@ export default function AutomationsScreen({
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { state, refreshing, refresh, toggle } = useAutomations();
+  const [templates, setTemplates] = useState<AutomationTemplate[]>([]);
+  const [installing, setInstalling] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void listAutomationTemplates()
+      .then((rows) => {
+        if (mounted) setTemplates(rows);
+      })
+      .catch(() => {
+        if (mounted) setTemplates([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const install = useCallback(
+    (template: AutomationTemplate): void => {
+      if (installing) return;
+      setInstalling(template.id);
+      void cloneAutomationTemplate(template.id)
+        .then(async () => {
+          await refresh();
+          Alert.alert("Automation added", `${template.name} is ready to use.`);
+        })
+        .catch((error: unknown) => {
+          Alert.alert(
+            "Could not add automation",
+            error instanceof Error ? error.message : "Please try again."
+          );
+        })
+        .finally(() => setInstalling(null));
+    },
+    [installing, refresh]
+  );
 
   const rows = state.kind === "ready" ? state.rows : [];
 
@@ -69,6 +109,17 @@ export default function AutomationsScreen({
         ListEmptyComponent={
           <EmptyState state={state} styles={styles} colors={colors} />
         }
+        ListFooterComponent={
+          templates.length > 0 && state.kind === "ready" ? (
+            <AutomationGallery
+              templates={templates}
+              installing={installing}
+              onInstall={install}
+              styles={styles}
+              colors={colors}
+            />
+          ) : null
+        }
         renderItem={({ item }) => (
           <AutomationCard
             row={item}
@@ -84,6 +135,62 @@ export default function AutomationsScreen({
 
 type Styles = ReturnType<typeof makeStyles>;
 type Colors = ReturnType<typeof useTheme>["colors"];
+
+function AutomationGallery({
+  templates,
+  installing,
+  onInstall,
+  styles,
+  colors,
+}: {
+  templates: AutomationTemplate[];
+  installing: string | null;
+  onInstall: (template: AutomationTemplate) => void;
+  styles: Styles;
+  colors: Colors;
+}): React.JSX.Element {
+  return (
+    <View style={styles.gallery} accessibilityRole="summary">
+      <View style={styles.galleryHead}>
+        <Text style={styles.galleryTitle}>Starter gallery</Text>
+        <Text style={styles.gallerySubtitle}>
+          Cross-app workflows you can add to this vault
+        </Text>
+      </View>
+      {templates.map((template) => {
+        const busy = installing === template.id;
+        return (
+          <View key={template.id} style={styles.templateCard}>
+            <View style={styles.templateIcon} accessibilityElementsHidden>
+              <Feather name="zap" size={16} color={colors.accent} />
+            </View>
+            <View style={styles.templateCopy}>
+              <Text style={styles.templateName}>{template.name}</Text>
+              <Text style={styles.templateDesc} numberOfLines={3}>
+                {template.desc}
+              </Text>
+              {template.triggerLabel ? (
+                <Text style={styles.templateTrigger}>
+                  {template.triggerLabel}
+                </Text>
+              ) : null}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${template.name}`}
+              accessibilityState={{ busy, disabled: installing !== null }}
+              disabled={installing !== null}
+              onPress={() => onInstall(template)}
+              style={[styles.addBtn, busy && styles.dim]}
+            >
+              <Text style={styles.addBtnText}>{busy ? "Adding…" : "Add"}</Text>
+            </Pressable>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 function EmptyState({
   state,
@@ -128,8 +235,8 @@ function EmptyState({
       <Feather name="zap" size={30} color={colors.accent} />
       <Text style={styles.emptyTitle}>No automations yet</Text>
       <Text style={styles.emptyCopy}>
-        An automation is a saved conversation that fires on a trigger. Create
-        one on your desktop.
+        An automation is a saved conversation that fires on a trigger. Pick a
+        starter below or create one on desktop.
       </Text>
     </View>
   );

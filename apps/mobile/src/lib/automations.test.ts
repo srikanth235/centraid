@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { runAutomation } from "./automations";
+import {
+  cloneAutomationTemplate,
+  listAutomationTemplates,
+  runAutomation,
+} from "./automations";
 
 const { fetchJson } = vi.hoisted(() => ({
   // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
@@ -28,6 +32,63 @@ describe("automations", () => {
       "https://gateway.example/centraid/_automations/turn-now?ref=brief%2Fmain",
       {
         headers: { authorization: "Bearer paired" },
+        method: "POST",
+      }
+    );
+  });
+
+  test("lists only the curated automation gallery", async () => {
+    fetchJson.mockResolvedValue([
+      {
+        id: "obligation-extractor",
+        name: "Document deadlines",
+        desc: "Find deadlines in documents.",
+        kind: "automation",
+      },
+      {
+        id: "unlisted-automation",
+        name: "Hidden",
+        desc: "Not in v0.",
+        kind: "automation",
+      },
+      {
+        id: "docs",
+        name: "Docs",
+        desc: "An app.",
+        kind: "app",
+      },
+    ]);
+    await expect(listAutomationTemplates()).resolves.toStrictEqual([
+      {
+        id: "obligation-extractor",
+        name: "Document deadlines",
+        desc: "Find deadlines in documents.",
+        kind: "automation",
+      },
+    ]);
+    expect(fetchJson).toHaveBeenCalledWith(
+      "https://gateway.example/centraid/_templates",
+      {
+        headers: { authorization: "Bearer paired" },
+        method: "GET",
+      }
+    );
+  });
+
+  test("publishes a selected automation starter", async () => {
+    fetchJson.mockResolvedValue({ app: { id: "document-deadlines-2" } });
+    await cloneAutomationTemplate("obligation-extractor");
+    expect(fetchJson).toHaveBeenCalledWith(
+      "https://gateway.example/centraid/_apps/_clone",
+      {
+        body: JSON.stringify({
+          templateId: "obligation-extractor",
+          publish: true,
+        }),
+        headers: {
+          authorization: "Bearer paired",
+          "content-type": "application/json",
+        },
         method: "POST",
       }
     );

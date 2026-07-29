@@ -28,8 +28,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
+import { ROUTES } from "@centraid/protocol";
 import {
   isShareableItemType,
+  readShareOrigin,
   shareToVault,
   unshareFromVault,
   VaultShareError,
@@ -42,13 +44,17 @@ import type {
   EnrollmentStore,
   GrantableRole,
 } from "../serve/enrollment-store.js";
+import type { GatewayDatabase } from "../serve/gateway-db.js";
+import { recordShareAccessReceipt } from "../serve/share-access-receipts.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
-export const SHARE_PATH = "/centraid/_gateway/share";
-const UNSHARE_PATH = `${SHARE_PATH}/remove`;
+export const SHARE_PATH = ROUTES.gatewayShare;
+const UNSHARE_PATH = ROUTES.gatewayShareRemove;
+export const SHARE_RECEIPTS_PATH = ROUTES.gatewayShareReceipts;
 
 export interface ShareRouteDeps {
   enrollments: EnrollmentStore;
+  gatewayDatabase: GatewayDatabase;
   /** The open vault handle for a mounted vault id, or undefined when unknown. */
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
   /** Direct host-custody request (authenticated bearer, never iroh-forwarded). */
@@ -166,8 +172,39 @@ export function makeShareRouteHandler(deps: ShareRouteDeps): RouteHandler {
     res: ServerResponse
   ): Promise<boolean> => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
-    if (url.pathname !== SHARE_PATH && url.pathname !== UNSHARE_PATH)
+    if (
+      url.pathname !== SHARE_PATH &&
+      url.pathname !== UNSHARE_PATH &&
+      url.pathname !== SHARE_RECEIPTS_PATH
+    )
       return false;
+    if (
+      url.pathname === SHARE_RECEIPTS_PATH &&
+      (req.method ?? "GET") === "GET"
+    ) {
+      const deviceKey = callerDeviceKey(req);
+      const member = deviceKey
+        ? deps.enrollments.memberFor(deviceKey)
+        : undefined;
+      const hostCustody = deps.isHostCustody?.(req) === true;
+      if (!member && !hostCustody)
+        return sendJson(res, 403, { error: "forbidden" });
+      const receipts = deps.gatewayDatabase.db
+        .prepare(
+          "SELECT * FROM share_access_receipts ORDER BY created_at DESC LIMIT 500"
+        )
+        .all() as Array<Record<string, unknown>>;
+      return sendJson(res, 200, {
+        receipts: receipts.filter(
+          (receipt) =>
+            hostCustody ||
+            deps.enrollments.members.roleIn(
+              member!.memberId,
+              String(receipt.audience_vault_id)
+            ) !== undefined
+        ),
+      });
+    }
     const method = req.method ?? "GET";
     const unshare = url.pathname === UNSHARE_PATH;
     if (method !== "POST" && !(unshare && method === "DELETE")) {
@@ -199,8 +236,20 @@ export function makeShareRouteHandler(deps: ShareRouteDeps): RouteHandler {
     const { audience } = resolvedAudience;
 
     if (unshare) {
+      const origin = readShareOrigin(audience.vault, itemType, itemId);
       const result = unshareFromVault({ audience, itemType, itemId });
-      return sendJson(res, 200, result);
+      const accessReceiptId = result.removed
+        ? recordShareAccessReceipt(deps.gatewayDatabase, {
+            memberId,
+            action: "unshare",
+            itemType,
+            originVaultId: origin?.originVaultId,
+            originItemId: origin?.originItemId,
+            audienceVaultId,
+            audienceItemId: itemId,
+          })
+        : undefined;
+      return sendJson(res, 200, { ...result, accessReceiptId });
     }
 
     const originVaultId = stringField(body, "originVaultId");
@@ -236,7 +285,16 @@ export function makeShareRouteHandler(deps: ShareRouteDeps): RouteHandler {
         // what it is rather than attributed to a person who did not act.
         sharedByMember: memberId ?? "host-custody",
       });
-      return sendJson(res, 200, result);
+      const accessReceiptId = recordShareAccessReceipt(deps.gatewayDatabase, {
+        memberId,
+        action: "share",
+        itemType,
+        originVaultId,
+        originItemId: itemId,
+        audienceVaultId,
+        audienceItemId: result.itemId,
+      });
+      return sendJson(res, 200, { ...result, accessReceiptId });
     } catch (error) {
       if (error instanceof VaultShareError) {
         return sendJson(res, 409, {

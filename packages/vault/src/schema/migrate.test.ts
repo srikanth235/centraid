@@ -46,6 +46,7 @@ function rewindVaultTo(file: string, version: 1 | 2 | 4): void {
     DROP INDEX IF EXISTS social_contact_channel_duplicate_idx;
     DROP INDEX IF EXISTS social_contact_channel_party_idx;
     DROP INDEX IF EXISTS schedule_recurrence_exception_target_idx;
+    DROP INDEX IF EXISTS schedule_task_section_idx;
     DROP INDEX IF EXISTS schedule_task_organize_idx;
     DROP INDEX IF EXISTS schedule_section_project_idx;
     DROP INDEX IF EXISTS schedule_project_owner_idx;

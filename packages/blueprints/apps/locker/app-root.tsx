@@ -481,8 +481,39 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     const stopDoorbell = onDataChange(CHANGE_TABLES, refresh);
     const stopFocus = onFocusRefresh(refresh);
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== "Escape") return;
       const state = stateRef.current;
+      const target = e.target;
+      const editing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (
+        e.key === "/" &&
+        !editing &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !state.locked
+      ) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>("#lockerSearchInput")?.focus();
+        return;
+      }
+      if (
+        e.key.toLowerCase() === "n" &&
+        !editing &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !state.locked &&
+        !state.edit &&
+        !state.gen
+      ) {
+        e.preventDefault();
+        openNew();
+        return;
+      }
+      if (e.key !== "Escape") return;
       if (state.edit) {
         closeEdit();
         return;

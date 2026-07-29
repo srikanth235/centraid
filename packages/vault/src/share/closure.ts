@@ -37,16 +37,29 @@ import type { DatabaseSync } from "node:sqlite";
 import { isBlobUri } from "../blob/store.js";
 import { VaultShareError } from "../errors.js";
 import { uuidv7 } from "../ids.js";
+import {
+  projectCollection,
+  projectLockerItem,
+  projectTallyGroup,
+  readCollectionClosure,
+  readTallyGroupClosure,
+} from "./household.js";
 
 /** Item kinds that can be placed into an audience vault at v0. */
 export type ShareableItemType =
+  | "core.collection"
   | "core.content_item"
   | "core.document"
+  | "locker.item"
+  | "tally.group"
   | "media.media_asset";
 
 const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
+  "core.collection",
   "core.content_item",
   "core.document",
+  "locker.item",
+  "tally.group",
   "media.media_asset",
 ];
 
@@ -55,7 +68,7 @@ export function isShareableItemType(value: string): value is ShareableItemType {
   return (SHAREABLE_ITEM_TYPES as readonly string[]).includes(value);
 }
 
-interface ContentItemRow {
+export interface ContentItemRow {
   content_id: string;
   media_type: string;
   content_uri: string;
@@ -68,7 +81,7 @@ interface ContentItemRow {
   created_at: string;
 }
 
-interface DerivativeRow {
+export interface DerivativeRow {
   derivative_id: string;
   variant: string;
   sha256: string | null;
@@ -78,7 +91,7 @@ interface DerivativeRow {
   created_at: string;
 }
 
-interface MediaAssetRow {
+export interface MediaAssetRow {
   asset_id: string;
   content_id: string;
   kind: string;
@@ -95,7 +108,7 @@ interface MediaAssetRow {
   purge_at: string | null;
 }
 
-interface DocumentRow {
+export interface DocumentRow {
   document_id: string;
   title: string;
   current_content_id: string;
@@ -110,12 +123,35 @@ export interface ShareClosure {
   itemType: ShareableItemType;
   /** The top-level row's id in the ORIGIN vault. */
   itemId: string;
-  contentItem: ContentItemRow;
+  contentItem: ContentItemRow | null;
   derivatives: DerivativeRow[];
   mediaAsset: MediaAssetRow | null;
   document: DocumentRow | null;
+  collection: CollectionClosure | null;
+  lockerItem: Record<string, unknown> | null;
+  tallyGroup: TallyGroupClosure | null;
   /** Content addresses the audience vault's CAS must hold for this closure. */
   shas: string[];
+}
+
+export interface CollectionClosure {
+  row: Record<string, unknown>;
+  entries: Array<{
+    row: Record<string, unknown>;
+    closure: ShareClosure;
+  }>;
+}
+
+export interface TallyGroupClosure {
+  group: Record<string, unknown>;
+  circle: Record<string, unknown>;
+  members: Array<Record<string, unknown>>;
+  parties: Array<Record<string, unknown>>;
+  expenses: Array<Record<string, unknown>>;
+  splits: Array<Record<string, unknown>>;
+  settlements: Array<Record<string, unknown>>;
+  recurring: Array<Record<string, unknown>>;
+  exceptions: Array<Record<string, unknown>>;
 }
 
 const CONTENT_ITEM_COLUMNS = `content_id, media_type, content_uri, sha256, byte_size, title,
@@ -128,7 +164,10 @@ const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_
        capture_group_id, width, height, duration_s, exif_json, favorite,
        archived_at, deleted_at, purge_at`;
 
-function readContentItem(db: DatabaseSync, contentId: string): ContentItemRow {
+export function readContentItem(
+  db: DatabaseSync,
+  contentId: string
+): ContentItemRow {
   const row = db
     .prepare(
       `SELECT ${CONTENT_ITEM_COLUMNS} FROM core_content_item WHERE content_id = ?`
@@ -141,7 +180,10 @@ function readContentItem(db: DatabaseSync, contentId: string): ContentItemRow {
   return row;
 }
 
-function readDerivatives(db: DatabaseSync, contentId: string): DerivativeRow[] {
+export function readDerivatives(
+  db: DatabaseSync,
+  contentId: string
+): DerivativeRow[] {
   return db
     .prepare(
       `SELECT ${DERIVATIVE_COLUMNS} FROM core_content_derivative
@@ -182,6 +224,9 @@ export function readShareClosure(
       derivatives,
       mediaAsset: null,
       document: null,
+      collection: null,
+      lockerItem: null,
+      tallyGroup: null,
       shas: shasOf(contentItem, derivatives),
     };
   }
@@ -206,8 +251,38 @@ export function readShareClosure(
       derivatives,
       mediaAsset: null,
       document,
+      collection: null,
+      lockerItem: null,
+      tallyGroup: null,
       shas: shasOf(contentItem, derivatives),
     };
+  }
+  if (itemType === "core.collection") {
+    return readCollectionClosure(origin, itemId, readShareClosure);
+  }
+  if (itemType === "locker.item") {
+    const lockerItem = origin
+      .prepare("SELECT * FROM locker_item WHERE item_id = ?")
+      .get(itemId) as Record<string, unknown> | undefined;
+    if (!lockerItem)
+      throw new VaultShareError(
+        `locker.item ${itemId} is not in the origin vault`
+      );
+    return {
+      itemType,
+      itemId,
+      contentItem: null,
+      derivatives: [],
+      mediaAsset: null,
+      document: null,
+      collection: null,
+      lockerItem,
+      tallyGroup: null,
+      shas: [],
+    };
+  }
+  if (itemType === "tally.group") {
+    return readTallyGroupClosure(origin, itemId);
   }
   const asset = origin
     .prepare(
@@ -227,6 +302,9 @@ export function readShareClosure(
     derivatives,
     mediaAsset: asset,
     document: null,
+    collection: null,
+    lockerItem: null,
+    tallyGroup: null,
     shas: shasOf(contentItem, derivatives),
   };
 }
@@ -237,7 +315,7 @@ export function readShareClosure(
  * the audience already holds a different row under that id — where a fresh id
  * is minted rather than corrupting either row.
  */
-function freeId(
+export function freeId(
   db: DatabaseSync,
   table: string,
   column: string,
@@ -421,8 +499,37 @@ function projectDocument(
  */
 export function projectShareClosure(
   audience: DatabaseSync,
-  closure: ShareClosure
+  closure: ShareClosure,
+  keys?: { origin: Buffer; audience: Buffer }
 ): ProjectionResult {
+  if (closure.lockerItem !== null) {
+    if (!keys)
+      throw new VaultShareError(
+        "sharing a Locker item requires both vault encryption keys"
+      );
+    return projectLockerItem(
+      audience,
+      closure.lockerItem,
+      keys.origin,
+      keys.audience,
+      freeId
+    );
+  }
+  if (closure.tallyGroup !== null) {
+    return projectTallyGroup(audience, closure.tallyGroup, freeId);
+  }
+  if (closure.collection !== null) {
+    return projectCollection(
+      audience,
+      closure.collection,
+      keys,
+      projectShareClosure,
+      freeId
+    );
+  }
+  if (closure.contentItem === null) {
+    throw new VaultShareError(`incomplete ${closure.itemType} share closure`);
+  }
   const heldContent = audience
     .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
     .get(closure.contentItem.sha256) as { content_id: string } | undefined;

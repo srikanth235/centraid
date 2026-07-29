@@ -185,6 +185,7 @@ jobs:
       # named contract suite shrinks below its recorded floor. Offline and fast,
       # so it belongs on the per-PR loop next to lint/typecheck.
       - run: bun run test:matrix
+      - run: bun run test:accessibility
       # #545 A6–A8 — smoke + orphaned script lanes + protocol/css linters that
       # previously lived only in check:pr (no CI enforcement).
       - run: bun run test:report:smoke

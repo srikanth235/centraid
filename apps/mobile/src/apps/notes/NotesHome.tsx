@@ -433,7 +433,10 @@ export default function NotesHome({
           keyExtractor={(note) => note.id}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={pull} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void pull()}
+            />
           }
           renderItem={({ item }) => (
             <NoteRow note={item} onOpen={() => openNote(item)} />

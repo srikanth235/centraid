@@ -50,6 +50,11 @@
         "verbs": "read"
       },
       {
+        "schema": "core",
+        "table": "document",
+        "verbs": "read"
+      },
+      {
         "schema": "schedule",
         "table": "task",
         "verbs": "read"

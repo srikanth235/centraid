@@ -235,7 +235,11 @@ export function CaptureOverlay({
             placeholder="Remind me to call Priya, spent ₹450 on lunch, meeting tomorrow at 9…"
           />
         </label>
-        <button type="button" disabled={busy || !text.trim()} onClick={review}>
+        <button
+          type="button"
+          disabled={busy || !text.trim()}
+          onClick={() => void review()}
+        >
           {busy && !preview ? "Classifying…" : "Preview"}
         </button>
         {preview ? (

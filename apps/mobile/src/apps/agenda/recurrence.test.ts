@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { expandEvent } from "./recurrence";
 
@@ -183,23 +183,32 @@ describe("recurrence", () => {
   test("an exhausted series terminates the walk instead of spinning to the guard", () => {
     // Regression for the old 10k-step outer walk: an anchored-far-past COUNT=1
     // series must return immediately once its single occurrence is consumed.
-    const started = performance.now();
-    for (let i = 0; i < 500; i += 1) {
-      expandEvent(
-        {
-          id: "series",
-          summary: "Once",
-          start: "2000-01-01T09:00:00Z",
-          end: "2000-01-01T09:30:00Z",
-          rrule: "FREQ=DAILY;COUNT=1",
-          status: "confirmed",
-        },
-        new Date("2026-07-01T00:00:00Z"),
-        new Date("2026-08-01T00:00:00Z")
-      );
+    const formatToParts = vi.spyOn(
+      Intl.DateTimeFormat.prototype,
+      "formatToParts"
+    );
+    try {
+      expect(
+        expandEvent(
+          {
+            id: "series",
+            summary: "Once",
+            start: "2000-01-01T09:00:00Z",
+            end: "2000-01-01T09:30:00Z",
+            rrule: "FREQ=DAILY;COUNT=1",
+            status: "confirmed",
+          },
+          new Date("2026-07-01T00:00:00Z"),
+          new Date("2026-08-01T00:00:00Z")
+        )
+      ).toStrictEqual([]);
+      // One start conversion plus the consumed occurrence and the next
+      // candidate needed to observe COUNT exhaustion. The former bug reached
+      // the 10k guard; this bound is deterministic even under a saturated CI
+      // host, unlike an elapsed-time assertion.
+      expect(formatToParts.mock.calls.length).toBeLessThanOrEqual(12);
+    } finally {
+      formatToParts.mockRestore();
     }
-    // 500 expansions of an exhausted series complete well under a second; the
-    // pre-fix walk spun 10k empty steps each and blew past this bound.
-    expect(performance.now() - started).toBeLessThan(500);
   });
 });

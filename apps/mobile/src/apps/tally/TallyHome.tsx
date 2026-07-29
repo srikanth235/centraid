@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import HomeKey from "../../kit/components/HomeKey";
 import {
   combineReplicaQueryStates,
@@ -56,7 +57,7 @@ export default function TallyHome({
   navigation,
 }: TallyScreenProps): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const { session, vaultId } = useReplica();
   const vault = useReplicaQuery(
     "tally",
     useMemo(() => ({ entity: "core.vault" }), [])
@@ -114,6 +115,7 @@ export default function TallyHome({
   );
   const [recurring, setRecurring] = useState(false);
   const [groupDraft, setGroupDraft] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
   const [editing, setEditing] = useState<{
     template: ReplicaRow;
     originalStart: string;
@@ -364,6 +366,18 @@ export default function TallyHome({
           ]}
         />
       </ScrollView>
+      {activeGroupId ? (
+        <Pressable
+          accessibilityLabel={`Share ${groupName(activeGroupId)} with household`}
+          accessibilityRole="button"
+          onPress={() => setShareOpen(true)}
+          style={[styles.share, { borderColor: colors.line }]}
+        >
+          <Text style={{ color: colors.accent }}>
+            Share group with household
+          </Text>
+        </Pressable>
+      ) : null}
       <View style={[styles.form, { borderColor: colors.line }]}>
         <TextInput
           value={description}
@@ -629,6 +643,19 @@ export default function TallyHome({
           </View>
         </View>
       </Modal>
+      <AudiencePlacementSheet
+        visible={shareOpen}
+        itemType="tally.group"
+        itemId={activeGroupId}
+        sourceVaultId={asString(
+          groups.rows.find((row) => row.group_id === activeGroupId)
+            ?.__centraidScopeId ??
+            vaultId ??
+            ""
+        )}
+        noun="Tally group"
+        onClose={() => setShareOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -685,6 +712,13 @@ const styles = StyleSheet.create({
   personName: { fontFamily: family.sansMedium, fontSize: 14 },
   row: { alignItems: "center", flexDirection: "row", gap: 8 },
   safe: { flex: 1 },
+  share: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginHorizontal: 16,
+    padding: 10,
+  },
   save: {
     borderRadius: 10,
     marginLeft: "auto",

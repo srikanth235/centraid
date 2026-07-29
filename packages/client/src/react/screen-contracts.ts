@@ -1148,6 +1148,14 @@ export interface HomeAutoItemDTO {
   footOk: boolean;
   starred: boolean;
 }
+export interface HomeDailyBriefDTO {
+  date: string;
+  events: Array<{ id: string; title: string; at: string }>;
+  tasks: Array<{ id: string; title: string; dueAt: string }>;
+  newPhotos: number;
+  balanceMinor: number;
+  currency: string;
+}
 export interface HomeBridgeProps {
   /** Dev flag (issue #434, Phase 3) — when false the builder is hidden, so the
    *  "What should we build?" composer hero + its suggestions don't render and
@@ -1157,6 +1165,7 @@ export interface HomeBridgeProps {
   dateLabel: string;
   appItems: HomeAppItemDTO[];
   automationItems: HomeAutoItemDTO[];
+  dailyBrief?: HomeDailyBriefDTO;
   counts: { all: number; apps: number; automations: number };
   attention: number;
   onBuild: (prompt: string) => void;

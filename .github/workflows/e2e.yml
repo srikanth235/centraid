@@ -397,8 +397,8 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # #496 PC1 / #630 — Android runs the same eight-app compatibility coverage as
-  # iOS: five WebView blueprints plus the three native v0 routes. Flake budget:
+  # #496 PC1 / #630 — Android runs the same eight native blueprint covers as
+  # iOS. Flake budget:
   # one retry at the flow harness; job failure still reds nightly. Metro and the
   # paired gateway must be up before Maestro.
   mobile-e2e-android:

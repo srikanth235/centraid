@@ -15,6 +15,7 @@ import React, {
 import { AppState } from "react-native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
+import { scheduleDailyBriefNotification } from "../../lib/daily-brief";
 import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import { syncDueNotifications } from "../../lib/notifications-core";
 import { getDesktopName } from "../../lib/phone-link";
@@ -301,6 +302,7 @@ export function ReplicaProvider({
         const freshness = await loadFreshness(identity.gatewayId, scopes);
         if (identity.online) {
           void registerReplicaPushWake(identity.auth.baseUrl);
+          void scheduleDailyBriefNotification();
           for (const scope of scopes)
             void syncDueNotifications(identity.auth.baseUrl, scope.vaultId);
         }

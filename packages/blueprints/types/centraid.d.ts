@@ -294,6 +294,26 @@ interface CentraidClient {
     /** Which mounted scope the write lands in; defaults to the primary. */
     scope?: string;
   }) => Promise<T>;
+  /** Place an entity into another mounted audience vault. */
+  place?: (opts: {
+    linkToken: string;
+    kind: "add" | "move";
+    itemType:
+      | "core.collection"
+      | "core.content_item"
+      | "core.document"
+      | "locker.item"
+      | "media.media_asset"
+      | "tally.group";
+    itemId: string;
+    sourceVaultId: string;
+    targetVaultId: string;
+  }) => Promise<{
+    status: string;
+    targetItemId?: string;
+    accessReceiptId?: string;
+    reason?: string;
+  }>;
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;

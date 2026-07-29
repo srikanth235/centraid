@@ -10,12 +10,8 @@ import type { ReplicaContextValue } from "../replica/ReplicaProvider";
 import { replicaQueryConnection } from "./replica-query-state";
 import type { ReplicaQueryState } from "./replica-query-state";
 
-export {
-  combineReplicaQueryStates,
-  replicaQueryConnection,
-} from "./replica-query-state";
+export { combineReplicaQueryStates } from "./replica-query-state";
 export type {
-  CombinedReplicaQueryState,
   ReplicaQueryConnection,
   ReplicaQueryState,
 } from "./replica-query-state";

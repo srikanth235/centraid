@@ -395,7 +395,9 @@ export default function PhotosHome({
               >
                 <Image
                   source={imageSource(hero.uri)}
+                  cachePolicy="memory-disk"
                   contentFit="cover"
+                  recyclingKey={hero.id}
                   style={styles.heroImage}
                 />
                 <View style={styles.heroShade} />

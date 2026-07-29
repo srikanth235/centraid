@@ -3850,7 +3850,7 @@ export async function buildGateway(
     // polls this to fire OS notifications (issue: Tasks/Agenda comparison
     // flagged "no time-based alerts, anywhere").
     forRoutePrefixes(
-      "/centraid/_reminders",
+      ["/centraid/_reminders", "/centraid/_brief"],
       makeRemindersRouteHandler(vaultRegistry)
     ),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
@@ -4141,6 +4141,7 @@ export async function buildGateway(
   // must not also be reachable through the in-scope chain.
   const shareHandler = makeShareRouteHandler({
     enrollments: enrollmentStore,
+    gatewayDatabase,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
   });

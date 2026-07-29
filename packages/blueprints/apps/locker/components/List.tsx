@@ -100,6 +100,7 @@ export function LockerList({
         <div className={styles.search}>
           <Icon name="search" sw={1.75} size={15} />
           <input
+            id="lockerSearchInput"
             type="search"
             placeholder={`Search ${allCount} items`}
             autoComplete="off"

@@ -41,6 +41,8 @@ CREATE INDEX schedule_section_project_idx
   ON schedule_section(project_id, sort_order);
 CREATE INDEX schedule_task_organize_idx
   ON schedule_task(project_id, section_id, sort_order);
+CREATE INDEX schedule_task_section_idx
+  ON schedule_task(section_id);
 
 CREATE TABLE schedule_recurrence_exception (
   exception_id  TEXT PRIMARY KEY,
@@ -92,6 +94,10 @@ CREATE TABLE people_merge (
 ) STRICT;
 CREATE UNIQUE INDEX people_merge_source_active_idx
   ON people_merge(source_party_id) WHERE undone_at IS NULL;
+CREATE INDEX people_merge_target_idx
+  ON people_merge(target_party_id);
+CREATE INDEX people_merge_revision_idx
+  ON people_merge(revision_id);
 
 ALTER TABLE tally_expense ADD COLUMN original_amount_minor INTEGER
   CHECK (original_amount_minor IS NULL OR original_amount_minor > 0);
@@ -132,6 +138,8 @@ CREATE TABLE tally_recurring_expense (
 ) STRICT;
 CREATE INDEX tally_recurring_expense_group_idx
   ON tally_recurring_expense(group_id, status, anchor_start);
+CREATE INDEX tally_recurring_expense_paid_by_idx
+  ON tally_recurring_expense(paid_by);
 CREATE UNIQUE INDEX tally_expense_recurring_instance_idx
   ON tally_expense(recurring_template_id, spent_on)
   WHERE recurring_template_id IS NOT NULL;

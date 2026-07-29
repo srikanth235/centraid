@@ -34,6 +34,8 @@ export default function Button({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
       onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,

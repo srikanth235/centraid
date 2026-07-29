@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -35,7 +36,8 @@ export default function AlbumDetail({
   navigation,
 }: PhotosScreenProps<"AlbumDetail">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const replica = useReplica();
+  const { session } = replica;
   const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
   const collections = useReplicaQuery(
@@ -48,6 +50,7 @@ export default function AlbumDetail({
   );
   const [selection, setSelection] = useState(new Set<string>());
   const [renameOpen, setRenameOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [name, setName] = useState("");
   const [keepOriginals, setKeepOriginals] = useState(false);
   // Which album's "keep originals" pin has finished hydrating. Derived rather
@@ -230,6 +233,15 @@ export default function AlbumDetail({
         ) : (
           <View style={styles.actions}>
             <Pressable
+              accessibilityLabel="Share album with household"
+              accessibilityRole="button"
+              onPress={() => setShareOpen(true)}
+            >
+              <Feather name="users" size={20} color={colors.accent} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Rename album"
+              accessibilityRole="button"
               onPress={() => {
                 setName(String(album?.name ?? ""));
                 setRenameOpen(true);
@@ -237,7 +249,11 @@ export default function AlbumDetail({
             >
               <Feather name="edit-2" size={19} color={colors.accent} />
             </Pressable>
-            <Pressable onPress={deleteAlbum}>
+            <Pressable
+              accessibilityLabel="Delete album"
+              accessibilityRole="button"
+              onPress={deleteAlbum}
+            >
               <Feather name="trash-2" size={20} color={colors.danger} />
             </Pressable>
           </View>
@@ -308,6 +324,16 @@ export default function AlbumDetail({
           </Pressable>
         </View>
       </Modal>
+      <AudiencePlacementSheet
+        visible={shareOpen}
+        itemType="core.collection"
+        itemId={route.params.albumId}
+        sourceVaultId={String(
+          album?.__centraidScopeId ?? replica.vaultId ?? ""
+        )}
+        noun="Album"
+        onClose={() => setShareOpen(false)}
+      />
     </SafeAreaView>
   );
 }

@@ -40,12 +40,14 @@ describe("confirm", () => {
       expect(document.querySelector(".danger")).not.toBeNull();
     });
 
-    it("Enter confirms and Escape cancels", async () => {
+    it("Enter confirms safe actions and cannot confirm danger actions", async () => {
       const p1 = openConfirm({ title: "T", message: "M" });
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
       await expect(p1).resolves.toBe(true);
 
-      const p2 = openConfirm({ title: "T", message: "M" });
+      const p2 = openConfirm({ title: "T", message: "M", danger: true });
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+      expect(document.querySelector(".card")).not.toBeNull();
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
       await expect(p2).resolves.toBe(false);
     });

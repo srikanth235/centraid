@@ -339,12 +339,36 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const stopFocus = onFocusRefresh(() => void refresh());
 
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== "Escape") return;
+      const target = e.target;
+      const editing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (e.key === "/" && !editing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>("#searchInput")?.focus();
+        return;
+      }
       if (isPopoverOpen()) {
+        if (e.key !== "Escape") return;
         closePopover();
         return;
       }
       const state = stateRef.current;
+      if (
+        e.key.toLowerCase() === "n" &&
+        !editing &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !state.addModalOpen &&
+        !state.detailsId
+      ) {
+        e.preventDefault();
+        handleOpenAddModal();
+        return;
+      }
+      if (e.key !== "Escape") return;
       if (state.addModalOpen) {
         handleCloseAddModal();
         return;
