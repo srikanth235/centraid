@@ -137,7 +137,16 @@ export function VaultStep({
             <p className={styles.hint}>
               Creating a new space here needs the gateway host's CLI.
             </p>
-          ) : null}
+          ) : (
+            // Nothing to pick, nothing to create (issue #603 D10) — an
+            // enrollment that grants no space used to render as a blank list
+            // with "Continue" still live. `canCommitConnectFlow` now says no;
+            // this says why.
+            <p className={styles.hint}>
+              This gateway shared no space with this device — ask its host for a
+              new pairing ticket.
+            </p>
+          )}
         </div>
       )}
       <div className={styles.foot}>

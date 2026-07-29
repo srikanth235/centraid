@@ -395,3 +395,38 @@ export function resolveAppMeta(
     name: row.name ?? builtin?.name ?? titleCaseFromId(row.id),
   };
 }
+
+/**
+ * The label an auto-founded gateway gives its owner before anyone has said who
+ * they are (`build-gateway.ts`). A placeholder, not a name — a member still
+ * carrying it counts as "not set yet".
+ */
+export const PLACEHOLDER_MEMBER_LABEL = "You";
+
+/**
+ * The name of the person this device just enrolled as, from the household
+ * roster (`GET /centraid/_gateway/devices`, the row flagged `current`).
+ *
+ * A name belongs to the PERSON, not to the phone. Pairing a second device for
+ * someone the gateway already knows must not ask them who they are again, so
+ * onboarding reads this and skips its profile step when it comes back set.
+ * Empty string = the roster still says "You"; `undefined` = the gateway has no
+ * device plane, or the read failed — both mean "ask", never "assume".
+ */
+export async function readSelfMemberName(): Promise<string | undefined> {
+  try {
+    const base = await requireGatewayBase();
+    const body = await fetchJson<{
+      devices?: Array<{ current?: boolean; memberLabel?: string }>;
+    }>(`${base}/centraid/_gateway/devices`, {
+      headers: apiHeaders(),
+      method: "GET",
+    });
+    const self = body.devices?.find((device) => device.current === true);
+    if (!self) return undefined;
+    const label = (self.memberLabel ?? "").trim();
+    return label === PLACEHOLDER_MEMBER_LABEL ? "" : label;
+  } catch {
+    return undefined;
+  }
+}

@@ -1028,9 +1028,13 @@ export async function buildGateway(
    * two vaults every household starts with, synchronously, before any route
    * can observe a zero-vault gateway.
    *
-   * ORDER IS LOAD-BEARING: ids are UUIDv7, so `defaultVaultId()` returns the
-   * OLDEST. Creating "Shared" first makes it the default vault for unscoped
-   * requests and for a pair ticket minted without an explicit target.
+   * ORDER IS NOT the default signal any more: "Shared" is still founded
+   * first (ids are UUIDv7, so it sorts oldest and heads every listing), but
+   * the DEFAULT vault is "Personal", marked at founding with the durable
+   * `personal` flag in its own `core_vault.settings_json`. Unscoped requests
+   * and a pair ticket minted without an explicit target land there — the
+   * owner's own space, never the household's shared one. The marker survives
+   * the fresh path renaming "Personal" to the owner's display name.
    *
    * `isFresh()` reads the filesystem registry, which counts a vault dir that
    * FAILED to mount — so corruption never re-founds over existing data. A
@@ -1053,7 +1057,10 @@ export async function buildGateway(
   };
   const autoFoundedVaults =
     vaultRegistry.isFresh() && neverInhabited()
-      ? [vaultRegistry.create("Shared"), vaultRegistry.create("Personal")]
+      ? [
+          vaultRegistry.create("Shared"),
+          vaultRegistry.create("Personal", { personal: true }),
+        ]
       : [];
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
@@ -1661,10 +1668,17 @@ export async function buildGateway(
       })
     : undefined;
 
-  // Read + refresh contract for a catalog surface: a Refresh (or a cold cache)
-  // kicks the warmer fire-and-forget; the response carries whatever's cached
-  // now plus the tri-state so the client knows whether to poll. `ready` wins
-  // over `loading`, so a Refresh over an existing list keeps showing it.
+  // Read + refresh contract for a catalog surface: a Refresh (or a cold cache
+  // nobody has warmed yet) kicks the warmer fire-and-forget; the response
+  // carries whatever's cached now plus the tri-state so the client knows
+  // whether to poll. `ready` wins over `loading`, so a Refresh over an
+  // existing list keeps showing it.
+  //
+  // The `hasWarmed` guard is load-bearing: a runner that self-reports no
+  // models (opencode, grok) leaves the cache empty forever, and re-kicking a
+  // warm on every poll kept `isWarming` true at read time — `loading` that
+  // never resolved. Once the question has been asked, an empty cache reports
+  // `empty` and an explicit Refresh is the way to ask again.
   const resolveCatalogSurface = async <T>(
     surface: CatalogSurface,
     kind: RunnerKind,
@@ -1673,7 +1687,9 @@ export async function buildGateway(
   ): Promise<{ list: T[]; status: SurfaceStatus }> => {
     if (!catalogPath || !warmer) return { list: [], status: "empty" };
     const list = await read(catalogPath, kind);
-    if (refresh || list.length === 0) void warmer.warm(kind, surface);
+    if (refresh || (list.length === 0 && !warmer.hasWarmed(kind, surface))) {
+      void warmer.warm(kind, surface);
+    }
     return {
       list,
       status: deriveStatus(list.length, warmer.isWarming(kind, surface)),
@@ -3158,9 +3174,11 @@ export async function buildGateway(
     const existing = schedulers.get(vaultId);
     if (existing) return existing;
     const created: automation.LocalScheduler =
-      options.scheduler &&
-      schedulers.size === 0 &&
-      vaultId === vaultRegistry.defaultVaultId()
+      // An injected scheduler belongs to the DEFAULT vault, whichever order
+      // it mounts in — the id check alone already makes that at most one
+      // vault (a `schedulers.size === 0` co-condition would silently drop the
+      // injection now that the default is not the first vault activated).
+      options.scheduler && vaultId === vaultRegistry.defaultVaultId()
         ? options.scheduler
         : new automation.InProcessScheduler({
             fire: (ref) =>
@@ -3735,11 +3753,11 @@ export async function buildGateway(
               ...(options.isHostCustody
                 ? { canMintPairingTicket: options.isHostCustody }
                 : {}),
-              // The mint target when the caller names no vault: Shared, the
-              // oldest auto-founded vault (issue #603). `list()` is
-              // oldest-first, same order as `defaultVaultId()`, but total —
-              // this seam must not throw when every vault has been deleted.
-              defaultVaultId: () => vaultRegistry.list()[0]?.vaultId,
+              // The mint target when the caller names no vault: the owner's
+              // PERSONAL vault, never Shared. The `OrUndefined` variant is
+              // used deliberately — this seam must not throw when every vault
+              // has been deleted.
+              defaultVaultId: () => vaultRegistry.defaultVaultIdOrUndefined(),
               vaultIds: () =>
                 vaultRegistry.list().map((vault) => vault.vaultId),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
@@ -4281,7 +4299,20 @@ export async function buildGateway(
         message: "this device is not enrolled in the requested vault",
       });
     }
-    const vaultId = requested ?? enrolled[0]!;
+    // No `x-centraid-vault` header → the gateway's DEFAULT vault (the owner's
+    // personal one), whenever this device is enrolled in it. Falling straight
+    // to `enrolled[0]` would put a headerless request in whichever vault the
+    // device's enrollment rows happen to rank first — Shared, on the usual
+    // auto-founded gateway — disagreeing with `defaultVaultId()` and with
+    // every other unscoped seam. A device NOT enrolled in the default still
+    // lands in the first vault it actually holds (a ticket minted against a
+    // named vault ranks that vault first, so a targeted pair is unaffected).
+    const preferredVaultId = vaultRegistry.defaultVaultIdOrUndefined();
+    const vaultId =
+      requested ??
+      (preferredVaultId !== undefined && enrolled.includes(preferredVaultId)
+        ? preferredVaultId
+        : enrolled[0]!);
     if (!vaultRegistry.get(vaultId)) {
       return sendJson(res, 404, {
         error: "vault_not_found",

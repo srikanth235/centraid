@@ -4,9 +4,17 @@
    Backups/Storage rather than a bolted-on style. */
 
 /* The card lives in the Gateway overview's right rail (a packed flex
-   column); it sizes like any other panel there. */
+   column); it sizes like any other panel there.
+
+   It is also a CONTAINER, and every breakpoint below keys off that rather
+   than the viewport. The card is routinely far narrower than the window — in
+   Household it sits in a max-width column, in Gateway it sits in a rail — so
+   a viewport media query fired at the wrong moment in both directions: a
+   716px window left the person rows unwrapped while the card was ~400px and
+   crushing device names to one letter per line. */
 .card {
   min-width: 0;
+  container: devices-card / inline-size;
 }
 
 .body {
@@ -77,12 +85,15 @@
   flex-direction: column;
   gap: 4px;
 }
+/* `break-word`, not `anywhere`: `anywhere` breaks mid-word even when the word
+   would fit on a line of its own, which is how "desktop host" rendered as one
+   letter per line once the layout squeezed this column. */
 .groupName {
   margin: 0;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--ink);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 /* Ownership words (Owner / Member / Viewer) beside the space they apply to —
    the only place a role is stated, because the person is where it is authored. */
@@ -187,7 +198,7 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--ink);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .renameForm {
   display: inline-flex;
@@ -195,7 +206,9 @@
   gap: 4px;
 }
 .renameInput {
-  width: min(190px, 30vw);
+  /* Container-relative, not viewport-relative: the field sits inside the card,
+     so `30vw` was free to overflow a card narrower than the window. */
+  width: min(190px, 60cqw);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   background: var(--bg);
@@ -344,12 +357,19 @@
 .confirm {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
+/* The ask names the person and their device count, so it is the longest
+   string in the card. It used to be `nowrap`, which made the confirm step the
+   widest thing in the row and squeezed every sibling to nothing. */
 .confirmAsk {
+  flex: 1 1 12ch;
+  min-width: 0;
   font-size: 11.5px;
+  line-height: 1.4;
   color: var(--ink-2);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .confirmYes {
   color: #fff;
@@ -375,15 +395,48 @@
   }
 }
 
-/* Narrow: let the action drop below the row body instead of crushing the
-   meta line. */
-@media (max-width: 560px) {
-  .row {
+/* Narrow CARD (not narrow window): let the action drop below the row body
+   instead of crushing the name and meta lines. `.rowAction` is `flex: none`,
+   so without this the button's intrinsic width — "Remove <person>" is as long
+   as the person's name — wins every sizing negotiation and `.main` collapses
+   to a column of single characters. */
+@container devices-card (max-width: 560px) {
+  .row,
+  .groupHead {
     flex-wrap: wrap;
   }
   .rowAction {
     align-self: flex-start;
+    /* Line the action up under the text column, past the glyph. */
     padding-left: 46px;
+  }
+  .groupHead .rowAction {
+    padding-left: 42px;
+  }
+}
+
+/* Very narrow card: the glyph gutter costs more than it gives. Drop the
+   indent, let actions span the row, and stop the chips from stacking into a
+   ragged column. */
+@container devices-card (max-width: 360px) {
+  .rowAction,
+  .groupHead .rowAction {
+    align-self: stretch;
+    padding-left: 0;
+  }
+  .rowAction > button,
+  .confirm {
+    width: 100%;
+  }
+  .confirm > button {
+    flex: 1 1 auto;
+  }
+  .tombstones,
+  .groupEmpty {
+    margin-left: 0;
+  }
+  .meta {
+    gap: 4px 10px;
   }
 }
 
@@ -392,5 +445,6 @@
 .headRight {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
 }

@@ -193,7 +193,16 @@ await runFlow("template-gate", async (ctx) => {
     clearState: false
 - extendedWaitUntil:
     visible:
-      text: "centraid"
+      text: "YOUR APPS"
+    timeout: 30000
+# Home renders its eight tiles before the app registry answers, and an app that
+# is not installed yet publishes "<name>, on your desktop — tap to pair" instead
+# of "Open <name>". Waiting for the installed label is waiting for the fetch this
+# flow's own install triggered — without it the FIRST template raced the refresh
+# and failed on a tile the screenshot plainly showed.
+- extendedWaitUntil:
+    visible:
+      text: "Open ${c.appName}"
     timeout: 30000
 - scrollUntilVisible:
     element:

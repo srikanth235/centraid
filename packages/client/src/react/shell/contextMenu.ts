@@ -30,10 +30,21 @@ export function isContextMenuOpen(): boolean {
   return ctxMenu !== null;
 }
 
+export interface MenuOptions {
+  /**
+   * Stretch the menu to the anchor rect's width instead of sizing to its
+   * longest label. For a menu anchored to a full-width row — the sidebar's
+   * account row — a content-width popup reads as a stray tooltip; matching
+   * the row makes it read as that row opening.
+   */
+  matchAnchorWidth?: boolean;
+}
+
 export function openMenu(
   items: ReadonlyArray<CtxItem | "sep">,
   anchor: ShellMenuAnchor,
-  onPick: (id: string) => void
+  onPick: (id: string) => void,
+  options?: MenuOptions
 ): void {
   closeContextMenu();
 
@@ -67,6 +78,9 @@ export function openMenu(
       onPick(id);
     });
     ctxMenu.append(btn);
+  }
+  if (options?.matchAnchorWidth && anchor.kind === "rect") {
+    ctxMenu.style.width = `${anchor.rect.width}px`;
   }
   document.body.append(ctxMenu);
 

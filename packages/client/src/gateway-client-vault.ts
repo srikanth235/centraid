@@ -36,6 +36,13 @@ export interface VaultListEntry {
   name: string;
   ownerPartyId: string;
   /**
+   * True for the owner's PERSONAL vault — the gateway's default target,
+   * marked in the vault itself at founding. Survives the fresh path renaming
+   * it to the owner's display name, so this (not `name === "Personal"`) is
+   * how a client finds "my own space".
+   */
+  personal?: boolean;
+  /**
    * Presentation out of `core_vault.settings_json` (#280: profiles are
    * vaults — the switcher's color/icon/blurb live IN the vault).
    */

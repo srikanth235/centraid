@@ -190,7 +190,8 @@ describe("serve scenarios", () => {
     expect(Array.isArray(body.logs)).toBe(true);
     // Both auto-founded vaults are mounted, sized off vault.db/journal.db.
     expect(body.vaults).toHaveLength(2);
-    expect(body.vaults[0]!.vaultId).toBe(handle.vaults.current().boot.vaultId);
+    // Oldest-first listing (Shared leads); the DEFAULT vault is Personal.
+    expect(body.vaults[0]!.vaultId).toBe(handle.vaults.list()[0]!.vaultId);
     expect(body.vaults[0]!.files.vaultDbBytes).toBeTypeOf("number");
   });
 
@@ -232,8 +233,9 @@ describe("serve scenarios", () => {
       recoveryKit: { confirmedAt: null },
     });
     expect(body.vaults).toHaveLength(2);
+    // Oldest-first listing, so Shared leads (the DEFAULT vault is Personal).
     expect(body.vaults[0]).toMatchObject({
-      vaultId: handle.vaults.current().boot.vaultId,
+      vaultId: handle.vaults.list()[0]!.vaultId,
       name: "Shared",
       running: false,
       destination: { kind: "gateway-local" },
@@ -261,7 +263,9 @@ describe("serve scenarios", () => {
         provider: { kind: "local", dir: providerDir },
       },
     });
-    const vaultId = handle.vaults.current().boot.vaultId;
+    // Backup status lists vaults oldest-first, so this is Shared — the
+    // registry DEFAULT (`current()`) is Personal and sits second.
+    const vaultId = handle.vaults.list()[0]!.vaultId;
     const auth = { Authorization: `Bearer ${handle.token}` };
 
     const before = await fetch(`${handle.url}/centraid/_gateway/backup`, {

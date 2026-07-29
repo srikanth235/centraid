@@ -454,6 +454,8 @@ export {
   type EnrichTier,
   readVaultPresentation,
   updateVaultPresentation,
+  readVaultPersonal,
+  markVaultPersonal,
   type VaultPresentation,
   lookupAppByName,
   ensureAppEnrolled,

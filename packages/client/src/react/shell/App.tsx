@@ -60,11 +60,14 @@ import HouseholdRoute from "./routes/HouseholdRoute.js";
 import InlineAppRoute from "./routes/InlineAppRoute.js";
 import { inlineAppLoader } from "./routes/inlineApps.js";
 import InsightsRoute from "./routes/InsightsRoute.js";
+import PairDeviceModal from "./routes/PairDeviceModal.js";
 import { createPaletteConversationSearch } from "./routes/paletteConversationSearch.js";
 import { buildPaletteGroups } from "./routes/paletteData.js";
 import { createPaletteEntitySearch } from "./routes/paletteEntitySearch.js";
+import { loadSelfProfile } from "./routes/profileData.js";
 import RenameGatewayModal from "./routes/RenameGatewayModal.js";
 import RunViewRoute from "./routes/RunViewRoute.js";
+import { forgetThisDeviceLocally } from "./routes/settingsAccountData.js";
 import SettingsRoute from "./routes/SettingsRoute.js";
 import StarredRoute from "./routes/StarredRoute.js";
 import StorageRoute from "./routes/StorageRoute.js";
@@ -83,6 +86,7 @@ import { showToast } from "./toast.js";
 import { showUndoToast } from "./undoToast.js";
 import { useAppearance } from "./useAppearance.js";
 import { useAssistantConversations } from "./useAssistantConversations.js";
+import { useAsyncData } from "./useAsyncData.js";
 import { useBlockingCount } from "./useBlockingCount.js";
 import { useBuilderEnabled } from "./useBuilderEnabled.js";
 import { useGatewayRuntime } from "./useGatewayRuntime.js";
@@ -183,6 +187,29 @@ export function BuilderRouteRedirect({ nav }: { nav: ShellNav }): JSX.Element {
   return <PageEmpty message="" />;
 }
 
+/**
+ * Settings stopped being a destination and became an overlay, but the route
+ * survives: the command palette, Household, Approvals, and the `window.Centraid`
+ * shim all still address it as `{kind: 'settings'}`. Rather than rewrite every
+ * caller, the route resolves here — open the dialog, and `replace` (not push)
+ * home so a dismissed dialog doesn't leave a settings entry in history.
+ */
+export function SettingsRouteRedirect({
+  nav,
+  page,
+  onOpen,
+}: {
+  nav: ShellNav;
+  page: string | undefined;
+  onOpen: (page: string) => void;
+}): JSX.Element {
+  useEffect(() => {
+    onOpen(page ?? "");
+    nav.replace({ kind: "home" });
+  }, [nav, page, onOpen]);
+  return <PageEmpty message="" />;
+}
+
 // The React shell root — the single component the flip mounts on #root,
 // replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
 // state (appearance prefs, the live app/draft list, starred set) and drives
@@ -205,6 +232,43 @@ export default function App(): JSX.Element {
   // I12 / #501 — What's new re-wired to GitHub release notes (main changelog.ts).
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [whatsNewAutoChecked, setWhatsNewAutoChecked] = useState(false);
+  // Settings is an overlay, not a destination: `null` closed, otherwise the
+  // page id to open on ("" = the default page). Keeping it out of the router
+  // is the point — changing a preference must not cost you your place in the
+  // app, and dismissing returns you exactly where you were.
+  const [settingsPage, setSettingsPage] = useState<string | null>(null);
+  // Pairing a phone is an act, not a preference, so it opens from the account
+  // menu as its own modal rather than as a Settings page (PairDeviceModal).
+  const [pairDeviceOpen, setPairDeviceOpen] = useState(false);
+  // The signed-in person, for the sidebar's account row. Re-read whenever the
+  // gateway or vault changes — a different gateway is a different household
+  // and therefore a different roster.
+  const [accountNonce, setAccountNonce] = useState(0);
+  const accountState = useAsyncData(loadSelfProfile, [accountNonce]);
+  const account =
+    accountState.status === "ready" ? accountState.data : undefined;
+  useEffect(() => {
+    const bump = (): void => setAccountNonce((n) => n + 1);
+    const offGateway = window.CentraidApi.onGatewayChanged?.(bump);
+    const offVault = window.CentraidApi.onVaultChanged?.(bump);
+    return () => {
+      offGateway?.();
+      offVault?.();
+    };
+  }, []);
+  const logOut = useCallback((): void => {
+    void (async () => {
+      const ok = await openConfirm({
+        confirmLabel: "Log out",
+        danger: true,
+        message:
+          "This device drops its pairing, its offline copy, and its cached previews, and returns to onboarding. Your vault is untouched — the enrollment stays on the gateway until you revoke it from Household → Devices.",
+        title: "Log out of this device?",
+      });
+      if (!ok) return;
+      await forgetThisDeviceLocally(account?.gatewayId);
+    })();
+  }, [account?.gatewayId]);
 
   // I12: auto-open What's new once per installed version after a successful
   // changelog fetch (changelogSeenVersion in desktop settings).
@@ -318,6 +382,11 @@ export default function App(): JSX.Element {
       ) {
         e.preventDefault();
         setCaptureOpen(true);
+      } else if (meta && e.key === ",") {
+        // The platform-standard Preferences shortcut. Toggles, so the same
+        // keystroke that opened the dialog dismisses it.
+        e.preventDefault();
+        setSettingsPage((open) => (open === null ? "" : null));
       } else if (meta && e.shiftKey && (e.key === "g" || e.key === "G")) {
         e.preventDefault();
         document
@@ -735,7 +804,13 @@ export default function App(): JSX.Element {
           gatewayStatus={gatewayStatus}
           onHousehold={go({ kind: "household" })}
           onAtlas={go({ kind: "atlas" })}
-          onSettings={go({ kind: "settings" })}
+          onSettings={() => setSettingsPage("")}
+          onPairDevice={() => setPairDeviceOpen(true)}
+          {...(account?.name ? { accountName: account.name } : {})}
+          {...(account?.avatarColor
+            ? { accountColor: account.avatarColor }
+            : {})}
+          {...(account ? { onLogOut: logOut } : {})}
           {...(builderEnabled
             ? { onNewApp: () => nav.navigate({ kind: "builder" }) }
             : {})}
@@ -758,6 +833,8 @@ export default function App(): JSX.Element {
       );
     },
     [
+      account,
+      logOut,
       builderEnabled,
       memberScopes,
       gatewaySwitcherOpen,
@@ -845,10 +922,10 @@ export default function App(): JSX.Element {
           // Legacy deep link: Settings → Connections now lives at Connectors.
           if (nav.route.page === "connections") return <ConnectorsRoute />;
           return (
-            <SettingsRoute
-              prefs={prefs}
-              setPrefs={setPrefs}
-              initialPage={nav.route.page}
+            <SettingsRouteRedirect
+              nav={nav}
+              page={nav.route.page}
+              onOpen={setSettingsPage}
             />
           );
         case "app": {
@@ -1001,6 +1078,19 @@ export default function App(): JSX.Element {
             )}
           >
             {renderRoute(nav)}
+            {/* Inside the provider, not beside it: the dialog's pages use
+                `useShellActions` for toasts, confirms, and navigation. */}
+            {settingsPage === null ? null : (
+              <SettingsRoute
+                prefs={prefs}
+                setPrefs={setPrefs}
+                initialPage={settingsPage}
+                onClose={() => setSettingsPage(null)}
+              />
+            )}
+            {pairDeviceOpen ? (
+              <PairDeviceModal onClose={() => setPairDeviceOpen(false)} />
+            ) : null}
           </ShellActionsProvider>
         )}
         {...(builderEnabled

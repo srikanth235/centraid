@@ -36,3 +36,16 @@ export function roleSentence(role: string): string {
 export function canWrite(role: string): boolean {
   return role === "admin" || role === "write";
 }
+
+/**
+ * Whether this member owns any space on this installation, i.e. may act on
+ * OTHER people's household rows (revoke their devices, remove them, mint
+ * tickets). A viewer used to be shown those buttons and every click silently
+ * no-op'd against the gateway's refusal (onboarding run B11), so the roster
+ * reads the same scope registry the "Viewer · <space>" copy reads.
+ */
+export function canAdministerHousehold(
+  spaces: readonly MemberScope[]
+): boolean {
+  return spaces.some((space) => space.role === "admin");
+}

@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { family } from "../kit/theme";
+import { readSelfMemberName } from "../lib/gateway";
 import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {
   BRAND_TEAL,
@@ -72,6 +73,22 @@ export default function Onboarding({
     setStep("done");
   };
 
+  /**
+   * The profile step is CONDITIONAL: it exists to learn a name nobody has
+   * given yet. When the gateway's roster already names this person — the
+   * self-pair case, adding your own second device — asking again would be a
+   * second chance to disagree with yourself, so the flow adopts the roster's
+   * name and goes straight to Done.
+   */
+  const afterPaired = (memberName: string | undefined): void => {
+    const known = (memberName ?? "").trim();
+    if (!known) return setStep("profile");
+    setProfileName(known);
+    setOnboarded(true);
+    setDisplayName(known);
+    setStep("done");
+  };
+
   const enter = (): void => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onDone();
@@ -99,7 +116,7 @@ export default function Onboarding({
           <ConnectionStep
             deviceName={deviceName}
             onDeviceName={setDeviceName}
-            onPaired={() => setStep("profile")}
+            onPaired={afterPaired}
           />
         ) : step === "profile" ? (
           <ProfileStep onSave={saveProfile} />
@@ -118,7 +135,8 @@ function ConnectionStep({
 }: {
   deviceName: string;
   onDeviceName: (value: string) => void;
-  onPaired: () => void;
+  /** The roster's name for this person, when it already has one. */
+  onPaired: (memberName: string | undefined) => void;
 }): React.JSX.Element {
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
@@ -151,7 +169,11 @@ function ConnectionStep({
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
-        onPaired();
+        // Pairing a second device for someone the roster already knows must
+        // not ask them who they are again — read the name the enrollment came
+        // back with and let the caller skip the profile step. Undefined (no
+        // device plane, unreachable) means "ask", never "assume".
+        onPaired(await readSelfMemberName());
       } catch (caughtError) {
         scannedRef.current = false;
         setError(

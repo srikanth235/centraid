@@ -78,26 +78,29 @@ describe("FirstRunGate scenarios", () => {
       expect(el.querySelectorAll("button")).toHaveLength(2);
     });
 
-    it('"Start fresh on this Mac" goes straight to the profile step', async () => {
+    it('"Start fresh on this Mac" hands straight to onboarding', async () => {
       const el = await mount(makeProps());
       clickIncludes(el, "Start fresh on this Mac");
       await flush();
-      expect(el.textContent).toContain("Make yourself");
       expect(el.querySelector('[data-testid="onboarding-view"]')).toBeTruthy();
+      // Never a name question first — that is asked after connecting, and
+      // only when the roster has no name for this person.
+      expect(el.textContent).not.toContain("Make yourself");
     });
 
-    it('"Connect with a ticket" also starts at the profile step', async () => {
+    it('"Connect with a ticket" opens on the pairing step', async () => {
       const el = await mount(makeProps());
       clickIncludes(el, "Connect with a ticket");
       await flush();
-      expect(el.textContent).toContain("Make yourself");
+      expect(el.textContent).toContain("Connect your");
+      expect(el.textContent).not.toContain("Make yourself");
     });
 
-    it('"Back" from a chosen path returns to the chooser', async () => {
+    it('"Start over" from a chosen path returns to the chooser', async () => {
       const el = await mount(makeProps());
       clickIncludes(el, "Connect with a ticket");
       await flush();
-      clickIncludes(el, "Back");
+      clickIncludes(el, "Start over");
       await flush();
       expect(el.querySelector('[data-testid="first-run-choice"]')).toBeTruthy();
     });
@@ -105,11 +108,15 @@ describe("FirstRunGate scenarios", () => {
     it("web never shows the chooser — the ticket path is the only path", async () => {
       const el = await mount(makeProps({ host: "web" }));
       expect(el.querySelector('[data-testid="first-run-choice"]')).toBeNull();
-      expect(el.textContent).toContain("Make yourself");
+      expect(el.textContent).toContain("Connect your");
       expect(el.textContent).not.toContain("this Mac");
-      // No chooser to go back to, so no back affordance either.
+      // No chooser to go back to, so neither escape is offered: the flow was
+      // opened with a single method, so ConnectFlow's own "Back" (which would
+      // land on a one-option chooser) is suppressed too.
       expect(
-        [...el.querySelectorAll("button")].some((b) => b.textContent === "Back")
+        [...el.querySelectorAll("button")].some((b) =>
+          ["Back", "Start over"].includes(b.textContent ?? "")
+        )
       ).toBe(false);
     });
   });

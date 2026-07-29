@@ -31,6 +31,30 @@ vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
   saveUserPrefs,
 }));
 
+type AgentCapabilities = NonNullable<AgentStatusEntry["capabilities"]>;
+
+/** A fully-probed capability set; overrides pick out the axis under test. */
+function caps(over: Partial<AgentCapabilities> = {}): AgentCapabilities {
+  return {
+    reachable: true,
+    loadSession: true,
+    resume: true,
+    close: true,
+    additionalDirectories: true,
+    mcpHttp: true,
+    mcpSse: false,
+    modelConfigurable: false,
+    usageUpdateObserved: false,
+    configOptionUpdateObserved: false,
+    locationsObserved: false,
+    authRequired: false,
+    promptImage: true,
+    promptAudio: false,
+    promptEmbeddedContext: true,
+    ...over,
+  };
+}
+
 function entry(over: Partial<AgentStatusEntry> = {}): AgentStatusEntry {
   return {
     kind: "codex",
@@ -50,6 +74,42 @@ describe("settingsProvidersData suite", () => {
     getUserPrefs.mockReset();
     saveUserPrefs.mockClear();
     getUserPrefs.mockResolvedValue({});
+  });
+
+  // The gateway omits `capabilities` entirely until the probe succeeds — and
+  // also when it throws. Reading that silence as "not ready" made a cold
+  // gateway label every installed runner "setup or sign-in needed", including
+  // ones that were signed in and working.
+  it("separates an unprobed runner from one that actually needs sign-in", async () => {
+    getAgentsStatus.mockResolvedValue({
+      agents: [
+        entry({ kind: "codex" }),
+        entry({
+          kind: "claude-code",
+          capabilities: caps({ authRequired: true }),
+        }),
+        entry({
+          kind: "grok",
+          capabilities: caps(),
+        }),
+      ],
+    } as never);
+    const dto = await loadProviders();
+    const byKind = Object.fromEntries(dto.cards.map((c) => [c.kind, c]));
+    expect(byKind["codex"]).toMatchObject({
+      sessionReady: false,
+      sessionProbePending: true,
+    });
+    expect(byKind["codex"]?.fallbackBlockedReason).toBe(
+      "capability probe has not reported yet"
+    );
+    expect(byKind["claude-code"]).toMatchObject({ sessionReady: false });
+    expect(byKind["claude-code"]?.sessionProbePending).toBeUndefined();
+    expect(byKind["claude-code"]?.fallbackBlockedReason).toBe(
+      "sign-in required"
+    );
+    expect(byKind["grok"]).toMatchObject({ sessionReady: true });
+    expect(byKind["grok"]?.sessionProbePending).toBeUndefined();
   });
 
   it("renders one card per agent the gateway lists, in the gateway’s order", async () => {

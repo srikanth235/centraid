@@ -70,6 +70,8 @@ import {
   writeScopeTombstones,
   renameVault,
   readVaultPresentation,
+  readVaultPersonal,
+  markVaultPersonal,
   readBackupPolicy,
   updateVaultPresentation,
   registerAttachmentCommands,
@@ -574,6 +576,8 @@ export class VaultPlane {
    * user_version, so ensuring lazily on first workspace use is safe.
    */
   private ledgerReady = false;
+  /** Memoized `core_vault.settings_json.personal` — see the `personal` getter. */
+  private personalFlag: boolean | undefined;
 
   constructor(options: VaultPlaneOptions) {
     this.logger = options.logger;
@@ -802,6 +806,32 @@ export class VaultPlane {
    */
   get presentation(): VaultPresentation {
     return readVaultPresentation(this.db);
+  }
+
+  /**
+   * Whether this vault is its owner's PERSONAL vault — the durable default
+   * marker (`core_vault.settings_json.personal`), survives rename/export.
+   *
+   * Memoized, and never throwing: `defaultVaultId()` consults this on every
+   * unscoped request, so it must neither pay a SQLite read each time nor let
+   * an unreadable plane (corrupt file, closed handle) take down request
+   * routing. An unreadable plane simply is not the default.
+   */
+  get personal(): boolean {
+    if (this.personalFlag === undefined) {
+      try {
+        this.personalFlag = readVaultPersonal(this.db);
+      } catch {
+        return false;
+      }
+    }
+    return this.personalFlag;
+  }
+
+  /** Mark this vault personal — written once, at founding. */
+  markPersonal(): void {
+    markVaultPersonal(this.db);
+    this.personalFlag = true;
   }
 
   /** Merge a presentation patch (owner act); null/empty clears a field. */

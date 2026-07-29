@@ -336,4 +336,32 @@ describe(canCommitConnectFlow, () => {
       true
     );
   });
+
+  // Issue #603 D10: a redeemed enrollment that names no vault left the vault
+  // step rendering an empty list with "Continue" still live.
+  it("gateway/ticket blocks commit when the redeemed report grants no vault", () => {
+    const report = { ok: true, stages: [] };
+    expect(
+      canCommitConnectFlow(
+        at({ method: "gateway", report, step: "vault", ticket: "t" })
+      )
+    ).toBe(false);
+    expect(
+      canCommitConnectFlow(
+        at({
+          method: "gateway",
+          report: {
+            ...report,
+            ticket: {
+              expiresAt: "",
+              gatewayEndpointId: "",
+              vaultName: "Office",
+            },
+          },
+          step: "vault",
+          ticket: "t",
+        })
+      )
+    ).toBe(true);
+  });
 });

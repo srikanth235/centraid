@@ -322,6 +322,18 @@ W5.1 W5.2 W5.3 W5.4 W5.5 W5.6 W5.7;
 W6.1 W6.2 W6.3 W6.4 W6.5 W6.6 W6.7 W6.8 W6.9 W6.10 W6.11 W6.12
 W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
 
+### Mainline reconciliation
+
+- Merged the post-fork #634 identity/pairing work from `origin/main` so this
+  branch preserves `receipts/issue-634-onboarding-identity-pairing.md` and its
+  Settings, profile, and pairing surfaces. The three overlapping files retain
+  both features: `packages/client/src/react/screens/OnboardingScreen.tsx`
+  combines roster-aware identity with #630 dry-run import;
+  `packages/client/src/react/shell/App.tsx` keeps preferences, capture, and
+  entity-search shortcuts; and
+  `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` retains the robust
+  restart-per-surface journey while expanding it to all eight blueprint apps.
+
 ### Foundations, measurement, and trust
 
 - Brought bundled blueprint sources into the enforced coverage/reachability
@@ -680,6 +692,8 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785348086-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 1231166 | 0 | 42480384 | 123898 | 1355064 | 15.5565 | 7045469 | 0 | 340018176 | 971024 | feat(readiness): complete compound and polish surfaces (#630) |
 | codex-019fad18-4c1-1785350971-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 660698 | 0 | 16481536 | 37691 | 698389 | 6.3375 | 7706167 | 0 | 356499712 | 1008715 | feat(readiness): complete compound and polish surfaces (#630) |
 | codex-019fad18-4c1-1785351038-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 2243 | 0 | 196096 | 115 | 2358 | 0.0564 | 7708410 | 0 | 356695808 | 1008830 | feat(readiness): complete compound and polish surfaces (#630) -m governance: all |
+| codex-019fad18-4c1-1785351250-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 32662 | 0 | 1772544 | 5205 | 37867 | 0.6029 | 7741072 | 0 | 358468352 | 1014035 | merge: reconcile onboarding mainline (#630) |
+| codex-019fad18-4c1-1785351313-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 14266 | 0 | 514048 | 1081 | 15347 | 0.1804 | 7755338 | 0 | 358982400 | 1015116 | merge: reconcile onboarding mainline (#630) |
 
 ## Steering
 

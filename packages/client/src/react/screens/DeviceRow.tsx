@@ -2,10 +2,10 @@ import type { IconName } from "@centraid/design-tokens";
 import { useState } from "react";
 import type { JSX } from "react";
 
-import type { CentraidGatewayDevice } from "../../gateway-client.js";
 import { formatDuration } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
+import type { GroupedDevice } from "./device-groups.js";
 import { lastAdminSpace } from "./device-roles.js";
 
 import controlsCss from "../styles/controls.module.css";
@@ -22,21 +22,20 @@ import styles from "./DevicesCard.module.css";
  */
 
 export interface DeviceRowProps {
-  device: CentraidGatewayDevice;
+  device: GroupedDevice;
   /** Live clock (parent ticks it) — drives the humanized ages. */
   now: number;
-  onRevoke: (
-    device: CentraidGatewayDevice,
+  /** Absent for a viewer looking at someone else's device: the gateway would
+   *  refuse the revoke, so the affordance is not offered at all. */
+  onRevoke?: (
+    device: GroupedDevice,
     confirmLastAdmin?: string
   ) => Promise<void>;
-  onRename?: (device: CentraidGatewayDevice, label: string) => Promise<void>;
-  onUpdateCompute?: (
-    device: CentraidGatewayDevice,
-    enabled: boolean
-  ) => Promise<void>;
+  onRename?: (device: GroupedDevice, label: string) => Promise<void>;
+  onUpdateCompute?: (device: GroupedDevice, enabled: boolean) => Promise<void>;
 }
 
-export function platformGlyph(device: CentraidGatewayDevice): IconName {
+export function platformGlyph(device: GroupedDevice): IconName {
   const platform = (device.platform ?? "").toLowerCase();
   if (/ios|android|iphone|ipad|mobile|phone/u.test(platform)) return "Phone";
   if (/web|browser|chrome|safari|firefox|edge/u.test(platform)) return "Globe";
@@ -75,6 +74,7 @@ export default function DeviceRow({
   const paired = ageLabel(device.addedAt, now);
 
   const revoke = async (confirmLastAdmin?: string): Promise<void> => {
+    if (!onRevoke) return;
     setBusy(true);
     setError(null);
     try {
@@ -194,12 +194,15 @@ export default function DeviceRow({
         </div>
         <div className={styles.meta}>
           {device.platform ? <span>{device.platform}</span> : null}
-          {(device.vaultName ?? device.vaultId) ? (
-            <span className={styles.metaVault}>
+          {/* Every space this device reaches — it holds one enrollment per
+              space, and showing only the first read as "paired to Shared"
+              for a device that also reached Personal. */}
+          {device.vaults.map((vault) => (
+            <span key={vault.vaultId} className={styles.metaVault}>
               <Icon name="Key" size={11} />
-              {device.vaultName ?? device.vaultId}
+              {vault.vaultName ?? vault.vaultId}
             </span>
-          ) : null}
+          ))}
           {lastSeen ? (
             <span>active {lastSeen}</span>
           ) : (
@@ -252,8 +255,9 @@ export default function DeviceRow({
         {error ? <div className={styles.rowError}>{error}</div> : null}
       </div>
 
+      {/* A viewer looking at someone else's device gets no verb at all. */}
       <div className={styles.rowAction}>
-        {confirming ? (
+        {onRevoke === undefined ? null : confirming ? (
           <div className={styles.confirm}>
             <span className={styles.confirmAsk}>
               {device.current ? "Sign out this device?" : "Revoke this device?"}

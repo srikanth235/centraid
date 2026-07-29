@@ -24,7 +24,12 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import { DISMISS_KEYBOARD_ONBOARDING } from "./first-run.mjs";
-import { metroReachable, prewarmMetroBundle } from "./metro.mjs";
+import {
+  METRO_ORIGIN,
+  METRO_PORT,
+  metroReachable,
+  prewarmMetroBundle,
+} from "./metro.mjs";
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -192,7 +197,13 @@ async function appInstalled(device, appId) {
 // from `localhost:8081` by default) can reach Metro on the dev machine.
 // iOS Simulator shares the host network so no reverse is needed there.
 async function ensureMetroReverseForAndroid(udid) {
-  await spawnText("adb", ["-s", udid, "reverse", "tcp:8081", "tcp:8081"]);
+  await spawnText("adb", [
+    "-s",
+    udid,
+    "reverse",
+    `tcp:${METRO_PORT}`,
+    `tcp:${METRO_PORT}`,
+  ]);
 }
 
 export async function setup({ runId } = {}) {
@@ -220,7 +231,7 @@ export async function setup({ runId } = {}) {
   }
   if (!(await metroReachable())) {
     throw new Error(
-      "Metro bundler not reachable at http://127.0.0.1:8081. The dev build needs it to " +
+      `Metro bundler not reachable at ${METRO_ORIGIN}. The dev build needs it to ` +
         "serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`."
     );
   }
@@ -359,14 +370,55 @@ export async function runFlow(slug, fn) {
     run,
   };
 
-  ctx.configureGateway = async (
-    gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
-    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
-  ) => {
-    if (!gatewayUrl) {
-      throw new Error(
-        "MAESTRO_GATEWAY_URL is required for this mobile journey"
+  // Mint the one-time pairing ticket the phone will redeem.
+  //
+  // Two lanes, because the two rigs have different custody. `MAESTRO_GATEWAY_DATA_DIR`
+  // drives `centraid-gateway pair`, the supported host-custody path: it derives the
+  // daemon's loopback bearer from the data dir itself, which a bare `fetch` cannot
+  // (the route answers `unauthorized` without it). Use this against a real
+  // `centraid-gateway serve` — the only gateway that owns an iroh endpoint, and
+  // therefore the only one whose ticket the phone can actually dial.
+  // The HTTP lane stays for a tokenless embedded host that already grants host
+  // custody to loopback.
+  const mintPairingTicket = async (gatewayUrl, gatewayToken) => {
+    const dataDir = process.env.MAESTRO_GATEWAY_DATA_DIR;
+    if (dataDir) {
+      const cli = path.join(REPO_ROOT, "packages/gateway/dist/cli/cli.js");
+      const port = new URL(gatewayUrl).port;
+      // A daemon started with a pinned `CENTRAID_GATEWAY_TOKEN` rejects the
+      // bearer the CLI would otherwise derive from `keys/endpoint-key.bin`, so
+      // the pin has to travel with the subprocess.
+      const pairEnv = gatewayToken
+        ? { env: { ...process.env, CENTRAID_GATEWAY_TOKEN: gatewayToken } }
+        : {};
+      const out = await spawnText(
+        "node",
+        [
+          cli,
+          "pair",
+          "--data-dir",
+          dataDir,
+          ...(port ? ["--port", port] : []),
+          "--new-member",
+          `Mobile E2E ${state.runId}`,
+          "--role",
+          "write",
+          "--ttl-minutes",
+          "30",
+          "--json",
+        ],
+        pairEnv
       );
+      // The CLI prints node's SQLite ExperimentalWarning on stdout's sibling
+      // stream, but its JSON is the last line either way.
+      const line = out.trim().split("\n").at(-1);
+      const parsed = JSON.parse(line ?? "{}");
+      if (parsed.ok !== true || typeof parsed.ticket !== "string") {
+        throw new Error(
+          `centraid-gateway pair refused a mobile ticket (${parsed.error ?? "no ticket"})`
+        );
+      }
+      return parsed.ticket;
     }
     const ticketResponse = await fetch(
       `${gatewayUrl.replace(/\/+$/u, "")}/centraid/_gateway/devices/ticket`,
@@ -393,7 +445,19 @@ export async function runFlow(slug, fn) {
         `gateway refused mobile pairing ticket (${ticketResult?.error ?? ticketResponse.status})`
       );
     }
-    const pairingTicket = ticketResult.ticket;
+    return ticketResult.ticket;
+  };
+
+  ctx.configureGateway = async (
+    gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
+  ) => {
+    if (!gatewayUrl) {
+      throw new Error(
+        "MAESTRO_GATEWAY_URL is required for this mobile journey"
+      );
+    }
+    const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
     // #603 removed the local/manual-URL bypass: every fresh client must redeem
     // a real one-time pairing ticket, then create its member profile. The
@@ -419,10 +483,21 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # resolved by Maestro without persisting the live capability in this YAML.
 - inputText: \${MAESTRO_PAIRING_TICKET}
 - hideKeyboard
+# The pasted ticket grows the field to ~14 lines, which pushes the submit button
+# off screen — and Maestro matches (and "taps") off-screen elements, so the tap
+# reports COMPLETED while nothing happens and the flow dies later on an
+# unrelated assertion. Scroll it fully into view first.
+- scrollUntilVisible:
+    element:
+      text: "Continue with pasted code"
+    direction: DOWN
+    visibilityPercentage: 100
 - tapOn: "Continue with pasted code"
+# Redemption dials the gateway over iroh; on a cold simulator that handshake is
+# the slowest step in the journey, so budget for the network, not the render.
 - extendedWaitUntil:
     visible: "Who's using this phone?"
-    timeout: 30000
+    timeout: 90000
 - tapOn: "Your name"
 # e2e-lint-allow: unasserted-input — React Native TextInput values are not
 # reliably Maestro-matchable; the personalized done heading below proves the
@@ -432,10 +507,13 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 - tapOn: "Continue"
 - extendedWaitUntil:
     visible: "You're all set, Nightly."
-    timeout: 15000
+    timeout: 60000
 - tapOn: "Enter Centraid"
+# The springboard Home has no tagline — "YOUR APPS" is the rail label above the
+# launcher grid (apps/mobile/src/screens/Home.tsx) and is the only Home-unique
+# string that survives every gateway state (the grid renders even with no apps).
 - extendedWaitUntil:
-    visible: "Everything you build, in one place."
+    visible: "YOUR APPS"
     timeout: 30000
 `,
       "configure-gateway",
@@ -487,7 +565,13 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     metadata: { platform: state.platform, udid: state.udid, app: state.appId },
     debug:
       "Maestro keeps per-step screenshots and ai-report.html under `~/.maestro/tests/<timestamp>/`; the newest directory belongs to this run.",
-    owner: `tests/agent-e2e-mobile/flows/${slug}.mjs`,
+    // Owner must be the flow FILE the matrix names, not the flow id — they
+    // differ for volume-proof.mjs (id "mobile-volume-proof"), and an id-derived
+    // path makes the evidence unmappable in the zero-grey report.
+    owner: path
+      .relative(REPO_ROOT, path.resolve(process.argv[1] ?? ""))
+      .split(path.sep)
+      .join("/"),
   });
 
   if (!pass) {

@@ -79,7 +79,8 @@ identity and changing one must not create a second connection record.
 ### Capability expired or was consumed
 
 Mint a new pair ticket. Never try to revive or edit the old value. Tickets burn
-on first successful redeem (or on a wrong secret).
+on first **successful** redeem only — a wrong secret is rejected before the
+ticket row is deleted, so the genuine ticket still redeems afterwards.
 
 ### `pair` reports a rejected credential
 

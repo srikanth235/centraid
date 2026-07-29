@@ -88,6 +88,36 @@ export type ResolveAgentCapabilities = (
 export type ResolveAgentHealth = (kind: RunnerKind) => RunnerHealthEntry[];
 
 /**
+ * The models a capability probe already saw the agent offer.
+ *
+ * Model enumeration into the CATALOG is opt-in per kind (`probeModels`, on for
+ * codex + claude-code) because the boot warmer would otherwise spawn a process
+ * per installed runner. But the capability probe launches those same agents
+ * anyway and reads the very same `session/new` model config option — so for a
+ * native ACP kind like opencode the answer (76 models) was already sitting in
+ * `capabilities.configOptions`, while the picker showed "Built-in model"
+ * because the catalog was empty.
+ *
+ * So an empty catalog falls back to that evidence rather than to nothing. No
+ * extra spawn, and nothing is fabricated: this only echoes `{value, name}`
+ * pairs the agent itself offered. `currentValue` is what the agent says it
+ * would use, which is exactly `default`.
+ */
+export function modelsFromCapabilities(
+  capabilities: AgentAcpCapabilities | undefined
+): RunnerModel[] {
+  const option = capabilities?.configOptions?.find(
+    (entry) => entry.category === "model"
+  );
+  if (!option) return [];
+  return option.values.map((value) => ({
+    id: value.value,
+    ...(value.name ? { name: value.name } : {}),
+    ...(value.value === option.currentValue ? { default: true } : {}),
+  }));
+}
+
+/**
  * ACP capability strip from a real `initialize` probe (optional; filled when
  * the host probes available agents — typically on `?refresh=1`).
  */
@@ -193,13 +223,23 @@ export async function readAgentsStatus(opts?: {
             ? resolveModels(backend.kind, refresh).catch(() => emptyModels)
             : Promise.resolve(emptyModels),
         ]);
-        const defaultModel = models.list.find((m) => m.default)?.id;
         const capabilities =
           availability.available && resolveCapabilities
             ? await resolveCapabilities(backend.kind, refresh).catch(
                 () => undefined
               )
             : undefined;
+        // A kind outside the catalog's opt-in probe still gets its models from
+        // the capability snapshot — see `modelsFromCapabilities`. `loading` is
+        // left alone: a warm in flight may still be about to fill the catalog.
+        const probed =
+          models.status === "empty" && models.list.length === 0
+            ? modelsFromCapabilities(capabilities)
+            : [];
+        const resolvedModels = probed.length > 0 ? probed : models.list;
+        const modelsStatus =
+          probed.length > 0 ? ("ready" as SurfaceStatus) : models.status;
+        const defaultModel = resolvedModels.find((m) => m.default)?.id;
         const health = opts?.resolveHealth?.(backend.kind) ?? [];
         return {
           kind: backend.kind,
@@ -210,8 +250,8 @@ export async function readAgentsStatus(opts?: {
           // The hint is the "what do I do about it" half of an unavailable
           // agent; on an available one it would just be noise in the payload.
           ...(availability.available ? {} : { hint: backend.installHint }),
-          models: models.list,
-          modelsStatus: models.status,
+          models: resolvedModels,
+          modelsStatus,
           ...(defaultModel ? { defaultModel } : {}),
           ...(capabilities ? { capabilities } : {}),
           ...(health.length > 0 ? { health } : {}),

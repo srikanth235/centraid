@@ -61,8 +61,10 @@ describe("web-host", () => {
       deviceName: expect.stringMatching(/^Web browser · [A-F0-9]{4}$/u),
       rememberDevice: false,
     });
+    // Durable even though `rememberDevice` defaulted to false: the enrollment
+    // must survive closing the browser, or the device silently unpairs.
     const persisted = JSON.parse(
-      sessionStorage.getItem("centraid.web.v1.connection") ?? "{}"
+      localStorage.getItem("centraid.web.v1.connection") ?? "{}"
     ) as Record<string, unknown>;
     expect(persisted).toMatchObject({
       endpointTicket: "endpoint",
@@ -74,6 +76,30 @@ describe("web-host", () => {
     await expect(window.CentraidApi.getGatewayAuth()).resolves.toMatchObject({
       gatewayId: "gateway-endpoint",
       vaultId: "vault-1",
+    });
+  });
+
+  test("an unremembered pairing survives closing the browser", async () => {
+    pairGatewayOverIroh.mockResolvedValue({
+      endpointId: "browser-endpoint",
+      response: {
+        ok: true,
+        gatewayId: "gateway-endpoint",
+        vaultId: "vault-1",
+        vaultName: "Personal",
+      },
+    });
+    await window.CentraidApi.redeemGatewayPairing({ ticket: ticket() });
+
+    // A browser restart drops sessionStorage and nothing else. Declining the
+    // offline copy used to put the enrollment there, so the next launch asked
+    // for a pairing ticket a device that was already paired.
+    sessionStorage.clear();
+
+    await expect(window.CentraidApi.getGatewayAuth()).resolves.toMatchObject({
+      gatewayId: "gateway-endpoint",
+      vaultId: "vault-1",
+      rememberDevice: false,
     });
   });
 
@@ -206,12 +232,12 @@ describe("web-host", () => {
     off();
 
     expect(purgeIrohDeviceState).toHaveBeenCalledOnce();
-    expect(localStorage.getItem("centraid.web.v1.connection")).toBeNull();
-    expect(
-      JSON.parse(sessionStorage.getItem("centraid.web.v1.connection") ?? "{}")
-    ).toMatchObject({
-      rememberDevice: false,
-    });
+    expect(sessionStorage.getItem("centraid.web.v1.connection")).toBeNull();
+    const cleared = JSON.parse(
+      localStorage.getItem("centraid.web.v1.connection") ?? "{}"
+    ) as Record<string, unknown>;
+    expect(cleared).toMatchObject({ rememberDevice: false });
+    expect(cleared["endpointId"]).toBeUndefined();
     expect(changed).toHaveBeenLastCalledWith({
       activeGatewayId: "web",
       removedGatewayId: "gateway-endpoint",

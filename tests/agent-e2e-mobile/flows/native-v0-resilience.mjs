@@ -1,79 +1,129 @@
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
 
+// The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
+// "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
+// covers opened from Home's launcher tiles; Settings is opened from the space
+// drawer. Each destination is asserted on copy unique to the screen it opens,
+// never on the tile label that remains visible on Home (issue #483, enforced
+// by scripts/lint-e2e-flows.mjs).
+// Covers dismiss with a native swipe-down gesture that Maestro cannot drive
+// reliably, so each surface is entered from a fresh launch of the app rather
+// than by navigating back — React Navigation state is not persisted, so every
+// launch lands on Home.
+const SURFACES = [
+  // Maestro anchors a text selector to the WHOLE node text, so the marker has
+  // to cover all of it: the Photos search field publishes
+  // "Search photos and moments" as its accessible name and renders
+  // "Search photos & moments" — a bare "Search photos" matches neither.
+  {
+    marker: "Search photos.*",
+    open: '- tapOn: "Open Photos"',
+    name: "photos",
+  },
+  {
+    marker: "Add document or folder",
+    open: '- tapOn: "Open Docs"',
+    name: "docs",
+  },
+  { marker: "Create event", open: '- tapOn: "Open Agenda"', name: "agenda" },
+  {
+    marker: "New task title",
+    open: '- tapOn: "Open Tasks"',
+    name: "tasks",
+  },
+  {
+    marker: "Person name",
+    open: '- tapOn: "Open People"',
+    name: "people",
+  },
+  {
+    marker: "Search notes",
+    open: '- tapOn: "Open Notes"',
+    name: "notes",
+  },
+  {
+    marker: "Fixed-point multi-currency ledger, available offline",
+    open: '- tapOn: "Open Tally"',
+    name: "tally",
+  },
+  {
+    marker: "Secrets stay online-only",
+    open: '- tapOn: "Open Locker"',
+    name: "locker",
+  },
+  // Settings is opened from the Space drawer, not the dock. The dock sits at
+  // the very bottom of the screen, exactly where the dev build's LogBox toast
+  // ("Open debugger to view warnings.") parks itself — it reappears whenever
+  // Home's data load emits a warning, so a dock tap right after launch lands on
+  // the toast, reports COMPLETED, and navigates nowhere. The drawer handle is
+  // top-right and never covered. Its Settings row publishes ", Settings"
+  // (icon + label in one accessibility element), which the dock's plain
+  // "Settings" does not match.
+  //
+  // "Desktop link" is three scroll pages down inside Settings; "APPEARANCE" is
+  // the first section heading it publishes and nothing else in the app renders
+  // it, so it proves arrival without a scroll.
+  {
+    marker: "APPEARANCE",
+    open: [
+      '- tapOn: "Open space menu"',
+      // Wait for the drawer to finish opening before touching its rows.
+      '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
+      // The row's accessible name is ", Settings" (icon + label collapsed into
+      // one element), but Maestro will not match a selector that starts with
+      // the comma — `.*Settings` is what actually resolves, and with the modal
+      // drawer open the dock underneath is not reachable anyway.
+      '- tapOn: ".*Settings"',
+    ].join("\n"),
+    name: "settings",
+  },
+];
+
 await runFlow("native-v0-resilience", async (ctx) => {
   await ctx.configureGateway();
-  // Exercise every bundled blueprint through its native launcher tile. Each
-  // destination is asserted with a control/copy marker unique to that screen,
-  // then the common app-exit key returns to the springboard.
-  await ctx.run(
-    `appId: ${ctx.state.appId}
+
+  const visitNext = async (index) => {
+    const surface = SURFACES[index];
+    if (surface === undefined) return;
+    await ctx.run(
+      `appId: ${ctx.state.appId}
 ---
+- stopApp
 - launchApp:
     clearState: false
 - extendedWaitUntil:
-    visible: "Everything you build, in one place."
+    visible: "YOUR APPS"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-- tapOn: "Open Photos"
+${surface.open}
 - extendedWaitUntil:
-    visible: "Search photos"
-    timeout: 15000
-- tapOn: "Back to your apps"
-- tapOn: "Open Docs"
-- extendedWaitUntil:
-    visible: "Add document or folder"
-    timeout: 15000
-- tapOn: "Back to your apps"
-- tapOn: "Open Agenda"
-- extendedWaitUntil:
-    visible: "Create event"
-    timeout: 15000
-- tapOn: "Back to your apps"
-- tapOn: "Open Tasks"
-- extendedWaitUntil:
-    visible: "New task title"
-    timeout: 15000
-- tapOn: "Back to your apps"
-- tapOn: "Open People"
-- extendedWaitUntil:
-    visible: "Person name"
-    timeout: 15000
-- tapOn: "Back to your apps"
-- tapOn: "Open Notes"
-- extendedWaitUntil:
-    visible: "Search notes"
-    timeout: 15000
-- tapOn: "Back to your apps"
-- tapOn: "Open Tally"
-- extendedWaitUntil:
-    visible: "Fixed-point multi-currency ledger, available offline"
-    timeout: 15000
-- tapOn: "Back to your apps"
-- tapOn: "Open Locker"
-- extendedWaitUntil:
-    visible: "Secrets stay online-only"
-    timeout: 15000
-- tapOn: "Back"
-- assertVisible: "Everything you build, in one place."
-- takeScreenshot: native-eight-blueprints
+    visible: "${surface.marker}"
+    timeout: 20000
+- takeScreenshot: native-${surface.name}
 `,
-    "five-tabs"
-  );
+      surface.name
+    );
+    ctx.note(`${surface.name}: opened from Home, "${surface.marker}" rendered`);
+    return visitNext(index + 1);
+  };
+  await visitNext(0);
+
   await ctx.restart();
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
 - extendedWaitUntil:
-    visible: "Everything you build, in one place."
+    visible: "YOUR APPS"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: after-force-kill
 `,
     "after-force-kill"
   );
   ctx.note(
-    "All eight native blueprint covers survived navigation and a process restart; complete the documented network matrix on this device."
+    "All eight native blueprint covers and Settings survived navigation and a process restart; complete the documented network matrix on this device."
   );
   return {
     pass: true,
-    notes: "all eight native blueprint covers and process-restart smoke passed",
+    notes:
+      "all eight native blueprint covers, Settings, and process-restart smoke passed",
   };
 });

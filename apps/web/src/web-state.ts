@@ -9,7 +9,9 @@ export interface WebConnection {
   label: string;
   displayName: string;
   avatarColor: string;
-  /** Explicit durable-storage consent from pairing. */
+  /** Offline-copy consent from pairing: encrypted replica, queued changes and
+   *  cached previews. It does NOT govern whether the pairing itself survives —
+   *  the enrollment is always durable (see `saveConnection`). */
   rememberDevice?: boolean;
 }
 
@@ -22,9 +24,12 @@ const DEFAULT_CONNECTION: WebConnection = {
 
 export function loadConnection(): WebConnection {
   try {
+    // localStorage first: it is where every write now lands. The sessionStorage
+    // read is migration only, for a tab that paired before the enrollment
+    // became unconditionally durable.
     const raw =
-      sessionStorage.getItem(`${PREFIX}connection`) ??
       localStorage.getItem(`${PREFIX}connection`) ??
+      sessionStorage.getItem(`${PREFIX}connection`) ??
       "{}";
     const parsed = JSON.parse(raw) as Partial<WebConnection>;
     return { ...DEFAULT_CONNECTION, ...parsed };
@@ -33,14 +38,20 @@ export function loadConnection(): WebConnection {
   }
 }
 
+/**
+ * The connection is ALWAYS durable. It used to follow `rememberDevice`, which
+ * put the enrollment in sessionStorage by default — so closing the browser
+ * silently unpaired a device that had already been paired, and the only route
+ * back was minting a fresh ticket. `rememberDevice` now governs the offline
+ * copy (replica, queued changes, cached previews) and nothing else; dropping
+ * this device is an explicit act (`removeGateway`), not a side effect of
+ * quitting the browser.
+ */
 export function saveConnection(patch: Partial<WebConnection>): WebConnection {
   const next = { ...loadConnection(), ...patch };
   const key = `${PREFIX}connection`;
-  const durable = next.rememberDevice === true;
-  const target = durable ? localStorage : sessionStorage;
-  const stale = durable ? sessionStorage : localStorage;
-  target.setItem(key, JSON.stringify(next));
-  stale.removeItem(key);
+  localStorage.setItem(key, JSON.stringify(next));
+  sessionStorage.removeItem(key);
   return next;
 }
 

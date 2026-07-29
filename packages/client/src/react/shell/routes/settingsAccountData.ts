@@ -32,6 +32,39 @@ export interface ActiveSpaceData {
   deletable: boolean;
 }
 
+/** Settings → This device — the browser's own half of the pairing. */
+export interface ThisDeviceData {
+  gatewayId?: string;
+  gatewayLabel?: string;
+  offlineCopy: boolean;
+}
+
+export async function loadThisDeviceData(): Promise<ThisDeviceData> {
+  const auth = await window.CentraidApi.getGatewayAuth().catch(() => undefined);
+  if (!auth?.gatewayId) return { offlineCopy: false };
+  const label = await window.CentraidApi.listGateways()
+    .then((rows) => rows.find((row) => row.id === auth.gatewayId)?.label)
+    .catch(() => undefined);
+  return {
+    gatewayId: auth.gatewayId,
+    gatewayLabel: label ?? "this gateway",
+    offlineCopy: auth.rememberDevice === true,
+  };
+}
+
+/**
+ * Drop this browser's pairing. `removeGateway` already owns the full local
+ * purge (connection, device key, tunnel caches, replica); clearing
+ * `onboardingCompletedAt` is what actually returns the shell to onboarding
+ * rather than leaving it on a signed-out screen with no way forward.
+ */
+export async function forgetThisDeviceLocally(
+  gatewayId: string | undefined
+): Promise<void> {
+  if (gatewayId) await window.CentraidApi.removeGateway({ id: gatewayId });
+  await window.CentraidApi.saveSettings({ onboardingCompletedAt: undefined });
+}
+
 export async function loadActiveSpaceData(): Promise<ActiveSpaceData | null> {
   const vaultList = await listVaults()
     .then((v) => v ?? [])

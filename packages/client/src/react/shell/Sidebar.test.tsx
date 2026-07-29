@@ -35,6 +35,24 @@ describe("Sidebar suite", () => {
       expect(el.textContent).not.toContain("Build new");
     });
 
+    it("shows the signed-in person in the foot, with their initials", () => {
+      const el = render(<Sidebar {...base} accountName="Ada Lovelace" />);
+      const row = el.querySelector(".sbAccount")!;
+      expect(row.textContent).toContain("Ada Lovelace");
+      expect(row.querySelector(".sbAccountAvatar")?.textContent).toBe("AL");
+      // Settings is no longer a nav row of its own — it lives in this menu.
+      expect(
+        [...el.querySelectorAll(".sbItem")].some((b) =>
+          b.textContent?.includes("Settings")
+        )
+      ).toBe(false);
+    });
+
+    it("falls back to a placeholder before the roster has loaded", () => {
+      const el = render(<Sidebar {...base} />);
+      expect(el.querySelector(".sbAccount")?.textContent).toContain("You");
+    });
+
     it("highlights the active page", () => {
       const el = render(<Sidebar {...base} activePage="insights" />);
       const active = el.querySelector('[data-active="true"]');
@@ -291,18 +309,19 @@ describe("Sidebar suite", () => {
       expect(onRelaunchToUpdate).toHaveBeenCalledOnce();
     });
 
-    it("renders the relaunch pill above Settings, below the stretch spacer", () => {
+    it("renders the relaunch pill above the account row, below the stretch spacer", () => {
       const el = render(
         <Sidebar
           {...base}
+          accountName="Ada Lovelace"
           updateVersion="0.2.0"
           onRelaunchToUpdate={() => {}}
         />
       );
       const pill = el.querySelector(".sbUpdate")!;
-      const settings = [...el.querySelectorAll(".sbItem")].find((b) =>
-        b.textContent?.includes("Settings")
-      )!;
+      // Settings moved into the account row's menu (⌘,), so the foot anchor
+      // is the person, not a nav item.
+      const settings = el.querySelector(".sbAccount")!;
       expect(
         pill.compareDocumentPosition(settings) &
           Node.DOCUMENT_POSITION_FOLLOWING

@@ -987,6 +987,14 @@ export interface AgentCardDTO {
   modelsLoading: boolean;
   /** ACP initialize/session probe succeeded and did not request authentication. */
   sessionReady: boolean;
+  /**
+   * The runner is installed but its capability probe has not reported yet —
+   * the gateway omits `capabilities` entirely until the probe succeeds, and it
+   * also omits them when the probe throws. Without this flag "we haven't
+   * checked" is indistinguishable from "you are signed out", which is how a
+   * cold gateway came to label every installed runner "sign-in needed".
+   */
+  sessionProbePending?: boolean;
   /** Why an installed runner cannot join unattended failover. */
   fallbackBlockedReason?: string;
   /** Live ACP capability evidence gates the corresponding turn controls. */
@@ -1395,6 +1403,8 @@ export interface AsstModelPickerDTO {
     title: string;
     connected: boolean;
     sessionReady: boolean;
+    /** Installed, probe not reported yet — say "checking", never "sign in". */
+    sessionProbePending?: boolean;
     hint?: string;
   }>;
   selectedRunnerKind: AgentRunnerKind;
