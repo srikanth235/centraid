@@ -1,12 +1,8 @@
 import { useState } from "react";
 
+import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { toggleFavorite } from "../assets-actions.ts";
-import {
-  assetBytes,
-  isAudioAsset,
-  isRenderableUri,
-  isVideoAsset,
-} from "../format.ts";
+import { assetBytes, isAudioAsset, isVideoAsset } from "../format.ts";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -29,7 +25,7 @@ import {
 // CSS split: React-owned classes in Lightbox.module.css; the imperatively
 // toggled `zoomable`/`zoomed`/`is-placeholder` markers stay global strings.
 import { fmtBytes, toast } from "../kit.ts";
-import { gridSrc } from "../media.ts";
+import { gridSrc, isRenderableUri } from "../media.ts";
 import { act, narrate } from "../outcomes.ts";
 import { canWriteScope, scopeAttr } from "../scopes.ts";
 import type { Album, Asset, Place } from "../types.ts";
@@ -111,29 +107,31 @@ export function Stage({
   // (issue #599) — see fillTileMedia's note on why an unstamped reference in a
   // shared audience renders the wrong photo rather than failing.
   const scope = scopeAttr(asset.scope_id);
-  if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
+  const contentSrc = safeMediaUrl(asset.content_uri);
+  const posterSrc = safeMediaUrl(asset.poster_uri);
+  if (contentSrc && isVideoAsset(asset)) {
     return (
       <video
         data-scope={scope}
-        src={asset.content_uri ?? undefined}
+        src={contentSrc}
         muted
         playsInline
         controls
         preload="metadata"
-        poster={asset.poster_uri ?? undefined}
-        aria-label={asset.title ?? "Video"}
+        poster={posterSrc ?? undefined}
+        aria-label={displayText(asset.title ?? "Video")}
       />
     );
   }
-  if (isRenderableUri(asset.content_uri) && isAudioAsset(asset)) {
+  if (contentSrc && isAudioAsset(asset)) {
     return (
       <div className={styles.audio} data-scope={scope}>
         <span aria-hidden="true">♪</span>
         <audio
-          src={asset.content_uri ?? undefined}
+          src={contentSrc}
           controls
           preload="metadata"
-          aria-label={asset.title ?? "Audio"}
+          aria-label={displayText(asset.title ?? "Audio")}
         >
           {/* The vault has no caption sidecar for media assets yet, so there is
               nothing to point `src` at — this is the wiring point for when it
@@ -144,16 +142,16 @@ export function Stage({
       </div>
     );
   }
-  if (isRenderableUri(asset.content_uri)) {
-    const displaySrc = asset.preview_uri ?? asset.content_uri ?? undefined;
+  if (contentSrc) {
+    const displaySrc = safeMediaUrl(asset.preview_uri) ?? contentSrc;
     const needsProbe =
-      displaySrc === asset.content_uri &&
+      displaySrc === contentSrc &&
       (asset.width == null || asset.height == null);
     return (
       <img
         data-scope={scope}
         src={displaySrc}
-        alt={asset.title ?? asset.kind ?? "Photo"}
+        alt={displayText(asset.title ?? asset.kind ?? "Photo")}
         decoding="async"
         ref={(el) => {
           if (!el || el.dataset.zoomWired) return;
@@ -167,11 +165,11 @@ export function Stage({
         onError={(e) => {
           if (
             e.currentTarget.dataset.originalFallback ||
-            displaySrc === asset.content_uri
+            displaySrc === contentSrc
           )
             return;
           e.currentTarget.dataset.originalFallback = "1";
-          e.currentTarget.src = asset.content_uri ?? "";
+          e.currentTarget.src = contentSrc;
         }}
       />
     );
@@ -190,20 +188,20 @@ function dateLine(asset: Asset): string {
       ? t.toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" })
       : null;
   return (
-    [when, asset.place?.name].filter(Boolean).join(" · ") ||
+    [when, displayText(asset.place?.name)].filter(Boolean).join(" · ") ||
     fmtBytes(assetBytes(asset))
   );
 }
 
 async function handleShare(asset: Asset): Promise<void> {
-  const url =
-    typeof asset.content_uri === "string" &&
-    asset.content_uri.startsWith("data:")
-      ? location.href
-      : (asset.content_uri ?? "");
+  const mediaUrl = safeMediaUrl(asset.content_uri);
+  const url = mediaUrl?.startsWith("data:") ? location.href : (mediaUrl ?? "");
   if (navigator.share) {
     try {
-      await navigator.share({ title: asset.title ?? "Photo", url });
+      await navigator.share({
+        title: displayText(asset.title ?? "Photo"),
+        url,
+      });
       return;
     } catch {
       return; // the user cancelled the native share sheet — not an error
@@ -273,7 +271,7 @@ export function LightboxShell({
         </button>
         <div className={styles.heading}>
           <div className={styles.title}>
-            {asset.title || asset.place?.name || "Photo"}
+            {displayText(asset.title || asset.place?.name || "Photo")}
           </div>
           <div className={styles.dateline}>{dateLine(displayAsset)}</div>
         </div>
@@ -312,15 +310,14 @@ export function LightboxShell({
                 <EditIcon />
               </button>
             ) : null}
-            {isRenderableUri(asset.content_uri) ||
-            String(asset.content_uri ?? "").startsWith("data:") ? (
+            {safeMediaUrl(asset.content_uri) ? (
               <a
                 className={styles.iconBtn}
                 data-scope={scopeAttr(asset.scope_id)}
                 aria-label="Download"
-                href={asset.content_uri ?? undefined}
+                href={safeMediaUrl(asset.content_uri) ?? undefined}
                 download={
-                  (asset.title ?? "").trim() || `photo-${asset.asset_id}`
+                  displayText(asset.title).trim() || `photo-${asset.asset_id}`
                 }
               >
                 <DownloadIcon />

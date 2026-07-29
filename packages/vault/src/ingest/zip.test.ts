@@ -4,7 +4,7 @@ import { deflateRawSync } from "node:zlib";
 
 import { describe, expect, test } from "vitest";
 
-import { readZipEntries } from "./zip.js";
+import { MAX_ZIP_ENTRY_BYTES, readZipEntries } from "./zip.js";
 
 /** Build a tiny non-zip64 archive with one stored and one deflated file. */
 function buildZip(): Buffer {
@@ -107,5 +107,24 @@ describe("zip", () => {
     expect(() => readZipEntries(Buffer.from("not a zip"))).toThrow(
       /not a zip file/u
     );
+  });
+
+  test("rejects traversal names and truncated entry data", () => {
+    const traversal = buildZip();
+    const firstCentral = traversal.indexOf(
+      Buffer.from([0x50, 0x4b, 0x01, 0x02])
+    );
+    traversal.write("../x.txt", firstCentral + 46, "utf8");
+    expect(() => readZipEntries(traversal)).toThrow(/unsafe zip entry name/u);
+
+    const truncated = buildZip().subarray(0, buildZip().length - 30);
+    expect(() => readZipEntries(truncated)).toThrow(/zip file|truncated zip/u);
+  });
+
+  test("rejects an archive-bomb declaration before inflating it", () => {
+    const bomb = buildZip();
+    const firstCentral = bomb.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    bomb.writeUInt32LE(MAX_ZIP_ENTRY_BYTES + 1, firstCentral + 24);
+    expect(() => readZipEntries(bomb)).toThrow(/exceeds uncompressed limit/u);
   });
 });

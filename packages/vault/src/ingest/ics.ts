@@ -14,13 +14,21 @@ export interface IcsEvent {
   rrule: string | null;
 }
 
+const MAX_ICS_LINES = 500_000;
+const MAX_ICS_LINE_CHARS = 1024 * 1024;
+
 /** Unfold RFC 5545 folded lines (CRLF followed by space or tab). */
 function unfold(text: string): string[] {
-  return text
+  const lines = text
     .replace(/\r\n[ \t]/gu, "")
     .replace(/\n[ \t]/gu, "")
     .split(/\r?\n/u)
     .filter((line) => line.length > 0);
+  if (lines.length > MAX_ICS_LINES)
+    throw new Error(`ICS exceeds ${MAX_ICS_LINES} unfolded lines`);
+  if (lines.some((line) => line.length > MAX_ICS_LINE_CHARS))
+    throw new Error(`ICS line exceeds ${MAX_ICS_LINE_CHARS} characters`);
+  return lines;
 }
 
 interface Prop {
@@ -81,6 +89,7 @@ export function parseIcs(text: string): IcsEvent[] {
     const prop = parseLine(line);
     if (!prop) continue;
     if (prop.name === "BEGIN" && prop.value.toUpperCase() === "VEVENT") {
+      if (current) throw new Error("ICS contains nested VEVENT records");
       current = {
         status: "confirmed",
         description: null,
@@ -131,5 +140,6 @@ export function parseIcs(text: string): IcsEvent[] {
         break;
     }
   }
+  if (current) throw new Error("truncated ICS VEVENT");
   return events;
 }

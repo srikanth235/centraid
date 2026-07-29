@@ -64,4 +64,23 @@ describe("passwords-csv", () => {
       /does not name a password column/u
     );
   });
+
+  test("rejects formula-bearing display fields while preserving arbitrary passwords", () => {
+    expect(() =>
+      parsePasswordsCsv(
+        [
+          "name,url,username,password,notes",
+          '=HYPERLINK("https://evil"),https://example.com,user,=real-password,note',
+        ].join("\n")
+      )
+    ).toThrow(/spreadsheet formula marker/u);
+    expect(
+      parsePasswordsCsv(
+        [
+          "name,url,username,password,notes",
+          "Safe,https://example.com,user,=real-password,note",
+        ].join("\n")
+      )[0]?.password
+    ).toBe("=real-password");
+  });
 });

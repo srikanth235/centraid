@@ -152,6 +152,10 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
  */
 export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
+    "core_entity_revision",
+    "Append-only P5 lifecycle history (issue #630). entity_type/entity_id names the row whose pre-mutation snapshot is retained for undo, audit, and export; it must survive soft delete and eventual purge rather than being treated as a live dangling pointer.",
+  ],
+  [
     "consent_provenance",
     "journal.db, append-only audit stream (§03). The provenance trail of a purged row is exactly what must survive it — NEVER cleaned by design.",
   ],

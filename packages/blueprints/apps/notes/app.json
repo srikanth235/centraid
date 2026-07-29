@@ -326,7 +326,7 @@
     {
       "name": "delete-notebook",
       "description": "Delete a notebook through knowledge.delete_notebook — member notes are unfiled, never destroyed (the outcome reports notes_unfiled); refuses while child notebooks exist.",
-      "confirmation": "always",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -357,7 +357,7 @@
     {
       "name": "delete-note",
       "description": "Move a note to the 30-day trash through knowledge.delete_note without removing placements, annotations or attachment edges.",
-      "confirmation": "always",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {

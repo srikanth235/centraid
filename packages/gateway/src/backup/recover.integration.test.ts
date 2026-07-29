@@ -446,7 +446,7 @@ describe("backup/recover", () => {
     expect({
       truncated: report.truncated,
       warmed: report.previews.warmed,
-      hasReason: report.previews.reason.length > 0,
+      hasReason: !report.previews.warmed && report.previews.reason.length > 0,
     }).toStrictEqual({
       truncated: false,
       warmed: false,

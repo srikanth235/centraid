@@ -24,6 +24,18 @@ const DESC_ALIASES = ["description", "memo", "payee", "narration", "details"];
 const AMOUNT_ALIASES = ["amount", "value", "amount (inr)", "amount (usd)"];
 const CURRENCY_ALIASES = ["currency", "ccy"];
 const ID_ALIASES = ["id", "external_id", "reference", "ref", "transaction id"];
+const MAX_CSV_ROWS = 100_001;
+const MAX_CSV_COLUMNS = 512;
+const MAX_CSV_FIELD_CHARS = 1024 * 1024;
+
+/** Reject cells spreadsheet programs would execute when a later export opens. */
+export function assertNonFormulaCell(
+  value: string | null | undefined,
+  label: string
+): void {
+  if (value && /^[\t\r ]*[=+\-@]/u.test(value))
+    throw new Error(`CSV ${label} begins with a spreadsheet formula marker`);
+}
 
 /** RFC 4180-ish row splitter: quoted fields, escaped quotes, CRLF-tolerant. */
 export function parseCsvRows(text: string): string[][] {
@@ -31,6 +43,20 @@ export function parseCsvRows(text: string): string[][] {
   let field = "";
   let row: string[] = [];
   let quoted = false;
+  const pushField = (): void => {
+    if (field.length > MAX_CSV_FIELD_CHARS)
+      throw new Error(`CSV field exceeds ${MAX_CSV_FIELD_CHARS} characters`);
+    row.push(field);
+    if (row.length > MAX_CSV_COLUMNS)
+      throw new Error(`CSV row exceeds ${MAX_CSV_COLUMNS} columns`);
+    field = "";
+  };
+  const pushRow = (): void => {
+    if (row.some((value) => value.trim() !== "")) rows.push(row);
+    if (rows.length > MAX_CSV_ROWS)
+      throw new Error(`CSV exceeds ${MAX_CSV_ROWS} rows`);
+    row = [];
+  };
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
     if (quoted) {
@@ -43,18 +69,16 @@ export function parseCsvRows(text: string): string[][] {
     }
     if (ch === '"') quoted = true;
     else if (ch === ",") {
-      row.push(field);
-      field = "";
+      pushField();
     } else if (ch === "\n" || ch === "\r") {
       if (ch === "\r" && text[i + 1] === "\n") i += 1;
-      row.push(field);
-      field = "";
-      if (row.some((f) => f.trim() !== "")) rows.push(row);
-      row = [];
+      pushField();
+      pushRow();
     } else field += ch;
   }
-  row.push(field);
-  if (row.some((f) => f.trim() !== "")) rows.push(row);
+  if (quoted) throw new Error("CSV has an unterminated quoted field");
+  pushField();
+  pushRow();
   return rows;
 }
 
@@ -110,15 +134,22 @@ export function parseTransactionsCsv(text: string): CsvTransaction[] {
     const rawAmount = (row[amountCol] ?? "").replace(/[,\s₹$€£]/gu, "");
     const amount = Number(rawAmount);
     if (!day || Number.isNaN(amount)) continue; // ledger noise lines
+    const externalId =
+      idCol >= 0 && row[idCol]?.trim() ? row[idCol]!.trim() : null;
+    const description = descCol >= 0 ? (row[descCol]?.trim() ?? null) : null;
+    const currency =
+      currencyCol >= 0
+        ? (row[currencyCol]?.trim().toUpperCase() ?? null)
+        : null;
+    assertNonFormulaCell(externalId, "external id");
+    assertNonFormulaCell(description, "description");
+    assertNonFormulaCell(currency, "currency");
     out.push({
-      externalId: idCol >= 0 && row[idCol]?.trim() ? row[idCol]!.trim() : null,
+      externalId,
       postedAt: `${day}T00:00:00Z`,
-      description: descCol >= 0 ? (row[descCol]?.trim() ?? null) : null,
+      description,
       amountMinor: Math.round(Math.abs(amount) * 100),
-      currency:
-        currencyCol >= 0
-          ? (row[currencyCol]?.trim().toUpperCase() ?? null)
-          : null,
+      currency,
       direction: amount < 0 ? "debit" : "credit",
     });
   }

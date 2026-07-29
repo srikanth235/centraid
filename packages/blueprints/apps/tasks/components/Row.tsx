@@ -5,6 +5,7 @@
 // instant it's clicked, reverting if the write didn't execute.
 import { useState } from "react";
 
+import { displayText } from "../../_shared/untrusted.ts";
 import {
   flagLevel,
   fmtDay,
@@ -26,7 +27,7 @@ const FLAG_MOD: Record<"high" | "medium" | "low", string> = {
 };
 
 function Highlighted({ text, term }: { text: string; term: string }) {
-  const segments = highlightSegments(text, term);
+  const segments = highlightSegments(displayText(text), displayText(term));
   return segments.map((s, i) =>
     s.hit ? <mark key={i}>{s.text}</mark> : s.text
   );
@@ -54,7 +55,8 @@ export function Row({
   const cancelled = task.status === "cancelled";
   const isDone = task.status === "completed" || completing;
   const level = flagLevel(task.priority);
-  const note = String(task.description ?? "").trim();
+  const title = displayText(task.title);
+  const note = displayText(task.description).trim();
   const overdue = Boolean(
     isOpen && task.due_at && String(task.due_at).slice(0, 10) < todayStr()
   );
@@ -88,7 +90,7 @@ export function Row({
         <button
           type="button"
           className="kit-stretch-btn"
-          aria-label={`Open ${task.title}`}
+          aria-label={`Open ${title}`}
           onClick={() => onOpen(task.task_id)}
         />
       )}
@@ -114,7 +116,7 @@ export function Row({
               isDone ? `${shared.rowTitle} ${shared.done}` : shared.rowTitle
             }
           >
-            <Highlighted text={task.title} term={search} />
+            <Highlighted text={title} term={search} />
           </span>
           {task.status === "in-process" ? (
             <span className={`${styles.badge} ${styles.doing}`}>
@@ -140,7 +142,7 @@ export function Row({
                 className={`${shared.tagChip} ${styles.tagChipStatic}`}
                 key={t.tag_id}
               >
-                #{t.label}
+                #{displayText(t.label)}
               </span>
             ))}
           </div>

@@ -1,3 +1,4 @@
+import { displayText } from "../../_shared/untrusted.ts";
 // List view: each row (#list root's mapped children), the head row
 // (#listHead root) and the truncation footer (#windowFoot root).
 import {
@@ -33,6 +34,7 @@ export function ListRow({
   const color = avatarColor(p);
   const st = statusOf(p);
   const selected = selectedIds.has(p.party_id);
+  const name = displayText(p.name);
   return (
     <div className={styles.row} data-selected={String(selected)}>
       {/* The whole row opens the profile. One stretched button carries that
@@ -41,14 +43,14 @@ export function ListRow({
       <button
         type="button"
         className="kit-stretch-btn"
-        aria-label={`Open ${p.name}`}
+        aria-label={`Open ${name}`}
         onClick={() => onOpenDetails(p.party_id)}
       />
       <button
         type="button"
         className={styles.check}
         aria-pressed={selected}
-        aria-label={`Select ${p.name}`}
+        aria-label={`Select ${name}`}
         onClick={(e) => {
           e.stopPropagation();
           onToggleSelect(p.party_id);
@@ -58,7 +60,7 @@ export function ListRow({
       </button>
       <KitAvatar
         style={{ cursor: "pointer", position: "relative" }}
-        name={p.name}
+        name={name}
         size="34px"
         color={color}
         onClick={(e) => {
@@ -68,20 +70,20 @@ export function ListRow({
       />
       <div className={styles.rowMain}>
         <div className={styles.rowTitle}>
-          {p.name}
+          {name}
           {p.starred ? (
             <span className={styles.starInd} aria-label="Favorite">
               ★
             </span>
           ) : null}
         </div>
-        <div className={styles.rowRole}>{p.role || ""}</div>
+        <div className={styles.rowRole}>{displayText(p.role)}</div>
         {search.trim() && p.snippet ? (
           <Snippet snippet={p.snippet} className={styles.rowRole} />
         ) : null}
       </div>
       <span className={`${styles.cell} ${styles.list}`}>
-        {listName(data, p.list_id ?? null)}
+        {displayText(listName(data, p.list_id ?? null))}
       </span>
       <span className={`${styles.cell} ${styles.last}`}>
         {shortFmt(daysSince(p))}
@@ -94,7 +96,7 @@ export function ListRow({
         <button
           type="button"
           className={styles.kebab}
-          aria-label={`Actions for ${p.name}`}
+          aria-label={`Actions for ${name}`}
           aria-haspopup="menu"
           onClick={(e) => {
             e.stopPropagation();

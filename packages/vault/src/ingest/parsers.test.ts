@@ -5,10 +5,21 @@ import { describe, expect, test } from "vitest";
 import { parseCsvRows } from "./csv.js";
 import { parseIcs } from "./ics.js";
 import { isPasswordsCsvHeader, parsePasswordsCsv } from "./passwords-csv.js";
+import { assertImportFileSize, MAX_IMPORT_FILE_BYTES } from "./stage-file.js";
 import { normalizeHandle, parseVcards } from "./vcard.js";
 import { readZipEntries } from "./zip.js";
 
 describe("ingest pure parsers (#545 B6)", () => {
+  test("oversized imports are rejected before allocating or parsing content", () => {
+    expect(() => assertImportFileSize(MAX_IMPORT_FILE_BYTES + 1)).toThrow(
+      /import file exceeds/u
+    );
+    expect(() => assertImportFileSize(Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      /import file exceeds/u
+    );
+    expect(() => assertImportFileSize(MAX_IMPORT_FILE_BYTES)).not.toThrow();
+  });
+
   test("parseIcs maps VEVENT fields to structs", () => {
     const ics = [
       "BEGIN:VCALENDAR",

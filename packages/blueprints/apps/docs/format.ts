@@ -1,3 +1,4 @@
+import { safeDocumentUrl } from "../_shared/untrusted.ts";
 import { I } from "./icons.ts";
 // Formatting + file-type helpers — pure functions of their arguments; none
 // hold or mutate app state, though `emptyStateFor` below takes `state` as a
@@ -134,12 +135,7 @@ export function decodeDataUri(uri: string | null | undefined): string | null {
 }
 
 export function loadable(uri: string | null | undefined): boolean {
-  // Same-origin vault blob URLs (issue #296) render everywhere data: did —
-  // and in iframes BETTER: `default-src 'self'` allows them where data:
-  // PDFs went blank.
-  return /^(?:data:|https?:|\/centraid\/_vault\/blobs\/)/iu.test(
-    String(uri ?? "")
-  );
+  return safeDocumentUrl(uri) !== null;
 }
 export function isImage(doc: DocFields): boolean {
   return (

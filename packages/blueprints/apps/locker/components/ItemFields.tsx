@@ -1,3 +1,4 @@
+import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { catOf, fmtDate, monoOf, subOf } from "../format.ts";
 // Field descriptors + rows for the detail pane's read view, keyed by the
 // vault's field names — the per-type shape app.js's `fieldDescriptors()` /
@@ -151,14 +152,19 @@ function FieldRow({
   if (f.kind === "otp") return <OtpFieldRow seed={f.seed} />;
 
   if (f.kind === "link") {
+    const href = safeExternalUrl(f.val);
     return (
       <div className={styles.field}>
         <div className={styles.fieldMain}>
           <div className={styles.fieldK}>{f.k}</div>
           <div className={styles.fieldV}>
-            <a href={f.val} target="_blank" rel="noreferrer">
-              {f.val}
-            </a>
+            {href ? (
+              <a href={href} target="_blank" rel="noreferrer noopener">
+                {displayText(f.val)}
+              </a>
+            ) : (
+              displayText(f.val)
+            )}
           </div>
         </div>
         <button
@@ -183,7 +189,7 @@ function FieldRow({
               f.mono ? `${styles.fieldV} ${styles.mono}` : styles.fieldV
             }
           >
-            {f.val}
+            {displayText(f.val)}
           </div>
         </div>
         {f.canCopy ? (

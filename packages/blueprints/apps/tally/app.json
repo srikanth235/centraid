@@ -152,7 +152,7 @@
     {
       "name": "delete-expense",
       "description": "Delete an expense through tally.delete_expense.",
-      "confirmation": "always",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": { "expense_id": { "type": "string", "minLength": 1 } },
@@ -334,7 +334,7 @@
     {
       "name": "remove-group-member",
       "description": "Remove a member from a group through tally.remove_group_member — refused while they are on the ledger.",
-      "confirmation": "always",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -357,7 +357,7 @@
     {
       "name": "delete-group",
       "description": "Delete an empty group through tally.delete_group — refused while it still holds expenses.",
-      "confirmation": "always",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": { "group_id": { "type": "string", "minLength": 1 } },

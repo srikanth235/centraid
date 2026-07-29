@@ -23,6 +23,48 @@ const PREFIX = "/centraid/_vault/imports";
 /** Imports carry whole mailboxes / Takeout zips — cap well above chat bodies. */
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
 
+function decodeImportBody(
+  body: Record<string, unknown>,
+  filename: string
+): Buffer | string {
+  const hasText = typeof body.text === "string";
+  const hasBase64 = typeof body.base64 === "string";
+  if (hasText === hasBase64)
+    throw new Error("provide exactly one of text or base64");
+  if (hasText) {
+    const text = body.text as string;
+    if (text.includes("\0")) throw new Error(`NUL byte in ${filename}`);
+    return text;
+  }
+  const compact = (body.base64 as string).replace(/\s+/gu, "");
+  if (
+    compact.length === 0 ||
+    compact.length % 4 !== 0 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/u.test(compact)
+  ) {
+    throw new Error("base64 is malformed");
+  }
+  const data = Buffer.from(compact, "base64");
+  if (!filename.toLowerCase().endsWith(".zip")) {
+    if (
+      (data[0] === 0xff && data[1] === 0xfe) ||
+      (data[0] === 0xfe && data[1] === 0xff)
+    ) {
+      throw new Error(`unsupported UTF-16 encoding in ${filename}; use UTF-8`);
+    }
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(data);
+      if (text.includes("\0")) throw new Error(`NUL byte in ${filename}`);
+      return text.startsWith("\uFEFF") ? text.slice(1) : text;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("NUL byte"))
+        throw error;
+      throw new Error(`invalid UTF-8 in ${filename}`, { cause: error });
+    }
+  }
+  return data;
+}
+
 export function makeImportRouteHandler(
   vaults: Pick<VaultRegistry, "current">
 ): RouteHandler {
@@ -46,10 +88,7 @@ export function makeImportRouteHandler(
         const filename = String(body.filename ?? "");
         if (!filename)
           return sendJson(res, 400, { error: "filename is required" });
-        const data =
-          typeof body.base64 === "string"
-            ? Buffer.from(body.base64, "base64")
-            : String(body.text ?? "");
+        const data = decodeImportBody(body, filename);
         const result = plane.gateway.stageImportFile(owner, {
           filename,
           data,

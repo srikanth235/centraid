@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
+import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { fmtRange, initials, toIsoUtc, toLocalInput } from "../format.ts";
 import { I } from "../icons.ts";
 import { armConfirm, outcomeMessage, renderAttachments } from "../kit.ts";
@@ -75,8 +76,10 @@ function GuestRow({
   }
   return (
     <div className={styles.guestRow}>
-      <span className={styles.guestAvatar}>{initials(attendee.name)}</span>
-      <span className={styles.guestName}>{attendee.name}</span>
+      <span className={styles.guestAvatar}>
+        {initials(displayText(attendee.name))}
+      </span>
+      <span className={styles.guestName}>{displayText(attendee.name)}</span>
       <span className={styles.guestStat} data-stat={attendee.partstat}>
         {PARTSTAT_LABEL[attendee.partstat] ?? "Invited"}
       </span>
@@ -202,6 +205,7 @@ export function EventDrawer({
       : "Confirmed";
   const attendees = ev.attendees ?? [];
   const repeats = repeatLabel(ev.rrule);
+  const conferencingUrl = safeExternalUrl(ev.conferencing_uri);
 
   return (
     <div className={styles.drawerBackdrop}>
@@ -221,7 +225,7 @@ export function EventDrawer({
         />
         <div className={styles.drawerHead}>
           <div className={styles.drawerHeadText}>
-            <h2 className={styles.drawerTitle}>{ev.summary}</h2>
+            <h2 className={styles.drawerTitle}>{displayText(ev.summary)}</h2>
             <p className={styles.drawerRange}>{fmtRange(ev)}</p>
           </div>
           <button
@@ -235,7 +239,8 @@ export function EventDrawer({
         </div>
         <div className={styles.drawerMeta}>
           <span className={styles.drawerCal}>
-            <CalDot color={color} /> {calendarName ?? "No calendar"}
+            <CalDot color={color} />{" "}
+            {displayText(calendarName ?? "No calendar")}
           </span>
           <span
             className={styles.badge}
@@ -262,13 +267,13 @@ export function EventDrawer({
 
         <div className={styles.drawerBody}>
           {ev.description ? (
-            <p className={styles.drawerDesc}>{ev.description}</p>
+            <p className={styles.drawerDesc}>{displayText(ev.description)}</p>
           ) : null}
 
-          {ev.conferencing_uri ? (
+          {conferencingUrl ? (
             <a
               className={`kit-btn primary ${styles.flex} ag-join-btn`}
-              href={ev.conferencing_uri}
+              href={conferencingUrl}
               target="_blank"
               rel="noreferrer noopener"
             >

@@ -5,7 +5,7 @@
 // routes here (not to transactions) when its header names a password column;
 // the staged rows' secret fields seal in the draft band immediately.
 
-import { parseCsvRows } from "./csv.js";
+import { assertNonFormulaCell, parseCsvRows } from "./csv.js";
 
 export interface CsvPasswordItem {
   title: string;
@@ -90,13 +90,18 @@ export function parsePasswordsCsv(text: string): CsvPasswordItem[] {
     const username = cell(row, col.username);
     const title = cell(row, col.title) ?? (url ? hostnameOf(url) : null);
     if (!title) continue; // a row with no name and no url is unusable
+    const notes = cell(row, col.notes);
+    assertNonFormulaCell(title, "item title");
+    assertNonFormulaCell(url, "item URL");
+    assertNonFormulaCell(username, "username");
+    assertNonFormulaCell(notes, "notes");
     items.push({
       title,
       url,
       username,
       password: cell(row, col.password),
       otpSeed: otpSeedOf(cell(row, col.otp)),
-      notes: cell(row, col.notes),
+      notes,
     });
   }
   return items;

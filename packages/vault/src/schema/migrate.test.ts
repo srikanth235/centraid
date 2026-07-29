@@ -38,6 +38,7 @@ function rewindVaultTo(file: string, version: 1 | 2): void {
     DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ai;
     DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_au;
     DROP TRIGGER IF EXISTS trg_replica_core_entity_revision_ad;
+    DROP INDEX IF EXISTS core_entity_revision_actor_idx;
     DROP INDEX IF EXISTS core_entity_revision_undo_idx;
     DROP INDEX IF EXISTS core_entity_revision_entity_idx;
     DROP TABLE core_entity_revision;

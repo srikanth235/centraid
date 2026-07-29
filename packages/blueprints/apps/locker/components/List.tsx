@@ -1,3 +1,4 @@
+import { displayText } from "../../_shared/untrusted.ts";
 // `<section class="v-list">` — the search box + filtered/sorted row list for
 // the current nav. The React port of app.js's `LockerList` Lit component;
 // the search input is a controlled input driven by `search` (app.tsx calls
@@ -21,6 +22,7 @@ function ListRow({
   onSelect: (id: string) => void;
 }) {
   const wc = warnColor(item);
+  const title = displayText(item.title);
   return (
     <button
       type="button"
@@ -36,7 +38,7 @@ function ListRow({
       </span>
       <span className={shared.imain}>
         <span className={shared.ititle}>
-          {item.title}
+          {title}
           {item.favorite ? (
             <span className={styles.star}>
               <Icon
@@ -51,7 +53,7 @@ function ListRow({
             <span className={styles.warnDot} style={{ background: wc }} />
           ) : null}
         </span>
-        <span className={shared.isub}>{subOf(item) || "—"}</span>
+        <span className={shared.isub}>{displayText(subOf(item) || "—")}</span>
       </span>
     </button>
   );

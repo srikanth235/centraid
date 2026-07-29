@@ -4,7 +4,7 @@ export default async function restoreAlbum({ body, ctx }: HandlerArgs) {
     const outcome = await ctx.vault.invoke({
       command: "media.restore_album",
       input: (body ?? {}) as Record<string, unknown>,
-      purpose: "dpv:Personalisation",
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (error) {

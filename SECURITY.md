@@ -77,6 +77,25 @@ unmounts the replica session behind an opaque lock surface. This is defense in
 depth over iOS Data Protection / Android credential encryption, not protection
 from a rooted device or malware running after successful user authentication.
 
+**Untrusted content boundary (issue #630).** Values arriving from imports,
+connectors, OCR, capture, share targets, and other household members are data,
+never markup. Blueprint JSX renders them as React text/attribute values through
+the shared `displayText` boundary, which also neutralizes invisible control and
+bidi-override characters. A separate allowlist is mandatory for dynamic URL
+sinks: user links permit HTTP(S), mail, and telephone schemes; media/document
+sources permit bounded known media MIME data URLs and same-origin vault blobs,
+but never active HTML/SVG data documents or script schemes. CSS cover URLs use
+the same media policy plus explicit CSS escaping. Adversarial coverage renders
+the shared 13-case corpus through a real component from every bundled app.
+
+The file-import border validates exactly one text/base64 body, strict UTF-8,
+file/record/field bounds, complete ICS/vCard records, and inert CSV display
+cells before staging. ZIP imports are never extracted to disk and reject
+traversal names, encryption, unsupported compression, inconsistent/truncated
+headers, excessive entry/aggregate expansion, and suspicious compression
+ratios. Any validation failure occurs before the draft batch is created, so
+canonical state is unchanged.
+
 ### Members, households, and the v0 storage premise (#599)
 
 - **Five-layer model.** L0 custody (the box; landlord bearer; an exported backup recovery kit) · L1 authentication (iroh device keys — the only cryptographically provable layer) · L2 principals (**members** and agents) · L3 authorization (`(member, vault) → role`; devices inherit) · L4 attribution (the journal records the acting member — and the agent when one acted — whenever a principal is known; scheduler-fired automations carry none). A vault owner is not root; being co-owner of a shared vault grants zero access to anyone's personal vault. Root remains host custody (L0).

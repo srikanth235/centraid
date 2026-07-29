@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FC } from "react";
 
-import { isRenderableUri, isVideoAsset } from "../format.ts";
+import { isVideoAsset } from "../format.ts";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -20,6 +20,7 @@ import {
   PauseIcon,
   PlayIcon,
 } from "../icons.tsx";
+import { isRenderableUri } from "../media.ts";
 import { scopeAttr } from "../scopes.ts";
 import type { Asset } from "../types.ts";
 

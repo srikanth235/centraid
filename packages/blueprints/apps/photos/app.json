@@ -239,7 +239,7 @@
     {
       "name": "delete-album",
       "description": "Delete an album through media.delete_album; its photos stay in the library.",
-      "confirmation": "always",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {

@@ -21,4 +21,6 @@ CREATE INDEX core_entity_revision_entity_idx
 CREATE INDEX core_entity_revision_undo_idx
   ON core_entity_revision(undo_until)
   WHERE undone_at IS NULL;
+CREATE INDEX core_entity_revision_actor_idx
+  ON core_entity_revision(actor_party_id);
 `;

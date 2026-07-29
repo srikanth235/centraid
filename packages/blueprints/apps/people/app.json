@@ -127,7 +127,7 @@
     {
       "name": "trash-person",
       "description": "Move a People profile to reversible 30-day trash while preserving its canonical party and linked facts.",
-      "confirmation": "always",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {

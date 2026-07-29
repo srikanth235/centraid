@@ -11,14 +11,20 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 // CSS-modules transform from hijacking the `.module.css` import and handing the
 // app a bogus class map; do not "simplify" it back to a plain `.module.css`.
 export default nodeProject({
-  resolve: {
-    alias: [
-      {
-        find: /^\.\/kit\.ts$/u,
-        replacement: path.join(import.meta.dirname, "kit/kit.ts"),
+  plugins: [
+    {
+      name: "blueprint-component-kit",
+      enforce: "pre",
+      resolveId(source, importer) {
+        if ((source !== "./kit.ts" && source !== "../kit.ts") || !importer)
+          return null;
+        const appsRoot = path.join(import.meta.dirname, "apps");
+        return importer.startsWith(`${appsRoot}${path.sep}`)
+          ? path.join(import.meta.dirname, "kit/kit.ts")
+          : null;
       },
-    ],
-  },
+    },
+  ],
   test: {
     name: "@centraid/blueprints",
     include: ["src/**/*.test.ts", "apps/**/*.test.ts"],

@@ -1,3 +1,4 @@
+import { displayText } from "../../_shared/untrusted.ts";
 import { avatarColor } from "../format.ts";
 import type { Person } from "../types.ts";
 import { KitAvatar } from "./Shared.tsx";
@@ -12,12 +13,13 @@ export function TrashCard({
   onRestore: (person: Person) => void;
 }) {
   const purge = person.purge_at ? new Date(person.purge_at) : null;
+  const name = displayText(person.name);
   return (
     <article className={styles.card}>
-      <KitAvatar name={person.name} size="48px" color={avatarColor(person)} />
+      <KitAvatar name={name} size="48px" color={avatarColor(person)} />
       <div className={styles.copy}>
-        <strong>{person.name}</strong>
-        <span>{person.role || "No role"}</span>
+        <strong>{name}</strong>
+        <span>{displayText(person.role || "No role")}</span>
         <small>
           {purge && !Number.isNaN(purge.getTime())
             ? `Purges ${purge.toLocaleDateString()}`
