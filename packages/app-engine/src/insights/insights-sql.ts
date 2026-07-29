@@ -2,7 +2,7 @@
  * Prepared-statement builders for InsightsStore (#514).
  */
 
-import { type DatabaseSync, type StatementSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 const TOKEN_SUM = `(COALESCE(total_input_tokens,0)+COALESCE(total_output_tokens,0)
   +COALESCE(total_cache_read_tokens,0)+COALESCE(total_cache_write_tokens,0))`;

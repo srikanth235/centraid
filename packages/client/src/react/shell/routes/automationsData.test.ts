@@ -9,8 +9,8 @@ import {
   collectAutomationRuns,
   deriveAutomationHero,
   triggerOriginLabel,
-  type AutomationFeedEntry,
 } from "./automationsData.js";
+import type { AutomationFeedEntry } from "./automationsData.js";
 
 // buildOverviewData is pure; stub the gateway module so importing it doesn't
 // run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`

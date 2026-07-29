@@ -2,8 +2,8 @@ import {
   errorText,
   moduleAvailability,
   unwrapPopupEnvelope,
-  type PopupEnvelope,
 } from "./popup-core.js";
+import type { PopupEnvelope } from "./popup-core.js";
 import { blockingSummary, pausedModuleStatuses } from "./popup-state.js";
 import type {
   CompanionModule,

@@ -1,6 +1,7 @@
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AtlasBrowseTab from "./AtlasBrowseTab.js";

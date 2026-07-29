@@ -15,14 +15,10 @@ import {
   decrypt,
   deriveDataKey,
   deriveDedupKey,
-  type Keyring,
 } from "./crypto.js";
-import {
-  createSnapshot,
-  restoreSnapshot,
-  verifySnapshot,
-  type SourceEntry,
-} from "./engine.js";
+import type { Keyring } from "./crypto.js";
+import { createSnapshot, restoreSnapshot, verifySnapshot } from "./engine.js";
+import type { SourceEntry } from "./engine.js";
 import { LocalBackupProvider } from "./local-provider.js";
 import {
   openManifest,

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { promoteStagedBlob } from "../blob/promote.js";
 import { stageBlobBytes } from "../blob/staging.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import {
   completeEnrichmentLease,
   enrichmentQueueDepth,

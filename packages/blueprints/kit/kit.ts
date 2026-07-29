@@ -226,23 +226,23 @@ export function toast(
 ): () => void {
   haptic("success");
   const host = ensureToastHost();
-  const el = document.createElement("kit-toast");
-  el.text = text;
+  const elLocal = document.createElement("kit-toast");
+  elLocal.text = text;
   let timer = 0;
   const dismiss = () => {
     clearTimeout(timer);
-    el.remove();
+    elLocal.remove();
   };
   if (undoLabel && onUndo) {
-    el.undoLabel = undoLabel;
-    el.addEventListener("kit-undo", () => {
+    elLocal.undoLabel = undoLabel;
+    elLocal.addEventListener("kit-undo", () => {
       dismiss();
       onUndo();
     });
   }
-  el.addEventListener("kit-dismiss", dismiss);
-  if (duration === 0) el.dataset.sticky = "1";
-  host.appendChild(el);
+  elLocal.addEventListener("kit-dismiss", dismiss);
+  if (duration === 0) elLocal.dataset.sticky = "1";
+  host.appendChild(elLocal);
   // A quick-capture burst (bulk add, demo seed) stacks a toast per receipt
   // and can cover half the app for seconds — keep only the newest few.
   // Sticky toasts (duration 0, e.g. errors awaiting dismissal) are evicted
@@ -293,9 +293,9 @@ export function outcomeMessage(
 /** Fill a container with shimmer rows while the first read is in flight. */
 export function showSkeleton(container: Element, rows = 3): void {
   container.innerHTML = "";
-  const el = document.createElement("kit-skeleton");
-  el.rows = rows;
-  container.appendChild(el);
+  const elLocal = document.createElement("kit-skeleton");
+  elLocal.rows = rows;
+  container.appendChild(elLocal);
 }
 
 /**
@@ -519,20 +519,20 @@ export function onFocusRefresh(
  * Returns a stop fn.
  */
 export function observeWidth(
-  el: Element | null,
+  elLocal: Element | null,
   breakpoint: number,
   onNarrow: (isNarrow: boolean) => void,
   { pollMs = 250 }: { pollMs?: number } = {}
 ): () => void {
   const measure = () => {
-    if (!el) return;
+    if (!elLocal) return;
     const forced = document.documentElement.dataset.appWidth === "narrow";
-    onNarrow(forced || el.clientWidth < breakpoint);
+    onNarrow(forced || elLocal.clientWidth < breakpoint);
   };
   measure();
-  if (typeof ResizeObserver === "function" && el) {
+  if (typeof ResizeObserver === "function" && elLocal) {
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(elLocal);
     // The forced-narrow knob flips an attribute, not a size — catch it too.
     window.addEventListener("resize", measure);
     return () => {
@@ -558,14 +558,14 @@ export function letterAvatar(
   name: string,
   { size = "2.25rem", color, initials, src, shape }: AvatarOptions = {}
 ): HTMLElement {
-  const el = document.createElement("kit-avatar");
-  el.name = String(name ?? "?");
-  el.size = size;
-  if (color) el.color = color;
-  if (initials) el.initials = initials;
-  if (src) el.src = src;
-  if (shape) el.shape = shape;
-  return el;
+  const elLocal = document.createElement("kit-avatar");
+  elLocal.name = String(name ?? "?");
+  elLocal.size = size;
+  if (color) elLocal.color = color;
+  if (initials) elLocal.initials = initials;
+  if (src) elLocal.src = src;
+  if (shape) elLocal.shape = shape;
+  return elLocal;
 }
 
 // ---------- SVG chart primitives (native elements — see elements.js) ----------
@@ -589,12 +589,12 @@ export function lineChart(
     label?: string;
   } = {}
 ): HTMLElement {
-  const el = document.createElement("kit-line-chart");
-  el.points = points ?? [];
-  el.width = width;
-  el.height = height;
-  el.label = label;
-  return el;
+  const elLocal = document.createElement("kit-line-chart");
+  elLocal.points = points ?? [];
+  elLocal.width = width;
+  elLocal.height = height;
+  elLocal.label = label;
+  return elLocal;
 }
 
 /** Horizontal proportion bar element (e.g. cost share behind a row's amount). */
@@ -602,10 +602,10 @@ export function barSpan(
   ratio: number,
   { tone }: { tone?: string } = {}
 ): HTMLElement {
-  const el = document.createElement("kit-meter");
-  el.ratio = ratio;
-  if (tone) el.tone = tone;
-  return el;
+  const elLocal = document.createElement("kit-meter");
+  elLocal.ratio = ratio;
+  if (tone) elLocal.tone = tone;
+  return elLocal;
 }
 
 /** Vertical bar chart element for period totals: items are {label, value} (see `<kit-bar-chart>`). */
@@ -621,12 +621,12 @@ export function barChart(
     label?: string;
   } = {}
 ): HTMLElement {
-  const el = document.createElement("kit-bar-chart");
-  el.items = items ?? [];
-  el.width = width;
-  el.height = height;
-  el.label = label;
-  return el;
+  const elLocal = document.createElement("kit-bar-chart");
+  elLocal.items = items ?? [];
+  elLocal.width = width;
+  elLocal.height = height;
+  elLocal.label = label;
+  return elLocal;
 }
 
 // ---------- Attachments (the "shared pattern across apps", now actually shared) ----------
@@ -1228,7 +1228,7 @@ export function wireThemeToggle(
 (function () {
   const cfg = window.KIT_ASK || {};
 
-  function el(html) {
+  function elLocal(html) {
     const t = document.createElement("template");
     t.innerHTML = html.trim();
     return t.content.firstChild;
@@ -1365,12 +1365,12 @@ export function wireThemeToggle(
     ) {
       mount.style.flexWrap = "wrap";
     }
-    const btn = el(
+    const btn = elLocal(
       '<button type="button" class="kit-ask-btn" id="kitAskBtn"><span class="kit-spark">✦</span> Ask</button>'
     );
     mount.appendChild(btn);
 
-    const ov = el(panelHTML());
+    const ov = elLocal(panelHTML());
     document.body.appendChild(ov);
     const panel = ov.querySelector(".kit-ask-panel");
     const log = ov.querySelector(".kit-ask-log");
@@ -1525,7 +1525,7 @@ export function wireThemeToggle(
 
       function renderMenu() {
         menu.innerHTML = "";
-        const useDefault = el(
+        const useDefault = elLocal(
           '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
             (state.current ? "" : " is-active") +
             '" aria-checked="' +
@@ -1539,10 +1539,12 @@ export function wireThemeToggle(
         });
         menu.appendChild(useDefault);
         if (state.catalog.length)
-          menu.appendChild(el('<div class="kit-ask-model-divider"></div>'));
+          menu.appendChild(
+            elLocal('<div class="kit-ask-model-divider"></div>')
+          );
         state.catalog.forEach((m) => {
-          let active = m.id === state.current;
-          let item = el(
+          const active = m.id === state.current;
+          const item = elLocal(
             '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
               (active ? " is-active" : "") +
               '" aria-checked="' +
@@ -1590,7 +1592,7 @@ export function wireThemeToggle(
     const modelPicker = initAskModelPicker();
 
     function bubble(cls, html) {
-      const m = el('<div class="kit-msg ' + cls + '"></div>');
+      const m = elLocal('<div class="kit-msg ' + cls + '"></div>');
       m.innerHTML = html;
       log.appendChild(m);
       log.scrollTop = log.scrollHeight;
@@ -1629,7 +1631,9 @@ export function wireThemeToggle(
       },
       /** show a typing indicator; returns { done() } */
       typing() {
-        let t = el('<div class="kit-ask-typing"><i></i><i></i><i></i></div>');
+        const t = elLocal(
+          '<div class="kit-ask-typing"><i></i><i></i><i></i></div>'
+        );
         log.appendChild(t);
         log.scrollTop = log.scrollHeight;
         return {
@@ -1647,7 +1651,7 @@ export function wireThemeToggle(
       setBusy,
       /** a completed, receipted action (with optional Undo) */
       applied(o = {}) {
-        let a = el(
+        const a = elLocal(
           '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
             esc(o.title) +
             '<span class="ac-s">' +
@@ -1657,7 +1661,7 @@ export function wireThemeToggle(
             "</div>"
         );
         log.appendChild(a);
-        let u = a.querySelector(".ac-undo");
+        const u = a.querySelector(".ac-undo");
         if (u)
           u.addEventListener("click", () => {
             o.onUndo();
@@ -1677,14 +1681,14 @@ export function wireThemeToggle(
        * immediate-swap behavior.
        */
       propose(o = {}) {
-        let diff = o.diff
+        const diff = o.diff
           ? '<div class="kit-aa-diff"><span class="d1">' +
             esc(o.diff[0]) +
             '</span> → <span class="d2">' +
             esc(o.diff[1]) +
             "</span></div>"
           : "";
-        let card = el(
+        const card = elLocal(
           '<div class="kit-ask-action"><span class="aa-label">Proposed write · needs your ok</span>' +
             '<div class="aa-title">' +
             esc(o.title) +
@@ -1699,22 +1703,22 @@ export function wireThemeToggle(
             '<button class="kit-aa-ghost aa-discard">Discard</button></div></div>'
         );
         log.appendChild(card);
-        function setBusy(busy) {
+        function setBusyLocal(busyLocal) {
           card.querySelectorAll("button").forEach((b) => {
-            b.disabled = busy;
+            b.disabled = busyLocal;
           });
-          card.classList.toggle("aa-busy", busy);
+          card.classList.toggle("aa-busy", busyLocal);
         }
         function note(text) {
-          let n =
+          const n =
             card.querySelector(".aa-note") ||
-            card.appendChild(el('<div class="aa-note"></div>'));
+            card.appendChild(elLocal('<div class="aa-note"></div>'));
           n.textContent = text;
           log.scrollTop = log.scrollHeight;
         }
         function swapApplied(receipt) {
           card.replaceWith(
-            el(
+            elLocal(
               '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
                 esc(o.title) +
                 '<span class="ac-s">' +
@@ -1725,41 +1729,45 @@ export function wireThemeToggle(
           log.scrollTop = log.scrollHeight;
         }
         card.querySelector(".kit-aa-approve").addEventListener("click", () => {
-          let settled = o.onApprove ? o.onApprove() : undefined;
+          const settled = o.onApprove ? o.onApprove() : undefined;
           if (!settled || typeof settled.then !== "function")
             return swapApplied();
-          setBusy(true);
+          setBusyLocal(true);
           settled
             .then((r) => {
               if (r && r.ok === false) {
-                setBusy(false);
+                setBusyLocal(false);
                 note(r.note || "The vault refused this write.");
                 return;
               }
               swapApplied(r && r.receipt);
             })
-            .catch((err) => {
-              setBusy(false);
-              note(String((err && err.message) || err || "Approval failed."));
+            .catch((error) => {
+              setBusyLocal(false);
+              note(
+                String((error && error.message) || error || "Approval failed.")
+              );
             });
         });
-        let edit = card.querySelector(".aa-edit");
+        const edit = card.querySelector(".aa-edit");
         if (edit)
           edit.addEventListener("click", () => {
             o.onEdit();
           });
         card.querySelector(".aa-discard").addEventListener("click", () => {
-          let settled = o.onDiscard ? o.onDiscard() : undefined;
+          const settled = o.onDiscard ? o.onDiscard() : undefined;
           if (!settled || typeof settled.then !== "function")
             return card.remove();
-          setBusy(true);
+          setBusyLocal(true);
           settled
             .then(() => {
               card.remove();
             })
-            .catch((err) => {
-              setBusy(false);
-              note(String((err && err.message) || err || "Discard failed."));
+            .catch((error) => {
+              setBusyLocal(false);
+              note(
+                String((error && error.message) || error || "Discard failed.")
+              );
             });
         });
         log.scrollTop = log.scrollHeight;
@@ -1788,7 +1796,7 @@ export function wireThemeToggle(
       pendingStrip.innerHTML = "";
       pendingStrip.hidden = pending.length === 0 || !historyView.hidden;
       pending.forEach((p) => {
-        let chip = el(
+        const chip = elLocal(
           '<span class="kit-ask-pending-chip' +
             (p.status === "uploading" ? " is-uploading" : "") +
             (p.status === "error" ? " is-error" : "") +
@@ -1825,7 +1833,7 @@ export function wireThemeToggle(
 
     function addFiles(files) {
       Array.prototype.slice.call(files || []).forEach((file) => {
-        let p = { cid: ++pendingSeq, file, status: "uploading" };
+        const p = { cid: ++pendingSeq, file, status: "uploading" };
         pending.push(p);
         renderPending();
         if (file.size > MAX_UPLOAD_BYTES) {
@@ -1844,10 +1852,12 @@ export function wireThemeToggle(
             p.filename = file.name;
             renderPending();
           })
-          .catch((err) => {
+          .catch((error) => {
             if (!pending.includes(p)) return;
             p.status = "error";
-            p.error = String((err && err.message) || err || "upload failed");
+            p.error = String(
+              (error && error.message) || error || "upload failed"
+            );
             renderPending();
           });
       });
@@ -1878,11 +1888,11 @@ export function wireThemeToggle(
       if (!typesHasFiles(e.dataTransfer)) return;
       e.preventDefault();
       panel.classList.remove("is-dragover");
-      let files = (e.dataTransfer && e.dataTransfer.files) || [];
+      const files = (e.dataTransfer && e.dataTransfer.files) || [];
       if (files.length) addFiles(files);
     });
     input.addEventListener("paste", (e) => {
-      let files = (e.clipboardData && e.clipboardData.files) || [];
+      const files = (e.clipboardData && e.clipboardData.files) || [];
       if (files.length) addFiles(files);
     });
 
@@ -1902,7 +1912,7 @@ export function wireThemeToggle(
     function historyNote(text) {
       historyList.innerHTML = "";
       historyList.appendChild(
-        el('<div class="kit-ask-history-empty"></div>')
+        elLocal('<div class="kit-ask-history-empty"></div>')
       ).textContent = text;
     }
 
@@ -1913,14 +1923,14 @@ export function wireThemeToggle(
         return;
       }
       sessions.forEach((s) => {
-        let title =
+        const title =
           s.title && String(s.title).trim() ? s.title : "Conversation";
-        let turns = s.turnCount || 0;
-        let meta =
+        const turns = s.turnCount || 0;
+        const meta =
           (turns === 1 ? "1 turn" : turns + " turns") +
           " · " +
           relTime(s.updatedAt);
-        let row = el(
+        const row = elLocal(
           '<div class="kit-ask-history-row">' +
             '<button type="button" class="kit-ask-history-item" data-id="' +
             esc(s.id) +
@@ -1952,7 +1962,7 @@ export function wireThemeToggle(
 
     function resetLogToIntro() {
       log.innerHTML = "";
-      const m = el('<div class="kit-msg ai"></div>');
+      const m = elLocal('<div class="kit-msg ai"></div>');
       m.textContent = introText();
       log.appendChild(m);
     }
@@ -1980,7 +1990,7 @@ export function wireThemeToggle(
             n++;
             i++;
           }
-          const note = el('<div class="kit-ask-toolnote"></div>');
+          const note = elLocal('<div class="kit-ask-toolnote"></div>');
           note.textContent = "⚙ used " + n + (n === 1 ? " tool" : " tools");
           log.appendChild(note);
         } else {
@@ -2038,7 +2048,7 @@ export function wireThemeToggle(
       if (input) input.focus();
     });
     historyList.addEventListener("click", (e) => {
-      let del = e.target.closest(".kit-ask-history-del");
+      const del = e.target.closest(".kit-ask-history-del");
       if (del) {
         // Same two-click "arm then confirm" idiom as every other destructive
         // control in the kit — no native confirm() dialog.
@@ -2046,7 +2056,7 @@ export function wireThemeToggle(
         deleteConversationRow(del.dataset.id);
         return;
       }
-      let item = e.target.closest(".kit-ask-history-item");
+      const item = e.target.closest(".kit-ask-history-item");
       if (item) openConversation(item.dataset.id);
     });
 
@@ -2071,10 +2081,10 @@ export function wireThemeToggle(
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       if (busy) return; // a turn is already in flight — guard double-sends
-      let uploaded = pending.filter((p) => {
+      const uploaded = pending.filter((p) => {
         return p.status === "done";
       });
-      let refs = uploaded.map((p) => {
+      const refs = uploaded.map((p) => {
         return {
           hash: p.hash,
           mime: p.mime,
@@ -2082,7 +2092,7 @@ export function wireThemeToggle(
           sizeBytes: p.sizeBytes,
         };
       });
-      let v = input.value.trim() || (refs.length ? "(attachment)" : "");
+      const v = input.value.trim() || (refs.length ? "(attachment)" : "");
       if (!v) return;
       api.user(v, refs.length ? refs : undefined);
       input.value = "";
@@ -2184,21 +2194,21 @@ export function wireThemeToggle(
           return;
         }
         return fetchJson(vaultAppsPath()).then((a) => {
-          let apps = (a.ok && a.body && a.body.apps) || [];
+          const apps = (a.ok && a.body && a.body.apps) || [];
           // `apps[].appId` is the internal consent_app UUID minted at
           // enrollment, not the manifest id `appId()` reads off the runtime
           // bridge — `name` is the field that carries the manifest id.
-          let mine = apps.find((x) => x.name === appId());
+          const mine = apps.find((x) => x.name === appId());
           if (!mine) {
             chip.textContent = "not enrolled — vault calls deny";
             return;
           }
-          let grants = mine.grants || [];
+          const grants = mine.grants || [];
           if (!grants.length) {
             chip.textContent = "no grant yet — writes deny or park";
             return;
           }
-          let verbs = {};
+          const verbs = {};
           grants.forEach((g) => {
             (g.scopes || []).forEach((sc) => {
               String(sc.verbs || "")
@@ -2208,7 +2218,7 @@ export function wireThemeToggle(
                 });
             });
           });
-          let list = Object.keys(verbs);
+          const list = Object.keys(verbs);
           chip.textContent =
             (list.length ? list.join(" + ") : "granted") + " · consent-gated";
         });
@@ -2287,7 +2297,7 @@ export function wireThemeToggle(
           );
           return;
         }
-        let d = describeParked(entry);
+        const d = describeParked(entry);
         api.propose({
           title: d.title,
           detail: d.detail,
@@ -2454,13 +2464,16 @@ export function wireThemeToggle(
         .then((id) => {
           return runTurn(id, false);
         })
-        .catch((err) => {
+        .catch((error) => {
           // A user-initiated cancel surfaces as an AbortError — not a failure.
-          if ((signal && signal.aborted) || (err && err.name === "AbortError"))
+          if (
+            (signal && signal.aborted) ||
+            (error && error.name === "AbortError")
+          )
             return;
           say(
             "Couldn't reach the vault gateway — " +
-              String((err && err.message) || err)
+              String((error && error.message) || error)
           );
         })
         .then(() => {
@@ -3082,7 +3095,7 @@ export function inlineLinkIds(body: string, refs: Reference[]): string[] {
  * text — the chip is presentation, degrading is free.
  */
 export function appendWithChips(
-  el: HTMLElement,
+  elLocal: HTMLElement,
   text: string,
   absStart: number,
   spans: unknown,
@@ -3096,7 +3109,7 @@ export function appendWithChips(
     .filter((r) => r.start >= absStart && r.end <= absEnd)
     .toSorted((a, b) => a.start - b.start);
   const literal = (seg) => {
-    if (seg) plain(el, seg);
+    if (seg) plain(elLocal, seg);
   };
   if (inside.length === 0) {
     literal(text);
@@ -3105,7 +3118,7 @@ export function appendWithChips(
   let cursor = absStart;
   for (const r of inside) {
     literal(text.slice(cursor - absStart, r.start - absStart));
-    el.appendChild(mentionChip(r));
+    elLocal.appendChild(mentionChip(r));
     cursor = r.end;
   }
   literal(text.slice(cursor - absStart));

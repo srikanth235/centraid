@@ -13,9 +13,8 @@ import {
   endpointTicketFor,
   loadEndpointSecret,
   startLocalProxy,
-  type LocalProxyHandle,
-  type TunnelClient,
 } from "@centraid/tunnel";
+import type { LocalProxyHandle, TunnelClient } from "@centraid/tunnel";
 
 import { deviceIrohKeyPersistence } from "./gateway-secrets.js";
 

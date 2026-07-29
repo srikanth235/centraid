@@ -20,8 +20,8 @@ import type { WorktreeStore } from "../worktree-store/index.js";
 import {
   deleteAppAndReconcile,
   publishAndReconcile,
-  type LifecycleRouteOptions,
 } from "./lifecycle-shared.js";
+import type { LifecycleRouteOptions } from "./lifecycle-shared.js";
 
 let appDir: string;
 let calls: string[];

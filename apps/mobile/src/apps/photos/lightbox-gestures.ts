@@ -8,7 +8,8 @@
 // `.onStart`/`.onUpdate`/`.onEnd` call chain, not the enclosing function).
 
 import { Gesture } from "react-native-gesture-handler";
-import { runOnJS, withTiming, type SharedValue } from "react-native-reanimated";
+import { runOnJS, withTiming } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 
 /** Pinch-to-zoom plus double-tap-to-toggle, clamped to 1×–5×. */
 export function buildZoomGesture(

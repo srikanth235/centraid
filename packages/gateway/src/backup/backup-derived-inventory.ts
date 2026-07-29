@@ -13,7 +13,8 @@
  * alongside cas keeps the owner-facing signal honest without churning consumers.
  */
 
-import { ReplicaIndex, type VaultDb } from "@centraid/vault";
+import { ReplicaIndex } from "@centraid/vault";
+import type { VaultDb } from "@centraid/vault";
 
 import { collectCasInventory } from "./backup-cas-inventory.js";
 import type {

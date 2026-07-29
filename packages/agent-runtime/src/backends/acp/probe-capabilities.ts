@@ -6,7 +6,8 @@
  * no stream events. Used by the agents-status route and vault preflight.
  */
 
-import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
 import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,9 +22,8 @@ import {
   hasSessionCapability,
   readConfigOptions,
   readOfferedModels,
-  type InitializeResult,
-  type SessionSetupResult,
 } from "./session-config.js";
+import type { InitializeResult, SessionSetupResult } from "./session-config.js";
 import type { AcpTurnConfig } from "./types.js";
 
 /** Persistable, adapter-neutral view of one ACP session config option. */
@@ -168,9 +168,9 @@ export async function probeAcpCapabilities(
   let launch: { bin: string; args: string[]; env: NodeJS.ProcessEnv };
   try {
     launch = planLaunch(config, undefined, []);
-  } catch (err) {
+  } catch (error) {
     return emptyCaps({
-      reason: err instanceof Error ? err.message : String(err),
+      reason: error instanceof Error ? error.message : String(error),
     });
   }
 
@@ -316,9 +316,9 @@ export async function probeAcpCapabilities(
       caps.usageUpdateObserved = usageUpdateObserved;
       caps.configOptionUpdateObserved = configOptionUpdateObserved;
       caps.locationsObserved = locationsObserved;
-    } catch (err) {
+    } catch (error) {
       const classified = classifyAgentFailureDetail(
-        err,
+        error,
         conn.stderrTail(),
         config
       );
@@ -329,9 +329,9 @@ export async function probeAcpCapabilities(
     }
 
     return caps;
-  } catch (err) {
+  } catch (error) {
     return emptyCaps({
-      reason: err instanceof Error ? err.message : String(err),
+      reason: error instanceof Error ? error.message : String(error),
     });
   } finally {
     clearTimeout(timer);

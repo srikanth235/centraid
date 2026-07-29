@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { FlashList } from "@shopify/flash-list";
+import type { FlashListRef } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import React, {

@@ -6,7 +6,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NativeReplicaSession } from "../replica/native-session";
+import type * as TypeImport_1mtgsk8 from "./derivatives-native";
+import type * as TypeImport_tjnyu from "./expo-native";
 import { backupDeviceMedia } from "./media-producer";
+import type * as TypeImport_181nh9s from "./native-digest";
+
+type ExpoFileSystem = typeof import("expo-file-system");
+type StorageModule = typeof import("../../storage");
+type ForegroundServiceModule = typeof import("./foreground-service");
+type NativeQueueModule = typeof import("./native-queue");
 
 // Shared, mutable fakes — hoisted so the (hoisted) vi.mock factories can close
 // over them without a temporal-dead-zone reference.
@@ -33,21 +41,14 @@ const H = vi.hoisted(() => {
     closed: false,
   };
   const fgs = {
-    start:
-      vi.fn<
-        typeof import("./foreground-service").UploadForegroundService.start
-      >(),
+    start: vi.fn<ForegroundServiceModule["UploadForegroundService"]["start"]>(),
     update:
-      vi.fn<
-        typeof import("./foreground-service").UploadForegroundService.update
-      >(),
-    stop: vi.fn<
-      typeof import("./foreground-service").UploadForegroundService.stop
-    >(),
+      vi.fn<ForegroundServiceModule["UploadForegroundService"]["update"]>(),
+    stop: vi.fn<ForegroundServiceModule["UploadForegroundService"]["stop"]>(),
   };
   const deletedFiles: string[] = [];
   const generateDeviceDerivatives =
-    vi.fn<typeof import("./derivatives-native").generateDeviceDerivatives>();
+    vi.fn<typeof TypeImport_1mtgsk8.generateDeviceDerivatives>();
   const fakeQueue = {
     bySha: () => q.item ?? q.existing,
     enqueue: async (
@@ -82,7 +83,7 @@ vi.mock(import("./native-queue"), () => ({
   // `open()` factory, so assert that surface to the real type.
   UploadQueue: {
     open: () => H.fakeQueue,
-  } as unknown as typeof import("./native-queue").UploadQueue,
+  } as unknown as NativeQueueModule["UploadQueue"],
 }));
 vi.mock(import("./foreground-service"), () => ({
   UploadForegroundService: H.fgs,
@@ -94,11 +95,10 @@ vi.mock(import("./enqueue"), () => ({
   sha256OfFile: async () => ({ sha256: "sha-of-file", size: 1_000 }),
 }));
 vi.mock(import("./expo-native"), () => ({
-  expoFileSource: vi.fn<typeof import("./expo-native").expoFileSource>(),
+  expoFileSource: vi.fn<typeof TypeImport_tjnyu.expoFileSource>(),
 }));
 vi.mock(import("./native-digest"), () => ({
-  createNativeDigest:
-    vi.fn<typeof import("./native-digest").createNativeDigest>(),
+  createNativeDigest: vi.fn<typeof TypeImport_181nh9s.createNativeDigest>(),
 }));
 vi.mock(import("./followup"), () => ({
   replaySettledUploadFollowups: async () => ({ replayed: 0, poisoned: 0 }),
@@ -117,7 +117,7 @@ vi.mock(import("../../storage"), () => ({
     // (rather than asserting) since they're trivial to satisfy honestly.
     get: <T>(_key: string, fallback: T): T => fallback,
     hydrate: async <T>(_key: string, fallback: T): Promise<T> => fallback,
-    set: vi.fn<typeof import("../../storage").Store.set>(),
+    set: vi.fn<StorageModule["Store"]["set"]>(),
   },
 }));
 vi.mock(import("expo-file-system"), () => ({
@@ -131,7 +131,7 @@ vi.mock(import("expo-file-system"), () => ({
     delete(): void {
       H.deletedFiles.push(this.uri);
     }
-  } as unknown as typeof import("expo-file-system").File,
+  } as unknown as ExpoFileSystem["File"],
 }));
 
 const { q, fgs, deletedFiles, generateDeviceDerivatives } = H;

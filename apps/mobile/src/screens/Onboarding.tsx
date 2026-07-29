@@ -152,9 +152,13 @@ function ConnectionStep({
           Haptics.NotificationFeedbackType.Success
         );
         onPaired();
-      } catch (err) {
+      } catch (caughtError) {
         scannedRef.current = false;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        );
       } finally {
         setPairing(false);
       }

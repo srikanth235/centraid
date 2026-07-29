@@ -8,7 +8,7 @@
 // of some index — an explicit one, or the implicit index SQLite gives a
 // rowid table's TEXT PRIMARY KEY / UNIQUE constraint, or a WITHOUT ROWID
 // table's own PRIMARY KEY.
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, test } from "vitest";
 

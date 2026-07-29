@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import {
   appEntry,
@@ -16,9 +17,8 @@ import {
   seedRemoteGatewayProfile,
   startMockGateway,
   waitForHome,
-  type MockGateway,
-  type TestEnv,
 } from "./fixtures";
+import type { MockGateway, TestEnv } from "./fixtures";
 
 /** §12 Settings, §13 Gateways / profiles, §14 cross-cutting. */
 
@@ -308,7 +308,7 @@ test("13.7 — a remote gateway can be removed; the local one cannot", async () 
     const localErr = await page.evaluate(() =>
       window.CentraidApi.removeGateway({ id: "local" })
         .then(() => null)
-        .catch((e: Error) => String(e.message ?? e))
+        .catch((error: Error) => String(error.message ?? error))
     );
     expect(localErr).toBeTruthy();
   } finally {

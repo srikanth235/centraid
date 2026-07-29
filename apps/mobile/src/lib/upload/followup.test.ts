@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { NativeReplicaSession } from "../replica/native-session";
+import type * as TypeImport_1mtgsk8 from "./derivatives-native";
 import { replaySettledUploadFollowups } from "./followup";
 import type { UploadQueue } from "./native-queue";
 import type { UploadFollowup } from "./store";
 
 vi.mock(import("./derivatives-native"), () => ({
   contributeDeviceDerivatives:
-    vi.fn<typeof import("./derivatives-native").contributeDeviceDerivatives>(),
+    vi.fn<typeof TypeImport_1mtgsk8.contributeDeviceDerivatives>(),
   cleanupDeviceDerivatives:
-    vi.fn<typeof import("./derivatives-native").cleanupDeviceDerivatives>(),
+    vi.fn<typeof TypeImport_1mtgsk8.cleanupDeviceDerivatives>(),
 }));
 
 function followupOf(overrides: Partial<UploadFollowup> = {}): UploadFollowup {

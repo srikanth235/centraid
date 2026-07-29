@@ -218,8 +218,8 @@ export default async function journalHandler({ ctx }: HandlerArgs) {
         String(b.sort_at).localeCompare(String(a.sort_at))
       ),
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { entries: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

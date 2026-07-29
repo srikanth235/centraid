@@ -6,7 +6,8 @@
  * sides of the conflict.
  */
 
-import { BackupProviderError, type BackupProvider } from "@centraid/backup";
+import { BackupProviderError } from "@centraid/backup";
+import type { BackupProvider } from "@centraid/backup";
 
 export function conflictAfterFirstCall(real: BackupProvider): BackupProvider {
   let calls = 0;

@@ -48,8 +48,8 @@ const baseManifest = () => ({
 function thrownBy(fn: () => unknown): unknown {
   try {
     fn();
-  } catch (err) {
-    return err;
+  } catch (error) {
+    return error;
   }
   return undefined;
 }

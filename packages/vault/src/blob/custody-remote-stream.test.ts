@@ -3,7 +3,8 @@ import { describe, expect, test, vi } from "vitest";
 
 import { BlobCustody } from "./custody.js";
 import { FsBlobStore, MemoryBlobStore } from "./local.js";
-import { sha256OfBytes, type BlobRange } from "./store.js";
+import { sha256OfBytes } from "./store.js";
+import type { BlobRange } from "./store.js";
 
 async function collect(source: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = [];

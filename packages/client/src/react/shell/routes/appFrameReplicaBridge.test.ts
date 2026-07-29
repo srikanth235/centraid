@@ -6,10 +6,8 @@ import type {
   ReplicaReadWireResult,
   ReplicaSearchWireResult,
 } from "../../../replica/types.js";
-import {
-  attachAppFrameReplicaBridge,
-  type AppFrameReplicaBridgeOptions,
-} from "./appFrameReplicaBridge.js";
+import { attachAppFrameReplicaBridge } from "./appFrameReplicaBridge.js";
+import type { AppFrameReplicaBridgeOptions } from "./appFrameReplicaBridge.js";
 
 // The session here is a structural stub (`as unknown as ReplicaShellSession`):
 // it keeps the real argument types — the part the bridge can drift against —

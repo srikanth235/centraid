@@ -111,10 +111,10 @@ export class ChangeBus {
     for (const listener of set) {
       try {
         listener(change, serialized);
-      } catch (err) {
+      } catch (error) {
         this.logger?.warn(
           `[change-bus] listener for app "${change.appId}" threw: ${
-            err instanceof Error ? err.message : String(err)
+            error instanceof Error ? error.message : String(error)
           }`
         );
       }

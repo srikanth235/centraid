@@ -6,23 +6,21 @@ import {
   compileHydrationPlan,
   hydrationMessagesFromLedger,
   resolveItemCost,
-  type ConversationRunner,
-  type ProviderConsentSource,
-  type ProviderEgressConsentController,
-  type RunnerKind,
-  type TurnStreamEvent,
 } from "@centraid/app-engine";
-import {
-  validateManifest,
-  type Manifest,
-  type ManifestVaultScope,
-} from "@centraid/automation";
+import type {
+  ConversationRunner,
+  ProviderConsentSource,
+  ProviderEgressConsentController,
+  RunnerKind,
+  TurnStreamEvent,
+} from "@centraid/app-engine";
+import type * as TypeImport_4y0tle from "@centraid/app-engine";
+import { validateManifest } from "@centraid/automation";
+import type { Manifest, ManifestVaultScope } from "@centraid/automation";
 
 import { journalConversationStore } from "../journal-stores.js";
-import {
-  AUTOMATION_ANCHOR_ENTITY,
-  type ResolvedAutomationAnchor,
-} from "./automation-anchor-scopes.js";
+import { AUTOMATION_ANCHOR_ENTITY } from "./automation-anchor-scopes.js";
+import type { ResolvedAutomationAnchor } from "./automation-anchor-scopes.js";
 
 export interface HeadlessCompileOptions {
   runner: ConversationRunner;
@@ -396,7 +394,7 @@ export async function runHeadlessAutomationCompile(
       | {
           adapterSessionId?: string;
           adapterKind?: string;
-          adapterUsageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
+          adapterUsageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
           hydrated?: boolean;
           hydrationTokens?: number;
         }
@@ -596,7 +594,8 @@ export async function runHeadlessAutomationCompile(
         );
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const messageLocal =
+        error instanceof Error ? error.message : String(error);
       const endedAt = Date.now();
       store.runInTransaction(() => {
         store.insertItem({
@@ -605,13 +604,13 @@ export async function runHeadlessAutomationCompile(
           ordinal: opts.failoverNotice ? 2 : 1,
           kind: "step",
           outputJson: JSON.stringify({
-            error: message,
+            error: messageLocal,
             ...(finalText ? { text: finalText } : {}),
             ...(stopReason === undefined ? {} : { stopReason }),
           }),
           ...(rawJson === undefined ? {} : { rawJson }),
           ok: false,
-          error: message,
+          error: messageLocal,
           startedAt,
           endedAt,
           durationMs: endedAt - startedAt,
@@ -621,11 +620,13 @@ export async function runHeadlessAutomationCompile(
           turnId: runId,
           endedAt,
           ok: false,
-          error: message,
+          error: messageLocal,
           summary: "Compile failed",
           ...(stopReason === undefined
             ? {}
-            : { outputJson: JSON.stringify({ stopReason, error: message }) }),
+            : {
+                outputJson: JSON.stringify({ stopReason, error: messageLocal }),
+              }),
         });
         if (adapter?.hydrationTokens !== undefined) {
           store.setTurnHydrationTokens(runId, adapter.hydrationTokens);
@@ -645,9 +646,9 @@ export async function runHeadlessAutomationCompile(
         store.noteFailedTurn(conversationId, "", observedAdapter);
       });
       if (failureClass === undefined) {
-        await opts.onFailure?.(message);
+        await opts.onFailure?.(messageLocal);
       } else {
-        await opts.onFailure?.(message, failureClass);
+        await opts.onFailure?.(messageLocal, failureClass);
       }
     }
   } finally {

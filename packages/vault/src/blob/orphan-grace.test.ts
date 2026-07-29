@@ -9,10 +9,8 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
 
 import { BLOB_CACHE_DDL } from "../schema/blob.js";
-import {
-  reconcileCustody,
-  type ReconcileContext,
-} from "./custody-reconcile.js";
+import { reconcileCustody } from "./custody-reconcile.js";
+import type { ReconcileContext } from "./custody-reconcile.js";
 import { MemoryBlobStore } from "./local.js";
 import { OrphanTombstoneIndex } from "./orphan-tombstone.js";
 import { sha256OfBytes } from "./store.js";

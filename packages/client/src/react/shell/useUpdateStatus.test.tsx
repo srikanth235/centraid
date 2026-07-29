@@ -1,12 +1,10 @@
 import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  relaunchToUpdate,
-  useUpdateStatus,
-  type UpdateStatus,
-} from "./useUpdateStatus.js";
+import { relaunchToUpdate, useUpdateStatus } from "./useUpdateStatus.js";
+import type { UpdateStatus } from "./useUpdateStatus.js";
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { RunnerHealthStore, type RunnerHealthPolicy } from "./runner-health.js";
+import { RunnerHealthStore } from "./runner-health.js";
+import type { RunnerHealthPolicy } from "./runner-health.js";
 import type { AgentFailureClass } from "./runner.js";
 import { newProvider } from "./store-test-fixtures.js";
 

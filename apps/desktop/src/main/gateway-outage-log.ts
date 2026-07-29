@@ -23,8 +23,8 @@ import {
   formatOutageLogLine,
   OUTAGE_LOG_CAP,
   parseOutageLogLines,
-  type OutageLogEvent,
 } from "./gateway-outage-log-core.js";
+import type { OutageLogEvent } from "./gateway-outage-log-core.js";
 
 const OUTAGE_LOG_FILE = "gateway-outage-log.jsonl";
 
@@ -40,10 +40,10 @@ function outageLogPath(): string {
 export function loadOutageLog(): OutageLogEvent[] {
   try {
     return parseOutageLogLines(readFileSync(outageLogPath(), "utf8"));
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       process.stdout.write(
-        `[gateway-outage-log] failed to read: ${String(err)}\n`
+        `[gateway-outage-log] failed to read: ${String(error)}\n`
       );
     }
     return [];
@@ -69,9 +69,9 @@ export function persistOutageEvents(
     const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
     writeFileSync(tmp, next.map(formatOutageLogLine).join(""), { mode: 0o600 });
     renameSync(tmp, file);
-  } catch (err) {
+  } catch (error) {
     process.stdout.write(
-      `[gateway-outage-log] failed to persist: ${String(err)}\n`
+      `[gateway-outage-log] failed to persist: ${String(error)}\n`
     );
   }
   return next;

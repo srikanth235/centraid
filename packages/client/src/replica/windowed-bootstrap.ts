@@ -3,9 +3,11 @@ import { ReplicaProtocolError } from "./errors.js";
 import {
   DEFAULT_REPLICA_BOOTSTRAP_WINDOW,
   fetchReplicaBootstrapPage,
-  type ReplicaBootstrapFirstPage,
-  type ReplicaBootstrapPage,
-  type ReplicaFetcher,
+} from "./shell-transport.js";
+import type {
+  ReplicaBootstrapFirstPage,
+  ReplicaBootstrapPage,
+  ReplicaFetcher,
 } from "./shell-transport.js";
 import type {
   IntentOutcome,

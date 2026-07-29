@@ -10,7 +10,8 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import { resolveEntity, type EntityRef } from "../schema/tables.js";
+import { resolveEntity } from "../schema/tables.js";
+import type { EntityRef } from "../schema/tables.js";
 import { evaluateConsent } from "./consent.js";
 import { writeReceipt } from "./evidence.js";
 import { compileFilters, tableColumns } from "./filters.js";

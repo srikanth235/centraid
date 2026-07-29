@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { relativeTime } from "../format.js";
 import type {
@@ -205,8 +206,8 @@ export default function ImportScreen({
           `Staged ${total} row${total === 1 ? "" : "s"} — review below`
         );
         await reload();
-      } catch (err) {
-        showToast?.(err instanceof Error ? err.message : "Import failed");
+      } catch (error) {
+        showToast?.(error instanceof Error ? error.message : "Import failed");
       } finally {
         setPicking(false);
       }
@@ -223,8 +224,8 @@ export default function ImportScreen({
         showToast?.(okMsg);
         return reload();
       })
-      .catch((err: unknown) => {
-        showToast?.(err instanceof Error ? err.message : failMsg);
+      .catch((error: unknown) => {
+        showToast?.(error instanceof Error ? error.message : failMsg);
         void reload();
       });
   };
@@ -285,10 +286,10 @@ export default function ImportScreen({
               key={c.connectionId}
               c={c}
               onToggle={(id, next) => {
-                setConnectionStatus(id, next).catch((err: unknown) => {
+                setConnectionStatus(id, next).catch((error: unknown) => {
                   showToast?.(
-                    err instanceof Error
-                      ? err.message
+                    error instanceof Error
+                      ? error.message
                       : "Could not update connection"
                   );
                 });

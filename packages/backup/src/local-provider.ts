@@ -38,37 +38,34 @@ import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import {
-  emptyRegistry,
-  type Registry,
-  type RegistryTarget,
-} from "./local-provider-registry.js";
-import { FsObjectStore, type ObjectStore } from "./object-store.js";
+import { emptyRegistry } from "./local-provider-registry.js";
+import type { Registry, RegistryTarget } from "./local-provider-registry.js";
+import { FsObjectStore } from "./object-store.js";
+import type { ObjectStore } from "./object-store.js";
 import {
   inventoryFromFilesystem,
   paginateAuditEvents,
   validateProviderPolicy,
 } from "./provider-observability.js";
-import {
-  BackupProviderError,
-  type AccountStatus,
-  type BackupProvider,
-  type ProviderAuditPage,
-  type ProviderAuditQuery,
-  type ProviderCapabilities,
-  type ProviderEventKind,
-  type ProviderInventoryPage,
-  type ProviderInventoryQuery,
-  type ProviderPolicy,
-  type ProviderPolicyDeclaration,
-  type SnapshotRegistration,
-  type SnapshotRow,
-  STORE_CLASSES,
-  type StoreClass,
-  type StoreUsageReport,
-  type TargetInfo,
-  type Usage,
-  type UsageByStore,
+import { BackupProviderError, STORE_CLASSES } from "./provider.js";
+import type {
+  AccountStatus,
+  BackupProvider,
+  ProviderAuditPage,
+  ProviderAuditQuery,
+  ProviderCapabilities,
+  ProviderEventKind,
+  ProviderInventoryPage,
+  ProviderInventoryQuery,
+  ProviderPolicy,
+  ProviderPolicyDeclaration,
+  SnapshotRegistration,
+  SnapshotRow,
+  StoreClass,
+  StoreUsageReport,
+  TargetInfo,
+  Usage,
+  UsageByStore,
 } from "./provider.js";
 
 const SOFT_DELETE_WINDOW_DAYS = 14;
@@ -159,8 +156,8 @@ export class LocalBackupProvider implements BackupProvider {
         policies: parsed.policies ?? {},
         events: parsed.events ?? {},
       };
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return emptyRegistry();
     }
   }

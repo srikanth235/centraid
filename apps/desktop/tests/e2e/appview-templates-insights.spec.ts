@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { test, expect } from "@playwright/test";
+import type * as TypeImport_11i4z7t from "@playwright/test";
 
 import {
   appEntry,
@@ -15,9 +16,8 @@ import {
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
-  type MockGateway,
-  type TestEnv,
 } from "./fixtures";
+import type { MockGateway, TestEnv } from "./fixtures";
 
 /** §7 App view + in-app chat, §10 Templates / Discover, §11 Insights. */
 
@@ -36,7 +36,7 @@ test.afterEach(async () => {
 });
 
 async function openApp(
-  page: import("@playwright/test").Page,
+  page: TypeImport_11i4z7t.Page,
   id: string,
   name: string
 ): Promise<void> {

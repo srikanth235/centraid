@@ -23,10 +23,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
-import {
-  MAX_BACKGROUND_PAUSE_MS,
-  type HealthRegistry,
-} from "../serve/health-registry.js";
+import { MAX_BACKGROUND_PAUSE_MS } from "../serve/health-registry.js";
+import type { HealthRegistry } from "../serve/health-registry.js";
 import type {
   PowerContextMonitor,
   PowerContextPushBody,
@@ -73,10 +71,10 @@ export function makeResourceRouteHandler(
     let body: Record<string, unknown>;
     try {
       body = await readJson(req);
-    } catch (err) {
+    } catch (error) {
       return sendJson(res, 400, {
         error: "invalid_body",
-        message: err instanceof Error ? err.message : String(err),
+        message: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -128,10 +126,10 @@ async function handlePowerContext(
   let body: Record<string, unknown>;
   try {
     body = await readJson(req);
-  } catch (err) {
+  } catch (error) {
     return sendJson(res, 400, {
       error: "invalid_body",
-      message: err instanceof Error ? err.message : String(err),
+      message: error instanceof Error ? error.message : String(error),
     });
   }
 

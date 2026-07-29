@@ -53,10 +53,10 @@ export async function listGatewayMembers(): Promise<GatewayMember[]> {
       "list members"
     );
     return out.members ?? [];
-  } catch (err) {
-    if (err instanceof GatewayClientError && err.code === "not_found")
+  } catch (error) {
+    if (error instanceof GatewayClientError && error.code === "not_found")
       return [];
-    throw err;
+    throw error;
   }
 }
 

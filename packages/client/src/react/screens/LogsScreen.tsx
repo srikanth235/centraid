@@ -1,11 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
 
@@ -258,11 +252,11 @@ export default function LogsScreen({
           message: result.error ?? "Export failed.",
         });
       }
-    } catch (err) {
+    } catch (error) {
       if (mountedRef.current) {
         setExportState({
           kind: "error",
-          message: err instanceof Error ? err.message : String(err),
+          message: error instanceof Error ? error.message : String(error),
         });
       }
     }

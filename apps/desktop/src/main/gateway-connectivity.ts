@@ -15,8 +15,8 @@ import {
   foldVaultsStageFromHttp,
   reachGuardFailureStages,
   stage,
-  type ConnectivityReport,
 } from "./gateway-connectivity-core.js";
+import type { ConnectivityReport } from "./gateway-connectivity-core.js";
 import { resolveGateway } from "./gateway-store.js";
 import { fetchGatewayVaults } from "./gateway-vaults-core.js";
 import { handshakeGateway } from "./version-handshake.js";
@@ -86,11 +86,11 @@ export async function testGatewayConnection(
       default:
         return assembleReport([], { error: "bad_input" });
     }
-  } catch (err) {
+  } catch (error) {
     // Belt-and-suspenders: the contract promises this never throws even if
     // something upstream (a store read, a malformed input) does.
     return assembleReport([], {
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }

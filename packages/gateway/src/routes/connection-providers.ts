@@ -351,5 +351,6 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
  */
 export const OFFERED_PROVIDER_PRESETS: readonly ProviderPreset[] =
   PROVIDER_PRESETS.filter(
-    (preset) => preset.credKind === "api_key" || preset.assistOnboarding
+    (presetLocal) =>
+      presetLocal.credKind === "api_key" || presetLocal.assistOnboarding
   );

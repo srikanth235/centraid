@@ -10,26 +10,20 @@
  * See ./stop-reason.ts, ./agent-errors.ts, ./session-warm.ts, ./turn-vault-tools.ts.
  */
 
-import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
 import { promises as fs } from "node:fs";
 import type { Readable, Writable } from "node:stream";
 
 import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { lowPriorityCommand } from "../../low-priority.js";
-import {
-  acpAttachmentBlocks,
-  type ContentBlock,
-  type PromptCapabilities,
-} from "../../multimodal.js";
+import { acpAttachmentBlocks } from "../../multimodal.js";
+import type { ContentBlock, PromptCapabilities } from "../../multimodal.js";
 import { classifyAgentFailureDetail } from "./agent-errors.js";
 import { isObject } from "./content.js";
-import {
-  ACP_PROTOCOL_VERSION,
-  createAcpConnection,
-  type AcpConnection,
-  type AcpConnectionHandlers,
-} from "./json-rpc.js";
+import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
+import type { AcpConnection, AcpConnectionHandlers } from "./json-rpc.js";
 import { planLaunch } from "./launch.js";
 import {
   permissionAutoAllowNotice,
@@ -48,10 +42,12 @@ import {
   readConfigOptionUpdate,
   readCurrentConfigValue,
   SET_MODE,
-  type InitializeResult,
-  type SessionConfigOption,
-  type SessionModes,
-  type SessionSetupResult,
+} from "./session-config.js";
+import type {
+  InitializeResult,
+  SessionConfigOption,
+  SessionModes,
+  SessionSetupResult,
 } from "./session-config.js";
 import { putWarmSlot, takeWarmSlot } from "./session-warm.js";
 import { outcomeForStopReason } from "./stop-reason.js";
@@ -98,8 +94,8 @@ export async function runAcpTurn(
   let launch: { bin: string; args: string[]; env: NodeJS.ProcessEnv };
   try {
     launch = planLaunch(config, input.extraPath, pendingNotices);
-  } catch (err) {
-    const failure = classifyAgentFailureDetail(err, "", config);
+  } catch (error) {
+    const failure = classifyAgentFailureDetail(error, "", config);
     input.onEvent({
       type: "error",
       message: failure.message,
@@ -670,11 +666,11 @@ export async function runAcpTurn(
           promptResult?.stopReason === "max_tokens" ||
           promptResult?.stopReason === "max_turn_requests");
     }
-  } catch (err) {
+  } catch (error) {
     parkWarm = false;
     if (!input.abortSignal.aborted) {
       const failure = classifyAgentFailureDetail(
-        err,
+        error,
         conn.stderrTail(),
         config
       );

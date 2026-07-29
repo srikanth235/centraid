@@ -1,4 +1,4 @@
-import { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import zlib from "node:zlib";
 
 import { describe, expect, it } from "vitest";

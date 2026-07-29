@@ -1,9 +1,11 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ShellRoute } from "../../app-shell-context.js";
-import ShellApp, { type ShellNav } from "./ShellApp.js";
+import ShellApp from "./ShellApp.js";
+import type { ShellNav } from "./ShellApp.js";
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;

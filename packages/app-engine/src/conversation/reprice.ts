@@ -138,10 +138,10 @@ export function repriceLedger(
     }
     for (const turnId of affectedTurns) rederiveTurn.run(turnId, turnId);
     db.prepare("RELEASE reprice").run();
-  } catch (err) {
+  } catch (error) {
     db.prepare("ROLLBACK TO reprice").run();
     db.prepare("RELEASE reprice").run();
-    throw err;
+    throw error;
   }
 
   // Fewer rows than asked for ⇒ tail reached; wrap to re-sweep from the start.

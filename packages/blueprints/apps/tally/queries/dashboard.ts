@@ -423,8 +423,8 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       owe_total_minor: owe,
       owed_total_minor: owed,
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",

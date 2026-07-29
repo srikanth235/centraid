@@ -18,10 +18,8 @@ import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { PairingTicketStore } from "../serve/pairing-store.js";
 import { WebControlSessionStore } from "../serve/web-session-store.js";
-import {
-  makeDevicesRouteHandler,
-  type DevicesRouteDeps,
-} from "./devices-routes.js";
+import { makeDevicesRouteHandler } from "./devices-routes.js";
+import type { DevicesRouteDeps } from "./devices-routes.js";
 
 const servers: http.Server[] = [];
 const databases: GatewayDatabase[] = [];

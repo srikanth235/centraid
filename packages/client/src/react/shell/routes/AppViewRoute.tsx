@@ -1,4 +1,5 @@
-import { type JSX, type ReactNode, useState } from "react";
+import { useState } from "react";
+import type { JSX, ReactNode } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
@@ -69,9 +70,9 @@ export default function AppViewRoute({
     try {
       await updateAppMeta({ id: app.id, name: next });
       showToast(`Renamed to "${next}"`);
-    } catch (err) {
+    } catch (error) {
       showToast(
-        `Could not rename: ${err instanceof Error ? err.message : String(err)}`
+        `Could not rename: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };
@@ -98,10 +99,10 @@ export default function AppViewRoute({
       await deleteApp({ id: app.id });
       showToast(`${bundled ? "Uninstalled" : "Deleted"} "${app.name}"`);
       nav.navigate({ kind: "home" });
-    } catch (err) {
+    } catch (error) {
       const verb = bundled ? "uninstall" : "delete";
       showToast(
-        `Could not ${verb}: ${err instanceof Error ? err.message : String(err)}`
+        `Could not ${verb}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };

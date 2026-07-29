@@ -16,10 +16,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Manifest } from "../manifest/manifest.js";
 import type { Row } from "../scaffold/app.js";
-import {
-  VaultCursorEngine,
-  type VaultCursorEngineOptions,
-} from "./cursor-engine.js";
+import { VaultCursorEngine } from "./cursor-engine.js";
+import type { VaultCursorEngineOptions } from "./cursor-engine.js";
 
 function row(ref: string, triggers: Manifest["triggers"]): Row {
   const [ownerApp, id] = ref.split("/") as [string, string];

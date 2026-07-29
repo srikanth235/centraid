@@ -1,8 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive SQLite regression suite; decomposition is outside issue #417
-import sqlite3InitModule, {
-  type Database,
-  type Sqlite3Static,
-} from "@sqlite.org/sqlite-wasm";
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
+import type { Database, Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
 
 import {

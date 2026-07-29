@@ -5,7 +5,8 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { buildAssistantContext } from "./assistant-context.js";
 
 let db: VaultDb;

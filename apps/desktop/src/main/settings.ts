@@ -240,9 +240,9 @@ async function readPersisted(): Promise<PersistedSettings> {
     const raw = await fs.readFile(settingsPath(), "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     return narrow(parsed);
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.error("[centraid] failed to read settings:", err);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error("[centraid] failed to read settings:", error);
     }
     return persistedDefaults();
   }
@@ -318,8 +318,9 @@ async function resolveEffective(
   const deferLocalStart =
     p.onboardingCompletedAt === undefined && !localGatewayStartRequested;
   if (resolved.profile.kind === "local" && !resolved.url && !deferLocalStart) {
-    const { ensureLocalGateway } = await import("./local-gateway.js");
-    const handle = await ensureLocalGateway(resolved.profile.id);
+    const { ensureLocalGateway: ensureLocalGatewayLocal } =
+      await import("./local-gateway.js");
+    const handle = await ensureLocalGatewayLocal(resolved.profile.id);
     resolved = {
       ...resolved,
       url: handle.url,

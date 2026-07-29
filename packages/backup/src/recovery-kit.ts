@@ -25,7 +25,8 @@ import {
   scryptSync,
 } from "node:crypto";
 
-import { validateKeyring, type Keyring } from "./crypto.js";
+import { validateKeyring } from "./crypto.js";
+import type { Keyring } from "./crypto.js";
 import type { RecoveryKitTarget } from "./engine.js";
 import { canonicalJson } from "./manifest.js";
 

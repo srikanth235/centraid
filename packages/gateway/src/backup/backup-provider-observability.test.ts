@@ -1,17 +1,17 @@
-import {
-  BackupProviderError,
-  type BackupProvider,
-  type ObjectStore,
-  type ProviderCapabilities,
-  type ProviderInventoryObject,
+import { BackupProviderError } from "@centraid/backup";
+import type {
+  BackupProvider,
+  ObjectStore,
+  ProviderCapabilities,
+  ProviderInventoryObject,
 } from "@centraid/backup";
 import { describe, expect, test } from "vitest";
 
 import {
   collectInventory,
   pushProviderPolicy,
-  type ProviderPolicySyncState,
 } from "./backup-provider-observability.js";
+import type { ProviderPolicySyncState } from "./backup-provider-observability.js";
 
 const capabilities = (
   extra: ProviderCapabilities["capabilities"]

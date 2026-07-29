@@ -56,8 +56,8 @@ export default async function activityHandler({ input, ctx }: HandlerArgs) {
         String(b.occurred_at ?? "").localeCompare(String(a.occurred_at ?? ""))
       );
     return { events };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { events: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState, type JSX } from "react";
+import { useCallback, useMemo, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   AtlasAuthoredLink,
@@ -7,12 +8,9 @@ import type {
 } from "../../gateway-client.js";
 import Icon from "../ui/Icon.js";
 import { useOrreryCamera } from "./atlasOrreryCamera.js";
-import AtlasOrreryChart, {
-  type AtlasHighlight,
-  type Readout,
-} from "./AtlasOrreryChart.js";
+import AtlasOrreryChart from "./AtlasOrreryChart.js";
+import type { AtlasHighlight, Readout } from "./AtlasOrreryChart.js";
 import {
-  type AtlasDetailLevel,
   aggregateRelationChips,
   allocateBearings,
   bfsHops,
@@ -25,18 +23,16 @@ import {
   sortedPacks,
   visibleAtLevel,
 } from "./atlasOrreryGeometry.js";
+import type { AtlasDetailLevel } from "./atlasOrreryGeometry.js";
 import {
   useRecenterAnimation,
   usePrefersReducedMotion,
 } from "./atlasOrreryMotion.js";
 import AtlasOrreryPanel from "./AtlasOrreryPanel.js";
-import {
-  LEVELS,
-  QUESTIONS,
-  fmt,
-  type QuestionKey,
-} from "./atlasRelationsMeta.js";
-import { useSampleRows, type SampleRowsFetcher } from "./atlasSampleRows.js";
+import { LEVELS, QUESTIONS, fmt } from "./atlasRelationsMeta.js";
+import type { QuestionKey } from "./atlasRelationsMeta.js";
+import { useSampleRows } from "./atlasSampleRows.js";
+import type { SampleRowsFetcher } from "./atlasSampleRows.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
@@ -306,8 +302,7 @@ export default function AtlasRelationsTab({
 
   // Rendered edges: both endpoints visible, self-refs dropped (a glyph, not a
   // loop), and — at Simple only — ghost edges nothing fills yet are hidden.
-  const visibleSet = new Set(visibleNodes.map((n) => n.physical));
-  visibleSet.add(center);
+  const visibleSet = new Set([...visibleNodes.map((n) => n.physical), center]);
   const drawEdges = edges.filter((e) =>
     edgeVisibleAtLevel(level, e, visibleSet)
   );

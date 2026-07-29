@@ -4,9 +4,8 @@ import {
   evaluatePosture,
   parsePmset,
   PowerContextMonitor,
-  type BatteryProbeResult,
-  type CpuStealSample,
 } from "./power-context.js";
+import type { BatteryProbeResult, CpuStealSample } from "./power-context.js";
 
 describe(evaluatePosture, () => {
   const base = {
@@ -187,7 +186,7 @@ describe(PowerContextMonitor, () => {
   });
 
   it("a fresh client push supersedes the probe and marks source client-push", async () => {
-    let t = 1_000;
+    const t = 1_000;
     const m = await monitorWith({
       platform: "darwin",
       now: () => t,
@@ -280,7 +279,7 @@ describe(PowerContextMonitor, () => {
   });
 
   it("fires onDeferringChange on the first true and on each toggle, not on boot false", async () => {
-    let t = 0;
+    const t = 0;
     const changes: boolean[] = [];
     const m = await monitorWith({
       platform: "darwin",

@@ -20,6 +20,7 @@
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
@@ -29,9 +30,8 @@ import {
   parseManifest,
   pendingWebhookTriggerOf,
   webhookTriggerOf,
-  type Trigger,
-  type WebhookTrigger,
 } from "../manifest/manifest.js";
+import type { Trigger, WebhookTrigger } from "../manifest/manifest.js";
 import {
   APP_AUTOMATIONS_SUBDIR,
   list,
@@ -141,12 +141,12 @@ export async function provisionAppPendingWebhooks(
   appDir: string
 ): Promise<ProvisionedWebhook[]> {
   const autoRoot = path.join(appDir, APP_AUTOMATIONS_SUBDIR);
-  let entries: import("node:fs").Dirent[];
+  let entries: TypeImport_g9tn66.Dirent[];
   try {
     entries = await fs.readdir(autoRoot, { withFileTypes: true });
-  } catch (err) {
-    if (isEnoent(err)) return [];
-    throw err;
+  } catch (error) {
+    if (isEnoent(error)) return [];
+    throw error;
   }
   const appId = path.basename(appDir);
   const minted = await Promise.all(
@@ -473,9 +473,9 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
       });
       sendJson(res, result.accepted ? 202 : 500, { ...result, deliveryId: id });
       return true;
-    } catch (err) {
+    } catch (error) {
       sendJson(res, 500, {
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       });
       return true;
     }

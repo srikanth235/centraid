@@ -1,8 +1,9 @@
-import { type JSX } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import { mechanismLabel, type DeleteState } from "./atlasBrowseData.js";
+import { mechanismLabel } from "./atlasBrowseData.js";
+import type { DeleteState } from "./atlasBrowseData.js";
 
 import styles from "./AtlasBrowseTab.module.css";
 

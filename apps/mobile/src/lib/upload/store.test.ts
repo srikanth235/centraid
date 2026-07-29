@@ -7,7 +7,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
-import { UploadQueueStore, type NewUpload } from "./store";
+import { UploadQueueStore } from "./store";
+import type { NewUpload } from "./store";
 
 let dir: string;
 let driver: NodeSqliteFileDriver;

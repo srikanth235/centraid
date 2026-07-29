@@ -1,11 +1,11 @@
-import { type JSX } from "react";
+import type { JSX } from "react";
 
 import {
   ALERT_PRESETS,
   buildAlertHistoryRows,
   thresholdLabel,
-  type GatewayRuntimeSnapshot,
 } from "../shell/routes/gatewayData.js";
+import type { GatewayRuntimeSnapshot } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import AlertHistoryPanel from "./AlertHistoryPanel.js";
 

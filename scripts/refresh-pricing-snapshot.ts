@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   console.log(`wrote ${count} models to ${path.relative(process.cwd(), out)}`);
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exit(1);
 });

@@ -1,10 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  mergePhotoAssets,
-  sectionPhotoAssets,
-  type PhotoAsset,
-} from "./timeline-model";
+import { mergePhotoAssets, sectionPhotoAssets } from "./timeline-model";
+import type { PhotoAsset } from "./timeline-model";
 
 function measureCpuMs<T>(run: () => T): { value: T; elapsedMs: number } {
   // This package runs alongside several other affected packages in PR checks.

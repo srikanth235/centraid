@@ -2,7 +2,8 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { VaultBlobBackpressureError } from "../errors.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import {

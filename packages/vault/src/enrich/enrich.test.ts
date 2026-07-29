@@ -12,14 +12,16 @@ import {
   createGrant,
   enrollAgent,
   enrollDevice,
-  type BootstrapResult,
 } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { registerEnrichCommands } from "../commands/enrich.js";
 import { registerMediaCommands } from "../commands/media.js";
 import { registerSyncCommands } from "../commands/sync.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { readEnrichSettings, updateEnrichSettings } from "../host.js";
 import { VISION_SCHEME_URI } from "../schema/enrich.js";

@@ -13,8 +13,8 @@ import {
   applyLimitsPatch,
   evaluateStorageLimit,
   loadStorageLimits,
-  type StorageLimits,
 } from "./storage-limits.js";
+import type { StorageLimits } from "./storage-limits.js";
 
 // The owner's two limits (issue #544). The rules worth pinning are the ones a
 // wrong answer makes dangerous: a limit low enough to be unsatisfiable, a

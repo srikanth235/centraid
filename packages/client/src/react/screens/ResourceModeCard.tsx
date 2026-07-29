@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
 import PowerPostureNote from "./PowerPostureNote.js";
@@ -8,12 +9,14 @@ import {
   formatPauseUntil,
   msUntilTonight,
   PAUSE_ONE_HOUR_MS,
-  type BackgroundPauseDTO,
-  type PowerContextState,
-  type ResourceKnobPrefs,
-  type ResourceMode,
-  type ResourceProfileDTO,
-  type TunableKnobKey,
+} from "./resource-summary.js";
+import type {
+  BackgroundPauseDTO,
+  PowerContextState,
+  ResourceKnobPrefs,
+  ResourceMode,
+  ResourceProfileDTO,
+  TunableKnobKey,
 } from "./resource-summary.js";
 import ResourceCompareDialog from "./ResourceCompareDialog.js";
 import ResourceDetailsDialog from "./ResourceDetailsDialog.js";
@@ -199,8 +202,10 @@ export default function ResourceModeCard({
     try {
       const res = await onPause(durationMs);
       setPauseState({ paused: res.paused, until: res.until });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       pauseBusyRef.current = false;
       setPauseBusy(false);
@@ -215,8 +220,10 @@ export default function ResourceModeCard({
     try {
       const res = await onResume();
       setPauseState({ paused: res.paused, until: null });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       pauseBusyRef.current = false;
       setPauseBusy(false);
@@ -230,9 +237,13 @@ export default function ResourceModeCard({
         setMode(m);
         setError(null);
       })
-      .catch((err: unknown) => {
+      .catch((caughtError: unknown) => {
         if (busyRef.current) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        );
       });
   }, [loadMode]);
 
@@ -251,9 +262,11 @@ export default function ResourceModeCard({
     try {
       await saveMode(next);
       setSavedNote("Saved. Applies fully on the next gateway restart.");
-    } catch (err) {
+    } catch (caughtError) {
       setMode(prev);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       busyRef.current = false;
       setBusy(false);

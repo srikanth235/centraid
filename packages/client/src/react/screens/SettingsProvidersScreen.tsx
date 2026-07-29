@@ -1,12 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#567) the provider settings screen coordinates one atomic runner/preflight/capability/ladder state surface whose optimistic rollback must remain centralized
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type JSX,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties, JSX } from "react";
 
 import type {
   AgentCardDTO,
@@ -56,6 +50,14 @@ function schedulePoll(
         schedulePoll(timerRef, deadlineRef, loadStatus, onStatus);
     });
   }, POLL_MS);
+}
+
+function clearTimers(
+  ...timers: Array<{ current: ReturnType<typeof setTimeout> | null }>
+): void {
+  for (const timer of timers) {
+    if (timer.current) clearTimeout(timer.current);
+  }
 }
 
 /**
@@ -366,10 +368,7 @@ export default function SettingsProvidersScreen({
       apply(s);
       if (s.anyLoading) poll();
     });
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-    };
+    return () => clearTimers(timerRef, copiedTimerRef);
   }, [loadStatus, apply, poll]);
 
   const doRefresh = (

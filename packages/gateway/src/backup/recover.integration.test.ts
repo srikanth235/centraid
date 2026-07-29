@@ -8,8 +8,8 @@ import {
   openRemoteBackupProvider,
   SNAPSHOT_FORMAT_V2,
   wrapRecoveryKit,
-  type WrappedRecoveryKitDocument,
 } from "@centraid/backup";
+import type { WrappedRecoveryKitDocument } from "@centraid/backup";
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -374,10 +374,10 @@ describe("backup/recover", () => {
         format: SNAPSHOT_FORMAT_V2,
         appMeta: {},
       });
-    } catch (err) {
+    } catch (error) {
       fenced =
-        err instanceof BackupProviderError &&
-        err.code === "conflict_generation";
+        error instanceof BackupProviderError &&
+        error.code === "conflict_generation";
     }
     expect(fenced).toBe(true);
 

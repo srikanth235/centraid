@@ -33,14 +33,14 @@ import {
   shareToVault,
   unshareFromVault,
   VaultShareError,
-  type ShareVaultRef,
 } from "@centraid/vault";
+import type { ShareVaultRef } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
-import {
-  canWrite,
-  type EnrollmentStore,
-  type GrantableRole,
+import { canWrite } from "../serve/enrollment-store.js";
+import type {
+  EnrollmentStore,
+  GrantableRole,
 } from "../serve/enrollment-store.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
@@ -237,11 +237,14 @@ export function makeShareRouteHandler(deps: ShareRouteDeps): RouteHandler {
         sharedByMember: memberId ?? "host-custody",
       });
       return sendJson(res, 200, result);
-    } catch (err) {
-      if (err instanceof VaultShareError) {
-        return sendJson(res, 409, { error: err.code, message: err.message });
+    } catch (error) {
+      if (error instanceof VaultShareError) {
+        return sendJson(res, 409, {
+          error: error.code,
+          message: error.message,
+        });
       }
-      throw err;
+      throw error;
     }
   };
 }

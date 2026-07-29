@@ -22,16 +22,16 @@
 
 import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
 
-import {
-  stableFollowupIntentId,
-  toUploadFollowup,
-  type NewUploadFollowup,
-  type PersistedUploadFollowupRow,
-  type UploadFollowup,
-  type UploadFollowupFactory,
+import { stableFollowupIntentId, toUploadFollowup } from "./followup-record";
+import type {
+  NewUploadFollowup,
+  PersistedUploadFollowupRow,
+  UploadFollowup,
+  UploadFollowupFactory,
 } from "./followup-record";
 import { migrateUploadSchema, SCHEMA_VERSION } from "./store-migrations";
-import { toItem, toPart, type ItemRow, type PartRow } from "./store-rows";
+import { toItem, toPart } from "./store-rows";
+import type { ItemRow, PartRow } from "./store-rows";
 
 export type {
   NewUploadFollowup,

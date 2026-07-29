@@ -6,8 +6,10 @@ import { beforeEach, describe, expect, test } from "vitest";
 
 import { sweepBlobStaging } from "../blob/staging.js";
 import { blobUriFor, sha256OfBytes } from "../blob/store.js";
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import type { Identity } from "../gateway/types.js";
 import { parseMbox } from "./mbox.js";
 import { PUBLISHERS } from "./publishers.js";

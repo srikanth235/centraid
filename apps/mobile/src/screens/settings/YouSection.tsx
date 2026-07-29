@@ -7,7 +7,8 @@
 import React, { useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
-import { radii, spacing, t, useTheme, type ThemeColors } from "../../kit/theme";
+import { radii, spacing, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import {
   PROFILE_COLORS,
   getProfileColor,

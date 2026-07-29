@@ -18,7 +18,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { createElement } from "react";
-import { createRoot, type Root as ReactRoot } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root as ReactRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,

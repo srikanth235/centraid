@@ -39,11 +39,8 @@ import { BackupService } from "../backup/backup-service.js";
 import { deriveBackupSourceInstanceId } from "../backup/backup-state.js";
 import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
 import { HealthRegistry } from "../serve/health-registry.js";
-import {
-  openVaultRegistry,
-  type VaultInfo,
-  type VaultRegistry,
-} from "../serve/vault-registry.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import type { VaultInfo, VaultRegistry } from "../serve/vault-registry.js";
 import { daemonKeyStore } from "./key-store.js";
 import { daemonLayoutFor } from "./paths.js";
 import { resolveDaemonConfig } from "./resolve-config.js";
@@ -284,9 +281,9 @@ export async function commandBackup(
           try {
             const rows = await service.listSnapshots(vaultId);
             for (const row of rows) printJson({ vaultId, ...row });
-          } catch (err) {
+          } catch (error) {
             process.stderr.write(
-              `centraid-gateway: ${err instanceof Error ? err.message : String(err)}\n`
+              `centraid-gateway: ${error instanceof Error ? error.message : String(error)}\n`
             );
           }
         });

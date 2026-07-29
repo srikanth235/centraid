@@ -8,10 +8,12 @@ import {
   openWalSegment,
   sealManifest,
   sealWalSegment,
-  type Keyring,
-  type ManifestEntry,
-  type ManifestPublic,
-  type WalSegmentAddress,
+} from "./index.ts";
+import type {
+  Keyring,
+  ManifestEntry,
+  ManifestPublic,
+  WalSegmentAddress,
 } from "./index.ts";
 
 interface GoldenFixture {

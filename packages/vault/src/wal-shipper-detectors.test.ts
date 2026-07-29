@@ -30,18 +30,16 @@ import {
   sealWalSegment,
   WAL_HEADER_BYTES,
   walSalts,
-  type WalDbName,
 } from "@centraid/backup";
+import type { WalDbName } from "@centraid/backup";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "./bootstrap.js";
-import { openVaultDb, type VaultDb } from "./db.js";
-import {
-  WalShipper,
-  type UploadableWalFile,
-  type WalShipperOptions,
-} from "./wal-shipper.js";
+import { openVaultDb } from "./db.js";
+import type { VaultDb } from "./db.js";
+import { WalShipper } from "./wal-shipper.js";
+import type { UploadableWalFile, WalShipperOptions } from "./wal-shipper.js";
 
 let root: string;
 let vaultDir: string;

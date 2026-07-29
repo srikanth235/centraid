@@ -35,8 +35,8 @@ export function makeHealthRouteHandler(health: HealthRegistry): RouteHandler {
     }
     try {
       return sendJson(res, 200, await health.snapshot());
-    } catch (err) {
-      return sendError(res, err);
+    } catch (error) {
+      return sendError(res, error);
     }
   };
 }

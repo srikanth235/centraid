@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_oycips from "../../gateway-client-core.js";
 // The inline kit is imported FIRST so its `./suppress-served-ask` side effect
 // runs before the real kit module (it suppresses kit.ts's auto-mounting Ask
 // IIFE). These suites exercise the authed vault overrides — blob staging, the
@@ -19,11 +20,11 @@ type AttachHandlers = Parameters<typeof wireAttachInput>[2];
 // gateway-client-core touches window.CentraidApi at module load and is the one
 // choke point every override routes through; stub it and capture the calls.
 const { doFetch, readJson } = vi.hoisted(() => ({
-  doFetch: vi.fn<typeof import("../../gateway-client-core.js").doFetch>(),
+  doFetch: vi.fn<typeof TypeImport_oycips.doFetch>(),
   readJson: vi.fn<(res: Response, op: string) => Promise<unknown>>(),
 }));
 vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
-  auth: vi.fn<typeof import("../../gateway-client-core.js").auth>(async () => ({
+  auth: vi.fn<typeof TypeImport_oycips.auth>(async () => ({
     baseUrl: "https://gw.test",
     token: "tok",
   })),

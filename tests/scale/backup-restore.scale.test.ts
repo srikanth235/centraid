@@ -8,8 +8,8 @@ import {
   createSnapshot,
   LocalBackupProvider,
   restoreSnapshot,
-  type SourceEntry,
 } from "@centraid/backup";
+import type { SourceEntry } from "@centraid/backup";
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";

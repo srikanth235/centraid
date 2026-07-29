@@ -7,10 +7,8 @@ import path from "node:path";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
-import {
-  makeJournalDbProvider,
-  type DatabaseProvider,
-} from "../stores/gateway-db.js";
+import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import type { DatabaseProvider } from "../stores/gateway-db.js";
 import { ConversationStore } from "./store.js";
 
 export function newProvider(): DatabaseProvider {

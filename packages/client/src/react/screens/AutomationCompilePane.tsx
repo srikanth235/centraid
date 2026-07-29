@@ -1,4 +1,5 @@
-import { type JSX, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   CompileAttemptDTO,
@@ -7,9 +8,8 @@ import type {
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
-import AutomationCompileArtifacts, {
-  type ArtifactFile,
-} from "./AutomationCompileArtifacts.js";
+import AutomationCompileArtifacts from "./AutomationCompileArtifacts.js";
+import type { ArtifactFile } from "./AutomationCompileArtifacts.js";
 
 import au from "../styles/automation.module.css";
 import styles from "./AutomationCompilePane.module.css";

@@ -5,6 +5,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { localGatewayDataDir } from "./gateway-paths.js";
+import type * as TypeImport_lwt46p from "./gateway-secrets.js";
 import {
   addGateway,
   listGateways,
@@ -12,14 +13,14 @@ import {
   resolveGateway,
   updateGatewayRelayHint,
 } from "./gateway-store.js";
+import type * as TypeImport_1pyf3fx from "./iroh-dialer.js";
 
 const fixture = vi.hoisted(() => ({
   file: "",
   localDataDir: "",
-  clearCredentials:
-    vi.fn<typeof import("./gateway-secrets.js").clearGatewayCredentials>(),
-  closeDialer: vi.fn<typeof import("./iroh-dialer.js").closeIrohDialer>(),
-  ensureProxy: vi.fn<typeof import("./iroh-dialer.js").ensureIrohProxy>(
+  clearCredentials: vi.fn<typeof TypeImport_lwt46p.clearGatewayCredentials>(),
+  closeDialer: vi.fn<typeof TypeImport_1pyf3fx.closeIrohDialer>(),
+  ensureProxy: vi.fn<typeof TypeImport_1pyf3fx.ensureIrohProxy>(
     async () => "http://127.0.0.1:43123"
   ),
 }));

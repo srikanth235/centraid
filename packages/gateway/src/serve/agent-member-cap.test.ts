@@ -18,7 +18,8 @@ import { describe, afterEach, expect, test } from "vitest";
 
 import type { DeviceRole } from "./enrollment-store.js";
 import { runWithVaultContext } from "./vault-context.js";
-import { openVaultPlane, type VaultPlane } from "./vault-plane.js";
+import { openVaultPlane } from "./vault-plane.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 const logger = {
   info: () => undefined,

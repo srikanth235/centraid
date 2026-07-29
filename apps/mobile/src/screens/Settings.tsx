@@ -20,14 +20,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
-import {
-  family,
-  radii,
-  spacing,
-  t,
-  useTheme,
-  type ThemeColors,
-} from "../kit/theme";
+import { family, radii, spacing, t, useTheme } from "../kit/theme";
+import type { ThemeColors } from "../kit/theme";
 import {
   hydrateGatewayToken,
   hydrateGatewayUrl,
@@ -43,8 +37,8 @@ import {
   pair,
   subscribeTunnelStatus,
   unpair,
-  type TunnelStatus,
 } from "../lib/phone-link";
+import type { TunnelStatus } from "../lib/phone-link";
 import type { SettingsScreenProps } from "../navigation";
 import AppearanceSection from "./settings/AppearanceSection";
 import SettingsSection from "./settings/SettingsSection";
@@ -133,8 +127,8 @@ export default function SettingsScreen({
         setDesktopName(name);
         setPasteTicket("");
       })
-      .catch((err: unknown) => {
-        setPairError(err instanceof Error ? err.message : String(err));
+      .catch((error: unknown) => {
+        setPairError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => setPairing(false));
   }, []);

@@ -16,8 +16,8 @@ import {
   applyBatchTx,
   ensureConnectionTx,
   stageBatchTx,
-  type StageCandidate,
 } from "../ingest/staging.js";
+import type { StageCandidate } from "../ingest/staging.js";
 import { sealedColumnsOf } from "../schema/sealed.js";
 
 /**

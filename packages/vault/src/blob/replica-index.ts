@@ -139,9 +139,9 @@ export class ReplicaIndex {
       for (const sha of remoteShas)
         if (!known.has(sha)) ins.run(sha, now, sizeOf(sha), store);
       this.db.exec("COMMIT");
-    } catch (err) {
+    } catch (error) {
       this.db.exec("ROLLBACK");
-      throw err;
+      throw error;
     }
   }
 }
@@ -178,9 +178,9 @@ export class AccessIndex {
       );
       for (const [sha, v] of this.pending) up.run(sha, v.at, v.size);
       this.db.exec("COMMIT");
-    } catch (err) {
+    } catch (error) {
       this.db.exec("ROLLBACK");
-      throw err;
+      throw error;
     }
     this.pending.clear();
   }

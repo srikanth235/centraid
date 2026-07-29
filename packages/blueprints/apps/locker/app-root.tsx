@@ -11,8 +11,8 @@ import {
   useReducer,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
+import type { ReactNode } from "react";
 
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
@@ -262,7 +262,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         bump();
       }
     },
-    [logic]
+    []
   );
 
   // Seed the narrow layout BEFORE the first paint. The served app sets

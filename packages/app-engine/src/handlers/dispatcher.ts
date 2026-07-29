@@ -24,9 +24,11 @@ import {
   findAction,
   findQuery,
   parseManifest,
-  type Manifest,
-  type ManifestActionEntry,
-  type ManifestQueryEntry,
+} from "../registry/manifest.js";
+import type {
+  Manifest,
+  ManifestActionEntry,
+  ManifestQueryEntry,
 } from "../registry/manifest.js";
 import type { Registry } from "../registry/registry.js";
 import type { RegistryEntry } from "../types.js";
@@ -73,10 +75,12 @@ export type ToolResult = ToolErrorResult | ToolSuccessResult;
 function errorResult(
   code: ToolErrorCode,
   message: string,
-  path?: string
+  pathLocal?: string
 ): ToolErrorResult {
   const structured: ToolErrorContent =
-    path === undefined ? { code, message } : { code, message, path };
+    pathLocal === undefined
+      ? { code, message }
+      : { code, message, path: pathLocal };
   return {
     isError: true,
     content: [{ type: "text", text: JSON.stringify(structured) }],
@@ -246,10 +250,10 @@ export class Dispatcher {
             }
             const manifest = await this.loadManifest(codeDir);
             return { id: entry.id, manifest };
-          } catch (err) {
+          } catch (error) {
             return {
               id: entry.id,
-              error: err instanceof Error ? err.message : String(err),
+              error: error instanceof Error ? error.message : String(error),
             };
           }
         })
@@ -271,8 +275,8 @@ export class Dispatcher {
     let manifest: Manifest;
     try {
       manifest = await this.loadManifest(codeDir);
-    } catch (err) {
-      return manifestErrorToResult(app, err);
+    } catch (error) {
+      return manifestErrorToResult(app, error);
     }
 
     if (action === undefined && query === undefined) {
@@ -353,8 +357,8 @@ export class Dispatcher {
     let manifest: Manifest;
     try {
       manifest = await this.loadManifest(codeDir);
-    } catch (err) {
-      return manifestErrorToResult(appId, err);
+    } catch (error) {
+      return manifestErrorToResult(appId, error);
     }
     // If the caller mistakenly addressed a query through write, surface
     // WRONG_KIND explicitly — better than UNKNOWN_ACTION which would
@@ -455,8 +459,8 @@ export class Dispatcher {
     let manifest: Manifest;
     try {
       manifest = await this.loadManifest(codeDir);
-    } catch (err) {
-      return manifestErrorToResult(appId, err);
+    } catch (error) {
+      return manifestErrorToResult(appId, error);
     }
     if (findAction(manifest, queryName) && !findQuery(manifest, queryName)) {
       return errorResult(
@@ -518,10 +522,10 @@ export class Dispatcher {
     let validate: ValidateFunction;
     try {
       validate = this.validatorFor(codeDir, kind, entry.name, entry.input);
-    } catch (err) {
+    } catch (error) {
       return errorResult(
         "INVALID_MANIFEST",
-        `manifest ${kind} "${entry.name}" has an invalid input schema: ${err instanceof Error ? err.message : String(err)}`
+        `manifest ${kind} "${entry.name}" has an invalid input schema: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     // Treat undefined as "no input" — Ajv expects an explicit value, but
@@ -531,12 +535,12 @@ export class Dispatcher {
     if (validate(data)) return undefined;
     const errs = validate.errors ?? [];
     const first = errs[0];
-    const path = first?.instancePath || "";
+    const pathLocal = first?.instancePath || "";
     const msg = first?.message ?? "input validation failed";
     return errorResult(
       "INVALID_INPUT",
       `${kind} "${entry.name}" rejected input: ${msg}`,
-      path || undefined
+      pathLocal || undefined
     );
   }
 }

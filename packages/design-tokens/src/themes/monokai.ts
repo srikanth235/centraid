@@ -2,7 +2,8 @@
 // accent; yellow-green (#a6e22e) is the success/string color.
 
 import { palette } from "../palette";
-import { BEZEL, BEZEL_INNER, type Theme } from "./shared";
+import { BEZEL, BEZEL_INNER } from "./shared";
+import type { Theme } from "./shared";
 
 export const monokaiTheme: Theme = {
   kind: "dark",

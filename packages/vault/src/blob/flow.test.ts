@@ -6,13 +6,16 @@
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerAttachmentCommands } from "../commands/attachments.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { registerMediaCommands } from "../commands/media.js";
 import { registerTaskCommands } from "../commands/tasks.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { sweepBlobStaging } from "./staging.js";
 import { blobUriFor, sha256OfBytes } from "./store.js";

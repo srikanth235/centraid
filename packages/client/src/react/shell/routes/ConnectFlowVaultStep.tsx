@@ -2,12 +2,8 @@ import type { Dispatch, JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
 import Icon from "../../ui/Icon.js";
-import {
-  canCommitConnectFlow,
-  vaultCapability,
-  type ConnectFlowEvent,
-  type ConnectFlowState,
-} from "./connectFlow-core.js";
+import { canCommitConnectFlow, vaultCapability } from "./connectFlow-core.js";
+import type { ConnectFlowEvent, ConnectFlowState } from "./connectFlow-core.js";
 import { PROFILE_COLORS } from "./SpaceModal.js";
 
 import a11y from "../../styles/a11y.module.css";

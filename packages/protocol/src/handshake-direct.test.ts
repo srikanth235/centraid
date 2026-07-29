@@ -159,23 +159,23 @@ describe("handshakeGateway network branches", () => {
       reason: "malformed",
     });
 
-    const good = vi.fn<(...args: unknown[]) => unknown>(
-      async (url: string, init?: { headers?: Record<string, string> }) => {
-        expect(url).toContain(ROUTES.gatewayInfo);
-        expect(init?.headers?.Authorization).toBe("Bearer tok");
-        return {
-          ok: true,
-          status: 200,
-          json: async () =>
-            buildGatewayInfoPayload({
-              instanceId: "i",
-              startedAt: 1,
-              uptimeMs: 2,
-              authenticated: true,
-            }),
-        };
-      }
-    );
+    const good = vi.fn<typeof fetch>(async (url, init) => {
+      expect(url).toContain(ROUTES.gatewayInfo);
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        "Bearer tok"
+      );
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          buildGatewayInfoPayload({
+            instanceId: "i",
+            startedAt: 1,
+            uptimeMs: 2,
+            authenticated: true,
+          }),
+      } as Response;
+    });
     const result = await handshakeGateway("http://gw", "tok", good as never);
     expect(result.ok).toBe(true);
     if (!result.ok) return;

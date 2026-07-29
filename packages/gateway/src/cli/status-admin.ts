@@ -24,16 +24,16 @@ import path from "node:path";
 import { handshakeGateway } from "@centraid/protocol";
 import { endpointIdForSecret } from "@centraid/tunnel";
 
-import {
-  openVaultRegistry,
-  type FailedMount,
-} from "../serve/vault-registry.js";
-import { jsonFail, runJson, type Fail } from "./json-cli.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import type { FailedMount } from "../serve/vault-registry.js";
+import { jsonFail, runJson } from "./json-cli.js";
+import type { Fail } from "./json-cli.js";
 import { daemonKeyStore } from "./key-store.js";
 import { landlordBearerForEndpointSecret } from "./landlord-auth.js";
 import { daemonLayoutFor } from "./paths.js";
 import { resolveDaemonConfig } from "./resolve-config.js";
-import { queryServiceStatus, type ServiceStatusInfo } from "./service-admin.js";
+import { queryServiceStatus } from "./service-admin.js";
+import type { ServiceStatusInfo } from "./service-admin.js";
 
 const quietLogger = {
   info: () => undefined,
@@ -196,10 +196,10 @@ export async function commandStatus(
       return;
     }
 
-    const lines = [`service: ${describeService(service)}`];
-    lines.push(
-      `data dir: ${dataDir.dataDir} (${dataDir.exists ? "exists" : "missing"})`
-    );
+    const lines = [
+      `service: ${describeService(service)}`,
+      `data dir: ${dataDir.dataDir} (${dataDir.exists ? "exists" : "missing"})`,
+    ];
     if (dataDir.endpointId) lines.push(`endpoint: ${dataDir.endpointId}`);
     lines.push(`daemon: ${dataDir.daemonRunning ? "running" : "not running"}`);
     if (dataDir.vaultCount !== undefined)

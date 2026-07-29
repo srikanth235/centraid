@@ -3,8 +3,8 @@ import {
   OnlineOnlyError,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
-  type RebootstrapReason,
 } from "./errors.js";
+import type { RebootstrapReason } from "./errors.js";
 import { applyOptimisticMutations, evaluateReplicaRead } from "./query.js";
 import {
   REPLICA_LOCAL_SEARCH,
@@ -15,22 +15,24 @@ import {
 import {
   REPLICA_PROTOCOL_VERSION,
   REPLICA_SYNTHETIC_PRIMARY_KEY,
-  type ApplyChangesResult,
-  type OptimisticMutation,
-  type ReplicaBootstrapHeader,
-  type ReplicaChangeBatch,
-  type ReplicaCursor,
-  type ReplicaEntitySchema,
-  type ReplicaInvalidation,
-  type ReplicaReadRequest,
-  type ReplicaReadWireResult,
-  type ReplicaRow,
-  type ReplicaRowEnvelope,
-  type ReplicaSearchRequest,
-  type ReplicaSearchWireResult,
-  type ReplicaShape,
-  type ReplicaSnapshot,
-  type ReplicaSnapshotRow,
+} from "./types.js";
+import type {
+  ApplyChangesResult,
+  OptimisticMutation,
+  ReplicaBootstrapHeader,
+  ReplicaChangeBatch,
+  ReplicaCursor,
+  ReplicaEntitySchema,
+  ReplicaInvalidation,
+  ReplicaReadRequest,
+  ReplicaReadWireResult,
+  ReplicaRow,
+  ReplicaRowEnvelope,
+  ReplicaSearchRequest,
+  ReplicaSearchWireResult,
+  ReplicaShape,
+  ReplicaSnapshot,
+  ReplicaSnapshotRow,
 } from "./types.js";
 
 /** Values the store binds to `?` placeholders: no blobs, no booleans (mapped to 0/1). */

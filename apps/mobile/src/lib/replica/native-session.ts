@@ -11,26 +11,28 @@ import {
   ReplicaCoordinator,
   ReplicaProtocolError,
   ReplicaTransportError,
-  type EnqueueIntentInput,
-  type GatewayAuth,
-  type IntentOutcome,
-  type OptimisticMutation,
-  type ReplicaChangeFeedAdapter,
-  type ReplicaCursor,
-  type ReplicaDigest,
-  type ReplicaFetcher,
-  type ReplicaIdFactory,
-  type ReplicaIntent,
-  type ReplicaInvalidation,
-  type ReplicaReadRequest,
-  type ReplicaReadWireResult,
-  type ReplicaSearchRequest,
-  type ReplicaSearchWireResult,
-  type ReplicaShape,
-  type ReplicaSqliteDriver,
-  type ReplicaStatus,
-  type ReplicaValue,
   validateOptimisticMutation,
+} from "@centraid/client/replica/native";
+import type {
+  EnqueueIntentInput,
+  GatewayAuth,
+  IntentOutcome,
+  OptimisticMutation,
+  ReplicaChangeFeedAdapter,
+  ReplicaCursor,
+  ReplicaDigest,
+  ReplicaFetcher,
+  ReplicaIdFactory,
+  ReplicaIntent,
+  ReplicaInvalidation,
+  ReplicaReadRequest,
+  ReplicaReadWireResult,
+  ReplicaSearchRequest,
+  ReplicaSearchWireResult,
+  ReplicaShape,
+  ReplicaSqliteDriver,
+  ReplicaStatus,
+  ReplicaValue,
 } from "@centraid/client/replica/native";
 
 import { NativeReplicaStore } from "./native-replica-store";
@@ -604,7 +606,7 @@ export async function createNativeReplicaSession(
     idFactory ??= nativeReplicaIdFactory;
   }
   const intents = new IntentQueue(intentStore, { digest, idFactory });
-  let session: NativeReplicaSession | undefined;
+  let session: NativeReplicaSession | undefined = undefined;
   const coordinator = new ReplicaCoordinator(store, intents, {
     changeFeed: feed,
     pullChanges: (cursor, signal) => {

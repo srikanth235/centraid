@@ -30,12 +30,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { deriveBackupSourceInstanceId } from "../backup/backup-state.js";
-import {
-  discoverRecovery,
-  recover,
-  type RecoverPhase,
-  type RecoveryDiscovery,
-} from "../backup/recover.js";
+import { discoverRecovery, recover } from "../backup/recover.js";
+import type { RecoverPhase, RecoveryDiscovery } from "../backup/recover.js";
 import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
 import { formatBytes } from "./backup-admin.js";
 import { daemonKeyStore } from "./key-store.js";
@@ -167,9 +163,9 @@ export async function commandRecover(
     let kitDocument: unknown;
     try {
       kitDocument = JSON.parse(readFileSync(parsed.kit, "utf8"));
-    } catch (err) {
+    } catch (error) {
       fail(
-        `could not read recovery kit "${parsed.kit}": ${err instanceof Error ? err.message : String(err)}`,
+        `could not read recovery kit "${parsed.kit}": ${error instanceof Error ? error.message : String(error)}`,
         2
       );
     }
@@ -185,8 +181,8 @@ export async function commandRecover(
         ...(parsed.vault === undefined ? {} : { vaultId: parsed.vault }),
         ...(parsed.atMs === undefined ? {} : { at: parsed.atMs }),
       });
-    } catch (err) {
-      fail(err instanceof Error ? err.message : String(err), 2);
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error), 2);
     }
     printFacts(discovery);
 

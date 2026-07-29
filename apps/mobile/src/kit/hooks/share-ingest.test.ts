@@ -5,12 +5,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
-import {
-  ShareIntentGate,
-  processShareIntent,
-  type ShareIngestPorts,
-  type SharedIntentFileLike,
-} from "./share-ingest";
+import { ShareIntentGate, processShareIntent } from "./share-ingest";
+import type { ShareIngestPorts, SharedIntentFileLike } from "./share-ingest";
 
 const session = {} as NativeReplicaSession;
 const GATEWAY = "http://127.0.0.1:8787";

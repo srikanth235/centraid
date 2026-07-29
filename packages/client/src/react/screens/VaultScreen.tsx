@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { relativeTime } from "../format.js";
 import type {
@@ -280,8 +281,8 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
           onAccessChanged?.();
           return reload();
         })
-        .catch((err: unknown) => {
-          showToast?.(err instanceof Error ? err.message : failMsg);
+        .catch((error: unknown) => {
+          showToast?.(error instanceof Error ? error.message : failMsg);
           void reload();
         });
     },

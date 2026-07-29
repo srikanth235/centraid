@@ -155,10 +155,10 @@ async function fetchOrThrow(
 ): Promise<Response> {
   try {
     return await fetch(href, init);
-  } catch (err) {
+  } catch (error) {
     throw new GatewayError(
       "unreachable",
-      `Could not reach the gateway: ${err instanceof Error ? err.message : String(err)}`
+      `Could not reach the gateway: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }

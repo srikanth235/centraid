@@ -30,12 +30,14 @@ import {
   parseTurnAttachmentRefs,
   resolveTurnAttachments,
   validateTurnAttachmentRefs,
-  type ConversationHistoryStore,
-  type ConversationRunner,
-  type ModelSubsystem,
-  type RunnerKind,
-  type TurnAttachmentRef,
-  type TurnLimiter,
+} from "@centraid/app-engine";
+import type {
+  ConversationHistoryStore,
+  ConversationRunner,
+  ModelSubsystem,
+  RunnerKind,
+  TurnAttachmentRef,
+  TurnLimiter,
 } from "@centraid/app-engine";
 
 import { assistantCwd } from "../runs/assistant-conversation-runner.js";
@@ -209,12 +211,12 @@ export function makeAssistantRouteHandler(
             additionalDirectories = await parseAdditionalDirectories(
               body.additionalDirectories
             );
-          } catch (err) {
+          } catch (error) {
             return sendJson(res, 400, {
               error: "bad_request",
               message:
-                err instanceof Error
-                  ? err.message
+                error instanceof Error
+                  ? error.message
                   : "Invalid additional directory.",
             });
           }
@@ -292,14 +294,14 @@ export function makeAssistantRouteHandler(
         error: "not_found",
         message: "unknown assistant route",
       });
-    } catch (err) {
+    } catch (error) {
       if (res.headersSent) {
         if (!res.writableEnded) res.end();
         return true;
       }
       return sendJson(res, 500, {
         error: "internal_error",
-        message: err instanceof Error ? err.message : String(err),
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   };

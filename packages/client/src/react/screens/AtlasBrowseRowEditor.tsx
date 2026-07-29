@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState, type FormEvent, type JSX } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent, JSX } from "react";
 
 import {
   browseInsertRow,
   browseRefSearch,
   browseUpdateRow,
-  type BrowseColumn,
-  type BrowseColumnsResult,
-  type BrowseRefHit,
+} from "../../gateway-client.js";
+import type {
+  BrowseColumn,
+  BrowseColumnsResult,
+  BrowseRefHit,
 } from "../../gateway-client.js";
 import Icon from "../ui/Icon.js";
 import {
@@ -14,8 +17,8 @@ import {
   insertableColumns,
   isNumericColumn,
   pkColumns,
-  type EditorState,
 } from "./atlasBrowseData.js";
+import type { EditorState } from "./atlasBrowseData.js";
 
 import styles from "./AtlasBrowseTab.module.css";
 

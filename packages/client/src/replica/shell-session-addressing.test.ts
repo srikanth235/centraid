@@ -1,26 +1,26 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+import type * as TypeImport_1nb0oqa from "../gateway-client-vault.js";
+import type * as TypeImport_1vwuba6 from "./shell-session.js";
+
 // The client may leave the vault unaddressed ("let the gateway pick", #289).
 // HTTP tolerates that; the replica cannot — it keys its local store by
 // (gatewayId, vaultId). These cover the resolve that fills the gap.
 
-const vaultStatus =
-  vi.fn<typeof import("../gateway-client-vault.js").vaultStatus>();
+const vaultStatus = vi.fn<typeof TypeImport_1nb0oqa.vaultStatus>();
 vi.mock(import("../gateway-client-vault.js"), () => ({
   vaultStatus: () => vaultStatus(),
 }));
 
-const status = (
-  vaultId: string
-): import("../gateway-client-vault.js").VaultStatus => ({
+const status = (vaultId: string): TypeImport_1nb0oqa.VaultStatus => ({
   vaultId,
   name: "Personal",
   ownerPartyId: "party-1",
   fresh: false,
 });
 
-let addressedGatewayAuth: typeof import("./shell-session.js").addressedGatewayAuth;
-let replicaIdentityForGatewayAuth: typeof import("./shell-session.js").replicaIdentityForGatewayAuth;
+let addressedGatewayAuth: typeof TypeImport_1vwuba6.addressedGatewayAuth;
+let replicaIdentityForGatewayAuth: typeof TypeImport_1vwuba6.replicaIdentityForGatewayAuth;
 let gatewayAuth: Record<string, unknown>;
 
 describe("shell-session-addressing", () => {

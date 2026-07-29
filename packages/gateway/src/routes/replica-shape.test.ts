@@ -12,7 +12,8 @@ import {
 } from "@centraid/vault";
 import { describe, afterEach, expect, test } from "vitest";
 
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
 import { projectReplicaPage } from "./replica-projection.js";
 import {
   buildReplicaShapes,

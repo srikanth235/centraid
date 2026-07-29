@@ -7,7 +7,8 @@ import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 
-import { useTheme, type ThemeColors } from "../../kit/theme";
+import { useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 
 export interface ColorSwatchRowProps {
   value: string;

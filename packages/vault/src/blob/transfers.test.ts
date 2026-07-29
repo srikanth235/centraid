@@ -8,7 +8,8 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { readBackupPolicy } from "../backup-policy.js";
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { BlobCache } from "./cache.js";
 import { BlobContentKeyRegistry } from "./content-keys.js";
 import type { RemoteTier } from "./custody-types.js";

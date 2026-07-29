@@ -25,8 +25,8 @@ import {
   InCloudOriginalError,
   liveVideoUri,
   openDeviceOriginal,
-  type DeviceOriginal,
 } from "./device-media";
+import type { DeviceOriginal } from "./device-media";
 import { imageSource } from "./media-source";
 import PhotosAskView from "./PhotosAskView";
 import PhotosCollectionsView from "./PhotosCollectionsView";
@@ -133,8 +133,8 @@ export default function PhotosHome({
         let original: DeviceOriginal;
         try {
           original = await openDeviceOriginal(asset.localId!);
-        } catch (reason) {
-          if (!(reason instanceof InCloudOriginalError)) throw reason;
+        } catch (error) {
+          if (!(error instanceof InCloudOriginalError)) throw error;
           inCloud.add(asset.id);
           return backupNext(index + 1);
         }

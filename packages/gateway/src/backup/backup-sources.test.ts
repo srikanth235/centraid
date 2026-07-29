@@ -12,7 +12,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { ReplicaIndex } from "@centraid/vault";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
 import { run } from "../worktree-store/git.js";
 import { WorktreeStore } from "../worktree-store/worktree-store.js";
 import { assembleSourceEntries } from "./backup-sources.js";

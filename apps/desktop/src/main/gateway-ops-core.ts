@@ -62,10 +62,10 @@ async function fetchJsonText(
         ...init.headers,
       },
     });
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
   if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
@@ -131,10 +131,10 @@ export async function exportGatewayDiagnostics(
   try {
     await deps.writeFile(filePath, fetched.text);
     return { ok: true, path: filePath };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -169,10 +169,10 @@ export async function exportGatewayRecoveryKit(
   try {
     await deps.writeFile(filePath, fetched.text);
     return { ok: true, path: filePath };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

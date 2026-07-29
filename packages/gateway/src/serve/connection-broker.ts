@@ -40,7 +40,8 @@ import type {
   ConnectionBinding,
   ResolveConnection,
 } from "@centraid/automation";
-import { sealAad, unsealValue, type InvokeOutcome } from "@centraid/vault";
+import { sealAad, unsealValue } from "@centraid/vault";
+import type { InvokeOutcome } from "@centraid/vault";
 
 import { PROVIDER_PRESETS } from "../routes/connection-providers.js";
 import {
@@ -48,8 +49,8 @@ import {
   assistCallbackUrl,
   assistScopes,
   validateAssistOAuthConfig,
-  type AssistOAuthConfig,
 } from "./assist-oauth.js";
+import type { AssistOAuthConfig } from "./assist-oauth.js";
 import type { PollJsonResponse } from "./automation-event-sources.js";
 import {
   authDeadError,
@@ -527,10 +528,10 @@ export class ConnectionBroker {
         onAuthDead,
         limit,
       } satisfies ConnectionAuth;
-    } catch (err) {
+    } catch (error) {
       // AuthDead already flipped needs-auth; either way this fire skips.
       return {
-        refused: `connection "${connector.label}" has no usable token: ${err instanceof Error ? err.message : String(err)}`,
+        refused: `connection "${connector.label}" has no usable token: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   };
@@ -703,9 +704,9 @@ export class ConnectionBroker {
         limit,
         allowWrites: true,
       } satisfies ConnectionAuth;
-    } catch (err) {
+    } catch (error) {
       return {
-        refused: `connection ${connectionId} has no usable token: ${err instanceof Error ? err.message : String(err)}`,
+        refused: `connection ${connectionId} has no usable token: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
@@ -858,7 +859,7 @@ export class ConnectionBroker {
         });
         status = res.status;
         text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
-      } catch (err) {
+      } catch (error) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
           return sendAttempt(attempt + 1);
@@ -866,7 +867,7 @@ export class ConnectionBroker {
         return {
           ok: false,
           authDead: false,
-          detail: err instanceof Error ? err.message : String(err),
+          detail: error instanceof Error ? error.message : String(error),
         };
       }
       if (status >= 500 || status === 429) {
@@ -941,7 +942,7 @@ export class ConnectionBroker {
         });
         status = res.status;
         text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
-      } catch (err) {
+      } catch (error) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
           return sendAttempt(attempt + 1);
@@ -949,7 +950,7 @@ export class ConnectionBroker {
         return {
           ok: false,
           authDead: false,
-          detail: err instanceof Error ? err.message : String(err),
+          detail: error instanceof Error ? error.message : String(error),
         };
       }
       if (status >= 500 || status === 429) {

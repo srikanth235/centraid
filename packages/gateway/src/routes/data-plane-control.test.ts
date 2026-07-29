@@ -3,10 +3,8 @@ import { Readable } from "node:stream";
 
 import { describe, expect, test, vi } from "vitest";
 
-import {
-  makeDataPlaneControlHandler,
-  type DataPlaneControlOptions,
-} from "./data-plane-control.js";
+import { makeDataPlaneControlHandler } from "./data-plane-control.js";
+import type { DataPlaneControlOptions } from "./data-plane-control.js";
 
 async function invokeRoute(
   handler: ReturnType<typeof makeDataPlaneControlHandler>,

@@ -15,7 +15,7 @@
  * `automation_id`) is the only thing that persists across them.
  */
 
-import { type DatabaseSync, type StatementSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import type {
   Conversation,

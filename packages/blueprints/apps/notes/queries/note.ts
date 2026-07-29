@@ -59,8 +59,8 @@ export default async function noteHandler({ input, ctx }: HandlerArgs) {
       : { rows: [] };
     const body = decodeBody((contents.rows ?? [])[0]?.content_uri);
     return { note_id: noteId, body, format: note.format };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       note_id: noteId,
       vaultDenied: { code: e.code, message: e.message },

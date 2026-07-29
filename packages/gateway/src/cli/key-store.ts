@@ -13,11 +13,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 
-import {
-  aesGcmKeyProtector,
-  KeyStore,
-  type KeyProtector,
-} from "@centraid/vault";
+import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
+import type { KeyProtector } from "@centraid/vault";
 
 import {
   DEFAULT_LAUNCHD_LABEL,

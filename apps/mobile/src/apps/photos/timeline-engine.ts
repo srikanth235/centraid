@@ -17,13 +17,8 @@ import { authHeader } from "../../lib/gateway";
 import type { NativeReplicaSession } from "../../lib/replica/native-session";
 import { UploadQueue } from "../../lib/upload/native-queue";
 import { capturedAtIso, durationSeconds } from "./device-media";
-import {
-  mergePhotoAssets,
-  sectionPhotoAssets,
-  type BackupState,
-  type PhotoAsset,
-  type PhotoSection,
-} from "./timeline-model";
+import { mergePhotoAssets, sectionPhotoAssets } from "./timeline-model";
+import type { BackupState, PhotoAsset, PhotoSection } from "./timeline-model";
 
 export interface TimelineSnapshot {
   assets: PhotoAsset[];
@@ -196,9 +191,9 @@ class PhotoTimelineEngine {
       this.#error = undefined;
       this.#replicaLoading = false;
       this.recompute();
-    } catch (reason) {
+    } catch (error) {
       if (generation !== this.#generation) return;
-      this.#error = reason instanceof Error ? reason.message : String(reason);
+      this.#error = error instanceof Error ? error.message : String(error);
       this.#replicaLoading = false;
       this.recompute();
     }
@@ -286,9 +281,9 @@ class PhotoTimelineEngine {
         return loadPage(offset + page.length, 1_000);
       };
       await loadPage(0, 250);
-    } catch (reason) {
+    } catch (error) {
       if (generation !== this.#generation) return;
-      this.#error = reason instanceof Error ? reason.message : String(reason);
+      this.#error = error instanceof Error ? error.message : String(error);
       this.#deviceLoading = false;
       this.recompute();
     }

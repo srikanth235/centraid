@@ -20,7 +20,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
-import { isRunnerKind, type RunnerKind } from "../conversation/turn.js";
+import { isRunnerKind } from "../conversation/turn.js";
+import type { RunnerKind } from "../conversation/turn.js";
 
 export interface PrefsPersistence {
   read: () => Record<string, unknown>;
@@ -352,8 +353,8 @@ export function makeUserStoreRouteHandler(
       }
       sendError(res, 404, "unknown user-store route");
       return true;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       sendError(res, 500, msg);
       return true;
     }

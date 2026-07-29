@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { currentReplicaLogState, readReplicaChanges } from "./change-log.js";
 import {
   deleteReplicaIntentOutcomesForDevice,
@@ -13,8 +14,8 @@ import {
 import {
   readReplicaInvocationCommit,
   recordReplicaInvocationCommitInTransaction,
-  type ReplicaInvocationAudit,
 } from "./invocation-commits.js";
+import type { ReplicaInvocationAudit } from "./invocation-commits.js";
 
 let db: VaultDb | undefined;
 describe("intents", () => {

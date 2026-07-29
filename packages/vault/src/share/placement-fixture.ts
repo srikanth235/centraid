@@ -11,8 +11,10 @@ import { expect } from "vitest";
 
 import { sweepLocalOrphans } from "../blob/local-orphan-sweep.js";
 import { blobUriFor } from "../blob/store.js";
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 
 const open: VaultDb[] = [];

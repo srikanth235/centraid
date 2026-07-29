@@ -143,12 +143,15 @@ export function Editor({
     clearTimeout(saveTimerRef.current);
     await performSave();
   };
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
 
   useEffect(() => {
-    registerFlush?.(flush);
+    registerFlush?.(() => flushRef.current());
     return () => clearTimeout(saveTimerRef.current);
-    // (#360) registered once; this component remounts on document_id change (see file header), so the closed-over doc/onSave props flush() reads can never go stale without a fresh registration
-  }, [flush, registerFlush]);
+  }, [registerFlush]);
 
   const updateBody = (v: string): void => {
     bodyRef.current = v;

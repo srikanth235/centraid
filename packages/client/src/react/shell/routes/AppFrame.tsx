@@ -1,18 +1,13 @@
 import { themes } from "@centraid/design-tokens";
-import {
-  type CSSProperties,
-  type JSX,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { useEffect, useMemo, useRef } from "react";
+import type { CSSProperties, JSX } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { appLiveUrl } from "../../../gateway-client.js";
-import {
-  attachAppFrameReplicaBridge,
-  type AppFrameResourceRequest,
-  type AppFrameResourceResponse,
+import { attachAppFrameReplicaBridge } from "./appFrameReplicaBridge.js";
+import type {
+  AppFrameResourceRequest,
+  AppFrameResourceResponse,
 } from "./appFrameReplicaBridge.js";
 import {
   isOpaqueAppTunnelUrl,

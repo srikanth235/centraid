@@ -1,7 +1,8 @@
 // Recoverable React error boundary for the shell root (issue #468 K1).
 // Class component required by React's error-boundary contract.
 
-import { Component, type ErrorInfo, type JSX, type ReactNode } from "react";
+import { Component } from "react";
+import type { ErrorInfo, JSX, ReactNode } from "react";
 
 export interface ErrorBoundaryProps {
   children: ReactNode;

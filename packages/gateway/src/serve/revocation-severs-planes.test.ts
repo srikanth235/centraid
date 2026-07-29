@@ -12,15 +12,15 @@ import {
   createTunnelClient,
   startGatewayEndpoint,
   tunnelRequest,
-  type GatewayEndpointHandle,
-  type TunnelClient,
 } from "@centraid/tunnel";
+import type { GatewayEndpointHandle, TunnelClient } from "@centraid/tunnel";
 import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { EnrollmentStore } from "./enrollment-store.ts";
 import { GatewayDatabase } from "./gateway-db.ts";
 import { PairingTicketStore } from "./pairing-store.ts";
-import { serve, type GatewayServeHandle } from "./serve.ts";
+import { serve } from "./serve.ts";
+import type { GatewayServeHandle } from "./serve.ts";
 import {
   hashControlToken,
   WebControlSessionStore,

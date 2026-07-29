@@ -1,16 +1,15 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  knobPrefKey,
-  parseResourceKnobPrefs,
-  type ResourceKnobPrefs,
-  type ResourceProfileDTO,
+import { knobPrefKey, parseResourceKnobPrefs } from "./resource-summary.js";
+import type {
+  ResourceKnobPrefs,
+  ResourceProfileDTO,
 } from "./resource-summary.js";
-import ResourceAdvancedKnobs, {
-  type ResourceAdvancedKnobsProps,
-} from "./ResourceAdvancedKnobs.js";
+import ResourceAdvancedKnobs from "./ResourceAdvancedKnobs.js";
+import type { ResourceAdvancedKnobsProps } from "./ResourceAdvancedKnobs.js";
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;

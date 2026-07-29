@@ -13,10 +13,8 @@
  */
 
 import { resolveGateway } from "./gateway-store.js";
-import {
-  fetchGatewayVaults,
-  type ListGatewayVaultsResult,
-} from "./gateway-vaults-core.js";
+import { fetchGatewayVaults } from "./gateway-vaults-core.js";
+import type { ListGatewayVaultsResult } from "./gateway-vaults-core.js";
 
 export type { ListGatewayVaultsResult } from "./gateway-vaults-core.js";
 

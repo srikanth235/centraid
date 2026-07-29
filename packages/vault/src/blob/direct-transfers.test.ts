@@ -5,9 +5,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { VaultBlobRemoteUnavailableError } from "../errors.js";
-import { BlobCache } from "./cache.js";
+import type { BlobCache } from "./cache.js";
 import { BlobContentKeyRegistry } from "./content-keys.js";
 import type { CustodyState, RemoteTier } from "./custody-types.js";
 import { DirectBlobTransfers } from "./direct-transfers.js";

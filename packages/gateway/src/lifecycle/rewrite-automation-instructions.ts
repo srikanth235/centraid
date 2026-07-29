@@ -11,11 +11,11 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
-import {
-  resolveItemCost,
-  type RunnerPrefs,
-  type RunTurnFn,
-  type TurnStreamEvent,
+import { resolveItemCost } from "@centraid/app-engine";
+import type {
+  RunnerPrefs,
+  RunTurnFn,
+  TurnStreamEvent,
 } from "@centraid/app-engine";
 import type { Row as AutomationRow } from "@centraid/automation";
 
@@ -219,8 +219,9 @@ export async function rewriteAutomationInstructions(
       }),
     });
     return { revisionTurnId, prompt };
-  } catch (caught) {
-    const message = caught instanceof Error ? caught.message : String(caught);
+  } catch (caughtError) {
+    const message =
+      caughtError instanceof Error ? caughtError.message : String(caughtError);
     const endedAt = Date.now();
     store.insertItem({
       itemId: randomUUID(),
@@ -250,6 +251,6 @@ export async function rewriteAutomationInstructions(
         ? {}
         : { outputJson: JSON.stringify({ stopReason, error: message }) }),
     });
-    throw caught;
+    throw caughtError;
   }
 }

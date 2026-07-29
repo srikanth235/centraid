@@ -1,12 +1,5 @@
-import {
-  useCallback,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type JSX,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useCallback, useRef, useState } from "react";
+import type { ChangeEvent, JSX, KeyboardEvent, RefObject } from "react";
 
 import {
   clearSlash,

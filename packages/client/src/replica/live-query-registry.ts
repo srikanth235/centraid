@@ -1,4 +1,4 @@
-import { LiveQuery } from "./live-query.js";
+import type { LiveQuery } from "./live-query.js";
 import type { ReplicaInvalidation } from "./types.js";
 
 export class LiveQueryRegistry {

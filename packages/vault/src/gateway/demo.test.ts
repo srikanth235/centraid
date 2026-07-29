@@ -11,12 +11,14 @@ import {
   enrollAgent,
   enrollApp,
   enrollDevice,
-  type BootstrapResult,
 } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerTaskCommands } from "../commands/tasks.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
-import { createGateway, Gateway } from "./gateway.js";
+import type { Gateway } from "./gateway.js";
+import { createGateway } from "./gateway.js";
 import type { Credential, InvokeOutcome } from "./types.js";
 
 let db: VaultDb;

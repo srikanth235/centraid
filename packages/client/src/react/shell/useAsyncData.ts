@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // The leaf-route data pattern, ported from the vanilla render fns: each screen
 // fetches its data over IPC, shows a loading line, then the screen (or an error
@@ -12,6 +12,7 @@ export type AsyncState<T> =
   | { status: "ready"; data: T };
 
 const LOADING: AsyncState<never> = { status: "loading" };
+const EMPTY_DEPS: readonly unknown[] = [];
 
 function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
   return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -19,7 +20,7 @@ function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
 
 export function useAsyncData<T>(
   load: () => Promise<T>,
-  deps: readonly unknown[] = []
+  deps: readonly unknown[] = EMPTY_DEPS
 ): AsyncState<T> {
   // The settled result is stamped with the deps it was fetched for; a deps
   // change therefore reads as `loading` during render, without an effect having
@@ -28,20 +29,34 @@ export function useAsyncData<T>(
     deps: readonly unknown[];
     state: AsyncState<T>;
   } | null>(null);
-  // `deps` is a caller-provided array by contract — re-fetch when it changes.
+  const loadRef = useRef(load);
+  const depsRef = useRef(deps);
+  const depsKey = JSON.stringify(deps);
+
+  // Refresh the values after every commit. The fetching effect only depends on
+  // the stable, value-based dependency signature, so inline loader callbacks
+  // do not refetch merely because rendering allocated a new function.
   useEffect(() => {
+    loadRef.current = load;
+    depsRef.current = deps;
+  });
+
+  useEffect(() => {
+    const requestedDeps = depsRef.current;
     let alive = true;
-    load()
+    loadRef
+      .current()
       .then((data) => {
-        if (alive) setSettled({ deps, state: { status: "ready", data } });
+        if (alive)
+          setSettled({ deps: requestedDeps, state: { status: "ready", data } });
       })
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         if (alive) {
           setSettled({
-            deps,
+            deps: requestedDeps,
             state: {
               status: "error",
-              error: err instanceof Error ? err.message : String(err),
+              error: error instanceof Error ? error.message : String(error),
             },
           });
         }
@@ -49,7 +64,8 @@ export function useAsyncData<T>(
     return () => {
       alive = false;
     };
-  }, deps);
+  }, [depsKey]);
+
   return settled !== null && sameDeps(settled.deps, deps)
     ? settled.state
     : LOADING;

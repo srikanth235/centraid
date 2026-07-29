@@ -46,12 +46,8 @@
  */
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import {
-  createServer,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import { createServer } from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import type { ToolContext } from "@centraid/app-engine";
@@ -322,14 +318,14 @@ export async function startVaultMcpServer(
     let response: unknown;
     try {
       response = await dispatch(body);
-    } catch (err) {
+    } catch (error) {
       // A throwing tool runner must not take the listener (or the turn) down.
       sendJson(res, 200, {
         jsonrpc: "2.0",
         id: body.id ?? null,
         error: {
           code: -32603,
-          message: err instanceof Error ? err.message : String(err),
+          message: error instanceof Error ? error.message : String(error),
         },
       });
       return;

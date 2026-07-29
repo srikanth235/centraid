@@ -5,6 +5,7 @@ import type {
   ReplicaShellSessionOptions,
   ShellReplicaCoordinator,
 } from "./shell-session.js";
+import type * as TypeImport_1vwuba6 from "./shell-session.js";
 import type { ReplicaFetcher } from "./shell-transport.js";
 import {
   listRememberedReplicaIdentities,
@@ -16,9 +17,9 @@ import type {
   ReplicaShape,
 } from "./types.js";
 
-let ReplicaShellSession: typeof import("./shell-session.js").ReplicaShellSession;
-let replicaIdentityForGatewayAuth: typeof import("./shell-session.js").replicaIdentityForGatewayAuth;
-let purgeCurrentReplicaDevice: typeof import("./shell-session.js").purgeCurrentReplicaDevice;
+let ReplicaShellSession: typeof TypeImport_1vwuba6.ReplicaShellSession;
+let replicaIdentityForGatewayAuth: typeof TypeImport_1vwuba6.replicaIdentityForGatewayAuth;
+let purgeCurrentReplicaDevice: typeof TypeImport_1vwuba6.purgeCurrentReplicaDevice;
 
 describe("shell-session", () => {
   beforeAll(async () => {

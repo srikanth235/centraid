@@ -16,8 +16,10 @@ import {
   streamTurn,
   updateAppMeta,
   uploadConversationAttachment,
-  type ConversationAttachmentRef,
-  type TurnStreamEvent,
+} from "../../../../gateway-client.js";
+import type {
+  ConversationAttachmentRef,
+  TurnStreamEvent,
 } from "../../../../gateway-client.js";
 import {
   providerConsentWire,
@@ -35,17 +37,19 @@ import {
 } from "../settingsProvidersData.js";
 import {
   BUILDER_SUGGESTIONS,
-  type ChatView,
-  type ConversationMsg,
-  type DeviceKey,
   FILE_WRITING_TOOLS,
   parseVersionTime,
   relTime,
   summarizeToolArgs,
-  type Tab,
-  type ToolCall,
   toBuilderMsg,
   turnProgress,
+} from "./builderModel.js";
+import type {
+  ChatView,
+  ConversationMsg,
+  DeviceKey,
+  Tab,
+  ToolCall,
 } from "./builderModel.js";
 
 export interface UseBuilderInput {
@@ -889,13 +893,16 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
               }),
           });
           if (generating.current) finishAgentTurn();
-        } catch (err) {
+        } catch (error) {
           if (agentAbort.current?.signal.aborted) {
             finishAgentTurn();
             return;
           }
           generating.current = false;
-          pushMessage({ kind: "status", text: `Agent error: ${String(err)}` });
+          pushMessage({
+            kind: "status",
+            text: `Agent error: ${String(error)}`,
+          });
         }
       })();
     },
@@ -924,8 +931,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         : "manual";
       showToast(next ? `Enabled · ${sched}` : "Disabled — schedule stopped");
       await refreshAutomationRow();
-    } catch (err) {
-      showToast(`Could not ${next ? "enable" : "disable"}: ${String(err)}`);
+    } catch (error) {
+      showToast(`Could not ${next ? "enable" : "disable"}: ${String(error)}`);
     } finally {
       automationBusy.current = false;
       bump();
@@ -970,8 +977,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         name: projName.current,
         versionId: result.versionId,
       });
-    } catch (err) {
-      const msg = String(err);
+    } catch (error) {
+      const msg = String(error);
       if (/no_changes|no staged changes/iu.test(msg)) {
         updateMessage(statusIdx, {
           kind: "status",
@@ -1103,10 +1110,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         });
         appId.current = id;
         bump();
-      } catch (err) {
+      } catch (error) {
         pushMessage({
           kind: "status",
-          text: `Could not create app: ${String(err)}`,
+          text: `Could not create app: ${String(error)}`,
         });
         return;
       }
@@ -1114,10 +1121,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         conversationId.current = (
           await createConversation(id, projName.current, input.targetScopeId)
         ).id;
-      } catch (err) {
+      } catch (error) {
         pushMessage({
           kind: "status",
-          text: `Could not start chat: ${String(err)}`,
+          text: `Could not start chat: ${String(error)}`,
         });
         return;
       }
@@ -1245,11 +1252,11 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       bump();
       if (appId.current) {
         void updateAppMeta({ id: appId.current, name: next }).catch(
-          (err: unknown) => {
+          (error: unknown) => {
             projName.current = previous;
             bump();
             showToast(
-              `Rename failed: ${err instanceof Error ? err.message : String(err)}`
+              `Rename failed: ${error instanceof Error ? error.message : String(error)}`
             );
           }
         );

@@ -74,8 +74,8 @@ export function createLogic({
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
-    } catch (err) {
-      notice(String((err as { message?: string })?.message ?? err));
+    } catch (error) {
+      notice(String((error as { message?: string })?.message ?? error));
       return undefined;
     }
   }

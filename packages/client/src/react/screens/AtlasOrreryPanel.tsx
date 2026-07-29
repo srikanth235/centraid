@@ -4,8 +4,10 @@ import type { AtlasFkEdge, AtlasGraphNode } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import type { Readout } from "./AtlasOrreryChart.js";
-import { packHueVar, type RelationChip } from "./atlasOrreryGeometry.js";
-import { pickSampleDisplay, type SampleResult } from "./atlasSampleRows.js";
+import { packHueVar } from "./atlasOrreryGeometry.js";
+import type { RelationChip } from "./atlasOrreryGeometry.js";
+import { pickSampleDisplay } from "./atlasSampleRows.js";
+import type { SampleResult } from "./atlasSampleRows.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 

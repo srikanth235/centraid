@@ -71,8 +71,8 @@ export function createLogic({
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
-    } catch (err) {
-      notice(err instanceof Error ? err.message : String(err));
+    } catch (error) {
+      notice(error instanceof Error ? error.message : String(error));
       return undefined;
     }
   }
@@ -333,8 +333,8 @@ export function createLogic({
       if (state.detailsId !== id) return;
       state.detailPerson = res?.person ?? null;
       renderDetails();
-    } catch (err) {
-      notice(err instanceof Error ? err.message : String(err));
+    } catch (error) {
+      notice(error instanceof Error ? error.message : String(error));
     }
   }
   function toggleAdder(key: string) {

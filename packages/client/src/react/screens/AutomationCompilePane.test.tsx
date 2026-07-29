@@ -1,11 +1,11 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CompileAttemptDTO, CompileStepDTO } from "../screen-contracts.js";
-import AutomationCompilePane, {
-  type AutomationCompilePaneProps,
-} from "./AutomationCompilePane.js";
+import AutomationCompilePane from "./AutomationCompilePane.js";
+import type { AutomationCompilePaneProps } from "./AutomationCompilePane.js";
 
 // The compile loop, which is the half of the automations UX the run screen is
 // no longer allowed to touch: compile in place, watch the steps, read the

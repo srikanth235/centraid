@@ -19,7 +19,8 @@
  * `gateway-supervisor-core.ts` (H7) and is applied by `local-gateway.ts`.
  */
 
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -530,10 +531,10 @@ export async function ensureDetachedGateway(
         CENTRAID_KEYSTORE_MASTER_KEY: gatewayWrappingKey.toString("base64"),
       },
     });
-  } catch (err) {
+  } catch (error) {
     throw new Error(
-      `failed to spawn detached gateway: ${err instanceof Error ? err.message : String(err)}`,
-      { cause: err }
+      `failed to spawn detached gateway: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
     );
   }
 
@@ -620,10 +621,10 @@ export async function installGatewayOsService(
       `exit ${result.status}`
     ).trim();
     return { ok: false, error: err || "service install failed" };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

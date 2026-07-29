@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   GatewayDeviceTicket,
@@ -10,11 +11,8 @@ import { formatClock, formatDuration } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import { pairErrorMessage, roleLabel } from "./device-roles.js";
-import DevicePairTarget, {
-  type PairGrant,
-  type PairSpace,
-  type PairTarget,
-} from "./DevicePairTarget.js";
+import DevicePairTarget from "./DevicePairTarget.js";
+import type { PairGrant, PairSpace, PairTarget } from "./DevicePairTarget.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
@@ -87,8 +85,13 @@ export default function DevicePairPanel({
       (svg) => {
         if (live) setQr({ svg, ticket });
       },
-      (err: unknown) => {
-        if (live) setError(err instanceof Error ? err.message : String(err));
+      (caughtError: unknown) => {
+        if (live)
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : String(caughtError)
+          );
       }
     );
     return () => {
@@ -119,8 +122,8 @@ export default function DevicePairPanel({
         input.grants = grants;
       }
       setTicket(await onCreateTicket(input));
-    } catch (err) {
-      setError(pairErrorMessage(err));
+    } catch (caughtError) {
+      setError(pairErrorMessage(caughtError));
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
@@ -9,16 +9,11 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { makeConversationRouteHandler } from "../http/conversation-routes.js";
-import {
-  makeJournalDbProvider,
-  type DatabaseProvider,
-} from "../stores/gateway-db.js";
+import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import type { DatabaseProvider } from "../stores/gateway-db.js";
 import type { WorkspaceProvider } from "../stores/vault-workspace.js";
-import {
-  ConversationHistoryStore,
-  deriveTitle,
-  type RecordTurnInput,
-} from "./history.js";
+import { ConversationHistoryStore, deriveTitle } from "./history.js";
+import type { RecordTurnInput } from "./history.js";
 import { ConversationStore } from "./store.js";
 
 // Tests that don't care about cross-user isolation share this stub owner id.

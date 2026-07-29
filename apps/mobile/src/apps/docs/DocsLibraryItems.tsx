@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { useTheme } from "../../kit/theme";
+import type { useTheme } from "../../kit/theme";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";
 import { styles } from "./DocsHome.styles";

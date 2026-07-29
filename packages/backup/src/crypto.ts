@@ -229,8 +229,8 @@ export async function createKeyring(file: string): Promise<Keyring> {
     throw new Error(
       `keyring already exists at ${file} — refusing to overwrite`
     );
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   const keyring: Keyring = {
     version: 1,

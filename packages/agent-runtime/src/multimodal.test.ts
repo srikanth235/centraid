@@ -8,8 +8,8 @@ import {
   TEXT_ATTACHMENT_MAX_BYTES,
   acpAttachmentBlocks,
   acpBlockFor,
-  type PromptCapabilities,
 } from "./multimodal.js";
+import type { PromptCapabilities } from "./multimodal.js";
 
 /** What both first-party ACP adapters actually advertise. */
 const FULL: PromptCapabilities = {

@@ -15,10 +15,10 @@ export function coerceAgentAnswer(text: string, json: unknown): unknown {
   const candidate = fenced?.groups?.body?.trim() ?? trimmed;
   try {
     return JSON.parse(candidate) as unknown;
-  } catch (err) {
+  } catch (error) {
     throw new Error(
-      `ctx.agent expected JSON but got: ${trimmed.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-      { cause: err }
+      `ctx.agent expected JSON but got: ${trimmed.slice(0, 500)} (${error instanceof Error ? error.message : String(error)})`,
+      { cause: error }
     );
   }
 }

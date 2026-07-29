@@ -4,8 +4,8 @@ import {
   conversationToJson,
   conversationToMarkdown,
   exportFilename,
-  type ExportableConversation,
 } from "./conversationExport.js";
+import type { ExportableConversation } from "./conversationExport.js";
 
 const CONV: ExportableConversation = {
   id: "c1",

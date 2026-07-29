@@ -17,9 +17,11 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { resolveBackupPolicy, type BackupPolicy } from "../backup-policy.js";
+import { resolveBackupPolicy } from "../backup-policy.js";
+import type { BackupPolicy } from "../backup-policy.js";
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { BlobCache } from "./cache.js";
 import { BlobContentKeyRegistry } from "./content-keys.js";
 import type { RemoteTier } from "./custody-types.js";
@@ -92,7 +94,7 @@ describe("direct-cold-doors", () => {
           url: `http://127.0.0.1:${addr.port}`,
           requests,
           close: () =>
-            new Promise<void>((resolve) => server.close(() => resolve())),
+            new Promise<void>((_resolve) => server.close(() => _resolve())),
         });
       });
     });

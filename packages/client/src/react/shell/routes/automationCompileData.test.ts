@@ -5,6 +5,7 @@ import {
   readAutomationTurnExpanded,
   streamAutomationTurn,
 } from "../../../gateway-client.js";
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
   compileAttemptOf,
   compileStepOf,
@@ -18,14 +19,10 @@ import {
 // pulling the module in doesn't run gateway-client-core's load-time
 // `window.CentraidApi` side effect (same guard automationsData.test.ts uses).
 vi.mock(import("../../../gateway-client.js"), () => ({
-  listAutomationTurns:
-    vi.fn<typeof import("../../../gateway-client.js").listAutomationTurns>(),
+  listAutomationTurns: vi.fn<typeof TypeImport_1gl5zx7.listAutomationTurns>(),
   readAutomationTurnExpanded:
-    vi.fn<
-      typeof import("../../../gateway-client.js").readAutomationTurnExpanded
-    >(),
-  streamAutomationTurn:
-    vi.fn<typeof import("../../../gateway-client.js").streamAutomationTurn>(),
+    vi.fn<typeof TypeImport_1gl5zx7.readAutomationTurnExpanded>(),
+  streamAutomationTurn: vi.fn<typeof TypeImport_1gl5zx7.streamAutomationTurn>(),
 }));
 
 const item = (

@@ -1,6 +1,7 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t, type ThemeColors } from "../../kit/theme";
+import { family, radii, spacing, t } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({

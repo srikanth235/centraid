@@ -1,5 +1,6 @@
 import crypto, { randomBytes } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
  * The full-story end-to-end test for the offsite backup feature
@@ -23,8 +24,8 @@ import {
   SNAPSHOT_FORMAT_V2,
   validateKeyring,
   verifySnapshot,
-  type BackupProvider,
 } from "@centraid/backup";
+import type { BackupProvider } from "@centraid/backup";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -41,10 +42,8 @@ import { daemonLayoutFor } from "../cli/paths.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { HealthRegistry } from "../serve/health-registry.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
-import {
-  openVaultRegistry,
-  type VaultRegistry,
-} from "../serve/vault-registry.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
 import { run } from "../worktree-store/git.js";
 import { WorktreeStore } from "../worktree-store/worktree-store.js";
 import type { BackupConfig } from "./backup-config.js";
@@ -62,7 +61,7 @@ const silentLogger = {
 const cleanups: Array<() => Promise<void> | void> = [];
 describe("backup", () => {
   async function countFiles(dir: string): Promise<number> {
-    let entries: import("node:fs").Dirent[];
+    let entries: TypeImport_g9tn66.Dirent[];
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {

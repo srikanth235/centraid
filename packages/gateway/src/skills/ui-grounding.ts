@@ -236,9 +236,6 @@ function renderUxRulesBlock(): string {
     '**Forms.** Always `<label for="...">` (or `aria-label`); `autocomplete=`, `enterkeyhint=`, and `inputmode=` set appropriately. Disabled submit until the input has content.',
     "",
     "**CSS discipline.** No `!important`. No deep selectors (`> > >`). No inline styles unless dynamic. No `font-family` overrides — the system stack from the scaffold is the contract.",
-  ];
-
-  lines.push(
     "",
     "**Visual feedback (preview snapshot).** The desktop shell keeps a fresh PNG",
     "of the live preview iframe at `./.preview/snapshot.png` (cwd-relative — it",
@@ -247,8 +244,8 @@ function renderUxRulesBlock(): string {
     "review comment — fix what looks wrong before moving on. Use `centraid preview",
     "snapshot` to check freshness (size + age in JSON) when you're unsure whether",
     "the file has caught up to your last write. One look per coherent visual change",
-    "is the right cadence; don't spam it."
-  );
+    "is the right cadence; don't spam it.",
+  ];
 
   return lines.join("\n");
 }

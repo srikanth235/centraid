@@ -109,8 +109,8 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       snippet: typeof _snippet === "string" ? _snippet : "",
     }));
     return { tasks };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { tasks: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

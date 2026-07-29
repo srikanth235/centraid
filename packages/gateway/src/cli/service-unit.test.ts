@@ -9,8 +9,8 @@ import {
   buildSystemdUnit,
   launchAgentPlistPath,
   systemdUnitPath,
-  type ServiceUnitSpec,
 } from "./service-unit.ts";
+import type { ServiceUnitSpec } from "./service-unit.ts";
 
 const spec: ServiceUnitSpec = {
   nodeBin: "/opt/homebrew/bin/node",

@@ -1,4 +1,5 @@
 import http from "node:http";
+import type * as TypeImport_1cs0ag8 from "node:net";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // governance: allow-repo-hygiene file-size-limit #526 Keep broker custody and Assist regression scenarios together.
@@ -11,7 +12,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from "./assist-oauth.js";
 import { ConnectionBroker } from "./connection-broker.js";
-import { openVaultPlane, type VaultPlane } from "./vault-plane.js";
+import { openVaultPlane } from "./vault-plane.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 const silentLogger = {
   info: () => undefined,
@@ -50,7 +52,7 @@ describe("connection-broker", () => {
 
   /** A token endpoint that accepts the connection but never answers — simulates a wedged IdP. */
   async function startHangingTokenServer(): Promise<{ url: string }> {
-    const sockets = new Set<import("node:net").Socket>();
+    const sockets = new Set<TypeImport_1cs0ag8.Socket>();
     const server = http.createServer(() => {
       /* never respond */
     });

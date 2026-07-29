@@ -19,12 +19,8 @@ import type {
   PartyPayload,
   TransactionPayload,
 } from "./publishers.js";
-import {
-  ensureConnection,
-  stageCandidates,
-  type StageCandidate,
-  type StageResult,
-} from "./staging.js";
+import { ensureConnection, stageCandidates } from "./staging.js";
+import type { StageCandidate, StageResult } from "./staging.js";
 import { parseVcards } from "./vcard.js";
 import { readZipEntries } from "./zip.js";
 

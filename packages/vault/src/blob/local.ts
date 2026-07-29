@@ -28,13 +28,8 @@ import path from "node:path";
 import type { Readable } from "node:stream";
 
 import { asVaultDiskFullError } from "../errors.js";
-import {
-  assertSha,
-  resolveRange,
-  type BlobRange,
-  type BlobStat,
-  type BlobStore,
-} from "./store.js";
+import { assertSha, resolveRange } from "./store.js";
+import type { BlobRange, BlobStat, BlobStore } from "./store.js";
 
 /* eslint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
 
@@ -119,11 +114,11 @@ export class FsBlobStore implements LocalBlobStore {
         closeSync(fd);
       }
       renameSync(tmp, file);
-    } catch (err) {
+    } catch (error) {
       // A write that ran out of disk leaves a partial (or zero-byte) tmp
       // file behind — never let that linger under the blob's fan-out dir.
       rmSync(tmp, { force: true });
-      throw asVaultDiskFullError("blob CAS write", err);
+      throw asVaultDiskFullError("blob CAS write", error);
     }
   }
 
@@ -142,17 +137,17 @@ export class FsBlobStore implements LocalBlobStore {
           closeSync(fd);
         }
         return bytes;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-        throw err;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+        throw error;
       }
     }
     let whole: Buffer;
     try {
       whole = readFileSync(file);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw err;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
     }
     return whole;
   }
@@ -187,9 +182,9 @@ export class FsBlobStore implements LocalBlobStore {
   statSync(sha: string): BlobStat | null {
     try {
       return { size: statSync(this.fileFor(sha)).size };
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw err;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
     }
   }
 
@@ -227,8 +222,8 @@ export class FsBlobStore implements LocalBlobStore {
     try {
       renameSync(tempPath, file);
       return true;
-    } catch (err) {
-      throw asVaultDiskFullError("blob CAS temp adoption", err);
+    } catch (error) {
+      throw asVaultDiskFullError("blob CAS temp adoption", error);
     }
   }
 
@@ -254,8 +249,8 @@ export class FsBlobStore implements LocalBlobStore {
     try {
       linkSync(sourcePath, file);
       return "linked";
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
       // A concurrent placer won the race to the same content address. CAS is
       // write-once, so the winner's bytes are ours too.
       if (code === "EEXIST") return "exists";
@@ -272,7 +267,7 @@ export class FsBlobStore implements LocalBlobStore {
       ) {
         return "unsupported";
       }
-      throw asVaultDiskFullError("blob CAS hardlink", err);
+      throw asVaultDiskFullError("blob CAS hardlink", error);
     }
   }
 

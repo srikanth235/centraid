@@ -8,8 +8,8 @@ import {
   assertArtifactShapeUnchanged,
   outboxVerbIsEditable,
   rebuilderForVerb,
-  type OutboxWireRequest,
 } from "./outbox-edit.js";
+import type { OutboxWireRequest } from "./outbox-edit.js";
 
 const stagedRequest: OutboxWireRequest = {
   method: "POST",

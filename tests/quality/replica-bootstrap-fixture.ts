@@ -4,10 +4,8 @@ import type {
   ReplicaCursor,
   ReplicaSnapshotRow,
 } from "../../packages/client/src/replica/types.js";
-import {
-  runWindowedBootstrap,
-  type WindowedBootstrapTarget,
-} from "../../packages/client/src/replica/windowed-bootstrap.js";
+import { runWindowedBootstrap } from "../../packages/client/src/replica/windowed-bootstrap.js";
+import type { WindowedBootstrapTarget } from "../../packages/client/src/replica/windowed-bootstrap.js";
 
 const gatewayAuth = {
   baseUrl: "http://127.0.0.1:18789",

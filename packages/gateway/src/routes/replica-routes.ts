@@ -2,6 +2,7 @@
 /* Replica HTTP protocol: authenticated bootstrap, pull/stream, lazy row and intent lanes. */
 import crypto from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type * as TypeImport_18fk7n9 from "node:sqlite";
 
 import {
   currentReplicaLogState,
@@ -11,11 +12,13 @@ import {
   ReplicaRebootstrapRequiredError,
   subscribeReplicaCommits,
   withReplicaSnapshot,
-  type ReplicaCursor,
-  type ReplicaLogState,
-  type ReplicaRow,
-  type ReplicaSnapshotResult,
-  type ReplicaSnapshotReader,
+} from "@centraid/vault";
+import type {
+  ReplicaCursor,
+  ReplicaLogState,
+  ReplicaRow,
+  ReplicaSnapshotResult,
+  ReplicaSnapshotReader,
 } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
@@ -25,19 +28,17 @@ import type { VaultRegistry } from "../serve/vault-registry.js";
 import {
   expectedReplicaShapeIds,
   resolveReplicaAccess,
-  type ReplicaRequestAccess,
 } from "./replica-access.js";
-import {
-  handleReplicaIntent,
-  type ReplicaIntentDispatcher,
-} from "./replica-intent-route.js";
+import type { ReplicaRequestAccess } from "./replica-access.js";
+import { handleReplicaIntent } from "./replica-intent-route.js";
+import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
 import {
   projectReplicaPage,
   replicaOutcomeWire,
   replicaShapeIds,
   sameReplicaShapeIds,
-  type ReplicaProjectedPage,
 } from "./replica-projection.js";
+import type { ReplicaProjectedPage } from "./replica-projection.js";
 import {
   buildReplicaShapes,
   replicaRowColumns,
@@ -47,8 +48,10 @@ import {
   REPLICA_SYNTHETIC_PRIMARY_KEY,
   replicaWireRowId,
   shapeReplicaRow,
-  type ReplicaEntityShape,
-  type ReplicaServerShape,
+} from "./replica-shape.js";
+import type {
+  ReplicaEntityShape,
+  ReplicaServerShape,
 } from "./replica-shape.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
@@ -322,7 +325,7 @@ function quoteIdentifier(value: string): string {
 }
 
 function rawKeyValues(
-  db: import("node:sqlite").DatabaseSync,
+  db: TypeImport_18fk7n9.DatabaseSync,
   schema: ReplicaEntityShape,
   rowId: string
 ): unknown[] {
@@ -345,7 +348,7 @@ function rawKeyValues(
 }
 
 function rawValues(
-  db: import("node:sqlite").DatabaseSync,
+  db: TypeImport_18fk7n9.DatabaseSync,
   schema: ReplicaEntityShape,
   rowId: string,
   columns: string[]
@@ -520,7 +523,7 @@ async function streamChanges(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  db: import("node:sqlite").DatabaseSync,
+  db: TypeImport_18fk7n9.DatabaseSync,
   vaultId: string,
   options: ReplicaRouteOptions,
   limit: number
@@ -665,7 +668,7 @@ type WindowedBootstrapResult =
 function handleWindowedBootstrap(
   res: ServerResponse,
   url: URL,
-  db: import("node:sqlite").DatabaseSync,
+  db: TypeImport_18fk7n9.DatabaseSync,
   vaultId: string,
   access: ReplicaRequestAccess
 ): true {

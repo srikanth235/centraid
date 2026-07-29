@@ -99,7 +99,7 @@ export async function probeCliAvailability(
   }
   const pending = availabilityInFlight.get(key);
   if (!opts.refresh && pending) return pending;
-  const probe = (async (): Promise<CliAvailability> => {
+  const probeLocal = (async (): Promise<CliAvailability> => {
     try {
       const raw = await execVersion(bin, agentSpawnEnv({ binPath }));
       return { available: true, version: raw.trim().slice(0, 200) };
@@ -107,9 +107,9 @@ export async function probeCliAvailability(
       return { available: false };
     }
   })();
-  availabilityInFlight.set(key, probe);
+  availabilityInFlight.set(key, probeLocal);
   try {
-    const status = await probe;
+    const status = await probeLocal;
     availabilityCache.set(key, { checkedAt: now, status });
     return status;
   } finally {
@@ -210,8 +210,8 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
       status.hint = `Run ${bin} update (or your package manager's upgrade command) to bring it up to date.`;
     }
     return status;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
       return {
         kind: prefs.kind,
@@ -221,7 +221,7 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
         minVersion: minVersionString(prefs.kind),
       };
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const message = error instanceof Error ? error.message : String(error);
     return {
       kind: prefs.kind,
       ok: false,

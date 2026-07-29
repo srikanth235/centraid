@@ -11,10 +11,8 @@ import type { ConversationRunner } from "../conversation/runner.ts";
 import { Runtime } from "../runtime.ts";
 import { makeJournalDbProvider } from "../stores/gateway-db.ts";
 import type { WorkspaceProvider } from "../stores/vault-workspace.ts";
-import {
-  startRuntimeHttpServer,
-  type RuntimeHttpServerHandle,
-} from "./http-server.ts";
+import { startRuntimeHttpServer } from "./http-server.ts";
+import type { RuntimeHttpServerHandle } from "./http-server.ts";
 import { TurnLimiter } from "./turn-limiter.ts";
 import type { AskModelInfo, AskModelPrefs } from "./turn-routes.ts";
 
@@ -67,7 +65,7 @@ describe("turn-routes", () => {
     // `journalFor`) — a fresh `makeJournalDbProvider` per `workspace()` call
     // opens a second handle onto the same sqlite file and the turn hangs.
     const journal = makeJournalDbProvider(path.join(dir, "journal.db"));
-    const workspace: WorkspaceProvider = () => ({
+    const workspaceLocal: WorkspaceProvider = () => ({
       vaultId: "vault-test",
       ownerPartyId: "test-user",
       appsDir: path.join(dir, "apps"),
@@ -75,7 +73,7 @@ describe("turn-routes", () => {
       journalDbFile: path.join(dir, "journal.db"),
       runnerSessionDir: path.join(dir, "runner-sessions"),
     });
-    return new ConversationHistoryStore(workspace);
+    return new ConversationHistoryStore(workspaceLocal);
   }
 
   async function bootstrapWithStore(

@@ -14,10 +14,8 @@ import {
   WebControlSessionStore,
 } from "../serve/web-session-store.js";
 import { makeDevicesRouteHandler } from "./devices-routes.js";
-import {
-  makeMembersRouteHandler,
-  type MembersRouteDeps,
-} from "./members-routes.js";
+import { makeMembersRouteHandler } from "./members-routes.js";
+import type { MembersRouteDeps } from "./members-routes.js";
 
 /*
  * The household roster (issue #599 L2). These tests are about the two

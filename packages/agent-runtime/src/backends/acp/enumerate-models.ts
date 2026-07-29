@@ -23,7 +23,8 @@
  * stdin, sends SIGTERM, then SIGKILLs if the child ignores it).
  */
 
-import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -34,12 +35,11 @@ import type { RunnerModel } from "@centraid/app-engine";
 import { lowPriorityCommand } from "../../low-priority.js";
 import { ACP_PROTOCOL_VERSION, createAcpConnection } from "./json-rpc.js";
 import { planLaunch } from "./launch.js";
-import {
-  readConfigOptions,
-  readOfferedModels,
-  type InitializeResult,
-  type OfferedModel,
-  type SessionSetupResult,
+import { readConfigOptions, readOfferedModels } from "./session-config.js";
+import type {
+  InitializeResult,
+  OfferedModel,
+  SessionSetupResult,
 } from "./session-config.js";
 import type { AcpTurnConfig } from "./types.js";
 

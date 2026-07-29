@@ -3,43 +3,44 @@ import type {
   InlineAppProps,
 } from "@centraid/blueprints/apps/inline-types";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-import { act, type JSX, useEffect, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { act, useEffect, useState } from "react";
+import type { JSX } from "react";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ReplicaShellSession } from "../../../replica/shell-session.js";
+import type * as TypeImport_ntzl9 from "../../../replica/shell-session.js";
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_g611bp from "../prompt.js";
 import type { ShellNav } from "../ShellApp.js";
+import type * as TypeImport_1483gth from "./appSettingsData.js";
 import InlineAppRoute from "./InlineAppRoute.js";
+import type * as TypeImport_13kqdum from "./templatesData.js";
 
 const { doFetch } = vi.hoisted(() => ({
-  doFetch: vi.fn<typeof import("../../../gateway-client-core.js").doFetch>(),
+  doFetch: vi.fn<typeof TypeImport_nod2nz.doFetch>(),
 }));
 
 // Heavy shell + gateway deps stubbed to their inline-relevant surface.
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
-  deleteApp: vi.fn<typeof import("../../../gateway-client.js").deleteApp>(),
-  updateAppMeta:
-    vi.fn<typeof import("../../../gateway-client.js").updateAppMeta>(),
-  streamTurn: vi.fn<typeof import("../../../gateway-client.js").streamTurn>(),
-  createConversation:
-    vi.fn<typeof import("../../../gateway-client.js").createConversation>(),
-  vaultParked: vi.fn<typeof import("../../../gateway-client.js").vaultParked>(
-    async () => []
-  ),
-  confirmVaultParked:
-    vi.fn<typeof import("../../../gateway-client.js").confirmVaultParked>(),
+  deleteApp: vi.fn<typeof TypeImport_1gl5zx7.deleteApp>(),
+  updateAppMeta: vi.fn<typeof TypeImport_1gl5zx7.updateAppMeta>(),
+  streamTurn: vi.fn<typeof TypeImport_1gl5zx7.streamTurn>(),
+  createConversation: vi.fn<typeof TypeImport_1gl5zx7.createConversation>(),
+  vaultParked: vi.fn<typeof TypeImport_1gl5zx7.vaultParked>(async () => []),
+  confirmVaultParked: vi.fn<typeof TypeImport_1gl5zx7.confirmVaultParked>(),
 }));
 vi.mock(import("../../../gateway-client-core.js") as Promise<unknown>, () => ({
-  auth: vi.fn<typeof import("../../../gateway-client-core.js").auth>(
-    async () => ({
-      baseUrl: "https://gw.test",
-      token: "tok",
-    })
-  ),
+  auth: vi.fn<typeof TypeImport_nod2nz.auth>(async () => ({
+    baseUrl: "https://gw.test",
+    token: "tok",
+  })),
   authHeaders: () => ({}),
   doFetch,
-  readJson: vi.fn<typeof import("../../../gateway-client-core.js").readJson>(),
+  readJson: vi.fn<typeof TypeImport_nod2nz.readJson>(),
 }));
 vi.mock(import("../ShellFrame.js") as Promise<unknown>, () => ({
   default: ({ children }: { children: React.ReactNode }) => (
@@ -50,16 +51,15 @@ vi.mock(import("./AppSettingsController.js") as Promise<unknown>, () => ({
   default: () => null,
 }));
 vi.mock(import("./templatesData.js") as Promise<unknown>, () => ({
-  loadAppTemplates: vi.fn<typeof import("./templatesData.js").loadAppTemplates>(
+  loadAppTemplates: vi.fn<typeof TypeImport_13kqdum.loadAppTemplates>(
     async () => []
   ),
 }));
 vi.mock(import("./appSettingsData.js") as Promise<unknown>, () => ({
-  fetchAppKnobValues: vi.fn<
-    typeof import("./appSettingsData.js").fetchAppKnobValues
-  >(async () => ({})),
-  pushKnobToInlineRoot:
-    vi.fn<typeof import("./appSettingsData.js").pushKnobToInlineRoot>(),
+  fetchAppKnobValues: vi.fn<typeof TypeImport_1483gth.fetchAppKnobValues>(
+    async () => ({})
+  ),
+  pushKnobToInlineRoot: vi.fn<typeof TypeImport_1483gth.pushKnobToInlineRoot>(),
 }));
 vi.mock(import("../actions.js") as Promise<unknown>, () => ({
   useShellActions: () => ({
@@ -74,7 +74,7 @@ vi.mock(import("../iconSvg.js") as Promise<unknown>, () => ({
   iconSvg: () => "<svg></svg>",
 }));
 vi.mock(import("../prompt.js") as Promise<unknown>, () => ({
-  openPrompt: vi.fn<typeof import("../prompt.js").openPrompt>(async () => ""),
+  openPrompt: vi.fn<typeof TypeImport_g611bp.openPrompt>(async () => ""),
 }));
 
 const fakeSession = {
@@ -92,10 +92,10 @@ vi.mock(
   import("../../../replica/shell-session.js") as Promise<unknown>,
   () => ({
     getReplicaShellSession: vi.fn<
-      typeof import("../../../replica/shell-session.js").getReplicaShellSession
+      typeof TypeImport_ntzl9.getReplicaShellSession
     >(async () => fakeShellSession),
     acquireReplicaShellSession: vi.fn<
-      typeof import("../../../replica/shell-session.js").acquireReplicaShellSession
+      typeof TypeImport_ntzl9.acquireReplicaShellSession
     >(async () => ({
       session: fakeShellSession,
       release: () => undefined,

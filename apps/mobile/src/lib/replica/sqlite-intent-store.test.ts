@@ -1,8 +1,10 @@
 import {
   MemoryIntentStore,
   ReplicaProtocolError,
-  type IntentRecordStore,
-  type NewStoredIntent,
+} from "@centraid/client/replica/native";
+import type {
+  IntentRecordStore,
+  NewStoredIntent,
 } from "@centraid/client/replica/native";
 // Proves SqliteIntentStore matches the durable-outbox spec by running the same
 // conformance corpus against it and the reference MemoryIntentStore.

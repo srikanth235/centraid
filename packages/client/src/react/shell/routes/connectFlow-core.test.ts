@@ -7,8 +7,8 @@ import {
   connectFlowReducer,
   createInitialConnectFlowState,
   vaultCapability,
-  type ConnectFlowState,
 } from "./connectFlow-core.js";
+import type { ConnectFlowState } from "./connectFlow-core.js";
 
 const at = (patch: Partial<ConnectFlowState>): ConnectFlowState => ({
   ...createInitialConnectFlowState(),

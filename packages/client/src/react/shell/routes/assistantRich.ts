@@ -11,8 +11,8 @@ import {
   richAnswerHtml as sharedRichAnswerHtml,
   hydrateRefs as sharedHydrateRefs,
   wireCodeCopy as sharedWireCodeCopy,
-  type AssistantRichClassOverrides,
 } from "@centraid/blueprints/kit/assistant-rich.js";
+import type { AssistantRichClassOverrides } from "@centraid/blueprints/kit/assistant-rich.js";
 
 import { resolveAssistantRefs } from "../../../gateway-client.js";
 

@@ -40,11 +40,11 @@ export async function appendLogs(
   await fs.mkdir(appDataDir, { recursive: true }).catch(() => {});
   try {
     await fs.appendFile(file, payload, "utf8");
-  } catch (err) {
+  } catch (error) {
     // Log persistence is best-effort — never fail the handler request just
     // because logs couldn't be written. Surface via console for diagnostic.
     console.error(
-      `[centraid] log append failed for ${appDataDir}: ${err instanceof Error ? err.message : String(err)}`
+      `[centraid] log append failed for ${appDataDir}: ${error instanceof Error ? error.message : String(error)}`
     );
     return;
   }

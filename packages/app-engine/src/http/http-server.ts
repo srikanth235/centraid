@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
-import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import { AddressInfo } from "node:net";
+import http from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 
 import type { Runtime } from "../runtime.js";
 import { makeUserStoreRouteHandler } from "../stores/prefs-store.js";
@@ -415,7 +416,7 @@ export async function startRuntimeHttpServer(
         // the listener open forever. Stop accepting, hurry the idle sockets
         // along, then destroy whatever is left after the grace window — see
         // GATEWAY_SHUTDOWN_GRACE_MS.
-        let force: ReturnType<typeof setTimeout> | undefined;
+        let force: ReturnType<typeof setTimeout> | undefined = undefined;
         server.close((err) => {
           if (force) clearTimeout(force);
           if (err) reject(err);

@@ -9,7 +9,8 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { readBackupPolicy } from "../backup-policy.js";
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { VaultBlobBackpressureError } from "../errors.js";
 import { BlobCache } from "./cache.js";
 import { BlobContentKeyRegistry } from "./content-keys.js";
@@ -204,7 +205,7 @@ describe("stream-ingress", () => {
     const error = await h
       .coordinator()
       .beginIngress({ expectedSize: 100 })
-      .catch((failure: unknown) => failure);
+      .catch((caughtError: unknown) => caughtError);
     expect(error).toBeInstanceOf(VaultBlobBackpressureError);
     expect((error as VaultBlobBackpressureError).details).toMatchObject({
       needBytes: 100,

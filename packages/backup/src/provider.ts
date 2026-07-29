@@ -1,3 +1,4 @@
+import type * as TypeImport_6gxkc6 from "./object-store.js";
 /*
  * The `centraid-storage-provider/1` seam (PROTOCOL.md): everything a client
  * (the engine in this package) needs from an offsite storage provider, and
@@ -368,7 +369,7 @@ export interface BackupProvider {
     targetId: string,
     store: StoreClass,
     mode: "read" | "read-write"
-  ) => Promise<import("./object-store.js").ObjectStore>;
+  ) => Promise<TypeImport_6gxkc6.ObjectStore>;
 
   /**
    * Layer-1 grant introspection (PROTOCOL.md § Credential grant) — OPTIONAL.

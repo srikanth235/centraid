@@ -26,10 +26,8 @@
 
 import { Worker } from "node:worker_threads";
 
-import {
-  isConstrainedWorkerHost,
-  type WorkerHostCapacity,
-} from "./worker-admission.js";
+import { isConstrainedWorkerHost } from "./worker-admission.js";
+import type { WorkerHostCapacity } from "./worker-admission.js";
 
 /** Resource caps mirrored from the pre-pool spawn (handler-runner.ts). */
 export interface WorkerResourceLimits {

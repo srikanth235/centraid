@@ -24,10 +24,12 @@ import type {
 
 import AppHeader from "../kit/components/AppHeader";
 import Button from "../kit/components/Button";
-import { spacing, t, useTheme, type ThemeColors } from "../kit/theme";
+import { spacing, t, useTheme } from "../kit/theme";
+import type { ThemeColors } from "../kit/theme";
 import { dispatch } from "../lib/bridge/dispatch";
 import { INJECTED_JS } from "../lib/bridge/injected";
-import { CENTRAID_HANDSHAKE, type BridgeRequest } from "../lib/bridge/protocol";
+import { CENTRAID_HANDSHAKE } from "../lib/bridge/protocol";
+import type { BridgeRequest } from "../lib/bridge/protocol";
 import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from "../lib/gateway";
 import type { AppDetailScreenProps } from "../navigation";
 
@@ -61,9 +63,11 @@ function startBaseResolve(setters: BaseResolveSetters): () => void {
         setters.setLoading(false);
       }
     })
-    .catch((err: unknown) => {
+    .catch((error: unknown) => {
       if (cancelled) return;
-      setters.setLoadError(err instanceof Error ? err.message : String(err));
+      setters.setLoadError(
+        error instanceof Error ? error.message : String(error)
+      );
       setters.setLoading(false);
     });
   return () => {

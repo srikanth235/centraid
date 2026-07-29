@@ -1,10 +1,10 @@
 import { listVaults } from "../../../gateway-client.js";
-import {
-  type ConnectFlowResult,
-  type ConnectFlowState,
-  type ConnectTestInput,
-  type ConnectivityReport,
-  type LocalVaultsResult,
+import type {
+  ConnectFlowResult,
+  ConnectFlowState,
+  ConnectTestInput,
+  ConnectivityReport,
+  LocalVaultsResult,
 } from "./connectFlow-core.js";
 import { connectGateway } from "./gatewayModals.js";
 
@@ -50,13 +50,13 @@ export async function runConnectivityTest(
       };
     }
     return await b.testGatewayConnection(input);
-  } catch (err) {
+  } catch (error) {
     return {
       error: "unreachable",
       ok: false,
       stages: [
         {
-          detail: err instanceof Error ? err.message : String(err),
+          detail: error instanceof Error ? error.message : String(error),
           id: "reach",
           label: "Reach gateway",
           status: "fail",
@@ -93,11 +93,11 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
         vaultId: v.vaultId,
       })),
     };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
       message: `Couldn't read this gateway's spaces: ${
-        err instanceof Error ? err.message : String(err)
+        error instanceof Error ? error.message : String(error)
       }`,
     };
   }

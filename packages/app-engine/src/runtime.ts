@@ -8,11 +8,8 @@ import type { ConversationHistoryStore } from "./conversation/history.js";
 import type { ConversationRunner } from "./conversation/runner.js";
 import type { ConversationWorkspaceKind } from "./conversation/schema.js";
 import type { RunnerKind } from "./conversation/turn.js";
-import {
-  Dispatcher,
-  statusForToolError,
-  type ToolResult,
-} from "./handlers/dispatcher.js";
+import { Dispatcher, statusForToolError } from "./handlers/dispatcher.js";
+import type { ToolResult } from "./handlers/dispatcher.js";
 import type { VaultBridge } from "./handlers/vault-bridge.js";
 import { handleAppChanges } from "./http/changes-sse.js";
 import { handleLogsRoute, handleSettingsWrite } from "./http/cloud-routes.js";
@@ -26,11 +23,8 @@ import { serveQueryBundle } from "./http/query-bundle.js";
 import { parseWithDraft } from "./http/router.js";
 import { serveStatic } from "./http/static-server.js";
 import type { TurnLimiter } from "./http/turn-limiter.js";
-import {
-  handleTurnRoute,
-  parseTurnSubRoute,
-  type AskModelPrefs,
-} from "./http/turn-routes.js";
+import { handleTurnRoute, parseTurnSubRoute } from "./http/turn-routes.js";
+import type { AskModelPrefs } from "./http/turn-routes.js";
 import { appDataDir } from "./registry/app-paths.js";
 import { cleanupDeregisteredApp } from "./registry/deregister-cleanup.js";
 import { Registry, RegistryError } from "./registry/registry.js";
@@ -530,12 +524,12 @@ export class Runtime {
         }
         body = parsed as Record<string, unknown>;
       }
-    } catch (err) {
+    } catch (error) {
       sendError(
         res,
         400,
         "bad_request",
-        `request body is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+        `request body is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
       );
       return;
     }
@@ -895,24 +889,24 @@ export class Runtime {
         case "not-found":
           sendError(res, 404, "not_found", "Unknown centraid path.");
       }
-    } catch (err) {
-      if (err instanceof RegistryError) {
+    } catch (error) {
+      if (error instanceof RegistryError) {
         const status =
-          err.code === "invalid_id"
+          error.code === "invalid_id"
             ? 400
-            : err.code === "already_registered"
+            : error.code === "already_registered"
               ? 409
-              : err.code === "not_a_directory"
+              : error.code === "not_a_directory"
                 ? 400
                 : 404;
-        sendError(res, status, err.code, err.message);
+        sendError(res, status, error.code, error.message);
         return;
       }
       sendError(
         res,
         500,
         "internal_error",
-        err instanceof Error ? err.message : String(err)
+        error instanceof Error ? error.message : String(error)
       );
     }
   }

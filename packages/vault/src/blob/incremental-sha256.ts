@@ -7,7 +7,8 @@
 // hasher's linear-memory state. This retires the previous handwritten
 // JavaScript compressor while keeping the durable resume contract.
 
-import { createSHA256, type IHasher } from "hash-wasm";
+import { createSHA256 } from "hash-wasm";
+import type { IHasher } from "hash-wasm";
 
 export interface SerializableSha256State {
   version: 2;

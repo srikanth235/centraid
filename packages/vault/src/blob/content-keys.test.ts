@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { BlobContentKeyRegistry } from "./content-keys.js";
 import { MemoryBlobStore } from "./local.js";
 import { sealBlob } from "./seal.js";

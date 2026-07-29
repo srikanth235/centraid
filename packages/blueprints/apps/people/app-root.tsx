@@ -12,9 +12,8 @@ import {
   useReducer,
   useRef,
   useState,
-  type KeyboardEvent,
-  type ReactElement,
 } from "react";
+import type { KeyboardEvent, ReactElement } from "react";
 
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";

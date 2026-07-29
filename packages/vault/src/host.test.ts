@@ -3,7 +3,8 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault, createGrant } from "./bootstrap.js";
 import { registerTaskCommands } from "./commands/tasks.js";
-import { openVaultDb, type VaultDb } from "./db.js";
+import { openVaultDb } from "./db.js";
+import type { VaultDb } from "./db.js";
 import { createGateway } from "./gateway/gateway.js";
 import {
   ensureAgentEnrolled,

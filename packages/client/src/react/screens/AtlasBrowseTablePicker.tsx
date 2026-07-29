@@ -1,4 +1,4 @@
-import { type JSX } from "react";
+import type { JSX } from "react";
 
 import type { BrowseTableEntry } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";

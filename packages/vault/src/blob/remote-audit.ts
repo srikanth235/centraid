@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import { remoteEncryptionKey } from "./custody-types.js";
+import type { RemoteTier } from "./custody-types.js";
 import type { LocalBlobStore } from "./local.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";
 import { assertSha, sha256OfBytes } from "./store.js";

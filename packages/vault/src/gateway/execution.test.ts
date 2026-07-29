@@ -6,8 +6,10 @@
 
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { isSealedValue } from "../schema/sealed.js";
@@ -23,8 +25,8 @@ import {
   setInvocationStatus,
   sweepDanglingLinks,
   validatePolymorphicWrites,
-  type RegisteredCommand,
 } from "./execution.js";
+import type { RegisteredCommand } from "./execution.js";
 import type { Identity } from "./types.js";
 import { GatewayError } from "./types.js";
 

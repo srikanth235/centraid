@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import {
   INLINE_BODY_BUDGET_BYTES,
@@ -35,8 +37,8 @@ describe("inline-body-guard", () => {
     let thrown: unknown;
     try {
       assertTextBodyWithinBudget(big, "text/markdown");
-    } catch (err) {
-      thrown = err;
+    } catch (error) {
+      thrown = error;
     }
     expect(thrown).toBeInstanceOf(InlineBodyTooLargeError);
     const typed = thrown as InlineBodyTooLargeError;

@@ -35,20 +35,22 @@ import {
   parseWalPairMarkerKey,
   parseWalSegmentKey,
   planCoordinatedReplay,
-  type CoordinatedReplayResult,
   WAL_DB_FILES,
   WAL_DB_NAMES,
-  type WalDbName,
-  type WalGroupCloser,
-  type WalPairMarker,
-  type WalReplayPlan,
-  type WalSegmentAddress,
-  type WalStreamListing,
   walGroupCloserKey,
   walPairMarkerPrefix,
   walSegmentKey,
   walSegmentPrefix,
   validateCommittedWal,
+} from "./wal-format.js";
+import type {
+  CoordinatedReplayResult,
+  WalDbName,
+  WalGroupCloser,
+  WalPairMarker,
+  WalReplayPlan,
+  WalSegmentAddress,
+  WalStreamListing,
 } from "./wal-format.js";
 
 export interface WalReplayDbOutcome {
@@ -150,9 +152,9 @@ async function listStream(
           await store.get(walGroupCloserKey(closer))
         );
         closers.push(closer);
-      } catch (err) {
+      } catch (error) {
         log.warn(
-          `restore: wal closer ${obj.key} failed authentication (${(err as Error).message}) — treating group as unclosed`
+          `restore: wal closer ${obj.key} failed authentication (${(error as Error).message}) — treating group as unclosed`
         );
       }
     }
@@ -187,9 +189,9 @@ async function listPairMarkers(
         markers.push(
           openWalPairMarker(dataKey, vaultId, addr, await store.get(obj.key))
         );
-      } catch (err) {
+      } catch (error) {
         log.warn(
-          `restore: wal pair marker ${obj.key} failed authentication (${(err as Error).message}) — ignoring it`
+          `restore: wal pair marker ${obj.key} failed authentication (${(error as Error).message}) — ignoring it`
         );
       }
     }
@@ -297,13 +299,13 @@ async function spoolSegments(opts: {
         const sealed = await opts.store.get(key);
         const plain = openWalSegment(opts.dataKey, opts.vaultId, addr, sealed);
         await fs.writeFile(spoolPath, plain);
-      } catch (err) {
+      } catch (error) {
         damaged.push(key);
         const listing = listingByDb[db]!;
         listing.segments = listing.segments.filter((s) => s !== addr);
         dropped = true;
         opts.log.warn(
-          `restore: wal segment ${key} unusable (${(err as Error).message}) — dropping it from ` +
+          `restore: wal segment ${key} unusable (${(error as Error).message}) — dropping it from ` +
             `the ${db} listing and re-planning the coordinated cut`
         );
       }

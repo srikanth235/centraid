@@ -9,8 +9,8 @@ import {
   presignS3Request,
   sha256HexOf,
   signS3Request,
-  type SignS3RequestParams,
 } from "./sigv4.js";
+import type { SignS3RequestParams } from "./sigv4.js";
 
 const CREDS = {
   accessKeyId: "AKIAEXAMPLE",

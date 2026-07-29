@@ -59,9 +59,11 @@ export function useReplicaQuery(
       if (!current()) return;
       setResult(next);
       setError(undefined);
-    } catch (reason) {
+    } catch (caughtError) {
       if (!current()) return;
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       if (current()) setLoading(false);
     }

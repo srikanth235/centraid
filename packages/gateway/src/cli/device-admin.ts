@@ -17,17 +17,16 @@
 import { handshakeGateway } from "@centraid/protocol";
 import { endpointIdForSecret } from "@centraid/tunnel";
 
-import {
-  EnrollmentStore,
-  type GrantableRole,
-} from "../serve/enrollment-store.js";
+import { EnrollmentStore } from "../serve/enrollment-store.js";
+import type { GrantableRole } from "../serve/enrollment-store.js";
 import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
 import {
   openVaultRegistry,
   VaultRegistryError,
-  type VaultRegistry,
 } from "../serve/vault-registry.js";
-import { jsonFail, runJson, type Fail } from "./json-cli.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
+import { jsonFail, runJson } from "./json-cli.js";
+import type { Fail } from "./json-cli.js";
 import { daemonKeyStore } from "./key-store.js";
 import { landlordBearerForEndpointSecret } from "./landlord-auth.js";
 import { renderTerminalQr } from "./pair-qr.js";
@@ -352,11 +351,11 @@ export async function commandPair(
           qr.trimEnd(),
           ""
         );
-      } catch (err) {
+      } catch (error) {
         lines.push(
           "Phone: ticket is too long for a terminal QR (relay-heavy EndpointTicket).",
           "Paste the one-line ticket under Settings → Gateway link on the phone instead.",
-          `QR encode error: ${err instanceof Error ? err.message : String(err)}`,
+          `QR encode error: ${error instanceof Error ? error.message : String(error)}`,
           ""
         );
       }
@@ -461,9 +460,9 @@ export async function commandDevices(
             : { memberLabel: parsed.newMember }),
         });
         process.stdout.write(`${JSON.stringify(row)}\n`);
-      } catch (err) {
-        if (err instanceof VaultRegistryError) fail(err.message, 1);
-        throw err;
+      } catch (error) {
+        if (error instanceof VaultRegistryError) fail(error.message, 1);
+        throw error;
       } finally {
         registry.stop();
       }

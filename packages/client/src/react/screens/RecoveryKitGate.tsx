@@ -1,4 +1,5 @@
-import { useRef, useState, type JSX } from "react";
+import { useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { formatClock } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
@@ -54,8 +55,10 @@ export default function RecoveryKitGate({
         throw new Error(result.error ?? "Recovery kit export failed");
       }
       setExported(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       setConfirming(false);
     }
@@ -87,8 +90,10 @@ export default function RecoveryKitGate({
         lossConsent: true,
       });
       setConfirmedAt(result.confirmedAt);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       setConfirming(false);
     }

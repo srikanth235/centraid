@@ -1,10 +1,12 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import SettingsDiagnosticsScreen, {
-  type GatewayHealthDTO,
-  type SettingsDiagnosticsBridgeProps,
+import SettingsDiagnosticsScreen from "./SettingsDiagnosticsScreen.js";
+import type {
+  GatewayHealthDTO,
+  SettingsDiagnosticsBridgeProps,
 } from "./SettingsDiagnosticsScreen.js";
 
 function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
   CRON_DEFAULT_TIMEZONE_PREF,
   loadDefaultCronTimeZone,
@@ -7,10 +8,10 @@ import {
 } from "./settingsCronTimezoneData.js";
 
 const getUserPrefs = vi.hoisted(() =>
-  vi.fn<typeof import("../../../gateway-client.js").getUserPrefs>()
+  vi.fn<typeof TypeImport_1gl5zx7.getUserPrefs>()
 );
 const saveUserPrefs = vi.hoisted(() =>
-  vi.fn<typeof import("../../../gateway-client.js").saveUserPrefs>()
+  vi.fn<typeof TypeImport_1gl5zx7.saveUserPrefs>()
 );
 
 vi.mock(import("../../../gateway-client.js"), () => ({

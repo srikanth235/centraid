@@ -1,8 +1,10 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { appLiveUrl as AppLiveUrl } from "../../../gateway-client.js";
+import type * as TypeImport_1cwwegz from "./AppFrame.js";
 
 const appLiveUrl = vi.fn<typeof AppLiveUrl>();
 const tunnelFetch = vi.fn<typeof fetch>();
@@ -10,7 +12,7 @@ vi.mock(import("../../../gateway-client.js"), () => ({
   appLiveUrl: (input: Parameters<typeof AppLiveUrl>[0]) => appLiveUrl(input),
 }));
 
-let AppFrame: typeof import("./AppFrame.js").default;
+let AppFrame: typeof TypeImport_1cwwegz.default;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 

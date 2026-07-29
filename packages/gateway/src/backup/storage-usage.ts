@@ -22,7 +22,8 @@
  * was true a moment ago.
  */
 
-import { openRemoteBackupProvider, type UsageByStore } from "@centraid/backup";
+import { openRemoteBackupProvider } from "@centraid/backup";
+import type { UsageByStore } from "@centraid/backup";
 
 import type { StorageConnectionStore } from "./storage-connections.js";
 
@@ -97,11 +98,11 @@ export class StorageUsagePoller {
     let result: ProviderUsageResult;
     try {
       result = await this.fetchOne(connectionId);
-    } catch (err) {
+    } catch (error) {
       result = {
         providerReported: prior?.result.providerReported ?? null,
         fetchedAt: prior?.result.fetchedAt ?? null,
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       };
     }
     this.cache.set(connectionId, {

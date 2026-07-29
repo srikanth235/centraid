@@ -7,6 +7,7 @@
  */
 
 import { createWriteStream, promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 
 export interface ObjectListEntry {
@@ -85,7 +86,7 @@ export class FsObjectStore implements ObjectStore {
           const ws = createWriteStream(tmp);
           ws.on("error", reject);
           ws.on("finish", resolve);
-          (async () => {
+          void (async () => {
             const iterator = data[Symbol.asyncIterator]();
             const writeNext = async (): Promise<void> => {
               const next = await iterator.next();
@@ -94,26 +95,26 @@ export class FsObjectStore implements ObjectStore {
                 return;
               }
               if (!ws.write(next.value)) {
-                await new Promise<void>((resolve) =>
-                  ws.once("drain", () => resolve())
+                await new Promise<void>((_resolve) =>
+                  ws.once("drain", () => _resolve())
                 );
               }
               return writeNext();
             };
             try {
               await writeNext();
-            } catch (err) {
+            } catch (error) {
               await iterator.return?.();
               ws.destroy();
-              reject(err instanceof Error ? err : new Error(String(err)));
+              reject(error instanceof Error ? error : new Error(String(error)));
             }
           })();
         });
       }
       await fs.rename(tmp, dest);
-    } catch (err) {
+    } catch (error) {
       await fs.rm(tmp, { force: true });
-      throw err;
+      throw error;
     }
   }
 
@@ -149,9 +150,9 @@ export class FsObjectStore implements ObjectStore {
       const st = await fs.stat(this.resolve(key));
       if (!st.isFile()) return null;
       return { size: st.size };
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw err;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
     }
   }
 
@@ -165,12 +166,12 @@ export class FsObjectStore implements ObjectStore {
     async function* walk(
       dir: string
     ): AsyncGenerator<{ key: string; size: number }> {
-      let entries: import("node:fs").Dirent[];
+      let entries: TypeImport_g9tn66.Dirent[];
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-        throw err;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        throw error;
       }
       const walkNextEntry = async function* (
         index: number
@@ -199,8 +200,8 @@ export class FsObjectStore implements ObjectStore {
   async delete(key: string): Promise<void> {
     try {
       await fs.unlink(this.resolve(key));
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
 }

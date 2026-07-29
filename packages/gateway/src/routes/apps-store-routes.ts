@@ -39,13 +39,11 @@ import path from "node:path";
 
 import { ExtSpecError } from "@centraid/vault";
 
-import {
-  applyExtOnPublish,
-  readExtSpecs,
-  type ExtBandOps,
-} from "../lifecycle/ext-band.js";
+import { applyExtOnPublish, readExtSpecs } from "../lifecycle/ext-band.js";
+import type { ExtBandOps } from "../lifecycle/ext-band.js";
 import { validateManifestAt } from "../validate-manifest.js";
-import { WorktreeStore, WorktreeStoreError } from "../worktree-store/index.js";
+import type { WorktreeStore } from "../worktree-store/index.js";
+import { WorktreeStoreError } from "../worktree-store/index.js";
 import { readDraftFiles, writeDraftFile } from "./apps-store-draft-files.js";
 import { readBody, readJson, sendJson } from "./route-helpers.js";
 
@@ -163,11 +161,14 @@ export function makeAppsStoreRouteHandler(
         let codeRemoved = true;
         try {
           await store.deleteApp(appId);
-        } catch (err) {
-          if (err instanceof WorktreeStoreError && err.code === "no_changes") {
+        } catch (error) {
+          if (
+            error instanceof WorktreeStoreError &&
+            error.code === "no_changes"
+          ) {
             codeRemoved = false;
           } else {
-            throw err;
+            throw error;
           }
         }
         if (opts.onAppDeleted) await opts.onAppDeleted(appId);
@@ -201,8 +202,8 @@ export function makeAppsStoreRouteHandler(
       }
 
       return false;
-    } catch (err) {
-      return sendStoreError(res, err);
+    } catch (error) {
+      return sendStoreError(res, error);
     }
   };
 }
@@ -304,12 +305,12 @@ async function handlePublish(
           }
         : {}),
     });
-  } catch (err) {
-    if (err instanceof ExtSpecError) {
-      sendJson(res, 400, { error: "invalid_ext_spec", message: err.message });
+  } catch (error) {
+    if (error instanceof ExtSpecError) {
+      sendJson(res, 400, { error: "invalid_ext_spec", message: error.message });
       return true;
     }
-    throw err;
+    throw error;
   }
   await onAppLive?.(appId);
   sendJson(res, 201, {
@@ -384,12 +385,12 @@ async function handleResetData(
         ? { ...ext.dropAppExtDraft(appId), created: [], altered: [] }
         : ext.seedAppExtDraft(appId, specs, { reset: true });
     sendJson(res, 200, { id: appId, ext: out });
-  } catch (err) {
-    if (err instanceof ExtSpecError) {
-      sendJson(res, 400, { error: "invalid_ext_spec", message: err.message });
+  } catch (error) {
+    if (error instanceof ExtSpecError) {
+      sendJson(res, 400, { error: "invalid_ext_spec", message: error.message });
       return true;
     }
-    throw err;
+    throw error;
   }
   return true;
 }

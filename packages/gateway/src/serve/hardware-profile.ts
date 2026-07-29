@@ -1,11 +1,7 @@
 import { availableParallelism, totalmem } from "node:os";
 
-import {
-  parseResourceMode,
-  resourceModeLabel,
-  type ResourceKnobOverrides,
-  type ResourceMode,
-} from "./resource-mode.js";
+import { parseResourceMode, resourceModeLabel } from "./resource-mode.js";
+import type { ResourceKnobOverrides, ResourceMode } from "./resource-mode.js";
 
 export { type ResourceMode } from "./resource-mode.js";
 export type HardwareClass = "constrained" | "standard";

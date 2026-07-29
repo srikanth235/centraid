@@ -1,12 +1,10 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  ShellActions,
-  ShellActionsProvider,
-  useShellActions,
-} from "./actions.js";
+import type { ShellActions } from "./actions.js";
+import { ShellActionsProvider, useShellActions } from "./actions.js";
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;

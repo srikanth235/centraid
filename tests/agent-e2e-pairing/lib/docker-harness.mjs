@@ -165,9 +165,9 @@ async function shQuiet(cmd, args, opts = {}) {
   // Best-effort teardown step: never throw, just report.
   try {
     await sh(cmd, args, opts);
-  } catch (e) {
+  } catch (error) {
     console.error(
-      `  [teardown warning] ${cmd} ${args.join(" ")}: ${e.message}`
+      `  [teardown warning] ${cmd} ${args.join(" ")}: ${error.message}`
     );
   }
 }
@@ -1096,8 +1096,8 @@ export async function runFlow(slug, fn) {
     };
 
     result = await fn(ctx);
-  } catch (e) {
-    error = e;
+  } catch (caughtError) {
+    error = caughtError;
   } finally {
     // Best-effort teardown, all of it — a failed cleanup step must not mask
     // the flow's actual pass/fail result, and must not stop later cleanup

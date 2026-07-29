@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createEnrichmentHealthProbe,
-  type EnrichmentAutomationRow,
-} from "./enrichment-health.js";
+import { createEnrichmentHealthProbe } from "./enrichment-health.js";
+import type { EnrichmentAutomationRow } from "./enrichment-health.js";
 
 function row(id: string, enabled: boolean): EnrichmentAutomationRow {
   return { id, enabled, ref: `${id}/${id}` };

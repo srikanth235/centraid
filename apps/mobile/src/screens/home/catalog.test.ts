@@ -44,10 +44,12 @@ function meta(id: string, name: string, description = ""): AppMetaResolved {
 describe(buildLauncherItems, () => {
   it("always includes native covers as installed", () => {
     const items = buildLauncherItems([]);
-    const natives = items.filter((it) => NATIVE_APP_IDS.has(it.meta.id));
+    const natives = items.filter((itLocal) =>
+      NATIVE_APP_IDS.has(itLocal.meta.id)
+    );
     expect(natives).toHaveLength(3);
-    expect(natives.every((it) => it.installed)).toBe(true);
-    expect(natives.map((it) => it.route.kind).sort()).toStrictEqual([
+    expect(natives.every((itLocal) => itLocal.installed)).toBe(true);
+    expect(natives.map((itLocal) => itLocal.route.kind).sort()).toStrictEqual([
       "agenda",
       "docs",
       "photos",
@@ -56,7 +58,7 @@ describe(buildLauncherItems, () => {
 
   it("dims uninstalled gateway catalog apps and routes them to pair", () => {
     const items = buildLauncherItems([]);
-    const tasks = items.find((it) => it.meta.id === "tasks");
+    const tasks = items.find((itLocal) => itLocal.meta.id === "tasks");
     expect(tasks).toMatchObject({ installed: false, route: { kind: "pair" } });
   });
 
@@ -66,13 +68,13 @@ describe(buildLauncherItems, () => {
       meta("custom-app", "Custom", "user built"),
     ];
     const items = buildLauncherItems(remote);
-    const tasks = items.find((it) => it.meta.id === "tasks");
+    const tasks = items.find((itLocal) => itLocal.meta.id === "tasks");
     expect(tasks).toMatchObject({
       installed: true,
       meta: expect.objectContaining({ name: "My Tasks" }),
       route: { kind: "app", appId: "tasks" },
     });
-    const custom = items.find((it) => it.meta.id === "custom-app");
+    const custom = items.find((itLocal) => itLocal.meta.id === "custom-app");
     expect(custom).toMatchObject({
       installed: true,
       route: { kind: "app", appId: "custom-app" },
@@ -88,7 +90,9 @@ describe(filterLauncherItems, () => {
     expect(copy).not.toBe(items);
     const photos = filterLauncherItems(items, "PHOTO");
     expect(
-      photos.every((it) => it.meta.name.toLowerCase().includes("photo"))
+      photos.every((itLocal) =>
+        itLocal.meta.name.toLowerCase().includes("photo")
+      )
     ).toBe(true);
     expect(photos.length).toBeGreaterThan(0);
   });

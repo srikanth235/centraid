@@ -9,8 +9,8 @@ import {
   hostFactRows,
   msUntilTonight,
   resolvedKnobRows,
-  type ResourceProfileDTO,
 } from "./resource-summary.js";
+import type { ResourceProfileDTO } from "./resource-summary.js";
 
 const sample: ResourceProfileDTO = {
   class: "standard",

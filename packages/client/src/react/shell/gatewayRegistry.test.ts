@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  applyProbeOutcome,
-  buildGatewayRows,
-  type GatewayProbeCache,
-  type RegistryGateway,
-} from "./gatewayRegistry.js";
+import { applyProbeOutcome, buildGatewayRows } from "./gatewayRegistry.js";
+import type { GatewayProbeCache, RegistryGateway } from "./gatewayRegistry.js";
 
 // The gateway switcher is the ONE switcher that survived Decision 14 (#599).
 // These are the pure halves: what a probe does to the cache, and what the rows

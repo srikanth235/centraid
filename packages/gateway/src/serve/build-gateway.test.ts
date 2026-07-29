@@ -8,7 +8,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.ts";
-import { buildGateway, type BuiltGateway } from "./build-gateway.ts";
+import { buildGateway } from "./build-gateway.ts";
+import type { BuiltGateway } from "./build-gateway.ts";
 import { GatewayDatabase } from "./gateway-db.js";
 
 // `buildGateway()` is the host-agnostic core: it constructs the whole

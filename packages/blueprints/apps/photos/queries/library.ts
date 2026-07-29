@@ -259,16 +259,16 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       window,
       tail,
     };
-  } catch (err) {
+  } catch (error) {
     const empty = { assets: [], albums: [], places: [], trash: [], tail: null };
     // Only a consent deny is "ask the owner for access". Every other failure
     // (VAULT_ERROR, VAULT_UNAVAILABLE, a protocol error from the replica
     // bridge) is ours, and saying "no vault access yet" about it sends the
     // reader off to fix a grant that was never the problem.
-    const e = err as { code?: string; message?: string };
+    const e = error as { code?: string; message?: string };
     if (e.code === "VAULT_CONSENT") {
       return { ...empty, vaultDenied: { code: e.code, message: e.message } };
     }
-    return { ...empty, error: String(e.message ?? err) };
+    return { ...empty, error: String(e.message ?? error) };
   }
 }

@@ -19,7 +19,8 @@ import { describe, afterEach, expect, test } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
-import { makeScopesRouteHandler, type ScopeVault } from "./scopes-routes.js";
+import { makeScopesRouteHandler } from "./scopes-routes.js";
+import type { ScopeVault } from "./scopes-routes.js";
 
 const servers: http.Server[] = [];
 const databases: GatewayDatabase[] = [];

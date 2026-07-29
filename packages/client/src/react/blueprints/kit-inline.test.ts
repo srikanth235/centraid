@@ -4,6 +4,7 @@ import {
 } from "@centraid/blueprints/kit/kit.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { installInlineCentraid } from "./centraid-inline.js";
 // The inline kit is imported FIRST so its `./suppress-served-ask` side effect
@@ -25,12 +26,12 @@ type InlineSession = NonNullable<
 >;
 
 vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
-  auth: vi.fn<typeof import("../../gateway-client-core.js").auth>(async () => ({
+  auth: vi.fn<typeof TypeImport_oycips.auth>(async () => ({
     baseUrl: "https://gw.test",
     token: "tok",
   })),
   authHeaders: () => ({}),
-  doFetch: vi.fn<typeof import("../../gateway-client-core.js").doFetch>(),
+  doFetch: vi.fn<typeof TypeImport_oycips.doFetch>(),
   readJson: <T>(...args: Parameters<typeof readJson>) =>
     readJson(...args) as Promise<T>,
 }));

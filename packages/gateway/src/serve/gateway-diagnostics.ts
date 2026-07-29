@@ -30,12 +30,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  dbSizeBreakdown,
-  scanInlineBodyViolations,
-  type DbSizeBreakdown,
-  type InlineBodyViolationScan,
-  type VaultDb,
+import { dbSizeBreakdown, scanInlineBodyViolations } from "@centraid/vault";
+import type {
+  DbSizeBreakdown,
+  InlineBodyViolationScan,
+  VaultDb,
 } from "@centraid/vault";
 
 import {

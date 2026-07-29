@@ -9,10 +9,8 @@
 // "the ambient scope". A member with one library therefore walks the same code
 // path as a member with five, and sees no chips, no badges and no scope
 // attributes (an empty id is never stamped).
-import {
-  resolveWriteTarget,
-  type WriteTarget,
-} from "../_shared/write-target.ts";
+import { resolveWriteTarget } from "../_shared/write-target.ts";
+import type { WriteTarget } from "../_shared/write-target.ts";
 import type { InlineScope } from "../inline-types.ts";
 
 /** The stand-in for a host that mounts one, unnamed scope. */

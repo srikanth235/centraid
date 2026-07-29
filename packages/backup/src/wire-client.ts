@@ -7,10 +7,8 @@
  * so a CAS consumer never needs to construct a `BackupProvider`.
  */
 
-import {
-  BackupProviderError,
-  type BackupProviderErrorCode,
-} from "./provider.js";
+import { BackupProviderError } from "./provider.js";
+import type { BackupProviderErrorCode } from "./provider.js";
 
 export interface WireClientOptions {
   /** e.g. "https://api.clawgnition.com" — no trailing slash required. */

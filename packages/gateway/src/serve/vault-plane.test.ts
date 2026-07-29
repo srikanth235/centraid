@@ -15,7 +15,8 @@ import {
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";
-import { openVaultPlane, type VaultPlane } from "./vault-plane.js";
+import { openVaultPlane } from "./vault-plane.js";
+import type { VaultPlane } from "./vault-plane.js";
 import { openVaultRegistry } from "./vault-registry.js";
 
 const silentLogger = {

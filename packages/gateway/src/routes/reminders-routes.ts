@@ -35,8 +35,8 @@ export function makeRemindersRouteHandler(vaults: VaultRegistry): RouteHandler {
     try {
       const reminders = computeDueReminders(vaults.current().db, nowIso());
       return sendJson(res, 200, { reminders });
-    } catch (err) {
-      return sendError(res, err);
+    } catch (error) {
+      return sendError(res, error);
     }
   };
 }

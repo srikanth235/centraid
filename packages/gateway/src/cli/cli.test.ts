@@ -274,7 +274,7 @@ describe("cli scenarios", () => {
 
     // Wait until the listening line has been printed. The bearer is NOT printed
     // (phase 7) — the parent already knows it (it supplied CENTRAID_GATEWAY_TOKEN).
-    const url = await new Promise<string>((resolve, reject) => {
+    const urlLocal = await new Promise<string>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`startup timeout; stderr=${stderr}`)),
         15_000
@@ -295,14 +295,14 @@ describe("cli scenarios", () => {
     expect(stdout).not.toMatch(/token:/u);
 
     try {
-      const ok = await fetch(`${url}/centraid/_apps`, {
+      const ok = await fetch(`${urlLocal}/centraid/_apps`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(ok.status).toBe(200);
       const body = (await ok.json()) as unknown[];
       expect(body).toStrictEqual([]);
 
-      const unauth = await fetch(`${url}/centraid/_apps`);
+      const unauth = await fetch(`${urlLocal}/centraid/_apps`);
       expect(unauth.status).toBe(401);
     } finally {
       child.kill("SIGTERM");

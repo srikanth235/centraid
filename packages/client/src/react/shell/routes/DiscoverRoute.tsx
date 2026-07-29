@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import type {
   AppearancePrefs,
@@ -81,9 +82,9 @@ export default function DiscoverRoute({
         showToast(`Installed "${pin.name}"`);
         openApp(pin.id);
       })
-      .catch((err: unknown) =>
+      .catch((error: unknown) =>
         showToast(
-          `Install failed: ${err instanceof Error ? err.message : String(err)}`
+          `Install failed: ${error instanceof Error ? error.message : String(error)}`
         )
       );
   };
@@ -108,9 +109,9 @@ export default function DiscoverRoute({
         if (ref) navigate({ kind: "automation-view", automationId: ref });
         else navigate({ kind: "automations" });
       })
-      .catch((err: unknown) =>
+      .catch((error: unknown) =>
         showToast(
-          `Could not adopt template: ${err instanceof Error ? err.message : String(err)}`
+          `Could not adopt template: ${error instanceof Error ? error.message : String(error)}`
         )
       );
   };

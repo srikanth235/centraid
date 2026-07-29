@@ -144,14 +144,14 @@ async function main() {
     console.log(`[iframe-probe] wrote ${shot}`);
 
     console.log(`[iframe-probe] PASS in ${Date.now() - t0}ms total`);
-  } catch (err) {
+  } catch (error) {
     const failShot = path.join(OUT_DIR, "iframe-probe-FAILURE.png");
     await page.screenshot({ path: failShot }).catch(() => undefined);
     console.error(`[iframe-probe] FAIL — screenshot at ${failShot}`);
     console.error(
       `[iframe-probe] console messages captured: ${consoleLog.length}`
     );
-    throw err;
+    throw error;
   } finally {
     await close();
     await fs
@@ -160,7 +160,7 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exitCode = 1;
 });

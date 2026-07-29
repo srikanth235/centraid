@@ -107,8 +107,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     let outcome: VaultOutcome | undefined;
     try {
       outcome = await window.centraid.write({ action, input });
-    } catch (err) {
-      notice(String((err as { message?: unknown })?.message ?? err));
+    } catch (error) {
+      notice(String((error as { message?: unknown })?.message ?? error));
       return undefined;
     }
     const executed = narrate(outcome);
@@ -129,8 +129,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
-    } catch (err) {
-      notice(String((err as { message?: unknown })?.message ?? err));
+    } catch (error) {
+      notice(String((error as { message?: unknown })?.message ?? error));
       return undefined;
     }
   }
@@ -228,8 +228,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         action: "set-status",
         input: { task_id: task.task_id, status: nextStatus },
       });
-    } catch (err) {
-      notice(String((err as { message?: unknown })?.message ?? err));
+    } catch (error) {
+      notice(String((error as { message?: unknown })?.message ?? error));
       return false;
     }
     if (outcome?.status === "executed") {

@@ -1,8 +1,5 @@
-import {
-  randomPassword,
-  unwrapCompanionEnvelope,
-  type CompanionEnvelope,
-} from "./content-core.js";
+import { randomPassword, unwrapCompanionEnvelope } from "./content-core.js";
+import type { CompanionEnvelope } from "./content-core.js";
 import {
   clearFillMaterial,
   isTrustedCredentialGesture,

@@ -10,12 +10,8 @@ import { deflateSync } from "node:zlib";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import {
-  BlobCustody,
-  sealBlob,
-  unsealBlob,
-  type RemoteTier,
-} from "./custody.js";
+import { BlobCustody, sealBlob, unsealBlob } from "./custody.js";
+import type { RemoteTier } from "./custody.js";
 import { FsBlobStore, MemoryBlobStore } from "./local.js";
 import { extractBlobMeta, sniffMediaType } from "./pipeline.js";
 import { S3BlobStore } from "./s3.js";
@@ -462,7 +458,7 @@ describe("blob", () => {
           authHeaders,
           requests,
           close: () =>
-            new Promise<void>((resolve) => server.close(() => resolve())),
+            new Promise<void>((_resolve) => server.close(() => _resolve())),
         });
       });
     });

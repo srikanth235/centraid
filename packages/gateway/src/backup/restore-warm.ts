@@ -20,7 +20,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { EngineLogger } from "@centraid/backup";
-import { BlobCustody, FsBlobStore, type RemoteTier } from "@centraid/vault";
+import { BlobCustody, FsBlobStore } from "@centraid/vault";
+import type { RemoteTier } from "@centraid/vault";
 
 export interface PreviewsWarmResult {
   /** Distinct `thumb` shas the restored vault references (the target set). */
@@ -116,10 +117,10 @@ export async function warmPreviewTinies(
           `restore warm-pass: remote CAS has no tiny ${sha} — grid slot degraded`
         );
       }
-    } catch (err) {
+    } catch (error) {
       failed += 1;
       opts.log?.warn?.(
-        `restore warm-pass: tiny ${sha} failed to warm: ${err instanceof Error ? err.message : String(err)}`
+        `restore warm-pass: tiny ${sha} failed to warm: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     return worker();

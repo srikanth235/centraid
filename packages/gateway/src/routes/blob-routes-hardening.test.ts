@@ -7,7 +7,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { DATA_PLANE_RELAY_HEADER } from "../serve/data-plane-handoff.js";
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
 import { makeBlobRouteHandler } from "./blob-routes.js";
 
 const silentLogger = {

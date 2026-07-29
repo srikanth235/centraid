@@ -460,8 +460,8 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     const truncated =
       ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
     return { notes: rows, notebooks: books, tags: allTags, truncated, window };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       notes: [],
       notebooks: [],

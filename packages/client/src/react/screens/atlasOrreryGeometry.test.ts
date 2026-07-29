@@ -4,7 +4,6 @@ import type { AtlasFkEdge } from "../../gateway-client.js";
 import {
   ZOOM_MAX,
   ZOOM_MIN,
-  type AtlasDetailLevel,
   allocateBearings,
   bfsHops,
   clientToViewBox,
@@ -17,6 +16,7 @@ import {
   visibleAtLevel,
   zoomView,
 } from "./atlasOrreryGeometry.js";
+import type { AtlasDetailLevel } from "./atlasOrreryGeometry.js";
 import { edge, makeGraph, node } from "./atlasRelationsTestKit.js";
 
 // ── Geometry (pure functions) ───────────────────────────────────────────────

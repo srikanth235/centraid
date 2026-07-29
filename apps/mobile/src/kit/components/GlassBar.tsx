@@ -18,9 +18,11 @@
 
 import { BlurView } from "expo-blur";
 import React, { useMemo } from "react";
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, View } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 
-import { useTheme, type ThemeColors, type Scheme } from "../theme";
+import { useTheme } from "../theme";
+import type { ThemeColors, Scheme } from "../theme";
 
 // A light colour cast over the live blur — not an opaque fill.
 const TINT: Record<Scheme, string> = {

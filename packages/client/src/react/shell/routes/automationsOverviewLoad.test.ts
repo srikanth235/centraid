@@ -7,9 +7,12 @@ import {
   listOutboxGrants,
   listTemplates,
 } from "../../../gateway-client.js";
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
 import { openWebhookReveal } from "../webhookReveal.js";
+import type * as TypeImport_1f3slmz from "../webhookReveal.js";
 import { collectAutomationRuns } from "./automationsData.js";
+import type * as TypeImport_17pturf from "./automationsData.js";
 import {
   adoptOverviewSuggestion,
   loadAutomationsOverviewData,
@@ -18,39 +21,35 @@ import {
   cloneAutomationTemplate,
   surfaceMintedWebhook,
 } from "./templatesData.js";
+import type * as TypeImport_13kqdum from "./templatesData.js";
 
 vi.mock(import("../../../gateway-client.js"), () => ({
-  listAutomations:
-    vi.fn<typeof import("../../../gateway-client.js").listAutomations>(),
-  listAutomationTurns:
-    vi.fn<typeof import("../../../gateway-client.js").listAutomationTurns>(),
-  getBlocking: vi.fn<typeof import("../../../gateway-client.js").getBlocking>(),
-  listOutboxGrants:
-    vi.fn<typeof import("../../../gateway-client.js").listOutboxGrants>(),
-  listAgents: vi.fn<typeof import("../../../gateway-client.js").listAgents>(),
-  listTemplates:
-    vi.fn<typeof import("../../../gateway-client.js").listTemplates>(),
+  listAutomations: vi.fn<typeof TypeImport_1gl5zx7.listAutomations>(),
+  listAutomationTurns: vi.fn<typeof TypeImport_1gl5zx7.listAutomationTurns>(),
+  getBlocking: vi.fn<typeof TypeImport_1gl5zx7.getBlocking>(),
+  listOutboxGrants: vi.fn<typeof TypeImport_1gl5zx7.listOutboxGrants>(),
+  listAgents: vi.fn<typeof TypeImport_1gl5zx7.listAgents>(),
+  listTemplates: vi.fn<typeof TypeImport_1gl5zx7.listTemplates>(),
 }));
 
 vi.mock(import("./automationsData.js"), async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./automationsData.js")>();
+  const actual = await importOriginal<typeof TypeImport_17pturf>();
   return {
     ...actual,
     collectAutomationRuns:
-      vi.fn<typeof import("./automationsData.js").collectAutomationRuns>(),
+      vi.fn<typeof TypeImport_17pturf.collectAutomationRuns>(),
   };
 });
 
 vi.mock(import("./templatesData.js"), () => ({
   cloneAutomationTemplate:
-    vi.fn<typeof import("./templatesData.js").cloneAutomationTemplate>(),
-  surfaceMintedWebhook:
-    vi.fn<typeof import("./templatesData.js").surfaceMintedWebhook>(),
+    vi.fn<typeof TypeImport_13kqdum.cloneAutomationTemplate>(),
+  surfaceMintedWebhook: vi.fn<typeof TypeImport_13kqdum.surfaceMintedWebhook>(),
 }));
 
 vi.mock(import("../webhookReveal.js"), () => ({
   openWebhookReveal: vi
-    .fn<typeof import("../webhookReveal.js").openWebhookReveal>()
+    .fn<typeof TypeImport_1f3slmz.openWebhookReveal>()
     .mockResolvedValue(undefined),
 }));
 

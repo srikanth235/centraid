@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { test, expect } from "@playwright/test";
+import type * as TypeImport_11i4z7t from "@playwright/test";
 
 import {
   appEntry,
@@ -17,9 +18,8 @@ import {
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
-  type MockGateway,
-  type TestEnv,
 } from "./fixtures";
+import type { MockGateway, TestEnv } from "./fixtures";
 
 /**
  * §3 — App deletion. Post-#137/#141 the app's code lives in the gateway git
@@ -206,7 +206,7 @@ test("3.4 — 404 from the gateway surfaces a delete error (not phantom success)
 // ---------- 3.5 dismiss paths ----------
 
 async function openDeleteDialog(
-  page: import("@playwright/test").Page,
+  page: TypeImport_11i4z7t.Page,
   id: string
 ): Promise<void> {
   await openTileMenu(page, id);

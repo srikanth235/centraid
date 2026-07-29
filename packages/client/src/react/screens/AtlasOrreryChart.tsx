@@ -1,20 +1,12 @@
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- the orrery's clickable kind nodes are SVG <g> elements; <button> is not renderable inside <svg>, so the g carries role="button" + tabIndex + Enter/Space key handling instead */
-import {
-  useEffect,
-  useId,
-  useRef,
-  type CSSProperties,
-  type JSX,
-  type PointerEvent,
-} from "react";
+import { useEffect, useId, useRef } from "react";
+import type { CSSProperties, JSX, PointerEvent } from "react";
 
 import type { AtlasFkEdge, AtlasGraphNode } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";
 import AtlasOrreryCore from "./AtlasOrreryCore.js";
 import {
   ORRERY,
-  type BearingLayout,
-  type ViewTransform,
   dialArcPath,
   edgeBow,
   edgePath,
@@ -25,6 +17,7 @@ import {
   polar,
   sectorFlipped,
 } from "./atlasOrreryGeometry.js";
+import type { BearingLayout, ViewTransform } from "./atlasOrreryGeometry.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 

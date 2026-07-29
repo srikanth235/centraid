@@ -41,8 +41,8 @@ export default async function partiesHandler({ ctx }: HandlerArgs) {
           String(a.name).localeCompare(String(b.name))
       );
     return { parties, me };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       parties: [],
       me: null,

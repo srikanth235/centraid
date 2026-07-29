@@ -7,10 +7,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
-import {
-  openVaultRegistry,
-  type VaultRegistry,
-} from "../serve/vault-registry.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
 import type { BackupConfig } from "./backup-config.js";
 import { BackupService } from "./backup-service.js";
 

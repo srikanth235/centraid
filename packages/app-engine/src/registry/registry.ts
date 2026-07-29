@@ -41,8 +41,8 @@ export class Registry {
           } as RegistryEntry,
         ])
       );
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       this.cache = new Map();
       await this.persist();
     }

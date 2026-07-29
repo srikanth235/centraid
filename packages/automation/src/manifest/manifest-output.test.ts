@@ -19,8 +19,8 @@ describe(validateOutputSchema, () => {
       let thrown: unknown;
       try {
         validateOutputSchema(raw);
-      } catch (err) {
-        thrown = err;
+      } catch (error) {
+        thrown = error;
       }
       expect(thrown).toMatchObject({
         code: "invalid_output_schema",

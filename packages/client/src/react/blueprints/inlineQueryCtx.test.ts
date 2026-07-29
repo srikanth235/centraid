@@ -11,8 +11,8 @@ import {
   buildInlineCtx,
   createOnlineGuard,
   runInlineQuery,
-  type InlineReplicaSession,
 } from "./inlineQueryCtx.js";
+import type { InlineReplicaSession } from "./inlineQueryCtx.js";
 
 const cursor = { epoch: "e1", seq: 7 };
 const dependency = { shapeId: "tasks/board", entity: "schedule.task" };

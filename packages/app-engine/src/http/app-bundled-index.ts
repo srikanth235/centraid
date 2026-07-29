@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 
 import { resolveStaticPath, SHARED_ASSET_FILES } from "./security.js";
 
@@ -13,7 +14,7 @@ const LINK_TAG_RE = /<link\b[^>]*>/giu;
 
 async function statOrNull(
   file: string
-): Promise<import("node:fs").Stats | null> {
+): Promise<TypeImport_g9tn66.Stats | null> {
   try {
     return await fs.stat(file);
   } catch {

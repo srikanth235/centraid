@@ -13,7 +13,8 @@
 // that reached the grid without one would paint the wrong photo, since content
 // ids collide across scopes by design.
 import { debounce } from "./kit.ts";
-import { mergeScopePages, type MergeAsset } from "./merge.ts";
+import { mergeScopePages } from "./merge.ts";
+import type { MergeAsset } from "./merge.ts";
 import { mountedScopes, ownScopeId } from "./scopes.ts";
 import type { Asset } from "./types.ts";
 

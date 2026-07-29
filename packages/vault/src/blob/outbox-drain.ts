@@ -1,5 +1,6 @@
 import type { BlobCache } from "./cache.js";
-import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import { remoteEncryptionKey } from "./custody-types.js";
+import type { RemoteTier } from "./custody-types.js";
 import type { LocalBlobStore } from "./local.js";
 import type { MultipartPart, RemoteBlobTransfer } from "./remote-transfer.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";

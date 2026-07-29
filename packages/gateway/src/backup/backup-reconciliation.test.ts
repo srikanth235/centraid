@@ -2,8 +2,8 @@ import {
   walGroupCloserKey,
   walPairMarkerKey,
   walSegmentKey,
-  type SnapshotRow,
 } from "@centraid/backup";
+import type { SnapshotRow } from "@centraid/backup";
 import { describe, expect, test, vi } from "vitest";
 
 import {

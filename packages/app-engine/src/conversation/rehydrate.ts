@@ -10,14 +10,8 @@
 
 import { readArchivedConversationSegment } from "./archive/index.js";
 import type { Attachment, Item, Turn } from "./schema.js";
-import {
-  attachmentFromRaw,
-  itemFromRaw,
-  turnFromRaw,
-  type RawAttachment,
-  type RawItem,
-  type RawTurn,
-} from "./store-sql.js";
+import { attachmentFromRaw, itemFromRaw, turnFromRaw } from "./store-sql.js";
+import type { RawAttachment, RawItem, RawTurn } from "./store-sql.js";
 
 /**
  * Injectable read-back of an archived segment blob by content hash. The gateway

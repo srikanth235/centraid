@@ -4,6 +4,7 @@
 import { flushMacrotasks } from "@centraid/test-kit/flush";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import { installInlineBlobImages } from "./inline-blob-images.js";
 
 // gateway-client-core is the choke point authorizeBlobUrl routes through; stub
@@ -13,7 +14,7 @@ const { doFetch, readJson } = vi.hoisted(() => ({
   readJson: vi.fn<(res: Response, op: string) => Promise<unknown>>(),
 }));
 vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
-  auth: vi.fn<typeof import("../../gateway-client-core.js").auth>(async () => ({
+  auth: vi.fn<typeof TypeImport_oycips.auth>(async () => ({
     baseUrl: "https://gw.test",
     token: "tok",
   })),

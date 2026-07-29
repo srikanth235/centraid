@@ -1,9 +1,11 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js";
-import StorageScreen, { type StorageScreenProps } from "./StorageScreen.js";
+import StorageScreen from "./StorageScreen.js";
+import type { StorageScreenProps } from "./StorageScreen.js";
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;

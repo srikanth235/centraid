@@ -13,6 +13,7 @@ import crypto from "node:crypto";
  * stands in for "the network is down", not for any provider behavior.
  */
 import { existsSync, statSync, promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -22,9 +23,8 @@ import {
   openManifest,
   SNAPSHOT_FORMAT_V2,
   validateKeyring,
-  type BackupProvider,
-  type ObjectStore,
 } from "@centraid/backup";
+import type { BackupProvider, ObjectStore } from "@centraid/backup";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -33,17 +33,18 @@ import {
   sealKeyFileFor,
   updateBackupPolicy,
   verifyRestoredPair,
-  type WalShipper,
-  type WalShipperOptions,
 } from "@centraid/vault";
+import type { WalShipper, WalShipperOptions } from "@centraid/vault";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import type { BackupConfig } from "./backup-config.js";
 import { evaluateBackupHealth } from "./backup-health.js";
-import { BackupService, type BackupServiceOptions } from "./backup-service.js";
+import { BackupService } from "./backup-service.js";
+import type { BackupServiceOptions } from "./backup-service.js";
 import { assembleSourceEntries } from "./backup-sources.js";
 import type { BackupTargetState } from "./backup-state.js";
 
@@ -257,7 +258,7 @@ describe("wal", () => {
     const root = path.join(f.providerDir, "objects", targetId, "backup", "wal");
     const out: string[] = [];
     const walk = async (dir: string): Promise<void> => {
-      let entries: import("node:fs").Dirent[];
+      let entries: TypeImport_g9tn66.Dirent[];
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
       } catch {
@@ -763,7 +764,7 @@ describe("wal", () => {
       let maxLocal = 0;
       await forEachSequentially(
         Array.from({ length: TICKS_PER_DAY }),
-        async (_, t) => {
+        async (_Local, t) => {
           const title = `outage-d${day}-t${t}`;
           invoke(f.plane, "schedule.add_task", { title });
           written.push(title);
@@ -1678,7 +1679,7 @@ describe("wal", () => {
     // The proxy resolves its inner provider LAZILY: `fx` mints the provider dir,
     // and every read helper in this file (walObjectFiles, openNewestManifest)
     // reads that same dir — a second root would be a different world.
-    let inner: BackupProvider | undefined;
+    let inner: BackupProvider | undefined = undefined;
     const f = await fx({
       provider: markerBlockingProvider(() => inner!, blocked),
     });

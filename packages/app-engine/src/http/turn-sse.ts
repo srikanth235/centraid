@@ -35,14 +35,15 @@ import type {
   TurnResumePlan,
   TurnStreamEvent,
 } from "../conversation/runner.js";
+import type * as TypeImport_wkgbyq from "../conversation/schema.js";
 import type { TurnAttachment } from "../conversation/turn.js";
+import type * as TypeImport_nu6ai6 from "../conversation/turn.js";
 import { costForUsage } from "../model-pricing.js";
-import { writeTurnBusy, type TurnLimiter } from "./turn-limiter.js";
+import { writeTurnBusy } from "./turn-limiter.js";
+import type { TurnLimiter } from "./turn-limiter.js";
 import { buildReplayEvents } from "./turn-replay.js";
-import {
-  withConversationLock,
-  type TurnAttachmentRef,
-} from "./turn-sse-support.js";
+import { withConversationLock } from "./turn-sse-support.js";
+import type { TurnAttachmentRef } from "./turn-sse-support.js";
 
 type ToolTurnNode = Extract<TurnNode, { kind: "tool" }>;
 
@@ -146,7 +147,7 @@ export interface DriveTurnOptions {
   dataDir: string;
   /** Canonical host-resolved root chosen from the Centraid workspace selector. */
   workspaceDirectory?: string;
-  workspaceKind?: import("../conversation/schema.js").ConversationWorkspaceKind;
+  workspaceKind?: TypeImport_wkgbyq.ConversationWorkspaceKind;
   /** The route-assembled system-prompt preamble. */
   extraSystemPrompt: string;
   runner: ConversationRunner;
@@ -160,11 +161,11 @@ export interface DriveTurnOptions {
   register?: "ask" | "build" | undefined;
   model?: string | undefined;
   thinking?: string | undefined;
-  runnerKind?: import("../conversation/turn.js").RunnerKind | undefined;
+  runnerKind?: TypeImport_nu6ai6.RunnerKind | undefined;
   /** One provider, or the whole set the client has accumulated (issue #567). */
   providerConsent?:
-    | import("../conversation/turn.js").RunnerKind
-    | readonly import("../conversation/turn.js").RunnerKind[]
+    | TypeImport_nu6ai6.RunnerKind
+    | readonly TypeImport_nu6ai6.RunnerKind[]
     | undefined;
   additionalDirectories?: string[];
   idempotencyKey?: string | undefined;
@@ -181,9 +182,7 @@ export interface DriveTurnOptions {
   retryOf?: string | undefined;
   prevAdapterSessionId?: string | undefined;
   prevAdapterKind?: string | undefined;
-  prevAdapterUsageSnapshot?:
-    | import("../conversation/turn.js").AdapterUsageSnapshot
-    | undefined;
+  prevAdapterUsageSnapshot?: TypeImport_nu6ai6.AdapterUsageSnapshot | undefined;
   /** CAS refs recorded on the turn's `message_in` item. */
   attachmentRefs?: TurnAttachmentRef[];
   /** Resolved blob paths handed to the runner for multimodal blocks. */
@@ -648,7 +647,7 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
           | {
               adapterSessionId?: string;
               adapterKind?: string;
-              adapterUsageSnapshot?: import("../conversation/turn.js").AdapterUsageSnapshot;
+              adapterUsageSnapshot?: TypeImport_nu6ai6.AdapterUsageSnapshot;
               hydrated?: boolean;
               hydrationKind?: "handoff" | "recovery";
               hydrationTokens?: number;
@@ -657,8 +656,8 @@ async function driveTurnInner(opts: DriveTurnOptions): Promise<void> {
         try {
           const out = await runner.run(input);
           runResult = out ?? undefined;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
           onEvent({ type: "error", message: msg });
         } finally {
           clearInterval(heartbeat);

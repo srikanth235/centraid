@@ -10,7 +10,8 @@ import {
   View,
 } from "react-native";
 
-import { radii, spacing, t, useTheme, type ThemeColors } from "../theme";
+import { radii, spacing, t, useTheme } from "../theme";
+import type { ThemeColors } from "../theme";
 
 export interface SheetOption {
   id: string;

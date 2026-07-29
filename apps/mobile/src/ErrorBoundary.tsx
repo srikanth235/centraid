@@ -1,5 +1,6 @@
 // React Native error boundary (issue #468 K1) — class component required.
-import React, { Component, type ErrorInfo, type ReactNode } from "react";
+import React, { Component } from "react";
+import type { ErrorInfo, ReactNode } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 
 interface Props {

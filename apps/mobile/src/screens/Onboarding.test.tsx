@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import React, { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Onboarding from "./Onboarding";
+
+type ExpoCamera = typeof import("expo-camera");
+type ExpoHaptics = typeof import("expo-haptics");
+type ReactNative = typeof import("react-native");
+type SafeAreaContext = typeof import("react-native-safe-area-context");
+type ReactNativeSvg = typeof import("react-native-svg");
+type ThemeModule = typeof import("../kit/theme");
+type PhoneLinkModule = typeof import("../lib/phone-link");
+type ProfileModule = typeof import("../lib/profile");
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -102,7 +112,7 @@ vi.mock(import("react-native"), async () => {
       }),
     View: ({ children }: { children?: React.ReactNode }) =>
       element("div", { children }),
-  } as unknown as Partial<typeof import("react-native")>;
+  } as unknown as Partial<ReactNative>;
 });
 
 vi.mock(import("react-native-safe-area-context"), async () => {
@@ -110,7 +120,7 @@ vi.mock(import("react-native-safe-area-context"), async () => {
   return {
     SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
       ReactModule.createElement("section", null, children),
-  } as unknown as Partial<typeof import("react-native-safe-area-context")>;
+  } as unknown as Partial<SafeAreaContext>;
 });
 
 vi.mock(import("react-native-svg"), async () => {
@@ -134,7 +144,7 @@ vi.mock(import("react-native-svg"), async () => {
     RadialGradient: component("radialGradient"),
     Rect: component("rect"),
     Stop: component("stop"),
-  } as unknown as Partial<typeof import("react-native-svg")>;
+  } as unknown as Partial<ReactNativeSvg>;
 });
 
 vi.mock(import("expo-camera"), async () => {
@@ -156,7 +166,7 @@ vi.mock(import("expo-camera"), async () => {
       ),
     useCameraPermissions: () =>
       [{ canAskAgain: true, granted: true }, mocks.requestPermission] as const,
-  } as unknown as Partial<typeof import("expo-camera")>;
+  } as unknown as Partial<ExpoCamera>;
 });
 
 vi.mock(
@@ -165,7 +175,7 @@ vi.mock(
     ({
       NotificationFeedbackType: { Success: "success" },
       notificationAsync: mocks.notificationAsync,
-    }) as unknown as Partial<typeof import("expo-haptics")>
+    }) as unknown as Partial<ExpoHaptics>
 );
 
 vi.mock(
@@ -180,7 +190,7 @@ vi.mock(
         sansMedium: "sans-medium",
         sansRegular: "sans",
       },
-    }) as unknown as Partial<typeof import("../kit/theme")>
+    }) as unknown as Partial<ThemeModule>
 );
 
 vi.mock(
@@ -194,7 +204,7 @@ vi.mock(
       setOnboarded: mocks.setOnboarded,
       setProfileColor: mocks.setProfileColor,
       setProfileName: mocks.setProfileName,
-    }) as unknown as Partial<typeof import("../lib/profile")>
+    }) as unknown as Partial<ProfileModule>
 );
 
 vi.mock(
@@ -203,7 +213,7 @@ vi.mock(
     ({
       isTunnelAvailable: () => true,
       pair: mocks.pair,
-    }) as unknown as Partial<typeof import("../lib/phone-link")>
+    }) as unknown as Partial<PhoneLinkModule>
 );
 
 let root: Root | undefined;

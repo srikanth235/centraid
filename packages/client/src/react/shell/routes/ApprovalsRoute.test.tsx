@@ -1,8 +1,11 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_qcp7vy from "../actions.js";
+import type * as TypeImport_1lvx9zk from "./ApprovalsRoute.js";
 
 type OutboxModule = typeof import("../../../gateway-client-outbox.js");
 type VaultModule = typeof import("../../../gateway-client-vault.js");
@@ -24,8 +27,8 @@ vi.mock(import("../../../gateway-client-vault.js"), () => ({
   confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
 }));
 
-let ApprovalsRoute: typeof import("./ApprovalsRoute.js").default;
-let ShellActionsProvider: typeof import("../actions.js").ShellActionsProvider;
+let ApprovalsRoute: typeof TypeImport_1lvx9zk.default;
+let ShellActionsProvider: typeof TypeImport_qcp7vy.ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 

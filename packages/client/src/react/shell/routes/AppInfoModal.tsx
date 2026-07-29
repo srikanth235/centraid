@@ -1,4 +1,5 @@
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import type { VaultBlockDTO, VaultScopeDTO } from "../../screen-contracts.js";
 import VaultScreen from "../../screens/VaultScreen.js";

@@ -19,7 +19,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Manifest } from "../manifest/manifest.js";
-import { runFire, type DispatchSurface } from "./fire.js";
+import { runFire } from "./fire.js";
+import type { DispatchSurface } from "./fire.js";
 
 function manifest(over: Partial<Manifest> = {}): Manifest {
   return {

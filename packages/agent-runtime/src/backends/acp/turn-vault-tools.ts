@@ -14,10 +14,9 @@ import type { ToolContext, TurnStreamEvent } from "@centraid/app-engine";
 
 import {
   startVaultMcpServer,
-  type AcpHttpMcpServer,
-  type VaultMcpHandle,
   VAULT_MCP_SERVER_NAME,
 } from "./vault-mcp-server.js";
+import type { AcpHttpMcpServer, VaultMcpHandle } from "./vault-mcp-server.js";
 
 const STDIO_PROXY = fileURLToPath(
   new URL("vault-mcp-stdio-proxy.mjs", import.meta.url)
@@ -109,14 +108,14 @@ export async function startTurnVaultTools(args: {
         "This runner doesn’t support HTTP MCP — vault tools are bridged over stdio MCP instead.",
     });
     return { mcpServers: [stdio], handle, transport: "stdio" };
-  } catch (err) {
+  } catch (error) {
     args.emit({
       type: "notice",
       level: "warn",
       code: "vault_tools_unavailable",
       message:
         "Couldn’t start the local vault tool endpoint, so this turn can’t reach your vault " +
-        `data: ${err instanceof Error ? err.message : String(err)}`,
+        `data: ${error instanceof Error ? error.message : String(error)}`,
     });
     return { mcpServers: [] };
   }

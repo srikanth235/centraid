@@ -10,7 +10,8 @@ import type { TurnStreamEvent } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
 
-import { notices, runFake, type RunOptions } from "./test-fixtures.js";
+import { notices, runFake } from "./test-fixtures.js";
+import type { RunOptions } from "./test-fixtures.js";
 
 interface PromptBlock {
   type: string;

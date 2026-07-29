@@ -1,13 +1,13 @@
 import { expect, test } from "@playwright/test";
+import type * as TypeImport_11i4z7t from "@playwright/test";
+
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive service-worker upgrade suite shares one synthetic tunnel-cache harness
 
 // These tests drive the service worker's tunnel cache directly. The SW asks a
 // window client to fulfil `/__centraid_iroh__/...` requests over the
 // `centraid:iroh-request` bridge; here the page itself plays that role with a
 // synthetic gateway, so the real caching code runs without the Iroh WASM.
-async function installFakeBridge(
-  page: import("@playwright/test").Page
-): Promise<void> {
+async function installFakeBridge(page: TypeImport_11i4z7t.Page): Promise<void> {
   await page.evaluate(() => {
     interface Call {
       target: string;

@@ -103,9 +103,9 @@ async function tick(): Promise<void> {
 function runTick(): Promise<void> {
   if (!inFlight) {
     inFlight = tick()
-      .catch((err) => {
+      .catch((error) => {
         process.stdout.write(
-          `[reminder-monitor] tick failed: ${String(err)}\n`
+          `[reminder-monitor] tick failed: ${String(error)}\n`
         );
       })
       .finally(() => {

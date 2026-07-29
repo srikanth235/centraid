@@ -13,5 +13,12 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "hydrate", "journal", "todos"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "hydrate",
+    "journal",
+    "todos",
+    "src/**/*.test.ts"
+  ]
 }

@@ -1,5 +1,6 @@
 import type { IconName } from "@centraid/design-tokens";
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import type { CentraidGatewayDevice } from "../../gateway-client.js";
 import { formatDuration } from "../shell/routes/gatewayData.js";
@@ -79,12 +80,16 @@ export default function DeviceRow({
     try {
       await onRevoke(device, confirmLastAdmin);
       // On success the parent drops the row; nothing more to do here.
-    } catch (err) {
-      const stranded = lastAdminSpace(err);
+    } catch (caughtError) {
+      const stranded = lastAdminSpace(caughtError);
       if (stranded !== undefined && confirmLastAdmin === undefined) {
         setStrandedSpace(stranded);
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        );
         setConfirming(false);
         setStrandedSpace(null);
       }
@@ -98,8 +103,10 @@ export default function DeviceRow({
     setError(null);
     try {
       await onUpdateCompute(device, enabled);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       setComputeBusy(false);
     }
@@ -126,8 +133,12 @@ export default function DeviceRow({
                 setBusy(true);
                 void onRename(device, name.trim())
                   .then(() => setEditingName(false))
-                  .catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : String(err))
+                  .catch((caughtError: unknown) =>
+                    setError(
+                      caughtError instanceof Error
+                        ? caughtError.message
+                        : String(caughtError)
+                    )
                   )
                   .finally(() => setBusy(false));
               }}

@@ -184,8 +184,8 @@ if (isMain()) {
   try {
     const report = runSyncVersions({ version: version || undefined, dryRun });
     console.log(JSON.stringify(report, null, 2));
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : err);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
     process.exit(2);
   }
 }

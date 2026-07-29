@@ -1,8 +1,8 @@
 import initWasm, {
   BrowserEndpoint,
   connect_failure_marker,
-  type BrowserResponse,
 } from "./generated/centraid_web_iroh.js";
+import type { BrowserResponse } from "./generated/centraid_web_iroh.js";
 import {
   irohStats,
   markConnectStart,
@@ -275,7 +275,10 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
   if (!connection.endpointId || !connection.endpointTicket) {
     throw new Error("No Iroh gateway is connected.");
   }
-  const headers = { ...message.headers };
+  const headers: Record<string, string> = {
+    ...message.headers,
+    "x-centraid-tunnel-auth-mode": "web-session",
+  };
   // Every request on this path originates from a generated app in the SW
   // bridge, so the auth mode is fixed by PROVENANCE, not by whether a cookie
   // happens to be in memory. The marker must be set unconditionally: the
@@ -284,7 +287,6 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
   // would let an idle app's requests fall through to the full device bearer —
   // a privilege escalation. No cookie means the gateway rejects with 401,
   // never an escalation. Do not "optimize" this back behind the cookie check.
-  headers["x-centraid-tunnel-auth-mode"] = "web-session";
   if (message.sessionCookie) {
     headers["cookie"] = message.sessionCookie;
   }

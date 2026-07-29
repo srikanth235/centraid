@@ -4,6 +4,7 @@ import type {
   BrowserEndpoint as WasmBrowserEndpoint,
   InitOutput,
 } from "./generated/centraid_web_iroh.js";
+import type * as TypeImport_1ruos0p from "./generated/centraid_web_iroh.js";
 import {
   irohBridgeIdForConsent,
   irohFetch,
@@ -12,6 +13,7 @@ import {
   purgeIrohDeviceState,
 } from "./iroh-transport.js";
 import { loadConnection } from "./web-state.js";
+import type * as TypeImport_1jabxbh from "./web-state.js";
 
 const wasm = vi.hoisted(() => {
   const connectFailureMarker = "IROH_CONNECT_FAILURE";
@@ -49,11 +51,11 @@ const wasm = vi.hoisted(() => {
     // (dozens of internal exports table entries); `iroh-transport.ts` only
     // awaits it and never reads the result, so a placeholder cast here is
     // honest — asserting only this one property, not the whole module.
-    initWasm: vi.fn<typeof import("./generated/centraid_web_iroh.js").default>(
+    initWasm: vi.fn<typeof TypeImport_1ruos0p.default>(
       async (): Promise<InitOutput> => undefined as unknown as InitOutput
     ),
     connect_failure_marker: vi.fn<
-      typeof import("./generated/centraid_web_iroh.js").connect_failure_marker
+      typeof TypeImport_1ruos0p.connect_failure_marker
     >(() => connectFailureMarker),
   };
 });
@@ -65,7 +67,7 @@ vi.mock(import("./generated/centraid_web_iroh.js"), () => ({
 }));
 
 vi.mock(import("./web-state.js"), () => ({
-  loadConnection: vi.fn<typeof import("./web-state.js").loadConnection>(() => ({
+  loadConnection: vi.fn<typeof TypeImport_1jabxbh.loadConnection>(() => ({
     endpointTicket: "ticket-abc",
     endpointId: "gw-1",
     vaultId: "vault-1",
@@ -74,9 +76,7 @@ vi.mock(import("./web-state.js"), () => ({
     avatarColor: "#6f5bf6",
     rememberDevice: true,
   })),
-  webGatewayId: vi.fn<typeof import("./web-state.js").webGatewayId>(
-    () => "gw-1"
-  ),
+  webGatewayId: vi.fn<typeof TypeImport_1jabxbh.webGatewayId>(() => "gw-1"),
 }));
 
 const DEVICE_KEY = "centraid.web.v1.iroh-device-key";

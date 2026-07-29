@@ -3,6 +3,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type ReactNative = typeof import("react-native");
+type ForegroundServiceModule = typeof import("./foreground-service");
+
 const native = {
   start: vi.fn<(total: number) => void>(),
   update: vi.fn<(completed: number, total: number) => void>(),
@@ -16,11 +19,11 @@ vi.mock(import("react-native"), () => ({
   // so this narrow stand-in is asserted to the real type instead.
   Platform: {
     OS: "android",
-  } as unknown as typeof import("react-native").Platform,
+  } as unknown as ReactNative["Platform"],
   NativeModules: { CentraidUploadForeground: native },
 }));
 
-let UploadForegroundService: typeof import("./foreground-service").UploadForegroundService;
+let UploadForegroundService: ForegroundServiceModule["UploadForegroundService"];
 
 describe("foreground-service", () => {
   beforeEach(async () => {

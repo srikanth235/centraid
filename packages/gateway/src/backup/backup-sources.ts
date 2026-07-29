@@ -13,11 +13,8 @@ import { createHash } from "node:crypto";
 import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 
-import {
-  WAL_DB_FILES,
-  type EngineLogger,
-  type SourceEntry,
-} from "@centraid/backup";
+import { WAL_DB_FILES } from "@centraid/backup";
+import type { EngineLogger, SourceEntry } from "@centraid/backup";
 import {
   archivedSegmentShas,
   conversationArchiveShas,
@@ -154,12 +151,12 @@ async function bundleCodeStore(
       kind: "git-bundle",
       absolutePath: bundlePath,
     };
-  } catch (err) {
+  } catch (error) {
     // An empty bare repo (no refs yet) makes `git bundle create --all` fail
     // loudly ("Refusing to create empty bundle") — that's an EXPECTED state
     // for a freshly created vault with no apps published yet, not a backup
     // failure; every other GitError still surfaces via the caught log line.
-    const message = err instanceof GitError ? err.message : String(err);
+    const message = error instanceof GitError ? error.message : String(error);
     log.warn?.(
       `backup: git bundle create failed (skipping git-bundle entry): ${message}`
     );

@@ -206,9 +206,9 @@ export function makeImportRouteHandler(
           plane.gateway.discardImport(owner, segments[0] ?? "")
         );
       }
-    } catch (err) {
+    } catch (error) {
       return sendJson(res, 400, {
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       });
     }
     return sendJson(res, 405, {

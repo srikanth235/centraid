@@ -1,6 +1,8 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
 
 import type { AutomationEditorBridgeProps } from "../screen-contracts.js";
 import AutomationEditorScreen from "./AutomationEditorScreen.js";

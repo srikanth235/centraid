@@ -11,9 +11,11 @@ import {
   VAULT_MCP_SERVER_NAME,
 } from "./vault-mcp-server.ts";
 
+type VaultMcpServerModule = typeof import("./vault-mcp-server.ts");
+
 // vitest hoists vi.mock above imports at run time.
 vi.mock(import("./vault-mcp-server.ts"), async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./vault-mcp-server.ts")>();
+  const actual = await importOriginal<VaultMcpServerModule>();
   return {
     ...actual,
     startVaultMcpServer: vi.fn<typeof actual.startVaultMcpServer>(
@@ -36,13 +38,13 @@ describe("turn-vault-tools", () => {
     vi.mocked(startVaultMcpServer).mockImplementation(
       (...args) =>
         (
-          vi.importActual("./vault-mcp-server.ts") as Promise<
-            typeof import("./vault-mcp-server.ts")
-          >
+          vi.importActual(
+            "./vault-mcp-server.ts"
+          ) as Promise<VaultMcpServerModule>
         ).then((m) => m.startVaultMcpServer(...args)) as never
     );
     // Reset to real implementation for subsequent tests.
-    const real = await vi.importActual<typeof import("./vault-mcp-server.ts")>(
+    const real = await vi.importActual<VaultMcpServerModule>(
       "./vault-mcp-server.ts"
     );
     vi.mocked(startVaultMcpServer).mockImplementation(real.startVaultMcpServer);

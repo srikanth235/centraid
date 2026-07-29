@@ -12,8 +12,10 @@ import type { Row } from "../scaffold/app.js";
 import {
   VaultCursorEngine,
   assertTriggerCursorAllowed,
-  type TriggerCursorFireInput,
-  type VaultCursorEngineOptions,
+} from "./cursor-engine.js";
+import type {
+  TriggerCursorFireInput,
+  VaultCursorEngineOptions,
 } from "./cursor-engine.js";
 
 function row(ref: string, triggers: Manifest["triggers"]): Row {

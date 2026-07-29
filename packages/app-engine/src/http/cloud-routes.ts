@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { readLogs, type LogLevel } from "../data/log-store.js";
+import { readLogs } from "../data/log-store.js";
+import type { LogLevel } from "../data/log-store.js";
 import { appDataDir } from "../registry/app-paths.js";
 import type { Registry } from "../registry/registry.js";
 import {

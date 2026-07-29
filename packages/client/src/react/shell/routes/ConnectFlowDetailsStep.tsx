@@ -1,11 +1,8 @@
 import type { ChangeEvent, Dispatch, JSX, RefObject } from "react";
 
 import { cx } from "../../ui/cx.js";
-import {
-  buildTestInput,
-  type ConnectFlowEvent,
-  type ConnectFlowState,
-} from "./connectFlow-core.js";
+import { buildTestInput } from "./connectFlow-core.js";
+import type { ConnectFlowEvent, ConnectFlowState } from "./connectFlow-core.js";
 
 import controlsCss from "../../styles/controls.module.css";
 import buttonCss from "../../ui/Button.module.css";

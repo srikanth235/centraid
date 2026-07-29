@@ -160,11 +160,11 @@ export async function consumeSse(body, onEvent, opts = {}) {
       },
       opts
     );
-  } catch (err) {
+  } catch (error) {
     // An abort surfaces as an AbortError on the pending read — that's the Stop
     // button doing its job, not a stream failure. Re-throw anything else.
-    if (!(signal && signal.aborted) && !(err && err.name === "AbortError"))
-      throw err;
+    if (!(signal && signal.aborted) && !(error && error.name === "AbortError"))
+      throw error;
   }
   return { ended };
 }

@@ -2,7 +2,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { expect, test, type Frame, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import type { Frame, Page } from "@playwright/test";
 
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";

@@ -8,8 +8,8 @@ import {
   isValidIanaTimeZone,
   parseManifest,
   validateManifest,
-  type Manifest,
 } from "./manifest.js";
+import type { Manifest } from "./manifest.js";
 
 /** A minimal valid `automation.json` object. */
 function baseManifest(

@@ -18,7 +18,8 @@
 //
 // The merge itself — ordering, cross-scope dedupe, the shared safe horizon —
 // lives in merge.ts and is deliberately not re-derived here.
-import { mergeScopePages, type MergeAsset, type MergeResult } from "./merge.ts";
+import { mergeScopePages } from "./merge.ts";
+import type { MergeAsset, MergeResult } from "./merge.ts";
 import type { Album, Asset, LibraryData, Place } from "./types.ts";
 
 /** What one scope answered, or why it couldn't. Errors are data, never throws. */

@@ -77,17 +77,19 @@ import {
   WAL_CAPTURE_ORDER,
   WAL_DB_FILES,
   WAL_DB_NAMES,
-  type WalDbName,
-  type WalGroupCloser,
-  type WalPairMarker,
-  type WalPairPosition,
-  type WalSegmentAddress,
   walGroupCloserKey,
   WAL_HEADER_BYTES,
   scanWalPrefix,
   walPairMarkerKey,
   walSalts,
   walSegmentKey,
+} from "@centraid/backup";
+import type {
+  WalDbName,
+  WalGroupCloser,
+  WalPairMarker,
+  WalPairPosition,
+  WalSegmentAddress,
 } from "@centraid/backup";
 
 import type { VaultDb } from "./db.js";
@@ -589,11 +591,11 @@ export class WalShipper {
         new TextEncoder().encode(`${JSON.stringify(this.state, null, 2)}\n`)
       );
       renameSync(tmp, this.stateFile);
-    } catch (err) {
+    } catch (error) {
       // A partial tmp on a full disk must not linger (it would accumulate
       // per tick); the state file itself is still the last good version.
       rmSync(tmp, { force: true });
-      throw err;
+      throw error;
     }
     fsyncDirBestEffort(this.dir);
   }
@@ -778,10 +780,10 @@ export class WalShipper {
         if (stream.lastSize > this.threshold()) {
           this.rollover(db, stream, reasons, report);
         }
-      } catch (err) {
+      } catch (error) {
         report.errors.push({
           db,
-          message: err instanceof Error ? err.message : String(err),
+          message: error instanceof Error ? error.message : String(error),
         });
         this.log.warn(
           `wal-ship: ${db} tick failed: ${report.errors.at(-1)!.message}`
@@ -935,7 +937,7 @@ export class WalShipper {
           }
         },
       };
-    } catch (err) {
+    } catch (error) {
       try {
         conn?.close();
       } catch {
@@ -943,7 +945,7 @@ export class WalShipper {
       }
       this.log.warn(
         `wal-ship: ${db} capture read-lock unavailable ` +
-          `(${err instanceof Error ? err.message : String(err)}) — ` +
+          `(${error instanceof Error ? error.message : String(error)}) — ` +
           `relying on post-copy race detection`
       );
       return null;
@@ -1056,13 +1058,13 @@ export class WalShipper {
     );
     try {
       writeFileDurable(file, bytes.subarray(stream.offset, boundary));
-    } catch (err) {
+    } catch (error) {
       // G4: the segment did not become durable, so the offset must not move
       // and NOTHING may checkpoint — the WAL keeps the bytes and the
       // failure surfaces as backpressure, not data loss.
       report.errors.push({
         db,
-        message: `segment write failed (${err instanceof Error ? err.message : String(err)}) — WAL retained`,
+        message: `segment write failed (${error instanceof Error ? error.message : String(error)}) — WAL retained`,
       });
       return { kind: "error" };
     }
@@ -1562,9 +1564,9 @@ export class WalShipper {
           baseSha256: stream.baseSha256,
         },
       });
-    } catch (err) {
+    } catch (error) {
       this.log.warn(
-        `wal-ship: generation receipt failed (${err instanceof Error ? err.message : String(err)})`
+        `wal-ship: generation receipt failed (${error instanceof Error ? error.message : String(error)})`
       );
     }
   }

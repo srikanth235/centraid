@@ -3,7 +3,8 @@
 // matches their primary CTA blue (#166ee1).
 
 import { palette } from "../palette";
-import { BEZEL, BEZEL_INNER, type Theme } from "./shared";
+import { BEZEL, BEZEL_INNER } from "./shared";
+import type { Theme } from "./shared";
 
 export const airtableLightTheme: Theme = {
   kind: "light",

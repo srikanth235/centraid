@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { cloneTemplateFiles } from "./clone.js";
-import {
-  scaffoldAppFiles,
-  updateAppMetaFiles,
-  type ScaffoldFile,
-} from "./scaffold-files.js";
+import { scaffoldAppFiles, updateAppMetaFiles } from "./scaffold-files.js";
+import type { ScaffoldFile } from "./scaffold-files.js";
 
 function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));

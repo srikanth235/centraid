@@ -20,8 +20,8 @@ import {
   normalizeProfile,
   sortGatewayProfiles,
   validateAddGatewayFields,
-  type GatewayProfileShape,
 } from "./gateway-store-core.js";
+import type { GatewayProfileShape } from "./gateway-store-core.js";
 import { ensureIrohProxy } from "./iroh-dialer.js";
 
 export type GatewayProfile = GatewayProfileShape;

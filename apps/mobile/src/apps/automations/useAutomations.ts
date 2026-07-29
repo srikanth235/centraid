@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
-import {
-  listAutomations,
-  setAutomationEnabled,
-  type AutomationRow,
-} from "../../lib/automations";
+import { listAutomations, setAutomationEnabled } from "../../lib/automations";
+import type { AutomationRow } from "../../lib/automations";
 import { GatewayError, resolveGatewayBase } from "../../lib/gateway";
 
 // The screen's load lifecycle, modeled explicitly (no try/catch soup): a
@@ -41,10 +38,10 @@ async function loadAutomations(
     }
     const rows = await listAutomations();
     setState({ kind: "ready", rows });
-  } catch (err) {
+  } catch (error) {
     const message =
-      err instanceof GatewayError || err instanceof Error
-        ? err.message
+      error instanceof GatewayError || error instanceof Error
+        ? error.message
         : "Could not load automations.";
     setState({ kind: "error", message });
   }
@@ -80,11 +77,11 @@ export function useAutomations(): UseAutomations {
       flip(next);
       try {
         await setAutomationEnabled(ref, next);
-      } catch (err) {
+      } catch (error) {
         // Revert the optimistic flip, then rethrow so the card can surface the
         // failure — the row's pill must reflect the automation's true state.
         flip(!next);
-        throw err;
+        throw error;
       }
     },
     []

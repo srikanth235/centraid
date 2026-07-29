@@ -8,8 +8,8 @@ import {
   ProviderNotHomeProfileError,
   RecoveryKitNotConfirmedError,
   testStorageConnection as gwTestStorageConnection,
-  type StorageConnectionDTO,
 } from "../../../gateway-client.js";
+import type { StorageConnectionDTO } from "../../../gateway-client.js";
 import type {
   StorageConnectionFormInput,
   StorageConnectionRowDTO,
@@ -51,18 +51,18 @@ export async function createStorageConnection(
       apiKey: input.apiKey,
     });
     return { ok: true, value: toRowDTO(connection) };
-  } catch (err) {
-    if (err instanceof RecoveryKitNotConfirmedError) {
+  } catch (error) {
+    if (error instanceof RecoveryKitNotConfirmedError) {
       return {
         ok: false,
         code: "recovery_kit_not_confirmed",
-        message: err.message,
+        message: error.message,
       };
     }
-    if (err instanceof ProviderNotHomeProfileError) {
+    if (error instanceof ProviderNotHomeProfileError) {
       const missing =
-        err.missingCapabilities.length > 0
-          ? ` It’s missing: ${err.missingCapabilities.join(", ")}.`
+        error.missingCapabilities.length > 0
+          ? ` It’s missing: ${error.missingCapabilities.join(", ")}.`
           : "";
       return {
         ok: false,
@@ -73,7 +73,7 @@ export async function createStorageConnection(
     return {
       ok: false,
       code: "error",
-      message: err instanceof Error ? err.message : String(err),
+      message: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -140,18 +140,18 @@ export async function attachVaultConnection(
             }
           : { kind: "fs" },
     };
-  } catch (err) {
-    if (err instanceof RecoveryKitNotConfirmedError) {
+  } catch (error) {
+    if (error instanceof RecoveryKitNotConfirmedError) {
       return {
         ok: false,
         code: "recovery_kit_not_confirmed",
-        message: err.message,
+        message: error.message,
       };
     }
     return {
       ok: false,
       code: "error",
-      message: err instanceof Error ? err.message : String(err),
+      message: error instanceof Error ? error.message : String(error),
     };
   }
 }

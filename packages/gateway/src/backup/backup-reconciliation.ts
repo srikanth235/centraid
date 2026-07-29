@@ -11,20 +11,22 @@ import {
   parseWalPairMarkerKey,
   parseWalSegmentKey,
   walPairMarkerKey,
-  type BackupProvider,
-  type Keyring,
-  type SnapshotRow,
-  type WalDbName,
-  type WalGroupCloser,
-  type WalSegmentAddress,
+} from "@centraid/backup";
+import type {
+  BackupProvider,
+  Keyring,
+  SnapshotRow,
+  WalDbName,
+  WalGroupCloser,
+  WalSegmentAddress,
 } from "@centraid/backup";
 import {
   ReplicaIndex,
   archivedSegmentShas,
   conversationArchiveShas,
   liveBlobShas,
-  type VaultDb,
 } from "@centraid/vault";
+import type { VaultDb } from "@centraid/vault";
 
 import { baseStore, reconcileCasInventory } from "./backup-cas-diff.js";
 import { collectCasInventory } from "./backup-cas-inventory.js";
@@ -32,8 +34,10 @@ import { reconcileDerivedInto } from "./backup-derived-inventory.js";
 import {
   collectAudit,
   collectInventory,
-  type CollectedAudit,
-  type CollectedInventory,
+} from "./backup-provider-observability.js";
+import type {
+  CollectedAudit,
+  CollectedInventory,
 } from "./backup-provider-observability.js";
 import type {
   BackupReconciliationState,
@@ -266,9 +270,9 @@ async function analyzeBackupInventory(opts: {
             })
           );
         }
-      } catch (err) {
+      } catch (error) {
         unreadable.push(
-          `${row.manifestKey}: ${err instanceof Error ? err.message : String(err)}`
+          `${row.manifestKey}: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }
@@ -383,8 +387,8 @@ export async function runBackupReconciliation(opts: {
       verifyBucket,
     }).then(
       (collection) => ({ collection }),
-      (err: unknown) => ({
-        error: err instanceof Error ? err.message : String(err),
+      (error: unknown) => ({
+        error: error instanceof Error ? error.message : String(error),
       })
     ),
     collectCasInventory({
