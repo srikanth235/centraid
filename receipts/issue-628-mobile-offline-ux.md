@@ -206,10 +206,13 @@
   13,726-byte p95; recent-90-day plus 5%-favorite retention projects 12,820,084
   bytes per source, within the shared 128 MiB per-source budget.
 
+- **CI green for PR #631 (verify coverage, mobile-smoke native fingerprint, gateway-package design-tokens build).** Added real unit coverage for the shipped push registration route and `PushWakeRelay` (opaque Expo wake payloads, debounce, revoked-audience filtering, delivery failure swallow). Ratcheted `apps/mobile/native-fingerprints.json` iOS hash to the CI-computed native identity after expo-background-task / expo-task-manager / centraid-storage landed. Dropped unnecessary `types: ["node"]` from `packages/design-tokens/tsconfig.json` so the gateway Docker build no longer fails looking for `@types/node` on a pure token package.
+
 The full changed-file inventory is:
 
 ```text
 AGENTS.md
+packages/design-tokens/tsconfig.json
 apps/mobile/App.tsx
 apps/mobile/android/app/src/main/AndroidManifest.xml
 apps/mobile/app.config.ts
@@ -295,6 +298,7 @@ packages/gateway/src/routes/multiplex-replica-routes.ts
 packages/gateway/src/routes/placement-routes.test.ts
 packages/gateway/src/routes/placement-routes.ts
 packages/gateway/src/routes/push-wake-routes.ts
+packages/gateway/src/routes/push-wake-routes.test.ts
 packages/gateway/src/routes/replica-routes.ts
 packages/gateway/src/serve/build-gateway.ts
 packages/gateway/src/serve/enrollment-store.ts
@@ -342,6 +346,13 @@ minimal privacy-safe APNs/FCM relay boundary; provider-specific relay delivery
 infrastructure is not required for correctness and remains deployment work.
 
 ## Verification
+
+```bash
+bun run --cwd packages/gateway test -- src/routes/push-wake-routes.test.ts
+bun run --cwd packages/design-tokens build
+# CI authoritative: verify (gateway lines ≥80), mobile-smoke (ci:native-state), gateway-package/trace-and-smoke
+```
+
 
 ```sh
 bun install
