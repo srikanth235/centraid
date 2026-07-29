@@ -214,15 +214,34 @@ binding procedure and checksum contract are recorded in
 maps configuration. The marker is now excluded for both platform fingerprints
 while the app configuration and installed package remain hashed.
 
-Two independent macOS hosted runs (30404358270 and 30407693912) stopped the
-154-target iOS cold build mid-ReactCodegen with zero compiler errors before
-Expo emitted exit 65 and a misleading package-dependency footer; the identical
-repository-script build completed locally. Hosted resource pressure is the
-leading diagnosis, not yet a proven cause. `.github/workflows/e2e.yml` now
-limits Xcode to two concurrent compile tasks on the three-core runner, and
-`TESTING.md` records the mitigation so it is not removed as an unexplained
-slowdown. A cache-miss hosted success remains required before checking the
-nightly acceptance items below.
+Three independent macOS hosted runs (30404358270, 30407693912, and
+30409157675) stopped the 154-target iOS cold build mid-ReactCodegen with zero
+compiler errors before Expo emitted exit 65 and a misleading
+package-dependency footer; the identical repository-script build completed
+locally. Hosted resource pressure is the leading diagnosis, not yet a proven
+cause. The third run proved a two-task cap insufficient, so
+`.github/workflows/e2e.yml` now serializes Xcode compile tasks on the
+three-core runner. `TESTING.md` records the mitigation so it is not removed as
+an unexplained slowdown. A cache-miss hosted success remains required before
+checking the nightly acceptance items below.
+
+The same full-nightly evidence exposed a stale mobile journey contract after
+#603 made pairing-ticket enrollment mandatory. The old
+`tests/agent-e2e-mobile/lib/first-run.mjs` helper still searched for a removed
+`Skip` action, and `tests/agent-e2e-mobile/lib/harness.mjs` still tried to
+bypass enrollment by saving a manual gateway URL. The harness now mints and
+redeems a real one-time gateway ticket for a run-unique write-role member,
+completes the member profile, and only then enters the app shell. The live
+capability stays in a `MAESTRO_*` variable rather than retained YAML; sensitive
+Maestro output/debug is suppressed and removed on failure, and
+`.github/workflows/e2e.yml` repeats that cleanup before artifact upload.
+`tests/agent-e2e-mobile/flows/home-loads.mjs` and its intent document
+`tests/agent-e2e-mobile/flows/home-loads.md` now verify the mandatory
+ticket-only first screen on both platforms instead of claiming that a cleared,
+unpaired client can reach Home. `tests/agent-e2e-mobile/README.md`,
+`tests/agent-e2e-mobile/flows/template-gate.md`, and
+`tests/agent-e2e-mobile/flows/native-v0-resilience.md` record the same
+mint/redeem contract rather than the removed Settings bypass.
 
 `.github/dependabot.yml` continues to propose all major upgrades, but leaves
 each production major in its own attributable PR while grouping patch/minor
@@ -451,6 +470,7 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785280747-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 389894 | 0 | 26411776 | 32143 | 422037 | 8.0598 | 2262246 | 0 | 151156992 | 223386 | fix(mobile): stabilize native fingerprint inputs (#587) |
 | codex-019fa9f8-a97-1785282371-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 176501 | 0 | 16274944 | 14348 | 190849 | 4.7252 | 2438747 | 0 | 167431936 | 237734 | ci(mobile): bound Xcode cold-build concurrency (#587) |
 | codex-019fa9f8-a97-1785282421-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 2139 | 0 | 628992 | 191 | 2330 | 0.1655 | 2440886 | 0 | 168060928 | 237925 | ci(mobile): bound Xcode cold-build concurrency (#587) -m governance: allow-toolc |
+| codex-019fa9f8-a97-1785285672-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 416690 | 0 | 36680192 | 35519 | 452209 | 10.7446 | 2857576 | 0 | 204741120 | 273444 | test(mobile): follow ticket-only onboarding (#587) -m governance: allow-toolchai |
 
 ### Steering
 

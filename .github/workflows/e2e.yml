@@ -280,12 +280,13 @@ jobs:
         run: |
           set -euo pipefail
           # The macos-15-arm64 hosted runner exposes only 3 cores. Xcode's
-          # default scheduler twice vanished mid-ReactCodegen with zero compiler
+          # default scheduler repeatedly vanished mid-ReactCodegen with zero compiler
           # errors, then Expo surfaced exit 65 plus a misleading
           # package-dependency footer. The same checkout builds locally, making
-          # hosted resource pressure the leading diagnosis. Keep two compile
-          # tasks live to reduce the cold build's peak memory pressure.
-          defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks -int 2
+          # hosted resource pressure the leading diagnosis. A two-task cap still
+          # terminated in run 30409157675, so serialize compile tasks for the
+          # cache-miss build to minimize its peak memory pressure.
+          defaults write com.apple.dt.Xcode IDEBuildOperationMaxNumberOfConcurrentCompileTasks -int 1
           bunx expo run:ios --device "$SIMULATOR_UDID" --no-bundler
           # Copy the product out of derived data into the cached location. Fail
           # hard if it cannot be found: caching an empty directory would turn
@@ -349,6 +350,14 @@ jobs:
           node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
           exit "$ec"
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
       # Single-root evidence upload only — dual path (artifacts/ + runs/) made
       # upload-artifact v4 LCA-nest as artifacts/artifacts/e2e after merge-multiple
       # download, which generate.mjs never reads (#535 F1).

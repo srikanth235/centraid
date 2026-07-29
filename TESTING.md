@@ -370,11 +370,12 @@ input identity. It likewise hashes the app's maps configuration and the
 `react-native-maps` package, but not the package's `RNMapsDefines.h` marker
 that CocoaPods rewrites from those inputs.
 
-The nightly iOS cold build caps Xcode at two concurrent compile tasks. The
-three-core hosted runner twice terminated this 154-target workspace
-mid-codegen with zero compiler errors, which Expo then presented as an exit-65
-package-dependency failure. Hosted resource pressure is the leading diagnosis;
-the cap reduces peak concurrency and must be verified on a cache-miss run.
+The nightly iOS cold build serializes Xcode compile tasks. The three-core
+hosted runner repeatedly terminated this 154-target workspace mid-codegen with
+zero compiler errors, which Expo then presented as an exit-65
+package-dependency failure; a two-task cap still terminated in run
+30409157675. Hosted resource pressure is the leading diagnosis; serialization
+minimizes peak concurrency and must be verified on a cache-miss run.
 
 Android decisions mirror iOS where the artifact exists: Android uses the same
 fingerprint ratchet and path-safe `require.resolve` project configuration.
