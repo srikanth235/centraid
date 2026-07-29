@@ -515,7 +515,7 @@ bun run check:pr:full
   and behavioral CRUD suites — 299 tests passing.
 - ACP → MCP blueprint agent parity integration — passing for all eight apps.
 - `bun run check:pr:full` — green: all static, affected/full test, and
-  diff-coverage gates; 781 coverage test files, 6,341 passing tests, and 84.9%
+  diff-coverage gates; 781 coverage test files, 6,365 passing tests, and 84.9%
   changed-line coverage against the 80% floor.
 - Fresh-context audit — pending final re-audit below.
 
@@ -708,6 +708,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785352090-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 78506 | 0 | 2589440 | 2739 | 81245 | 0.8847 | 7895284 | 0 | 365602304 | 1023988 | test(gateway): make lock PID enrichment load-safe (#630) |
 | codex-019fad18-4c1-1785352146-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 3175 | 0 | 125952 | 557 | 3732 | 0.0478 | 7898459 | 0 | 365728256 | 1024545 | test(gateway): make lock PID enrichment load-safe (#630) |
 | codex-019fad18-4c1-1785352224-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 18562 | 0 | 198144 | 805 | 19367 | 0.1080 | 7917021 | 0 | 365926400 | 1025350 | test(gateway): narrow optional lock diagnostics (#630) |
+| codex-019fad18-4c1-1785352700-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 97066 | 0 | 1736960 | 1617 | 98683 | 0.7012 | 8014087 | 0 | 367663360 | 1026967 | docs(receipt): record reconciled issue gate (#630) |
 
 ## Steering
 
