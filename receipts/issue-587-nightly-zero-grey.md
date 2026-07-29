@@ -374,6 +374,35 @@ rejected the initially proposed 92%/74% line floors against Linux measurements
 of 90.65%/67.65%. The corrected 88%/65% floors apply the documented two-point
 margin while still tightening the previous 70%/45% baselines.
 
+### Merge with the #619 lint hardening
+
+`main` gained `oxlint --deny-warnings` (#619, merged as `0cacce5f`) while this
+branch was open. Merging it back conflicted in two files and required the
+branch's own additions to meet the stricter gate:
+
+- `scripts/test-report/generate.mjs` keeps this branch's durable `laneSeries`
+  trend rendering and richer hero/legend markup, carrying #619's shadow-free
+  identifiers (`modelLocal`, `coverageRowsLocal`, `mutationRowsLocal`) through
+  it. `collectFloorSeries` / `collectFloorBaselines` parameters and
+  `buildCells`'s destructured `laneMarkers` / `reportScope` were renamed for
+  the same `no-shadow` rule.
+- `tests/agent-e2e-mobile/lib/harness.mjs` keeps this branch's
+  `ctx.run(yaml, hint, options)` signature in #619's hoisted-const form.
+- The perf and scale suites this branch adds
+  (`tests/perf/agent-turn.perf.test.ts`,
+  `tests/perf/automation-fire.perf.test.ts`,
+  `tests/scale/agent-sessions.scale.test.ts`) split their inline `type`
+  specifiers into top-level `import type` statements for
+  `consistent-type-specifier-style`.
+
+```sh
+bun run check:pr
+# all static/lint/typecheck/knip/governance gates passed after the merge
+# oxlint --deny-warnings clean; format:check clean
+# test:ratchet:unit 9 files, 114 tests passed
+# test:report:smoke ok; test:matrix 15 surfaces × 10 dimensions, 58 flows
+```
+
 The first two full-nightly attempts also exposed a deterministic stale desktop
 fixture: `apps/desktop/tests/e2e/appview-templates-insights.spec.ts` invented a
 `digest` automation template ID after Discover had moved to an explicit v0
@@ -476,6 +505,7 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785282421-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 2139 | 0 | 628992 | 191 | 2330 | 0.1655 | 2440886 | 0 | 168060928 | 237925 | ci(mobile): bound Xcode cold-build concurrency (#587) -m governance: allow-toolc |
 | codex-019fa9f8-a97-1785285672-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 416690 | 0 | 36680192 | 35519 | 452209 | 10.7446 | 2857576 | 0 | 204741120 | 273444 | test(mobile): follow ticket-only onboarding (#587) -m governance: allow-toolchai |
 | codex-019fa9f8-a97-1785287040-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 217373 | 0 | 13805056 | 9954 | 227327 | 4.1440 | 3074949 | 0 | 218546176 | 283398 | ci(mobile): recover zero-error Xcode exits (#587) -m governance: allow-toolchain |
+| claude-code-d066a5ca-d69-1785290959-1 | claude-code | d066a5ca-d698-4c48-b924-0c68f20ac3e9 | #587 | claude-opus-5 | 8 | 15891 | 710269 | 1835 | 17734 | 0.5004 | 213 | 336326 | 11580609 | 40307 | docs(receipt): record the #619 lint-hardening merge (#587) |
 
 ### Steering
 
