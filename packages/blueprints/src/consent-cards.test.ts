@@ -88,8 +88,8 @@ describe("confirmParked", () => {
     });
     const out = await confirmParked("inv-1", true, { fetchJson });
     expect(out).toStrictEqual({ status: "executed", receiptId: "r1" });
-    const [url, opts] = fetchJson.mock.calls[0];
-    expect(url).toBe("/centraid/_vault/parked/inv-1");
+    const [urlLocal, opts] = fetchJson.mock.calls[0];
+    expect(urlLocal).toBe("/centraid/_vault/parked/inv-1");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toStrictEqual({ approve: true });
   });

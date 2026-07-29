@@ -3,14 +3,8 @@
 // switcher's popover callbacks. A route-wiring extraction remains the right
 // follow-up; #599 shrank this file rather than growing it (the space switcher's
 // callbacks and the New-space modal left for Household).
-import {
-  type JSX,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { relativeTime } from "../../app-format.js";
 import type { ShellRoute } from "../../app-shell-context.js";
@@ -25,7 +19,8 @@ import {
 } from "../../gateway-client.js";
 import PaletteScreen from "../screens/PaletteScreen.js";
 import WhatsNewModal from "../screens/WhatsNewModal.js";
-import { type ShellActions, ShellActionsProvider } from "./actions.js";
+import { ShellActionsProvider } from "./actions.js";
+import type { ShellActions } from "./actions.js";
 import { openConfirm } from "./confirm.js";
 import { openMenu } from "./contextMenu.js";
 import {
@@ -49,10 +44,8 @@ import AutomationViewRoute from "./routes/AutomationViewRoute.js";
 import BuilderRoute from "./routes/BuilderRoute.js";
 import ConnectFlowModal from "./routes/ConnectFlowModal.js";
 import ConnectorsRoute from "./routes/ConnectorsRoute.js";
-import {
-  downloadConversation,
-  type ExportFormat,
-} from "./routes/conversationExport.js";
+import { downloadConversation } from "./routes/conversationExport.js";
+import type { ExportFormat } from "./routes/conversationExport.js";
 import {
   conversationScope,
   conversationScopes,
@@ -73,11 +66,13 @@ import StarredRoute from "./routes/StarredRoute.js";
 import StorageRoute from "./routes/StorageRoute.js";
 import TemplatesRoute from "./routes/TemplatesRoute.js";
 import TestConnectionModal from "./routes/TestConnectionModal.js";
-import ShellApp, { type ShellNav } from "./ShellApp.js";
-import Sidebar, {
-  type ShellMenuAnchor,
-  type SidebarConversation,
-  type SidebarPage,
+import ShellApp from "./ShellApp.js";
+import type { ShellNav } from "./ShellApp.js";
+import Sidebar from "./Sidebar.js";
+import type {
+  ShellMenuAnchor,
+  SidebarConversation,
+  SidebarPage,
 } from "./Sidebar.js";
 import { PageEmpty } from "./status.js";
 import { showToast } from "./toast.js";
@@ -382,9 +377,9 @@ export default function App(): JSX.Element {
                 ASSISTANT_APP_ID,
                 id,
                 conversationScope(id)
-              ).catch((err: unknown) =>
+              ).catch((error: unknown) =>
                 showToast(
-                  `Couldn't delete: ${err instanceof Error ? err.message : String(err)}`
+                  `Couldn't delete: ${error instanceof Error ? error.message : String(error)}`
                 )
               );
               unhide();
@@ -416,9 +411,9 @@ export default function App(): JSX.Element {
           id,
           next,
           conversationScope(id)
-        ).catch((err: unknown) =>
+        ).catch((error: unknown) =>
           showToast(
-            `Couldn't rename: ${err instanceof Error ? err.message : String(err)}`
+            `Couldn't rename: ${error instanceof Error ? error.message : String(error)}`
           )
         );
         await assistantConversations.refresh();
@@ -436,8 +431,8 @@ export default function App(): JSX.Element {
           id,
           pinned,
           conversationScope(id)
-        ).catch((err: unknown) =>
-          showToast(`Couldn't ${pinned ? "pin" : "unpin"}: ${errMsg(err)}`)
+        ).catch((error: unknown) =>
+          showToast(`Couldn't ${pinned ? "pin" : "unpin"}: ${errMsg(error)}`)
         );
         await assistantConversations.refresh();
       })();
@@ -455,9 +450,9 @@ export default function App(): JSX.Element {
           id,
           archived,
           conversationScope(id)
-        ).catch((err: unknown) =>
+        ).catch((error: unknown) =>
           showToast(
-            `Couldn't ${archived ? "archive" : "unarchive"}: ${errMsg(err)}`
+            `Couldn't ${archived ? "archive" : "unarchive"}: ${errMsg(error)}`
           )
         );
         const cur = navRef.current?.route;
@@ -485,8 +480,8 @@ export default function App(): JSX.Element {
             conversationScope(id)
           );
           downloadConversation(conv, format);
-        } catch (err: unknown) {
-          showToast(`Couldn't export: ${errMsg(err)}`);
+        } catch (error: unknown) {
+          showToast(`Couldn't export: ${errMsg(error)}`);
         }
       })();
     },
@@ -570,15 +565,15 @@ export default function App(): JSX.Element {
           rows: getCachedGatewayRows(activeGatewayId),
           onSelectSpace: (vaultId) => {
             void window.CentraidApi.setActiveVault({ vaultId }).catch(
-              (err: unknown) =>
-                showToast(`Couldn't switch space: ${errMsg(err)}`)
+              (error: unknown) =>
+                showToast(`Couldn't switch space: ${errMsg(error)}`)
             );
           },
           onAddGateway: () => setAddGatewayOpen(true),
           onSelectGateway: (gatewayId) => {
             void window.CentraidApi.setActiveGateway({ id: gatewayId }).catch(
-              (err: unknown) =>
-                showToast(`Couldn't switch gateway: ${errMsg(err)}`)
+              (error: unknown) =>
+                showToast(`Couldn't switch gateway: ${errMsg(error)}`)
             );
           },
           onRemoveGateway: (gatewayId) => {
@@ -592,7 +587,8 @@ export default function App(): JSX.Element {
               });
               if (!ok) return;
               await window.CentraidApi.removeGateway({ id: gatewayId }).catch(
-                (err: unknown) => showToast(`Couldn't remove: ${errMsg(err)}`)
+                (error: unknown) =>
+                  showToast(`Couldn't remove: ${errMsg(error)}`)
               );
             })();
           },
@@ -928,8 +924,8 @@ export default function App(): JSX.Element {
       {paletteOpen ? (
         <PaletteScreen
           onClose={closePalette}
-          onReady={(refresh) => {
-            paletteConversationSearch.setOnResults(refresh);
+          onReady={(refreshLocal) => {
+            paletteConversationSearch.setOnResults(refreshLocal);
           }}
           buildGroups={(query) =>
             buildPaletteGroups(query, {
@@ -978,9 +974,9 @@ export default function App(): JSX.Element {
             setRenameTarget(null);
             void window.CentraidApi.renameGateway({ id: gatewayId, label })
               .then(() => showToast(`Renamed · ${label}`))
-              .catch((err: unknown) =>
+              .catch((error: unknown) =>
                 showToast(
-                  `Couldn't rename: ${err instanceof Error ? err.message : String(err)}`
+                  `Couldn't rename: ${error instanceof Error ? error.message : String(error)}`
                 )
               );
           }}

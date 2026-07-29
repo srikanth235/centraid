@@ -30,9 +30,8 @@ import {
   JS_SAFE_INTEGER_BOUND,
   parseExtLogical,
   validateExtSpecs,
-  type ExtBand,
-  type ExtTableSpec,
 } from "../schema/ext.js";
+import type { ExtBand, ExtTableSpec } from "../schema/ext.js";
 import type { SearchableEntity } from "../schema/fts.js";
 import {
   isSealedValue,
@@ -267,9 +266,9 @@ export function applyExtBand(
     // from listVaultEntities and therefore never replicated.
     refreshReplicaTriggers(db.vault);
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   return outcome;
 }
@@ -458,9 +457,9 @@ export function seedExtDraft(
       );
     }
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   return outcome;
 }
@@ -477,9 +476,9 @@ export function dropExtBand(
   try {
     for (const row of rows) dropExtTable(db, row, now);
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   return rows.map((r) => r.table_name);
 }

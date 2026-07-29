@@ -12,7 +12,8 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { updateBlobStoreSettings } from "../host.js";
 import { BLOB_CACHE_DDL } from "../schema/blob.js";
 import { ReplicaIndex } from "./replica-index.js";
@@ -88,7 +89,7 @@ function startFakeS3(): Promise<FakeS3> {
         objects,
         requests,
         close: () =>
-          new Promise<void>((resolve) => server.close(() => resolve())),
+          new Promise<void>((_resolve) => server.close(() => _resolve())),
       });
     });
   });

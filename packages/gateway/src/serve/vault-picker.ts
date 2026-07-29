@@ -12,13 +12,11 @@
  */
 
 import type { RuntimeLogger } from "@centraid/app-engine";
-import {
-  CARD_PK,
-  CARDED_ENTITIES,
-  SEARCHABLE,
-  type Credential,
-  type Gateway as VaultGateway,
-  type RefCard,
+import { CARD_PK, CARDED_ENTITIES, SEARCHABLE } from "@centraid/vault";
+import type {
+  Credential,
+  Gateway as VaultGateway,
+  RefCard,
 } from "@centraid/vault";
 
 import {
@@ -180,9 +178,9 @@ export function pickEntities(
           });
         }
       }
-    } catch (err) {
+    } catch (error) {
       logger.warn(
-        `vault plane: picker skipped ${kind}: ${err instanceof Error ? err.message : String(err)}`
+        `vault plane: picker skipped ${kind}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

@@ -24,17 +24,19 @@ import path from "node:path";
 
 import {
   appendLogs,
-  type LogEntry,
-  type ConversationStore,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-  type TurnStreamEvent,
-  type AutomationTurnStreamEvent,
-  type VaultBridge,
-  type VaultOp,
   WorkerPool,
   workerPoolSizeFromEnv,
   workerResourceLimitsFromEnv,
+} from "@centraid/app-engine";
+import type {
+  LogEntry,
+  ConversationStore,
+  AutomationTriggerKind,
+  AutomationTriggerOrigin,
+  TurnStreamEvent,
+  AutomationTurnStreamEvent,
+  VaultBridge,
+  VaultOp,
 } from "@centraid/app-engine";
 
 import { validateOutputAgainstSchema } from "../manifest/manifest-output.js";
@@ -44,15 +46,15 @@ import {
   extractReturnEnvelope,
   noopRunEventSink,
   truncateForAudit,
-  type HandlerReturnEnvelope,
 } from "./audit.js";
+import type { HandlerReturnEnvelope } from "./audit.js";
 import {
   handleAgentMessage,
   handleRunsMessage,
   handleStateMessage,
   handleVaultMessage,
-  type AuditState,
 } from "./ctx.js";
+import type { AuditState } from "./ctx.js";
 
 function resolveWorkerFile(): string {
   // `here` is the dir of this module (`src/handler` → `dist/handler` once
@@ -615,10 +617,12 @@ export async function runHandler(
   const executeFetch = async (
     rawSpec: FetchSpecWire
   ): Promise<FetchWireResult> => {
-    let { spec, injected } = await substituteSecrets(
+    const substituted = await substituteSecrets(
       rawSpec,
       opts.connectionAuth?.values ?? {}
     );
+    let { spec } = substituted;
+    const { injected } = substituted;
     if (!injected) return fetchOnce(spec, false);
     assertInjectable(spec.url, spec.method ?? "GET", spec.body);
     const auth = opts.connectionAuth!;
@@ -878,12 +882,12 @@ export async function runHandler(
         ...(typeof pull.summary === "string" ? { summary: pull.summary } : {}),
         output: { staged, published },
       };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       await closeConnectorRun(false, { staged, published }, message).catch(
         () => undefined
       );
-      throw err;
+      throw error;
     }
   };
 
@@ -1053,12 +1057,14 @@ export async function runHandler(
           .then((result) => {
             send({ type: "fetch-reply", id: msg.id, ok: true, result });
           })
-          .catch((err: unknown) => {
+          .catch((error: unknown) => {
             send({
               type: "fetch-reply",
               id: msg.id,
               ok: false,
-              error: scrub(err instanceof Error ? err.message : String(err)),
+              error: scrub(
+                error instanceof Error ? error.message : String(error)
+              ),
             });
           });
         return;
@@ -1082,12 +1088,12 @@ export async function runHandler(
               result,
             });
           })
-          .catch((err: unknown) => {
+          .catch((error: unknown) => {
             send({
               type: "connector-open-reply",
               id: msg.id,
               ok: false,
-              error: err instanceof Error ? err.message : String(err),
+              error: error instanceof Error ? error.message : String(error),
             });
           });
         return;
@@ -1199,8 +1205,9 @@ export async function runHandler(
               toolBatches,
               agentCalls,
             });
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
             await closeConnectorRun(false, {}, message).catch(() => undefined);
             finish({
               ok: false,

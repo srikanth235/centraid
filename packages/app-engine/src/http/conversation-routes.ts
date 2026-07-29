@@ -316,8 +316,8 @@ export function makeConversationRouteHandler(
       }
       sendError(res, 405, "method not allowed");
       return true;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
       sendError(res, 500, msg);
       return true;
     }

@@ -9,12 +9,11 @@ import {
 } from "../errors.js";
 import { uuidv7 } from "../ids.js";
 import type { BlobCache } from "./cache.js";
-import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import { remoteEncryptionKey } from "./custody-types.js";
+import type { RemoteTier } from "./custody-types.js";
 import { extractBlobMetaFromProbes, sniffMediaType } from "./pipeline.js";
-import {
-  INGRESS_PREVIEW_MAX_BYTES,
-  type IngressPreviewInput,
-} from "./preview.js";
+import { INGRESS_PREVIEW_MAX_BYTES } from "./preview.js";
+import type { IngressPreviewInput } from "./preview.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";
 import { sealBlobStream } from "./seal.js";
 import { recordKnownStagedBlob } from "./staging-record.js";

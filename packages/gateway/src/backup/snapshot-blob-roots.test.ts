@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
 
-import {
-  sealManifest,
-  type BackupProvider,
-  type Keyring,
-  type ManifestEntry,
-  type SnapshotRow,
+import { sealManifest } from "@centraid/backup";
+import type {
+  BackupProvider,
+  Keyring,
+  ManifestEntry,
+  SnapshotRow,
 } from "@centraid/backup";
 import { describe, expect, test } from "vitest";
 

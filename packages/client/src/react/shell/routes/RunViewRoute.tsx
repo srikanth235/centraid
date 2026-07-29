@@ -1,12 +1,13 @@
-import { type JSX, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
+import type { JSX } from "react";
 
 import {
   readAutomation,
   readAutomationTurnExpanded,
   runAutomationNow,
   streamAutomationTurn,
-  type AutomationTurnStreamEvent,
 } from "../../../gateway-client.js";
+import type { AutomationTurnStreamEvent } from "../../../gateway-client.js";
 import type { RunViewSnapshot } from "../../screen-contracts.js";
 import RunViewScreen from "../../screens/RunViewScreen.js";
 import { useShellActions } from "../actions.js";
@@ -227,9 +228,9 @@ export default function RunViewRoute({
             .then(({ turnId }) =>
               navigate({ kind: "run-view", automationId: ref, runId: turnId })
             )
-            .catch((err: unknown) =>
+            .catch((error: unknown) =>
               showToast(
-                `Run failed: ${err instanceof Error ? err.message : String(err)}`
+                `Run failed: ${error instanceof Error ? error.message : String(error)}`
               )
             );
         }}

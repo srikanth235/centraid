@@ -15,11 +15,8 @@
 
 import { app } from "electron";
 
-import {
-  normalizeReleases,
-  type ChangelogRelease,
-  type ChangelogResult,
-} from "./changelog-core.js";
+import { normalizeReleases } from "./changelog-core.js";
+import type { ChangelogRelease, ChangelogResult } from "./changelog-core.js";
 
 /**
  * The repo the release notes come from. Hardcoded (no `repository` field in
@@ -77,12 +74,13 @@ export async function getChangelog(): Promise<ChangelogResult> {
     const releases = await fetchReleases();
     cache = { releases, fetchedAt: now };
     return { currentVersion, releases };
-  } catch (err) {
+  } catch (error) {
     if (cache) return { currentVersion, releases: cache.releases };
     return {
       currentVersion,
       releases: [],
-      error: err instanceof Error ? err.message : "Failed to load changelog",
+      error:
+        error instanceof Error ? error.message : "Failed to load changelog",
     };
   }
 }

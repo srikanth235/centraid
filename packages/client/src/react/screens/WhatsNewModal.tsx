@@ -1,4 +1,5 @@
-import { useEffect, useRef, type JSX } from "react";
+import { useEffect, useRef } from "react";
+import type { JSX } from "react";
 
 import type { CentraidChangelogRelease } from "../../centraid-api.js";
 import { changelogNotesToHtml } from "../shell/changelogMarkdown.js";

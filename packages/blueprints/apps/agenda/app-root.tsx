@@ -5,15 +5,8 @@
 // descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
 // wiring; there is deliberately no parallel served-system-app entry.
 
-import {
-  useCallback,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactElement,
-} from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import type { KeyboardEvent, ReactElement } from "react";
 
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";

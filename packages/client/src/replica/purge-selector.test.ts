@@ -9,8 +9,8 @@ import {
   listReplicaPurgeSelectors,
   rememberReplicaPurgeSelector,
   replicaPurgeSelectorMatches,
-  type ReplicaPurgeSelector,
 } from "./purge-selector.js";
+import type { ReplicaPurgeSelector } from "./purge-selector.js";
 
 function memoryStorage(seed?: string) {
   const values = new Map<string, string>();

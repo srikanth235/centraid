@@ -33,8 +33,8 @@ import {
   fetchRemoteTemplates,
   resolveTemplates,
   templateSourceDir,
-  type ResolvedTemplate,
 } from "@centraid/blueprints";
+import type { ResolvedTemplate } from "@centraid/blueprints";
 
 import { sendJson } from "./route-helpers.js";
 

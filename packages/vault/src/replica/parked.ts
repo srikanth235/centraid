@@ -2,10 +2,10 @@ import type { VaultDb } from "../db.js";
 import { writeExplanation, writeReceipt } from "../gateway/evidence.js";
 import type { Identity, InvokeRequest } from "../gateway/types.js";
 import { sealAad, sealValue, unsealValue } from "../schema/sealed.js";
-import {
-  transitionReplicaIntentOutcomeInTransaction,
-  type ReplicaIntentOutcome,
-  type TransitionReplicaIntentOutcomeInput,
+import { transitionReplicaIntentOutcomeInTransaction } from "./intents.js";
+import type {
+  ReplicaIntentOutcome,
+  TransitionReplicaIntentOutcomeInput,
 } from "./intents.js";
 
 export interface DurableParkedPayload {

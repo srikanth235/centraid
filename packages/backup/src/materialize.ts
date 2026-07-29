@@ -23,15 +23,12 @@ import {
   decrypt,
   deriveDataKey,
   deriveDedupKey,
-  type Keyring,
   masterKeyForEpoch,
 } from "./crypto.js";
+import type { Keyring } from "./crypto.js";
 import type { EngineLogger } from "./engine-log.js";
-import {
-  isSafeEntryPath,
-  type ManifestEntry,
-  openManifest,
-} from "./manifest.js";
+import { isSafeEntryPath, openManifest } from "./manifest.js";
+import type { ManifestEntry } from "./manifest.js";
 import { applyInOrder } from "./ordered-work.js";
 import type { BackupProvider } from "./provider.js";
 

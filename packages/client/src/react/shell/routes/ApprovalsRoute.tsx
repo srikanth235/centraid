@@ -1,4 +1,5 @@
-import { type JSX, useState } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import {
   decideOutboxItem,
@@ -62,9 +63,9 @@ export default function ApprovalsRoute(): JSX.Element {
     try {
       await action();
       reload();
-    } catch (err) {
+    } catch (error) {
       showToast(
-        `That didn’t go through: ${err instanceof Error ? err.message : String(err)}`
+        `That didn’t go through: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       setBusyId(null);

@@ -20,7 +20,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { isDirectHostRequest } from "../routes/route-helpers.ts";
-import { buildGateway, type BuiltGateway } from "./build-gateway.ts";
+import { buildGateway } from "./build-gateway.ts";
+import type { BuiltGateway } from "./build-gateway.ts";
 import { EnrollmentStore } from "./enrollment-store.ts";
 import { GatewayDatabase } from "./gateway-db.ts";
 import { PairingTicketStore } from "./pairing-store.ts";

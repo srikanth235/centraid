@@ -10,10 +10,8 @@ import * as Notifications from "expo-notifications";
 import { SchedulableTriggerInputTypes } from "expo-notifications";
 
 import type { BridgeMethod, BridgeRequest, BridgeResponse } from "./protocol";
-import {
-  assertGatewayMintedUploadUrl,
-  type BackgroundTransferScope,
-} from "./transfer-policy";
+import { assertGatewayMintedUploadUrl } from "./transfer-policy";
+import type { BackgroundTransferScope } from "./transfer-policy";
 
 class BridgeFailureError extends Error {
   constructor(
@@ -300,10 +298,10 @@ export async function dispatch(
   try {
     const value = await handler(appId, req.args, scope);
     return { id: req.id, ok: true, value };
-  } catch (err) {
-    if (err instanceof BridgeFailureError) {
+  } catch (error) {
+    if (error instanceof BridgeFailureError) {
       return {
-        error: { code: err.code, message: err.message },
+        error: { code: error.code, message: error.message },
         id: req.id,
         ok: false,
       };
@@ -311,7 +309,7 @@ export async function dispatch(
     return {
       error: {
         code: "unhandled",
-        message: err instanceof Error ? err.message : String(err),
+        message: error instanceof Error ? error.message : String(error),
       },
       id: req.id,
       ok: false,

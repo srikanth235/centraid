@@ -1,7 +1,8 @@
 // Proves the ReplicaSqliteStore core is driver-neutral: the same corpus runs
 // against the sqlite-wasm adapter (the web engine) and a node:sqlite adapter
 // (the CI stand-in for op-sqlite, which cannot load under vitest on macOS/node).
-import sqlite3InitModule, { type Sqlite3Static } from "@sqlite.org/sqlite-wasm";
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
+import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
 
 import {

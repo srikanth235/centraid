@@ -118,8 +118,8 @@ async function appendSeries({
   summary,
   slug,
   date,
-  runId,
-  runUrl,
+  runIdLocal,
+  runUrlLocal,
   reportPath,
 }) {
   await mkdir(historyDir, { recursive: true });
@@ -127,8 +127,8 @@ async function appendSeries({
   const record = {
     slug,
     date,
-    runId: runId || null,
-    runUrl: runUrl || null,
+    runId: runIdLocal || null,
+    runUrl: runUrlLocal || null,
     reportPath,
     summary: summary ?? null,
   };
@@ -173,10 +173,10 @@ function summarizeEntry(record) {
 }
 
 /** Series entries whose archived HTML is still on disk (the rest were pruned). */
-async function retainedSlugs(series) {
+async function retainedSlugs(seriesLocal) {
   const kept = new Set();
   await Promise.all(
-    (Array.isArray(series) ? series : []).map(async (entry) => {
+    (Array.isArray(seriesLocal) ? seriesLocal : []).map(async (entry) => {
       if (!entry?.reportPath) return;
       try {
         await stat(path.join(siteDir, entry.reportPath, "index.html"));
@@ -190,7 +190,7 @@ async function retainedSlugs(series) {
 }
 
 /** Keep the `keep` newest dated slots; older HTML is dropped (JSON series stays). */
-async function pruneRuns(runsDir, keep) {
+async function pruneRuns(runsDir, keepLocal) {
   const entries = (
     await readdir(runsDir, { withFileTypes: true }).catch(() => [])
   )
@@ -198,7 +198,7 @@ async function pruneRuns(runsDir, keep) {
     .map((entry) => entry.name)
     .sort()
     .toReversed();
-  const stale = entries.slice(keep);
+  const stale = entries.slice(keepLocal);
   await Promise.all(
     stale.map((name) =>
       rm(path.join(runsDir, name), { recursive: true, force: true })
@@ -238,10 +238,10 @@ async function listSlots(base) {
 }
 
 function renderLanding(
-  slots,
-  { repo, generatedAt, highlight, series, retained }
+  slotsLocal,
+  { repo, generatedAt, highlight, seriesLocal, retained }
 ) {
-  const items = slots
+  const items = slotsLocal
     .map((s) => {
       const href = `test-report/${s}/`;
       const label = s === highlight ? `${s} (this deploy)` : s;
@@ -283,14 +283,14 @@ function renderLanding(
   <ul>
 ${items || "    <li><em>No reports published yet.</em></li>"}
   </ul>
-${renderHistory(series, retained)}
+${renderHistory(seriesLocal, retained)}
 </body>
 </html>
 `;
 }
 
-function renderHistory(series, retained) {
-  const entries = Array.isArray(series) ? series : [];
+function renderHistory(seriesLocal, retained) {
+  const entries = Array.isArray(seriesLocal) ? seriesLocal : [];
   if (!entries.length) return "";
   const groups = new Map();
   for (const entry of entries) {

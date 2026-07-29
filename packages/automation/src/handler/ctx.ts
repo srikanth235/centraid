@@ -19,8 +19,8 @@ import {
   openRunNode,
   rowToRunRef,
   usageCloseFields,
-  type RunEventSink,
 } from "./audit.js";
+import type { RunEventSink } from "./audit.js";
 import type {
   AgentAttachment,
   AgentDispatcher,
@@ -264,8 +264,9 @@ export async function handleAgentMessage(
       ...usageCloseFields(lastUsage),
     });
     return { ok: true, result };
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err);
+  } catch (caughtError) {
+    const error =
+      caughtError instanceof Error ? caughtError.message : String(caughtError);
     closeDanglingTools(error);
     closeRunNode({
       store: audit.store,
@@ -353,10 +354,10 @@ export async function handleVaultMessage(
       });
     }
     return settle({ ok: true, result: result.result });
-  } catch (err) {
+  } catch (error) {
     return settle({
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -387,10 +388,10 @@ export function handleStateMessage(
       return { ok: true };
     }
     return { ok: false, error: `unknown state method: ${String(method)}` };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -426,10 +427,10 @@ export function handleRunsMessage(
       return { ok: true, result: first ? toRef(first) : undefined };
     }
     return { ok: true, result: rows.map(toRef) };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

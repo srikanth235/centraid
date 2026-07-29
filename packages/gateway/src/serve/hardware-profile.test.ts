@@ -5,9 +5,11 @@ import {
   hardwareClassForResourceMode,
   RESOURCE_KNOB_BOUNDS,
   resolveGatewayHardwareProfile,
-  type ResourceKnobName,
-  type ResourceKnobSource,
   toStructuredResourceProfile,
+} from "./hardware-profile.js";
+import type {
+  ResourceKnobName,
+  ResourceKnobSource,
 } from "./hardware-profile.js";
 
 /** All six knobs Linked to the preset — the no-override baseline. */

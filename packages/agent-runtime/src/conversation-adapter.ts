@@ -17,11 +17,11 @@
  * core.
  */
 
-import {
-  makeConversationRunnerCore,
-  type ConversationRunner,
-  type Dispatcher,
-  type ModelSubsystem,
+import { makeConversationRunnerCore } from "@centraid/app-engine";
+import type {
+  ConversationRunner,
+  Dispatcher,
+  ModelSubsystem,
 } from "@centraid/app-engine";
 
 import { runTurn } from "./runtime.js";

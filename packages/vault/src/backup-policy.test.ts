@@ -9,7 +9,8 @@ import {
   updateBackupPolicy,
 } from "./backup-policy.js";
 import { bootstrapVault } from "./bootstrap.js";
-import { openVaultDb, type VaultDb } from "./db.js";
+import { openVaultDb } from "./db.js";
+import type { VaultDb } from "./db.js";
 
 describe("BackupPolicy", () => {
   let db: VaultDb;

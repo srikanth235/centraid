@@ -14,7 +14,8 @@ import path from "node:path";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { runHandler, type HandlerOutcome } from "./handler-runner.js";
+import { runHandler } from "./handler-runner.js";
+import type { HandlerOutcome } from "./handler-runner.js";
 import { WorkerAdmission } from "./worker-admission.js";
 
 let appDir: string;

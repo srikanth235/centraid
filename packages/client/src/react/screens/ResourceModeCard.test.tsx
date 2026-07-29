@@ -1,13 +1,17 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { msUntilTonight, type ResourceProfileDTO } from "./resource-summary.js";
+import { msUntilTonight } from "./resource-summary.js";
+import type { ResourceProfileDTO } from "./resource-summary.js";
 import ResourceModeCard, {
   parseResourceModePref,
   RESOURCE_MODE_PREF_KEY,
-  type ResourceMode,
-  type ResourceModeCardProps,
+} from "./ResourceModeCard.js";
+import type {
+  ResourceMode,
+  ResourceModeCardProps,
 } from "./ResourceModeCard.js";
 
 let root: Root | null = null;

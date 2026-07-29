@@ -19,7 +19,8 @@ import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.ts";
 import type { WorktreeStore } from "../worktree-store/index.js";
-import { serve, type GatewayServeHandle } from "./serve.ts";
+import { serve } from "./serve.ts";
+import type { GatewayServeHandle } from "./serve.ts";
 
 let dataDir: string;
 let handle: GatewayServeHandle;

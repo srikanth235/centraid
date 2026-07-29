@@ -5,8 +5,8 @@ import {
   ConversationStore,
   ProviderEgressConsentStore,
   makeJournalDbProvider,
-  type ConversationRunner,
 } from "@centraid/app-engine";
+import type { ConversationRunner } from "@centraid/app-engine";
 import { validateManifest } from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, it, vi } from "vitest";

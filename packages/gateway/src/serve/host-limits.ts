@@ -18,7 +18,8 @@
 
 import { readFileSync } from "node:fs";
 
-import { defaultStealSampler, type CpuStealSample } from "./power-context.js";
+import { defaultStealSampler } from "./power-context.js";
+import type { CpuStealSample } from "./power-context.js";
 
 export interface HostLimits {
   /** cgroup CPU quota as fractional cores (quota/period), or null when unlimited/unknown. */

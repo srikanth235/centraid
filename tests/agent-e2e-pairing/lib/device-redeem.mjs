@@ -153,10 +153,10 @@ async function main() {
   console.log(JSON.stringify(out));
 }
 
-main().catch((err) => {
-  log("FATAL", err?.stack ?? String(err));
+main().catch((error) => {
+  log("FATAL", error?.stack ?? String(error));
   console.log(
-    JSON.stringify({ paired: false, error: String(err?.message ?? err) })
+    JSON.stringify({ paired: false, error: String(error?.message ?? error) })
   );
   process.exitCode = 1;
 });

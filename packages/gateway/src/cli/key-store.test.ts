@@ -1,4 +1,5 @@
 import type { SpawnSyncReturns } from "node:child_process";
+import type * as TypeImport_1u70gh7 from "node:child_process";
 import { promises as fs, statSync } from "node:fs";
 import path from "node:path";
 
@@ -25,8 +26,7 @@ const mocked = vi.hoisted(() => ({
 }));
 
 vi.mock(import("node:child_process"), () => ({
-  spawnSync:
-    mocked.spawnSync as unknown as typeof import("node:child_process").spawnSync,
+  spawnSync: mocked.spawnSync as unknown as typeof TypeImport_1u70gh7.spawnSync,
 }));
 
 /** A complete `SpawnSyncReturns<string>` so the mock answers exactly what the real call would. */

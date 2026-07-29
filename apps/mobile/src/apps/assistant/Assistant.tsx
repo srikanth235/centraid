@@ -16,13 +16,13 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-import OptionSheet, {
-  type SheetOption,
-} from "../../kit/components/OptionSheet";
+import OptionSheet from "../../kit/components/OptionSheet";
+import type { SheetOption } from "../../kit/components/OptionSheet";
 import { useTheme } from "../../kit/theme";
 import type { AssistantScreenProps } from "../../navigation";
 import { makeStyles } from "./Assistant.styles";
-import { useAssistant, type Bubble } from "./useAssistant";
+import { useAssistant } from "./useAssistant";
+import type { Bubble } from "./useAssistant";
 
 // The vault assistant chat — a full-page cover over Home (springboard model).
 // Chrome mirrors the other covers: a serif title and the teal leave key. The

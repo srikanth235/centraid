@@ -1,4 +1,5 @@
-import { useCallback, type JSX } from "react";
+import { useCallback } from "react";
+import type { JSX } from "react";
 
 import AutomationsOverviewScreen from "../../screens/AutomationsOverviewScreen.js";
 import { useShellActions } from "../actions.js";

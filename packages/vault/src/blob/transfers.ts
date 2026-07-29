@@ -1,4 +1,5 @@
-import { createHash, type Hash } from "node:crypto";
+import { createHash } from "node:crypto";
+import type { Hash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#418) the ingress/direct/stream/outbox coordinator is one lifecycle boundary; splitting only its close fence would separate shutdown ordering from the runner it owns
 import {
   closeSync,
@@ -23,13 +24,13 @@ import {
 } from "../errors.js";
 import { uuidv7 } from "../ids.js";
 import type { BlobCache } from "./cache.js";
-import { BlobContentKeyRegistry } from "./content-keys.js";
+import type { BlobContentKeyRegistry } from "./content-keys.js";
 import type { CustodyState, RemoteTier } from "./custody-types.js";
-import {
-  DirectBlobTransfers,
-  type DirectBlobDownloadResult,
-  type DirectBlobInitInput,
-  type DirectBlobInitResult,
+import { DirectBlobTransfers } from "./direct-transfers.js";
+import type {
+  DirectBlobDownloadResult,
+  DirectBlobInitInput,
+  DirectBlobInitResult,
 } from "./direct-transfers.js";
 import { enqueueExistingLocalBlobs } from "./existing-local.js";
 import {
@@ -40,11 +41,8 @@ import { assertSpoolAdmission, requireRemote } from "./ingress-admission.js";
 import type { LocalBlobStore } from "./local.js";
 import { streamThroughOnce } from "./one-shot-stream.js";
 import { BlobOutboxRunner } from "./outbox-runner.js";
-import {
-  preflightBlob,
-  type BlobPreflightHint,
-  type BlobPreflightResult,
-} from "./preflight.js";
+import { preflightBlob } from "./preflight.js";
+import type { BlobPreflightHint, BlobPreflightResult } from "./preflight.js";
 import type { IngressPreviewInput } from "./preview.js";
 import { auditRemoteBlob } from "./remote-audit.js";
 import type { MultipartPart } from "./remote-transfer.js";
@@ -54,9 +52,10 @@ import { assertSha } from "./store.js";
 import {
   RemoteStreamIngress,
   STREAM_INGRESS_CHUNK_BYTES,
-  type StreamIngressStart,
 } from "./stream-ingress.js";
-import { BlobTransferState, type IngressSessionRow } from "./transfer-state.js";
+import type { StreamIngressStart } from "./stream-ingress.js";
+import { BlobTransferState } from "./transfer-state.js";
+import type { IngressSessionRow } from "./transfer-state.js";
 import { streamThroughUnknownHash } from "./unknown-hash-stream.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;

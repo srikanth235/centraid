@@ -1,4 +1,5 @@
-import { type JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { relativeWhen, shortVersionTitle } from "../../../../format.js";
 import { activateVersion, listVersions } from "../../../../gateway-client.js";
@@ -84,8 +85,8 @@ export default function BuilderHistory({
         showToast(`Restored to ${title}`);
         onRestored(versionId);
         setNonce((n) => n + 1);
-      } catch (err) {
-        showToast(`Restore failed: ${String(err)}`);
+      } catch (caughtError) {
+        showToast(`Restore failed: ${String(caughtError)}`);
       }
     })();
   };

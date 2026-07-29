@@ -19,11 +19,8 @@ import { WEBHOOK_ROUTE_PREFIX } from "@centraid/automation";
 import { ROUTES } from "@centraid/protocol";
 
 import { OAUTH_CALLBACK_PATH } from "../routes/connections-routes.js";
-import {
-  buildGateway,
-  type BuildGatewayOptions,
-  type BuiltGateway,
-} from "./build-gateway.js";
+import { buildGateway } from "./build-gateway.js";
+import type { BuildGatewayOptions, BuiltGateway } from "./build-gateway.js";
 import { WEB_SESSION_REDEEM_PATH } from "./web-app-sessions.js";
 import { startWebUiServer } from "./web-ui-server.js";
 

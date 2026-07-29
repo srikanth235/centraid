@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import { formatBytes } from "../../format.js";
 import { formatDuration } from "../shell/routes/gatewayData.js";

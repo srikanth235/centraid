@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createBlobSweepHealthProbe,
-  type BlobCustodyCounts,
-} from "./blob-sweep-health.js";
+import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
+import type { BlobCustodyCounts } from "./blob-sweep-health.js";
 
 const ZERO_COUNTS: BlobCustodyCounts = {
   "local-only": 0,

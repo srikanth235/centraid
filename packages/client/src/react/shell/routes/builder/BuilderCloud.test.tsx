@@ -1,25 +1,19 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_10vk0g from "../../../../gateway-client.js";
+
 const api = vi.hoisted(() => ({
-  appLiveUrl:
-    vi.fn<typeof import("../../../../gateway-client.js").appLiveUrl>(),
-  appLogs: vi.fn<typeof import("../../../../gateway-client.js").appLogs>(),
-  deleteAutomation:
-    vi.fn<typeof import("../../../../gateway-client.js").deleteAutomation>(),
-  listAutomations:
-    vi.fn<typeof import("../../../../gateway-client.js").listAutomations>(),
-  listVersions:
-    vi.fn<typeof import("../../../../gateway-client.js").listVersions>(),
-  readAutomationTurn:
-    vi.fn<typeof import("../../../../gateway-client.js").readAutomationTurn>(),
-  runAutomationNow:
-    vi.fn<typeof import("../../../../gateway-client.js").runAutomationNow>(),
-  setAutomationEnabled:
-    vi.fn<
-      typeof import("../../../../gateway-client.js").setAutomationEnabled
-    >(),
+  appLiveUrl: vi.fn<typeof TypeImport_10vk0g.appLiveUrl>(),
+  appLogs: vi.fn<typeof TypeImport_10vk0g.appLogs>(),
+  deleteAutomation: vi.fn<typeof TypeImport_10vk0g.deleteAutomation>(),
+  listAutomations: vi.fn<typeof TypeImport_10vk0g.listAutomations>(),
+  listVersions: vi.fn<typeof TypeImport_10vk0g.listVersions>(),
+  readAutomationTurn: vi.fn<typeof TypeImport_10vk0g.readAutomationTurn>(),
+  runAutomationNow: vi.fn<typeof TypeImport_10vk0g.runAutomationNow>(),
+  setAutomationEnabled: vi.fn<typeof TypeImport_10vk0g.setAutomationEnabled>(),
 }));
 
 vi.mock(import("../../../../gateway-client.js"), () => api);

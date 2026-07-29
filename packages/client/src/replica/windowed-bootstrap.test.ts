@@ -13,10 +13,10 @@ import type {
   ReplicaCursor,
   ReplicaSnapshotRow,
 } from "./types.js";
-import {
-  runWindowedBootstrap,
-  type RunWindowedBootstrapOptions,
-  type WindowedBootstrapTarget,
+import { runWindowedBootstrap } from "./windowed-bootstrap.js";
+import type {
+  RunWindowedBootstrapOptions,
+  WindowedBootstrapTarget,
 } from "./windowed-bootstrap.js";
 
 const gatewayAuth: GatewayAuth = {

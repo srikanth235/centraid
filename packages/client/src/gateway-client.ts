@@ -27,13 +27,10 @@ import {
   consumeSse,
   consumeSseFrames,
   frameData,
-  type TurnStreamEvent,
 } from "@centraid/blueprints/kit/turn-stream.js";
-import {
-  isGatewayCapabilities,
-  type GatewayCapabilities,
-  type GatewayInfo,
-} from "@centraid/protocol";
+import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
+import { isGatewayCapabilities } from "@centraid/protocol";
+import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
 
 import {
   appSessionUrl,
@@ -616,10 +613,10 @@ export async function streamAutomationTurn(
       },
       { signal }
     );
-  } catch (err) {
+  } catch (error) {
     // A caller-initiated abort is a normal teardown, not a failure.
     if (signal.aborted) return;
-    throw err;
+    throw error;
   }
 }
 

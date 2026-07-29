@@ -108,7 +108,8 @@ export function sealBlobStream(
       pendingLen += chunk.length;
       const out: Buffer[] = [];
       // Only carve full frames here; the trailing partial waits for flush.
-      while (pendingLen >= frameSize && index < frameCount) {
+      while (pendingLen >= frameSize) {
+        if (index >= frameCount) break;
         const joined = Buffer.concat(pending, pendingLen);
         emitFrame(out, joined.subarray(0, frameSize));
         const rest = joined.subarray(frameSize);

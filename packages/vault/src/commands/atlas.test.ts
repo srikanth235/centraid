@@ -8,9 +8,12 @@
 
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
 import { readReplicaChanges } from "../replica/change-log.js";
 import {

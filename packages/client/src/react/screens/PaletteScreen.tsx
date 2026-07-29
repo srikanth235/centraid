@@ -1,11 +1,5 @@
-import {
-  Fragment,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-  type JSX,
-} from "react";
+import { Fragment, useEffect, useReducer, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type { PaletteBridgeProps, PaletteRowDTO } from "../screen-contracts.js";
 

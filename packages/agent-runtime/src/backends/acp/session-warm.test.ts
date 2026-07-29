@@ -9,8 +9,8 @@ import {
   putWarmSlot,
   takeWarmSlot,
   warmKey,
-  type WarmAgentSlot,
 } from "./session-warm.ts";
+import type { WarmAgentSlot } from "./session-warm.ts";
 
 function makeConn(opts?: { exited?: boolean; closeThrows?: boolean }): {
   conn: AcpConnection;

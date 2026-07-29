@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { notifyReplicaCommit, subscribeReplicaCommits } from "./doorbell.js";
 
 let db: VaultDb | undefined;

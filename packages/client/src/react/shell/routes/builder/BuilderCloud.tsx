@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (cloud/publish surface); splitting would fragment one visual unit
-import { type JSX, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { relativeWhen } from "../../../../format.js";
 import {
@@ -228,10 +229,10 @@ export default function BuilderCloud({
       logsCacheRef.current = r.entries;
       setLogsCache(r.entries);
       setLogsError(undefined);
-    } catch (err) {
+    } catch (error) {
       logsCacheRef.current = "error";
       setLogsCache("error");
-      setLogsError(err instanceof Error ? err.message : String(err));
+      setLogsError(error instanceof Error ? error.message : String(error));
     }
   }, [appId]);
 
@@ -261,10 +262,12 @@ export default function BuilderCloud({
       automationsCacheRef.current = filtered;
       setAutomationsCache(filtered);
       setAutomationsError(undefined);
-    } catch (err) {
+    } catch (error) {
       automationsCacheRef.current = "error";
       setAutomationsCache("error");
-      setAutomationsError(err instanceof Error ? err.message : String(err));
+      setAutomationsError(
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }, [appId]);
 
@@ -280,10 +283,12 @@ export default function BuilderCloud({
       try {
         await setAutomationEnabled({ automationId: row.ref, enabled: next });
         await refreshAutomations();
-      } catch (err) {
+      } catch (error) {
         automationsCacheRef.current = "error";
         setAutomationsCache("error");
-        setAutomationsError(err instanceof Error ? err.message : String(err));
+        setAutomationsError(
+          error instanceof Error ? error.message : String(error)
+        );
       }
     },
     [appId, refreshAutomations]
@@ -308,14 +313,14 @@ export default function BuilderCloud({
             finishedAt: Date.now(),
           },
         }));
-      } catch (err) {
+      } catch (error) {
         setRunStates((s) => ({
           ...s,
           [row.name]: {
             kind: "done",
             ok: false,
             durationMs: 0,
-            error: err instanceof Error ? err.message : String(err),
+            error: error instanceof Error ? error.message : String(error),
             finishedAt: Date.now(),
           },
         }));
@@ -339,10 +344,12 @@ export default function BuilderCloud({
           return next;
         });
         await refreshAutomations();
-      } catch (err) {
+      } catch (error) {
         automationsCacheRef.current = "error";
         setAutomationsCache("error");
-        setAutomationsError(err instanceof Error ? err.message : String(err));
+        setAutomationsError(
+          error instanceof Error ? error.message : String(error)
+        );
       }
     },
     [appId, refreshAutomations]

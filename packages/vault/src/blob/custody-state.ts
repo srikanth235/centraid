@@ -68,9 +68,9 @@ export async function refreshCustodyState(
       );
     }
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   return { updated: byContent.size };
 }

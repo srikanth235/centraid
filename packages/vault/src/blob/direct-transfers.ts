@@ -7,16 +7,16 @@ import {
 } from "../errors.js";
 import { uuidv7 } from "../ids.js";
 import type { BlobCache } from "./cache.js";
-import {
+import type {
   BlobContentKeyRegistry,
-  type DeviceWrappedContentKey,
+  DeviceWrappedContentKey,
 } from "./content-keys.js";
 import type { CustodyState, RemoteTier } from "./custody-types.js";
 import type { MultipartPart } from "./remote-transfer.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";
 import { recordKnownStagedBlob } from "./staging-record.js";
 import { assertSha } from "./store.js";
-import type { BlobTransferState } from "./transfer-state.js";
+import type { BlobTransferState, IngressSessionRow } from "./transfer-state.js";
 import type { CommittedBlob } from "./transfers.js";
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -249,7 +249,7 @@ export class DirectBlobTransfers {
   }
 
   private async resumeResult(
-    row: import("./transfer-state.js").IngressSessionRow,
+    row: IngressSessionRow,
     remote: NonNullable<ReturnType<DirectBlobTransferDeps["remote"]>>,
     contentKey: DeviceWrappedContentKey,
     keyBase64: string
@@ -345,10 +345,12 @@ export class DirectBlobTransfers {
       );
     }
     if (!etag) throw new VaultBlobSessionError("multipart ETag is required");
-    const byNumber = new Map(
-      this.parts(row.remote_parts_json).map((part) => [part.partNumber, part])
-    );
-    byNumber.set(partNumber, { partNumber, etag });
+    const byNumber = new Map<number, MultipartPart>([
+      ...this.parts(row.remote_parts_json).map(
+        (part) => [part.partNumber, part] as const
+      ),
+      [partNumber, { partNumber, etag }] as const,
+    ]);
     const parts = [...byNumber.values()].sort(
       (a, b) => a.partNumber - b.partNumber
     );
@@ -478,7 +480,7 @@ export class DirectBlobTransfers {
   }
 
   private assertSessionDevice(
-    row: import("./transfer-state.js").IngressSessionRow,
+    row: IngressSessionRow,
     deviceIdentity: string
   ): void {
     const deviceId = this.deps.contentKeys.resolvePairedDevice(deviceIdentity);

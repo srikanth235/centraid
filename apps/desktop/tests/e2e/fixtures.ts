@@ -8,12 +8,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 // governance: allow-repo-hygiene file-size-limit — one cohesive e2e harness (mock
 // gateway + record builders + DOM helpers) shared by every spec; splitting it would
 // scatter the single source of fixture truth. See receipts/issue-225-desktop-e2e-suite.md.
-import {
-  _electron,
-  test,
-  type ElectronApplication,
-  type Page,
-} from "@playwright/test";
+import { _electron, test } from "@playwright/test";
+import type { ElectronApplication, Page } from "@playwright/test";
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
@@ -247,8 +243,8 @@ export async function startMockGateway(
       }
 
       void route(method, p, url, body, res, state, options).catch(
-        (err: unknown) => {
-          json(res, 500, { error: String(err) });
+        (error: unknown) => {
+          json(res, 500, { error: String(error) });
         }
       );
     });

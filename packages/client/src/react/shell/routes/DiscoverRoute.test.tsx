@@ -1,32 +1,31 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_qcp7vy from "../actions.js";
+import type * as TypeImport_14mz0rj from "./DiscoverRoute.js";
 
 // Product change (issue #434): APP templates INSTALL in place (registration +
 // consent grants, no code copy) — "Use this template" is gone; the card verb is
 // Install (Open when already installed). Automation templates keep their
 // clone-into-builder flow untouched.
-type DiscoverRouteProps = Parameters<
-  typeof import("./DiscoverRoute.js").default
->[0];
+type DiscoverRouteProps = Parameters<typeof TypeImport_14mz0rj.default>[0];
 type Template = Awaited<ReturnType<typeof listTemplates>>[number];
 
-const listTemplates =
-  vi.fn<typeof import("../../../gateway-client.js").listTemplates>();
-const gwCloneTemplate =
-  vi.fn<typeof import("../../../gateway-client.js").cloneTemplate>();
-const gwInstallTemplate =
-  vi.fn<typeof import("../../../gateway-client.js").installTemplate>();
+const listTemplates = vi.fn<typeof TypeImport_1gl5zx7.listTemplates>();
+const gwCloneTemplate = vi.fn<typeof TypeImport_1gl5zx7.cloneTemplate>();
+const gwInstallTemplate = vi.fn<typeof TypeImport_1gl5zx7.installTemplate>();
 vi.mock(import("../../../gateway-client.js"), () => ({
   listTemplates,
   cloneTemplate: gwCloneTemplate,
   installTemplate: gwInstallTemplate,
 }));
 
-let DiscoverRoute: typeof import("./DiscoverRoute.js").default;
-let ShellActionsProvider: typeof import("../actions.js").ShellActionsProvider;
+let DiscoverRoute: typeof TypeImport_14mz0rj.default;
+let ShellActionsProvider: typeof TypeImport_qcp7vy.ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 

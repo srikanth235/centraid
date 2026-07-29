@@ -1,4 +1,5 @@
-import { fork, type ChildProcess } from "node:child_process";
+import { fork } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 
 import { recordQualityResult } from "@centraid/test-kit/quality-result";

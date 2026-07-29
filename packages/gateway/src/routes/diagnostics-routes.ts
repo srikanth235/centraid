@@ -34,8 +34,8 @@ export function makeDiagnosticsRouteHandler(
     }
     try {
       return sendJson(res, 200, await build());
-    } catch (err) {
-      return sendError(res, err);
+    } catch (error) {
+      return sendError(res, error);
     }
   };
 }

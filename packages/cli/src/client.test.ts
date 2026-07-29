@@ -64,10 +64,10 @@ function startMockGateway(): Promise<{
         url: `http://127.0.0.1:${addr.port}`,
         token,
         close: () =>
-          new Promise<void>((resolve, reject) => {
+          new Promise<void>((_resolve, _reject) => {
             server.close((err) => {
-              if (err) reject(err);
-              else resolve();
+              if (err) _reject(err);
+              else _resolve();
             });
           }),
       });

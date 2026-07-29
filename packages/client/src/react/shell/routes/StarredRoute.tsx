@@ -1,4 +1,4 @@
-import { type JSX } from "react";
+import type { JSX } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import type { HomeMenuAnchor } from "../../screen-contracts.js";
@@ -9,10 +9,8 @@ import PageScroll from "../PageScroll.js";
 import type { ShellMenuAnchor } from "../Sidebar.js";
 import { PageEmpty } from "../status.js";
 import { useAsyncData } from "../useAsyncData.js";
-import {
-  collectAutomationRuns,
-  type AutomationFeedEntry,
-} from "./automationsData.js";
+import { collectAutomationRuns } from "./automationsData.js";
+import type { AutomationFeedEntry } from "./automationsData.js";
 import { buildHomeAppItems, buildHomeAutoItems } from "./homeData.js";
 
 export interface StarredRouteProps {

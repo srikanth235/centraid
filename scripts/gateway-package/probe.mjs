@@ -30,10 +30,10 @@ export async function probeGatewayInfo(baseUrl, opts = {}) {
       status: res.status,
       detail: JSON.stringify({ status: res.status, body }),
     };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      detail: err instanceof Error ? err.message : String(err),
+      detail: error instanceof Error ? error.message : String(error),
     };
   } finally {
     clearTimeout(timer);

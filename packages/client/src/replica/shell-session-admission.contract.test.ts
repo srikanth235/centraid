@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, test, vi } from "vitest";
 
 import type { ShellReplicaCoordinator } from "./shell-session.js";
+import type * as TypeImport_1vwuba6 from "./shell-session.js";
 import type { ReplicaFetcher } from "./shell-transport.js";
 import type { ReplicaIntent, ReplicaShape } from "./types.js";
 
-let ReplicaShellSession: typeof import("./shell-session.js").ReplicaShellSession;
+let ReplicaShellSession: typeof TypeImport_1vwuba6.ReplicaShellSession;
 
 describe("shell-session-admission", () => {
   beforeAll(async () => {

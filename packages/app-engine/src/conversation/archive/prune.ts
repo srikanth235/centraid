@@ -89,9 +89,9 @@ export function pruneCustodyProven(
       journal.exec("COMMIT");
       turnsPruned += Number(info.changes);
       segmentsPruned += 1;
-    } catch (err) {
+    } catch (error) {
       journal.exec("ROLLBACK");
-      throw err;
+      throw error;
     }
   }
   return { turnsPruned, segmentsPruned };

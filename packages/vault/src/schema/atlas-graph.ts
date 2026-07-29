@@ -1,10 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import {
-  atlasTables,
-  type AtlasPackKind,
-  type AtlasTableEntry,
-} from "./atlas.js";
+import { atlasTables } from "./atlas.js";
+import type { AtlasPackKind, AtlasTableEntry } from "./atlas.js";
 import { resolveEntity } from "./tables.js";
 
 export function countRows(db: DatabaseSync, physical: string): number {

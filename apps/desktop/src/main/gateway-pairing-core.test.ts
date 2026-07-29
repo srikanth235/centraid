@@ -6,8 +6,8 @@ import {
   foldIrohPairResponse,
   isFoldError,
   isTicketExpired,
-  type PairingTicketPayload,
 } from "./gateway-pairing-core.js";
+import type { PairingTicketPayload } from "./gateway-pairing-core.js";
 
 function encode(payload: unknown): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");

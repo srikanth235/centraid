@@ -54,7 +54,7 @@ const classOut = JSON.parse(
 function bumpSemver(v, kind) {
   const m = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-.*)?$/u.exec(v);
   if (!m?.groups) throw new Error(`unparseable version ${v}`);
-  let maj = Number(m.groups.major);
+  const maj = Number(m.groups.major);
   let min = Number(m.groups.minor);
   let pat = Number(m.groups.patch);
   if (kind === "major") {

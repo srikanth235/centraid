@@ -33,9 +33,8 @@ import {
   isPendingOffsite,
   renderAttachments as baseRenderAttachments,
   sha256File,
-  type Attachment,
-  type VaultOutcome,
 } from "@centraid/blueprints/kit/kit.js";
+import type { Attachment, VaultOutcome } from "@centraid/blueprints/kit/kit.js";
 
 import { auth, authHeaders, doFetch } from "../../gateway-client-core.js";
 import { authorizeBlobUrl, blobAuthHeaders, BLOB_PREFIX } from "./blob-auth.js";
@@ -291,47 +290,52 @@ export function wireAttachInput(
   getSubjectId: () => string | null | undefined,
   { act, narrate, notice, refresh }: AttachHandlers
 ): void {
-  inputEl.addEventListener("change", async () => {
-    const subjectId = getSubjectId();
-    if (!subjectId) return;
-    const files = Array.from(inputEl.files ?? []);
-    // Keep attachment requests and consent narration in the chosen-file
-    // order; a declined/failed outcome must stop the same batch as before.
-    const attachNext = async (index: number): Promise<void> => {
-      const file = files[index];
-      if (!file) return;
-      let input: Record<string, unknown>;
-      let custodyReceipt: StagedBlob | undefined;
-      try {
-        if (file.size > INLINE_ATTACH_BYTES) {
-          const staged = await stageFileBytes(file);
-          custodyReceipt = staged;
-          input = {
-            subject_id: subjectId,
-            staged_sha: staged.sha256,
-            title: file.name,
-          };
-        } else {
-          const dataUri = await fileToDataUri(file);
-          input = {
-            subject_id: subjectId,
-            data_uri: dataUri,
-            title: file.name,
-          };
+  inputEl.addEventListener("change", () => {
+    void (async () => {
+      const subjectId = getSubjectId();
+      if (!subjectId) return;
+      const files = Array.from(inputEl.files ?? []);
+      // Keep attachment requests and consent narration in the chosen-file
+      // order; a declined/failed outcome must stop the same batch as before.
+      const attachNext = async (index: number): Promise<void> => {
+        const file = files[index];
+        if (!file) return;
+        let input: Record<string, unknown>;
+        let custodyReceipt: StagedBlob | undefined;
+        try {
+          if (file.size > INLINE_ATTACH_BYTES) {
+            const staged = await stageFileBytes(file);
+            custodyReceipt = staged;
+            input = {
+              subject_id: subjectId,
+              staged_sha: staged.sha256,
+              title: file.name,
+            };
+          } else {
+            const dataUri = await fileToDataUri(file);
+            input = {
+              subject_id: subjectId,
+              data_uri: dataUri,
+              title: file.name,
+            };
+          }
+        } catch {
+          notice?.("Could not read that file.");
+          return attachNext(index + 1);
         }
-      } catch {
-        notice?.("Could not read that file.");
-        return attachNext(index + 1);
-      }
-      const outcome = await act("attach", input);
-      if (outcome?.status === "executed" && isPendingOffsite(custodyReceipt)) {
-        notice?.("Attached locally · waiting for offsite custody.");
-      }
-      if (narrate(outcome)) return attachNext(index + 1);
-    };
-    await attachNext(0);
-    inputEl.value = "";
-    await refresh?.();
+        const outcome = await act("attach", input);
+        if (
+          outcome?.status === "executed" &&
+          isPendingOffsite(custodyReceipt)
+        ) {
+          notice?.("Attached locally · waiting for offsite custody.");
+        }
+        if (narrate(outcome)) return attachNext(index + 1);
+      };
+      await attachNext(0);
+      inputEl.value = "";
+      await refresh?.();
+    })();
   });
 }
 

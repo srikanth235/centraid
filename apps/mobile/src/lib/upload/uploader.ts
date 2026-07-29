@@ -19,11 +19,11 @@ import { base64ToBytes } from "./bytes";
 import { sealDirectory, sealPart } from "./cbsf";
 import type { UploadCrypto } from "./crypto";
 import type { FileSourceOpener } from "./file-source";
-import {
-  DirectTransferError,
-  type DirectTransferClient,
-  type MultipartPartReceipt,
-  type SettlementReceipt,
+import { DirectTransferError } from "./gateway-client";
+import type {
+  DirectTransferClient,
+  MultipartPartReceipt,
+  SettlementReceipt,
 } from "./gateway-client";
 import type { UploadItem, UploadQueueStore } from "./store";
 

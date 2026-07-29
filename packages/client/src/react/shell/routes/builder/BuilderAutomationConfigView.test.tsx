@@ -1,18 +1,18 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_10vk0g from "../../../../gateway-client.js";
+
 // ConfigView pulls in gateway-client.js (writeAppFile/publish/readAutomation)
 // for the trigger save path — stub it the same way AppFrame.test.tsx does so
 // a static render doesn't need `window.CentraidApi` (only present under
 // Electron, not jsdom).
 vi.mock(import("../../../../gateway-client.js"), () => ({
-  writeAppFile:
-    vi.fn<typeof import("../../../../gateway-client.js").writeAppFile>(),
-  publish: vi.fn<typeof import("../../../../gateway-client.js").publish>(),
-  readAutomation:
-    vi.fn<typeof import("../../../../gateway-client.js").readAutomation>(),
+  writeAppFile: vi.fn<typeof TypeImport_10vk0g.writeAppFile>(),
+  publish: vi.fn<typeof TypeImport_10vk0g.publish>(),
+  readAutomation: vi.fn<typeof TypeImport_10vk0g.readAutomation>(),
   listAutomationTurns: vi
-    .fn<typeof import("../../../../gateway-client.js").listAutomationTurns>()
+    .fn<typeof TypeImport_10vk0g.listAutomationTurns>()
     .mockResolvedValue([]),
 }));
 

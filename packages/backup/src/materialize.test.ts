@@ -14,7 +14,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
 
 import { createKeyring } from "./crypto.js";
-import { createSnapshot, type SourceEntry } from "./engine.js";
+import { createSnapshot } from "./engine.js";
+import type { SourceEntry } from "./engine.js";
 import { openLocalBackupProvider } from "./local-provider.js";
 import { materializeSnapshotBlobs } from "./materialize.js";
 

@@ -162,10 +162,10 @@ export function resealVaultKey(
     // The stamped fingerprint flips with the data, in the same transaction.
     stampSealKeyFingerprint(db.vault, newKey);
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
     if (keyFile) rmSync(`${keyFile}.next`, { force: true });
-    throw err;
+    throw error;
   }
   // Publish the new key: promote the sidecar and swap the live buffer in
   // place, so every holder of db.sealKey (gateway, staging) sees it.

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import type * as TypeImport_11i4z7t from "@playwright/test";
 
 import {
   automationRow,
@@ -14,9 +15,8 @@ import {
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
-  type MockGateway,
-  type TestEnv,
 } from "./fixtures";
+import type { MockGateway, TestEnv } from "./fixtures";
 
 /** §8 Automations list & viewer, §9 Automation runs & monitoring. */
 
@@ -34,9 +34,7 @@ test.afterEach(async () => {
   await cleanupEnv(env);
 });
 
-async function openAutomations(
-  page: import("@playwright/test").Page
-): Promise<void> {
+async function openAutomations(page: TypeImport_11i4z7t.Page): Promise<void> {
   await waitForHome(page);
   await gotoNav(page, "Automations");
   await page
@@ -48,16 +46,14 @@ async function openAutomations(
 
 /** Overflow menu (⋯) holds Edit / Pause·Resume / Delete after the chat-thread redesign. */
 async function openAutomationMenu(
-  page: import("@playwright/test").Page
+  page: TypeImport_11i4z7t.Page
 ): Promise<void> {
   await page.getByTestId("automation-menu-trigger").click();
   await expect(page.getByRole("menu")).toBeVisible();
 }
 
 /** Run cards open the viewer via Details / View details, not the entry shell. */
-async function openRunDetails(
-  page: import("@playwright/test").Page
-): Promise<void> {
+async function openRunDetails(page: TypeImport_11i4z7t.Page): Promise<void> {
   await page.getByTestId("run-entry").first().waitFor({ timeout: 15_000 });
   await page.getByTestId("run-details").first().click({ timeout: 15_000 });
 }

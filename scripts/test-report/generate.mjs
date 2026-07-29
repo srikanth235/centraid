@@ -609,7 +609,10 @@ function buildCells(
   manifest,
   evidenceItems,
   validationErrors,
-  { laneMarkers = {}, reportScope = "" } = {}
+  {
+    laneMarkers: laneMarkersLocal = {},
+    reportScope: reportScopeLocal = "",
+  } = {}
 ) {
   const staleOwners = new Set(
     validationErrors
@@ -668,7 +671,7 @@ function buildCells(
         state = "skipped";
       else if (surface.assessment[dimension.id] === "skip") state = "skipped";
       else if (surface.assessment[dimension.id] === "gap") state = "gap";
-      else if (reportScope === "nightly" && owners.length) {
+      else if (reportScopeLocal === "nightly" && owners.length) {
         const expectedMarkers = owners
           .map((owner) => expectedLaneMarker(owner))
           .filter(Boolean);
@@ -681,7 +684,7 @@ function buildCells(
         );
         state = basenameCollision
           ? "evidence-unmatched"
-          : expectedMarkers.some((marker) => laneMarkers[marker])
+          : expectedMarkers.some((marker) => laneMarkersLocal[marker])
             ? "owner-silent"
             : "lane-did-not-run";
       }
@@ -788,19 +791,19 @@ function packageRuntime(files) {
     .sort((a, b) => b.duration - a.duration);
 }
 
-function collectCoverage(summary, floorConfig) {
+function collectCoverage(summaryLocal, floorConfig) {
   // Skip `_comment` / meta keys — same filter mutation rows already use (#535).
   return filterFloorConfigEntries(floorConfig).map(([scope, floor]) => {
     const target = typeof floor === "number" ? { lines: floor } : floor;
     const prefix = scope.replace("/**", "");
-    const entries = summary
-      ? Object.entries(summary).filter(
+    const entries = summaryLocal
+      ? Object.entries(summaryLocal).filter(
           ([file]) => file !== "total" && normalizeFile(file).startsWith(prefix)
         )
       : [];
     const source =
       scope === "lines"
-        ? summary?.total
+        ? summaryLocal?.total
         : aggregateCoverage(entries.map(([, value]) => value));
     return {
       scope: scope === "lines" ? "repo-wide" : scope,
@@ -814,7 +817,7 @@ function collectCoverage(summary, floorConfig) {
 
 /** #532 — mutation scores vs floors for the test-health report. */
 function collectMutationRows(scoresArtifact, floorConfig) {
-  const floors =
+  const floorsLocal =
     floorConfig && typeof floorConfig === "object"
       ? Object.entries(floorConfig).filter(
           ([key, value]) =>
@@ -826,7 +829,7 @@ function collectMutationRows(scoresArtifact, floorConfig) {
   const byId = new Map(
     (scoresArtifact?.packages ?? []).map((row) => [row.id, row])
   );
-  const ids = new Set([...floors.map(([id]) => id), ...byId.keys()]);
+  const ids = new Set([...floorsLocal.map(([id]) => id), ...byId.keys()]);
   return [...ids].sort().map((id) => {
     const floor = floorConfig?.[id];
     const row = byId.get(id);
@@ -839,25 +842,25 @@ function collectMutationRows(scoresArtifact, floorConfig) {
   });
 }
 
-function collectFloorSeries(coverageRows, mutationRows) {
+function collectFloorSeries(coverageRowsLocal, mutationRowsLocal) {
   return Object.fromEntries([
-    ...coverageRows.flatMap((row) => [
+    ...coverageRowsLocal.flatMap((row) => [
       [`coverage:${row.scope}:lines`, row.lines],
       [`coverage:${row.scope}:branches`, row.branches],
     ]),
-    ...mutationRows.map((row) => [`mutation:${row.scope}`, row.score]),
+    ...mutationRowsLocal.map((row) => [`mutation:${row.scope}`, row.score]),
   ]);
 }
 
-function collectFloorBaselines(coverageRows, mutationRows) {
+function collectFloorBaselines(coverageRowsLocal, mutationRowsLocal) {
   return Object.fromEntries(
     [
-      ...coverageRows.flatMap((row) => [
+      ...coverageRowsLocal.flatMap((row) => [
         [`coverage:${row.scope}:lines`, row.lineFloor],
         [`coverage:${row.scope}:branches`, row.branchFloor],
       ]),
-      ...mutationRows.map((row) => [`mutation:${row.scope}`, row.floor]),
-    ].filter(([, floor]) => Number.isFinite(floor))
+      ...mutationRowsLocal.map((row) => [`mutation:${row.scope}`, row.floor]),
+    ].filter(([, floorValue]) => Number.isFinite(floorValue))
   );
 }
 
@@ -909,17 +912,17 @@ function trendSvg(values) {
   return `<svg class="spark" viewBox="0 0 120 40" role="img" aria-label="Result trend"><polyline points="${points}" /></svg>`;
 }
 
-function render(model) {
-  const data = JSON.stringify(model).replaceAll("<", "\\u003c");
-  const dimensionHeaders = model.matrix.dimensions
+function render(modelLocal) {
+  const data = JSON.stringify(modelLocal).replaceAll("<", "\\u003c");
+  const dimensionHeaders = modelLocal.matrix.dimensions
     .map(
       (dimension) =>
         `<th scope="col"><span>${escapeHtml(dimension.label)}</span><small>${escapeHtml(dimension.lane)}</small></th>`
     )
     .join("");
-  const rows = model.matrix.surfaces
+  const rows = modelLocal.matrix.surfaces
     .map((surface, rowIndex) => {
-      const surfaceCells = model.cells.filter(
+      const surfaceCells = modelLocal.cells.filter(
         (cell) => cell.surface === surface.id
       );
       return `<tr style="--row:${rowIndex}"><th scope="row">${escapeHtml(surface.label)}</th>${surfaceCells
@@ -930,7 +933,7 @@ function render(model) {
         .join("")}</tr>`;
     })
     .join("");
-  const coverageRows = model.coverageRows
+  const coverageRowsLocal = modelLocal.coverageRows
     .map((row) => {
       const lineState =
         row.lines == null
@@ -947,8 +950,8 @@ function render(model) {
       return `<tr><td>${escapeHtml(row.scope)}</td><td class="metric ${lineState}">${row.lines ?? "—"}% <small>/ ${row.lineFloor}%</small></td><td class="metric ${branchState}">${row.branches ?? "—"}% <small>/ ${row.branchFloor ?? "—"}%</small></td></tr>`;
     })
     .join("");
-  const mutationRows = (model.mutationRows ?? []).length
-    ? (model.mutationRows ?? [])
+  const mutationRowsLocal = (modelLocal.mutationRows ?? []).length
+    ? (modelLocal.mutationRows ?? [])
         .map((row) => {
           const state =
             row.score == null
@@ -960,16 +963,16 @@ function render(model) {
         })
         .join("")
     : '<tr><td colspan="3" class="muted">No mutation scores (nightly Stryker lane)</td></tr>';
-  const runtimeRows = model.packageRuntime.length
-    ? model.packageRuntime
+  const runtimeRows = modelLocal.packageRuntime.length
+    ? modelLocal.packageRuntime
         .map(
           (row) =>
             `<tr><td>${escapeHtml(row.scope)}</td><td>${formatMs(row.duration)}</td></tr>`
         )
         .join("")
     : '<tr><td colspan="2" class="muted">No Vitest JSON found</td></tr>';
-  const slowRows = model.slowest.length
-    ? model.slowest
+  const slowRows = modelLocal.slowest.length
+    ? modelLocal.slowest
         .map(
           (row, index) =>
             `<tr><td>${index + 1}</td><td>${escapeHtml(row.file)}</td><td>${formatMs(row.duration)}</td><td>${row.skipped}</td><td>${row.envGated}</td></tr>`
@@ -978,7 +981,7 @@ function render(model) {
     : '<tr><td colspan="5" class="muted">No Vitest timing evidence found</td></tr>';
   // Prefer the durable gh-pages series; lane artifacts remain as the fallback
   // (and as per-owner detail) so a first run with no series still renders.
-  const durableSeries = model.healthHistory ?? [];
+  const durableSeries = modelLocal.healthHistory ?? [];
   const durableTrends =
     durableSeries.length > 1
       ? [
@@ -1012,38 +1015,41 @@ function render(model) {
   const trends = `${durableTrends}${laneTrends}`;
 
   const honestyBanners = [];
-  if (model.reportScope === "main") {
+  if (modelLocal.reportScope === "main") {
     honestyBanners.push(
       `<p class="lede" style="border-left:3px solid var(--blue);padding-left:12px">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/" style="color:var(--blue)">/test-report/nightly/</a>.</p>`
     );
   }
-  if (model.summary.silentAllClear && model.summary.jobReconciliation) {
+  if (
+    modelLocal.summary.silentAllClear &&
+    modelLocal.summary.jobReconciliation
+  ) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--red)">${escapeHtml(model.summary.jobReconciliation)}</p>`
+      `<p class="lede" style="color:var(--red)">${escapeHtml(modelLocal.summary.jobReconciliation)}</p>`
     );
   }
-  if (model.summary.unmappedEvidence) {
+  if (modelLocal.summary.unmappedEvidence) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--amber)">Unmapped e2e evidence: ${model.summary.unmappedEvidence}${
-        (model.summary.unmappedFailed ?? []).length
-          ? ` (${(model.summary.unmappedFailed ?? []).length} failed: ${escapeHtml((model.summary.unmappedFailed ?? []).join(", "))})`
+      `<p class="lede" style="color:var(--amber)">Unmapped e2e evidence: ${modelLocal.summary.unmappedEvidence}${
+        (modelLocal.summary.unmappedFailed ?? []).length
+          ? ` (${(modelLocal.summary.unmappedFailed ?? []).length} failed: ${escapeHtml((modelLocal.summary.unmappedFailed ?? []).join(", "))})`
           : ""
       }</p>`
     );
   }
-  if (model.summary.cellsMissingRose) {
+  if (modelLocal.summary.cellsMissingRose) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--amber)">cellsMissing rose vs prior durable history: ${model.summary.cellsMissingPrior} → ${model.summary.cellsMissing} (Δ+${model.summary.cellsMissingDelta})</p>`
+      `<p class="lede" style="color:var(--amber)">cellsMissing rose vs prior durable history: ${modelLocal.summary.cellsMissingPrior} → ${modelLocal.summary.cellsMissing} (Δ+${modelLocal.summary.cellsMissingDelta})</p>`
     );
   }
-  if ((model.summary.floorRatchetCandidates ?? []).length) {
+  if ((modelLocal.summary.floorRatchetCandidates ?? []).length) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--amber)">Sustained floor ratchet due: ${escapeHtml(model.summary.floorRatchetCandidates.map((row) => `${row.key} ${row.floor}→${row.candidate}`).join(", "))}</p>`
+      `<p class="lede" style="color:var(--amber)">Sustained floor ratchet due: ${escapeHtml(modelLocal.summary.floorRatchetCandidates.map((row) => `${row.key} ${row.floor}→${row.candidate}`).join(", "))}</p>`
     );
   }
-  if ((model.summary.agedInfraMismatchCellIds ?? []).length) {
+  if ((modelLocal.summary.agedInfraMismatchCellIds ?? []).length) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--red)">Infrastructure mismatch exceeded its three-run maximum age: ${escapeHtml(model.summary.agedInfraMismatchCellIds.join(", "))}</p>`
+      `<p class="lede" style="color:var(--red)">Infrastructure mismatch exceeded its three-run maximum age: ${escapeHtml(modelLocal.summary.agedInfraMismatchCellIds.join(", "))}</p>`
     );
   }
 
@@ -1053,17 +1059,19 @@ function render(model) {
 :root{color-scheme:dark;--ink:#ecf3ee;--muted:#8f9f98;--panel:#111713;--line:#273129;--bg:#090d0b;--green:#5bd697;--red:#ff766f;--amber:#e9b95c;--blue:#72a9ff;--violet:#b39cff;--cyan:#69d8d0;--grey:#738079;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% -10%,#173126 0,transparent 35%),var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}main{width:min(1480px,calc(100% - 40px));margin:auto;padding:56px 0 80px}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(34px,5vw,66px);letter-spacing:-.055em;line-height:.95;margin:14px 0 16px;max-width:780px}.lede{color:#afbbb5;font-size:16px;max-width:720px;margin:0}.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:44px;align-items:end;margin-bottom:42px}.summary{display:grid;grid-template-columns:repeat(3,92px);gap:8px}.stat{background:#101612;border:1px solid var(--line);border-radius:4px;padding:15px 12px}.stat b{display:block;font-size:25px}.stat small,.muted,small{color:var(--muted)}.matrix-shell,.card{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.matrix-head{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.matrix-head h2,.card h2{font-size:15px;margin:0;letter-spacing:-.01em}.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.dot.passed{background:var(--green)}.dot.partial{background:var(--cyan)}.dot.failed,.dot.infra-mismatch{background:var(--red)}.dot.flaky{background:var(--violet)}.dot.skipped{background:var(--amber)}.dot.gap{background:#ff9e64}.dot.evidence-unmatched{background:#ff8a65}.dot.owner-silent{background:#ffcb6b}.dot.lane-did-not-run,.dot.stale{background:var(--grey)}.matrix-scroll{overflow:auto;padding:10px}table{border-collapse:separate;border-spacing:4px;width:100%}.heatmap th{font-size:11px;color:var(--muted);font-weight:650;text-align:left;min-width:68px}.heatmap thead th:not(:first-child){height:98px;vertical-align:bottom}.heatmap thead th span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);height:74px}.heatmap thead th small{display:none}.heatmap tbody th{min-width:230px;color:#bdc9c3}.cell{width:100%;min-width:52px;height:40px;border:1px solid transparent;border-radius:3px;color:#07110c;display:flex;justify-content:space-between;align-items:center;padding:0 9px;font:700 13px var(--sans);cursor:pointer;transition:transform .16s,border-color .16s,filter .16s;animation:rise .34s both;animation-delay:calc(var(--row)*28ms)}.cell small{color:inherit;opacity:.65}.cell:hover,.cell:focus-visible{transform:translateY(-2px);filter:brightness(1.12);outline:none;border-color:#fff8}.cell.passed{background:var(--green)}.cell.passed.assessment-partial{background:var(--cyan)}.cell.failed,.cell.infra-mismatch{background:var(--red)}.cell.flaky{background:var(--violet)}.cell.skipped{background:var(--amber)}.cell.gap{background:#ff9e64}.cell.evidence-unmatched{background:#ff8a65}.cell.owner-silent{background:#ffcb6b}.cell.missing,.cell.stale,.cell.lane-did-not-run{background:#46534c;color:#f0f4f1}.inspector{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:20px;border-top:1px solid var(--line);min-height:126px}.inspector .kicker{color:var(--muted);font-size:12px}.inspector h3{margin:4px 0 0;font-size:18px}.flow-list{display:grid;gap:8px}.flow{display:grid;grid-template-columns:minmax(150px,.45fr) 78px 84px 84px minmax(230px,1fr);gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #202923}.flow:last-child{border-bottom:0}.tier{color:var(--blue);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.result{font-size:11px;font-weight:750;text-transform:uppercase}.result.passed{color:var(--green)}.result.failed,.result.infra-mismatch{color:var(--red)}.result.flaky{color:var(--violet)}.result.skipped{color:var(--amber)}.result.evidence-unmatched{color:#ff8a65}.result.missing,.result.stale,.result.owner-silent,.result.lane-did-not-run{color:var(--muted)}.path{color:#a8b7af;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.card{padding:20px;overflow:auto}.card h2{margin-bottom:14px}.data{border-spacing:0;width:100%}.data th,.data td{text-align:left;border-bottom:1px solid #202923;padding:8px 7px;font-size:12px}.data th{color:var(--muted);font-weight:650}.metric.passed{color:var(--green)}.metric.failed{color:var(--red)}.metric.missing{color:var(--muted)}.wide{grid-column:1/-1}.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}.trend{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#0c110e;border:1px solid #202923;padding:12px}.trend strong,.trend small{display:block}.spark{width:120px;height:40px}.spark polyline{fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}.empty{color:var(--muted);border:1px dashed #334038;padding:24px;margin:0}.foot{margin-top:20px;color:var(--muted);font-size:12px}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(max-width:900px){main{width:min(100% - 22px,1480px);padding-top:30px}.hero{grid-template-columns:1fr}.summary{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.inspector{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.matrix-head{align-items:flex-start;flex-direction:column}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style></head><body><main>
 <header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Every absence is classified: wiring, a silent owner, or a lane that did not run.</p>${honestyBanners.join("")}${
-    model.summary.unhandledErrors
-      ? `<p class="lede" style="color:var(--red)">Unhandled Vitest errors: ${model.summary.unhandledErrors} — ${escapeHtml(
-          (model.summary.unhandledErrorMessages ?? []).join(" · ").slice(0, 400)
+    modelLocal.summary.unhandledErrors
+      ? `<p class="lede" style="color:var(--red)">Unhandled Vitest errors: ${modelLocal.summary.unhandledErrors} — ${escapeHtml(
+          (modelLocal.summary.unhandledErrorMessages ?? [])
+            .join(" · ")
+            .slice(0, 400)
         )}</p>`
       : ""
-  }</div><div class="summary"><div class="stat"><b>${model.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${model.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${model.summary.cellsSolid ?? 0}</b><small>solid</small></div><div class="stat"><b>${model.summary.cellsPartial ?? 0}</b><small>partial</small></div><div class="stat"><b>${model.summary.cellsGap ?? 0}</b><small>declared gaps</small></div><div class="stat"><b>${model.summary.cellsNotApplicable ?? 0}</b><small>n/a by design</small></div><div class="stat"><b>${model.summary.cellsMissing ?? 0}</b><small>unproven cells</small></div><div class="stat"><b>${model.summary.cellsFlaky ?? 0}</b><small>flaky cells</small></div><div class="stat"><b>${model.summary.unhandledErrors ?? 0}</b><small>unhandled errors</small></div></div></header>
+  }</div><div class="summary"><div class="stat"><b>${modelLocal.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${modelLocal.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${modelLocal.summary.cellsSolid ?? 0}</b><small>solid</small></div><div class="stat"><b>${modelLocal.summary.cellsPartial ?? 0}</b><small>partial</small></div><div class="stat"><b>${modelLocal.summary.cellsGap ?? 0}</b><small>declared gaps</small></div><div class="stat"><b>${modelLocal.summary.cellsNotApplicable ?? 0}</b><small>n/a by design</small></div><div class="stat"><b>${modelLocal.summary.cellsMissing ?? 0}</b><small>unproven cells</small></div><div class="stat"><b>${modelLocal.summary.cellsFlaky ?? 0}</b><small>flaky cells</small></div><div class="stat"><b>${modelLocal.summary.unhandledErrors ?? 0}</b><small>unhandled errors</small></div></div></header>
 <section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>solid passed</span><span><i class="dot partial"></i>partial passed</span><span><i class="dot failed"></i>product failed</span><span><i class="dot flaky"></i>flaky</span><span><i class="dot gap"></i>tracked gap</span><span><i class="dot skipped"></i>n/a by design</span><span><i class="dot missing"></i>missing (PR-only)</span><span><i class="dot evidence-unmatched"></i>evidence unmatched</span><span><i class="dot owner-silent"></i>owner silent</span><span><i class="dot lane-did-not-run"></i>lane did not run / stale</span><span><i class="dot infra-mismatch"></i>infra mismatch</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, latest result, and first error.</p></div></div></section>
-<section class="grid"><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRows}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRows}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
-    (model.summary.envGatedOwners ?? []).length
+<section class="grid"><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRowsLocal}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRowsLocal}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
+    (modelLocal.summary.envGatedOwners ?? []).length
       ? `<table class="data"><thead><tr><th>Cell</th><th>Owner</th><th>Env</th><th>Kind</th></tr></thead><tbody>${(
-          model.summary.envGatedOwners ?? []
+          modelLocal.summary.envGatedOwners ?? []
         )
           .map(
             (row) =>
@@ -1072,8 +1080,8 @@ function render(model) {
           .join("")}</tbody></table>`
       : '<p class="empty">No solid/partial matrix owners are whole-file env-gated off default CI.</p>'
   }</article><article class="card wide"><h2>Skipped and environment-gated test debt</h2>${
-    model.skipDebt.length
-      ? `<table class="data"><thead><tr><th>Owner</th><th>Test</th><th>Reason</th><th>Gate</th></tr></thead><tbody>${model.skipDebt
+    modelLocal.skipDebt.length
+      ? `<table class="data"><thead><tr><th>Owner</th><th>Test</th><th>Reason</th><th>Gate</th></tr></thead><tbody>${modelLocal.skipDebt
           .map(
             (row) =>
               `<tr><td class="path">${escapeHtml(row.file)}</td><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.reason)}</td><td>${row.envGated ? "environment" : "skip"}</td></tr>`
@@ -1081,8 +1089,8 @@ function render(model) {
           .join("")}</tbody></table>`
       : '<p class="empty">No skipped or environment-gated tests in this evidence set.</p>'
   }</article><article class="card wide"><h2>Playwright flake rate</h2>${
-    (model.summary.flakeRates ?? []).length
-      ? `<table class="data"><thead><tr><th>Owner</th><th>Flaky runs</th><th>Observed runs</th><th>Rate</th></tr></thead><tbody>${model.summary.flakeRates
+    (modelLocal.summary.flakeRates ?? []).length
+      ? `<table class="data"><thead><tr><th>Owner</th><th>Flaky runs</th><th>Observed runs</th><th>Rate</th></tr></thead><tbody>${modelLocal.summary.flakeRates
           .map(
             (row) =>
               `<tr><td class="path">${escapeHtml(row.owner)}</td><td>${row.flaky}</td><td>${row.runs}</td><td>${row.rate}%</td></tr>`
@@ -1090,8 +1098,8 @@ function render(model) {
           .join("")}</tbody></table>`
       : '<p class="empty">No Playwright owner history is available.</p>'
   }</article><article class="card wide"><h2>Absolute weakness signals</h2>${
-    (model.summary.absoluteWeaknesses ?? []).length
-      ? `<table class="data"><thead><tr><th>Signal</th><th>Scope</th><th>Value</th><th>Floor</th></tr></thead><tbody>${model.summary.absoluteWeaknesses
+    (modelLocal.summary.absoluteWeaknesses ?? []).length
+      ? `<table class="data"><thead><tr><th>Signal</th><th>Scope</th><th>Value</th><th>Floor</th></tr></thead><tbody>${modelLocal.summary.absoluteWeaknesses
           .map(
             (row) =>
               `<tr><td>${escapeHtml(row.kind)}</td><td class="path">${escapeHtml(row.scope)}</td><td>${row.value}%</td><td>${row.floor ?? "—"}%</td></tr>`
@@ -1099,11 +1107,11 @@ function render(model) {
           .join("")}</tbody></table>`
       : '<p class="empty">No floor-lag or absolute mutation weakness detected.</p>'
   }</article><article class="card wide"><h2>Open field-quality observations</h2>${
-    model.qualityOpen.length
-      ? `<ul>${model.qualityOpen.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    modelLocal.qualityOpen.length
+      ? `<ul>${modelLocal.qualityOpen.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
       : '<p class="empty">QUALITY.md has no open observations.</p>'
   }</article><article class="card wide"><h2>Nightly performance and scale trends</h2><div class="trend-grid">${trends}</div></article></section>
-<p class="foot">Generated ${escapeHtml(model.generatedAt)} · ${model.matrix.surfaces.length} surfaces · ${model.matrix.dimensions.length} dimensions · ${model.matrix.flows.length} canonical flows</p></main>
+<p class="foot">Generated ${escapeHtml(modelLocal.generatedAt)} · ${modelLocal.matrix.surfaces.length} surfaces · ${modelLocal.matrix.dimensions.length} dimensions · ${modelLocal.matrix.flows.length} canonical flows</p></main>
 <script type="application/json" id="report-data">${data}</script><script>
 const report=JSON.parse(document.querySelector('#report-data').textContent);const byId=new Map(report.cells.map(cell=>[cell.id,cell]));const kicker=document.querySelector('#inspector-kicker');const title=document.querySelector('#inspector-title');const flows=document.querySelector('#inspector-flows');for(const button of document.querySelectorAll('[data-cell]'))button.addEventListener('click',()=>{const cell=byId.get(button.dataset.cell);kicker.textContent=cell.dimensionLabel+' · '+cell.lane+' · '+cell.state+' · '+cell.assessment;title.textContent=cell.surfaceLabel;flows.innerHTML=cell.owners.length?cell.owners.map(owner=>'<div class="flow"><strong>'+safe(owner.name)+'</strong><span class="tier">'+safe(owner.tier)+'</span><span class="result '+safe(owner.latest.status)+'">'+safe(owner.latest.status)+'</span><span>'+duration(owner.latest.duration)+'</span><span class="path">'+safe(owner.owner)+(owner.latest.error?'<br><strong>Error:</strong> '+safe(owner.latest.error):'')+(owner.latest.runUrl?'<br><a href="'+safe(owner.latest.runUrl)+'">Actions run / artifacts</a>':'')+(owner.latest.attachments?.length?'<br>Attachments: '+owner.latest.attachments.map(item=>safe(item.name??item.path??'attachment')).join(', '):'')+'</span></div>').join(''):'<p class="muted">No evidence owner is expected for this cell. Catalog assessment: '+safe(cell.assessment)+'.</p>';for(const current of document.querySelectorAll('[data-cell][aria-pressed]'))current.removeAttribute('aria-pressed');button.setAttribute('aria-pressed','true')});function duration(value){if(!Number.isFinite(value))return '—';return value>=1000?(value/1000).toFixed(2)+'s':Math.round(value)+'ms'}function safe(value){const span=document.createElement('span');span.textContent=value??'';return span.innerHTML}
 </script></body></html>`;

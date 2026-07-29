@@ -6,7 +6,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
 import {
   deleteReplicaIntentOutcomesForDevice,
@@ -18,8 +19,8 @@ import {
   readReplicaInvocationCommit,
   recordReplicaInvocationCommitInTransaction,
   repairReplicaInvocationCommits,
-  type ReplicaInvocationAudit,
 } from "./invocation-commits.js";
+import type { ReplicaInvocationAudit } from "./invocation-commits.js";
 
 function auditFor(invocationId: string): ReplicaInvocationAudit {
   return {

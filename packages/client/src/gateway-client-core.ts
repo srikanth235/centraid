@@ -21,8 +21,8 @@ import {
   GatewayClientError,
   href,
   VAULT_HEADER,
-  type GatewayAuth,
 } from "./gateway-auth.js";
+import type { GatewayAuth } from "./gateway-auth.js";
 
 export {
   authHeaders,
@@ -158,10 +158,10 @@ export async function doFetch(
       ...finalInit,
       credentials: gatewayAuth.webControl ? "include" : finalInit.credentials,
     });
-  } catch (err) {
+  } catch (error) {
     throw new GatewayClientError(
       "gateway_unreachable",
-      `Could not reach gateway at ${baseUrl}: ${err instanceof Error ? err.message : String(err)}`
+      `Could not reach gateway at ${baseUrl}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }

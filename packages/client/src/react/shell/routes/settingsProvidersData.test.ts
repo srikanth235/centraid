@@ -7,6 +7,7 @@
 
 import { describe, beforeEach, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
   loadProviders,
   resolveReportedRunnerKind,
@@ -14,15 +15,12 @@ import {
 } from "./settingsProvidersData.js";
 
 const { getAgentsStatus, getUserPrefs, saveUserPrefs } = vi.hoisted(() => ({
-  getAgentsStatus:
-    vi.fn<typeof import("../../../gateway-client.js").getAgentsStatus>(),
-  getUserPrefs:
-    vi.fn<typeof import("../../../gateway-client.js").getUserPrefs>(),
-  saveUserPrefs:
-    vi.fn<typeof import("../../../gateway-client.js").saveUserPrefs>(),
+  getAgentsStatus: vi.fn<typeof TypeImport_1gl5zx7.getAgentsStatus>(),
+  getUserPrefs: vi.fn<typeof TypeImport_1gl5zx7.getUserPrefs>(),
+  saveUserPrefs: vi.fn<typeof TypeImport_1gl5zx7.saveUserPrefs>(),
 }));
 type AgentStatusEntry = Awaited<
-  ReturnType<typeof import("../../../gateway-client.js").getAgentsStatus>
+  ReturnType<typeof TypeImport_1gl5zx7.getAgentsStatus>
 >["agents"][number];
 
 // `vi.mock` is hoisted above the imports, so the gateway stub lands before

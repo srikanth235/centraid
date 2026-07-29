@@ -5,7 +5,7 @@ import crypto from "node:crypto";
  * call the dispatched command functions, asserting stdout + gateway.db rows.
  */
 import { promises as fs } from "node:fs";
-import http from "node:http";
+import type http from "node:http";
 
 import { buildGatewayInfoPayload } from "@centraid/protocol";
 import { tempDir } from "@centraid/test-kit/temp-dir";

@@ -43,10 +43,10 @@ function writeBlobFile(file: string, bytes: Buffer): void {
   try {
     writeFileSync(tmp, bytes, { mode: 0o600 });
     renameSync(tmp, file);
-  } catch (err) {
+  } catch (error) {
     // Same rule as the CAS write path (blob/local.ts): a disk-full export
     // never leaves a partial `.tmp` file next to the real blob path.
     rmSync(tmp, { force: true });
-    throw asVaultDiskFullError("blob export write", err);
+    throw asVaultDiskFullError("blob export write", error);
   }
 }

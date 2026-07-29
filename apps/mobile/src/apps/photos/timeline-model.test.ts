@@ -5,8 +5,8 @@ import {
   mergePhotoAssets,
   onThisDay,
   sectionPhotoAssets,
-  type PhotoAsset,
 } from "./timeline-model";
+import type { PhotoAsset } from "./timeline-model";
 
 const photo = (id: string, fields: Partial<PhotoAsset> = {}): PhotoAsset => ({
   id,

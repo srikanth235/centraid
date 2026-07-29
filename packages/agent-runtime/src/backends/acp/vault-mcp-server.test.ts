@@ -7,11 +7,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { vaultToolContext } from "./test-fixtures.ts";
-import {
-  startVaultMcpServer,
-  type VaultMcpHandle,
-  type VaultMcpHooks,
-} from "./vault-mcp-server.ts";
+import { startVaultMcpServer } from "./vault-mcp-server.ts";
+import type { VaultMcpHandle, VaultMcpHooks } from "./vault-mcp-server.ts";
 
 const openHandles: VaultMcpHandle[] = [];
 describe("vault-mcp-server", () => {

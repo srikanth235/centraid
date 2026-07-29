@@ -8,7 +8,8 @@
  */
 
 import type { S3Grant, StoreClass } from "./provider.js";
-import { callProviderRoute, type WireClientOptions } from "./wire-client.js";
+import { callProviderRoute } from "./wire-client.js";
+import type { WireClientOptions } from "./wire-client.js";
 
 const DEFAULT_GRANT_TTL_SECONDS = 3600;
 

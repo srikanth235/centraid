@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ChangeBus, type AppChange } from "./change-bus.js";
+import { ChangeBus } from "./change-bus.js";
+import type { AppChange } from "./change-bus.js";
 
 describe(ChangeBus, () => {
   it("delivers emits to matching-app subscribers in subscription order", () => {
@@ -72,10 +73,10 @@ describe(ChangeBus, () => {
   it("listener that unsubscribes itself during dispatch does not break iteration", () => {
     const bus = new ChangeBus();
     const order: string[] = [];
-    let unsubA: () => void;
+    let unsubA: (() => void) | undefined = undefined;
     unsubA = bus.subscribe("app1", () => {
       order.push("a");
-      unsubA();
+      unsubA?.();
     });
     bus.subscribe("app1", () => order.push("b"));
     bus.emit({ appId: "app1", tables: ["t"], ts: 1, source: "handler" });

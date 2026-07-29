@@ -68,8 +68,8 @@ describe("errors", () => {
     let err: unknown;
     try {
       for (let i = 0; i < 100_000; i++) stmt.run("x".repeat(2000));
-    } catch (e) {
-      err = e;
+    } catch (error) {
+      err = error;
     }
     return { db, err };
   }

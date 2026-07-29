@@ -1,15 +1,16 @@
-import { useCallback, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useRef, useState } from "react";
+import type { PointerEvent } from "react";
 
 import {
   IDENTITY_VIEW,
   ORRERY,
   ZOOM_MAX,
   ZOOM_MIN,
-  type ViewTransform,
   clientToViewBox,
   panView,
   zoomView,
 } from "./atlasOrreryGeometry.js";
+import type { ViewTransform } from "./atlasOrreryGeometry.js";
 
 // The orrery's pan/zoom camera (issue #519), lifted out of AtlasRelationsTab so
 // the tab stays about graph state. `view` is a lens over the chart body, never a

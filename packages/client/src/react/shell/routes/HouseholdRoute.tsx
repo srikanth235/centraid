@@ -1,4 +1,5 @@
-import { type JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import {
   createGatewayDeviceTicket,
@@ -54,9 +55,9 @@ export default function HouseholdRoute(): JSX.Element {
               try {
                 await createSpace(data);
                 showToast(`Space created · ${data.name}`);
-              } catch (err) {
+              } catch (error) {
                 showToast(
-                  `Couldn't create space: ${err instanceof Error ? err.message : String(err)}`
+                  `Couldn't create space: ${error instanceof Error ? error.message : String(error)}`
                 );
               }
             })();

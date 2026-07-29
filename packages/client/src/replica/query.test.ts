@@ -2,11 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import { OnlineOnlyError, OnlineOnlyGuard } from "./errors.js";
 import { evaluateReplicaRead, guardReplicaRow } from "./query.js";
-import {
-  REPLICA_SYNTHETIC_PRIMARY_KEY,
-  type ReplicaEntitySchema,
-  type ReplicaRowEnvelope,
-} from "./types.js";
+import { REPLICA_SYNTHETIC_PRIMARY_KEY } from "./types.js";
+import type { ReplicaEntitySchema, ReplicaRowEnvelope } from "./types.js";
 
 const schema: ReplicaEntitySchema = {
   entity: "core.task",

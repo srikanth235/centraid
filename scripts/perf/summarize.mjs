@@ -15,8 +15,8 @@ const reportPath =
 let report;
 try {
   report = JSON.parse(readFileSync(reportPath, "utf8"));
-} catch (err) {
-  console.error(`Could not read report at ${reportPath}: ${err.message}`);
+} catch (error) {
+  console.error(`Could not read report at ${reportPath}: ${error.message}`);
   console.error("Run `node scripts/perf/run-waterfall.mjs` first.");
   process.exit(1);
 }

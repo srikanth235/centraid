@@ -26,8 +26,8 @@ import {
   formatCrashLine,
   shouldRotate,
   toCrashRecord,
-  type CrashKind,
 } from "./crash-log-core.js";
+import type { CrashKind } from "./crash-log-core.js";
 
 const CRASH_LOG_FILE = "crash.log";
 /** Single-generation rotation (crash.log -> crash.log.1) past this size. */
@@ -41,10 +41,10 @@ function rotateIfNeeded(file: string): void {
   try {
     const { size } = statSync(file);
     if (shouldRotate(size, MAX_BYTES)) renameSync(file, `${file}.1`);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       process.stdout.write(
-        `[crash-log] rotation check failed: ${String(err)}\n`
+        `[crash-log] rotation check failed: ${String(error)}\n`
       );
     }
   }
@@ -59,9 +59,9 @@ export function recordCrash(kind: CrashKind, err: unknown): void {
     const file = crashLogPath();
     rotateIfNeeded(file);
     appendFileSync(file, line, { mode: 0o600 });
-  } catch (writeErr) {
+  } catch (error) {
     process.stdout.write(
-      `[crash-log] failed to persist crash log: ${String(writeErr)}\n`
+      `[crash-log] failed to persist crash log: ${String(error)}\n`
     );
   }
 }

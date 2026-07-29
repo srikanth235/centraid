@@ -68,10 +68,12 @@ function runQuickCheck(
       ok: false,
       lines: rows.slice(0, maxLines).map((r) => `${file}: ${r.quick_check}`),
     };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      lines: [`${file}: ${err instanceof Error ? err.message : String(err)}`],
+      lines: [
+        `${file}: ${error instanceof Error ? error.message : String(error)}`,
+      ],
     };
   }
 }

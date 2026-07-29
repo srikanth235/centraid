@@ -15,8 +15,8 @@ import {
   BINARY_DERIVATIVE_SQL,
   isBinaryDerivative,
   isDerivativeVariant,
-  type BinaryDerivativeVariant,
 } from "./derivatives.js";
+import type { BinaryDerivativeVariant } from "./derivatives.js";
 import { shaOfBlobUri } from "./store.js";
 
 // Mirrors commands/links.ts RELATIONS_SCHEME_URI (imported by literal to

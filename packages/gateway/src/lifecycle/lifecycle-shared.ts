@@ -13,13 +13,12 @@ import { AppScaffoldError } from "@centraid/blueprints";
 import { ExtSpecError } from "@centraid/vault";
 
 import { validateManifestAt } from "../routes/apps-store-routes.js";
-import {
-  sendJson,
-  writeFileMap,
-  type FileMapEntry,
-} from "../routes/route-helpers.js";
-import { WorktreeStore, WorktreeStoreError } from "../worktree-store/index.js";
-import { applyExtOnPublish, type ExtBandOps } from "./ext-band.js";
+import { sendJson, writeFileMap } from "../routes/route-helpers.js";
+import type { FileMapEntry } from "../routes/route-helpers.js";
+import type { WorktreeStore } from "../worktree-store/index.js";
+import { WorktreeStoreError } from "../worktree-store/index.js";
+import { applyExtOnPublish } from "./ext-band.js";
+import type { ExtBandOps } from "./ext-band.js";
 
 export interface LifecycleRouteOptions {
   /** Git store backing app code. Sessions/publishes ride through it. */
@@ -121,10 +120,10 @@ export async function ensureSession(
   try {
     const handle = await store.openSession(sessionId);
     return handle.id;
-  } catch (err) {
-    if (err instanceof WorktreeStoreError && err.code === "session_exists")
+  } catch (error) {
+    if (error instanceof WorktreeStoreError && error.code === "session_exists")
       return sessionId;
-    throw err;
+    throw error;
   }
 }
 

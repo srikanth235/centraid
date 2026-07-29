@@ -13,7 +13,8 @@ import type {
 } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import { runAcpTurn, type AcpTurnConfig } from "./backend.js";
+import { runAcpTurn } from "./backend.js";
+import type { AcpTurnConfig } from "./backend.js";
 
 export const FAKE_AGENT = fileURLToPath(
   new URL("fake-acp-agent.mjs", import.meta.url)

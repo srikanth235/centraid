@@ -5,15 +5,15 @@
  * parsing inline.
  */
 
-import {
-  BackupProviderError,
-  type BackupProvider,
-  type ProviderAuditEvent,
-  type ProviderCapabilities,
-  type ProviderInventoryObject,
-  type ProviderPolicy,
-  type ProviderPolicyDeclaration,
-  type StoreClass,
+import { BackupProviderError } from "@centraid/backup";
+import type {
+  BackupProvider,
+  ProviderAuditEvent,
+  ProviderCapabilities,
+  ProviderInventoryObject,
+  ProviderPolicy,
+  ProviderPolicyDeclaration,
+  StoreClass,
 } from "@centraid/backup";
 import type { BackupPolicy } from "@centraid/vault";
 
@@ -120,14 +120,14 @@ export async function pushProviderPolicy(opts: {
       status: providerPolicyMatches(opts.desired, echo) ? "synced" : "drift",
       echo,
     };
-  } catch (err) {
+  } catch (error) {
     return {
       ...base,
       status:
-        err instanceof BackupProviderError && err.code === "policy_unmet"
+        error instanceof BackupProviderError && error.code === "policy_unmet"
           ? "rejected"
           : "error",
-      ...errorFields(err),
+      ...errorFields(error),
     };
   }
 }
@@ -151,8 +151,8 @@ export async function inspectProviderPolicy(opts: {
       status: providerPolicyMatches(opts.desired, echo) ? "synced" : "drift",
       echo,
     };
-  } catch (err) {
-    return { ...base, status: "error", ...errorFields(err) };
+  } catch (error) {
+    return { ...base, status: "error", ...errorFields(error) };
   }
 }
 
@@ -288,12 +288,13 @@ export async function collectInventory(opts: {
           metadataMismatch: metadataMismatches(providerObjects, bucketObjects),
         },
       };
-    } catch (err) {
+    } catch (error) {
       return {
         source: "bucket",
         providerAttested: false,
         objects: raw,
-        attestationError: err instanceof Error ? err.message : String(err),
+        attestationError:
+          error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -308,7 +309,7 @@ export async function collectInventory(opts: {
           opts.store
         ),
       };
-    } catch (err) {
+    } catch (error) {
       return {
         source: "bucket",
         providerAttested: false,
@@ -317,7 +318,8 @@ export async function collectInventory(opts: {
           opts.targetId,
           opts.store
         ),
-        attestationError: err instanceof Error ? err.message : String(err),
+        attestationError:
+          error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -357,12 +359,12 @@ export async function collectAudit(
     };
     await readPage();
     return { source: "provider", eventCount, recent };
-  } catch (err) {
+  } catch (error) {
     return {
       source: "unavailable",
       eventCount: 0,
       recent: [],
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

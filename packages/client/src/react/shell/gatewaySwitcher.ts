@@ -1,4 +1,5 @@
-import { openMenu, type CtxItem } from "./contextMenu.js";
+import { openMenu } from "./contextMenu.js";
+import type { CtxItem } from "./contextMenu.js";
 import type { GatewayRow } from "./gatewayRegistry.js";
 import { iconSvg } from "./iconSvg.js";
 
@@ -79,6 +80,10 @@ function subtitleFor(row: GatewayRow): string {
       return "Unexpected response";
     case "unreachable":
       return "Offline";
+    case "ready":
+      return row.spaceCount === undefined
+        ? "Connected"
+        : `${row.spaceCount} ${row.spaceCount === 1 ? "space" : "spaces"}`;
     default:
       return row.spaceCount === undefined
         ? "Connected"

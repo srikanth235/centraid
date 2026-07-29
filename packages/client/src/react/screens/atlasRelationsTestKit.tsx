@@ -1,5 +1,6 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 import type {
   AtlasFkEdge,
@@ -7,9 +8,8 @@ import type {
   AtlasGraphPayload,
 } from "../../gateway-client.js";
 import type { AtlasDetailLevel } from "./atlasOrreryGeometry.js";
-import AtlasRelationsTab, {
-  type AtlasRelationsTabProps,
-} from "./AtlasRelationsTab.js";
+import AtlasRelationsTab from "./AtlasRelationsTab.js";
+import type { AtlasRelationsTabProps } from "./AtlasRelationsTab.js";
 
 // Shared test kit for the Relations "Map" suites (issue #519). Fixtures, the
 // mount harness, and the DOM query helpers live here so the pure-geometry suite
@@ -205,11 +205,11 @@ export const flush = async (): Promise<void> => {
 };
 
 export const fire = async (
-  node: Element | null | undefined,
+  nodeLocal: Element | null | undefined,
   type: string
 ): Promise<void> => {
   await act(async () =>
-    node?.dispatchEvent(new MouseEvent(type, { bubbles: true }))
+    nodeLocal?.dispatchEvent(new MouseEvent(type, { bubbles: true }))
   );
   await act(async () => {
     await Promise.resolve();

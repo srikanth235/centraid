@@ -6,7 +6,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { DEFAULT_BACKUP_POLICY } from "../backup-policy.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { BlobCache } from "./cache.js";
 import type { RemoteTier } from "./custody-types.js";
 import { FsBlobStore } from "./local.js";

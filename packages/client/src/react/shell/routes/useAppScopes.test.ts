@@ -1,35 +1,35 @@
 // Scope-set resolution for an inline app mount (issue #599).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";
 import type { AppScopeEntry } from "../../../gateway-client-vault.js";
+import type * as TypeImport_lhrfvk from "../../../gateway-client-vault.js";
+import type * as TypeImport_ntzl9 from "../../../replica/shell-session.js";
 
 const { listAppScopes } = vi.hoisted(() => ({
-  listAppScopes:
-    vi.fn<typeof import("../../../gateway-client-vault.js").listAppScopes>(),
+  listAppScopes: vi.fn<typeof TypeImport_lhrfvk.listAppScopes>(),
 }));
 vi.mock(import("../../../gateway-client-vault.js") as Promise<unknown>, () => ({
   listAppScopes,
 }));
 vi.mock(import("../../../gateway-client-core.js") as Promise<unknown>, () => ({
-  auth: vi.fn<typeof import("../../../gateway-client-core.js").auth>(
-    async () => ({
-      baseUrl: "https://gw.test",
-      token: "tok",
-      gatewayId: "profile-home",
-    })
-  ),
+  auth: vi.fn<typeof TypeImport_nod2nz.auth>(async () => ({
+    baseUrl: "https://gw.test",
+    token: "tok",
+    gatewayId: "profile-home",
+  })),
 }));
 vi.mock(
   import("../../../replica/shell-session.js") as Promise<unknown>,
   () => ({
-    addressedGatewayAuth: vi.fn<
-      typeof import("../../../replica/shell-session.js").addressedGatewayAuth
-    >(async () => ({
-      baseUrl: "https://gw.test",
-      token: "tok",
-      gatewayId: "profile-home",
-      vaultId: "vault-ambient",
-    })),
+    addressedGatewayAuth: vi.fn<typeof TypeImport_ntzl9.addressedGatewayAuth>(
+      async () => ({
+        baseUrl: "https://gw.test",
+        token: "tok",
+        gatewayId: "profile-home",
+        vaultId: "vault-ambient",
+      })
+    ),
     replicaIdentityForGatewayAuth: (gatewayAuth: {
       gatewayId?: string;
       vaultId?: string;

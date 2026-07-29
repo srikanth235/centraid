@@ -24,10 +24,11 @@ async function loadChangelog(): Promise<ChangelogState> {
     };
   try {
     return { status: "ready", result: await get() };
-  } catch (err: unknown) {
+  } catch (error: unknown) {
     return {
       status: "error",
-      message: err instanceof Error ? err.message : "Failed to load changelog.",
+      message:
+        error instanceof Error ? error.message : "Failed to load changelog.",
     };
   }
 }

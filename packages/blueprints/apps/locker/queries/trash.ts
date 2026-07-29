@@ -4,7 +4,8 @@
  * same decorate() path as the live window.
  */
 
-import { decorate, readTags, readStarred, type RawItem } from "./items.ts";
+import { decorate, readTags, readStarred } from "./items.ts";
+import type { RawItem } from "./items.ts";
 
 export default async function trash({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
@@ -23,8 +24,8 @@ export default async function trash({ ctx }: HandlerArgs) {
       readStarred(ctx, ids, purpose),
     ]);
     return { items: decorate(rows, tagsByItem, starredIds) };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

@@ -17,7 +17,8 @@ import crypto from "node:crypto";
 import path from "node:path";
 
 import { GatewayDatabase } from "./gateway-db.js";
-import { MemberStore, type Member, type MemberGrant } from "./member-store.js";
+import { MemberStore } from "./member-store.js";
+import type { Member, MemberGrant } from "./member-store.js";
 
 /*
  * ROLE is the authority a MEMBER is granted in a vault — what they may DO.

@@ -16,13 +16,12 @@ import {
   fakeBlobStoreFetch,
 } from "./fake-direct-transfer";
 import { bytesFileSource } from "./file-source";
-import {
-  DirectTransferError,
-  type DirectTransferClient,
-} from "./gateway-client";
+import { DirectTransferError } from "./gateway-client";
+import type { DirectTransferClient } from "./gateway-client";
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
 import { UploadQueueStore } from "./store";
-import { UploadDrainer, type PartPutter } from "./uploader";
+import { UploadDrainer } from "./uploader";
+import type { PartPutter } from "./uploader";
 
 const crypto = webCryptoUploadCrypto();
 const fetchImpl = fakeBlobStoreFetch();

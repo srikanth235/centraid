@@ -1,5 +1,6 @@
 import type { IconName } from "@centraid/design-tokens";
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   AuOverviewData,
@@ -333,8 +334,8 @@ export default function AutomationsOverviewScreen({
       loadDataRef
         .current()
         .then(setState)
-        .catch((err: unknown) => {
-          setErrMsg(err instanceof Error ? err.message : String(err));
+        .catch((error: unknown) => {
+          setErrMsg(error instanceof Error ? error.message : String(error));
           setState("error");
         }),
     []

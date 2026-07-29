@@ -10,10 +10,12 @@ import {
   createGrant,
   enrollAgent,
   enrollDevice,
-  type BootstrapResult,
 } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { uuidv7 } from "../ids.js";
 import { registerSyncCommands } from "./sync.js";

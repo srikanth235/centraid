@@ -24,14 +24,16 @@ import {
   wrapRecoveryKit,
   verifySnapshot,
   validateKeyring,
-  type BackupProvider,
-  type Keyring,
-  type RecoveryKitDocument,
-  type Retention,
-  type RestoreResult,
-  type SnapshotRow,
-  type SourceEntry,
-  type VerifySnapshotResult,
+} from "@centraid/backup";
+import type {
+  BackupProvider,
+  Keyring,
+  RecoveryKitDocument,
+  Retention,
+  RestoreResult,
+  SnapshotRow,
+  SourceEntry,
+  VerifySnapshotResult,
 } from "@centraid/backup";
 import {
   DEFAULT_BACKUP_POLICY,
@@ -45,9 +47,8 @@ import {
   KeyStore,
   sealKeyFileFor,
   verifyRestoredPair,
-  type BackupPolicy,
-  type RemoteTier,
 } from "@centraid/vault";
+import type { BackupPolicy, RemoteTier } from "@centraid/vault";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import type { HealthRegistry } from "../serve/health-registry.js";
@@ -59,40 +60,34 @@ import {
   failedCasOnlyReconciliation,
   runCasOnlyReconciliation,
 } from "./backup-cas-reconciliation.js";
-import {
-  type BackupConfig,
-  type BackupProviderConfig,
-} from "./backup-config.js";
+import type { BackupConfig, BackupProviderConfig } from "./backup-config.js";
 import { evaluateBackupHealth } from "./backup-health.js";
 import {
   inspectProviderPolicy,
   providerPolicyFor,
   providerPolicyMatches,
   pushProviderPolicy,
-  type ProviderPolicySyncState,
 } from "./backup-provider-observability.js";
+import type { ProviderPolicySyncState } from "./backup-provider-observability.js";
 import {
   failedReconciliation,
   runBackupReconciliation,
-  type BackupReconciliationState,
 } from "./backup-reconciliation.js";
+import type { BackupReconciliationState } from "./backup-reconciliation.js";
 import { recoveryKitDocument } from "./backup-recovery-kit.js";
-import {
-  assembleSourceEntries,
-  type AssembleOptions,
-} from "./backup-sources.js";
+import { assembleSourceEntries } from "./backup-sources.js";
+import type { AssembleOptions } from "./backup-sources.js";
 import {
   deriveBackupSourceInstanceId,
   loadBackupState,
   opaqueLabel,
   saveBackupState,
-  type BackupTargetState,
 } from "./backup-state.js";
-import {
-  RecoveryKitStateStore,
-  type RecoveryKitState,
-} from "./recovery-kit-state.js";
-import { warmPreviewTinies, type PreviewsWarmResult } from "./restore-warm.js";
+import type { BackupTargetState } from "./backup-state.js";
+import { RecoveryKitStateStore } from "./recovery-kit-state.js";
+import type { RecoveryKitState } from "./recovery-kit-state.js";
+import { warmPreviewTinies } from "./restore-warm.js";
+import type { PreviewsWarmResult } from "./restore-warm.js";
 import { snapshotReferencedBlobShas } from "./snapshot-blob-roots.js";
 import type { StorageConnectionStore } from "./storage-connections.js";
 import {
@@ -999,9 +994,9 @@ export class BackupService {
             state.targets[vaultId] = target;
             await saveBackupState(this.gatewayDatabase, state);
           }
-        } catch (err) {
+        } catch (error) {
           this.logger.warn(
-            `backup: wal prune failed (kept everything): ${err instanceof Error ? err.message : String(err)}`
+            `backup: wal prune failed (kept everything): ${error instanceof Error ? error.message : String(error)}`
           );
         }
       }
@@ -1011,10 +1006,10 @@ export class BackupService {
           ? `vault ${vaultId}: backed up (seq ${row.seq})`
           : `vault ${vaultId}: no change since last backup`
       );
-    } catch (err) {
+    } catch (error) {
       if (
-        err instanceof BackupProviderError &&
-        err.code === "conflict_generation"
+        error instanceof BackupProviderError &&
+        error.code === "conflict_generation"
       ) {
         // PROTOCOL.md § Generation fencing: never retry with a bumped
         // generation automatically — surface loudly and stop.
@@ -1029,7 +1024,7 @@ export class BackupService {
         );
         return;
       }
-      const message = err instanceof Error ? err.message : String(err);
+      const message = error instanceof Error ? error.message : String(error);
       target.lastError = message;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
@@ -1037,7 +1032,7 @@ export class BackupService {
         "backups",
         `vault ${vaultId}: backup failed: ${message}`
       );
-      throw err;
+      throw error;
     }
     // No staging teardown: the code bundle lives in a persistent per-vault dir
     // that is DELIBERATELY kept between ticks (a failed run leaves the standing
@@ -1191,8 +1186,8 @@ export class BackupService {
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
       return result;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       target.lastVerifyError = `verify failed: ${message}`;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
@@ -1200,7 +1195,7 @@ export class BackupService {
         "backups",
         `vault ${vaultId}: verify failed: ${message}`
       );
-      throw err;
+      throw error;
     }
   }
 
@@ -1278,11 +1273,11 @@ export class BackupService {
           verifyBucket,
           checkedAt,
         });
-      } catch (err) {
+      } catch (error) {
         target.reconciliation = failedReconciliation(
           checkedAt,
           verifyBucket ? "bucket" : "scheduled",
-          err instanceof Error ? err.message : String(err)
+          error instanceof Error ? error.message : String(error)
         );
       }
       summary = target.reconciliation;
@@ -1304,11 +1299,11 @@ export class BackupService {
           verifyBucket,
           checkedAt,
         });
-      } catch (err) {
+      } catch (error) {
         summary = failedCasOnlyReconciliation(
           checkedAt,
           verifyBucket ? "bucket" : "scheduled",
-          err instanceof Error ? err.message : String(err)
+          error instanceof Error ? error.message : String(error)
         );
       }
       state.casReconciliations[vaultId] = summary;
@@ -1481,8 +1476,8 @@ export class BackupService {
       } else {
         this.health.reportOk("backups", `${ran}: ok`);
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       // Persist the failure: the health probe recomputes from backup STATE
       // at every snapshot (overriding pushed reports), so an unpersisted
       // failure would show green health over provably damaged backups.
@@ -1493,7 +1488,7 @@ export class BackupService {
         "backups",
         `vault ${vaultId}: restore-verify failed: ${message}`
       );
-      throw err;
+      throw error;
     } finally {
       await fs
         .rm(destDir, { recursive: true, force: true })
@@ -1547,10 +1542,10 @@ export class BackupService {
         }
         for (const gen of generations) anchored.add(gen);
       });
-    } catch (err) {
+    } catch (error) {
       this.logger.warn(
         `backup: could not read the registered manifests to confirm which generations they ` +
-          `anchor (bases stay pending, registration retries): ${err instanceof Error ? err.message : String(err)}`
+          `anchor (bases stay pending, registration retries): ${error instanceof Error ? error.message : String(error)}`
       );
     }
     return anchored;
@@ -1649,10 +1644,10 @@ export class BackupService {
           const last = this.lastAutoBackupAttemptMs.get(vaultId) ?? 0;
           if (this.now() - last >= 5 * 60 * 1000) {
             this.lastAutoBackupAttemptMs.set(vaultId, this.now());
-            await this.doRunBackup(vaultId).catch((err) => {
+            await this.doRunBackup(vaultId).catch((error) => {
               this.logger.warn(
                 `backup: base registration for ${vaultId} failed (segments keep accumulating locally): ` +
-                  `${err instanceof Error ? err.message : String(err)}`
+                  `${error instanceof Error ? error.message : String(error)}`
               );
             });
             state = await loadBackupState(
@@ -1722,10 +1717,10 @@ export class BackupService {
         // walTimer, and any this service drove) may have healed foreign
         // checkpoints — persist the tally so health can surface it.
         await this.syncWalForeignCheckpoints(vaultId, shipper);
-      } catch (err) {
+      } catch (error) {
         this.logger.warn(
           `backup: wal drain for ${vaultId} failed (will retry): ` +
-            `${err instanceof Error ? err.message : String(err)}`
+            `${error instanceof Error ? error.message : String(error)}`
         );
       }
     });
@@ -1735,9 +1730,9 @@ export class BackupService {
 
   start(): void {
     if (this.timer) return;
-    void this.syncEnabledPolicies().catch((err) => {
+    void this.syncEnabledPolicies().catch((error) => {
       this.logger.warn(
-        `backup: provider policy sync failed: ${err instanceof Error ? err.message : String(err)}`
+        `backup: provider policy sync failed: ${error instanceof Error ? error.message : String(error)}`
       );
     });
     const runScheduled = () => {
@@ -1751,9 +1746,9 @@ export class BackupService {
         this.shouldDeferPosture()
       )
         return;
-      void this.tick().catch((err) => {
+      void this.tick().catch((error) => {
         this.logger.warn(
-          `backup: scheduler tick failed: ${err instanceof Error ? err.message : String(err)}`
+          `backup: scheduler tick failed: ${error instanceof Error ? error.message : String(error)}`
         );
       });
     };
@@ -1767,9 +1762,9 @@ export class BackupService {
     // The 30 s global clock used to run even with no backend. Resolve live
     // configuration first, then arm one tick for the earliest actual policy
     // due time; unconfigured gateways arm no WAL-drain clock (#456 I4).
-    void this.refreshWalSchedule().catch((err) => {
+    void this.refreshWalSchedule().catch((error) => {
       this.logger.warn(
-        `backup: wal scheduler setup failed: ${err instanceof Error ? err.message : String(err)}`
+        `backup: wal scheduler setup failed: ${error instanceof Error ? error.message : String(error)}`
       );
     });
   }
@@ -1820,9 +1815,9 @@ export class BackupService {
         if (!this.health.shouldDeferBackgroundWork()) await this.drainWalDue();
         await this.refreshWalSchedule();
       };
-      void run().catch((err) => {
+      void run().catch((error) => {
         this.logger.warn(
-          `backup: wal drain tick failed: ${err instanceof Error ? err.message : String(err)}`
+          `backup: wal drain tick failed: ${error instanceof Error ? error.message : String(error)}`
         );
       });
     }, delayMs);
@@ -1887,9 +1882,9 @@ export class BackupService {
             this.now() - Date.parse(target.lastVerifiedAt) >=
               policy.verifyEveryDays * DAY_MS);
         if (verifyDue) {
-          await this.runVerify(vaultId).catch((err) => {
+          await this.runVerify(vaultId).catch((error) => {
             this.logger.warn(
-              `backup: scheduled verify failed: ${err instanceof Error ? err.message : String(err)}`
+              `backup: scheduled verify failed: ${error instanceof Error ? error.message : String(error)}`
             );
           });
         }
@@ -1905,9 +1900,9 @@ export class BackupService {
           this.now() - Date.parse(restoreBaseline) >=
             policy.verifyEveryDays * DAY_MS;
         if (restoreVerifyDue) {
-          await this.runRestoreVerify(vaultId).catch((err) => {
+          await this.runRestoreVerify(vaultId).catch((error) => {
             this.logger.warn(
-              `backup: scheduled restore-verify failed: ${err instanceof Error ? err.message : String(err)}`
+              `backup: scheduled restore-verify failed: ${error instanceof Error ? error.message : String(error)}`
             );
           });
         }

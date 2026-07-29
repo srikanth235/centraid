@@ -18,53 +18,38 @@ const {
   RecoveryKitNotConfirmedError,
   ProviderNotHomeProfileError,
 } = vi.hoisted(() => {
-  class RecoveryKitNotConfirmedError extends Error {
+  class MockRecoveryKitNotConfirmedError extends Error {
     constructor(message: string) {
       super(message);
-      this.name = "RecoveryKitNotConfirmedError";
+      this.name = "MockRecoveryKitNotConfirmedError";
     }
   }
-  class ProviderNotHomeProfileError extends Error {
+  class MockProviderNotHomeProfileError extends Error {
     readonly missingCapabilities: string[];
     constructor(message: string, missingCapabilities: string[]) {
       super(message);
-      this.name = "ProviderNotHomeProfileError";
+      this.name = "MockProviderNotHomeProfileError";
       this.missingCapabilities = missingCapabilities;
     }
   }
   return {
     listStorageConnections:
-      vi.fn<
-        typeof import("../../../gateway-client.js").listStorageConnections
-      >(),
+      vi.fn<typeof TypeImport_1gl5zx7.listStorageConnections>(),
     gwCreateStorageConnection:
-      vi.fn<
-        typeof import("../../../gateway-client.js").createStorageConnection
-      >(),
+      vi.fn<typeof TypeImport_1gl5zx7.createStorageConnection>(),
     gwDeleteStorageConnection:
-      vi.fn<
-        typeof import("../../../gateway-client.js").deleteStorageConnection
-      >(),
+      vi.fn<typeof TypeImport_1gl5zx7.deleteStorageConnection>(),
     gwTestStorageConnection:
-      vi.fn<
-        typeof import("../../../gateway-client.js").testStorageConnection
-      >(),
+      vi.fn<typeof TypeImport_1gl5zx7.testStorageConnection>(),
     confirmGatewayRecoveryKit:
-      vi.fn<
-        typeof import("../../../gateway-client.js").confirmGatewayRecoveryKit
-      >(),
-    getVaultBlobStore:
-      vi.fn<typeof import("../../../gateway-client.js").getVaultBlobStore>(),
+      vi.fn<typeof TypeImport_1gl5zx7.confirmGatewayRecoveryKit>(),
+    getVaultBlobStore: vi.fn<typeof TypeImport_1gl5zx7.getVaultBlobStore>(),
     attachVaultStorageConnection:
-      vi.fn<
-        typeof import("../../../gateway-client.js").attachVaultStorageConnection
-      >(),
+      vi.fn<typeof TypeImport_1gl5zx7.attachVaultStorageConnection>(),
     detachVaultStorageConnection:
-      vi.fn<
-        typeof import("../../../gateway-client.js").detachVaultStorageConnection
-      >(),
-    RecoveryKitNotConfirmedError,
-    ProviderNotHomeProfileError,
+      vi.fn<typeof TypeImport_1gl5zx7.detachVaultStorageConnection>(),
+    RecoveryKitNotConfirmedError: MockRecoveryKitNotConfirmedError,
+    ProviderNotHomeProfileError: MockProviderNotHomeProfileError,
   };
 });
 
@@ -81,6 +66,7 @@ vi.mock(import("../../../gateway-client.js"), () => ({
   RecoveryKitNotConfirmedError,
 }));
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 /* oxlint-disable-next-line import/first -- subject under test after vi.mock (hoisted) */
 import {
   attachVaultConnection,

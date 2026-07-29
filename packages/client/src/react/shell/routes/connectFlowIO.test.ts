@@ -5,12 +5,10 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const listVaults =
-  vi.fn<typeof import("../../../gateway-client.js").listVaults>();
-const connectGateway =
-  vi.fn<typeof import("./gatewayModals.js").connectGateway>();
+const listVaults = vi.fn<typeof TypeImport_1gl5zx7.listVaults>();
+const connectGateway = vi.fn<typeof TypeImport_1fv8ovv.connectGateway>();
 const friendlyGatewayError = vi.fn<
-  typeof import("./gatewayModals.js").friendlyGatewayError
+  typeof TypeImport_1fv8ovv.friendlyGatewayError
 >((error, message) => message || error);
 
 vi.mock(import("../../../gateway-client.js"), () => ({
@@ -23,12 +21,14 @@ vi.mock(import("./gatewayModals.js"), () => ({
     friendlyGatewayError(error, message),
 }));
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
   commitConnectFlow,
   connectFreshLocalGateway,
   loadLocalVaults,
   runConnectivityTest,
 } from "./connectFlowIO.js";
+import type * as TypeImport_1fv8ovv from "./gatewayModals.js";
 
 describe("connectFlowIO scenarios", () => {
   beforeEach(() => {

@@ -4,9 +4,8 @@ import {
   readReplicaChanges,
   readReplicaIntentOutcome,
   withReplicaSnapshot,
-  type ReplicaChangeEntry,
-  type ReplicaCursor,
 } from "@centraid/vault";
+import type { ReplicaChangeEntry, ReplicaCursor } from "@centraid/vault";
 
 import {
   buildReplicaShapes,
@@ -15,8 +14,10 @@ import {
   replicaHistoricalRowState,
   replicaWireRowId,
   shapeReplicaRow,
-  type ReplicaServerShape,
-  type ReplicaShapeAccess,
+} from "./replica-shape.js";
+import type {
+  ReplicaServerShape,
+  ReplicaShapeAccess,
 } from "./replica-shape.js";
 
 export interface ReplicaUpsertWire {

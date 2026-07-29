@@ -17,12 +17,8 @@
 import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { firstString, textOf } from "./content.js";
-import {
-  readCost,
-  readTokenUsage,
-  type TokenUsage,
-  type UsageCost,
-} from "./usage.js";
+import { readCost, readTokenUsage } from "./usage.js";
+import type { TokenUsage, UsageCost } from "./usage.js";
 
 export interface SessionUpdateMapper {
   /** Feed one `session/update` notification's `params`. */

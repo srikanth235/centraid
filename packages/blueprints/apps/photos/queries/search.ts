@@ -170,11 +170,11 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
         contentIds.indexOf(a.content_id) - contentIds.indexOf(b.content_id)
     );
     return { assets };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     if (e.code === "VAULT_CONSENT") {
       return { assets: [], vaultDenied: { code: e.code, message: e.message } };
     }
-    return { assets: [], error: String(e.message ?? err) };
+    return { assets: [], error: String(e.message ?? error) };
   }
 }

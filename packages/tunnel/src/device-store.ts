@@ -65,8 +65,8 @@ export class DeviceStore {
             typeof d?.name === "string"
         );
       }
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     return new DeviceStore(file, devices);
   }

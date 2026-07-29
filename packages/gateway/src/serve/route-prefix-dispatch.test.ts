@@ -5,8 +5,8 @@ import { describe, expect, test, vi } from "vitest";
 import {
   createRoutePrefixDispatch,
   forRoutePrefixes,
-  type RouteHandler,
 } from "./build-gateway.js";
+import type { RouteHandler } from "./build-gateway.js";
 
 describe("route-prefix-dispatch", () => {
   test("prefix table parses once and invokes only the most-specific matching family (#456 R1)", async () => {

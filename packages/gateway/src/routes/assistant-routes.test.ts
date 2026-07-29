@@ -8,7 +8,8 @@ import crypto from "node:crypto";
  * so the tests stay hermetic.
  */
 import { promises as fs } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
+import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -17,17 +18,14 @@ import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
   openJournalDb,
-  type ConversationRunner,
-  type VaultWorkspace,
 } from "@centraid/app-engine";
+import type { ConversationRunner, VaultWorkspace } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, expect, test } from "vitest";
 
 import type { VaultRegistry } from "../serve/vault-registry.js";
-import {
-  makeAssistantRouteHandler,
-  type AssistantRouteOptions,
-} from "./assistant-routes.js";
+import { makeAssistantRouteHandler } from "./assistant-routes.js";
+import type { AssistantRouteOptions } from "./assistant-routes.js";
 
 let dir: string;
 let journal: DatabaseSync | undefined;

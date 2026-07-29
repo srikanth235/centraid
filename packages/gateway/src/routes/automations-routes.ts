@@ -33,18 +33,18 @@ import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
-import {
+import type {
   AnalyticsStore,
   InsightsStore,
-  isRunnerKind,
-  parseTurnAttachmentRefs,
-  type TurnAttachmentRef,
-  type ConversationStore,
-  type Item,
-  type Turn,
-  type AutomationTurnStreamEvent,
-  type TurnStreamEvent,
+  TurnAttachmentRef,
+  ConversationStore,
+  Item,
+  Turn,
+  AutomationTurnStreamEvent,
+  TurnStreamEvent,
+  RunnerKind,
 } from "@centraid/app-engine";
+import { isRunnerKind, parseTurnAttachmentRefs } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
 import { journalConversationStore } from "../journal-stores.js";
@@ -105,10 +105,8 @@ export interface AutomationsRouteOptions {
     message: string;
     abortSignal: AbortSignal;
     onEvent: (event: TurnStreamEvent) => void;
-    providerConsent?:
-      | import("@centraid/app-engine").RunnerKind
-      | readonly import("@centraid/app-engine").RunnerKind[];
-    runnerKind?: import("@centraid/app-engine").RunnerKind;
+    providerConsent?: RunnerKind | readonly RunnerKind[];
+    runnerKind?: RunnerKind;
     model?: string;
     thinking?: string;
     attachmentRefs?: TurnAttachmentRef[];
@@ -592,8 +590,8 @@ export function makeAutomationsRouteHandler(
       }
 
       return false;
-    } catch (err) {
-      return sendError(res, err);
+    } catch (error) {
+      return sendError(res, error);
     }
   };
 }

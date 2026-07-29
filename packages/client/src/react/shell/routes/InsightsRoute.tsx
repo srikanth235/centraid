@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import {
   getGatewayHealth,

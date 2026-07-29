@@ -4,17 +4,11 @@
  * old direct own-S3 bucket listing is gone. */
 
 import { openRemoteBackupProvider } from "@centraid/backup";
-import {
-  readBlobStoreSettings,
-  ReplicaIndex,
-  type ReplicaStore,
-  type VaultDb,
-} from "@centraid/vault";
+import { readBlobStoreSettings, ReplicaIndex } from "@centraid/vault";
+import type { ReplicaStore, VaultDb } from "@centraid/vault";
 
-import {
-  collectInventory,
-  type CollectedInventory,
-} from "./backup-provider-observability.js";
+import { collectInventory } from "./backup-provider-observability.js";
+import type { CollectedInventory } from "./backup-provider-observability.js";
 import type { StorageConnectionStore } from "./storage-connections.js";
 
 export interface CasInventoryResult {
@@ -127,10 +121,10 @@ export async function collectCasInventory(opts: {
       }),
       store
     );
-  } catch (err) {
+  } catch (error) {
     return {
       configured: true,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

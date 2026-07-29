@@ -6,8 +6,6 @@ import { toBlueprintCss } from "@centraid/design-tokens";
 // globally, by the route host — same as the served path's <link rel=kit.css>.
 import "@centraid/blueprints/kit/kit.css";
 import {
-  type JSX,
-  type ReactNode,
   Suspense,
   use,
   useCallback,
@@ -16,13 +14,12 @@ import {
   useRef,
   useState,
 } from "react";
+import type { JSX, ReactNode } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
-import {
-  acquireReplicaShellSession,
-  type ReplicaScopeLease,
-} from "../../../replica/shell-session.js";
+import { acquireReplicaShellSession } from "../../../replica/shell-session.js";
+import type { ReplicaScopeLease } from "../../../replica/shell-session.js";
 import {
   addInlineScope,
   installInlineCentraid,
@@ -39,11 +36,8 @@ import { useAsyncData } from "../useAsyncData.js";
 import AppSettingsController from "./AppSettingsController.js";
 import { fetchAppKnobValues, pushKnobToInlineRoot } from "./appSettingsData.js";
 import { loadAppTemplates } from "./templatesData.js";
-import {
-  scopeSetKey,
-  useAppScopes,
-  type ResolvedAppScope,
-} from "./useAppScopes.js";
+import { scopeSetKey, useAppScopes } from "./useAppScopes.js";
+import type { ResolvedAppScope } from "./useAppScopes.js";
 
 import chrome from "../chrome.module.css";
 import styles from "./InlineAppRoute.module.css";
@@ -162,7 +156,7 @@ function InlineAppMount({
       installation.teardown();
       lease.release();
     };
-  }, []);
+  }, [descriptor, installation, lease, onDescriptor]);
 
   // Secondary scopes stream in. Each is an independent replica session, so one
   // slow or failing audience never holds up the others — or the app.
@@ -192,7 +186,7 @@ function InlineAppMount({
       alive = false;
       for (const held of leases) held.release();
     };
-  }, []);
+  }, [descriptor.multiScope, installed, scopes]);
   const Root = descriptor.Root;
   return (
     <Root rootRef={(el: HTMLElement | null) => onRootReady(el, descriptor)} />
@@ -302,9 +296,9 @@ export default function InlineAppRoute({
     try {
       await updateAppMeta({ id: app.id, name: next });
       showToast(`Renamed to "${next}"`);
-    } catch (err) {
+    } catch (error) {
       showToast(
-        `Could not rename: ${err instanceof Error ? err.message : String(err)}`
+        `Could not rename: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };
@@ -328,10 +322,10 @@ export default function InlineAppRoute({
       await deleteApp({ id: app.id });
       showToast(`${bundled ? "Uninstalled" : "Deleted"} "${app.name}"`);
       nav.navigate({ kind: "home" });
-    } catch (err) {
+    } catch (error) {
       const verb = bundled ? "uninstall" : "delete";
       showToast(
-        `Could not ${verb}: ${err instanceof Error ? err.message : String(err)}`
+        `Could not ${verb}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   };

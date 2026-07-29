@@ -6,17 +6,16 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollApp,
-  type BootstrapResult,
-} from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { ExtSpecError, type ExtTableSpec } from "../schema/ext.js";
+import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import { ExtSpecError } from "../schema/ext.js";
+import type { ExtTableSpec } from "../schema/ext.js";
 import { isSealedValue, readSealKeyFingerprint } from "../schema/sealed.js";
 import { applyExtBand, extCommandDefinitions, seedExtDraft } from "./ext.js";
-import { createGateway, type Gateway } from "./gateway.js";
+import { createGateway } from "./gateway.js";
+import type { Gateway } from "./gateway.js";
 import { resealVaultKey } from "./reseal.js";
 import type { Credential } from "./types.js";
 

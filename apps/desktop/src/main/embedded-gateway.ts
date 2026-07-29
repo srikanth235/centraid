@@ -2,9 +2,8 @@ import {
   assistOAuthFromEnvironment,
   createWasmImagePreviewCodec,
   serve,
-  type GatewayPaths,
-  type GatewayServeHandle,
 } from "@centraid/gateway";
+import type { GatewayPaths, GatewayServeHandle } from "@centraid/gateway";
 import type { KeyStore } from "@centraid/vault";
 
 export interface DesktopEmbeddedGatewayOptions {

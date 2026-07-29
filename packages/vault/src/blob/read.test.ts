@@ -5,7 +5,8 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { resolveDerivativeShas } from "./read.js";
 
@@ -19,7 +20,7 @@ describe("read", () => {
   /** Insert a bare content item and (optionally) one binary rung for it. */
   function seed(
     contentId: string,
-    sha: string,
+    shaLocal: string,
     variant?: "thumb" | "preview"
   ): void {
     db.vault
@@ -28,7 +29,7 @@ describe("read", () => {
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
        VALUES (?, 'image/jpeg', ?, ?, 10, ?)`
       )
-      .run(contentId, `blob:sha256:${sha}`, sha, nowIso());
+      .run(contentId, `blob:sha256:${shaLocal}`, shaLocal, nowIso());
     if (variant) {
       db.vault
         .prepare(
@@ -40,7 +41,7 @@ describe("read", () => {
           uuidv7(),
           contentId,
           variant,
-          `d${sha}`.slice(0, 64).padEnd(64, "0"),
+          `d${shaLocal}`.slice(0, 64).padEnd(64, "0"),
           nowIso()
         );
     }

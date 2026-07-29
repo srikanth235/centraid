@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import type * as TypeImport_rdfcd1 from "node:http";
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
  * Connector broker invariants (issue #290 phase 4): manifest contract
@@ -13,12 +14,10 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { isBrokerReadOnlyPost } from "../handler/runner.js";
-import { validateManifest, type Manifest } from "../manifest/manifest.js";
-import {
-  runFire,
-  type DispatchSurface,
-  type OpenDispatchArgs,
-} from "./fire.js";
+import { validateManifest } from "../manifest/manifest.js";
+import type { Manifest } from "../manifest/manifest.js";
+import { runFire } from "./fire.js";
+import type { DispatchSurface, OpenDispatchArgs } from "./fire.js";
 
 const VAULT_BLOCK = {
   purpose: "dpv:ServiceProvision",
@@ -906,8 +905,8 @@ describe("broker-injected connection credentials (issue #304)", () => {
 
   async function withServer(
     respond: (
-      req: import("node:http").IncomingMessage,
-      res: import("node:http").ServerResponse
+      req: TypeImport_rdfcd1.IncomingMessage,
+      res: TypeImport_rdfcd1.ServerResponse
     ) => void,
     run: (port: number) => Promise<void>
   ): Promise<void> {

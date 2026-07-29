@@ -1,4 +1,5 @@
-import { type JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { formatDuration, relativeTime } from "../../../app-format.js";
 import {
@@ -39,11 +40,16 @@ export default function RunsPane({
       .then((r) => {
         if (alive) setSettled({ key, result: r });
       })
-      .catch((err: unknown) => {
+      .catch((caughtError: unknown) => {
         if (alive) {
           setSettled({
             key,
-            result: { error: err instanceof Error ? err.message : String(err) },
+            result: {
+              error:
+                caughtError instanceof Error
+                  ? caughtError.message
+                  : String(caughtError),
+            },
           });
         }
       });

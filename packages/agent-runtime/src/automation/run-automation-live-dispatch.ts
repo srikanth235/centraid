@@ -43,6 +43,7 @@ import {
   hydrationMessagesFromLedger,
   makeJournalDbProvider,
 } from "@centraid/app-engine";
+import type * as TypeImport_4y0tle from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 
 import { getRunnerBackend } from "../registry.js";
@@ -173,7 +174,7 @@ export async function startLiveDispatch(
     | {
         kind: string;
         sessionId?: string;
-        usageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
+        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
         hydrated?: boolean;
       }
     | undefined;
@@ -181,7 +182,7 @@ export async function startLiveDispatch(
     | {
         kind: string;
         sessionId?: string;
-        usageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
+        usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
         hydrated?: boolean;
       }
     | undefined;
@@ -317,7 +318,7 @@ export async function startLiveDispatch(
       | {
           sessionId?: string;
           adapterKind: string;
-          usageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
+          usageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
           hydrated?: boolean;
           hydrationKind?: "handoff" | "recovery";
         }

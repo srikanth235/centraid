@@ -55,9 +55,9 @@ export async function openDeviceOriginal(
   const inCloud = await isInCloud(asset);
   try {
     return { asset, uri: await asset.getUri() };
-  } catch (reason) {
-    if (inCloud) throw new InCloudOriginalError(localId, reason);
-    throw reason;
+  } catch (error) {
+    if (inCloud) throw new InCloudOriginalError(localId, error);
+    throw error;
   }
 }
 

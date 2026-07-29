@@ -1,4 +1,5 @@
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import type { SettingsLayoutBridgeProps } from "../screen-contracts.js";
 import {

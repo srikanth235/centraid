@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import {
@@ -18,10 +19,8 @@ import type { ShellMenuAnchor } from "../Sidebar.js";
 import { PageLoading } from "../status.js";
 import { useAsyncData } from "../useAsyncData.js";
 import AppInfoModal from "./AppInfoModal.js";
-import {
-  collectAutomationRuns,
-  type AutomationFeedEntry,
-} from "./automationsData.js";
+import { collectAutomationRuns } from "./automationsData.js";
+import type { AutomationFeedEntry } from "./automationsData.js";
 import {
   attentionCount,
   buildHomeAppItems,
@@ -172,9 +171,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     try {
       await deleteApp({ id: app.id });
       showToast(`Deleted ${draft ? "draft " : ""}"${app.name}"`);
-    } catch (err) {
+    } catch (error) {
       showToast(
-        `Could not delete: ${err instanceof Error ? err.message : String(err)}`
+        `Could not delete: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     void refreshApps();
@@ -195,9 +194,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     try {
       await deleteApp({ id: app.id });
       showToast(`Uninstalled "${app.name}"`);
-    } catch (err) {
+    } catch (error) {
       showToast(
-        `Could not uninstall: ${err instanceof Error ? err.message : String(err)}`
+        `Could not uninstall: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     void refreshApps();
@@ -222,9 +221,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         await renameInstalledApp({ id: gatewayAppId(app), name: next });
       else await updateAppMeta({ id: app.id, name: next });
       showToast(`Renamed to "${next}"`);
-    } catch (err) {
+    } catch (error) {
       showToast(
-        `Could not rename: ${err instanceof Error ? err.message : String(err)}`
+        `Could not rename: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     void refreshApps();
@@ -250,9 +249,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
           .then(({ turnId }) =>
             navigate({ kind: "run-view", automationId: row.ref, runId: turnId })
           )
-          .catch((err: unknown) =>
+          .catch((error: unknown) =>
             showToast(
-              `Run failed: ${err instanceof Error ? err.message : String(err)}`
+              `Run failed: ${error instanceof Error ? error.message : String(error)}`
             )
           );
       else if (pick === "edit")
@@ -268,9 +267,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
           if (!ok) return;
           void deleteAutomation({ automationId: row.ref })
             .then(() => showToast(`Deleted "${row.name}"`))
-            .catch((err: unknown) =>
+            .catch((error: unknown) =>
               showToast(
-                `Could not delete: ${err instanceof Error ? err.message : String(err)}`
+                `Could not delete: ${error instanceof Error ? error.message : String(error)}`
               )
             );
         });

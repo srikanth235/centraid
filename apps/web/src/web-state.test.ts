@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { webGatewayId, type WebConnection } from "./web-state.js";
+import { webGatewayId } from "./web-state.js";
+import type { WebConnection } from "./web-state.js";
 
 const base: WebConnection = {
   label: "Gateway",

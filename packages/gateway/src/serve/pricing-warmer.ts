@@ -16,11 +16,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import {
-  filterLiteLLM,
-  setPricingCatalog,
-  type PricingCatalog,
-} from "@centraid/app-engine";
+import { filterLiteLLM, setPricingCatalog } from "@centraid/app-engine";
+import type { PricingCatalog } from "@centraid/app-engine";
 
 const LITELLM_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -103,10 +100,10 @@ export class PricingWarmer {
         models,
       });
       this.logger?.info(`pricing catalog refreshed: ${count} models`);
-    } catch (err) {
+    } catch (error) {
       // Keep last-good (disk table) or the bundled snapshot — never a guess.
       this.logger?.warn(
-        `pricing catalog refresh failed: ${err instanceof Error ? err.message : String(err)}`
+        `pricing catalog refresh failed: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       this.refreshing = false;
@@ -149,9 +146,9 @@ export class PricingWarmer {
     try {
       await mkdir(path.dirname(this.cacheFile), { recursive: true });
       await writeFile(this.cacheFile, `${JSON.stringify(cache)}\n`);
-    } catch (err) {
+    } catch (error) {
       this.logger?.warn(
-        `pricing catalog cache write failed: ${err instanceof Error ? err.message : String(err)}`
+        `pricing catalog cache write failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

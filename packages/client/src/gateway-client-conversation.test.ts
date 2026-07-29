@@ -1,6 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
-let streamTurn: typeof import("./gateway-client-conversation.js").streamTurn;
+import type * as TypeImport_1ho0pgl from "./gateway-client-conversation.js";
+
+let streamTurn: typeof TypeImport_1ho0pgl.streamTurn;
 
 describe("gateway-client-conversation", () => {
   beforeAll(async () => {

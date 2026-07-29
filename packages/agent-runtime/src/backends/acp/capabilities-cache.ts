@@ -13,10 +13,8 @@ import path from "node:path";
 import type { RunnerKind } from "@centraid/app-engine";
 
 import { acpConfigFor } from "../../registry.js";
-import {
-  probeAcpCapabilities,
-  type AcpAgentCapabilities,
-} from "./probe-capabilities.js";
+import { probeAcpCapabilities } from "./probe-capabilities.js";
+import type { AcpAgentCapabilities } from "./probe-capabilities.js";
 
 export { type AcpAgentCapabilities } from "./probe-capabilities.js";
 

@@ -2,13 +2,11 @@ import { tileFinish } from "@centraid/design-tokens";
 import type { IconName } from "@centraid/design-tokens";
 import type { JSX } from "react";
 
-import {
-  roleBadge,
-  roleSentence,
-  type MemberScope,
-} from "../shell/memberScope.js";
+import { roleBadge, roleSentence } from "../shell/memberScope.js";
+import type { MemberScope } from "../shell/memberScope.js";
 import Icon from "../ui/Icon.js";
-import DevicesCard, { type DevicesCardProps } from "./DevicesCard.js";
+import DevicesCard from "./DevicesCard.js";
+import type { DevicesCardProps } from "./DevicesCard.js";
 
 import styles from "./HouseholdScreen.module.css";
 

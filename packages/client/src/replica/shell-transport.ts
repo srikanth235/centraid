@@ -1,9 +1,5 @@
-import {
-  authHeaders,
-  GatewayClientError,
-  href,
-  type GatewayAuth,
-} from "../gateway-auth.js";
+import { authHeaders, GatewayClientError, href } from "../gateway-auth.js";
+import type { GatewayAuth } from "../gateway-auth.js";
 import {
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,

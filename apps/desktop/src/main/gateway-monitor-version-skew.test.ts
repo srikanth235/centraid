@@ -5,8 +5,10 @@ import {
   applyVersionSkewAlert,
   DEFAULT_ALERT_SECONDS,
   initialRuntimeState,
-  type GatewayProbe,
-  type GatewayRuntimeState,
+} from "./gateway-monitor-core.js";
+import type {
+  GatewayProbe,
+  GatewayRuntimeState,
 } from "./gateway-monitor-core.js";
 import {
   EXPECTED_GATEWAY_VERSION,

@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type JSX } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   AuEditorCatalogConnectorDTO,
@@ -6,10 +7,8 @@ import type {
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import { Button, Icon } from "../ui/index.js";
-import {
-  ConnectorBrandGlyph,
-  type ConnectorTone,
-} from "./connectorBrandMarks.js";
+import { ConnectorBrandGlyph } from "./connectorBrandMarks.js";
+import type { ConnectorTone } from "./connectorBrandMarks.js";
 
 import styles from "./AutomationEditorScreen.module.css";
 
@@ -270,9 +269,9 @@ export function AutomationEditorConnectorsPicker({
         onToggleSelect(item.kind);
       }
       onConnected();
-    } catch (err) {
+    } catch (error) {
       showToast?.(
-        `Could not connect: ${err instanceof Error ? err.message : String(err)}`
+        `Could not connect: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       setBusyKind(null);
@@ -293,9 +292,9 @@ export function AutomationEditorConnectorsPicker({
         label: item.connection?.label ?? item.name,
       });
       onConnected();
-    } catch (err) {
+    } catch (error) {
       showToast?.(
-        `Authorize failed: ${err instanceof Error ? err.message : String(err)}`
+        `Authorize failed: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       setBusyKind(null);

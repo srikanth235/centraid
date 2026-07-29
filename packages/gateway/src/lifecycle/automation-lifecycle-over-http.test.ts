@@ -16,13 +16,15 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import * as automation from "@centraid/automation";
-import { scaffoldAppFiles, type ScaffoldFile } from "@centraid/blueprints";
+import { scaffoldAppFiles } from "@centraid/blueprints";
+import type { ScaffoldFile } from "@centraid/blueprints";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.ts";
-import { serve, type GatewayServeHandle } from "../serve/serve.ts";
+import { serve } from "../serve/serve.ts";
+import type { GatewayServeHandle } from "../serve/serve.ts";
 
 let dataDir: string;
 let handle: GatewayServeHandle;

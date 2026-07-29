@@ -20,22 +20,21 @@ import {
   deriveDedupKey,
   deriveNonce,
   encryptWithNonce,
-  type Keyring,
   masterKeyForEpoch,
 } from "./crypto.js";
+import type { Keyring } from "./crypto.js";
 import type { EngineLogger } from "./engine-log.js";
 import {
   assertManifestMatchesRegistry,
   canonicalJson,
   isSafeEntryPath,
-  type ManifestEntry,
-  type ManifestEntryKind,
   openManifest,
   READABLE_SNAPSHOT_FORMATS,
   sealManifest,
   SNAPSHOT_FORMAT_V2,
   validateSnapshotBasePair,
 } from "./manifest.js";
+import type { ManifestEntry, ManifestEntryKind } from "./manifest.js";
 import type { ObjectStore } from "./object-store.js";
 import {
   applyAvailableInOrder,
@@ -53,18 +52,21 @@ import {
   parseWalSegmentKey,
   planCoordinatedReplay,
   planWalReplay,
-  type WalDbName,
-  type WalGroupCloser,
-  type WalPairMarker,
-  type WalSegmentAddress,
-  type WalStreamListing,
   WAL_DB_FILES,
   WAL_DB_NAMES,
   walPairMarkerPrefix,
   walSegmentKey,
   walSegmentPrefix,
 } from "./wal-format.js";
-import { replayWalSegments, type WalReplayOutcome } from "./wal-restore.js";
+import type {
+  WalDbName,
+  WalGroupCloser,
+  WalPairMarker,
+  WalSegmentAddress,
+  WalStreamListing,
+} from "./wal-format.js";
+import { replayWalSegments } from "./wal-restore.js";
+import type { WalReplayOutcome } from "./wal-restore.js";
 
 export interface SourceEntry {
   /** Path recorded in the manifest — relative, forward-slash, no traversal. */
@@ -667,12 +669,12 @@ export async function restoreSnapshot(
   let destEntries: string[];
   try {
     destEntries = await fs.readdir(opts.destDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       await fs.mkdir(opts.destDir, { recursive: true });
       destEntries = [];
     } else {
-      throw err;
+      throw error;
     }
   }
   if (destEntries.length > 0) {

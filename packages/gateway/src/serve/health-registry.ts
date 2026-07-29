@@ -405,10 +405,10 @@ export class HealthRegistry {
           state.status = result.status;
           if (result.detail !== undefined) state.detail = result.detail;
           if (result.status === "ok") state.lastOkAt = this.now();
-        } catch (err) {
+        } catch (error) {
           this.reportError(
             component,
-            err instanceof Error ? err.message : String(err)
+            error instanceof Error ? error.message : String(error)
           );
         }
       })

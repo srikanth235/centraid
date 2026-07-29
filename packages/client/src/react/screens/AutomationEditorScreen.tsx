@@ -1,13 +1,7 @@
 import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#325) single cohesive screen component (Name/Instructions/trigger-picker/tabs form for one surface); splitting would fragment one visual unit
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type JSX,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent, JSX } from "react";
 
 import { relativeRunLabel } from "../../app-format.js";
 import { glyphForId, hueForId } from "../../automation-identity.js";
@@ -1405,13 +1399,17 @@ export default function AutomationEditorScreen({
           : cat?.connection;
         if (connection) {
           setConnectionBindings((m) => {
-            const copy = new Map(m);
-            copy.set(kind, {
-              connectionId: connection.connectionId,
-              kind,
-              label: connection.label,
-            });
-            return copy;
+            return new Map([
+              ...m,
+              [
+                kind,
+                {
+                  connectionId: connection.connectionId,
+                  kind,
+                  label: connection.label,
+                },
+              ],
+            ]);
           });
         }
       }
@@ -1427,9 +1425,7 @@ export default function AutomationEditorScreen({
   }): void => {
     setSelectedConnectors((prev) => new Set(prev).add(binding.kind));
     setConnectionBindings((m) => {
-      const copy = new Map(m);
-      copy.set(binding.kind, binding);
-      return copy;
+      return new Map([...m, [binding.kind, binding]]);
     });
   };
 

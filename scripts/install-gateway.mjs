@@ -71,8 +71,8 @@ function main(argv) {
   let args;
   try {
     args = parseInstallArgs(argv);
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : err);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
     process.exit(2);
   }
   if (args.help) {
@@ -92,7 +92,7 @@ function main(argv) {
 
   const home = process.env.HOME || "";
   let prefix = args.prefix;
-  let useGlobal = args.global && !prefix;
+  const useGlobal = args.global && !prefix;
   if (!useGlobal && !prefix) {
     prefix = defaultInstallPrefix(home);
   }
@@ -105,8 +105,8 @@ function main(argv) {
       fromPackDir: args.fromPackDir,
       packFiles,
     });
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : err);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   }
 

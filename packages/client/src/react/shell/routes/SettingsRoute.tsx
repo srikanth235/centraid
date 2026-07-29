@@ -1,5 +1,6 @@
 import type { IconName } from "@centraid/design-tokens";
-import { Fragment, type JSX, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   AccentKey,
@@ -214,9 +215,9 @@ export default function SettingsRoute({
         showToast(`Saved · ${data.name}`);
         refreshSpace();
       })
-      .catch((err: unknown) =>
+      .catch((error: unknown) =>
         showToast(
-          `Save failed: ${err instanceof Error ? err.message : String(err)}`
+          `Save failed: ${error instanceof Error ? error.message : String(error)}`
         )
       );
   };
@@ -234,9 +235,9 @@ export default function SettingsRoute({
         await deleteSpace(vaultId, typed);
         showToast(`Deleted · ${name}`);
         navigate({ kind: "home" });
-      } catch (err) {
+      } catch (error) {
         showToast(
-          `Delete failed: ${err instanceof Error ? err.message : String(err)}`
+          `Delete failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     })();

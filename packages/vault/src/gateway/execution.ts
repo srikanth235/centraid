@@ -17,8 +17,8 @@ import {
   finalizeOrdinaryInvocationCommit,
   readReplicaInvocationCommit,
   recordReplicaInvocationCommitInTransaction,
-  type ReplicaInvocationAudit,
 } from "../replica/invocation-commits.js";
+import type { ReplicaInvocationAudit } from "../replica/invocation-commits.js";
 import {
   readDurableParkedDenial,
   readDurableParkedPayload,
@@ -38,11 +38,8 @@ import {
 import { SEED_DEMO_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
 import type { ConsentAllow } from "./consent.js";
-import {
-  evaluateConditions,
-  judgmentVeto,
-  type CommandRow,
-} from "./contract.js";
+import { evaluateConditions, judgmentVeto } from "./contract.js";
+import type { CommandRow } from "./contract.js";
 import {
   actingMemberDetail,
   writeCheck,
@@ -669,7 +666,7 @@ export function runContractAndExecute(
             }
           : null;
       },
-      claimStaged: (sha256, options) =>
+      claimStaged: (sha256, optionsLocal) =>
         promoteStagedBlob(
           {
             vault: db.vault,
@@ -680,7 +677,7 @@ export function runContractAndExecute(
             creatorPartyId: identity.partyId,
           },
           sha256,
-          options
+          optionsLocal
         ),
       spill: (bytes) => db.blobs.ingestSync(bytes).sha256,
       has: (sha256) => db.blobs.hasSync(sha256),
@@ -832,13 +829,15 @@ export function runContractAndExecute(
     });
     commitInvocationTransaction(db.vault, vaultTransaction);
     if (!options.deferReplicaNotify) notifyReplicaCommit(db.vault);
-  } catch (err) {
+  } catch (error) {
     rollbackInvocationTransaction(db.vault, vaultTransaction);
     setInvocationStatus(db, invocationId, "failed");
     // A handler (or SQLite constraint message) that echoes its input would
     // put a submitted secret into the journal and the HTTP error — scrub
     // declared sealed inputs out of the text first (issue #298 item 7).
-    const reason = scrub(err instanceof Error ? err.message : String(err));
+    const reason = scrub(
+      error instanceof Error ? error.message : String(error)
+    );
     const receiptId = writeReceipt(db.journal, {
       grantId: consent.grantId,
       invocationId,

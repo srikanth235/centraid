@@ -38,7 +38,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { type DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 
 import type { DatabaseProvider } from "../stores/gateway-db.js";
 import type { ArchiveSegmentRef } from "./rehydrate.js";
@@ -63,12 +63,14 @@ import {
   itemFromRaw,
   attachmentFromRaw,
   stateFromRaw,
-  type PreparedStatements,
-  type RawConversation,
-  type RawTurn,
-  type RawItem,
-  type RawAttachment,
-  type RawState,
+} from "./store-sql.js";
+import type {
+  PreparedStatements,
+  RawConversation,
+  RawTurn,
+  RawItem,
+  RawAttachment,
+  RawState,
 } from "./store-sql.js";
 import type { AdapterUsageSnapshot } from "./turn.js";
 
@@ -318,13 +320,13 @@ export class ConversationStore {
       const out = fn();
       db.exec("COMMIT");
       return out;
-    } catch (err) {
+    } catch (error) {
       try {
         db.exec("ROLLBACK");
       } catch {
         /* already rolled back */
       }
-      throw err;
+      throw error;
     }
   }
 

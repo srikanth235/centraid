@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 
 import type { ConformanceCase, ConformanceHarness } from "./conformance.js";
 import type { ObjectListEntry } from "./object-store.js";
-import {
-  BackupProviderError,
-  type BackupProvider,
-  type ProviderAuditEvent,
-  type ProviderInventoryObject,
-  type ProviderPolicyDeclaration,
-  type StoreClass,
+import { BackupProviderError } from "./provider.js";
+import type {
+  BackupProvider,
+  ProviderAuditEvent,
+  ProviderInventoryObject,
+  ProviderPolicyDeclaration,
+  StoreClass,
 } from "./provider.js";
 
 const TEXT = new TextEncoder();

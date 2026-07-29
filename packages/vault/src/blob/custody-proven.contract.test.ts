@@ -5,7 +5,8 @@
 import { describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { updateBlobStoreSettings } from "../host.js";
 import { blobCustodyProven } from "./custody-proven.js";
 import { sha256OfBytes } from "./store.js";

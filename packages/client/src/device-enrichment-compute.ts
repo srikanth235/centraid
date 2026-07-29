@@ -21,9 +21,9 @@ export interface DeviceWorkContribution {
   mediaType: string;
 }
 
-let pdfRuntime:
-  | Promise<typeof import("pdfjs-dist/legacy/build/pdf.mjs")>
-  | undefined;
+type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
+
+let pdfRuntime: Promise<PdfJs> | undefined;
 
 function readBlobBytes(source: Blob): Promise<ArrayBuffer> {
   const native = source as Blob & { arrayBuffer?: () => Promise<ArrayBuffer> };
@@ -47,9 +47,7 @@ function readBlobBytes(source: Blob): Promise<ArrayBuffer> {
   });
 }
 
-async function loadPdfJs(): Promise<
-  typeof import("pdfjs-dist/legacy/build/pdf.mjs")
-> {
+async function loadPdfJs(): Promise<PdfJs> {
   pdfRuntime ??= import("pdfjs-dist/legacy/build/pdf.mjs").then((pdfjs) => {
     pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
     return pdfjs;

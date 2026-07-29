@@ -22,7 +22,8 @@
 
 import { isValidIanaTimeZone } from "../cron-timezone.js";
 import { ManifestError } from "./manifest-errors.js";
-import { validateOutputSchema, type OutputSchema } from "./manifest-output.js";
+import { validateOutputSchema } from "./manifest-output.js";
+import type { OutputSchema } from "./manifest-output.js";
 import { isValidRef } from "./ref.js";
 
 export { isValidIanaTimeZone } from "../cron-timezone.js";
@@ -573,16 +574,20 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
           `${field}.where`
         );
       }
-      where = t.where.map((raw, i) => {
+      where = t.where.map((rawLocal, i) => {
         const cf = `${field}.where[${i}]`;
-        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        if (
+          rawLocal === null ||
+          typeof rawLocal !== "object" ||
+          Array.isArray(rawLocal)
+        ) {
           throw new ManifestError(
             "invalid_trigger",
             `manifest.${cf} must be an object`,
             cf
           );
         }
-        const c = raw as Record<string, unknown>;
+        const c = rawLocal as Record<string, unknown>;
         const column = requireString(c.column, `${cf}.column`);
         if (
           typeof c.op !== "string" ||
@@ -616,9 +621,9 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         `${field}.entities`
       );
     }
-    const entities = t.entities.map((raw, i) => {
+    const entities = t.entities.map((rawLocal, i) => {
       const ef = `${field}.entities[${i}]`;
-      const entity = requireString(raw, ef);
+      const entity = requireString(rawLocal, ef);
       if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
         throw new ManifestError(
           "invalid_trigger",
@@ -956,16 +961,20 @@ function validateVault(raw: unknown): ManifestVault | undefined {
       "vault.scopes"
     );
   }
-  const scopes = v.scopes.map((raw, i) => {
+  const scopes = v.scopes.map((rawLocal, i) => {
     const field = `vault.scopes[${i}]`;
-    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    if (
+      rawLocal === null ||
+      typeof rawLocal !== "object" ||
+      Array.isArray(rawLocal)
+    ) {
       throw new ManifestError(
         "invalid_field",
         `manifest.${field} must be an object`,
         field
       );
     }
-    const s = raw as Record<string, unknown>;
+    const s = rawLocal as Record<string, unknown>;
     const schema = requireString(s.schema, `${field}.schema`);
     if (typeof s.verbs !== "string" || !VAULT_VERBS.has(s.verbs)) {
       throw new ManifestError(
@@ -1100,10 +1109,10 @@ export function parseManifest(json: string): Manifest {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
-  } catch (err) {
+  } catch (error) {
     throw new ManifestError(
       "invalid_json",
-      `manifest is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+      `manifest is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
     );
   }
   return validateManifest(raw);

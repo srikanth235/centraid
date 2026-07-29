@@ -1,11 +1,11 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MemberScope } from "../shell/memberScope.js";
-import HouseholdScreen, {
-  type HouseholdScreenProps,
-} from "./HouseholdScreen.js";
+import HouseholdScreen from "./HouseholdScreen.js";
+import type { HouseholdScreenProps } from "./HouseholdScreen.js";
 
 // Household is the page that had to exist once the space switcher was retired
 // (#599, Decision 14): a member is no longer "in" one space, so something must

@@ -1,18 +1,21 @@
 import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_bmsl46 from "../../gateway-client.js";
+import type * as TypeImport_4z974v from "./useMemberScopes.js";
+
 const { listAppScopes, listVaults } = vi.hoisted(() => ({
-  listAppScopes:
-    vi.fn<typeof import("../../gateway-client.js").listAppScopes>(),
-  listVaults: vi.fn<typeof import("../../gateway-client.js").listVaults>(),
+  listAppScopes: vi.fn<typeof TypeImport_bmsl46.listAppScopes>(),
+  listVaults: vi.fn<typeof TypeImport_bmsl46.listVaults>(),
 }));
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   listAppScopes,
   listVaults,
 }));
 
-let useMemberScopes: typeof import("./useMemberScopes.js").useMemberScopes;
+let useMemberScopes: typeof TypeImport_4z974v.useMemberScopes;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 describe("useMemberScopes suite", () => {

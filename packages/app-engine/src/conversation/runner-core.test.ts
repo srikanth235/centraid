@@ -12,10 +12,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Dispatcher } from "../handlers/dispatcher.js";
 import type { ModelSubsystem } from "../stores/prefs-store.js";
-import {
-  makeConversationRunnerCore,
-  type ConversationRunnerCoreOptions,
-} from "./runner-core.js";
+import { makeConversationRunnerCore } from "./runner-core.js";
+import type { ConversationRunnerCoreOptions } from "./runner-core.js";
 import type { ConversationTurnInput } from "./runner.js";
 import type { RunnerPrefs, RunTurnFn, TurnInput } from "./turn.js";
 

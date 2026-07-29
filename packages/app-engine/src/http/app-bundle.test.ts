@@ -16,7 +16,8 @@ import {
   findBundleByHash,
   prewarmAppAssets,
 } from "./app-bundle.js";
-import { serveStatic, type ServeStaticOptions } from "./static-server.js";
+import { serveStatic } from "./static-server.js";
+import type { ServeStaticOptions } from "./static-server.js";
 
 interface MockRes {
   statusCode: number;

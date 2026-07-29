@@ -6,12 +6,10 @@ import {
   installDesktopAssistHandoff,
   parseAssistHandoffUrl,
 } from "./assist-oauth-handoff.js";
+import type * as TypeImport_1jh8y15 from "./gateway-client-connections.js";
 
 const { complete } = vi.hoisted(() => ({
-  complete:
-    vi.fn<
-      typeof import("./gateway-client-connections.js").completeAssistAuthorization
-    >(),
+  complete: vi.fn<typeof TypeImport_1jh8y15.completeAssistAuthorization>(),
 }));
 vi.mock(import("./gateway-client-connections.js"), () => ({
   completeAssistAuthorization: complete,

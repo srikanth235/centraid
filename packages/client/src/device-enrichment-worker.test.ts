@@ -2,42 +2,28 @@ import { describe, expect, test, vi } from "vitest";
 
 import type { DeviceWorkContribution } from "./device-enrichment-compute.js";
 import { computeDeviceWorkContributions } from "./device-enrichment-compute.js";
-import {
-  runDeviceEnrichmentWorkerOnce,
-  type DeviceWorkerApi,
-} from "./device-enrichment-worker.js";
+import { runDeviceEnrichmentWorkerOnce } from "./device-enrichment-worker.js";
+import type { DeviceWorkerApi } from "./device-enrichment-worker.js";
 import type {
   CentraidGatewayDevice,
   DeviceEnrichmentLease,
 } from "./gateway-client-devices.js";
+import type * as TypeImport_6pj8pj from "./gateway-client-devices.js";
 
 vi.mock(import("./gateway-client-devices.js"), () => ({
   finishGatewayDeviceWork:
-    vi.fn<
-      typeof import("./gateway-client-devices.js").finishGatewayDeviceWork
-    >(),
+    vi.fn<typeof TypeImport_6pj8pj.finishGatewayDeviceWork>(),
   leaseGatewayDeviceWork:
-    vi.fn<
-      typeof import("./gateway-client-devices.js").leaseGatewayDeviceWork
-    >(),
-  listGatewayDevices:
-    vi.fn<typeof import("./gateway-client-devices.js").listGatewayDevices>(),
+    vi.fn<typeof TypeImport_6pj8pj.leaseGatewayDeviceWork>(),
+  listGatewayDevices: vi.fn<typeof TypeImport_6pj8pj.listGatewayDevices>(),
   readGatewayDeviceWorkSource:
-    vi.fn<
-      typeof import("./gateway-client-devices.js").readGatewayDeviceWorkSource
-    >(),
+    vi.fn<typeof TypeImport_6pj8pj.readGatewayDeviceWorkSource>(),
   releaseGatewayDeviceWork:
-    vi.fn<
-      typeof import("./gateway-client-devices.js").releaseGatewayDeviceWork
-    >(),
+    vi.fn<typeof TypeImport_6pj8pj.releaseGatewayDeviceWork>(),
   setGatewayDeviceCompute:
-    vi.fn<
-      typeof import("./gateway-client-devices.js").setGatewayDeviceCompute
-    >(),
+    vi.fn<typeof TypeImport_6pj8pj.setGatewayDeviceCompute>(),
   stageGatewayDeviceWorkDerivative:
-    vi.fn<
-      typeof import("./gateway-client-devices.js").stageGatewayDeviceWorkDerivative
-    >(),
+    vi.fn<typeof TypeImport_6pj8pj.stageGatewayDeviceWorkDerivative>(),
 }));
 
 const SHA = "a".repeat(64);

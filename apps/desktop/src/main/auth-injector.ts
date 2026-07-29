@@ -20,13 +20,14 @@
 // Pure rewrite rules live in `auth-injector-core.ts` (unit-tested without
 // Electron). This file only wires them onto `session.webRequest`.
 
-import { session, type Session } from "electron";
+import { session } from "electron";
+import type { Session } from "electron";
 
 import {
   applyIncomingFrameRelaxation,
   applyOutgoingAuthHeaders,
-  type AuthInjectorSnapshot,
 } from "./auth-injector-core.js";
+import type { AuthInjectorSnapshot } from "./auth-injector-core.js";
 import { loadSettings } from "./settings.js";
 
 let state: AuthInjectorSnapshot | null = null;

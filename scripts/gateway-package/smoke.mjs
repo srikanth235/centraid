@@ -150,7 +150,7 @@ async function main() {
   await hostMode();
 }
 
-main().catch((err) => {
-  process.stderr.write(`${err instanceof Error ? err.stack : err}\n`);
+main().catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.stack : error}\n`);
   process.exit(1);
 });

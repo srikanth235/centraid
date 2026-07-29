@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
@@ -27,8 +28,10 @@ export default function RestartGatewayButton({
     try {
       const result = await onRestart();
       if (!result.ok) setError(result.error ?? "Restart was refused.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       setPending(false);
     }

@@ -65,8 +65,8 @@ export default async function autofillCandidates({ ctx }: { ctx: HandlerCtx }) {
           warned.has(row.item_id),
       }));
     return { candidates };
-  } catch (err) {
-    const error = err as { code?: string; message?: string };
+  } catch (caughtError) {
+    const error = caughtError as { code?: string; message?: string };
     return {
       candidates: [],
       vaultDenied: { code: error.code, message: error.message },

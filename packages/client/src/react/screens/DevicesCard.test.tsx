@@ -1,12 +1,14 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   CentraidGatewayDevice,
   GatewayMember,
 } from "../../gateway-client.js";
-import DevicesCard, { type DevicesCardProps } from "./DevicesCard.js";
+import DevicesCard from "./DevicesCard.js";
+import type { DevicesCardProps } from "./DevicesCard.js";
 
 // The card is people-first (#599): every assertion here is about a PERSON —
 // their access in ownership words, their devices, and the two distinct

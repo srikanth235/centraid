@@ -6,28 +6,29 @@ import type {
 // member's own scope plus every audience they belong to.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import {
   addInlineScope,
   createInlineCentraidClient,
   InlineScopeError,
-  type InlineScopeBinding,
-  type InlineScopeSession,
+} from "./centraid-inline.js";
+import type {
+  InlineScopeBinding,
+  InlineScopeSession,
 } from "./centraid-inline.js";
 
 const { doFetch, readJson } = vi.hoisted(() => ({
-  doFetch: vi.fn<typeof import("../../gateway-client-core.js").doFetch>(),
+  doFetch: vi.fn<typeof TypeImport_oycips.doFetch>(),
   readJson: vi.fn<(res: Response, op: string) => Promise<unknown>>(),
 }));
 vi.mock(
   import("../../gateway-client-core.js") as Promise<unknown>,
   async () => ({
-    auth: vi.fn<typeof import("../../gateway-client-core.js").auth>(
-      async () => ({
-        baseUrl: "https://gw.test",
-        token: "tok",
-      })
-    ),
+    auth: vi.fn<typeof TypeImport_oycips.auth>(async () => ({
+      baseUrl: "https://gw.test",
+      token: "tok",
+    })),
     authHeaders: (token: string | undefined, ct?: string) => ({
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(ct ? { "Content-Type": ct } : {}),

@@ -10,9 +10,10 @@ import {
   openDirectory,
   TRAILER_BYTES,
   unsealFrame,
-  type FrameDirectory,
 } from "./seal-frames.js";
-import { resolveRange, type BlobRange, type BlobStore } from "./store.js";
+import type { FrameDirectory } from "./seal-frames.js";
+import { resolveRange } from "./store.js";
+import type { BlobRange, BlobStore } from "./store.js";
 
 /**
  * Fetch a whole remote object and return its PLAINTEXT (issue #405 §4): one

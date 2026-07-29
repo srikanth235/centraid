@@ -20,8 +20,8 @@ import {
   createConversation,
   streamTurn,
   vaultParked,
-  type TurnStreamEvent,
 } from "../../gateway-client.js";
+import type { TurnStreamEvent } from "../../gateway-client.js";
 import {
   providerConsentWire,
   withProviderConsent,

@@ -9,9 +9,11 @@ import {
   walGroupCloserKey,
   walPairMarkerKey,
   walSegmentKey,
-  type WalDbName,
-  type WalGroupCloser,
-  type WalSegmentAddress,
+} from "./wal-format.js";
+import type {
+  WalDbName,
+  WalGroupCloser,
+  WalSegmentAddress,
 } from "./wal-format.js";
 
 const hex32: fc.Arbitrary<string> = fc

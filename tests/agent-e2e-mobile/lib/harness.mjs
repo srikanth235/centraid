@@ -345,18 +345,18 @@ export async function runFlow(slug, fn) {
   };
 
   const notes = [];
+  const run = async (yaml, hint, options = {}) => {
+    const label = nextLabel(hint);
+    console.log(`  run     : ${label}`);
+    await runMaestroChunk(yaml, { state, label, ...options });
+  };
   const ctx = {
     state,
     note(m) {
       notes.push(m);
       console.log(`  note    : ${m}`);
     },
-  };
-
-  ctx.run = async (yaml, hint, options = {}) => {
-    const label = nextLabel(hint);
-    console.log(`  run     : ${label}`);
-    await runMaestroChunk(yaml, { state, label, ...options });
+    run,
   };
 
   ctx.configureGateway = async (
@@ -470,8 +470,8 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
   const t0 = Date.now();
   try {
     result = await fn(ctx);
-  } catch (e) {
-    error = e;
+  } catch (caughtError) {
+    error = caughtError;
   }
   const elapsedMs = Date.now() - t0;
   const pass = !error && result?.pass !== false;
@@ -507,8 +507,8 @@ if (cmd) {
       process.exit(1);
     }
     console.log(JSON.stringify(out, null, 2));
-  } catch (err) {
-    console.error(err.message ?? err);
+  } catch (error) {
+    console.error(error.message ?? error);
     process.exit(1);
   }
 }

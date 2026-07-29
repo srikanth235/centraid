@@ -396,10 +396,10 @@ export function parseManifest(json: string): Manifest {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
-  } catch (err) {
+  } catch (error) {
     throw new ManifestError(
       "invalid_json",
-      `app.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+      `app.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
     );
   }
   return validateManifest(raw);

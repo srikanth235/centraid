@@ -10,7 +10,8 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { family, useTheme, type ThemeColors } from "../../kit/theme";
+import { family, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import { firstNameOf, greetingFor, initialsOf } from "../../lib/profile";
 
 export interface GreetingHeaderProps {

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
-import {
-  browseRows,
-  type AtlasCensusPayload,
-  type AtlasGraphPayload,
-  type AtlasPulsePayload,
+import { browseRows } from "../../gateway-client.js";
+import type {
+  AtlasCensusPayload,
+  AtlasGraphPayload,
+  AtlasPulsePayload,
 } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";

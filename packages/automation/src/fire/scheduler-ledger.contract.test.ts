@@ -9,8 +9,8 @@ import {
   SchedulerLedgerStore,
   SCHEDULER_LEDGER_AUTOMATION_ID,
   SCHEDULER_LEDGER_KEY,
-  type MissedWindowEntry,
 } from "./scheduler-ledger.js";
+import type { MissedWindowEntry } from "./scheduler-ledger.js";
 
 const at = (h: number, mi: number, day = 1): Date =>
   new Date(2026, 0, day, h, mi, 0, 0);

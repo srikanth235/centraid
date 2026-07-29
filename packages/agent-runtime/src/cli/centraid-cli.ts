@@ -58,12 +58,12 @@ function commandPreviewSnapshot(): void {
       mtimeMs: stat.mtimeMs,
       ageMs: Date.now() - stat.mtimeMs,
     });
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       printJson({ path: abs, exists: false });
       return;
     }
-    fail(err instanceof Error ? err.message : String(err));
+    fail(error instanceof Error ? error.message : String(error));
   }
 }
 

@@ -5,7 +5,8 @@
 
 import { describe, expect, test } from "vitest";
 
-import { openVaultDb, type VaultDb } from "./db.js";
+import { openVaultDb } from "./db.js";
+import type { VaultDb } from "./db.js";
 import { nowIso, sha256Hex, uuidv7 } from "./ids.js";
 import {
   findArchiveManifest,

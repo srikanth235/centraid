@@ -5,7 +5,8 @@ import type { BoardSection, PendingAdd, Task, View } from "../types.ts";
 // for parked adds (no task_id exists yet, so these are rendered as ghost
 // rows rather than real Row components), the bucketed/logbook sections, the
 // empty state and the bounded-window "Show more" footer.
-import { Capture, type CaptureProps } from "./Capture.tsx";
+import { Capture } from "./Capture.tsx";
+import type { CaptureProps } from "./Capture.tsx";
 import { Row } from "./Row.tsx";
 import { Icon } from "./Shared.tsx";
 

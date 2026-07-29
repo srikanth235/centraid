@@ -11,21 +11,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
-import {
-  family,
-  radii,
-  spacing,
-  t,
-  useTheme,
-  type ThemeColors,
-} from "../kit/theme";
+import { family, radii, spacing, t, useTheme } from "../kit/theme";
+import type { ThemeColors } from "../kit/theme";
 import {
   confirmParked,
   GatewayError,
   listParked,
   resolveGatewayBase,
-  type ParkedInvocation,
 } from "../lib/gateway";
+import type { ParkedInvocation } from "../lib/gateway";
 import type { SettingsScreenProps } from "../navigation";
 
 // Parked vault invocations awaiting the owner's say-so — medium+ acts that
@@ -53,10 +47,10 @@ async function loadApprovals(
     }
     const rows = await listParked();
     setState({ kind: "ready", rows });
-  } catch (err) {
+  } catch (error) {
     const message =
-      err instanceof GatewayError || err instanceof Error
-        ? err.message
+      error instanceof GatewayError || error instanceof Error
+        ? error.message
         : "Could not load approvals.";
     setState({ kind: "error", message });
   }
@@ -95,9 +89,11 @@ export default function ApprovalsScreen({
               }
             : prev
         );
-      } catch (err) {
+      } catch (error) {
         setActionError(
-          err instanceof Error ? err.message : "Could not record the decision."
+          error instanceof Error
+            ? error.message
+            : "Could not record the decision."
         );
       }
     },

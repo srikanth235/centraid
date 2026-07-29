@@ -1,6 +1,7 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t, type ThemeColors } from "../../kit/theme";
+import { family, radii, spacing, t } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 
 // StyleSheet keys stay alphabetized (repo convention). Colour comes from the
 // resolved theme (solar-cream light / dark), so `makeStyles(colors)` is memoized

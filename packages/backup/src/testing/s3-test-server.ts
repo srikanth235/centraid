@@ -89,13 +89,17 @@ export class S3TestServer {
     // doesn't exist until after the constructor runs (which needs the
     // already-listening server's assigned port) — tie the knot with a
     // pre-declared binding the closure captures by reference.
-    let self: S3TestServer;
+    let getSelf = (): S3TestServer => {
+      throw new Error("S3TestServer request arrived before initialization");
+    };
     const server = http.createServer((req, res) => {
-      self.handle(req, res).catch((err: unknown) => {
-        if (!res.headersSent)
-          res.writeHead(500, { "content-type": "text/plain" });
-        res.end(err instanceof Error ? err.message : String(err));
-      });
+      getSelf()
+        .handle(req, res)
+        .catch((error: unknown) => {
+          if (!res.headersSent)
+            res.writeHead(500, { "content-type": "text/plain" });
+          res.end(error instanceof Error ? error.message : String(error));
+        });
     });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
@@ -105,7 +109,8 @@ export class S3TestServer {
     if (address === null || typeof address === "string") {
       throw new Error("S3TestServer: failed to bind a TCP port");
     }
-    self = new S3TestServer(server, address.port, listPageSize);
+    const self = new S3TestServer(server, address.port, listPageSize);
+    getSelf = () => self;
     return self;
   }
 

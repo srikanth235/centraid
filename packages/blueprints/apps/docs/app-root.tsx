@@ -153,9 +153,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       closePopover();
       bump();
     };
-    const core = {} as Core;
+    let core = undefined as unknown as Core;
 
-    core.refresh = async (): Promise<void> => {
+    const refresh = async (): Promise<void> => {
       let next: DriveResult;
       try {
         next = await window.centraid.read<DriveResult>({
@@ -205,6 +205,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // a background refresh never closes it out from under a typing user.
       bump();
     };
+    core = { refresh } as Core;
 
     core.applySearch = debounce(async () => {
       const q = (

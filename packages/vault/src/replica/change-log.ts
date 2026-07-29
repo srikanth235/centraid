@@ -4,12 +4,8 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { REPLICA_SCHEMA_EPOCH } from "../schema/replica.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
-import {
-  formatReplicaCursor,
-  parseReplicaCursor,
-  type ReplicaCursor,
-  type ReplicaCursorInput,
-} from "./cursor.js";
+import { formatReplicaCursor, parseReplicaCursor } from "./cursor.js";
+import type { ReplicaCursor, ReplicaCursorInput } from "./cursor.js";
 import { replicaUnavailableColumnsOf } from "./unavailable-columns.js";
 
 export const REPLICA_RETENTION_DAYS = 30;

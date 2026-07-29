@@ -1,5 +1,6 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import {
   afterEach,
   beforeAll,
@@ -9,6 +10,8 @@ import {
   it,
   vi,
 } from "vitest";
+
+import type * as TypeImport_1mc1xey from "./App.js";
 
 type GatewayClient = typeof import("../../gateway-client.js");
 
@@ -74,7 +77,7 @@ vi.mock(import("./store.js") as Promise<unknown>, () => ({
   },
 }));
 
-let App: typeof import("./App.js").default;
+let App: typeof TypeImport_1mc1xey.default;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 

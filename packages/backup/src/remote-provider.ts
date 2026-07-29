@@ -24,24 +24,24 @@
 
 import { requestStorageGrant } from "./cas-grant.js";
 import type { ObjectStore } from "./object-store.js";
-import {
-  BackupProviderError,
-  type AccountStatus,
-  type BackupProvider,
-  type ProviderAuditPage,
-  type ProviderAuditQuery,
-  type ProviderCapabilities,
-  type ProviderInventoryPage,
-  type ProviderInventoryQuery,
-  type ProviderPolicy,
-  type ProviderPolicyDeclaration,
-  type S3Grant,
-  type SnapshotRegistration,
-  type SnapshotRow,
-  type StoreClass,
-  type TargetInfo,
-  type Usage,
-  type UsageByStore,
+import { BackupProviderError } from "./provider.js";
+import type {
+  AccountStatus,
+  BackupProvider,
+  ProviderAuditPage,
+  ProviderAuditQuery,
+  ProviderCapabilities,
+  ProviderInventoryPage,
+  ProviderInventoryQuery,
+  ProviderPolicy,
+  ProviderPolicyDeclaration,
+  S3Grant,
+  SnapshotRegistration,
+  SnapshotRow,
+  StoreClass,
+  TargetInfo,
+  Usage,
+  UsageByStore,
 } from "./provider.js";
 import { S3ObjectStore } from "./s3-store.js";
 import { callProviderRoute } from "./wire-client.js";

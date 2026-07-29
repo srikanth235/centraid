@@ -1,4 +1,5 @@
-import { webCryptoDigest, type ReplicaDigest } from "./digest.js";
+import { webCryptoDigest } from "./digest.js";
+import type { ReplicaDigest } from "./digest.js";
 import { ReplicaProtocolError } from "./errors.js";
 import type { ReplicaValue } from "./types.js";
 

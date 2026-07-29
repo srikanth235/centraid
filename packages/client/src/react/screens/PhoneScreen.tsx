@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   PhoneBridgeProps,

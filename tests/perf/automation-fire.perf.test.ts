@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { runFire, type OpenDispatch } from "@centraid/automation";
+import { runFire } from "@centraid/automation";
+import type { OpenDispatch } from "@centraid/automation";
 import {
   qualityRegressionBudget,
   recordQualityResult,

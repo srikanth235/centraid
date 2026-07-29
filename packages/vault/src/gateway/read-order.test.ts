@@ -4,11 +4,14 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { compileFilters, compileOrderBy } from "./filters.js";
-import { createGateway, Gateway } from "./gateway.js";
+import type { Gateway } from "./gateway.js";
+import { createGateway } from "./gateway.js";
 import type { Credential } from "./types.js";
 
 let db: VaultDb;

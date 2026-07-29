@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
-import { type JSX, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { JSX } from "react";
 
 import Button from "../ui/Button.js";
 import { cx } from "../ui/cx.js";

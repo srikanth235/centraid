@@ -15,7 +15,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { runWithVaultContext, vaultContext } from "../serve/vault-context.js";
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
 import { makeReplicaRouteHandler } from "./replica-routes.js";

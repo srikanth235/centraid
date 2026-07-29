@@ -2,6 +2,8 @@
 // native imaging/file stack at the top level, so those are stubbed to let it
 // load under node; only the perceptual hash is exercised here.
 
+import type * as TypeImport_1299ylc from "expo-image-manipulator";
+import type * as TypeImport_7z4mwb from "expo-video-thumbnails";
 import { describe, expect, it, vi } from "vitest";
 
 import { dhash } from "./derivatives-native";
@@ -21,15 +23,13 @@ vi.mock(import("expo-file-system"), () => ({
   Paths: { document: {} } as unknown as ExpoFileSystem["Paths"],
 }));
 vi.mock(import("expo-image-manipulator"), () => ({
-  manipulateAsync:
-    vi.fn<typeof import("expo-image-manipulator").manipulateAsync>(),
+  manipulateAsync: vi.fn<typeof TypeImport_1299ylc.manipulateAsync>(),
   SaveFormat: {
     JPEG: "jpeg",
-  } as unknown as typeof import("expo-image-manipulator").SaveFormat,
+  } as unknown as typeof TypeImport_1299ylc.SaveFormat,
 }));
 vi.mock(import("expo-video-thumbnails"), () => ({
-  getThumbnailAsync:
-    vi.fn<typeof import("expo-video-thumbnails").getThumbnailAsync>(),
+  getThumbnailAsync: vi.fn<typeof TypeImport_7z4mwb.getThumbnailAsync>(),
 }));
 vi.mock(import("../gateway"), () => ({ authHeader: () => ({}) }));
 

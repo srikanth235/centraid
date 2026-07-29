@@ -16,7 +16,8 @@
 // accents, a prominent active card. Mechanics mirror the Space/Photos drawers (a
 // transparent Modal, an Animated slide, a fading scrim that closes on tap).
 
-import { icons as ICON_SET, type IconName } from "@centraid/design-tokens";
+import { icons as ICON_SET } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design-tokens";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -34,8 +35,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";
 import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
-import { family, radii, t, useTheme, type ThemeColors } from "../../kit/theme";
-import { listVaults, type VaultRow } from "../../lib/gateway";
+import { family, radii, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
+import { listVaults } from "../../lib/gateway";
+import type { VaultRow } from "../../lib/gateway";
 import { forgetSpace, switchSpace } from "../../lib/phone-link";
 import {
   addActiveGatewayVault,
@@ -43,8 +46,8 @@ import {
   listSpaces,
   noteActiveVaultMeta,
   subscribeSpaces,
-  type Space,
 } from "../../lib/spaces";
+import type { Space } from "../../lib/spaces";
 
 const DEFAULT_ICON: IconName = "Sparkle";
 const SHEET_TRAVEL = 720; // ≥ max sheet height, so the closed sheet sits fully off-screen.

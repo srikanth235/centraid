@@ -26,7 +26,7 @@
  * rehydration (wave 3) serves an archived run's transcript on demand.
  */
 
-import { type DatabaseSync, type StatementSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import type { RunSummary } from "../conversation/run-summary-sink.js";
 import type { RunKind } from "../conversation/schema.js";

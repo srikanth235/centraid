@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { GatewayError, resolveGatewayBase } from "../../lib/gateway";
-import {
-  fetchGatewayHealth,
-  fetchInsightsSummary,
-  type GatewayHealth,
-  type InsightsSummary,
-} from "../../lib/insights";
+import { fetchGatewayHealth, fetchInsightsSummary } from "../../lib/insights";
+import type { GatewayHealth, InsightsSummary } from "../../lib/insights";
 import { subscribeSpaces } from "../../lib/spaces";
 
 // The Insights screen mirrors TWO independent gateway surfaces — health

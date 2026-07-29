@@ -6,12 +6,11 @@ import type { BackupPolicy } from "../backup-policy.js";
 import { VaultBlobSessionError } from "../errors.js";
 import { uuidv7 } from "../ids.js";
 import type { BlobCache } from "./cache.js";
-import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import { remoteEncryptionKey } from "./custody-types.js";
+import type { RemoteTier } from "./custody-types.js";
 import { extractBlobMetaFromProbes, sniffMediaType } from "./pipeline.js";
-import {
-  INGRESS_PREVIEW_MAX_BYTES,
-  type IngressPreviewInput,
-} from "./preview.js";
+import { INGRESS_PREVIEW_MAX_BYTES } from "./preview.js";
+import type { IngressPreviewInput } from "./preview.js";
 import type { RemoteBlobTransfer } from "./remote-transfer.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";
 import {

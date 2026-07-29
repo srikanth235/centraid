@@ -87,9 +87,9 @@ export async function streamGatewayLogs(
       },
       { signal }
     );
-  } catch (err) {
+  } catch (error) {
     // A caller-initiated abort is a normal teardown, not a failure.
     if (signal.aborted) return;
-    throw err;
+    throw error;
   }
 }

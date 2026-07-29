@@ -27,14 +27,13 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type FC,
-  type ReactElement,
-  type ReactNode,
 } from "react";
+import type { FC, ReactElement, ReactNode } from "react";
 
 import type { InlineScope, InlineAppProps } from "../inline-types.ts";
 import { assetKey } from "./asset-key.ts";
-import { Chrome, type ChromeSlots } from "./Chrome.tsx";
+import { Chrome } from "./Chrome.tsx";
+import type { ChromeSlots } from "./Chrome.tsx";
 import { AlbumGridView } from "./components/AlbumGrid.tsx";
 import { EnrichmentPanel } from "./components/Enrichment.tsx";
 import { MemoriesStrip } from "./components/Memories.tsx";

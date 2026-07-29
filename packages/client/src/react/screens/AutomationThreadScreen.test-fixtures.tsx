@@ -5,13 +5,13 @@
 // AutomationThreadScreenTurnWatch.test.tsx, never shipped.
 
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, vi } from "vitest";
 
 import type { AutomationThreadBridgeProps } from "../screen-contracts.js";
-import AutomationThreadScreen, {
-  type AutomationThreadDataEx,
-} from "./AutomationThreadScreen.js";
+import AutomationThreadScreen from "./AutomationThreadScreen.js";
+import type { AutomationThreadDataEx } from "./AutomationThreadScreen.js";
 
 export const NOW = new Date("2026-07-12T18:00:00Z").getTime();
 export const YESTERDAY = NOW - 24 * 60 * 60 * 1000;

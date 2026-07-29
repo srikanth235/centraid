@@ -8,7 +8,8 @@ import os from "node:os";
 import path from "node:path";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { bootstrapVault, openVaultDb, type VaultDb } from "@centraid/vault";
+import { bootstrapVault, openVaultDb } from "@centraid/vault";
+import type { VaultDb } from "@centraid/vault";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { buildDiagnosticsBundle } from "./gateway-diagnostics.ts";

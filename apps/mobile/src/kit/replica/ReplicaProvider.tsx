@@ -1,7 +1,7 @@
-import {
-  fetchReplicaBootstrapPage,
-  type GatewayAuth,
-  type ReplicaFetcher,
+import { fetchReplicaBootstrapPage } from "@centraid/client/replica/native";
+import type {
+  GatewayAuth,
+  ReplicaFetcher,
 } from "@centraid/client/replica/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Network from "expo-network";
@@ -12,10 +12,8 @@ import { authHeader, resolveGatewayBase } from "../../lib/gateway";
 import { getDesktopName } from "../../lib/phone-link";
 import { NativeVaultChangeFeed } from "../../lib/replica/native-change-feed";
 import { nativeReplicaDigest } from "../../lib/replica/native-hash";
-import {
-  createNativeReplicaSession,
-  type NativeReplicaSession,
-} from "../../lib/replica/native-session";
+import { createNativeReplicaSession } from "../../lib/replica/native-session";
+import type { NativeReplicaSession } from "../../lib/replica/native-session";
 import { openNativeReplicaDriver } from "../../lib/replica/op-sqlite-driver";
 import {
   LAST_BASE,

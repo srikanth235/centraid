@@ -8,8 +8,8 @@ import {
   INITIAL_ROUTER,
   routeKey,
   routerReducer,
-  type RouterState,
 } from "./router.js";
+import type { RouterState } from "./router.js";
 
 const nav = (state: RouterState, route: ShellRoute) =>
   routerReducer(state, { type: "navigate", route });
@@ -59,7 +59,7 @@ describe("shell router", () => {
   });
 
   it("back/forward are no-ops at the ends", () => {
-    let s = nav(INITIAL_ROUTER, { kind: "home" });
+    const s = nav(INITIAL_ROUTER, { kind: "home" });
     expect(routerReducer(s, { type: "back" })).toBe(s);
     expect(routerReducer(s, { type: "forward" })).toBe(s);
   });

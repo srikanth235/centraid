@@ -6,7 +6,7 @@ import {
   statSync,
   promises as fsp,
 } from "node:fs";
-import { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import zlib from "node:zlib";
 

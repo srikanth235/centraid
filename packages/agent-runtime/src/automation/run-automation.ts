@@ -20,15 +20,15 @@
 
 import { randomUUID } from "node:crypto";
 
-import {
-  isRunnerKind,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-  type AutomationTurnStreamEvent,
-  type ProviderEgressConsentController,
-  type RunnerHealthController,
-  type RunnerPrefs,
-  type VaultBridge,
+import { isRunnerKind } from "@centraid/app-engine";
+import type {
+  AutomationTriggerKind,
+  AutomationTriggerOrigin,
+  AutomationTurnStreamEvent,
+  ProviderEgressConsentController,
+  RunnerHealthController,
+  RunnerPrefs,
+  VaultBridge,
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 

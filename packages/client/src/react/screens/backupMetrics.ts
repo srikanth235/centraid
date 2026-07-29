@@ -14,11 +14,11 @@
  */
 
 import type { StorageConnectionUsageDTO } from "../../gateway-client.js";
-import {
-  deriveStorageMetrics,
-  type StorageMetrics,
-  type RetentionInput,
-  type UsageInput,
+import { deriveStorageMetrics } from "../../storage-metrics.js";
+import type {
+  StorageMetrics,
+  RetentionInput,
+  UsageInput,
 } from "../../storage-metrics.js";
 import type { BackupStatusDTO, BackupVaultStatusDTO } from "./BackupCard.js";
 

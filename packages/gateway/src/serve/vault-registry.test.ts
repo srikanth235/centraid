@@ -10,11 +10,8 @@ import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import { runWithVaultContext } from "./vault-context.js";
-import {
-  openVaultRegistry,
-  VaultRegistryError,
-  type VaultRegistry,
-} from "./vault-registry.js";
+import { openVaultRegistry, VaultRegistryError } from "./vault-registry.js";
+import type { VaultRegistry } from "./vault-registry.js";
 
 const silentLogger = {
   info: () => undefined,
@@ -467,8 +464,8 @@ describe("vault-registry scenarios", () => {
       async (name) => {
         await fs
           .copyFile(path.join(firstDir, name), path.join(dupeDir, name))
-          .catch((err) => {
-            if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+          .catch((error) => {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           });
       }
     );

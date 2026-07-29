@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AssistantConfig } from "../../lib/assistant";
+import type * as TypeImport_qayssx from "../../lib/assistant";
 
 const assistant = vi.hoisted(() => ({
   saveAssistantSelection:
-    vi.fn<typeof import("../../lib/assistant").saveAssistantSelection>(),
+    vi.fn<typeof TypeImport_qayssx.saveAssistantSelection>(),
 }));
 
 vi.mock(import("../../lib/assistant"), () => ({

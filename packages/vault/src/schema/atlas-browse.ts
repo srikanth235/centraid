@@ -23,9 +23,11 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { maskSealed } from "./atlas-browse-mask.js";
-import { atlasTables, packKindOf, type AtlasPackKind } from "./atlas.js";
+import { atlasTables, packKindOf } from "./atlas.js";
+import type { AtlasPackKind } from "./atlas.js";
 import { sealedColumnsOf } from "./sealed.js";
-import { resolveEntity, type EntityRef } from "./tables.js";
+import { resolveEntity } from "./tables.js";
+import type { EntityRef } from "./tables.js";
 
 /** Hard cap on a Browse page — some tables are 40k+ rows (issue #441 B3). */
 export const BROWSE_MAX_LIMIT = 100;
@@ -330,7 +332,7 @@ export function browseRows(
   const cmp = dir === "desc" ? "<" : ">";
 
   // orderBy is a real column only (registry/PRAGMA whitelist) or the key.
-  let orderBy = params.orderBy ?? key.column;
+  const orderBy = params.orderBy ?? key.column;
   if (
     orderBy !== key.column &&
     orderBy !== "rowid" &&

@@ -148,7 +148,7 @@ jobs:
       - run: bun run lockfile:lint
       - run: bun run format:check
       # `--format github` emits inline PR annotations on the offending lines.
-      - run: bunx oxlint -c oxlint.config.mjs --format github .
+      - run: bunx oxlint -c oxlint.config.mjs --deny-warnings --format github .
       # Monorepo package.json hygiene: unused/undeclared deps, version drift
       # across workspaces, misplaced @types (sherif). Fast, offline.
       - run: bun run lint:packages
@@ -163,6 +163,7 @@ jobs:
       # Per-package lint scripts (mobile import boundaries, blueprint app
       # no-undef, data-plane cargo fmt/clippy) only exist under turbo.
       - run: bunx turbo run lint
+      - run: bun run lint:tsconfigs
       # `typecheck` dependsOn `^build` in turbo.json, so this also builds
       # package dist for consumers — no separate full-repo `build` here.
       - run: bun run typecheck

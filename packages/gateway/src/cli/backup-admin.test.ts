@@ -13,8 +13,8 @@ import {
   SNAPSHOT_FORMAT_V2,
   openLocalBackupProvider,
   parseRecoveryKit,
-  type BackupProvider,
 } from "@centraid/backup";
+import type { BackupProvider } from "@centraid/backup";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { KeyStore } from "@centraid/vault";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";

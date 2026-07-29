@@ -13,8 +13,8 @@ import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
 import {
   readAutomationTurnExpanded,
   streamAutomationTurn,
-  type AutomationTurnStreamEvent,
 } from "../../../gateway-client.js";
+import type { AutomationTurnStreamEvent } from "../../../gateway-client.js";
 import type { AsstMsgDTO, TurnWatchOutcome } from "../../screen-contracts.js";
 import {
   automationLiveMessages,

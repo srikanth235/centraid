@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { nativeUploadPolicy } from "./native-policy";
 
+type ExpoBattery = typeof import("expo-battery");
+type ExpoNetwork = typeof import("expo-network");
+
 type NetworkStateTestSeam = () => Promise<{
   isConnected: boolean;
   type: "WIFI" | "CELLULAR" | "OTHER";
@@ -28,7 +31,7 @@ vi.mock(import("expo-network") as Promise<unknown>, () => ({
     WIFI: "WIFI",
     CELLULAR: "CELLULAR",
     OTHER: "OTHER",
-  } as unknown as typeof import("expo-network").NetworkStateType,
+  } as unknown as ExpoNetwork["NetworkStateType"],
 }));
 vi.mock(import("expo-battery"), () => ({
   getBatteryStateAsync: () => battery.getBatteryStateAsync(),
@@ -37,7 +40,7 @@ vi.mock(import("expo-battery"), () => ({
     UNPLUGGED: 1,
     CHARGING: 2,
     FULL: 3,
-  } as unknown as typeof import("expo-battery").BatteryState,
+  } as unknown as ExpoBattery["BatteryState"],
 }));
 vi.mock(import("../../storage") as Promise<unknown>, () => ({
   Store: {

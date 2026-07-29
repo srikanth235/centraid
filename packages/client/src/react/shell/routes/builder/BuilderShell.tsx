@@ -1,5 +1,7 @@
-import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX, ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 import type { AppearancePrefs } from "../../../../app-shell-context.js";
 import BuilderChatPane from "../../../screens/BuilderChatPane.js";
@@ -15,7 +17,8 @@ import BuilderCode from "./BuilderCode.js";
 import BuilderHistory from "./BuilderHistory.js";
 import type { Tab } from "./builderModel.js";
 import BuilderPreview from "./BuilderPreview.js";
-import { type UseBuilderInput, useBuilder } from "./useBuilder.js";
+import { useBuilder } from "./useBuilder.js";
+import type { UseBuilderInput } from "./useBuilder.js";
 
 import buttonCss from "../../../ui/Button.module.css";
 import chrome from "../../chrome.module.css";
@@ -121,14 +124,14 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   // Chat pane only exists on Preview (app) or every automation tab; ⌘\ toggles.
   const chatEligible = vm.isAutomation || vm.tab === "preview";
   const chatVisible = chatEligible && chatOpenPref;
-  const toggleChat = (): void => {
+  const toggleChat = useCallback((): void => {
     if (!chatEligible) return;
     setChatOpenPref((open) => {
       const next = !open;
       Store.set(CHAT_PANE_PREF, next);
       return next;
     });
-  };
+  }, [chatEligible]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (!(e.metaKey || e.ctrlKey) || e.key !== "\\") return;

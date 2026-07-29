@@ -42,9 +42,11 @@ import {
   loadEndpointSecret,
   startGatewayEndpoint,
   TUNNEL_FORWARDED_HEADER,
-  type GatewayEndpointHandle,
-  type GatewayPairRequest,
-  type GatewayPairResponse,
+} from "@centraid/tunnel";
+import type {
+  GatewayEndpointHandle,
+  GatewayPairRequest,
+  GatewayPairResponse,
 } from "@centraid/tunnel";
 import { KeyStore } from "@centraid/vault";
 
@@ -326,11 +328,11 @@ export function makeDaemonDevicePlane(input: {
         nativeControl: { secret: controlSecret },
         ...(input.relays ? { relays: input.relays } : {}),
       });
-    } catch (err) {
+    } catch (error) {
       logger.warn(
         "gateway endpoint failed to start (remote iroh transport unavailable; " +
           "HTTP keeps serving): " +
-          (err instanceof Error ? err.message : String(err))
+          (error instanceof Error ? error.message : String(error))
       );
       return undefined;
     }

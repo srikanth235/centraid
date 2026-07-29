@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   LocalUsageReportDTO,
@@ -54,9 +55,11 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
         setReport(next);
         setLimits(next.limits);
         setFootprintError(null);
-      } catch (err) {
+      } catch (error) {
         if (!mountedRef.current) return;
-        setFootprintError(err instanceof Error ? err.message : String(err));
+        setFootprintError(
+          error instanceof Error ? error.message : String(error)
+        );
       }
     },
     [loadLocalUsage]

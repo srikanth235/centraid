@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type { AutomationEditorData } from "../screen-contracts.js";
 import { Icon } from "../ui/index.js";

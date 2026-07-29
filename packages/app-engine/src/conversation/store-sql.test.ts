@@ -17,11 +17,13 @@ import {
   prepare,
   stateFromRaw,
   turnFromRaw,
-  type RawAttachment,
-  type RawConversation,
-  type RawItem,
-  type RawState,
-  type RawTurn,
+} from "./store-sql.js";
+import type {
+  RawAttachment,
+  RawConversation,
+  RawItem,
+  RawState,
+  RawTurn,
 } from "./store-sql.js";
 
 function rawConversation(over: Partial<RawConversation> = {}): RawConversation {

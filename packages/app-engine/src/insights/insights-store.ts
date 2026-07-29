@@ -14,13 +14,11 @@
  * live-arm only. `recent` is live-only (archived runs are ≥90d idle).
  */
 
-import { type DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 
 import type { DatabaseProvider } from "../stores/gateway-db.js";
-import {
-  prepareInsightsStatements,
-  type InsightsPreparedStatements,
-} from "./insights-sql.js";
+import { prepareInsightsStatements } from "./insights-sql.js";
+import type { InsightsPreparedStatements } from "./insights-sql.js";
 import type {
   InsightsActivityRow,
   InsightsAttention,

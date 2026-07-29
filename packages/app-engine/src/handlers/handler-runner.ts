@@ -1,13 +1,12 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { appendLogs, type LogEntry } from "../data/log-store.js";
+import { appendLogs } from "../data/log-store.js";
+import type { LogEntry } from "../data/log-store.js";
 import type { AppRef } from "../types.js";
 import type { VaultBridge, VaultOp } from "./vault-bridge.js";
-import {
-  sharedWorkerAdmission,
-  type WorkerAdmission,
-} from "./worker-admission.js";
+import { sharedWorkerAdmission } from "./worker-admission.js";
+import type { WorkerAdmission } from "./worker-admission.js";
 import {
   WorkerPool,
   workerPoolSizeFromEnv,
@@ -109,11 +108,11 @@ export async function runHandler(
   // into existence, not after.
   try {
     await admission.acquire();
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
       busy: true,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
       logs: [],
     };
   }
@@ -195,10 +194,10 @@ export async function runHandler(
         void (async () => {
           const reply = bridge
             ? await bridge({ op: call.op, payload: call.payload ?? {} }).catch(
-                (err: unknown) => ({
+                (error: unknown) => ({
                   ok: false,
                   code: "VAULT_ERROR",
-                  error: err instanceof Error ? err.message : String(err),
+                  error: error instanceof Error ? error.message : String(error),
                 })
               )
             : {

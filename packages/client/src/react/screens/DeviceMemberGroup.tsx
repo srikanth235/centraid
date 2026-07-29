@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import type {
   CentraidGatewayDevice,
@@ -73,12 +74,16 @@ export default function DeviceMemberGroup({
     setError(null);
     try {
       await onRemoveMember(confirmLastAdmin);
-    } catch (err) {
-      const stranded = lastAdminSpace(err);
+    } catch (caughtError) {
+      const stranded = lastAdminSpace(caughtError);
       if (stranded !== undefined && confirmLastAdmin === undefined) {
         setStrandedSpace(stranded);
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        );
         setConfirming(false);
         setStrandedSpace(null);
       }

@@ -1,12 +1,8 @@
 import type { JSX } from "react";
 
 import { relativeTime } from "../format.js";
-import {
-  processUsageRows,
-  subsystemUsageRows,
-  type ResourceUsageDTO,
-  type ResourceUsageRow,
-} from "./resource-summary.js";
+import { processUsageRows, subsystemUsageRows } from "./resource-summary.js";
+import type { ResourceUsageDTO, ResourceUsageRow } from "./resource-summary.js";
 
 import styles from "./ResourceReceiptPanel.module.css";
 

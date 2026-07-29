@@ -127,9 +127,9 @@ export function runReadOnlySql(
       truncated: all.length > rows.length,
       durationMs,
     };
-  } catch (err) {
-    if (err instanceof GatewayError) throw err;
-    const message = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    if (error instanceof GatewayError) throw error;
+    const message = error instanceof Error ? error.message : String(error);
     throw new GatewayError("execution", `sql failed: ${message}`);
   } finally {
     if (dedicated) {

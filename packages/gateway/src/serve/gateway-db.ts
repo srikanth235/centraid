@@ -10,7 +10,8 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, statfsSync } from "node:fs";
 import path from "node:path";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
+import type { SQLInputValue } from "node:sqlite";
 
 export const GATEWAY_DB_FILE = "gateway.db";
 

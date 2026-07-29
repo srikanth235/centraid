@@ -191,11 +191,11 @@ export class OutboxExecutor {
       try {
         const outcome = await this.drainItem(plane, row);
         report[outcome] += 1;
-      } catch (err) {
+      } catch (error) {
         report.deferred += 1;
         this.logger.warn(
           `outbox: drain of ${row.item_id} (${row.verb}) errored, deferring: ` +
-            (err instanceof Error ? err.message : String(err))
+            (error instanceof Error ? error.message : String(error))
         );
       }
     });
@@ -241,7 +241,7 @@ export class OutboxExecutor {
       spec = parseRequest(row.request_json);
       injectedSpec = substitute(spec, auth.values);
       assertDrainable(injectedSpec.url, auth);
-    } catch (err) {
+    } catch (error) {
       // Structural refusals (bad request row, host outside the pin) are
       // terminal: waiting will not move the pin.
       await this.recordResult(
@@ -249,7 +249,7 @@ export class OutboxExecutor {
         row.item_id,
         "failed",
         undefined,
-        errText(err, auth)
+        errText(error, auth)
       );
       return "failed";
     }
@@ -258,9 +258,9 @@ export class OutboxExecutor {
       let response: { status: number; text: string };
       try {
         response = await this.fetchOnce(injectedSpec, auth);
-      } catch (err) {
+      } catch (error) {
         this.logger.warn(
-          `outbox: ${row.item_id} network failure, deferring: ${errText(err, auth)}`
+          `outbox: ${row.item_id} network failure, deferring: ${errText(error, auth)}`
         );
         return "deferred";
       }
@@ -272,9 +272,9 @@ export class OutboxExecutor {
           // the URL means new values can move the destination.
           assertDrainable(injectedSpec.url, auth);
           return send();
-        } catch (err) {
+        } catch (error) {
           this.logger.warn(
-            `outbox: ${row.item_id} token refresh refused: ${errText(err, auth)}`
+            `outbox: ${row.item_id} token refresh refused: ${errText(error, auth)}`
           );
           return "deferred";
         }

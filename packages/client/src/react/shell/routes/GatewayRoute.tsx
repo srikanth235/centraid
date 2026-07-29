@@ -1,4 +1,5 @@
-import { type JSX, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import {
   confirmGatewayRecoveryKit,
@@ -20,14 +21,16 @@ import GatewayScreen from "../../screens/GatewayScreen.js";
 import {
   knobPrefKey,
   parseResourceKnobPrefs,
-  type ResourceKnobPrefs,
-  type TunableKnobKey,
+} from "../../screens/resource-summary.js";
+import type {
+  ResourceKnobPrefs,
+  TunableKnobKey,
 } from "../../screens/resource-summary.js";
 import {
   parseResourceModePref,
   RESOURCE_MODE_PREF_KEY,
-  type ResourceMode,
 } from "../../screens/ResourceModeCard.js";
+import type { ResourceMode } from "../../screens/ResourceModeCard.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { PageLoading } from "../status.js";
@@ -83,9 +86,9 @@ export default function GatewayRoute({
     setSaving(true);
     try {
       await window.CentraidApi.saveSettings(patch);
-    } catch (err) {
+    } catch (error) {
       showToast(
-        `Couldn’t save the alert setting: ${err instanceof Error ? err.message : String(err)}`
+        `Couldn’t save the alert setting: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       setSaving(false);
@@ -98,10 +101,10 @@ export default function GatewayRoute({
     setLaunchAtLogin(enabled); // optimistic — matches the alert toggle's feel
     try {
       await window.CentraidApi.saveSettings({ launchAtLogin: enabled });
-    } catch (err) {
+    } catch (error) {
       setLaunchAtLogin(prev);
       showToast(
-        `Couldn’t save the login setting: ${err instanceof Error ? err.message : String(err)}`
+        `Couldn’t save the login setting: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       setSavingLaunchAtLogin(false);

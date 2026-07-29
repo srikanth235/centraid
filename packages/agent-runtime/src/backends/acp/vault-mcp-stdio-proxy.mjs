@@ -74,13 +74,13 @@ rl.on("line", (line) => {
       .then((out) => {
         if (out && typeof out === "object") send(out);
       })
-      .catch((err) => {
+      .catch((error) => {
         send({
           jsonrpc: "2.0",
           id: msg.id,
           error: {
             code: -32000,
-            message: err instanceof Error ? err.message : String(err),
+            message: error instanceof Error ? error.message : String(error),
           },
         });
       });

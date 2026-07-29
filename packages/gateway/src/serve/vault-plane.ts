@@ -27,10 +27,12 @@ import {
   ensureConversationLedger,
   runConversationArchival,
   repriceLedger,
-  type RuntimeLogger,
-  type VaultBridge,
-  type VaultCallResult,
-  type VaultWorkspace,
+} from "@centraid/app-engine";
+import type {
+  RuntimeLogger,
+  VaultBridge,
+  VaultCallResult,
+  VaultWorkspace,
 } from "@centraid/app-engine";
 import {
   assertExtSchemaOwnership,
@@ -48,7 +50,6 @@ import {
   listEnrolledApps,
   listInstalledApps,
   setAppLabel,
-  type InstalledAppRow,
   lookupAgentByName,
   lookupAppByName,
   markAgentRevoked,
@@ -67,13 +68,10 @@ import {
   markScopeRequestDecided,
   openScopeRequest,
   writeScopeTombstones,
-  type ScopeRequestSummary,
-  type ScopeTriple,
   renameVault,
   readVaultPresentation,
   readBackupPolicy,
   updateVaultPresentation,
-  type VaultPresentation,
   registerAttachmentCommands,
   registerTagCommands,
   registerBusinessCommands,
@@ -97,40 +95,46 @@ import {
   registerTaskCommands,
   registerAtlasCommands,
   pruneReplicaChanges,
-  type AgentSummary,
-  type AppSummary,
-  type ChangesRequest,
-  type Credential,
-  type Gateway as VaultGateway,
-  type GrantSummary,
-  type HostBootstrap,
-  type InvokeOutcome,
-  type InvokeRequest,
-  type ParkedSummary,
-  type ReadRequest,
-  type RefRequest,
-  type RevealRequest,
-  type RevocationResult,
-  type ScopeSpec,
-  type SearchRequest,
-  type SweepResult,
-  type VaultDb,
-  type VaultSqlResult,
-  type ResolveResult,
-  type ExtApplyOutcome,
-  type ExtTableSpec,
-  type DemoPurgeResult,
-  type BlobStoreSettings,
-  type S3Credentials,
-  type PreviewCodec,
-  type KeyStore,
   runJournalArchival,
   blobCustodyProven,
   WalShipper,
   jitterDelayMs,
-  type WalShipperOptions,
   scopeCovers,
   sweepLocalOrphans,
+} from "@centraid/vault";
+import type {
+  InstalledAppRow,
+  ScopeRequestSummary,
+  ScopeTriple,
+  VaultPresentation,
+  AgentSummary,
+  AppSummary,
+  ChangesRequest,
+  Credential,
+  Gateway as VaultGateway,
+  GrantSummary,
+  HostBootstrap,
+  InvokeOutcome,
+  InvokeRequest,
+  ParkedSummary,
+  ReadRequest,
+  RefRequest,
+  RevealRequest,
+  RevocationResult,
+  ScopeSpec,
+  SearchRequest,
+  SweepResult,
+  VaultDb,
+  VaultSqlResult,
+  ResolveResult,
+  ExtApplyOutcome,
+  ExtTableSpec,
+  DemoPurgeResult,
+  BlobStoreSettings,
+  S3Credentials,
+  PreviewCodec,
+  KeyStore,
+  WalShipperOptions,
 } from "@centraid/vault";
 
 import { canWrite } from "./enrollment-store.js";
@@ -138,19 +142,16 @@ import { GroupCommitQueue } from "./group-commit-queue.js";
 import { decideJournalArchive } from "./journal-limit.js";
 import { replicaIntentContext } from "./replica-intent-context.js";
 import { vaultContext } from "./vault-context.js";
-import {
-  pickAnchors,
-  pickEntities,
-  type AnchorPickerHit,
-  type AnchorSelector,
-  type LinkInput,
-  type PickerHit,
-  type PickerRequest,
+import { pickAnchors, pickEntities } from "./vault-picker.js";
+import type {
+  AnchorPickerHit,
+  AnchorSelector,
+  LinkInput,
+  PickerHit,
+  PickerRequest,
 } from "./vault-picker.js";
-import {
-  applyRestoreQuarantine,
-  type QuarantineStatus,
-} from "./vault-quarantine.js";
+import { applyRestoreQuarantine } from "./vault-quarantine.js";
+import type { QuarantineStatus } from "./vault-quarantine.js";
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 /**
@@ -373,18 +374,18 @@ export interface ReviewEntry {
 function asVaultCallResult(fn: () => unknown): VaultCallResult {
   try {
     return { ok: true, result: fn() };
-  } catch (err) {
-    if (err instanceof GatewayError) {
+  } catch (error) {
+    if (error instanceof GatewayError) {
       return {
         ok: false,
-        code: `VAULT_${err.stage.toUpperCase()}`,
-        error: err.message,
+        code: `VAULT_${error.stage.toUpperCase()}`,
+        error: error.message,
       };
     }
     return {
       ok: false,
       code: "VAULT_ERROR",
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -437,18 +438,18 @@ async function asVaultCallResultAsync(
 ): Promise<VaultCallResult> {
   try {
     return { ok: true, result: await fn() };
-  } catch (err) {
-    if (err instanceof GatewayError) {
+  } catch (error) {
+    if (error instanceof GatewayError) {
       return {
         ok: false,
-        code: `VAULT_${err.stage.toUpperCase()}`,
-        error: err.message,
+        code: `VAULT_${error.stage.toUpperCase()}`,
+        error: error.message,
       };
     }
     return {
       ok: false,
       code: "VAULT_ERROR",
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -716,11 +717,11 @@ export class VaultPlane {
         },
         ...this.walShipperOptions,
       });
-    } catch (err) {
+    } catch (error) {
       // In-memory vaults (tests) have no files to ship.
       if (this.dir !== ":memory:") {
         this.logger.warn(
-          `vault plane: wal shipper unavailable: ${err instanceof Error ? err.message : String(err)}`
+          `vault plane: wal shipper unavailable: ${error instanceof Error ? error.message : String(error)}`
         );
       }
       return undefined;
@@ -2137,12 +2138,18 @@ export class VaultPlane {
         deviceKey: this.boot.deviceKey,
         ...(block
           ? {
-              scopeClamp: block.scopes.map((scope) => ({
-                schema: scope.schema,
-                ...(scope.table === undefined ? {} : { table: scope.table }),
-                verbs: scope.verbs,
-                ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
-                ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+              scopeClamp: block.scopes.map((scopeLocal) => ({
+                schema: scopeLocal.schema,
+                ...(scopeLocal.table === undefined
+                  ? {}
+                  : { table: scopeLocal.table }),
+                verbs: scopeLocal.verbs,
+                ...(scopeLocal.rowFilter
+                  ? { rowFilter: [...scopeLocal.rowFilter] }
+                  : {}),
+                ...(scopeLocal.fieldMask
+                  ? { fieldMask: [...scopeLocal.fieldMask] }
+                  : {}),
               })),
             }
           : {}),
@@ -2283,9 +2290,9 @@ export class VaultPlane {
             "vault plane: WAL checkpointed by fallback (no wal shipper — backups are NOT capturing this vault)"
           );
         }
-      } catch (err) {
+      } catch (error) {
         this.logger.warn(
-          `vault plane: fallback checkpoint failed: ${err instanceof Error ? err.message : String(err)}`
+          `vault plane: fallback checkpoint failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
       return;
@@ -2302,9 +2309,9 @@ export class VaultPlane {
           `vault plane: wal capture error (${err.db}): ${err.message}`
         );
       }
-    } catch (err) {
+    } catch (error) {
       this.logger.warn(
-        `vault plane: wal tick failed: ${err instanceof Error ? err.message : String(err)}`
+        `vault plane: wal tick failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -2575,15 +2582,15 @@ export class VaultPlane {
               captureFirst: false,
             });
           }
-        } catch (err) {
+        } catch (error) {
           this.logger.warn(
-            `vault plane: journal archival failed: ${err instanceof Error ? err.message : String(err)}`
+            `vault plane: journal archival failed: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       }
-    } catch (err) {
+    } catch (error) {
       this.logger.warn(
-        `vault plane: sweep failed: ${err instanceof Error ? err.message : String(err)}`
+        `vault plane: sweep failed: ${error instanceof Error ? error.message : String(error)}`
       );
     } finally {
       this.onSweepPass?.({ durationMs: Date.now() - sweepStartedAt });
@@ -2647,9 +2654,9 @@ export class VaultPlane {
           });
         }
       })
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         this.logger.warn(
-          `vault plane: blob sweep failed: ${err instanceof Error ? err.message : String(err)}`
+          `vault plane: blob sweep failed: ${error instanceof Error ? error.message : String(error)}`
         );
       });
   }
@@ -2704,10 +2711,10 @@ export class VaultPlane {
     if (!this.snapshotBlobRoots) return undefined;
     try {
       return await this.snapshotBlobRoots();
-    } catch (err) {
+    } catch (error) {
       this.logger.warn(
         `vault plane: retained-snapshot roots unavailable — skipping orphan delete to protect ` +
-          `the recovery window (issue #436 §6): ${err instanceof Error ? err.message : String(err)}`
+          `the recovery window (issue #436 §6): ${error instanceof Error ? error.message : String(error)}`
       );
       return "unavailable";
     }
@@ -2727,10 +2734,10 @@ export class VaultPlane {
     if (!this.orphanGraceWindowMs) return undefined;
     try {
       return await this.orphanGraceWindowMs();
-    } catch (err) {
+    } catch (error) {
       this.logger.warn(
         `vault plane: recovery window unavailable — holding all orphans (infinite grace) to protect ` +
-          `the recovery window (issue #439 R4): ${err instanceof Error ? err.message : String(err)}`
+          `the recovery window (issue #439 R4): ${error instanceof Error ? error.message : String(error)}`
       );
       return Number.POSITIVE_INFINITY;
     }
@@ -2757,9 +2764,9 @@ export class VaultPlane {
       // restart).
       try {
         this.walShipper.close();
-      } catch (err) {
+      } catch (error) {
         this.logger.warn(
-          `vault plane: wal shipper close failed: ${err instanceof Error ? err.message : String(err)}`
+          `vault plane: wal shipper close failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
       this.db.close({ skipOptimize: true });
@@ -2768,9 +2775,9 @@ export class VaultPlane {
     if (this.ownsWalLifecycle() && this.walCaptureConfigured()) {
       try {
         this.gateway.checkpoint(this.ownerCredential);
-      } catch (err) {
+      } catch (error) {
         this.logger.warn(
-          `vault plane: checkpoint on stop failed: ${err instanceof Error ? err.message : String(err)}`
+          `vault plane: checkpoint on stop failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }

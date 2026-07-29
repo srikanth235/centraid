@@ -4,11 +4,13 @@
 // blocks as a single CSS string. Desktop injects this into a <style> tag
 // at preload time — the only token-related CSS it ships.
 
-import { densities, type DensityScale } from "./density";
+import { densities } from "./density";
+import type { DensityScale } from "./density";
 import { library } from "./library";
 import { palette } from "./palette";
 import { radii } from "./radii";
-import { BRAND, themes, type Theme, type ThemeName } from "./themes";
+import { BRAND, themes } from "./themes";
+import type { Theme, ThemeName } from "./themes";
 import { fontStacks, marketingType, type, typeShorthand } from "./typography";
 
 function block(selector: string, props: Record<string, string>): string {

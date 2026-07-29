@@ -5,16 +5,16 @@ import {
   ensureAppEnrolled,
   openVaultDb,
   purposeConceptId,
-  type Credential,
 } from "@centraid/vault";
+import type { Credential } from "@centraid/vault";
 import { afterEach, describe, expect, test } from "vitest";
 
 import {
   AutomationAnchorError,
   resolveAutomationAnchors,
   scopesForAutomationAnchors,
-  type AnchorVaultReads,
 } from "./automation-anchor-scopes.js";
+import type { AnchorVaultReads } from "./automation-anchor-scopes.js";
 
 const cleanups: Array<() => void> = [];
 describe("automation-anchor-scopes", () => {

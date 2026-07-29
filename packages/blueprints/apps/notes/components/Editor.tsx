@@ -373,12 +373,15 @@ export function Editor({
     clearTimeout(saveTimerRef.current);
     await performSave();
   };
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  });
 
   useEffect(() => {
-    registerFlush?.(flush);
+    registerFlush?.(() => flushRef.current());
     return () => clearTimeout(saveTimerRef.current);
-    // (#336) mount-once flush registration, deliberately []
-  }, [flush, registerFlush]);
+  }, [registerFlush]);
 
   useEffect(() => {
     if (bodyEditing && textareaRef.current) {

@@ -10,12 +10,8 @@
 // corrupt identity.
 
 import { S3RequestPipeline } from "./s3-pipeline.js";
-import {
-  assertSha,
-  type BlobRange,
-  type BlobStat,
-  type BlobStore,
-} from "./store.js";
+import { assertSha } from "./store.js";
+import type { BlobRange, BlobStat, BlobStore } from "./store.js";
 
 export interface S3Credentials {
   accessKeyId: string;
@@ -253,9 +249,9 @@ export class S3BlobStore implements BlobStore {
         return;
       }
       await this.completeMultipartUpload(key, uploadId, parts);
-    } catch (err) {
+    } catch (error) {
       await this.abortMultipartUpload(key, uploadId).catch(() => undefined);
-      throw err;
+      throw error;
     }
   }
 

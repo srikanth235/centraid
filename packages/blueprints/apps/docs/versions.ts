@@ -58,8 +58,8 @@ export function createVersions({
         action: "edit",
         input: { document_id: documentId, body_text: bodyText },
       });
-    } catch (err) {
-      notice(String((err as { message?: string })?.message ?? err));
+    } catch (error) {
+      notice(String((error as { message?: string })?.message ?? error));
       return undefined;
     }
     if (outcome?.status === "executed") {

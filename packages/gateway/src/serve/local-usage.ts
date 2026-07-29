@@ -27,7 +27,8 @@
  * smaller number with no explanation.
  */
 
-import { promises as fs, statfsSync, type Dirent } from "node:fs";
+import { promises as fs, statfsSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import path from "node:path";
 
 /**
@@ -136,8 +137,8 @@ export async function walkDirBytes(
     let entries: Dirent[];
     try {
       entries = await fs.readdir(currentDir, { withFileTypes: true });
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
       // A component directory that was never created is 0 bytes, not an error.
       if (code !== "ENOENT")
         unreadable ??= `${currentDir}: ${code ?? "unreadable"}`;
@@ -156,8 +157,8 @@ export async function walkDirBytes(
           const stat = await fs.stat(full);
           bytes += stat.size;
           files += 1;
-        } catch (err) {
-          const code = (err as NodeJS.ErrnoException).code;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
           if (code !== "ENOENT")
             unreadable ??= `${full}: ${code ?? "unreadable"}`;
         }
@@ -297,8 +298,8 @@ export class LocalUsageScanner {
         this.cached = report;
         return report;
       })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
         // Last-known-good beats a blank number; a fresh gateway with no cache
         // yet reports empty-but-explained rather than throwing at the route.
         const fallback: LocalUsageReport = this.cached

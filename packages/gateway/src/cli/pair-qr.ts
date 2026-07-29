@@ -24,7 +24,7 @@ export async function renderTerminalQr(text: string): Promise<string> {
       small: true,
       margin: 1,
     });
-  } catch (first) {
+  } catch (error) {
     // Fall back without `small` if the compact renderer rejects the matrix.
     try {
       return await QRCode.toString(text, {
@@ -33,9 +33,9 @@ export async function renderTerminalQr(text: string): Promise<string> {
         margin: 1,
       });
     } catch {
-      throw first instanceof Error
-        ? first
-        : new Error(`QR encode failed: ${String(first)}`);
+      throw error instanceof Error
+        ? error
+        : new Error(`QR encode failed: ${String(error)}`);
     }
   }
 }

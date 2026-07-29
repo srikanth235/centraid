@@ -12,7 +12,8 @@ import {
   stageItem,
 } from "./outbox-executor-test-kit.js";
 import { OutboxExecutor } from "./outbox-executor.js";
-import { openVaultPlane, type VaultPlane } from "./vault-plane.js";
+import { openVaultPlane } from "./vault-plane.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 const silentLogger = {
   info: () => undefined,

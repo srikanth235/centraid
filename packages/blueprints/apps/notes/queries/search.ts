@@ -252,8 +252,8 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       };
     });
     return { notes };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { notes: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

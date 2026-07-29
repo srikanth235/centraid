@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import type {
   LocalUsageReportDTO,
@@ -94,8 +95,12 @@ function LimitControl({
     setBusy(true);
     setError(null);
     onCommit(bytes)
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : String(err))
+      .catch((caughtError: unknown) =>
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        )
       )
       .finally(() => setBusy(false));
   };

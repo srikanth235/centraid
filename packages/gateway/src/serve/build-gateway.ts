@@ -44,25 +44,38 @@ import {
   enumerateRunnerModels,
   probeCliAvailability,
   resolveAcpCapabilities,
-  type CatalogSurface,
-  type RunnerKind,
-  type RunnerPrefs,
-  type SurfaceStatus,
 } from "@centraid/agent-runtime";
+import type {
+  CatalogSurface,
+  RunnerKind,
+  RunnerPrefs,
+  SurfaceStatus,
+} from "@centraid/agent-runtime";
+import type {
+  AskModelInfo,
+  AutomationTriggerKind,
+  AutomationTriggerOrigin,
+  ConversationRunner,
+  ConversationStore,
+  ModelSubsystem,
+  RunTurnFn,
+  RunnerHealthController,
+  RuntimeLogger,
+  ToolResult,
+  VaultWorkspace,
+} from "@centraid/app-engine";
 import {
   AnalyticsStore,
   ASSISTANT_APP_ID,
   AUTHED_DEVICE_HEADER,
   COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
-  ConversationStore,
   AutomationTriggerStore,
   Dispatcher,
   InsightsStore,
   PrefsStore,
   ProviderEgressConsentStore,
   RunnerHealthStore,
-  type RunnerHealthController,
   RUNNER_KINDS,
   Runtime,
   changesSubscriberCount,
@@ -79,15 +92,6 @@ import {
   TurnLimiter,
   prewarmAppAssets,
   workerAdmissionStats,
-  type AskModelInfo,
-  type ConversationRunner,
-  type ModelSubsystem,
-  type RuntimeLogger,
-  type RunTurnFn,
-  type ToolResult,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-  type VaultWorkspace,
 } from "@centraid/app-engine";
 import * as automation from "@centraid/automation";
 import {
@@ -101,9 +105,8 @@ import {
   readBlobStoreSettings,
   custodyStateCounts,
   jitterDelayMs,
-  type FilterClause,
-  type PreviewCodec,
 } from "@centraid/vault";
+import type { FilterClause, PreviewCodec } from "@centraid/vault";
 
 import type { BackupConfig } from "../backup/backup-config.js";
 import { BackupService } from "../backup/backup-service.js";
@@ -119,17 +122,15 @@ import {
 import {
   resolveAutomationAgentSelection,
   resolveAutomationRewriteModel,
-  type AutomationAgentSelection,
 } from "../lifecycle/automation-agent-selection.js";
+import type { AutomationAgentSelection } from "../lifecycle/automation-agent-selection.js";
 import {
   resolveAutomationAnchors,
   scopesForAutomationAnchors,
 } from "../lifecycle/automation-anchor-scopes.js";
 import { reviseAutomationInstructions } from "../lifecycle/automation-revision.js";
-import {
-  makeDraftCodeDirResolver,
-  type ExtBandOps,
-} from "../lifecycle/ext-band.js";
+import { makeDraftCodeDirResolver } from "../lifecycle/ext-band.js";
+import type { ExtBandOps } from "../lifecycle/ext-band.js";
 import {
   finalizeCompiledManifest,
   recordFailedAutomationCompile,
@@ -141,15 +142,13 @@ import {
   prepareLifecycleSession,
   publishAndReconcile,
   stageAndMaybePublish,
-  type LifecycleRouteOptions,
 } from "../lifecycle/lifecycle-shared.js";
+import type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 import { rewriteAutomationInstructions } from "../lifecycle/rewrite-automation-instructions.js";
 import type { GatewayPaths } from "../paths.js";
 import { createImagePreviewCodec } from "../preview/codec.js";
-import {
-  makeAgentsRouteHandler,
-  type AgentAcpCapabilities,
-} from "../routes/agents-routes.js";
+import { makeAgentsRouteHandler } from "../routes/agents-routes.js";
+import type { AgentAcpCapabilities } from "../routes/agents-routes.js";
 import { makeAppsStoreRouteHandler } from "../routes/apps-store-routes.js";
 import { makeAssistantRouteHandler } from "../routes/assistant-routes.js";
 import {
@@ -159,10 +158,8 @@ import {
 import { makeBackupRouteHandler } from "../routes/backup-routes.js";
 import { makeBlobRouteHandler } from "../routes/blob-routes.js";
 import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
-import {
-  makeDataPlaneControlHandler,
-  type DataPlaneControlOptions,
-} from "../routes/data-plane-control.js";
+import { makeDataPlaneControlHandler } from "../routes/data-plane-control.js";
+import type { DataPlaneControlOptions } from "../routes/data-plane-control.js";
 import { makeDemoRouteHandler } from "../routes/demo-routes.js";
 import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
@@ -240,8 +237,8 @@ import {
   parseResourceKnobPrefs,
   resolveResourceMode,
   RESOURCE_MODE_PREF_KEY,
-  type ResourceMode,
 } from "./resource-mode.js";
+import type { ResourceMode } from "./resource-mode.js";
 import {
   removedRunnerLadderMembers,
   resolveGatewayRunnerPrefs,
@@ -257,14 +254,12 @@ import {
   ingressRetentionGap,
   readIngressCursor,
 } from "./trigger-ingress-cursor.js";
-import {
-  runWithVaultContext,
-  VAULT_HEADER,
-  type DeviceAccess,
-} from "./vault-context.js";
+import { runWithVaultContext, VAULT_HEADER } from "./vault-context.js";
+import type { DeviceAccess } from "./vault-context.js";
 import { createVaultIntegrityHealthProbe } from "./vault-integrity-health.js";
 import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
-import { openVaultRegistry, type VaultRegistry } from "./vault-registry.js";
+import { openVaultRegistry } from "./vault-registry.js";
+import type { VaultRegistry } from "./vault-registry.js";
 import { WebAppSessions } from "./web-app-sessions.js";
 import { WebControlSessionStore } from "./web-session-store.js";
 
@@ -736,10 +731,10 @@ export async function buildGateway(
       "storage-latency",
       `4 KiB fsync ${storageLatency.fsyncMs.toFixed(1)} ms`
     );
-  } catch (err) {
+  } catch (error) {
     health.reportDegraded(
       "storage-latency",
-      `boot fsync probe failed: ${err instanceof Error ? err.message : String(err)}`
+      `boot fsync probe failed: ${error instanceof Error ? error.message : String(error)}`
     );
   }
   health.registerProbe("event-loop", async () => {
@@ -1067,9 +1062,9 @@ export async function buildGateway(
     for (const plane of planes) {
       try {
         plane.db.vault.prepare("PRAGMA user_version").get();
-      } catch (err) {
+      } catch (error) {
         unreadable.push(
-          `${plane.boot.vaultId}: ${err instanceof Error ? err.message : String(err)}`
+          `${plane.boot.vaultId}: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }
@@ -1742,7 +1737,7 @@ export async function buildGateway(
   // Cycle break: the chat runner needs the Runtime's dispatcher, but
   // the Runtime is constructed *with* the chat runner. The runtimeRef
   // holder resolves at call time, after the assignment below.
-  let runtimeRef: Runtime | undefined;
+  let runtimeRef: Runtime | undefined = undefined;
   const getDispatcher = (): Runtime["dispatcher"] => {
     const rt = runtimeRef;
     if (!rt)
@@ -1815,8 +1810,8 @@ export async function buildGateway(
     void outboxExecutor
       .drain(plane)
       .then(() => health.reportOk("outbox"))
-      .catch((err) => {
-        const message = `outbox drain failed: ${err instanceof Error ? err.message : String(err)}`;
+      .catch((error) => {
+        const message = `outbox drain failed: ${error instanceof Error ? error.message : String(error)}`;
         health.reportError("outbox", message);
         logger.warn(message);
       });
@@ -1839,10 +1834,10 @@ export async function buildGateway(
       };
       const block = manifestScopeBlock(raw.vault);
       if (block) plane.ensureAppInstallGrant(appId, block);
-    } catch (err) {
+    } catch (error) {
       logger.warn(
         `install-time grant for app "${appId}" failed: ` +
-          (err instanceof Error ? err.message : String(err))
+          (error instanceof Error ? error.message : String(error))
       );
     }
   };
@@ -2047,8 +2042,8 @@ export async function buildGateway(
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
       health.reportOk("automation-runs");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
       runEventBus.publish(runId, {
         type: "turn.end",
@@ -2061,7 +2056,7 @@ export async function buildGateway(
         `${opts.triggerKind} ${automationRef}: ${message}`
       );
       logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
-      if (opts.propagateError) throw err;
+      if (opts.propagateError) throw error;
     }
   };
 
@@ -2113,11 +2108,11 @@ export async function buildGateway(
       settledHosts.set(vaultId, host);
       await reconcileScheduler(vaultId);
       return host;
-    }).catch((err) => {
+    }).catch((error) => {
       // A failed mount must not poison the cache — drop it so the next
       // request retries (e.g. after a transient git failure).
       hosts.delete(vaultId);
-      throw err;
+      throw error;
     });
     hosts.set(vaultId, built);
     return built;
@@ -2180,10 +2175,10 @@ export async function buildGateway(
         await prewarmApp(appId, bundledAppDir(appId));
         return true;
       });
-    } catch (err) {
+    } catch (error) {
       logger.warn(
         `scopes: auto-install of "${appId}" into vault ${vaultId} failed: ` +
-          (err instanceof Error ? err.message : String(err))
+          (error instanceof Error ? error.message : String(error))
       );
       return false;
     }
@@ -3229,10 +3224,10 @@ export async function buildGateway(
               appId,
               nameByOwnerApp.get(appId)
             );
-          } catch (err) {
+          } catch (error) {
             logger.warn(
               `vault plane: agent enrollment for "${appId}" failed: ` +
-                (err instanceof Error ? err.message : String(err))
+                (error instanceof Error ? error.message : String(error))
             );
           }
         }
@@ -3241,10 +3236,10 @@ export async function buildGateway(
           if (!block || !plane) continue;
           try {
             plane.ensureAgentInstallGrant(row.ownerApp, block);
-          } catch (err) {
+          } catch (error) {
             logger.warn(
               `install-time grant for automation "${row.ownerApp}" failed: ` +
-                (err instanceof Error ? err.message : String(err))
+                (error instanceof Error ? error.message : String(error))
             );
           }
         }
@@ -3266,13 +3261,13 @@ export async function buildGateway(
           `scheduler${schedulers.size === 1 ? "" : "s"} running for ${schedulers.size} vault${schedulers.size === 1 ? "" : "s"}`
         )
       )
-      .catch((err) => {
+      .catch((error) => {
         const message =
           `scheduler reconcile failed: ` +
-          (err instanceof Error ? err.message : String(err));
+          (error instanceof Error ? error.message : String(error));
         health.reportError("automations", message);
         logger.warn(message);
-        throw err;
+        throw error;
       })
       .finally(() => {
         settled.inFlight = undefined;
@@ -3317,8 +3312,8 @@ export async function buildGateway(
         accepted: true,
         ...(result.inserted ? {} : { duplicate: true }),
       };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       health.reportError(
         "automation-runs",
         `webhook ingress ${input.automationRef}: ${message}`
@@ -4169,7 +4164,6 @@ export async function buildGateway(
       });
     }
     req.headers[AUTHED_DEVICE_HEADER] = deviceKey;
-    let vaultId: string;
     const enrolled =
       effectiveDeviceAccess?.vaultsFor(deviceKey) ??
       enrollmentStore.vaultsFor(deviceKey);
@@ -4199,7 +4193,7 @@ export async function buildGateway(
         message: "this device is not enrolled in the requested vault",
       });
     }
-    vaultId = requested ?? enrolled[0]!;
+    const vaultId = requested ?? enrolled[0]!;
     if (!vaultRegistry.get(vaultId)) {
       return sendJson(res, 404, {
         error: "vault_not_found",
@@ -4325,10 +4319,10 @@ export async function buildGateway(
             .map((c) =>
               activeWarmer
                 .warm(c.kind, surface)
-                .catch((err) =>
+                .catch((error) =>
                   catalogLogger.warn(
                     `catalog warm (${c.kind}/${surface}) failed: ` +
-                      (err instanceof Error ? err.message : String(err))
+                      (error instanceof Error ? error.message : String(error))
                   )
                 )
             )

@@ -20,15 +20,15 @@ import {
   foldIrohPairResponse,
   isFoldError,
   isTicketExpired,
-  type RedeemGatewayPairingResult,
 } from "./gateway-pairing-core.js";
+import type { RedeemGatewayPairingResult } from "./gateway-pairing-core.js";
 import {
   addGateway,
   listGateways,
   updateGatewayRelayHint,
   updateGatewayRememberDevice,
-  type GatewayProfile,
 } from "./gateway-store.js";
+import type { GatewayProfile } from "./gateway-store.js";
 import { ensureIrohDeviceKey } from "./iroh-dialer.js";
 import { setActiveGatewayId, setActiveVaultId } from "./settings.js";
 

@@ -1,6 +1,7 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t, type ThemeColors } from "../../kit/theme";
+import { family, radii, spacing, t } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 
 // makeStyles(colors) + useMemo per scheme (matches Settings). The composer row
 // stays clear of the floating Home key via its own bottom padding; the bubbles

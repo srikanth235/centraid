@@ -13,11 +13,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { blobUriFor, updateBlobStoreSettings, uuidv7 } from "@centraid/vault";
 import { afterAll, describe, expect, test } from "vitest";
 
-import {
-  blobSweepBackoff,
-  openVaultPlane,
-  type VaultPlane,
-} from "./vault-plane.js";
+import { blobSweepBackoff, openVaultPlane } from "./vault-plane.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 const silentLogger = {
   info: () => undefined,

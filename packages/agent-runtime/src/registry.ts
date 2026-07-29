@@ -42,11 +42,8 @@ import type {
   TurnResult,
 } from "@centraid/app-engine";
 
-import {
-  runAcpTurn,
-  type AcpAdapterSpec,
-  type AcpTurnConfig,
-} from "./backends/acp/backend.js";
+import { runAcpTurn } from "./backends/acp/backend.js";
+import type { AcpAdapterSpec, AcpTurnConfig } from "./backends/acp/backend.js";
 import { enumerateAcpModels } from "./backends/acp/enumerate-models.js";
 import { resolveClaudeModel } from "./models/tiers.js";
 

@@ -15,12 +15,8 @@ import path from "node:path";
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import {
-  bootstrapVault,
-  blobUriFor,
-  openVaultDb,
-  type VaultDb,
-} from "@centraid/vault";
+import { bootstrapVault, blobUriFor, openVaultDb } from "@centraid/vault";
+import type { VaultDb } from "@centraid/vault";
 import { describe, afterEach, expect, test } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";

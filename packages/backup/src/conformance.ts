@@ -65,12 +65,12 @@ async function expectError(
 ): Promise<BackupProviderError> {
   try {
     await fn();
-  } catch (err) {
+  } catch (error) {
     assert.ok(
-      err instanceof BackupProviderError,
-      `expected a BackupProviderError, got ${String(err)}`
+      error instanceof BackupProviderError,
+      `expected a BackupProviderError, got ${String(error)}`
     );
-    return err;
+    return error;
   }
   throw new Error("expected a BackupProviderError to be thrown, nothing was");
 }

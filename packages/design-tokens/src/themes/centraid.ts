@@ -14,8 +14,8 @@ import {
   BRAND,
   DANGER,
   SUCCESS,
-  type Theme,
 } from "./shared";
+import type { Theme } from "./shared";
 
 export const lightTheme: Theme = {
   kind: "light",

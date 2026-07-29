@@ -411,8 +411,8 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       })),
     };
     return { person };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { person: null, vaultDenied: { code: e.code, message: e.message } };
   }
 }

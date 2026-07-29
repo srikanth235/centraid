@@ -1,5 +1,6 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -8,14 +9,15 @@ import type {
   OutboxNeedsAuth,
 } from "../../gateway-client-outbox.js";
 import type { VaultParkedEntry } from "../../gateway-client-vault.js";
+import type * as TypeImport_bmsl46 from "../../gateway-client.js";
+import type * as TypeImport_6f8n6u from "./useBlockingCount.js";
 
-const getBlocking =
-  vi.fn<typeof import("../../gateway-client.js").getBlocking>();
+const getBlocking = vi.fn<typeof TypeImport_bmsl46.getBlocking>();
 vi.mock(import("../../gateway-client.js"), () => ({
   getBlocking: () => getBlocking(),
 }));
 
-let useBlockingCount: typeof import("./useBlockingCount.js").useBlockingCount;
+let useBlockingCount: typeof TypeImport_6f8n6u.useBlockingCount;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 

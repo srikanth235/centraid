@@ -1,11 +1,13 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import SettingsConnectionsScreen, {
-  type ConnectionRowDTO,
-  type ProviderOptionDTO,
-  type SettingsConnectionsBridgeProps,
+import SettingsConnectionsScreen from "./SettingsConnectionsScreen.js";
+import type {
+  ConnectionRowDTO,
+  ProviderOptionDTO,
+  SettingsConnectionsBridgeProps,
 } from "./SettingsConnectionsScreen.js";
 
 function makeRow(over: Partial<ConnectionRowDTO> = {}): ConnectionRowDTO {

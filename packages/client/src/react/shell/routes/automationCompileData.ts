@@ -17,8 +17,8 @@ import {
   listAutomationTurns,
   readAutomationTurnExpanded,
   streamAutomationTurn,
-  type AutomationTurnStreamEvent,
 } from "../../../gateway-client.js";
+import type { AutomationTurnStreamEvent } from "../../../gateway-client.js";
 import type {
   CompileAttemptDTO,
   CompileStepDTO,

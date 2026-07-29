@@ -37,8 +37,8 @@ export default async function friendHandler({ input, ctx }: HandlerArgs) {
       },
       ledger,
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",

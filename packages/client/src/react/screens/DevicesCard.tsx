@@ -1,11 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { isRevokedDevice } from "../../device-roster.js";
 import type {
@@ -112,9 +106,9 @@ export default function DevicesCard({
         setDevices(list);
         setLoadError(null);
       })
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         if (!mountedRef.current) return;
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(error instanceof Error ? error.message : String(error));
       });
     void loadMembers?.()
       .then((list) => {

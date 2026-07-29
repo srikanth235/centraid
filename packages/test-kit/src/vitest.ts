@@ -1,10 +1,7 @@
 import { fileURLToPath } from "node:url";
 
-import {
-  defineProject,
-  mergeConfig,
-  type UserWorkspaceConfig,
-} from "vitest/config";
+import { defineProject, mergeConfig } from "vitest/config";
+import type { UserWorkspaceConfig } from "vitest/config";
 
 type ProjectConfig = UserWorkspaceConfig;
 

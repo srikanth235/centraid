@@ -100,13 +100,15 @@ export function evaluateConditions(
         passed: compare(spec.op, row[spec.column], spec.value),
         observed: row,
       };
-    } catch (err) {
+    } catch (error) {
       return {
         name: spec.name,
         predicate,
         message: spec.message,
         passed: false,
-        observed: { error: err instanceof Error ? err.message : String(err) },
+        observed: {
+          error: error instanceof Error ? error.message : String(error),
+        },
       };
     }
   });

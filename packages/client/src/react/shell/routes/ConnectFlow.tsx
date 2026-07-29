@@ -1,6 +1,7 @@
 import type { IconName } from "@centraid/design-tokens";
 import { tileFinish } from "@centraid/design-tokens";
-import { type JSX, useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
 import Icon from "../../ui/Icon.js";
@@ -8,9 +9,8 @@ import {
   buildTestInput,
   connectFlowReducer,
   createInitialConnectFlowState,
-  type ConnectFlowResult,
-  type ConnectMethod,
 } from "./connectFlow-core.js";
+import type { ConnectFlowResult, ConnectMethod } from "./connectFlow-core.js";
 import { GatewayDetailsStep } from "./ConnectFlowDetailsStep.js";
 import {
   commitConnectFlow,
@@ -112,7 +112,7 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-  }, [state.step, state.testing]);
+  }, [state, state.step, state.testing]);
 
   // "This Mac" has no test step — load its existing vaults straight into
   // the same `report.vaults` shape the vault step already knows how to
@@ -127,7 +127,7 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-  }, [state.method, state.step, state.report]);
+  }, [state, state.method, state.step, state.report]);
 
   // Run the commit whenever a `commit` dispatch lands us in `committing`.
   useEffect(() => {
@@ -137,10 +137,10 @@ export default function ConnectFlow({
       (result) => {
         if (alive) dispatch({ result, type: "commitSettled" });
       },
-      (err: unknown) => {
+      (error: unknown) => {
         if (alive)
           dispatch({
-            error: err instanceof Error ? err.message : String(err),
+            error: error instanceof Error ? error.message : String(error),
             type: "commitFailed",
           });
       }
@@ -148,11 +148,11 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-  }, [state.step]);
+  }, [state, state.step]);
 
   useEffect(() => {
     if (state.step === "done" && state.result) onDone(state.result);
-  }, [state.step, state.result]);
+  }, [onDone, state, state.step, state.result]);
 
   useEffect(() => {
     if (state.step === "details" && state.method === "gateway") {

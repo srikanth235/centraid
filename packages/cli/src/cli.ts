@@ -136,7 +136,7 @@ if (
   entry.endsWith("cli.ts") ||
   entry.endsWith("/cli")
 ) {
-  main().catch((err) => {
-    fail(err instanceof Error ? err.message : String(err));
+  main().catch((error) => {
+    fail(error instanceof Error ? error.message : String(error));
   });
 }

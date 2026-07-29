@@ -29,8 +29,8 @@ export default async function edit({
       purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       status: 200,
       body: { status: "denied", reason: e.message, code: e.code },

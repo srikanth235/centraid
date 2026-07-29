@@ -22,12 +22,8 @@
  * we could not read who references it is exactly backwards.
  */
 
-import {
-  openManifest,
-  type BackupProvider,
-  type Keyring,
-  type ManifestEntry,
-} from "@centraid/backup";
+import { openManifest } from "@centraid/backup";
+import type { BackupProvider, Keyring, ManifestEntry } from "@centraid/backup";
 
 /**
  * The blob shas a single manifest's entries reference. A `blob` entry's
@@ -92,13 +88,13 @@ export async function snapshotReferencedBlobShas(opts: {
         opts.vaultId,
         row.manifestHash
       );
-    } catch (err) {
+    } catch (error) {
       // An unreadable retained manifest must FAIL the root computation, never
       // shrink it: a caller that then deletes "unreferenced" CAS blobs would be
       // deleting bytes it simply failed to prove were still reachable.
       throw new Error(
-        `snapshot roots: cannot read manifest seq ${row.seq}: ${err instanceof Error ? err.message : String(err)}`,
-        { cause: err }
+        `snapshot roots: cannot read manifest seq ${row.seq}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
       );
     }
     const shas = blobShasFromManifestEntries(opened.entries);

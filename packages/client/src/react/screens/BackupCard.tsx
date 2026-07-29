@@ -1,11 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type { GatewayHomeDiscoveryDTO } from "../../gateway-client.js";
 import type { UsageInput } from "../../storage-metrics.js";
@@ -13,15 +7,17 @@ import { formatDuration } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import BackupHealthMetrics, { ClockLine } from "./BackupHealthMetrics.js";
-import BackupInventoryPanel, {
-  type BackupReconciliationDTO,
-  type ProviderPolicyStatusDTO,
+import BackupInventoryPanel from "./BackupInventoryPanel.js";
+import type {
+  BackupReconciliationDTO,
+  ProviderPolicyStatusDTO,
 } from "./BackupInventoryPanel.js";
 import { computeStorageMetrics } from "./backupMetrics.js";
-import BackupPolicyPanel, {
-  type BackupDestinationDTO,
-  type BackupPolicyDTO,
-  type BackupPolicyPatchDTO,
+import BackupPolicyPanel from "./BackupPolicyPanel.js";
+import type {
+  BackupDestinationDTO,
+  BackupPolicyDTO,
+  BackupPolicyPatchDTO,
 } from "./BackupPolicyPanel.js";
 import RecoveryKitGate from "./RecoveryKitGate.js";
 
@@ -224,9 +220,9 @@ export default function BackupCard({
         setStatus(s);
         setLoadError(null);
       })
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         if (!mountedRef.current) return;
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(error instanceof Error ? error.message : String(error));
       });
     if (loadUsage) {
       loadUsage()
@@ -267,9 +263,9 @@ export default function BackupCard({
       await onRunNow();
       refresh();
       followupTimerRef.current = setTimeout(refresh, FOLLOWUP_MS);
-    } catch (err) {
+    } catch (error) {
       if (mountedRef.current)
-        setRunError(err instanceof Error ? err.message : String(err));
+        setRunError(error instanceof Error ? error.message : String(error));
     } finally {
       if (mountedRef.current) setTriggering(false);
     }
@@ -286,9 +282,9 @@ export default function BackupCard({
       await onVerifyNow();
       refresh();
       followupTimerRef.current = setTimeout(refresh, FOLLOWUP_MS);
-    } catch (err) {
+    } catch (error) {
       if (mountedRef.current)
-        setRunError(err instanceof Error ? err.message : String(err));
+        setRunError(error instanceof Error ? error.message : String(error));
     } finally {
       if (mountedRef.current) setVerifying(false);
     }

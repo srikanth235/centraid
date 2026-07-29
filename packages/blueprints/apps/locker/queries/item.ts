@@ -112,8 +112,8 @@ export default async function itemHandler({
       updated_at: row.updated_at,
     };
     return { item };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { item: null, vaultDenied: { code: e.code, message: e.message } };
   }
 }

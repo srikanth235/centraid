@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import type * as TypeImport_11i4z7t from "@playwright/test";
 
 import {
   appEntry,
@@ -12,9 +13,8 @@ import {
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
-  type MockGateway,
-  type TestEnv,
 } from "./fixtures";
+import type { MockGateway, TestEnv } from "./fixtures";
 
 /** §4 App creation, §5 App editing, §6 Builder tabs. */
 
@@ -65,7 +65,7 @@ const TURN_FRAMES = [
 
 /** Open an existing published app in the builder (Edit with Centraid). */
 async function openEditor(
-  page: import("@playwright/test").Page,
+  page: TypeImport_11i4z7t.Page,
   id: string,
   name: string
 ): Promise<void> {

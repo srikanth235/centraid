@@ -4,12 +4,8 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  handleRunsMessage,
-  handleStateMessage,
-  nextOrdinal,
-  type AuditState,
-} from "./ctx.js";
+import { handleRunsMessage, handleStateMessage, nextOrdinal } from "./ctx.js";
+import type { AuditState } from "./ctx.js";
 
 function audit(over: Partial<AuditState> = {}): AuditState {
   return {

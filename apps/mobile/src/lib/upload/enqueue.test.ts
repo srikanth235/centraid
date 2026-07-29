@@ -9,11 +9,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FRAME_BYTES } from "./cbsf";
-import {
-  enqueueLocalFile,
-  sha256OfFile,
-  type StreamingDigest,
-} from "./enqueue";
+import { enqueueLocalFile, sha256OfFile } from "./enqueue";
+import type { StreamingDigest } from "./enqueue";
 import { bytesFileSource } from "./file-source";
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
 import { UploadQueueStore } from "./store";

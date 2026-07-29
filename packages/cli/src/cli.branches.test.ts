@@ -55,8 +55,9 @@ describe("cli.branches", () => {
 
     try {
       await main(argv);
-    } catch (e) {
-      if (!(e instanceof Error) || !e.message.startsWith("__exit_")) throw e;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith("__exit_"))
+        throw error;
     } finally {
       writeOut.mockRestore();
       writeErr.mockRestore();
@@ -95,18 +96,18 @@ describe("cli.branches", () => {
     expect(ver.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/u);
   });
 
-  function jsonResponse(status: number, body: unknown) {
+  function jsonResponse(status: number, body: unknown): Response {
     const text = body === undefined ? "" : JSON.stringify(body);
     return {
       ok: status >= 200 && status < 300,
       status,
       json: async () => body,
       text: async () => text,
-    };
+    } as Response;
   }
 
   test("health fails on non-2xx; list fails on 401 and other non-2xx", async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async (input: RequestInfo | URL) => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
       if (url.includes("/health")) return jsonResponse(503, { error: "down" });
       if (url.includes("/_apps"))
@@ -139,7 +140,7 @@ describe("cli.branches", () => {
     expect(list401.code).toBe(1);
     expect(list401.stderr).toMatch(/unauthorized/u);
 
-    fetchImpl.mockImplementation(async (input: RequestInfo | URL) => {
+    fetchImpl.mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes("/_apps")) return jsonResponse(500, {});
       return jsonResponse(200, {});

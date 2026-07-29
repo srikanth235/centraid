@@ -12,7 +12,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { DiskFullTracker } from "@centraid/vault";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { GatewayLogStore, type GatewayLogEntry } from "./gateway-log-store.ts";
+import { GatewayLogStore } from "./gateway-log-store.ts";
+import type { GatewayLogEntry } from "./gateway-log-store.ts";
 
 // ESM's `node:fs` module namespace isn't configurable, so `vi.spyOn` can't
 // stub a single export (vitest's documented limitation) — mock the whole

@@ -3,16 +3,15 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { FsObjectStore } from "./object-store.js";
-import {
-  BackupProviderError,
-  type ProviderAuditEvent,
-  type ProviderAuditPage,
-  type ProviderAuditQuery,
-  type ProviderInventoryObject,
-  type ProviderInventoryPage,
-  type ProviderInventoryQuery,
-  type ProviderPolicyDeclaration,
-  STORE_CLASSES,
+import { BackupProviderError, STORE_CLASSES } from "./provider.js";
+import type {
+  ProviderAuditEvent,
+  ProviderAuditPage,
+  ProviderAuditQuery,
+  ProviderInventoryObject,
+  ProviderInventoryPage,
+  ProviderInventoryQuery,
+  ProviderPolicyDeclaration,
 } from "./provider.js";
 
 export const MIN_POLICY_RPO_SECONDS = 30;

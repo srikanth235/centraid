@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 
 // Crop/rotate editor (issue #352 phase 3/4). Non-destructive by design: the
@@ -65,7 +65,7 @@ export function EditorView({
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const noteRef = useRef<HTMLParagraphElement | null>(null);
 
-  function draw() {
+  const draw = useCallback(() => {
     const img = imgRef.current;
     const canvas = canvasRef.current;
     if (!img || !canvas) return;
@@ -80,7 +80,11 @@ export function EditorView({
     ctx.rotate((rotation * Math.PI) / 180);
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     ctx.restore();
-  }
+  }, [rotation]);
+  const drawRef = useRef(draw);
+  useEffect(() => {
+    drawRef.current = draw;
+  }, [draw]);
 
   // One source Image per mount — content_uri never changes under an open
   // editor (the lightbox mints a fresh EditorView per asset via its own
@@ -91,7 +95,7 @@ export function EditorView({
     img.addEventListener("load", () => {
       if (cancelled) return;
       imgRef.current = img;
-      draw();
+      drawRef.current();
     });
     img.addEventListener("error", () => {
       if (!cancelled) setLoadError(true);
@@ -100,12 +104,10 @@ export function EditorView({
     return () => {
       cancelled = true;
     };
-    // (#360) one-shot load; the rotation-driven redraw is the effect below
-  }, [draw, asset.content_uri]);
+  }, [asset.content_uri]);
 
   useEffect(() => {
     draw();
-    // (#360) draw() closes over the current rotation/refs each render
   }, [rotation, draw]);
 
   function fractionAt(e: { clientX: number; clientY: number }) {
@@ -183,10 +185,10 @@ export function EditorView({
       );
       await refresh();
       onSaved();
-    } catch (err) {
+    } catch (error) {
       if (noteRef.current) {
         noteRef.current.textContent = String(
-          (err as { message?: string })?.message ?? err
+          (error as { message?: string })?.message ?? error
         );
       }
     } finally {

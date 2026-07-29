@@ -2,7 +2,8 @@
 // of AssistantScreen so that screen stays under the file-size cap while gaining
 // copy / feedback / regenerate / retry / retry-pager / timestamp affordances.
 
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import type { AsstAttachmentDTO, AsstMsgDTO } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";

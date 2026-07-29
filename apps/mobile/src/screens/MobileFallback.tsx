@@ -4,7 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../kit/components/Button";
 import Icon from "../kit/components/Icon";
-import { radii, spacing, t, useTheme, type ThemeColors } from "../kit/theme";
+import { radii, spacing, t, useTheme } from "../kit/theme";
+import type { ThemeColors } from "../kit/theme";
 import type { RootScreenProps } from "../navigation";
 
 // Mobile fallback for the desktop Builder. The mobile app is for *using*

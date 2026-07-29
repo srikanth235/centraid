@@ -17,8 +17,10 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { countRows } from "./atlas-graph.js";
-import { atlasTables, type AtlasPackKind } from "./atlas.js";
-import { dbSizeBreakdown, type TableStatsMethod } from "./table-stats.js";
+import { atlasTables } from "./atlas.js";
+import type { AtlasPackKind } from "./atlas.js";
+import { dbSizeBreakdown } from "./table-stats.js";
+import type { TableStatsMethod } from "./table-stats.js";
 
 export {
   ATLAS_GRAPH_CENTER,

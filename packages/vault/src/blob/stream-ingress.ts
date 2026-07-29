@@ -20,16 +20,13 @@ import {
 import { uuidv7 } from "../ids.js";
 import type { BlobCache } from "./cache.js";
 import type { BlobContentKeyRegistry } from "./content-keys.js";
-import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
-import {
-  IncrementalSha256,
-  type SerializableSha256State,
-} from "./incremental-sha256.js";
+import { remoteEncryptionKey } from "./custody-types.js";
+import type { RemoteTier } from "./custody-types.js";
+import { IncrementalSha256 } from "./incremental-sha256.js";
+import type { SerializableSha256State } from "./incremental-sha256.js";
 import { extractBlobMetaFromProbes, sniffMediaType } from "./pipeline.js";
-import {
-  INGRESS_PREVIEW_MAX_BYTES,
-  type IngressPreviewInput,
-} from "./preview.js";
+import { INGRESS_PREVIEW_MAX_BYTES } from "./preview.js";
+import type { IngressPreviewInput } from "./preview.js";
 import type { MultipartPart } from "./remote-transfer.js";
 import { verifyRemoteSealedObject } from "./remote-verify.js";
 import {
@@ -274,10 +271,12 @@ export class RemoteStreamIngress {
         bytes.subarray(Math.max(0, bytes.length - PROBE_TAIL_BYTES))
       );
     }
-    const byNumber = new Map(
-      parseParts(row.remote_parts_json).map((part) => [part.partNumber, part])
-    );
-    byNumber.set(partNumber, { partNumber, etag });
+    const byNumber = new Map<number, MultipartPart>([
+      ...parseParts(row.remote_parts_json).map(
+        (part) => [part.partNumber, part] as const
+      ),
+      [partNumber, { partNumber, etag }] as const,
+    ]);
     this.deps.state.recordRemoteAppend({
       sessionId,
       receivedBytes: nextOffset,

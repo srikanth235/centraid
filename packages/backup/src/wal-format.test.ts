@@ -36,11 +36,6 @@ import {
   WAL_CAPTURE_ORDER,
   WAL_DB_NAMES,
   WAL_HEADER_BYTES,
-  type WalDbName,
-  type WalGroupCloser,
-  type WalPairMarker,
-  type WalSegmentAddress,
-  type WalStreamListing,
   walGroupCloserKey,
   walPageSize,
   walPairMarkerKey,
@@ -48,6 +43,13 @@ import {
   walSegmentKey,
   walSegmentPrefix,
   validateCommittedWal,
+} from "./wal-format.js";
+import type {
+  WalDbName,
+  WalGroupCloser,
+  WalPairMarker,
+  WalSegmentAddress,
+  WalStreamListing,
 } from "./wal-format.js";
 
 const cleanups: Array<() => Promise<void>> = [];

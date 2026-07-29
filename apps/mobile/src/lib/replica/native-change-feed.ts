@@ -4,12 +4,14 @@ import {
   INITIAL_VAULT_CURSOR,
   parseChange,
   parseCursor,
-  type GatewayAuth,
-  type ReplicaChangeFeedAdapter,
-  type ReplicaCursor,
-  type SseFrame,
-  type VaultChangeCursor,
-  type VaultChangeMessage,
+} from "@centraid/client/replica/native";
+import type {
+  GatewayAuth,
+  ReplicaChangeFeedAdapter,
+  ReplicaCursor,
+  SseFrame,
+  VaultChangeCursor,
+  VaultChangeMessage,
 } from "@centraid/client/replica/native";
 import { fetch as expoFetch } from "expo/fetch";
 

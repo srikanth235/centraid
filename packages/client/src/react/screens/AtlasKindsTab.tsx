@@ -1,4 +1,5 @@
-import { Fragment, useState, type JSX } from "react";
+import { Fragment, useState } from "react";
+import type { JSX } from "react";
 
 import { formatBytes, relativeWhen } from "../../format.js";
 import type {

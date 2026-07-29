@@ -22,13 +22,16 @@ import {
   hydrationMessagesFromLedger,
   resolveItemCost,
   withConversationLock,
-  type AutomationTurnStreamEvent,
-  type ConversationRunner,
-  type ConversationTurnAttachment,
-  type RunnerKind,
-  type TurnAttachment,
-  type TurnStreamEvent,
 } from "@centraid/app-engine";
+import type {
+  AutomationTurnStreamEvent,
+  ConversationRunner,
+  ConversationTurnAttachment,
+  RunnerKind,
+  TurnAttachment,
+  TurnStreamEvent,
+} from "@centraid/app-engine";
+import type * as TypeImport_4y0tle from "@centraid/app-engine";
 import type { Row as AutomationRow } from "@centraid/automation";
 
 import { journalConversationStore } from "../journal-stores.js";
@@ -269,14 +272,14 @@ export async function runInteractiveAutomationTurn(
         const hydrationMessages = hydrationMessagesFromLedger(
           turnsBeforeCurrent,
           (turnId) => store.listItems(turnId),
-          (itemId) => store.listAttachmentsForItem(itemId),
+          (itemIdLocal) => store.listAttachmentsForItem(itemIdLocal),
           binding?.hydratedThroughSeq ?? -1
         );
         const recoveryMessages = binding
           ? hydrationMessagesFromLedger(
               turnsBeforeCurrent,
               (turnId) => store.listItems(turnId),
-              (itemId) => store.listAttachmentsForItem(itemId)
+              (itemIdLocal) => store.listAttachmentsForItem(itemIdLocal)
             )
           : [];
         const hydrationPlan =
@@ -558,7 +561,7 @@ export async function runInteractiveAutomationTurn(
           | {
               adapterSessionId?: string;
               adapterKind?: string;
-              adapterUsageSnapshot?: import("@centraid/app-engine").AdapterUsageSnapshot;
+              adapterUsageSnapshot?: TypeImport_4y0tle.AdapterUsageSnapshot;
               hydrated?: boolean;
               hydrationTokens?: number;
             }
@@ -777,10 +780,10 @@ export async function runInteractiveAutomationTurn(
           ...(stopReason ? { stopReason } : {}),
         };
         store.runInTransaction(() => {
-          for (const [itemId, artifacts] of artifactsByItem) {
+          for (const [_itemId, artifacts] of artifactsByItem) {
             for (const artifact of artifacts) {
               store.insertAttachment({
-                itemId,
+                itemId: _itemId,
                 hash: artifact.hash,
                 mime: artifact.mime,
                 sizeBytes: artifact.sizeBytes,

@@ -86,8 +86,8 @@ export default async function autofillItem({
         receipt_id: revealed.receiptId,
       },
     };
-  } catch (err) {
-    const error = err as { code?: string; message?: string };
+  } catch (caughtError) {
+    const error = caughtError as { code?: string; message?: string };
     return {
       fill: null,
       vaultDenied: { code: error.code, message: error.message },

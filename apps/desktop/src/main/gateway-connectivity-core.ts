@@ -14,8 +14,8 @@
 import {
   decodePairingTicket,
   isTicketExpired,
-  type PairingTicketPayload,
 } from "./gateway-pairing-core.js";
+import type { PairingTicketPayload } from "./gateway-pairing-core.js";
 import type { ListGatewayVaultsResult } from "./gateway-vaults-core.js";
 import type { HandshakeResult } from "./version-handshake.js";
 

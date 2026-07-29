@@ -1,27 +1,27 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_qcp7vy from "../actions.js";
 import type { HomeRouteProps } from "./HomeRoute.js";
+import type * as TypeImport_1t4fyrr from "./HomeRoute.js";
+import type * as TypeImport_13kqdum from "./templatesData.js";
 
 // Issue #434, Phase 2 — the installed-app context menu rework. A bundled
 // install (its id is a reserved bundled-template id) gets Open / App info /
 // Rename / Star / Uninstall (Share + Reveal dropped, Delete → Uninstall with
 // the data-stays copy). A code-store app keeps Delete.
 
-const listAutomations =
-  vi.fn<typeof import("../../../gateway-client.js").listAutomations>();
-const deleteApp =
-  vi.fn<typeof import("../../../gateway-client.js").deleteApp>();
-const deleteAutomation =
-  vi.fn<typeof import("../../../gateway-client.js").deleteAutomation>();
-const runAutomationNow =
-  vi.fn<typeof import("../../../gateway-client.js").runAutomationNow>();
-const updateAppMeta =
-  vi.fn<typeof import("../../../gateway-client.js").updateAppMeta>();
+const listAutomations = vi.fn<typeof TypeImport_1gl5zx7.listAutomations>();
+const deleteApp = vi.fn<typeof TypeImport_1gl5zx7.deleteApp>();
+const deleteAutomation = vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>();
+const runAutomationNow = vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>();
+const updateAppMeta = vi.fn<typeof TypeImport_1gl5zx7.updateAppMeta>();
 const renameInstalledApp =
-  vi.fn<typeof import("../../../gateway-client.js").renameInstalledApp>();
+  vi.fn<typeof TypeImport_1gl5zx7.renameInstalledApp>();
 vi.mock(import("../../../gateway-client.js"), () => ({
   listAutomations: () => listAutomations(),
   deleteApp: (a) => deleteApp(a),
@@ -39,8 +39,7 @@ vi.mock(import("./automationsData.js"), () => ({
     entries: [],
   }),
 }));
-const loadAppTemplates =
-  vi.fn<typeof import("./templatesData.js").loadAppTemplates>();
+const loadAppTemplates = vi.fn<typeof TypeImport_13kqdum.loadAppTemplates>();
 vi.mock(import("./templatesData.js"), () => ({
   loadAppTemplates: () => loadAppTemplates(),
 }));
@@ -82,8 +81,8 @@ vi.mock(import("./appSettingsData.js"), () => ({
   }),
 }));
 
-let HomeRoute: typeof import("./HomeRoute.js").default;
-let ShellActionsProvider: typeof import("../actions.js").ShellActionsProvider;
+let HomeRoute: typeof TypeImport_1t4fyrr.default;
+let ShellActionsProvider: typeof TypeImport_qcp7vy.ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
