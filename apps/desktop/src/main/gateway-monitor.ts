@@ -30,6 +30,7 @@
 
 import { BrowserWindow, Notification } from "electron";
 
+import { setTrayGatewayRunning } from "./app-chrome.js";
 import {
   applyComponentAlerts,
   applyProbe,
@@ -386,6 +387,12 @@ async function tick(): Promise<void> {
     alertHistory,
   };
   broadcast(lastSnapshot);
+  // Keep the tray honest (issue #603 F4). main.ts sets the label once at boot,
+  // when a true first run has DELIBERATELY not started the local gateway yet —
+  // without this it stayed "Gateway: stopped" for the rest of the session. The
+  // heartbeat already knows the truth every tick, so reuse it rather than
+  // adding a second poller.
+  setTrayGatewayRunning(state.status === "up");
 }
 
 /** Run one tick, coalescing concurrent callers onto the same pass. */

@@ -200,9 +200,18 @@ export function installWebHost(): void {
           rememberDevice: input.rememberDevice ?? false,
         });
         if (!response.ok || !response.vaultId || !response.gatewayId) {
-          throw new Error(
-            response.error ?? "Gateway rejected the pairing ticket."
-          );
+          // A REFUSAL is not an outage: the gateway answered. Surfacing its
+          // code keeps "that ticket was already used" from reading as
+          // "your gateway is down" (scenario B5).
+          const refusal = response.error ?? "";
+          return {
+            ok: false as const,
+            error:
+              refusal === "ticket_expired"
+                ? ("ticket_expired" as const)
+                : ("invalid_ticket" as const),
+            message: refusal || "Gateway rejected the pairing ticket.",
+          };
         }
         const next = saveConnection({
           endpointTicket: decoded.gw,

@@ -1,12 +1,10 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
-import type {
-  CentraidGatewayDevice,
-  GatewayVaultGrant,
-} from "../../gateway-client.js";
+import type { GatewayVaultGrant } from "../../gateway-client.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
+import type { GroupedDevice } from "./device-groups.js";
 import { lastAdminSpace, roleLabel } from "./device-roles.js";
 import DeviceRow, { ageLabel } from "./DeviceRow.js";
 
@@ -29,26 +27,27 @@ export interface DeviceMemberGroupProps {
   /** The person's (space, role) grants — devices only inherit these. */
   roles: readonly GatewayVaultGrant[];
   /** Live bindings. */
-  devices: readonly CentraidGatewayDevice[];
+  devices: readonly GroupedDevice[];
   /** Tombstoned bindings, kept so past attribution still resolves. */
-  revoked: readonly CentraidGatewayDevice[];
+  revoked: readonly GroupedDevice[];
   /** True for the group holding the device making this request. */
   isSelf: boolean;
   now: number;
-  onRevokeDevice: (
-    device: CentraidGatewayDevice,
+  /** Absent when the viewer may not revoke anything on this installation. */
+  onRevokeDevice?: (
+    device: GroupedDevice,
     confirmLastAdmin?: string
   ) => Promise<void>;
-  onRenameDevice?: (
-    device: CentraidGatewayDevice,
-    label: string
-  ) => Promise<void>;
-  onUpdateCompute?: (
-    device: CentraidGatewayDevice,
-    enabled: boolean
-  ) => Promise<void>;
+  onRenameDevice?: (device: GroupedDevice, label: string) => Promise<void>;
+  onUpdateCompute?: (device: GroupedDevice, enabled: boolean) => Promise<void>;
   /** Absent when the gateway exposes no roster surface to remove people with. */
   onRemoveMember?: (confirmLastAdmin?: string) => Promise<void>;
+  /**
+   * False for a member who owns no space: the household verbs are hidden
+   * rather than rendered dead (onboarding run B11). Signing THIS device out
+   * stays available — it is the viewer's own hardware, not someone else's.
+   */
+  canAdminister?: boolean;
 }
 
 export default function DeviceMemberGroup({
@@ -62,6 +61,7 @@ export default function DeviceMemberGroup({
   onRenameDevice,
   onUpdateCompute,
   onRemoveMember,
+  canAdminister = true,
 }: DeviceMemberGroupProps): JSX.Element {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -125,7 +125,7 @@ export default function DeviceMemberGroup({
           ) : null}
           {error ? <div className={styles.rowError}>{error}</div> : null}
         </div>
-        {onRemoveMember ? (
+        {onRemoveMember && canAdminister ? (
           <div className={styles.rowAction}>
             {confirming ? (
               <div className={styles.confirm}>
@@ -187,9 +187,15 @@ export default function DeviceMemberGroup({
               key={device.deviceId}
               device={device}
               now={now}
-              onRevoke={onRevokeDevice}
-              {...(onRenameDevice ? { onRename: onRenameDevice } : {})}
-              {...(onUpdateCompute ? { onUpdateCompute } : {})}
+              {...(onRevokeDevice && (canAdminister || device.current)
+                ? { onRevoke: onRevokeDevice }
+                : {})}
+              {...(onRenameDevice && (canAdminister || device.current)
+                ? { onRename: onRenameDevice }
+                : {})}
+              {...(onUpdateCompute && (canAdminister || device.current)
+                ? { onUpdateCompute }
+                : {})}
             />
           ))}
         </div>

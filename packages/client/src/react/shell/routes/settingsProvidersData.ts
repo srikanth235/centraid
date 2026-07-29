@@ -289,12 +289,20 @@ function toCard(
     connected: entry.available,
     sessionReady:
       entry.available && caps?.reachable === true && caps.authRequired !== true,
+    // Installed, but the gateway has not (yet) reported capabilities for it.
+    // That is silence, not a refusal — see `sessionProbePending`.
+    ...(entry.available && caps === undefined
+      ? { sessionProbePending: true }
+      : {}),
     ...(entry.available &&
     !(caps?.reachable === true && caps.authRequired !== true)
       ? {
           fallbackBlockedReason: caps?.authRequired
             ? "sign-in required"
-            : (caps?.reason ?? "session readiness has not succeeded"),
+            : (caps?.reason ??
+              (caps === undefined
+                ? "capability probe has not reported yet"
+                : "session readiness has not succeeded")),
         }
       : {}),
     kind: entry.kind,

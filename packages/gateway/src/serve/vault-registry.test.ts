@@ -58,6 +58,43 @@ describe("vault-registry scenarios", () => {
     expect(registry.isFresh()).toBe(false);
   });
 
+  test("the default vault is the marked personal one, not the oldest, and survives a rename", async () => {
+    const root = await tempDir();
+    const registry = openVaultRegistry({
+      rootDir: root,
+      logger: silentLogger,
+      ownerName: "Priya",
+    });
+    cleanups.push(() => registry.stop());
+    const shared = registry.create("Shared");
+    const personal = registry.create("Personal", { personal: true });
+
+    // Oldest-first listing still leads with Shared…
+    expect(registry.list().map((v) => v.vaultId)).toStrictEqual([
+      shared.vaultId,
+      personal.vaultId,
+    ]);
+    expect(registry.list().map((v) => v.personal)).toStrictEqual([
+      undefined,
+      true,
+    ]);
+    // …but the default is the owner's own vault.
+    expect(registry.defaultVaultId()).toBe(personal.vaultId);
+
+    // The desktop fresh path renames it to the owner's display name — the
+    // marker lives in the vault, so the default does not move.
+    registry.rename(personal.vaultId, "Priya");
+    expect(registry.defaultVaultId()).toBe(personal.vaultId);
+
+    // No marked vault at all (pre-marker data / erased personal vault) →
+    // the previous oldest-first behaviour.
+    registry.delete(personal.vaultId);
+    expect(registry.defaultVaultId()).toBe(shared.vaultId);
+    registry.delete(shared.vaultId);
+    expect(registry.defaultVaultIdOrUndefined()).toBeUndefined();
+    expect(() => registry.defaultVaultId()).toThrow(/no vault mounted/u);
+  });
+
   test("create / rename / delete permits the last vault to return to zero", async () => {
     const root = await tempDir();
     const registry = openRegistry(root);

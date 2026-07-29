@@ -6,12 +6,12 @@ import type { JSX, ReactNode } from "react";
 import Icon from "../ui/Icon.js";
 import Logo from "../ui/Logo.js";
 import StatusPill from "../ui/StatusPill.js";
+import { openMenu } from "./contextMenu.js";
 import {
   ArrowRightGlyph,
   HomeGlyph,
   PlusGlyph,
   SearchGlyph,
-  SettingsGlyph,
   SparkleGlyph,
 } from "./glyphs.js";
 
@@ -124,6 +124,15 @@ export interface SidebarProps {
   /** @deprecated Apps list is no longer shown in the sidebar. */
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
+  /** Open the phone-pairing modal. Omitted = the menu offers no pairing. */
+  onPairDevice?: () => void;
+  /** The signed-in person, shown in the sidebar foot in place of a bare
+   *  "Settings" row. Falsy while the roster is still loading. */
+  accountName?: string;
+  accountColor?: string;
+  /** Drop this device's pairing and return to onboarding. Omitted = the menu
+   *  offers no log-out (nothing local to forget). */
+  onLogOut?: () => void;
   /**
    * A newer build is on disk (main's dist watcher): the version a relaunch
    * would load. Set alongside onRelaunchToUpdate to show the pill above
@@ -137,6 +146,91 @@ export interface SidebarProps {
   updateReadyToInstall?: boolean;
   /** Open the "What's new" changelog modal. Omitted = the item is hidden. */
   onWhatsNew?: () => void;
+}
+
+function accountInitials(name: string): string {
+  const parts = name
+    .trim()
+    .split(/\s+/u)
+    .filter((word) => word.length > 0);
+  if (parts.length === 0) return "·";
+  if (parts.length === 1) {
+    const word = parts[0] ?? "";
+    return (word.charAt(0) + (word.charAt(1) || "")).toUpperCase();
+  }
+  return (
+    (parts[0]?.charAt(0) ?? "") + (parts[1]?.charAt(0) ?? "")
+  ).toUpperCase();
+}
+
+/**
+ * The sidebar foot is the account row: who you are, not what you can
+ * configure. Settings moved into its menu because a preferences dialog is an
+ * action you take a handful of times, while your own name is the thing that
+ * should be standing there — and it is the only place in the shell that shows
+ * the household name at all.
+ */
+function AccountRow(props: SidebarProps): JSX.Element {
+  const name = props.accountName?.trim() || "You";
+  return (
+    <button
+      type="button"
+      className={chrome.sbAccount}
+      aria-haspopup="menu"
+      aria-label={`${name}. Account menu.`}
+      onClick={(event) => {
+        // Anchor to the SIDEBAR, inset by a hair, not to the button: the menu
+        // should read as this column opening upward, so it lines up with the
+        // rail's edges rather than floating at some content width inside it.
+        const row = event.currentTarget.getBoundingClientRect();
+        const column =
+          event.currentTarget.parentElement?.getBoundingClientRect() ?? row;
+        const gap = 8;
+        const rect = new DOMRect(
+          column.left + gap,
+          row.top,
+          Math.max(160, column.width - gap * 2),
+          row.height
+        );
+        openMenu(
+          [
+            { id: "settings", label: "Settings", icon: "Settings" },
+            ...(props.onPairDevice
+              ? ([{ id: "pair", label: "Pair device", icon: "Phone" }] as const)
+              : []),
+            ...(props.onLogOut
+              ? ([
+                  "sep" as const,
+                  {
+                    id: "logout",
+                    label: "Log out",
+                    icon: "ArrowRight",
+                    danger: true,
+                  },
+                ] as const)
+              : []),
+          ],
+          { kind: "rect", rect },
+          (id) => {
+            if (id === "settings") props.onSettings();
+            if (id === "pair") props.onPairDevice?.();
+            if (id === "logout") props.onLogOut?.();
+          },
+          { matchAnchorWidth: true }
+        );
+      }}
+    >
+      <span
+        className={chrome.sbAccountAvatar}
+        style={{ background: props.accountColor ?? "#5B8DEF" }}
+        aria-hidden="true"
+      >
+        {accountInitials(name)}
+      </span>
+      <span className={chrome.sbAccountName}>{name}</span>
+      <span className={chrome.sbMeta}>⌘,</span>
+    </button>
+  );
 }
 
 function SbItem(props: {
@@ -512,13 +606,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
           <ArrowRightGlyph />
         </button>
       ) : null}
-      <SbItem
-        icon={<SettingsGlyph />}
-        label="Settings"
-        active={props.activePage === "settings"}
-        onClick={() => props.onSettings()}
-        trailing={<StatusPill tone="live">live</StatusPill>}
-      />
+      <AccountRow {...props} />
     </div>
   );
 }

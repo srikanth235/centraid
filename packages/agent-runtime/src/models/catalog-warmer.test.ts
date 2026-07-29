@@ -79,6 +79,40 @@ describe("catalog-warmer", () => {
     await expect(readCatalog(catalogPath)).resolves.toBeUndefined();
   });
 
+  // A runner that self-reports no models (opencode, grok) leaves the cache
+  // empty forever. The read path only re-kicks a warm while the question is
+  // unanswered — otherwise every poll restarted a warm, `isWarming` was true
+  // at read time, and the surface reported `loading` for good.
+  test("records a completed warm even when it enumerated nothing", async () => {
+    const catalogPath = await tmpCatalogPath();
+    const warmer = new CatalogWarmer({
+      catalogPath,
+      enumerateModels: noModels,
+    });
+    expect(warmer.hasWarmed("opencode", "models")).toBe(false);
+    await warmer.warm("opencode", "models");
+    expect(warmer.hasWarmed("opencode", "models")).toBe(true);
+    expect(warmer.isWarming("opencode", "models")).toBe(false);
+    // The surface can now settle instead of spinning.
+    expect(deriveStatus(0, warmer.isWarming("opencode", "models"))).toBe(
+      "empty"
+    );
+    // A different kind is still unasked.
+    expect(warmer.hasWarmed("codex", "models")).toBe(false);
+  });
+
+  test("records a completed warm even when the enumerator threw", async () => {
+    const catalogPath = await tmpCatalogPath();
+    const warmer = new CatalogWarmer({
+      catalogPath,
+      enumerateModels: async () => {
+        throw new Error("boom");
+      },
+    });
+    await warmer.warm("grok", "models");
+    expect(warmer.hasWarmed("grok", "models")).toBe(true);
+  });
+
   test("deriveStatus: loading wins over a cache, then ready, else empty", () => {
     expect(deriveStatus(0, false)).toBe("empty");
     expect(deriveStatus(0, true)).toBe("loading");

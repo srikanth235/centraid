@@ -2,7 +2,11 @@ import { tileFinish } from "@centraid/design-tokens";
 import type { IconName } from "@centraid/design-tokens";
 import type { JSX } from "react";
 
-import { roleBadge, roleSentence } from "../shell/memberScope.js";
+import {
+  canAdministerHousehold,
+  roleBadge,
+  roleSentence,
+} from "../shell/memberScope.js";
 import type { MemberScope } from "../shell/memberScope.js";
 import Icon from "../ui/Icon.js";
 import DevicesCard from "./DevicesCard.js";
@@ -125,6 +129,9 @@ export default function HouseholdScreen(
 ): JSX.Element {
   const { spaces, defaultScopeId } = props;
   const spaceCount = spaces.length;
+  // Same source of truth as the "Viewer · <space>" copy below: the scope
+  // registry. A member who owns no space gets read-only roster rows (B11).
+  const canAdminister = canAdministerHousehold(spaces);
   return (
     <div className={styles.page}>
       <div className={styles.head}>
@@ -147,6 +154,7 @@ export default function HouseholdScreen(
         {props.loadDevices && props.onRevokeDevice ? (
           <DevicesCard
             now={props.now}
+            canAdminister={canAdminister}
             loadDevices={props.loadDevices}
             onRevokeDevice={props.onRevokeDevice}
             {...(props.onRenameDevice

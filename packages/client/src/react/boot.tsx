@@ -20,6 +20,7 @@ import {
   installDesktopAssistHandoff,
 } from "../assist-oauth-handoff.js";
 import { resetGatewayAuthCache } from "../gateway-client-core.js";
+import { renameGatewayMember } from "../gateway-client-members.js";
 import { updateVault } from "../gateway-client-vault.js";
 import { isWebHost } from "./host-platform.js";
 import FirstRunGate from "./screens/FirstRunGate.js";
@@ -137,6 +138,8 @@ void (async (): Promise<void> => {
           avatarColor,
           gatewayId,
           vaultId,
+          ownerVault,
+          memberId,
           path,
         }) => {
           // Write metadata to the gateway this run actually connected.
@@ -145,10 +148,29 @@ void (async (): Promise<void> => {
             displayName,
             avatarColor,
           });
+          // The name belongs to the PERSON: without this it lived only in
+          // device-local settings, invisible to every surface, and Household
+          // kept showing the placeholder "You". `memberId` is set only when
+          // onboarding actually asked, so a returning device never renames
+          // someone who already has a name. Non-fatal for the same reason the
+          // vault rename below is: the user is already in.
+          if (memberId && displayName) {
+            await renameGatewayMember(memberId, displayName).catch(
+              (error: unknown) => {
+                console.error(
+                  "[first-run] naming the household member failed",
+                  error
+                );
+              }
+            );
+          }
           resetGatewayAuthCache();
-          if (path === "fresh" && vaultId) {
+          if (path === "fresh" && vaultId && ownerVault) {
             // The auto-founded owner vault ships as "Personal"; first run
-            // makes it theirs. Deliberately non-fatal — the user is already
+            // makes it theirs. `ownerVault` is false when this run landed on
+            // a reinstall's existing data, where the fallback vault is the
+            // SHARED one — renaming that would rename everyone's space
+            // (issue #603 C10). Deliberately non-fatal — the user is already
             // in, and a generically-named space is a cosmetic problem they
             // can fix in Settings, not a reason to block onboarding. Logged
             // rather than swallowed so it is diagnosable.

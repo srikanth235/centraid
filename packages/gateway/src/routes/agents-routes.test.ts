@@ -9,7 +9,29 @@
 import { SUPPORTED_RUNNER_KINDS } from "@centraid/agent-runtime";
 import { describe, expect, test } from "vitest";
 
-import { readAgentsStatus } from "./agents-routes.ts";
+import type { AgentAcpCapabilities } from "./agents-routes.ts";
+import { modelsFromCapabilities, readAgentsStatus } from "./agents-routes.ts";
+
+/** A probed snapshot carrying only the axes these tests read. */
+function caps(
+  configOptions: AgentAcpCapabilities["configOptions"]
+): AgentAcpCapabilities {
+  return {
+    reachable: true,
+    loadSession: true,
+    resume: true,
+    close: true,
+    additionalDirectories: true,
+    mcpHttp: true,
+    mcpSse: false,
+    modelConfigurable: (configOptions ?? []).some(
+      (option) => option.category === "model"
+    ),
+    ...(configOptions ? { configOptions } : {}),
+    authRequired: false,
+    promptImage: true,
+  };
+}
 
 describe("agents-routes", () => {
   test("reports one entry per supported runner kind", async () => {
@@ -116,6 +138,70 @@ describe("agents-routes", () => {
       refresh: true,
     });
     expect(seen).toStrictEqual(SUPPORTED_RUNNER_KINDS.map(() => true));
+  });
+
+  // Catalog enumeration is opt-in per kind (codex + claude-code), but the
+  // capability probe launches every available agent anyway and reads the same
+  // session/new model option. opencode advertised 76 models there while the
+  // picker said "Built-in model", because only the empty catalog was consulted.
+  test("falls an empty catalog back to the models the capability probe saw", () => {
+    const models = modelsFromCapabilities(
+      caps([
+        {
+          id: "model",
+          category: "model",
+          type: "select",
+          currentValue: "opencode/sonnet",
+          values: [
+            { value: "opencode/sonnet", name: "OpenCode Zen/Sonnet" },
+            { value: "opencode/haiku" },
+          ],
+        },
+      ])
+    );
+    // Only what the agent itself offered — and its own current pick is the default.
+    expect(models).toStrictEqual([
+      { id: "opencode/sonnet", name: "OpenCode Zen/Sonnet", default: true },
+      { id: "opencode/haiku" },
+    ]);
+  });
+
+  test("stays empty when the probe found no model option, or no probe ran", () => {
+    expect(modelsFromCapabilities(undefined)).toStrictEqual([]);
+    expect(modelsFromCapabilities(caps(undefined))).toStrictEqual([]);
+    expect(
+      modelsFromCapabilities(
+        caps([
+          {
+            id: "thought",
+            category: "thought_level",
+            type: "select",
+            values: [{ value: "high" }],
+          },
+        ])
+      )
+    ).toStrictEqual([]);
+  });
+
+  // An in-flight warm may still fill the catalog, so `loading` is never
+  // overwritten — the client keeps polling rather than latching a fallback.
+  test("never overrides a loading catalog with the capability fallback", async () => {
+    const s = await readAgentsStatus({
+      resolveModels: async () => ({ list: [], status: "loading" }),
+      resolveCapabilities: async () =>
+        caps([
+          {
+            id: "model",
+            category: "model",
+            type: "select",
+            values: [{ value: "m-1" }],
+          },
+        ]),
+    });
+    for (const agent of s.agents) {
+      expect(agent.modelsStatus).toBe("loading");
+      expect(agent.models).toStrictEqual([]);
+    }
   });
 
   test("a throwing resolver degrades that agent to an empty list", async () => {

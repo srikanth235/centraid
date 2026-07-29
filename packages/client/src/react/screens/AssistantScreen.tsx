@@ -59,7 +59,11 @@ export function RunnerPicker({
         {picker.runners.map((runner) => (
           <option key={runner.kind} value={runner.kind} title={runner.hint}>
             {runner.title}
-            {runner.sessionReady ? "" : " — setup or sign-in needed"}
+            {runner.sessionReady
+              ? ""
+              : runner.sessionProbePending
+                ? " — checking…"
+                : " — setup or sign-in needed"}
           </option>
         ))}
       </select>

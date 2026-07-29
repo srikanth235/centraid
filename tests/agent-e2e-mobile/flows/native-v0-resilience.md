@@ -1,14 +1,18 @@
 # native-v0-resilience
 
 **Goal:** preserve a repeatable native v0 smoke and resilience matrix across
-the Home, Photos, Docs, Agenda, and Settings families.
+the Home springboard and the Photos, Docs, Agenda, and Settings surfaces.
 
-Note the tab is **Home**, not "Apps". The route is registered as `Apps` (see
-`navigation.ts` and Settings' `navigate('Apps', …)`), but it renders as "Home",
-and an earlier version of this flow asserted the route name — matching nothing.
-Each tab is also verified by a string unique to the screen it opens rather than
-by its own label: the label is in the tab bar on every screen, so
-`tapOn: "Docs"` + `assertVisible: "Docs"` passes even when the tap does nothing.
+There is no bottom-tab navigator (`apps/mobile/src/navigation.ts`): Photos,
+Docs and Agenda are full-screen covers launched from Home's tiles, and Settings
+opens from the glass dock. Each surface is therefore entered the way a user
+enters it — by the tile's `Open <name>` accessibility label — and asserted on a
+string that only the opened SCREEN publishes ("Search photos",
+"Add document or folder", "Create event", "APPEARANCE"), never on the tile or
+dock label, which is on Home whether or not the tap did anything. Covers dismiss
+with a native swipe-down gesture Maestro cannot drive, so each surface starts
+from a fresh launch; React Navigation state is not persisted, so every launch
+lands on Home.
 
 **Setup:** install a development build, start Metro, and expose a reachable
 gateway through `MAESTRO_GATEWAY_URL`. The flow clears app state, mints a
@@ -19,8 +23,8 @@ one calendar event. Run the 50k deterministic fixture with `cd apps/mobile &&
 bun test timeline-50k` before the device flow.
 
 **Automated steps:** configure the declared gateway; launch without clearing
-state; visit all five tabs; open Photos again; force-stop and relaunch without
-clearing state; assert the local Photos surface returns. This catches navigation
+state; open each of the four surfaces from Home; force-stop and relaunch without
+clearing state; assert Home returns. This catches navigation
 regressions and verifies that replica/upload databases outlive the process.
 
 **Manual network matrix (record observations in the run verdict):**

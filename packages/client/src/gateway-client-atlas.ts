@@ -10,6 +10,7 @@ import {
   authHeaders,
   doFetch,
   enc,
+  nonJsonError,
   readJson,
 } from "./gateway-client-core.js";
 
@@ -390,9 +391,7 @@ async function browseWrite(
   try {
     body = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    throw new Error(
-      `browse ${path} returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`
-    );
+    throw nonJsonError(`browse ${path}`, res.status, text);
   }
   return {
     ok: res.ok && body["ok"] !== false,

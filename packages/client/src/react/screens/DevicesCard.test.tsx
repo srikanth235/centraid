@@ -173,6 +173,60 @@ describe("DevicesCard suite", () => {
       expect(button(el, "Remove Priya")).toBeTruthy();
     });
 
+    // Onboarding run B11: a read-only member was shown both verbs and every
+    // click was refused server-side with no feedback at all.
+    it("hides the household verbs from a member who owns no space", async () => {
+      const el = await mount({
+        canAdminister: false,
+        loadDevices: vi
+          .fn<DevicesCardProps["loadDevices"]>()
+          .mockResolvedValue([
+            device(),
+            device({
+              deviceId: "enr_2",
+              memberId: "mem_arun",
+              memberLabel: "Arun",
+              label: "Arun’s phone",
+            }),
+          ]),
+        loadMembers: vi
+          .fn<NonNullable<DevicesCardProps["loadMembers"]>>()
+          .mockResolvedValue([member()]),
+        onRemoveMember: vi
+          .fn<NonNullable<DevicesCardProps["onRemoveMember"]>>()
+          .mockResolvedValue({ removed: true }),
+        onCreateTicket: vi
+          .fn<NonNullable<DevicesCardProps["onCreateTicket"]>>()
+          .mockRejectedValue(new Error("not offered")),
+      });
+      expect(button(el, "Revoke device")).toBeUndefined();
+      expect(button(el, "Remove Priya")).toBeUndefined();
+      expect(button(el, "Pair a device")).toBeUndefined();
+      // The roster itself is still readable — it is only the verbs that go.
+      expect(el.textContent).toContain("Arun’s phone");
+    });
+
+    it("still lets a viewer sign this device out", async () => {
+      const el = await mount({
+        canAdminister: false,
+        loadDevices: vi
+          .fn<DevicesCardProps["loadDevices"]>()
+          .mockResolvedValue([
+            device({ current: true, label: "This browser" }),
+            device({ deviceId: "enr_2", label: "Other browser" }),
+          ]),
+        loadMembers: vi
+          .fn<NonNullable<DevicesCardProps["loadMembers"]>>()
+          .mockResolvedValue([member()]),
+      });
+      // Exactly one revoke affordance: the caller's own hardware.
+      expect(
+        [...el.querySelectorAll("button")].filter(
+          (b) => b.textContent?.trim() === "Revoke device"
+        )
+      ).toHaveLength(1);
+    });
+
     it("renames a device inline without revoking it", async () => {
       const original = device();
       const onRenameDevice = vi

@@ -38,6 +38,7 @@ import {
   authHeaders,
   doFetch,
   enc,
+  nonJsonError,
   readJson,
   withClientSession,
 } from "./gateway-client-core.js";
@@ -353,10 +354,7 @@ async function readRemoveOutcome(
     try {
       return JSON.parse(text) as { connection_id: string };
     } catch {
-      throw new GatewayClientError(
-        "gateway_error",
-        `${op} returned non-JSON: ${text.slice(0, 200)}`
-      );
+      throw nonJsonError(op, res.status, text);
     }
   }
   if (res.status === 401 || res.status === 403) {

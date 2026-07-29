@@ -8,7 +8,7 @@ import type * as TypeImport_1ruos0p from "./generated/centraid_web_iroh.js";
 import {
   irohBridgeIdForConsent,
   irohFetch,
-  moveIrohDeviceKeyForConsent,
+  adoptDurableIrohDeviceKey,
   pairGatewayOverIroh,
   purgeIrohDeviceState,
 } from "./iroh-transport.js";
@@ -104,15 +104,24 @@ describe("iroh-transport", () => {
   });
 
   describe("Iroh remember-device boundaries", () => {
-    test("moves one stable device key between session and durable storage", () => {
+    test("keeps the one stable device key durable regardless of consent", () => {
       sessionStorage.setItem(DEVICE_KEY, "stable-key");
-      expect(moveIrohDeviceKeyForConsent(true)).toBe("stable-key");
+      expect(adoptDurableIrohDeviceKey()).toBe("stable-key");
       expect(localStorage.getItem(DEVICE_KEY)).toBe("stable-key");
       expect(sessionStorage.getItem(DEVICE_KEY)).toBeNull();
 
-      expect(moveIrohDeviceKeyForConsent(false)).toBe("stable-key");
-      expect(sessionStorage.getItem(DEVICE_KEY)).toBe("stable-key");
-      expect(localStorage.getItem(DEVICE_KEY)).toBeNull();
+      // Declining the offline copy no longer demotes the enrolled identity —
+      // that is what silently unpaired a browser on every restart.
+      (loadConnection as ReturnType<typeof vi.fn>).mockReturnValue({
+        endpointId: "gw-1",
+        label: "Web",
+        displayName: "Web",
+        avatarColor: "#6f5bf6",
+        rememberDevice: false,
+      });
+      expect(adoptDurableIrohDeviceKey()).toBe("stable-key");
+      expect(localStorage.getItem(DEVICE_KEY)).toBe("stable-key");
+      expect(sessionStorage.getItem(DEVICE_KEY)).toBeNull();
     });
 
     test("marks only remembered bridge scopes as durable-cache eligible", () => {

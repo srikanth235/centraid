@@ -283,6 +283,38 @@ describe("ConnectFlow scenarios", () => {
       });
     });
 
+    // Issue #603 D10: a ticket that decodes but names no vault used to land
+    // on an empty, actionless list with "Enter Centraid" still enabled.
+    it("a ticket that grants no vault explains itself and blocks the CTA", async () => {
+      testGatewayConnection.mockResolvedValue({
+        ok: true,
+        stages: [
+          { detail: "", id: "decode", label: "Decode ticket", status: "pass" },
+        ],
+      });
+      const el = mount({ context: "onboarding", onDone: onDoneMock() });
+      click(radios(el, "Existing gateway")[0]);
+      await flush();
+      typeInto(el.querySelector("textarea") as HTMLTextAreaElement, "a-ticket");
+      click(
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === "Continue"
+        )
+      );
+      await flush(3);
+      click(
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === "Continue"
+        )
+      );
+      await flush();
+      expect(el.textContent).toContain("shared no space with this device");
+      const cta = [...el.querySelectorAll("button")].find(
+        (b) => b.textContent === "Enter Centraid"
+      ) as HTMLButtonElement;
+      expect(cta.disabled).toBe(true);
+    });
+
     it("gateway test failure shows Retry, which re-runs the test", async () => {
       testGatewayConnection.mockResolvedValueOnce({
         error: "invalid_ticket",

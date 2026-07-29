@@ -106,14 +106,19 @@ describe("build-gateway scenarios", () => {
         pair: () => ({ ok: false }),
       },
     });
-    // Order is load-bearing: ids are UUIDv7, so the OLDEST is the default the
-    // registry hands unscoped callers and unnamed pair tickets.
+    // Shared is founded first, so it heads the (oldest-first) listing — but
+    // the DEFAULT the registry hands unscoped callers and unnamed pair
+    // tickets is the owner's marked Personal vault, never Shared.
     expect(gateway.vaults.list().map((v) => v.name)).toStrictEqual([
       "Shared",
       "Personal",
     ]);
+    expect(gateway.vaults.list().map((v) => v.personal)).toStrictEqual([
+      undefined,
+      true,
+    ]);
     const founded = gateway.vaults.list().map((v) => v.vaultId);
-    expect(gateway.vaults.defaultVaultId()).toBe(founded[0]);
+    expect(gateway.vaults.defaultVaultId()).toBe(founded[1]);
     await expect(directoryBytes(dataDir)).resolves.toBeLessThanOrEqual(
       14 * 1024 ** 2
     );
@@ -147,8 +152,9 @@ describe("build-gateway scenarios", () => {
       expect(tunnelAttacker.status).toBe(403);
       // The vault plane answers straight away: no 409 wall to clear first.
       expect(status.status).toBe(200);
+      // Unscoped → the default vault, which is Personal (founded[1]).
       await expect(status.json()).resolves.toMatchObject({
-        vaultId: founded[0],
+        vaultId: founded[1],
       });
     } finally {
       await mounted.close();

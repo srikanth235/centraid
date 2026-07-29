@@ -13,7 +13,8 @@
  * context (see `vault-context.ts`); there is no server-global active seat,
  * so two clients on two vaults never disturb each other. Outside a scoped
  * request (tests, boot paths that predate scoping) `current()` falls back
- * to the default vault — the oldest one.
+ * to the default vault — the owner's PERSONAL vault, identified by a durable
+ * marker in the vault itself, never by creation order (see `defaultVaultId`).
  *
  * Vault lifecycle is split by AUTHORITY, not by transport (issue #289,
  * corrected in #568 item J). `create` and `delete` are ADMIN acts, but they
@@ -133,6 +134,13 @@ export interface VaultInfo {
   vaultId: string;
   name: string;
   ownerPartyId: string;
+  /**
+   * True for the owner's PERSONAL vault — the durable default marker written
+   * at founding (`core_vault.settings_json.personal`). Absent on every other
+   * vault, so clients can find "my own space" without matching a name that
+   * the fresh path renames.
+   */
+  personal?: boolean;
   /** Presentation out of `core_vault.settings_json` (#280: profiles are vaults). */
   color?: string;
   icon?: string;
@@ -418,6 +426,7 @@ export class VaultRegistry {
       vaultId: plane.boot.vaultId,
       name: plane.name,
       ownerPartyId: plane.boot.ownerPartyId,
+      ...(plane.personal ? { personal: true } : {}),
       ...(presentation.color ? { color: presentation.color } : {}),
       ...(presentation.icon ? { icon: presentation.icon } : {}),
       ...(presentation.blurb ? { blurb: presentation.blurb } : {}),
@@ -425,15 +434,33 @@ export class VaultRegistry {
   }
 
   /**
-   * The default vault — the oldest one (ids are UUIDv7, so lexicographic
-   * order is creation order). The fallback for unscoped callers only; a
-   * scoped request always names its vault.
+   * The default vault — the owner's PERSONAL vault, never the shared one.
+   *
+   * The signal is the durable `personal` marker written into the vault's own
+   * `core_vault.settings_json` at founding, NOT creation order and NOT the
+   * name: ids are UUIDv7 so "oldest" is Shared (founded first), and the
+   * desktop fresh path renames the personal vault to the owner's display
+   * name. Ties (a data dir with several marked vaults — restore edge) resolve
+   * oldest-first; a registry with no marked vault at all (pre-marker dev data,
+   * or a household that erased its personal vault) falls back to the oldest,
+   * which is the previous behaviour.
+   *
+   * The fallback for unscoped callers only; a scoped request names its vault.
    */
   defaultVaultId(): string {
-    const oldest = [...this.planes.keys()].sort()[0];
-    if (oldest === undefined)
+    const chosen = this.defaultVaultIdOrUndefined();
+    if (chosen === undefined)
       throw new Error("vault registry: no vault mounted");
-    return oldest;
+    return chosen;
+  }
+
+  /**
+   * `defaultVaultId()` without the throw — for seams that must survive a
+   * gateway whose every vault was erased (the pairing-ticket mint target).
+   */
+  defaultVaultIdOrUndefined(): string | undefined {
+    const ids = [...this.planes.keys()].sort();
+    return ids.find((id) => this.planes.get(id)?.personal === true) ?? ids[0];
   }
 
   /**
@@ -483,8 +510,11 @@ export class VaultRegistry {
    * Create (and mount) a fresh vault. ADMIN act: the CLI, the auto-found
    * bootstrap a fresh data dir runs at construction (#603), or an admin
    * device over HTTP. Never reachable on ordinary device authority.
+   *
+   * `personal: true` stamps the durable default marker (see `VaultInfo.personal`
+   * and `defaultVaultId()`); only the auto-found bootstrap passes it.
    */
-  create(name?: string): VaultInfo {
+  create(name?: string, options?: { personal?: boolean }): VaultInfo {
     const trimmed = name?.trim();
     if (trimmed !== undefined && trimmed.length === 0) {
       throw new VaultRegistryError("bad_name", "a vault name cannot be empty");
@@ -495,6 +525,7 @@ export class VaultRegistry {
       vaultId,
       ...(trimmed ? { vaultName: trimmed } : {}),
     });
+    if (options?.personal) plane.markPersonal();
     this.scannedDirs.add(dir);
     this.planes.set(plane.boot.vaultId, plane);
     if (this.started) plane.start();

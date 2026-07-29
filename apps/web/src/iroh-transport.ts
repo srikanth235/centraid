@@ -47,22 +47,18 @@ function encodeBytes(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function endpoint(
-  rememberDevice = loadConnection().rememberDevice === true
-): Promise<BrowserEndpoint> {
-  const stored = moveIrohDeviceKeyForConsent(rememberDevice);
-  // Consent changes move the same key between session/durable storage. Keep
-  // the live endpoint as well: rotating it would strand an enrolled identity.
+async function endpoint(): Promise<BrowserEndpoint> {
+  const stored = adoptDurableIrohDeviceKey();
   if (!endpointPromise) {
     endpointPromise = (async () => {
       const connectStart = markConnectStart();
       await initWasm();
-      const storage = rememberDevice ? localStorage : sessionStorage;
       const node = await BrowserEndpoint.spawn(
         stored ? decodeBytes(stored) : undefined,
         undefined
       );
-      if (!stored) storage.setItem(KEY_STORAGE, encodeBytes(node.secret_key()));
+      if (!stored)
+        localStorage.setItem(KEY_STORAGE, encodeBytes(node.secret_key()));
       measureConnect(connectStart);
       return node;
     })().catch((error) => {
@@ -71,21 +67,26 @@ async function endpoint(
     });
   }
   const node = await endpointPromise;
-  // Cover a consent toggle while the first WASM spawn was still pending: its
-  // closure may have written to the old bucket after the pre-spawn move.
-  moveIrohDeviceKeyForConsent(rememberDevice);
+  // A spawn that was still pending may have written its key to the session
+  // bucket under the pre-#603 code path; fold it back in.
+  adoptDurableIrohDeviceKey();
   return node;
 }
 
-/** Move (never copy) the stable browser device key into its consented bucket. */
-export function moveIrohDeviceKeyForConsent(
-  rememberDevice: boolean
-): string | null {
-  const target = rememberDevice ? localStorage : sessionStorage;
-  const stale = rememberDevice ? sessionStorage : localStorage;
-  const stored = target.getItem(KEY_STORAGE) ?? stale.getItem(KEY_STORAGE);
-  if (stored !== null) target.setItem(KEY_STORAGE, stored);
-  stale.removeItem(KEY_STORAGE);
+/**
+ * Move (never copy) the stable browser device key into durable storage.
+ *
+ * This key IS the enrolled device identity — losing it means the gateway no
+ * longer recognises this browser and the only way back is a fresh pairing
+ * ticket. It used to live in sessionStorage whenever "Remember this device"
+ * was unchecked (the default), so every browser restart silently unpaired.
+ * Durability is no longer a consent axis; the offline copy still is.
+ */
+export function adoptDurableIrohDeviceKey(): string | null {
+  const stored =
+    localStorage.getItem(KEY_STORAGE) ?? sessionStorage.getItem(KEY_STORAGE);
+  if (stored !== null) localStorage.setItem(KEY_STORAGE, stored);
+  sessionStorage.removeItem(KEY_STORAGE);
   return stored;
 }
 
@@ -111,7 +112,7 @@ export interface IrohPairingResponse {
 export async function pairGatewayOverIroh(
   input: IrohPairingInput
 ): Promise<{ response: IrohPairingResponse; endpointId: string }> {
-  const node = await endpoint(input.rememberDevice);
+  const node = await endpoint();
   const response = JSON.parse(
     await node.pair_gateway(
       input.endpointTicket,

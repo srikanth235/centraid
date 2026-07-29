@@ -5,13 +5,30 @@
 // functions are the one cohesive piece that stands alone. `appId` is passed in
 // rather than imported so this module has no edge back to harness.mjs.
 
+// Metro's port. 8081 is Expo's default and what CI uses; every Metro URL in the
+// harness derives from here so an override is one env var
+// (`METRO_PORT=8082 node tests/agent-e2e-mobile/flows/<flow>.mjs`).
+//
+// Overriding it does NOT move the app: this project has no `expo-dev-client`
+// dependency, so the iOS debug build asks `RCTBundleURLProvider` for
+// `localhost:8081` — a port baked in at BUILD time (`RCT_METRO_PORT`), not
+// discoverable at run time, and the `centraid://` scheme has no
+// `expo-development-client` deep link to redirect it. A second worktree that
+// starts Metro elsewhere gets a "No script URL provided" redbox on the phone
+// while this preflight reports the packager healthy. So: on iOS, either free
+// 8081 for the worktree under test or rebuild with `RCT_METRO_PORT`. The
+// override is genuinely useful on Android, where `adb reverse` maps whatever
+// port is chosen back to the emulator's `localhost:<port>`.
+export const METRO_PORT = Number(process.env.METRO_PORT ?? 8081);
+export const METRO_ORIGIN = `http://127.0.0.1:${METRO_PORT}`;
+
 // The Expo dev build fetches its JS bundle from Metro at runtime. If
 // clearState wipes the cached bundle and Metro isn't reachable, the
 // app shows a redbox ("No script URL provided") and every `assertVisible`
 // times out cryptically. Fail loudly instead.
 export async function metroReachable() {
   try {
-    const res = await fetch("http://127.0.0.1:8081/status", {
+    const res = await fetch(`${METRO_ORIGIN}/status`, {
       signal: AbortSignal.timeout(1500),
     });
     return res.ok;
@@ -78,8 +95,8 @@ export async function prewarmMetroBundle(platform, appId) {
   // 200 alone does not mean the real graph was built.
   const query = devClientBundleQuery(platform, appId);
   const candidates = [
-    `http://127.0.0.1:8081/apps/mobile/index.bundle?${query}`,
-    `http://127.0.0.1:8081/index.bundle?${query}`,
+    `${METRO_ORIGIN}/apps/mobile/index.bundle?${query}`,
+    `${METRO_ORIGIN}/index.bundle?${query}`,
   ];
   const MIN_REAL_BUNDLE_BYTES = 1_000_000;
   // Fallback URLs must be tried in priority order; the first complete bundle

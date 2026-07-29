@@ -34,7 +34,7 @@ bun run build && centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --
 | --- | --- | --- | --- |
 | **desktop** | `bun run dev:desktop` | Electron window; gateway loopback (often ephemeral until H4) | Embeds gateway today; H1 targets detached |
 | **web** | `bun run dev:web` | Vite default (see `apps/web`) | Needs a reachable gateway or ticket path |
-| **mobile** | `bun run dev:mobile` | Metro **8081** | Pair via desktop Settings → Phone |
+| **mobile** | `bun run dev:mobile` | Metro **8081** | Pair with a ticket minted in desktop Household → Devices |
 | **gateway-daemon** | `centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | No `print-token` (retired #505). **Do not pin `CENTRAID_GATEWAY_TOKEN`** — see below. A fresh `<dir>` auto-founds `Shared` + `Personal` (#603); `centraid-gateway pair` mints a device ticket |
 | **product CLI** | `centraid status --url http://127.0.0.1:8765 --token <hex>` | (client) | Wire client (`@centraid/cli`); auth via `--token` / `CENTRAID_TOKEN` / `CENTRAID_GATEWAY_TOKEN` |
 | **docs site** | `bun run docs:serve` | **4173** on 127.0.0.1 | After `docs:build` / `docs:bundle` |
@@ -87,15 +87,16 @@ exactly like a phone or a second desktop:
    bun run --cwd apps/web build && node packages/gateway/scripts/embed-web.mjs
    ```
 
-2. **Mint a pairing ticket** for the vault (one line; redeems over plain HTTP via
-   `POST /centraid/_gateway/pair`, issue #376):
+2. **Mint a pairing ticket** for the vault (one line; redeems only over the iroh
+   pairing ALPN `centraid/gw-pair/1` — the HTTP `POST /centraid/_gateway/pair`
+   twin was removed in #555):
 
    ```sh
    centraid-gateway pair --data-dir "<same data-dir>" --vault "<name-or-id>"
    ```
 
-   Omitting `--vault` targets the registry default — `Shared` on an
-   auto-founded gateway.
+   Omitting `--vault` targets the registry default — the owner's `Personal`
+   vault on an auto-founded gateway, never `Shared`.
 
 3. **Open the web UI in the browser pane.** Register the web port in
    `.claude/launch.json` and start it with the preview tool — ad-hoc navigation to
@@ -112,8 +113,9 @@ exactly like a phone or a second desktop:
    fill in the profile step (display name + avatar colour). The ConnectFlow
    (`packages/client/src/react/shell/routes/ConnectFlow.tsx`) is shared with
    desktop's **Connect with a ticket** option and the switcher's **Add
-   gateway**; it offers two methods (**This Mac** / **Existing gateway**), and
-   web only ever reaches the second. The ticket redeems over iroh, records this
+   gateway**; web passes `methods={['gateway']}` plus `initialMethod="gateway"`,
+   so there is no method chooser — it opens directly on the ticket field. The
+   ticket redeems over iroh, records this
    device's EndpointId enrollment, and connects to the existing vault — its
    automations, runs, and data appear as in desktop.
 

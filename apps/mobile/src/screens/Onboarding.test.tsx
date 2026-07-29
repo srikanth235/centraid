@@ -13,6 +13,7 @@ type ReactNative = typeof import("react-native");
 type SafeAreaContext = typeof import("react-native-safe-area-context");
 type ReactNativeSvg = typeof import("react-native-svg");
 type ThemeModule = typeof import("../kit/theme");
+type GatewayModule = typeof import("../lib/gateway");
 type PhoneLinkModule = typeof import("../lib/phone-link");
 type ProfileModule = typeof import("../lib/profile");
 
@@ -23,6 +24,7 @@ type ProfileModule = typeof import("../lib/profile");
 const mocks = vi.hoisted(() => ({
   notificationAsync: vi.fn<(type?: unknown) => Promise<void>>(),
   onDone: vi.fn<() => void>(),
+  readSelfMemberName: vi.fn<() => Promise<string | undefined>>(),
   pair: vi.fn<
     (
       ticket: string,
@@ -207,6 +209,16 @@ vi.mock(
     }) as unknown as Partial<ProfileModule>
 );
 
+// Mocked, not stubbed-around: the real module pulls AsyncStorage in at import
+// time, which does not resolve under vitest's jsdom environment.
+vi.mock(
+  import("../lib/gateway"),
+  () =>
+    ({
+      readSelfMemberName: mocks.readSelfMemberName,
+    }) as unknown as Partial<GatewayModule>
+);
+
 vi.mock(
   import("../lib/phone-link"),
   () =>
@@ -227,6 +239,9 @@ describe("Onboarding scenarios", () => {
       desktopName: "Gateway",
       deviceId: "device-1",
     });
+    // Default: a roster that does not name this person yet, so the profile
+    // step runs. Individual tests override it.
+    mocks.readSelfMemberName.mockResolvedValue("");
     container = document.createElement("div");
     document.body.appendChild(container);
     const handleDone = mocks.onDone;
@@ -297,6 +312,42 @@ describe("Onboarding scenarios", () => {
     await flush();
     expect(container!.textContent).toContain("Who's using");
   }
+
+  /** Paste a pair ticket without asserting which step it lands on. */
+  async function pasteTicket(): Promise<void> {
+    typeValue(container!.querySelector("textarea")!, "pair-ticket");
+    click(button("Continue with pasted code"));
+    await flush();
+  }
+
+  describe("naming an already-known person", () => {
+    // Self-pairing a second device is the common case: the household roster
+    // already carries the name. Asking again would be a second chance to
+    // disagree with yourself, and the answer would overwrite the roster.
+    it("skips the profile step when the roster already names this person", async () => {
+      mocks.readSelfMemberName.mockResolvedValue("Ada Lovelace");
+      await pasteTicket();
+      expect(container!.textContent).not.toContain("Who's using");
+      expect(container!.textContent).toContain("You're all set, Ada");
+      // The roster's name is adopted, not re-asked and not re-written to it.
+      expect(mocks.setProfileName).toHaveBeenCalledWith("Ada Lovelace");
+      expect(mocks.setOnboarded).toHaveBeenCalledWith(true);
+    });
+
+    it("still asks when the roster carries only the placeholder", async () => {
+      mocks.readSelfMemberName.mockResolvedValue("");
+      await pasteTicket();
+      expect(container!.textContent).toContain("Who's using");
+    });
+
+    // A failed read is not evidence of a name. Asking is the safe branch:
+    // the worst case is one redundant question, not a silently wrong identity.
+    it("still asks when the roster could not be read", async () => {
+      mocks.readSelfMemberName.mockResolvedValue(undefined);
+      await pasteTicket();
+      expect(container!.textContent).toContain("Who's using");
+    });
+  });
 
   describe("mobile ticket-only onboarding", () => {
     it("pairs from a pasted ticket, then persists the profile from the unified step", async () => {
