@@ -3,7 +3,7 @@
 // injection lesson). The hook in `ShareIntentIngest.tsx` is a thin wrapper that
 // wires the real producers, `expo-file-system`, `Alert`, and reset in.
 
-import type { NativeReplicaSession } from "../../lib/replica/native-session";
+import type { MobileReplicaSession } from "../../lib/replica/native-session";
 import type { DeviceMediaInput } from "../../lib/upload/media-producer";
 
 /** A shared file as expo-share-intent hands it to us (structural subset). */
@@ -42,12 +42,12 @@ interface DocumentProducerInput {
 
 export interface ShareIngestPorts {
   backupDeviceMedia: (
-    session: NativeReplicaSession,
+    session: MobileReplicaSession,
     gatewayBase: string,
     input: MediaProducerInput
   ) => Promise<unknown>;
   backupDocument: (
-    session: NativeReplicaSession,
+    session: MobileReplicaSession,
     gatewayBase: string,
     input: DocumentProducerInput
   ) => Promise<unknown>;
@@ -83,9 +83,10 @@ function isDeviceMedia(mimeType: string): boolean {
  */
 export async function processShareIntent(
   ports: ShareIngestPorts,
-  session: NativeReplicaSession,
+  session: MobileReplicaSession,
   gatewayBase: string,
-  shareIntent: SharedIntentLike
+  shareIntent: SharedIntentLike,
+  targetVaultId?: string
 ): Promise<void> {
   try {
     const files = shareIntent.files ?? [];
@@ -103,6 +104,7 @@ export async function processShareIntent(
       if (isDeviceMedia(file.mimeType)) {
         await ports.backupDeviceMedia(session, gatewayBase, {
           localUri: file.path,
+          ...(targetVaultId ? { targetVaultId } : {}),
           ...(file.fileName ? { filename: file.fileName } : {}),
           mediaType: file.mimeType,
           plaintextSize,
@@ -115,6 +117,7 @@ export async function processShareIntent(
       } else {
         await ports.backupDocument(session, gatewayBase, {
           localUri: file.path,
+          ...(targetVaultId ? { targetVaultId } : {}),
           title: file.fileName ?? file.path,
           mediaType: file.mimeType,
           plaintextSize,

@@ -251,6 +251,88 @@ function collectBootstrapWindow(
   };
 }
 
+/**
+ * First-paint window for native Photos/Docs. It is deliberately a DUPLICATE
+ * prefix: the opaque continuation still starts the canonical full walk at
+ * zero, so lazy backfill cannot skip anything and ordinary upserts collapse
+ * the repeated rows.
+ */
+function collectNewestVisibleRows(
+  db: TypeImport_18fk7n9.DatabaseSync,
+  reader: ReplicaSnapshotReader,
+  shapes: ReplicaServerShape[],
+  nowMs: number,
+  windowLimit: number
+): BootstrapWireRow[] {
+  const candidates = [
+    ...(db
+      .prepare(
+        `SELECT asset_id AS row_id,
+                COALESCE(captured_at, '') AS modified_at,
+                'media.media_asset' AS entity
+           FROM media_media_asset
+          ORDER BY COALESCE(captured_at, '') DESC LIMIT ?`
+      )
+      .all(windowLimit) as unknown as Array<{
+      row_id: string;
+      modified_at: string;
+      entity: string;
+    }>),
+    ...(db
+      .prepare(
+        `SELECT document_id AS row_id, updated_at AS modified_at,
+                'core.document' AS entity
+           FROM core_document ORDER BY updated_at DESC LIMIT ?`
+      )
+      .all(windowLimit) as unknown as Array<{
+      row_id: string;
+      modified_at: string;
+      entity: string;
+    }>),
+  ].sort((left, right) => right.modified_at.localeCompare(left.modified_at));
+  const rows: BootstrapWireRow[] = [];
+  const seen = new Set<string>();
+  const append = (entity: string, rowId: string): ReplicaRow | undefined => {
+    const raw = reader.readRow(entity, rowId, {
+      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+    });
+    if (!raw) return undefined;
+    for (const shape of shapes) {
+      if (!shape.entityMap.has(entity)) continue;
+      const shaped = shapeReplicaRow(shape, entity, raw, nowMs);
+      const key = shaped
+        ? `${shaped.shapeId}\u0000${shaped.entity}\u0000${shaped.rowId}`
+        : "";
+      if (shaped && !seen.has(key) && rows.length < windowLimit) {
+        seen.add(key);
+        rows.push(shaped);
+      }
+    }
+    return raw;
+  };
+  for (const candidate of candidates) {
+    if (rows.length >= windowLimit) break;
+    const raw = append(candidate.entity, candidate.row_id);
+    const contentId =
+      typeof raw?.values.content_id === "string"
+        ? raw.values.content_id
+        : typeof raw?.values.current_content_id === "string"
+          ? raw.values.current_content_id
+          : undefined;
+    if (!contentId) continue;
+    append("core.content_item", contentId);
+    const derivatives = db
+      .prepare(
+        `SELECT derivative_id FROM core_content_derivative
+          WHERE content_id = ? ORDER BY variant`
+      )
+      .all(contentId) as Array<{ derivative_id: string }>;
+    for (const derivative of derivatives)
+      append("core.content_derivative", derivative.derivative_id);
+  }
+  return rows;
+}
+
 export interface ReplicaRouteOptions {
   enrollments?: EnrollmentStore;
   dispatchIntent: ReplicaIntentDispatcher;
@@ -720,13 +802,18 @@ function handleWindowedBootstrap(
       }
       let collected: ReturnType<typeof collectBootstrapWindow>;
       try {
-        collected = collectBootstrapWindow(
-          reader,
-          shapes,
-          nowMs,
-          start,
-          windowLimit
-        );
+        const priority =
+          !token && url.searchParams.get("priority") === "newest"
+            ? collectNewestVisibleRows(db, reader, shapes, nowMs, windowLimit)
+            : [];
+        collected =
+          priority.length > 0
+            ? {
+                rows: priority,
+                position: { shapeIdx: 0, entityIdx: 0, after: null },
+                complete: false,
+              }
+            : collectBootstrapWindow(reader, shapes, nowMs, start, windowLimit);
       } catch {
         return { badToken: true }; // a malformed `after` row id the reader rejected
       }

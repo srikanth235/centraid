@@ -17,7 +17,7 @@ import {
   household,
   seedPhoto,
 } from "./placement-fixture.js";
-import { readShareOrigin, shareToVault } from "./placement.js";
+import { moveOutOfVault, readShareOrigin, shareToVault } from "./placement.js";
 
 describe("placement suite", () => {
   afterEach(closeOpenVaults);
@@ -277,5 +277,63 @@ describe("placement suite", () => {
       "present",
       "present",
     ]);
+  });
+
+  test("documents project their current content and can move after target commit", () => {
+    const { origin, originBoot, audience } = household();
+    const content = seedPhoto(origin, originBoot, "document");
+    const documentId = "019b0000-0000-7000-8000-000000000628";
+    const now = "2026-07-29T00:00:00.000Z";
+    origin.vault
+      .prepare(
+        `INSERT INTO core_document
+           (document_id, title, current_content_id, created_at, updated_at,
+            deleted_at, purge_at)
+         VALUES (?, 'Offline plan', ?, ?, ?, NULL, NULL)`
+      )
+      .run(documentId, content.contentId, now, now);
+
+    const placed = shareToVault({
+      origin,
+      originVaultId: "vault-priya",
+      audience,
+      itemType: "core.document",
+      itemId: documentId,
+      sharedByMember: "member-priya",
+    });
+    expect(
+      plainSqliteRow(
+        audience.vault
+          .prepare(
+            `SELECT d.document_id, d.title, c.sha256
+               FROM core_document d
+               JOIN core_content_item c
+                 ON c.content_id = d.current_content_id
+              WHERE d.document_id = ?`
+          )
+          .get(placed.itemId)
+      )
+    ).toStrictEqual({
+      document_id: documentId,
+      title: "Offline plan",
+      sha256: content.sha256,
+    });
+
+    const moved = moveOutOfVault({
+      source: origin,
+      itemType: "core.document",
+      itemId: documentId,
+    });
+    expect(moved.removed).toBe(true);
+    expect(
+      origin.vault
+        .prepare("SELECT 1 FROM core_document WHERE document_id = ?")
+        .get(documentId)
+    ).toBeUndefined();
+    expect(
+      audience.vault
+        .prepare("SELECT 1 FROM core_document WHERE document_id = ?")
+        .get(documentId)
+    ).toBeDefined();
   });
 });

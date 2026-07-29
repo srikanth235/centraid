@@ -301,6 +301,36 @@ function installGatewaySchema(db: DatabaseSync): void {
       warn_at_percent REAL NOT NULL,
       journal_limit_bytes INTEGER
     ) STRICT;
+    /*
+     * Cross-vault placement is a recoverable two-step workflow, not a
+     * distributed SQLite transaction. The target projection always commits
+     * before a move removes its source; replay resumes from these two states.
+     */
+    CREATE TABLE IF NOT EXISTS placement_intents (
+      link_token TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
+      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK (kind IN ('add', 'move')),
+      item_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      source_vault_id TEXT NOT NULL,
+      target_vault_id TEXT NOT NULL,
+      target_item_id TEXT,
+      target_state TEXT NOT NULL CHECK (target_state IN ('queued', 'executed')),
+      source_state TEXT NOT NULL CHECK (source_state IN ('not-needed', 'queued', 'executed')),
+      status TEXT NOT NULL CHECK (status IN ('queued', 'in-flight', 'executed', 'parked', 'denied', 'failed')),
+      reason TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS placement_intents_device_status
+      ON placement_intents(device_id, status, updated_at);
+    CREATE TABLE IF NOT EXISTS push_registrations (
+      device_id TEXT PRIMARY KEY REFERENCES devices(endpoint_id) ON DELETE CASCADE,
+      expo_token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
+      updated_at TEXT NOT NULL
+    ) STRICT;
   `);
 }
 

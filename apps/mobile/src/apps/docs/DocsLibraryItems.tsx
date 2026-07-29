@@ -68,7 +68,8 @@ export function ListItem({
           {item.location ? `${item.location} · ` : ""}
           {formatType(item.document.mediaType)} ·{" "}
           {formatBytes(item.document.byteSize)} ·{" "}
-          {item.document.custody ?? "local"}
+          {item.document.custody ?? "local"} ·{" "}
+          {item.document.scopeLabels?.join(" + ") ?? "Vault"}
         </Text>
       </View>
       {item.document.starred ? (
@@ -112,7 +113,7 @@ export function GridItem({
       </Text>
       <Text style={[styles.meta, { color: colors.ink2 }]}>
         {document
-          ? `${item.kind === "document" && item.location ? `${item.location} · ` : ""}${formatType(document.mediaType)} · ${formatBytes(document.byteSize)}`
+          ? `${item.kind === "document" && item.location ? `${item.location} · ` : ""}${formatType(document.mediaType)} · ${formatBytes(document.byteSize)} · ${document.scopeLabels?.join(" + ") ?? "Vault"}`
           : "Folder"}
       </Text>
     </Pressable>

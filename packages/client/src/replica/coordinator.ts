@@ -135,6 +135,16 @@ export class ReplicaCoordinator {
 
   async bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<void> {
     await this.worker.bootstrapPage(rows);
+    this.emitInvalidations([
+      { shapeId: "*", entity: "*", source: "canonical" },
+    ]);
+  }
+
+  async bootstrapPreview(cursor: ReplicaCursor): Promise<void> {
+    await this.worker.bootstrapPreview?.(cursor);
+    this.emitInvalidations([
+      { shapeId: "*", entity: "*", source: "canonical" },
+    ]);
   }
 
   /**

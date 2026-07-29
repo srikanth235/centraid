@@ -4,6 +4,7 @@ import { AppRegistry } from "react-native";
 import { install as installQuickCrypto } from "react-native-quick-crypto";
 
 import App from "./App";
+import { registerReplicaBackgroundTasks } from "./src/lib/replica/background-sync";
 import { drainUploadQueueInBackground } from "./src/lib/upload/boot";
 
 // Supply Hermes with native JSI SHA-256 plus WebCrypto AES-GCM/HMAC before
@@ -14,5 +15,6 @@ AppRegistry.registerHeadlessTask(
   "CentraidUploadDrain",
   () => drainUploadQueueInBackground
 );
+void registerReplicaBackgroundTasks();
 
 registerRootComponent(App);

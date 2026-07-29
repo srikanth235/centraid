@@ -23,6 +23,7 @@ import type {
 export interface WindowedBootstrapTarget {
   bootstrapBegin: (header: ReplicaBootstrapHeader) => Promise<void>;
   bootstrapPage: (rows: ReplicaBootstrapPage["rows"]) => Promise<void>;
+  bootstrapPreview?: (cursor: ReplicaCursor) => Promise<void>;
   bootstrapCommit: (
     cursor: ReplicaCursor,
     header: ReplicaBootstrapHeader,
@@ -50,6 +51,12 @@ export interface RunWindowedBootstrapOptions {
   ) => Promise<ReplicaChangeBatch>;
   /** Guards against a pathological server that never stops emitting pages. */
   maxPages?: number;
+  /** Fires once page 1 is durably readable, before lazy backfill. */
+  onFirstPage?: (
+    cursor: ReplicaCursor,
+    header: ReplicaBootstrapHeader
+  ) => void | Promise<void>;
+  onProgress?: (pages: number) => void;
 }
 
 const DEFAULT_MAX_PAGES = 10_000;
@@ -76,6 +83,7 @@ export async function runWindowedBootstrap(
   const maxPages = options.maxPages ?? DEFAULT_MAX_PAGES;
   const first = (await fetchReplicaBootstrapPage(options.gatewayAuth, {
     window: options.window ?? DEFAULT_REPLICA_BOOTSTRAP_WINDOW,
+    priority: "newest",
     ...(options.fetcher ? { fetcher: options.fetcher } : {}),
     ...(options.signal ? { signal: options.signal } : {}),
   })) as ReplicaBootstrapFirstPage;
@@ -91,6 +99,9 @@ export async function runWindowedBootstrap(
 
   await options.target.bootstrapBegin(header);
   await options.target.bootstrapPage(first.rows);
+  await options.target.bootstrapPreview?.(firstCursor);
+  await options.onFirstPage?.(firstCursor, header);
+  options.onProgress?.(1);
 
   const applyNextPage = async (
     page: ReplicaBootstrapPage,
@@ -125,6 +136,7 @@ export async function runWindowedBootstrap(
       );
     }
     await options.target.bootstrapPage(nextPage.rows);
+    options.onProgress?.(nextPageCount);
     return applyNextPage(nextPage, nextPageCount);
   };
   await applyNextPage(first, 1);

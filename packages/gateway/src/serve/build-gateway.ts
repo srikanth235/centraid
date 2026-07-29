@@ -173,6 +173,19 @@ import {
   makeLogsRouteHandler,
 } from "../routes/logs-routes.js";
 import { makeMembersRouteHandler } from "../routes/members-routes.js";
+import {
+  makeMultiplexReplicaRouteHandler,
+  MULTIPLEX_REPLICA_CHANGES_PATH,
+} from "../routes/multiplex-replica-routes.js";
+import {
+  makePlacementRouteHandler,
+  PLACEMENTS_PATH,
+} from "../routes/placement-routes.js";
+import {
+  makePushRegistrationRouteHandler,
+  PUSH_REGISTRATIONS_PATH,
+  PushWakeRelay,
+} from "../routes/push-wake-routes.js";
 import { makeRemindersRouteHandler } from "../routes/reminders-routes.js";
 import type { ReplicaIntentDispatchOutcome } from "../routes/replica-intent-route.js";
 import { makeReplicaRouteHandler } from "../routes/replica-routes.js";
@@ -3672,6 +3685,8 @@ export async function buildGateway(
           backupWal: options.backup?.enabled === true,
           assistOAuth: Boolean(options.assistOAuth),
           automationTurns: true,
+          multiVaultReplica: true,
+          crossVaultPlacements: true,
         },
       })
     ),
@@ -4110,6 +4125,22 @@ export async function buildGateway(
     ensureAppInstalled: ensureBundledAppInstalled,
     ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
   });
+  const multiplexReplicaHandler = makeMultiplexReplicaRouteHandler(
+    vaultRegistry,
+    enrollmentStore
+  );
+  const placementHandler = makePlacementRouteHandler({
+    gatewayDatabase,
+    enrollments: enrollmentStore,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+  });
+  const pushRegistrationHandler =
+    makePushRegistrationRouteHandler(gatewayDatabase);
+  const pushWakeRelay = new PushWakeRelay(
+    vaultRegistry,
+    enrollmentStore,
+    gatewayDatabase
+  );
 
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
@@ -4143,6 +4174,20 @@ export async function buildGateway(
       (await prefixDispatch(req, res))
     ) {
       return true;
+    }
+    // A native merged grid cannot attach `x-centraid-vault` to an ordinary
+    // image URL. Carry the explicit scope in a gateway-plane URL, then rewrite
+    // it into the existing consent/range-capable blob lane before vault
+    // resolution. Authorization below remains exactly the same.
+    const scopedBlob =
+      /^\/centraid\/_gateway\/blobs\/(?<vaultId>[^/]+)\/(?<contentId>[^/]+)$/u.exec(
+        url.pathname
+      );
+    if (scopedBlob) {
+      const encodedVaultId = scopedBlob.groups?.vaultId ?? "";
+      const encodedContentId = scopedBlob.groups?.contentId ?? "";
+      req.headers[VAULT_HEADER] = decodeURIComponent(encodedVaultId);
+      req.url = `/centraid/_vault/blobs/${encodedContentId}${url.search}`;
     }
     // Resolve the request's vault (issue #289): a proved device enrollment
     // scopes what it may address; the header picks within it. No identity is a
@@ -4186,6 +4231,18 @@ export async function buildGateway(
     // answers "which vaults may I work in", which is by definition not one
     // vault, so it must run before the `x-centraid-vault` resolution below.
     if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res)))
+      return true;
+    if (
+      url.pathname === MULTIPLEX_REPLICA_CHANGES_PATH &&
+      (await multiplexReplicaHandler(req, res))
+    )
+      return true;
+    if (url.pathname === PLACEMENTS_PATH && (await placementHandler(req, res)))
+      return true;
+    if (
+      url.pathname === PUSH_REGISTRATIONS_PATH &&
+      (await pushRegistrationHandler(req, res))
+    )
       return true;
     if (requested !== undefined && !enrolled.includes(requested)) {
       return sendJson(res, 403, {
@@ -4254,6 +4311,7 @@ export async function buildGateway(
     // currently armed timer and also needs its host/scheduler activated.
     unsubscribeLateMount();
     unsubscribeLateMount = vaultRegistry.onMount((plane) => {
+      pushWakeRelay.attach(plane);
       const task = Promise.all([
         hostFor(plane).catch((error) =>
           logger.warn(
@@ -4273,6 +4331,7 @@ export async function buildGateway(
       lateMountTasks.add(task);
       void task.finally(() => lateMountTasks.delete(task));
     });
+    pushWakeRelay.start();
 
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
@@ -4336,6 +4395,7 @@ export async function buildGateway(
 
   const stop = async (): Promise<void> => {
     unsubscribeLateMount();
+    pushWakeRelay.stop();
     // A mount notification may already be building its code host. Let that
     // bounded work settle before closing vault databases or removing temp
     // roots; otherwise shutdown races git/SQLite initialization.

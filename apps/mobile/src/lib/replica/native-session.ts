@@ -37,6 +37,7 @@ import type {
 
 import { NativeReplicaStore } from "./native-replica-store";
 import { SqliteIntentStore } from "./sqlite-intent-store";
+import type { NativeIntentAttention } from "./sqlite-intent-store";
 
 export type NativeReadRequest = Omit<ReplicaReadRequest, "shapeId"> & {
   shapeId?: string;
@@ -66,6 +67,29 @@ export type NativeWriteResult =
   | IntentOutcome
   | { intentId: string; status: "queued" | "in-flight"; reason?: string };
 
+/** Structural surface consumed by mobile app features across one or N vaults. */
+export interface MobileReplicaSession {
+  read: (
+    appId: string,
+    request: NativeReadRequest
+  ) => Promise<ReplicaReadWireResult>;
+  search: (
+    appId: string,
+    request: NativeSearchRequest
+  ) => Promise<ReplicaSearchWireResult>;
+  write: (appId: string, input: NativeWriteInput) => Promise<NativeWriteResult>;
+  writeTo?: (
+    vaultId: string,
+    appId: string,
+    input: NativeWriteInput
+  ) => Promise<NativeWriteResult>;
+  subscribe: (
+    appId: string,
+    listener: (invalidations: readonly ReplicaInvalidation[]) => void
+  ) => () => void;
+  pullNow: () => Promise<void | boolean>;
+}
+
 /** AppState-shaped foreground signal; RN's `AppState` satisfies it. */
 export interface AppStateLike {
   readonly currentState: string | null;
@@ -94,6 +118,7 @@ export interface CreateNativeReplicaSessionOptions {
   driver: ReplicaSqliteDriver;
   appState?: AppStateLike;
   isConnected?: () => boolean;
+  isNetworkWorkAllowed?: () => Promise<boolean>;
   retryDelayMs?: number;
   /**
    * Hermes has no WebCrypto. These default to the `expo-crypto` implementations
@@ -107,6 +132,16 @@ export interface CreateNativeReplicaSessionOptions {
    * library cannot land in one JSON envelope (the single-shot route 413s).
    */
   bootstrapWindow?: number;
+  /**
+   * Return from `start()` once page one is durable and readable, then backfill
+   * in the background. Foreground mobile sessions enable this; headless jobs
+   * and compatibility callers wait for convergence.
+   */
+  progressiveBootstrap?: boolean;
+  onBootstrapProgress?: (progress: {
+    phase: "first-page" | "backfill" | "complete";
+    pages: number;
+  }) => void;
 }
 
 interface Waiter {
@@ -123,7 +158,7 @@ interface Waiter {
  * surface a future Photos UI consumes — no web admission barrier or
  * storage-manifest machinery.
  */
-export class NativeReplicaSession {
+export class NativeReplicaSession implements MobileReplicaSession {
   readonly #coordinator: ReplicaCoordinator;
   readonly #gatewayAuth: GatewayAuth;
   readonly #fetcher: ReplicaFetcher;
@@ -131,11 +166,21 @@ export class NativeReplicaSession {
   readonly #appState: AppStateLike | undefined;
   readonly #isConnected: () => boolean;
   readonly #retryDelayMs: number;
+  readonly #isNetworkWorkAllowed: () => Promise<boolean>;
   readonly #bootstrapWindow: number | undefined;
+  readonly #progressiveBootstrap: boolean;
+  readonly #intentStore: SqliteIntentStore;
+  readonly #onBootstrapProgress:
+    | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
+    | undefined;
+  #previewReady:
+    | { resolve: () => void; reject: (error: unknown) => void }
+    | undefined;
   readonly #waiters = new Map<string, Set<Waiter>>();
   #catalog: ReplicaShape[] = [];
   #hasCursor = false;
   #bootstrapPromise: Promise<void> | undefined;
+  #bootstrapAbort: AbortController | undefined;
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -144,6 +189,7 @@ export class NativeReplicaSession {
 
   constructor(
     coordinator: ReplicaCoordinator,
+    intentStore: SqliteIntentStore,
     options: Pick<
       CreateNativeReplicaSessionOptions,
       | "gatewayAuth"
@@ -151,18 +197,26 @@ export class NativeReplicaSession {
       | "changeFeed"
       | "appState"
       | "isConnected"
+      | "isNetworkWorkAllowed"
       | "retryDelayMs"
       | "bootstrapWindow"
+      | "progressiveBootstrap"
+      | "onBootstrapProgress"
     >
   ) {
     this.#coordinator = coordinator;
+    this.#intentStore = intentStore;
     this.#gatewayAuth = options.gatewayAuth;
     this.#fetcher = options.fetcher;
     this.#feed = options.changeFeed;
     this.#appState = options.appState;
     this.#isConnected = options.isConnected ?? (() => true);
+    this.#isNetworkWorkAllowed =
+      options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
     this.#retryDelayMs = options.retryDelayMs ?? 2_000;
     this.#bootstrapWindow = options.bootstrapWindow;
+    this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
+    this.#onBootstrapProgress = options.onBootstrapProgress;
   }
 
   get coordinator(): ReplicaCoordinator {
@@ -174,7 +228,22 @@ export class NativeReplicaSession {
     await this.#coordinator.recoverSending();
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.#coordinator.catalog();
-    else await this.bootstrapWhenReachable();
+    else if (this.#isConnected() && (await this.#isNetworkWorkAllowed())) {
+      const preview = new Promise<void>((resolve, reject) => {
+        this.#previewReady = { resolve, reject };
+      });
+      const bootstrap = this.bootstrapWhenReachable().catch((error) => {
+        this.#previewReady?.reject(error);
+        this.#previewReady = undefined;
+        throw error;
+      });
+      if (this.#progressiveBootstrap) {
+        void bootstrap.catch(() => undefined);
+        await preview;
+      } else {
+        await bootstrap;
+      }
+    }
     const foreground = this.#appState
       ? this.#appState.currentState !== "background"
       : true;
@@ -307,6 +376,51 @@ export class NativeReplicaSession {
     return this.#coordinator.status();
   }
 
+  async pendingChanges(): Promise<
+    Array<
+      | {
+          intentId: string;
+          status: "queued" | "sending" | "awaiting-change" | "parked";
+          appId: string;
+          action: string;
+          reason?: string;
+        }
+      | NativeIntentAttention
+    >
+  > {
+    const pending = await this.#coordinator.pendingIntents();
+    return [
+      ...pending.map((intent) => ({
+        intentId: intent.intentId,
+        status: intent.state as
+          | "queued"
+          | "sending"
+          | "awaiting-change"
+          | "parked",
+        appId: intent.appId,
+        action: intent.action,
+        ...(intent.reason ? { reason: intent.reason } : {}),
+      })),
+      ...this.#intentStore.attention(),
+    ];
+  }
+
+  async cancelPendingChange(intentId: string): Promise<boolean> {
+    const pending = await this.#coordinator.pendingIntents();
+    if (!pending.some((intent) => intent.intentId === intentId)) return false;
+    await this.#coordinator.applyIntentOutcome({
+      intentId,
+      status: "denied",
+      reason: "Cancelled on this device",
+    });
+    this.#intentStore.dismissAttention(intentId);
+    return true;
+  }
+
+  dismissAttention(intentId: string): void {
+    this.#intentStore.dismissAttention(intentId);
+  }
+
   catalog(): readonly ReplicaShape[] {
     return this.#catalog;
   }
@@ -335,6 +449,7 @@ export class NativeReplicaSession {
 
   async flushIntents(): Promise<void> {
     if (this.#closed || !this.#isConnected()) return;
+    if (!(await this.#isNetworkWorkAllowed())) return;
     if (this.#drainPromise) {
       this.#drainRequested = true;
       return this.#drainPromise;
@@ -351,13 +466,15 @@ export class NativeReplicaSession {
   }
 
   /** Force a foreground delta pull immediately (e.g. on manual refresh). */
-  async pullNow(): Promise<void> {
-    if (this.#closed || !this.#isConnected() || !this.#hasCursor) return;
+  async pullNow(): Promise<boolean> {
+    if (this.#closed || !this.#isConnected() || !this.#hasCursor) return false;
+    if (!(await this.#isNetworkWorkAllowed())) return false;
     const status = await this.#coordinator.status();
-    if (!status.cursor) return;
+    if (!status.cursor) return false;
     const abort = new AbortController();
     const batch = await this.pullChanges(status.cursor, abort.signal);
     if (batch) await this.#coordinator.applyChanges(batch);
+    return true;
   }
 
   requireBootstrap(): void {
@@ -374,7 +491,24 @@ export class NativeReplicaSession {
     this.#appStateSub = undefined;
     this.#feed.setActive(false);
     this.rejectWaiters(new ReplicaProtocolError("Replica session closed"));
+    this.#bootstrapAbort?.abort();
+    await this.#bootstrapPromise?.catch(() => undefined);
     await this.#coordinator.close();
+  }
+
+  /** Membership revocation: close and delete this scope's rows and intents. */
+  async purge(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    if (this.#retryTimer) clearTimeout(this.#retryTimer);
+    this.#retryTimer = undefined;
+    this.#appStateSub?.remove();
+    this.#appStateSub = undefined;
+    this.#feed.setActive(false);
+    this.rejectWaiters(new ReplicaProtocolError("Replica scope was revoked"));
+    this.#bootstrapAbort?.abort();
+    await this.#bootstrapPromise?.catch(() => undefined);
+    await this.#coordinator.purge();
   }
 
   private readonly onAppStateChange = (state: string): void => {
@@ -395,6 +529,7 @@ export class NativeReplicaSession {
   private async bootstrapWhenReachable(): Promise<void> {
     if (this.#bootstrapPromise || this.#closed || !this.#isConnected())
       return this.#bootstrapPromise;
+    if (!(await this.#isNetworkWorkAllowed())) return;
     this.#bootstrapPromise = this.bootstrap().finally(() => {
       this.#bootstrapPromise = undefined;
     });
@@ -407,40 +542,58 @@ export class NativeReplicaSession {
    * reports a cursor once all of that has succeeded.
    */
   private async bootstrap(): Promise<void> {
+    const abort = new AbortController();
+    this.#bootstrapAbort = abort;
     const resolved: IntentOutcome[] = [];
-    await runWindowedBootstrap({
-      gatewayAuth: this.#gatewayAuth,
-      target: this.#coordinator,
-      fetcher: this.#fetcher,
-      ...(this.#bootstrapWindow === undefined
-        ? {}
-        : { window: this.#bootstrapWindow }),
-      reconcileOutcomes: async (cursor) => {
-        const pending = await this.#coordinator.pendingIntents();
-        const exact = await fetchReplicaIntentOutcomes(
-          this.#gatewayAuth,
-          pending.map((intent) => intent.intentId),
-          cursor,
-          this.#fetcher
-        );
-        resolved.push(...exact);
-        return exact;
-      },
-      pullChanges: async (cursor, signal) => {
-        const shapeIds = (await this.#coordinator.catalog()).map(
-          (shape) => shape.shapeId
-        );
-        return fetchReplicaChanges(
-          this.#gatewayAuth,
-          cursor,
-          signal,
-          shapeIds,
-          this.#fetcher
-        );
-      },
-    });
+    try {
+      await runWindowedBootstrap({
+        gatewayAuth: this.#gatewayAuth,
+        target: this.#coordinator,
+        fetcher: this.#fetcher,
+        signal: abort.signal,
+        ...(this.#bootstrapWindow === undefined
+          ? {}
+          : { window: this.#bootstrapWindow }),
+        reconcileOutcomes: async (cursor) => {
+          const pending = await this.#coordinator.pendingIntents();
+          const exact = await fetchReplicaIntentOutcomes(
+            this.#gatewayAuth,
+            pending.map((intent) => intent.intentId),
+            cursor,
+            this.#fetcher
+          );
+          resolved.push(...exact);
+          return exact;
+        },
+        pullChanges: async (cursor, signal) => {
+          const shapeIds = (await this.#coordinator.catalog()).map(
+            (shape) => shape.shapeId
+          );
+          return fetchReplicaChanges(
+            this.#gatewayAuth,
+            cursor,
+            signal,
+            shapeIds,
+            this.#fetcher
+          );
+        },
+        onFirstPage: async () => {
+          this.#catalog = await this.#coordinator.catalog();
+          this.#onBootstrapProgress?.({ phase: "first-page", pages: 1 });
+          this.#previewReady?.resolve();
+          this.#previewReady = undefined;
+        },
+        onProgress: (pages) => {
+          if (pages > 1)
+            this.#onBootstrapProgress?.({ phase: "backfill", pages });
+        },
+      });
+    } finally {
+      if (this.#bootstrapAbort === abort) this.#bootstrapAbort = undefined;
+    }
     this.#hasCursor = true;
     this.#catalog = await this.#coordinator.catalog();
+    this.#onBootstrapProgress?.({ phase: "complete", pages: 0 });
     for (const outcome of resolved)
       this.resolveWaiter(outcome.intentId, outcome);
   }
@@ -629,7 +782,7 @@ export async function createNativeReplicaSession(
     },
     onRebootstrapRequired: () => session?.requireBootstrap(),
   });
-  session = new NativeReplicaSession(coordinator, options);
+  session = new NativeReplicaSession(coordinator, intentStore, options);
   await session.start();
   return session;
 }

@@ -21,12 +21,14 @@ describe("the default gateway capabilities", () => {
       backupWal: true,
       assistOAuth: false,
       automationTurns: true,
+      multiVaultReplica: true,
+      crossVaultPlacements: true,
     });
   });
 });
 
 describe(isGatewayCapabilities, () => {
-  it("accepts the required booleans and optional assistOAuth / automationTurns", () => {
+  it("accepts required booleans and optional compatible capabilities", () => {
     expect(isGatewayCapabilities(null)).toBe(false);
     expect(isGatewayCapabilities("x")).toBe(false);
     expect(isGatewayCapabilities({})).toBe(false);
@@ -46,6 +48,8 @@ describe(isGatewayCapabilities, () => {
         backupWal: true,
         assistOAuth: true,
         automationTurns: true,
+        multiVaultReplica: true,
+        crossVaultPlacements: true,
       })
     ).toBe(true);
     expect(
@@ -64,6 +68,24 @@ describe(isGatewayCapabilities, () => {
         tunnel: true,
         backupWal: true,
         automationTurns: "yes",
+      })
+    ).toBe(false);
+    expect(
+      isGatewayCapabilities({
+        webSessions: true,
+        devicePairing: true,
+        tunnel: true,
+        backupWal: true,
+        multiVaultReplica: "yes",
+      })
+    ).toBe(false);
+    expect(
+      isGatewayCapabilities({
+        webSessions: true,
+        devicePairing: true,
+        tunnel: true,
+        backupWal: true,
+        crossVaultPlacements: "yes",
       })
     ).toBe(false);
     expect(

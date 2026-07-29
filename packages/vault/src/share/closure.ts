@@ -6,6 +6,7 @@
 //   media.media_asset  →  the asset row + its core_content_item + every
 //                         core_content_derivative of that content item
 //   core.content_item  →  the content item + its derivatives
+//   core.document      →  the document wrapper + current content + derivatives
 //
 // Two deliberate exclusions:
 //
@@ -38,10 +39,14 @@ import { VaultShareError } from "../errors.js";
 import { uuidv7 } from "../ids.js";
 
 /** Item kinds that can be placed into an audience vault at v0. */
-export type ShareableItemType = "core.content_item" | "media.media_asset";
+export type ShareableItemType =
+  | "core.content_item"
+  | "core.document"
+  | "media.media_asset";
 
 const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
   "core.content_item",
+  "core.document",
   "media.media_asset",
 ];
 
@@ -90,6 +95,16 @@ interface MediaAssetRow {
   purge_at: string | null;
 }
 
+interface DocumentRow {
+  document_id: string;
+  title: string;
+  current_content_id: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  purge_at: string | null;
+}
+
 /** Everything read out of the origin vault for one share, resolved up front. */
 export interface ShareClosure {
   itemType: ShareableItemType;
@@ -98,6 +113,7 @@ export interface ShareClosure {
   contentItem: ContentItemRow;
   derivatives: DerivativeRow[];
   mediaAsset: MediaAssetRow | null;
+  document: DocumentRow | null;
   /** Content addresses the audience vault's CAS must hold for this closure. */
   shas: string[];
 }
@@ -165,6 +181,31 @@ export function readShareClosure(
       contentItem,
       derivatives,
       mediaAsset: null,
+      document: null,
+      shas: shasOf(contentItem, derivatives),
+    };
+  }
+  if (itemType === "core.document") {
+    const document = origin
+      .prepare(
+        `SELECT document_id, title, current_content_id, created_at, updated_at,
+                deleted_at, purge_at
+           FROM core_document WHERE document_id = ?`
+      )
+      .get(itemId) as DocumentRow | undefined;
+    if (!document)
+      throw new VaultShareError(
+        `core.document ${itemId} is not in the origin vault`
+      );
+    const contentItem = readContentItem(origin, document.current_content_id);
+    const derivatives = readDerivatives(origin, contentItem.content_id);
+    return {
+      itemType,
+      itemId,
+      contentItem,
+      derivatives,
+      mediaAsset: null,
+      document,
       shas: shasOf(contentItem, derivatives),
     };
   }
@@ -185,6 +226,7 @@ export function readShareClosure(
     contentItem,
     derivatives,
     mediaAsset: asset,
+    document: null,
     shas: shasOf(contentItem, derivatives),
   };
 }
@@ -331,6 +373,47 @@ function projectMediaAsset(
   return { itemId: assetId, deduped: false };
 }
 
+function projectDocument(
+  audience: DatabaseSync,
+  contentId: string,
+  row: DocumentRow
+): ProjectionResult {
+  const byOriginId = audience
+    .prepare("SELECT document_id FROM core_document WHERE document_id = ?")
+    .get(row.document_id) as { document_id: string } | undefined;
+  if (byOriginId) return { itemId: byOriginId.document_id, deduped: true };
+  const byContent = audience
+    .prepare(
+      `SELECT document_id FROM core_document
+        WHERE current_content_id = ? AND title = ? LIMIT 1`
+    )
+    .get(contentId, row.title) as { document_id: string } | undefined;
+  if (byContent) return { itemId: byContent.document_id, deduped: true };
+  const documentId = freeId(
+    audience,
+    "core_document",
+    "document_id",
+    row.document_id
+  );
+  audience
+    .prepare(
+      `INSERT INTO core_document
+         (document_id, title, current_content_id, created_at, updated_at,
+          deleted_at, purge_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      documentId,
+      row.title,
+      contentId,
+      row.created_at,
+      row.updated_at,
+      row.deleted_at,
+      row.purge_at
+    );
+  return { itemId: documentId, deduped: false };
+}
+
 /**
  * Write the closure into the audience vault. The caller owns the transaction —
  * this is the body of the ONE single-DB transaction a share performs, and the
@@ -345,6 +428,9 @@ export function projectShareClosure(
     .get(closure.contentItem.sha256) as { content_id: string } | undefined;
   const contentId = projectContentItem(audience, closure.contentItem);
   projectDerivatives(audience, contentId, closure.derivatives);
+  if (closure.document !== null) {
+    return projectDocument(audience, contentId, closure.document);
+  }
   if (closure.mediaAsset === null) {
     return { itemId: contentId, deduped: heldContent !== undefined };
   }

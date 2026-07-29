@@ -277,6 +277,15 @@ const AssetCell = memo(
             <Feather name="cloud" size={14} color="#fff" />
           ) : null}
         </View>
+        {asset.scopeLabels?.length ? (
+          <View style={styles.scopeBadges}>
+            {asset.scopeLabels.slice(0, 2).map((label) => (
+              <View key={label} style={styles.scopeBadge}>
+                <Text style={styles.scopeBadgeText}>{label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
         {asset.duplicateHint ? (
           <View style={styles.duplicate}>
             <Icon name="Copy" size={12} color="#fff" />
@@ -301,11 +310,15 @@ export default function PhotoTimeline({
   onOpen,
   selection,
   onSelectionChange,
+  refreshing = false,
+  onRefresh,
 }: {
   sections: PhotoSection[];
   onOpen: (asset: PhotoAsset) => void;
   selection: Set<string>;
   onSelectionChange: (next: Set<string>) => void;
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
@@ -460,6 +473,8 @@ export default function PhotoTimeline({
             )
           }
           onScrollBeginDrag={() => setScrubLabel("")}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           onScroll={(event) => {
             scrollOffset.current = event.nativeEvent.contentOffset.y;
           }}
@@ -542,6 +557,25 @@ const styles = StyleSheet.create({
     top: "46%",
   },
   scrubText: { fontFamily: family.sansBold, fontSize: 12 },
+  scopeBadge: {
+    backgroundColor: "rgba(0,0,0,.56)",
+    borderRadius: 999,
+    maxWidth: 76,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  scopeBadges: {
+    flexDirection: "row",
+    gap: 3,
+    left: 5,
+    position: "absolute",
+    top: 5,
+  },
+  scopeBadgeText: {
+    color: "#fff",
+    fontFamily: family.sansBold,
+    fontSize: 8,
+  },
   selectDay: { fontFamily: family.sansMedium, fontSize: 12 },
   selection: {
     borderWidth: 3,

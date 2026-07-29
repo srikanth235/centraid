@@ -4,6 +4,7 @@
 // sealer and drainer take every one of these by injection so the vitest rig
 // can exercise them (the M0.2 lesson).
 
+import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { OpSqliteDriver } from "../replica/op-sqlite-driver";
 import { webCryptoUploadCrypto } from "./crypto";
 import type { UploadCrypto } from "./crypto";
@@ -24,8 +25,8 @@ import type { DrainSummary, UploadPolicy } from "./uploader";
 
 /**
  * The queue's own database, deliberately NOT the replica's — see the header of
- * `store.ts` for why. op-sqlite resolves a bare name under the app's documents
- * directory, which is backed up and survives app updates.
+ * `store.ts` for why. Production places it in the native durable,
+ * backup-excluded replica directory so OS cache cleanup cannot evict intents.
  */
 const UPLOAD_DB_NAME = "centraid-uploads.db";
 
@@ -48,7 +49,12 @@ export class UploadQueue {
 
   static open(options: UploadQueueOptions): UploadQueue {
     const store = UploadQueueStore.create(
-      OpSqliteDriver.open({ name: UPLOAD_DB_NAME })
+      OpSqliteDriver.open({
+        name: UPLOAD_DB_NAME,
+        ...(replicaStorageDirectory()
+          ? { location: replicaStorageDirectory() }
+          : {}),
+      })
     );
     const scope = { gatewayBaseUrl: options.gatewayBaseUrl };
     const drainer = new UploadDrainer({

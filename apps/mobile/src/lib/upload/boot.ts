@@ -22,7 +22,7 @@ import { AppState } from "react-native";
 
 import { Store } from "../../storage";
 import { authHeader, resolveGatewayBase } from "../gateway";
-import type { NativeReplicaSession } from "../replica/native-session";
+import type { MobileReplicaSession } from "../replica/native-session";
 import { withDrainLock } from "./drain-lock";
 import { replaySettledUploadFollowups } from "./followup";
 import { UploadForegroundService } from "./foreground-service";
@@ -46,7 +46,7 @@ const EMPTY_RECONCILE: ReconcileSummary = {
 };
 
 async function reconcileOnce(
-  session?: NativeReplicaSession
+  session?: MobileReplicaSession
 ): Promise<ReconcileSummary> {
   let queue: UploadQueue | undefined;
   try {
@@ -104,14 +104,16 @@ async function reconcileOnce(
 }
 
 /** Registered as an Android Headless JS task by index.ts. Never touches the FGS. */
-export async function drainUploadQueueInBackground(): Promise<void> {
-  await withDrainLock(() => reconcileOnce());
+export async function drainUploadQueueInBackground(
+  session?: MobileReplicaSession
+): Promise<void> {
+  await withDrainLock(() => reconcileOnce(session));
 }
 
 /** Coalesces repeated foreground events into at most one queued reconcile. */
 let reconcilePending = false;
 
-function scheduleReconcile(session?: NativeReplicaSession): void {
+function scheduleReconcile(session?: MobileReplicaSession): void {
   if (reconcilePending) return;
   reconcilePending = true;
   void withDrainLock(async () => {
@@ -121,7 +123,7 @@ function scheduleReconcile(session?: NativeReplicaSession): void {
 }
 
 /** Drain on mount and on every return to the foreground. */
-export function useUploadReconciliation(session?: NativeReplicaSession): void {
+export function useUploadReconciliation(session?: MobileReplicaSession): void {
   useEffect(() => {
     scheduleReconcile(session);
     const subscription = AppState.addEventListener("change", (state) => {

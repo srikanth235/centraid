@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { NativeReplicaSession } from "../replica/native-session";
+import type {
+  MobileReplicaSession,
+  NativeReplicaSession,
+} from "../replica/native-session";
 import type * as TypeImport_1mtgsk8 from "./derivatives-native";
 import { replaySettledUploadFollowups } from "./followup";
 import type { UploadQueue } from "./native-queue";
@@ -62,6 +65,31 @@ function okSession(): { session: NativeReplicaSession; writes: string[] } {
 }
 
 describe("settled upload follow-ups", () => {
+  it("replays a targeted upload through the matching mounted vault session", async () => {
+    const { queue } = fakeQueue([
+      followupOf({ targetVaultId: "vault-family" }),
+    ]);
+    const writeTo = vi.fn<NonNullable<MobileReplicaSession["writeTo"]>>(
+      async (_vaultId, _shape, input) => ({
+        intentId: input.intentId!,
+        status: "executed",
+      })
+    );
+    const session = {
+      write: vi.fn<MobileReplicaSession["write"]>(),
+      writeTo,
+    } as unknown as MobileReplicaSession;
+
+    await replaySettledUploadFollowups(queue, session, "http://gateway");
+
+    expect(writeTo).toHaveBeenCalledWith(
+      "vault-family",
+      "docs",
+      expect.objectContaining({ intentId: "upload-followup-item-1-stable" })
+    );
+    expect(session.write).not.toHaveBeenCalled();
+  });
+
   it("replays the same intent id after a kill between execution and ledger clearing", async () => {
     const followup = followupOf();
     let pending = [followup];

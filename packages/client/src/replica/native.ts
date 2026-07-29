@@ -37,3 +37,8 @@ export {
   type GatewayAuth,
 } from "../gateway-auth.js";
 export * from "../vault-change-sse.js";
+export {
+  isGatewayCapabilities,
+  type GatewayCapabilities,
+  type GatewayInfo,
+} from "@centraid/protocol";

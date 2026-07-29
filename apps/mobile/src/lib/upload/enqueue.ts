@@ -19,6 +19,7 @@ const HASH_CHUNK_BYTES = 4 * 1024 * 1024;
 
 export interface EnqueueInput {
   localUri: string;
+  targetVaultId?: string;
   mediaType?: string;
   filename?: string;
   /** Caller-known plaintext size; verified against the opened file. */
@@ -104,6 +105,7 @@ export async function enqueueLocalFile(
     itemId: deps.newId(),
     sha256,
     localUri: input.localUri,
+    ...(input.targetVaultId ? { targetVaultId: input.targetVaultId } : {}),
     ...(input.mediaType ? { mediaType: input.mediaType } : {}),
     ...(input.filename ? { filename: input.filename } : {}),
     plaintextSize: size,

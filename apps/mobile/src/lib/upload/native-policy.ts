@@ -44,3 +44,8 @@ export function nativeUploadPolicy(): UploadPolicy {
     },
   };
 }
+
+/** Replica sync/rebootstrap deliberately shares the upload network policy. */
+export async function nativeSyncAllowed(): Promise<boolean> {
+  return nativeUploadPolicy().canTransfer();
+}

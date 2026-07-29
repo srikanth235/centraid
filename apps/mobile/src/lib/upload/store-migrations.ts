@@ -16,7 +16,7 @@
 import type { ReplicaSqliteDriver } from "@centraid/client/replica/native";
 
 /** Bumped when the DDL changes. Each step from any prior version is idempotent. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 type Driver = Pick<ReplicaSqliteDriver, "exec" | "run" | "all">;
 
@@ -101,6 +101,16 @@ export function migrateUploadSchema(
       }
       if (!hasColumn(driver, "upload_followup", "last_error")) {
         driver.exec("ALTER TABLE upload_followup ADD COLUMN last_error TEXT;");
+      }
+    });
+  }
+
+  if (version < 5) {
+    // v4 → v5: a global transfer ledger still needs a durable target so the
+    // vault-first storage screen and headless follow-up replay stay truthful.
+    inTransaction(driver, 5, () => {
+      if (!hasColumn(driver, "upload_item", "target_vault_id")) {
+        driver.exec("ALTER TABLE upload_item ADD COLUMN target_vault_id TEXT;");
       }
     });
   }

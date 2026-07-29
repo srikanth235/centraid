@@ -96,6 +96,12 @@ export interface UnshareFromVaultResult {
   orphanedShas: string[];
 }
 
+export interface MoveOutOfVaultInput {
+  source: ShareVaultRef;
+  itemType: ShareableItemType;
+  itemId: string;
+}
+
 /** Read the provenance record for a projected row, or undefined. */
 export interface ShareOriginRecord {
   itemType: string;
@@ -240,5 +246,41 @@ export function unshareFromVault(
   // model AFTER the commit, so a sha some other row still holds is honestly
   // reported as still-live rather than guessed at.
   const live = liveBlobShas(audience);
+  return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
+}
+
+/**
+ * Remove the source side of a completed cross-vault MOVE.
+ *
+ * Unlike unshare this may remove an authored item. The caller must durably
+ * prove that the target projection committed first; the gateway placement
+ * ledger owns that ordering and replay. Kept explicit so no ordinary share
+ * path can accidentally invoke authored deletion.
+ */
+export function moveOutOfVault(
+  input: MoveOutOfVaultInput
+): UnshareFromVaultResult {
+  const source = input.source.vault;
+  source.exec("BEGIN IMMEDIATE");
+  let shas: string[];
+  try {
+    const removal = deleteProjectedClosure(
+      source,
+      input.itemType,
+      input.itemId
+    );
+    source
+      .prepare(
+        "DELETE FROM core_share_origin WHERE item_type = ? AND item_id = ?"
+      )
+      .run(input.itemType, input.itemId);
+    shas = removal.shas;
+    source.exec("COMMIT");
+    if (!removal.removed) return { removed: false, orphanedShas: [] };
+  } catch (error) {
+    source.exec("ROLLBACK");
+    throw error;
+  }
+  const live = liveBlobShas(source);
   return { removed: true, orphanedShas: shas.filter((sha) => !live.has(sha)) };
 }

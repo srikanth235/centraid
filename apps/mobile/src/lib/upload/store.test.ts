@@ -41,8 +41,11 @@ describe("store", () => {
 
   describe(UploadQueueStore, () => {
     it("enqueues an item with one row per part", () => {
-      const item = store.enqueue(upload({ partCount: 3 }));
+      const item = store.enqueue(
+        upload({ partCount: 3, targetVaultId: "vault-family" })
+      );
       expect(item.state).toBe("pending");
+      expect(item.targetVaultId).toBe("vault-family");
       expect(
         store.parts(item.itemId).map((part) => part.partNumber)
       ).toStrictEqual([1, 2, 3]);
@@ -228,6 +231,16 @@ describe("store", () => {
       ).toBe("docs");
     });
 
+    it("adds durable vault targeting to a v4 queue without losing bytes", () => {
+      driver.exec("ALTER TABLE upload_item DROP COLUMN target_vault_id");
+      driver.exec("PRAGMA user_version = 4");
+
+      store = UploadQueueStore.create(driver);
+      const item = store.enqueue(upload({ targetVaultId: "vault-family" }));
+
+      expect(item.targetVaultId).toBe("vault-family");
+    });
+
     // The historical v2 follow-up table: no intent_id, no attempts/poison columns.
     const V2_FOLLOWUP_DDL = `
     CREATE TABLE upload_followup (
@@ -266,6 +279,19 @@ describe("store", () => {
         /^upload-followup-/u
       );
       expect(followups[0]?.attempts, "attempts column added at v4").toBe(0);
+    });
+
+    it("carries an upload target into settled follow-up replay", () => {
+      const item = store.enqueue(upload({ targetVaultId: "vault-personal" }));
+      store.enqueueFollowup({
+        itemId: item.itemId,
+        shape: "photos",
+        action: "upload",
+        input: { staged_sha: item.sha256, kind: "photo" },
+      });
+      store.settle(item.itemId, { casAck: "replicated" });
+
+      expect(store.pendingFollowups()[0]?.targetVaultId).toBe("vault-personal");
     });
 
     it("survives a kill between the v2→v3 ALTER and its version bump (idempotent)", () => {

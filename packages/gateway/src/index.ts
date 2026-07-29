@@ -116,6 +116,19 @@ export {
   REPLICA_INTENTS_PATH,
   type ReplicaRouteOptions,
 } from "./routes/replica-routes.js";
+export {
+  makeMultiplexReplicaRouteHandler,
+  MULTIPLEX_REPLICA_CHANGES_PATH,
+} from "./routes/multiplex-replica-routes.js";
+export {
+  makePlacementRouteHandler,
+  PLACEMENTS_PATH,
+} from "./routes/placement-routes.js";
+export {
+  makePushRegistrationRouteHandler,
+  PUSH_REGISTRATIONS_PATH,
+  PushWakeRelay,
+} from "./routes/push-wake-routes.js";
 // The vault-register tool runners, giving chat turns `vault_sql` /
 // `vault_invoke` / `vault_content` capability through the same
 // consent/receipt pipeline the codex/claude runners use (issue #319).

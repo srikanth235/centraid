@@ -62,6 +62,7 @@ const DDL = `
     item_id TEXT PRIMARY KEY,
     sha256 TEXT NOT NULL UNIQUE,
     local_uri TEXT NOT NULL,
+    target_vault_id TEXT,
     media_type TEXT,
     filename TEXT,
     plaintext_size INTEGER NOT NULL,
@@ -126,6 +127,7 @@ export interface UploadItem {
   itemId: string;
   sha256: string;
   localUri: string;
+  targetVaultId?: string;
   mediaType?: string;
   filename?: string;
   plaintextSize: number;
@@ -144,6 +146,7 @@ export interface NewUpload {
   itemId: string;
   sha256: string;
   localUri: string;
+  targetVaultId?: string;
   mediaType?: string;
   filename?: string;
   plaintextSize: number;
@@ -275,7 +278,8 @@ export class UploadQueueStore {
   pendingFollowups(): UploadFollowup[] {
     return this.driver
       .all<PersistedUploadFollowupRow>(
-        `SELECT followup.* FROM upload_followup AS followup
+        `SELECT followup.*, item.target_vault_id
+         FROM upload_followup AS followup
          INNER JOIN upload_item AS item ON item.item_id = followup.item_id
          WHERE item.state = 'settled' AND followup.poisoned_at IS NULL
          ORDER BY followup.followup_id`
@@ -422,6 +426,12 @@ export class UploadQueueStore {
   private enqueueItem(upload: NewUpload): UploadItem {
     const existing = this.bySha(upload.sha256);
     if (existing) {
+      if (!existing.targetVaultId && upload.targetVaultId) {
+        this.driver.run(
+          "UPDATE upload_item SET target_vault_id = ? WHERE item_id = ?",
+          [upload.targetVaultId, existing.itemId]
+        );
+      }
       // F6: a terminally-failed item is not a dead end. Re-enqueuing the same
       // bytes revives it with fresh attempts and a cleared error, so the next
       // backup run retries the transfer instead of a producer reporting a
@@ -434,18 +444,19 @@ export class UploadQueueStore {
         );
         return this.require(existing.itemId);
       }
-      return existing;
+      return this.require(existing.itemId);
     }
     const createdOrder = this.nextOrder();
     this.driver.run(
       `INSERT INTO upload_item(
-         item_id, sha256, local_uri, media_type, filename, plaintext_size,
+         item_id, sha256, local_uri, target_vault_id, media_type, filename, plaintext_size,
          sealed_size, frame_count, part_count, state, created_order, attempts)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, 0)`,
       [
         upload.itemId,
         upload.sha256,
         upload.localUri,
+        upload.targetVaultId ?? null,
         upload.mediaType ?? null,
         upload.filename ?? null,
         upload.plaintextSize,

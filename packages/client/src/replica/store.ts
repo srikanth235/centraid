@@ -49,6 +49,8 @@ export interface ReplicaStore {
    */
   bootstrapBegin: (header: ReplicaBootstrapHeader) => Promise<undefined>;
   bootstrapPage: (rows: ReplicaSnapshotRow[]) => Promise<undefined>;
+  /** Make the first page readable without claiming bootstrap is complete. */
+  bootstrapPreview?: (cursor: ReplicaCursor) => Promise<undefined>;
   /** Commit at the PAGE-1 cursor; the caller must then replay changes from it. */
   bootstrapCommit: (cursor: ReplicaCursor) => Promise<ReplicaCursor>;
   applyChanges: (batch: ReplicaChangeBatch) => Promise<ApplyChangesResult>;

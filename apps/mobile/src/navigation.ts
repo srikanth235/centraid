@@ -53,6 +53,7 @@ export type AgendaStackParamList = {
 export type SettingsStackParamList = {
   Settings: undefined;
   Approvals: undefined;
+  PhoneStorage: undefined;
 };
 
 export type RootStackParamList = {

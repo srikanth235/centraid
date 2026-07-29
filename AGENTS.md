@@ -48,6 +48,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/client-keying.md](docs/client-keying.md) | Cache/UI key axes (vault path, gateway, conversation) |
 | [docs/release.md](docs/release.md) | Three numbers, surfaces matrix, prepare vs publish, patch/minor, beta |
 | [docs/oauth-assist.md](docs/oauth-assist.md) | Assist code-courier architecture, privacy, scopes, BYO, reconnect |
+| [docs/mobile-offline.md](docs/mobile-offline.md) | Native multi-vault replicas, background sync, storage, privacy, and performance guardrails |
 | [docs/release/oauth-assist-google.md](docs/release/oauth-assist-google.md) | Google/Cloudflare production and verification evidence gates |
 | [docs/identifiers.md](docs/identifiers.md) | `dev.centraid.*` table (J5) |
 | [docs/enrollment.md](docs/enrollment.md) | Human checklist: Apple / Azure / Play signing |

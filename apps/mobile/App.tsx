@@ -72,6 +72,7 @@ import ApprovalsScreen from "./src/screens/Approvals";
 import HomeScreen from "./src/screens/Home";
 import MobileFallbackScreen from "./src/screens/MobileFallback";
 import OnboardingScreen from "./src/screens/Onboarding";
+import PhoneStorageScreen from "./src/screens/PhoneStorage";
 import SettingsScreen from "./src/screens/Settings";
 
 // Keep the native splash up until fonts have loaded — avoids a flash of
@@ -186,6 +187,10 @@ function SettingsNavigator(): React.JSX.Element {
     >
       <SettingsStack.Screen name="Settings" component={SettingsScreen} />
       <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
+      <SettingsStack.Screen
+        name="PhoneStorage"
+        component={PhoneStorageScreen}
+      />
     </SettingsStack.Navigator>
   );
 }
