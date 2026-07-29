@@ -5,6 +5,7 @@
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { registerScheduleOrganizeCommands } from "./schedule-organize.js";
 
 const PROPOSE_EVENT: CommandDefinition = {
   name: "schedule.propose_event",
@@ -19,6 +20,11 @@ const PROPOSE_EVENT: CommandDefinition = {
       dtstart: { type: "string", minLength: 1 },
       dtend: { type: "string", minLength: 1 },
       start_tz: { type: "string" },
+      end_tz: { type: "string" },
+      recurrence_semantics: {
+        type: "string",
+        enum: ["zoned", "floating", "all-day"],
+      },
       calendar_id: { type: "string", minLength: 1 },
       location_place_id: { type: "string" },
       attendee_party_ids: { type: "array", items: { type: "string" } },
@@ -113,6 +119,8 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
     dtstart: string;
     dtend: string;
     start_tz?: string;
+    end_tz?: string;
+    recurrence_semantics?: "zoned" | "floating" | "all-day";
     calendar_id: string;
     location_place_id?: string;
     attendee_party_ids?: string[];
@@ -124,9 +132,10 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO core_event
-         (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
-          location_place_id, organizer_party_id, sequence, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'tentative', ?, ?, 0, ?, ?)`
+         (event_id, ical_uid, summary, description, dtstart, dtend, start_tz,
+          rrule, status, location_place_id, organizer_party_id, sequence,
+          created_at, updated_at, end_tz, recurrence_semantics)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'tentative', ?, ?, 0, ?, ?, ?, ?)`
     )
     .run(
       eventId,
@@ -139,7 +148,9 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       input.location_place_id ?? null,
       ctx.identity.partyId,
       ctx.now,
-      ctx.now
+      ctx.now,
+      input.end_tz ?? input.start_tz ?? null,
+      input.recurrence_semantics ?? "zoned"
     );
   ctx.wrote("core.event", eventId);
   const remindersJson =
@@ -422,4 +433,5 @@ export function registerScheduleCommands(gateway: Gateway): void {
   gateway.registerCommand(RESCHEDULE_EVENT);
   gateway.registerCommand(RESPOND_RSVP);
   gateway.registerCommand(CANCEL_EVENT);
+  registerScheduleOrganizeCommands(gateway);
 }

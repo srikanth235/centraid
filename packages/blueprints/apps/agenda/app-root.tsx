@@ -59,6 +59,7 @@ export const CHANGE_TABLES = [
   "core.event",
   "schedule.event_ext",
   "schedule.attendee",
+  "schedule.recurrence_exception",
   "schedule.calendar",
   "core.party",
   "core.attachment",
@@ -324,7 +325,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
   // ---- Overlays ----
   const openEventDetail = useCallback((ev: AgEvent) => {
-    stateRef.current.detailEventId = ev.event_id;
+    stateRef.current.detailEventId = ev.instance_key ?? ev.event_id;
     bump();
   }, []);
   const closeDrawer = useCallback(() => {
@@ -579,15 +580,17 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     : null;
   const drawerNode = detailEv ? (
     <EventDrawer
-      key={detailEv.event_id}
+      key={detailEv.instance_key ?? detailEv.event_id}
       event={detailEv}
+      calendars={data.calendars}
       calendarName={data.calById.get(detailEv.calendar_id as string)?.name}
       color={logic.colorFor(detailEv.calendar_id)}
       pending={state.pendingIds.has(detailEv.event_id)}
       pendingCancel={state.pendingCancelIds.has(detailEv.event_id)}
       activity={state.activityLog.get(detailEv.event_id) ?? []}
       onClose={closeDrawer}
-      onReschedule={(id, s, e) => logic.rescheduleEvent(id, s, e)}
+      onEdit={(payload) => logic.editEvent(payload)}
+      onEditOccurrence={(payload) => logic.editOccurrence(payload)}
       onRsvp={(id, p, st) => logic.respondRsvp(id, p, st)}
       onAttach={(id) => {
         logic.setAttachTarget(id);

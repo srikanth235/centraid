@@ -1,4 +1,25 @@
-# Cron timezone model (issue #570)
+# Civil time and cron timezone model (issues #570 and #630)
+
+`@centraid/time-engine` is the shared civil-time and recurrence core for
+Agenda, Tasks, Tally, and automation previews. It owns IANA wall-clock
+resolution, RRULE expansion, completion-relative next occurrences, stable
+original-occurrence identity, and occurrence/future exceptions. The app engine
+exposes that package to blueprints as `ctx.time`; blueprints must not implement
+their own UTC recurrence loops.
+
+Temporal values carry an explicit meaning:
+
+- `zoned`: the wall time is resolved in `start_tz` (and `end_tz` when the end
+  belongs to another zone).
+- `floating`: the wall value follows the viewer without acquiring an implicit
+  zone.
+- `all-day`: date spans stay calendar dates and do not acquire an implicit
+  zone.
+
+The shared DST policy is the cron policy below: a nonexistent wall time is
+skipped and an overlapping wall time occurs once at the earlier instant.
+Per-instance exceptions are keyed by the unmodified original occurrence, even
+when an override moves what the user sees.
 
 Cron triggers store an optional IANA timezone. The fire zone is resolved in
 three tiers (n8n-shaped, without a hardcoded geographic fallback):
@@ -48,6 +69,8 @@ is running.
 
 | Concern | Location |
 | --- | --- |
+| Civil time + recurrence + exception expansion | `packages/time-engine/src/` |
+| Blueprint runtime surface | `packages/app-engine/src/worker/runner.ts` (`ctx.time`) |
 | Resolution + wall-clock extraction | `packages/automation/src/cron-timezone.ts` |
 | Matcher | `packages/automation/src/fire/cron-match.ts` |
 | Cursor / due instants | `packages/automation/src/fire/cron-cursor.ts` |

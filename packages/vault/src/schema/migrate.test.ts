@@ -29,6 +29,44 @@ function userVersionOf(file: string): number {
 function rewindVaultTo(file: string, version: 1 | 2 | 4): void {
   const raw = new DatabaseSync(file);
   raw.exec(`
+    DROP TRIGGER IF EXISTS trg_replica_core_event_ai;
+    DROP TRIGGER IF EXISTS trg_replica_core_event_au;
+    DROP TRIGGER IF EXISTS trg_replica_core_event_ad;
+    DROP TRIGGER IF EXISTS trg_replica_schedule_task_ai;
+    DROP TRIGGER IF EXISTS trg_replica_schedule_task_au;
+    DROP TRIGGER IF EXISTS trg_replica_schedule_task_ad;
+    DROP TRIGGER IF EXISTS trg_replica_tally_expense_ai;
+    DROP TRIGGER IF EXISTS trg_replica_tally_expense_au;
+    DROP TRIGGER IF EXISTS trg_replica_tally_expense_ad;
+
+    DROP INDEX IF EXISTS tally_recurring_expense_group_idx;
+    DROP INDEX IF EXISTS social_contact_channel_preferred_idx;
+    DROP INDEX IF EXISTS social_contact_channel_party_idx;
+    DROP INDEX IF EXISTS schedule_recurrence_exception_target_idx;
+    DROP INDEX IF EXISTS schedule_task_organize_idx;
+    DROP INDEX IF EXISTS schedule_section_project_idx;
+    DROP INDEX IF EXISTS schedule_project_owner_idx;
+    DROP TABLE IF EXISTS tally_recurring_expense;
+    DROP TABLE IF EXISTS social_contact_channel;
+    DROP TABLE IF EXISTS schedule_recurrence_exception;
+    DROP TABLE IF EXISTS schedule_section;
+    DROP TABLE IF EXISTS schedule_project;
+    ALTER TABLE tally_expense DROP COLUMN recurring_template_id;
+    ALTER TABLE tally_expense DROP COLUMN rate_date;
+    ALTER TABLE tally_expense DROP COLUMN rate_source;
+    ALTER TABLE tally_expense DROP COLUMN rate_scale;
+    ALTER TABLE tally_expense DROP COLUMN rate_scaled;
+    ALTER TABLE tally_expense DROP COLUMN settlement_currency;
+    ALTER TABLE tally_expense DROP COLUMN original_currency;
+    ALTER TABLE tally_expense DROP COLUMN original_amount_minor;
+    ALTER TABLE schedule_task DROP COLUMN recurrence_tz;
+    ALTER TABLE schedule_task DROP COLUMN recurrence_anchor;
+    ALTER TABLE schedule_task DROP COLUMN sort_order;
+    ALTER TABLE schedule_task DROP COLUMN section_id;
+    ALTER TABLE schedule_task DROP COLUMN project_id;
+    ALTER TABLE core_event DROP COLUMN recurrence_semantics;
+    ALTER TABLE core_event DROP COLUMN end_tz;
+
     DROP TRIGGER IF EXISTS tally_expense_line_allocation_touch_updated_at;
     DROP TRIGGER IF EXISTS tally_expense_line_item_touch_updated_at;
     DROP TRIGGER IF EXISTS tally_expense_receipt_touch_updated_at;

@@ -20,6 +20,18 @@ export default async function propose({
         ...(input.description
           ? { description: String(input.description) }
           : {}),
+        ...(input.start_tz ? { start_tz: String(input.start_tz) } : {}),
+        ...(input.end_tz ? { end_tz: String(input.end_tz) } : {}),
+        ...(input.recurrence_semantics
+          ? { recurrence_semantics: String(input.recurrence_semantics) }
+          : {}),
+        ...(input.rrule ? { rrule: String(input.rrule) } : {}),
+        ...(input.conferencing_uri
+          ? { conferencing_uri: String(input.conferencing_uri) }
+          : {}),
+        ...(Array.isArray(input.reminders)
+          ? { reminders: input.reminders }
+          : {}),
         ...(Array.isArray(input.attendee_party_ids) &&
         input.attendee_party_ids.length
           ? { attendee_party_ids: input.attendee_party_ids.map(String) }

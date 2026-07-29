@@ -281,6 +281,8 @@ import { WebControlSessionStore } from "./web-session-store.js";
 
 export type { DeviceAccess } from "./vault-context.js";
 
+const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/time-engine");
+
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */
   paths: GatewayPaths;
@@ -3405,6 +3407,7 @@ export async function buildGateway(
     // Shared kit assets (kit.ts / kit.css) are served from the blueprints
     // package's canonical `kit/` dir; apps no longer ship per-app copies.
     sharedAssetsDir: KIT_DIR,
+    timeModuleUrl: TIME_ENGINE_MODULE_URL,
     userStore: prefs,
     conversationHistoryStore,
     conversationRunner: {

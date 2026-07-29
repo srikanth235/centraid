@@ -11,7 +11,14 @@ import {
   settlePendingChange,
   trackPendingOutcome,
 } from "./pending.ts";
-import type { AgEvent, AppData, AppState, CreatePayload } from "./types.ts";
+import type {
+  AgEvent,
+  AppData,
+  AppState,
+  CreatePayload,
+  EventEditPayload,
+  OccurrenceEditPayload,
+} from "./types.ts";
 
 interface LogicDeps {
   state: AppState;
@@ -91,8 +98,14 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     );
   }
 
-  function findEvent(eventId: string): AgEvent | null {
-    return (data.events ?? []).find((e) => e.event_id === eventId) ?? null;
+  function findEvent(identity: string): AgEvent | null {
+    return (
+      (data.events ?? []).find(
+        (event) =>
+          (event.instance_key ?? event.event_id) === identity ||
+          event.event_id === identity
+      ) ?? null
+    );
   }
 
   /** Like write(), but returns the raw outcome for callers that narrate + refresh themselves. */
@@ -154,39 +167,40 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  async function rescheduleEvent(
-    eventId: string,
-    dtstart: string,
-    dtend: string
+  async function editEvent(
+    input: EventEditPayload
   ): Promise<VaultOutcome | undefined> {
-    const outcome = await write("reschedule", {
-      event_id: eventId,
-      dtstart,
-      dtend,
-    });
+    const outcome = await write("edit-event", input);
     if (outcome?.status === "executed") {
-      logActivity(eventId, "Rescheduled", outcome);
-      toast("Event moved · receipt");
+      logActivity(input.event_id, "Event details edited", outcome);
+      toast("Event updated · receipt");
     } else if (
-      outcome?.status === "parked" ||
       outcome?.status === "queued" ||
       outcome?.status === "in-flight"
     ) {
-      trackPending(eventId, "reschedule", outcome);
+      toast("Event edit saved on this device — it will sync when connected.");
+    }
+    return outcome;
+  }
+
+  async function editOccurrence(
+    input: OccurrenceEditPayload
+  ): Promise<VaultOutcome | undefined> {
+    const outcome = await write("edit-occurrence", input);
+    if (outcome?.status === "executed") {
       logActivity(
-        eventId,
-        outcome.status === "parked"
-          ? "Move asked — parked for the owner"
-          : "Move saved locally",
+        input.event_id,
+        `${input.action === "skip" ? "Skipped" : "Edited"} ${input.scope}`,
         outcome
       );
+      toast("Recurring event updated · receipt");
+    } else if (
+      outcome?.status === "queued" ||
+      outcome?.status === "in-flight"
+    ) {
       toast(
-        outcome.status === "parked"
-          ? "Sent to the owner for confirmation — it stays at its current time until approved."
-          : "Move saved on this device — it will sync when the gateway is reachable.",
-        { duration: 7000 }
+        "Recurrence edit saved on this device — it will sync when connected."
       );
-      render();
     }
     return outcome;
   }
@@ -344,7 +358,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     settlePending,
     reconcilePending,
     proposeEvent,
-    rescheduleEvent,
+    editEvent,
+    editOccurrence,
     respondRsvp,
     cancelEvent,
     setAttachTarget,

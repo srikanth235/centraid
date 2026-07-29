@@ -38,6 +38,7 @@ import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
+import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
 /**
  * Ontology contract version stamped on rows (rule R07). Bumped to 1.4 for
@@ -98,6 +99,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   ENTITY_REVISIONS_DDL,
   PEOPLE_PROFILE_LIFECYCLE_DDL,
   TALLY_RECEIPT_DDL,
+  TIME_ORGANIZE_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

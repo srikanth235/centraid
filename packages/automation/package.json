@@ -27,7 +27,8 @@
   },
   "dependencies": {
     "@centraid/app-engine": "workspace:*",
-    "@centraid/blueprints": "workspace:*"
+    "@centraid/blueprints": "workspace:*",
+    "@centraid/time-engine": "workspace:*"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

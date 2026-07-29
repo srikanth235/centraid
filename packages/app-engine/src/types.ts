@@ -80,6 +80,38 @@ export interface AppRef {
   readonly dir: string;
 }
 
+/** Deterministic civil-time helpers available to every app handler. */
+export interface ScopedRecurrenceInstance {
+  readonly originalStart: string;
+  readonly start: string;
+  readonly wallStart: string;
+  readonly overlap: boolean;
+}
+
+export interface ScopedRecurrenceException {
+  readonly originalStart: string;
+  readonly scope?: "occurrence" | "future";
+  readonly action: "skip" | "override";
+  readonly start?: string;
+}
+
+export interface ScopedTime {
+  expandRecurrence: (input: {
+    rrule: string;
+    start: string;
+    rangeFrom: string;
+    rangeTo: string;
+    timeZone?: string;
+    semantics?: "zoned" | "floating" | "all-day";
+    maxInstances?: number;
+  }) => ScopedRecurrenceInstance[];
+  applyRecurrenceExceptions: (
+    instances: readonly ScopedRecurrenceInstance[],
+    exceptions: readonly ScopedRecurrenceException[]
+  ) => ScopedRecurrenceInstance[];
+  describeRecurrence: (rrule: string) => string | null;
+}
+
 export interface CommonHandlerArgs {
   log: ScopedLog;
   app: AppRef;
@@ -87,6 +119,7 @@ export interface CommonHandlerArgs {
     fetch: ScopedFetch;
     abortSignal: AbortSignal;
     vault: ScopedVault;
+    time: ScopedTime;
   };
 }
 

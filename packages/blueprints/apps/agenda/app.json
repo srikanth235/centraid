@@ -82,6 +82,13 @@
           "start_tz": {
             "type": "string"
           },
+          "end_tz": {
+            "type": "string"
+          },
+          "recurrence_semantics": {
+            "type": "string",
+            "enum": ["zoned", "floating", "all-day"]
+          },
           "calendar_id": {
             "type": "string",
             "minLength": 1
@@ -136,31 +143,6 @@
       "writes": []
     },
     {
-      "name": "reschedule",
-      "description": "Move an event to a new time (same identity, SEQUENCE bumped).",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "event_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "dtstart": {
-            "type": "string",
-            "minLength": 1
-          },
-          "dtend": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["event_id", "dtstart", "dtend"],
-        "additionalProperties": false
-      },
-      "writes": []
-    },
-    {
       "name": "rsvp",
       "description": "Record an attendee's response (RFC 5545 PARTSTAT).",
       "confirmation": "none",
@@ -181,6 +163,64 @@
           }
         },
         "required": ["event_id", "party_id", "partstat"],
+        "additionalProperties": false
+      },
+      "writes": []
+    },
+    {
+      "name": "edit-event",
+      "description": "Edit the complete event series contract: content, time and zone semantics, calendar, location, reminders, conferencing, recurrence, and attendee roster.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "event_id": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "clear_description": { "type": "boolean" },
+          "dtstart": { "type": "string" },
+          "dtend": { "type": "string" },
+          "start_tz": { "type": "string" },
+          "end_tz": { "type": "string" },
+          "recurrence_semantics": {
+            "type": "string",
+            "enum": ["zoned", "floating", "all-day"]
+          },
+          "rrule": { "type": "string" },
+          "clear_rrule": { "type": "boolean" },
+          "calendar_id": { "type": "string" },
+          "location_place_id": { "type": "string" },
+          "clear_location": { "type": "boolean" },
+          "conferencing_uri": { "type": "string" },
+          "clear_conferencing": { "type": "boolean" },
+          "reminders": { "type": "array" },
+          "attendee_party_ids": { "type": "array" }
+        },
+        "required": ["event_id"],
+        "additionalProperties": false
+      },
+      "writes": []
+    },
+    {
+      "name": "edit-occurrence",
+      "description": "Skip or override one stable recurrence instance, this-and-future instances, or the whole series.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "event_id": { "type": "string", "minLength": 1 },
+          "original_start": { "type": "string", "minLength": 1 },
+          "scope": {
+            "type": "string",
+            "enum": ["occurrence", "future", "series"]
+          },
+          "action": { "type": "string", "enum": ["skip", "override"] },
+          "dtstart": { "type": "string" },
+          "dtend": { "type": "string" },
+          "summary": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "required": ["event_id", "original_start", "scope", "action"],
         "additionalProperties": false
       },
       "writes": []

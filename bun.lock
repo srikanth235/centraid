@@ -71,6 +71,7 @@
         "@centraid/client": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/protocol": "workspace:*",
+        "@centraid/time-engine": "workspace:*",
         "@expo-google-fonts/geist": "^0.4.2",
         "@expo-google-fonts/jetbrains-mono": "^0.4.1",
         "@expo-google-fonts/playfair-display": "^0.4.1",
@@ -200,6 +201,7 @@
       "dependencies": {
         "@centraid/app-engine": "workspace:*",
         "@centraid/blueprints": "workspace:*",
+        "@centraid/time-engine": "workspace:*",
       },
       "devDependencies": {
         "@centraid/test-kit": "workspace:*",
@@ -236,6 +238,7 @@
       "devDependencies": {
         "@centraid/app-engine": "workspace:*",
         "@centraid/test-kit": "workspace:*",
+        "@centraid/time-engine": "workspace:*",
         "@types/node": "^26.1.2",
         "@types/react": "~19.2.17",
         "esbuild": "^0.28.1",
@@ -304,6 +307,7 @@
         "@centraid/blueprints": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
         "@centraid/protocol": "workspace:*",
+        "@centraid/time-engine": "workspace:*",
         "@centraid/tunnel": "workspace:*",
         "@centraid/vault": "workspace:*",
         "jpeg-js": "^0.4.4",
@@ -343,6 +347,15 @@
         "typescript": "catalog:",
       },
     },
+    "packages/time-engine": {
+      "name": "@centraid/time-engine",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/test-kit": "workspace:*",
+        "@types/node": "^26.1.2",
+        "typescript": "catalog:",
+      },
+    },
     "packages/tunnel": {
       "name": "@centraid/tunnel",
       "version": "0.1.0",
@@ -361,6 +374,7 @@
       "dependencies": {
         "@centraid/backup": "workspace:*",
         "@centraid/blob-format": "workspace:*",
+        "@centraid/time-engine": "workspace:*",
         "hash-wasm": "^4.12.0",
         "uuid": "^14.0.1",
       },
@@ -636,6 +650,8 @@
     "@centraid/protocol": ["@centraid/protocol@workspace:packages/protocol"],
 
     "@centraid/test-kit": ["@centraid/test-kit@workspace:packages/test-kit"],
+
+    "@centraid/time-engine": ["@centraid/time-engine@workspace:packages/time-engine"],
 
     "@centraid/tunnel": ["@centraid/tunnel@workspace:packages/tunnel"],
 

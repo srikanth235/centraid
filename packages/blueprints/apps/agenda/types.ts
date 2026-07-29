@@ -50,6 +50,9 @@ export interface AgEvent {
   status?: string;
   dtstart: string;
   dtend?: string | null;
+  start_tz?: string | null;
+  end_tz?: string | null;
+  recurrence_semantics?: "zoned" | "floating" | "all-day";
   description?: string;
   rrule?: string | null;
   conferencing_uri?: string | null;
@@ -58,6 +61,44 @@ export interface AgEvent {
   snippet?: string;
   instance_key?: string;
   is_recurrence_instance?: boolean;
+  original_start?: string;
+  recurrence_overlap?: boolean;
+  location_place_id?: string | null;
+  reminders_json?: string | null;
+}
+
+export interface EventEditPayload {
+  event_id: string;
+  summary: string;
+  description?: string;
+  clear_description?: true;
+  dtstart: string;
+  dtend: string;
+  start_tz?: string;
+  end_tz?: string;
+  recurrence_semantics: "zoned" | "floating" | "all-day";
+  rrule?: string;
+  clear_rrule?: true;
+  calendar_id?: string;
+  location_place_id?: string;
+  clear_location?: true;
+  conferencing_uri?: string;
+  clear_conferencing?: true;
+  reminders: { minutes_before: number }[];
+  attendee_party_ids: string[];
+  [key: string]: unknown;
+}
+
+export interface OccurrenceEditPayload {
+  event_id: string;
+  original_start: string;
+  scope: "occurrence" | "future" | "series";
+  action: "skip" | "override";
+  dtstart?: string;
+  dtend?: string;
+  summary?: string;
+  description?: string;
+  [key: string]: unknown;
 }
 
 /** One event's segment clamped to a single local day (see format.ts bucketByDay). */

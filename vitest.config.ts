@@ -16,6 +16,7 @@ export const coverageProjects = [
   "packages/design-tokens",
   "packages/gateway",
   "packages/protocol",
+  "packages/time-engine",
   "packages/cli",
   "packages/tunnel",
   "packages/test-kit",

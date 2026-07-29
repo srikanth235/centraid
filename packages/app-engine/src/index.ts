@@ -120,6 +120,7 @@ export type {
   ActionModule,
   HandlerFn,
   ScopedFetch,
+  ScopedTime,
   CommonHandlerArgs,
 } from "./types.js";
 

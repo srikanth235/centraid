@@ -14,7 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { family, useTheme } from "../../kit/theme";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
+import type { NativeWriteInput } from "../../lib/replica/native-session";
 import type { AgendaScreenProps } from "../../navigation";
+import AgendaEventEditor from "./AgendaEventEditor";
 import { useAgenda } from "./useAgenda";
 
 // Rows from useReplicaQuery carry a synthetic `__rowId` key that is not a real
@@ -42,6 +44,13 @@ export default function AgendaEvent({
   const canonical = agenda.canonicalEvents.find(
     (row) => row.event_id === eventId
   );
+  const eventExtension = agenda.eventExtensions.find(
+    (row) => row.event_id === eventId
+  );
+  const editableCanonical = {
+    ...canonical,
+    ...eventExtension,
+  };
   // Render the tapped occurrence when an instanceKey was threaded through, so a
   // recurring instance shows its own date/time (and reminders below fire for
   // that occurrence). Writes still target the canonical series via `eventId`.
@@ -50,6 +59,7 @@ export default function AgendaEvent({
       ? agenda.events.find((row) => row.instanceKey === instanceKey)
       : undefined) ?? agenda.events.find((row) => row.id === eventId);
   const [pending, setPending] = useState<string>();
+  const [editOpen, setEditOpen] = useState(false);
   const partyNames = new Map(
     agenda.parties.map((row) => [
       String(row.party_id),
@@ -86,32 +96,27 @@ export default function AgendaEvent({
     );
   };
 
-  const reschedule = async (): Promise<void> => {
-    if (!event || !session) return;
-    const start = new Date(
-      Date.parse(event.start) + 60 * 60 * 1000
-    ).toISOString();
-    const end = new Date(Date.parse(event.end) + 60 * 60 * 1000).toISOString();
+  const writeEdit = async (request: {
+    action: string;
+    input: NativeWriteInput["input"];
+    optimistic: NonNullable<NativeWriteInput["optimistic"]>;
+  }): Promise<boolean> => {
+    if (!session) return false;
     try {
       const result = await session.write("agenda", {
-        action: "reschedule",
-        input: { event_id: event.id, dtstart: start, dtend: end },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.event",
-            rowId: event.id,
-            values: {
-              ...(canonical ? withoutRowId(canonical) : {}),
-              dtstart: start,
-              dtend: end,
-            },
-          },
-        ],
+        action: request.action,
+        input: request.input,
+        optimistic: request.optimistic,
       });
-      applyOutcome(result, "Reschedule");
+      applyOutcome(result, "Event edit");
+      return (
+        result.status === "executed" ||
+        result.status === "queued" ||
+        result.status === "in-flight"
+      );
     } catch (error) {
-      reportFailure("Reschedule", error);
+      reportFailure("Event edit", error);
+      return false;
     }
   };
   const cancel = async (): Promise<void> => {
@@ -304,13 +309,17 @@ export default function AgendaEvent({
         <Text style={[styles.section, { color: colors.ink2 }]}>ACTIONS</Text>
         <Pressable
           style={[styles.action, { borderBottomColor: colors.line }]}
-          onPress={() => void reschedule()}
+          accessibilityRole="button"
+          accessibilityLabel="Edit every event field"
+          onPress={() => setEditOpen(true)}
         >
-          <Feather name="clock" size={18} color={colors.accent} />
+          <Feather name="edit-3" size={18} color={colors.accent} />
           <Text style={[styles.actionText, { color: colors.ink }]}>
-            Move one hour later
+            Edit event
           </Text>
-          <Text style={[styles.risk, { color: colors.ink2 }]}>approval</Text>
+          <Text style={[styles.risk, { color: colors.ink2 }]}>
+            {event.isRecurrenceInstance ? "scope" : "all fields"}
+          </Text>
         </Pressable>
         <Pressable
           style={[styles.action, { borderBottomColor: colors.line }]}
@@ -336,6 +345,16 @@ export default function AgendaEvent({
           <Text style={[styles.risk, { color: colors.ink2 }]}>approval</Text>
         </Pressable>
       </ScrollView>
+      <AgendaEventEditor
+        visible={editOpen}
+        event={event}
+        canonical={editableCanonical}
+        calendars={agenda.calendars}
+        parties={agenda.parties}
+        attendees={attendees}
+        onClose={() => setEditOpen(false)}
+        onWrite={writeEdit}
+      />
     </SafeAreaView>
   );
 }

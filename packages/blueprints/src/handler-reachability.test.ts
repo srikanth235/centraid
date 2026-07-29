@@ -163,12 +163,22 @@ function mobileException(
 
 describe("manifest handler reachability", () => {
   describe.each(manifests())("$id", (manifest) => {
-    const webSource = sourceTree(path.join(APPS_ROOT, manifest.id), true);
+    const webSource = sourceTree(
+      path.join(APPS_ROOT, manifest.id),
+      true
+    ).concat(
+      manifest.id === "tally"
+        ? sourceTree(
+            path.join(REPO_ROOT, "packages/client/src/react/shell"),
+            false
+          )
+        : ""
+    );
     const mobileSource = sourceTree(
       path.join(MOBILE_APPS_ROOT, manifest.id),
       false
     ).concat(
-      manifest.id === "photos"
+      manifest.id === "photos" || manifest.id === "tally"
         ? sourceTree(path.join(REPO_ROOT, "apps/mobile/src/lib/upload"), false)
         : ""
     );

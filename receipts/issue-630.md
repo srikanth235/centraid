@@ -67,6 +67,23 @@ backup-covered vault data. The receipt recovery canary separately proves the
 image, canonical attachment, OCR derivative, line items, and allocations
 survive side restore and restore-after-erase. -->
 
+<!-- Checkpoint: Wave 4 now has one dependency-free civil-time and recurrence
+engine consumed by Agenda, Tasks, vault recurrence compatibility, automation
+timezone extraction, the mobile replica, and blueprint handlers through
+`ctx.time`. It implements zoned/floating/all-day semantics, calendar- and
+completion-relative rules, RRULE end conditions and readable previews, stable
+original-occurrence keys, occurrence/future skips and overrides, and the shared
+gap-skip/overlap-once-at-earlier-instant policy. Agenda supports complete event
+editing and recurrence scope on web and mobile; schedule schema and commands
+now carry projects/sections/order and recurrence exceptions.
+
+Ambiguity decision: moved recurring instances retain the original occurrence
+instant as their durable identity. This keeps concurrent offline edits and
+future-scope exceptions addressable even when an override changes the visible
+start. In a fall-back overlap, the earlier absolute instant is canonical and
+the duplicate wall occurrence is suppressed, matching the automation policy
+documented in docs/cron-timezone.md. -->
+
 ### Costs
 
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
@@ -85,3 +102,6 @@ survive side restore and restore-after-erase. -->
 | codex-019fad18-4c1-1785334143-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 877041 | 0 | 48042496 | 144738 | 1021779 | 16.3743 | 3830468 | 0 | 193868800 | 529329 | feat(capture): add private cross-platform intake and reminders (#630) |
 | codex-019fad18-4c1-1785334747-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 91929 | 0 | 6185472 | 21489 | 113418 | 2.0985 | 3922397 | 0 | 200054272 | 550818 | feat(capture): add private cross-platform intake and reminders (#630) |
 | codex-019fad18-4c1-1785334818-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 3597 | 0 | 835584 | 336 | 3933 | 0.2229 | 3925994 | 0 | 200889856 | 551154 | feat(capture): add private cross-platform intake and reminders (#630) |
+| codex-019fad18-4c1-1785337231-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 440644 | 0 | 25269760 | 80374 | 521018 | 8.6247 | 4366638 | 0 | 226159616 | 631528 | feat(time): unify recurrence and Agenda editing (#630) |
+| codex-019fad18-4c1-1785337540-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 73402 | 0 | 4989952 | 3951 | 77353 | 1.4903 | 4440040 | 0 | 231149568 | 635479 | feat(time): unify recurrence and Agenda editing (#630) |
+| codex-019fad18-4c1-1785337630-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 9699 | 0 | 1854464 | 631 | 10330 | 0.4973 | 4449739 | 0 | 233004032 | 636110 | feat(time): unify recurrence and Agenda editing (#630) -m governance: allow-tool |

@@ -41,6 +41,7 @@
   "devDependencies": {
     "@centraid/app-engine": "workspace:*",
     "@centraid/test-kit": "workspace:*",
+    "@centraid/time-engine": "workspace:*",
     "@types/node": "^26.1.2",
     "@types/react": "~19.2.17",
     "esbuild": "^0.28.1",

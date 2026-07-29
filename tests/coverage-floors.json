@@ -15,6 +15,7 @@
   "packages/blueprints/kit/**": { "lines": 49, "branches": 37 },
   "packages/client/src/replica/**": { "lines": 75, "branches": 62 },
   "packages/gateway/src/**": { "lines": 80, "branches": 65 },
+  "packages/time-engine/src/**": { "lines": 74, "branches": 56 },
   "packages/agent-runtime/src/**": { "lines": 72, "branches": 75 },
   "packages/vault/src/**": { "lines": 88, "branches": 74 },
   "packages/design-tokens/src/**": { "lines": 98, "branches": 70 },

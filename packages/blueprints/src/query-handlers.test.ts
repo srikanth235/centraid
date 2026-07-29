@@ -8,6 +8,11 @@
 // changes (issue #404) that only manifest with content: notes shipping a
 // preview + checklist tally instead of full bodies, the on-open body pull, and
 // agenda bounding recurring expansion to the visible range.
+import {
+  applyRecurrenceExceptions,
+  describeRecurrence,
+  expandRecurrence,
+} from "@centraid/time-engine";
 import { describe, expect, it, vi } from "vitest";
 
 type VaultReadTestSeam = (input: {
@@ -26,6 +31,11 @@ type VaultInvokeTestSeam = (input: {
 /** A mock ctx.vault that returns fixture rows keyed by entity name. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
   return {
+    time: {
+      applyRecurrenceExceptions,
+      describeRecurrence,
+      expandRecurrence,
+    },
     vault: {
       read: async ({ entity }: { entity: string }) => ({
         rows: rowsByEntity[entity] ?? [],

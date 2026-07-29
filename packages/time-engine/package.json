@@ -1,0 +1,44 @@
+{
+  "name": "@centraid/time-engine",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Shared timezone-aware recurrence semantics for Centraid schedules, tasks, tally templates, and automations.",
+  "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/time-engine"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "react-native": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "clean": "rm -rf dist",
+    "coverage": "vitest run --coverage",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
+    "@types/node": "^26.1.2",
+    "typescript": "catalog:"
+  }
+}

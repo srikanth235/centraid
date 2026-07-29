@@ -19,6 +19,10 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
     "agenda",
     useMemo(() => ({ entity: "schedule.attendee" }), [])
   );
+  const eventExtensions = useReplicaQuery(
+    "agenda",
+    useMemo(() => ({ entity: "schedule.event_ext" }), [])
+  );
   const parties = useReplicaQuery(
     "agenda",
     useMemo(() => ({ entity: "core.party" }), [])
@@ -26,6 +30,10 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
   const calendars = useReplicaQuery(
     "agenda",
     useMemo(() => ({ entity: "schedule.calendar" }), [])
+  );
+  const exceptions = useReplicaQuery(
+    "agenda",
+    useMemo(() => ({ entity: "schedule.recurrence_exception" }), [])
   );
   // The vault's owner party (issue #337) — the one attendee whose RSVP the
   // owner controls. core.vault is granted to the agenda shape, so this rides
@@ -37,8 +45,10 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
   const queryState = combineReplicaQueryStates([
     events,
     attendees,
+    eventExtensions,
     parties,
     calendars,
+    exceptions,
     vault,
   ]);
   const rows = useMemo(
@@ -51,29 +61,58 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
           // The vault allows a NULL dtend and treats it as a zero-duration
           // event (upcoming.js); match that instead of dropping the row.
           const end = value<string>(row, "dtend") ?? start;
+          const extension = eventExtensions.rows.find(
+            (candidate) => value(candidate, "event_id") === id
+          );
           return expandEvent(
             {
               id,
-              calendarId: value<string>(row, "calendar_id"),
+              calendarId: value<string>(extension ?? row, "calendar_id"),
               summary: value<string>(row, "summary") ?? "Untitled event",
               description: value<string>(row, "description"),
               start,
               end,
               timezone: value<string>(row, "start_tz"),
+              endTimezone: value<string>(row, "end_tz"),
+              recurrenceSemantics:
+                value<"zoned" | "floating" | "all-day">(
+                  row,
+                  "recurrence_semantics"
+                ) ?? "zoned",
               rrule: value<string>(row, "rrule"),
               status: value<string>(row, "status") ?? "confirmed",
             },
             rangeStart,
-            rangeEnd
+            rangeEnd,
+            200,
+            exceptions.rows
+              .filter((exception) => value(exception, "target_id") === id)
+              .map((exception) => {
+                const raw = value<string>(exception, "override_json");
+                const override = raw
+                  ? (JSON.parse(raw) as {
+                      scope?: "occurrence" | "future";
+                      start?: string;
+                    })
+                  : {};
+                return {
+                  originalStart:
+                    value<string>(exception, "original_start") ?? "",
+                  action:
+                    value<"skip" | "override">(exception, "action") ?? "skip",
+                  ...override,
+                };
+              })
           );
         })
         .sort((a, b) => a.start.localeCompare(b.start)),
-    [events.rows, rangeEnd, rangeStart]
+    [events.rows, eventExtensions.rows, exceptions.rows, rangeEnd, rangeStart]
   );
   return {
     events: rows,
     canonicalEvents: events.rows,
     attendees: attendees.rows,
+    eventExtensions: eventExtensions.rows,
     parties: parties.rows,
     calendars: calendars.rows,
     ownerPartyId: value<string>(vault.rows[0] ?? {}, "owner_party_id"),

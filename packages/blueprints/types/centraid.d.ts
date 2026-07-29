@@ -128,11 +128,46 @@ interface VaultApi {
   content: (request: Record<string, unknown>) => Promise<unknown>;
 }
 
-/** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault. */
+type RecurrenceSemantics = "zoned" | "floating" | "all-day";
+
+interface RecurrenceInstance {
+  originalStart: string;
+  start: string;
+  wallStart: string;
+  overlap: boolean;
+}
+
+interface RecurrenceException {
+  originalStart: string;
+  action: "skip" | "override";
+  scope?: "occurrence" | "future";
+  start?: string;
+}
+
+/** Deterministic shared time core exposed by the host worker. */
+interface TimeApi {
+  expandRecurrence: (input: {
+    rrule: string;
+    start: string;
+    rangeFrom: string;
+    rangeTo: string;
+    timeZone?: string;
+    semantics?: RecurrenceSemantics;
+    maxInstances?: number;
+  }) => RecurrenceInstance[];
+  applyRecurrenceExceptions: (
+    instances: readonly RecurrenceInstance[],
+    exceptions: readonly RecurrenceException[]
+  ) => RecurrenceInstance[];
+  describeRecurrence: (rrule: string) => string | null;
+}
+
+/** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault, and time. */
 interface HandlerCtx {
   fetch: (input: string, init?: RequestInit) => Promise<Response>;
   abortSignal: AbortSignal;
   vault: VaultApi;
+  time: TimeApi;
 }
 
 interface HandlerLog {

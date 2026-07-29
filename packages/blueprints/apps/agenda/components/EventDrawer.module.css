@@ -181,15 +181,6 @@
   color: var(--danger);
   background: color-mix(in oklab, var(--danger) 12%, transparent);
 }
-.reschedule {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.rescheduleBtn {
-  align-self: flex-start;
-}
 .activity {
   margin-bottom: 4px;
 }
