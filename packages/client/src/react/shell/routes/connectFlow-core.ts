@@ -47,6 +47,8 @@ export interface ConnectivityVaultPreview {
   name: string;
   color?: string;
   icon?: string;
+  /** The owner's own vault — the gateway's default (marked in the vault). */
+  personal?: boolean;
 }
 
 /** Mirrors the design doc's `ConnectivityReport` (GATEWAY_TEST_CONNECTION
@@ -78,6 +80,13 @@ export interface ConnectFlowResult {
   gatewayId: string;
   vaultId: string;
   displayLabel: string;
+  /** True only when `vaultId` is the gateway's auto-founded "Personal" vault
+   *  — i.e. a vault first run may safely rename to the owner's display name.
+   *  A reinstall over existing data has no "Personal" vault (it was already
+   *  renamed), and the fallback there is the oldest vault, which is "Shared".
+   *  Renaming THAT would rename everyone's shared space, so the flag stays
+   *  false and the host skips the rename. */
+  ownerVault?: boolean;
 }
 
 /** Outcome of reading the local gateway's vaults (issue #603 W4). A transport
@@ -332,7 +341,20 @@ export function canCommitConnectFlow(state: ConnectFlowState): boolean {
     );
   }
   if (state.method === "gateway") {
-    return state.ticket.trim().length > 0;
+    if (state.ticket.trim().length === 0) return false;
+    // Once the ticket has been redeemed the report says which vault the
+    // enrollment actually grants. An enrollment that names none leaves the
+    // vault step with nothing to pick, so "Continue" must not proceed
+    // (issue #603 D10) — it would commit against no space at all.
+    if (state.step === "vault" && state.report) return hasUsableVault(state);
+    return true;
   }
   return false;
+}
+
+/** Does the vault step have anything the user can actually connect to —
+ *  a ticket-locked vault or at least one selectable/creatable option? */
+function hasUsableVault(state: ConnectFlowState): boolean {
+  const cap = vaultCapability(state);
+  return cap.locked !== null || cap.options.length > 0 || cap.canCreate;
 }

@@ -152,7 +152,12 @@ function parseDeviceArgs(
   return out;
 }
 
-/** Resolve `--vault` (name or id) against the mounted registry; default = oldest. */
+/**
+ * Resolve `--vault` (name or id) against the mounted registry. With no
+ * selector the default is the owner's PERSONAL vault (the registry's durable
+ * `personal` marker), never the shared household vault — a bare
+ * `centraid-gateway pair` invites a device into the owner's own space.
+ */
 function resolveVault(
   registry: VaultRegistry,
   selector: string | undefined,
@@ -160,9 +165,9 @@ function resolveVault(
 ): { vaultId: string; name: string } {
   const vaults = registry.list();
   if (selector === undefined) {
-    const oldest = vaults[0];
-    if (!oldest) fail("no vault exists yet — run `vault create` first", 1);
-    return { vaultId: oldest.vaultId, name: oldest.name };
+    const preferred = vaults.find((v) => v.personal) ?? vaults[0];
+    if (!preferred) fail("no vault exists yet — run `vault create` first", 1);
+    return { vaultId: preferred.vaultId, name: preferred.name };
   }
   const match =
     vaults.find((v) => v.vaultId === selector) ??

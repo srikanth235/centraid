@@ -113,6 +113,30 @@ export function readVaultPresentation(db: VaultDb): VaultPresentation {
 }
 
 /**
+ * Whether this vault is its owner's PERSONAL vault — the one a gateway
+ * defaults to when a caller names none (pair tickets, unscoped requests,
+ * post-onboarding landing).
+ *
+ * The marker lives in the vault's own settings bag, NOT in creation order or
+ * in the display name: ids are UUIDv7 so "oldest" is the shared household
+ * vault, and the desktop fresh path RENAMES the personal vault to the owner's
+ * display name, which kills any name match. A flag written at founding travels
+ * with the vault through rename, export, backup and restore.
+ */
+export function readVaultPersonal(db: VaultDb): boolean {
+  return readVaultSettings(db).personal === true;
+}
+
+/** Mark this vault as its owner's personal vault (founding act, see above). */
+export function markVaultPersonal(db: VaultDb): void {
+  const settings = readVaultSettings(db);
+  settings.personal = true;
+  db.vault
+    .prepare("UPDATE core_vault SET settings_json = ?")
+    .run(JSON.stringify(settings));
+}
+
+/**
  * Merge a presentation patch into `core_vault.settings_json` (owner act).
  * `null`/empty-string values clear a field.
  */

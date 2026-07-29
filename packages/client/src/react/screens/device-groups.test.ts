@@ -72,6 +72,47 @@ describe(groupDevicesByMember, () => {
     expect(groups[1]?.devices).toStrictEqual([]);
   });
 
+  it("folds a device's per-space enrollments into one hardware row", () => {
+    // The devices route returns a row per (device, space). Two rows for one
+    // browser used to render as two devices — the card counted "4 devices"
+    // for two — each with a "Revoke device" button that dropped one space.
+    const groups = groupDevicesByMember(
+      [
+        device({ deviceId: "enr_shared", vaultId: "v1", vaultName: "Shared" }),
+        device({
+          deviceId: "enr_personal",
+          vaultId: "v2",
+          vaultName: "Personal",
+          role: "admin",
+        }),
+      ],
+      []
+    );
+    expect(groups[0]?.devices).toHaveLength(1);
+    expect(groups[0]?.devices[0]?.enrollmentIds).toStrictEqual([
+      "enr_shared",
+      "enr_personal",
+    ]);
+    expect(groups[0]?.devices[0]?.vaults).toStrictEqual([
+      { vaultId: "v1", vaultName: "Shared", role: "write" },
+      { vaultId: "v2", vaultName: "Personal", role: "admin" },
+    ]);
+  });
+
+  it("keeps two distinct endpoints apart when they share a person", () => {
+    const groups = groupDevicesByMember(
+      [
+        device(),
+        device({ deviceId: "enr_2", endpointId: "ep_2", label: "Phone" }),
+      ],
+      []
+    );
+    expect(groups[0]?.devices.map((d) => d.label)).toStrictEqual([
+      "Browser",
+      "Phone",
+    ]);
+  });
+
   it("collects every space the caller can see, de-duplicated", () => {
     const groups = groupDevicesByMember(
       [

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import { isRevokedDevice } from "../../device-roster.js";
 import type {
   CentraidGatewayDevice,
   GatewayDeviceTicket,
@@ -12,6 +11,7 @@ import type {
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import { groupDevicesByMember, spacesFromGroups } from "./device-groups.js";
+import type { GroupedDevice } from "./device-groups.js";
 import DeviceMemberGroup from "./DeviceMemberGroup.js";
 import DevicePairPanel from "./DevicePairPanel.js";
 
@@ -75,6 +75,13 @@ export interface DevicesCardProps {
     contributeWhileCharging: boolean
   ) => Promise<CentraidGatewayDevice>;
   loadWorkStatus?: () => Promise<GatewayDeviceWorkDepth[]>;
+  /**
+   * Whether the viewer owns any space here. A read-only member saw live
+   * `Revoke device` / `Remove <person>` buttons whose clicks the gateway
+   * refused with no feedback (onboarding run B11); the roster now renders
+   * read-only rows for them instead.
+   */
+  canAdminister?: boolean;
 }
 
 /** Poll cadence — same order of magnitude as the Backups card. */
@@ -91,6 +98,7 @@ export default function DevicesCard({
   onCreateTicket,
   onUpdateCompute,
   loadWorkStatus,
+  canAdminister = true,
 }: DevicesCardProps): JSX.Element {
   const [devices, setDevices] = useState<CentraidGatewayDevice[] | null>(null);
   const [members, setMembers] = useState<GatewayMember[]>([]);
@@ -136,20 +144,28 @@ export default function DevicesCard({
   }, [refresh]);
 
   const revoke = useCallback(
-    async (
-      device: CentraidGatewayDevice,
-      confirmLastAdmin?: string
-    ): Promise<void> => {
-      await onRevokeDevice(
-        device.deviceId,
-        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
+    async (device: GroupedDevice, confirmLastAdmin?: string): Promise<void> => {
+      // "Revoke device" means the hardware, so every enrollment it holds goes
+      // — one per space it reached. Chained rather than `Promise.all`: the
+      // gateway refuses the enrollment that would strand a space's last owner,
+      // and that refusal has to surface before the rest are dropped.
+      await device.enrollmentIds.reduce(
+        (chain, enrollmentId) =>
+          chain.then(async () => {
+            await onRevokeDevice(
+              enrollmentId,
+              confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
+            );
+          }),
+        Promise.resolve()
       );
       if (device.current) await onCurrentDeviceRevoked?.();
-      // Optimistically drop the row; a background refresh reconciles (and
+      // Optimistically drop the rows; a background refresh reconciles (and
       // brings the tombstone back under the group's revoked disclosure).
       if (mountedRef.current) {
+        const dropped = new Set(device.enrollmentIds);
         setDevices(
-          (prev) => prev?.filter((d) => d.deviceId !== device.deviceId) ?? prev
+          (prev) => prev?.filter((d) => !dropped.has(d.deviceId)) ?? prev
         );
       }
       refresh();
@@ -158,7 +174,7 @@ export default function DevicesCard({
   );
 
   const rename = useCallback(
-    async (device: CentraidGatewayDevice, label: string): Promise<void> => {
+    async (device: GroupedDevice, label: string): Promise<void> => {
       if (!onRenameDevice) return;
       const updated = await onRenameDevice(device.deviceId, label);
       if (mountedRef.current) {
@@ -195,7 +211,7 @@ export default function DevicesCard({
   );
 
   const updateCompute = useCallback(
-    async (device: CentraidGatewayDevice, enabled: boolean): Promise<void> => {
+    async (device: GroupedDevice, enabled: boolean): Promise<void> => {
       if (!onUpdateCompute) return;
       const updated = await onUpdateCompute(device, enabled);
       if (!mountedRef.current) return;
@@ -217,8 +233,12 @@ export default function DevicesCard({
   const selfMemberId = groups.find((group) => group.isSelf)?.memberId;
 
   const people = groups.length;
-  const liveCount =
-    devices?.filter((device) => !isRevokedDevice(device)).length ?? 0;
+  // Count hardware, not enrollment rows: a browser paired into two spaces is
+  // one device, and counting its rows read as "4 devices" for two.
+  const liveCount = groups.reduce(
+    (sum, group) => sum + group.devices.length,
+    0
+  );
   const queued = workDepth.reduce((sum, depth) => sum + depth.available, 0);
   const leased = workDepth.reduce((sum, depth) => sum + depth.leased, 0);
 
@@ -241,7 +261,7 @@ export default function DevicesCard({
               {queued} queued · {leased} leased
             </span>
           ) : null}
-          {onCreateTicket && !pairing ? (
+          {onCreateTicket && canAdminister && !pairing ? (
             <button
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
@@ -255,7 +275,7 @@ export default function DevicesCard({
       </div>
 
       <div className={styles.body}>
-        {onCreateTicket && pairing ? (
+        {onCreateTicket && canAdminister && pairing ? (
           <DevicePairPanel
             now={now}
             onCreateTicket={onCreateTicket}
@@ -293,6 +313,7 @@ export default function DevicesCard({
                   isSelf={group.isSelf}
                   now={now}
                   onRevokeDevice={revoke}
+                  canAdminister={canAdminister}
                   {...(onRenameDevice ? { onRenameDevice: rename } : {})}
                   {...(onUpdateCompute
                     ? { onUpdateCompute: updateCompute }

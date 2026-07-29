@@ -92,10 +92,11 @@ export interface DevicesRouteDeps {
    */
   endpointTicket?: () => string | undefined;
   /**
-   * The registry's default vault — "Shared" on an auto-founded gateway
-   * (issue #603). Used when the caller names no target at all, so a bare
-   * `centraid-gateway pair` invites into the household vault rather than
-   * whichever vault happens to sort first in the caller's enrollments.
+   * The registry's default vault — the owner's PERSONAL vault on an
+   * auto-founded gateway (marked at founding; never "Shared"). Used when the
+   * caller names no target at all, so a bare `centraid-gateway pair` invites
+   * into the owner's own space rather than whichever vault happens to sort
+   * first in the caller's enrollments.
    */
   defaultVaultId?: () => string | undefined;
   /** Direct host-custody request (authenticated bearer, never iroh-forwarded). */
@@ -185,7 +186,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         });
       }
       const hostVaults = hostCustody ? (deps.vaultIds?.() ?? []) : [];
-      // No named target → the registry default (Shared), but only when the
+      // No named target → the registry default (the personal vault), but only when the
       // caller may actually address it; otherwise fall back to what it holds.
       const preferred = deps.defaultVaultId?.();
       const target =

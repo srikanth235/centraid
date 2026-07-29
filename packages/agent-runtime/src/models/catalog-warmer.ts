@@ -16,6 +16,13 @@
  * this stays free of gateway-only concerns (model prefs come from the
  * gateway's prefs loader).
  *
+ * A finished warm is also RECORDED (`hasWarmed`), whatever it produced. That
+ * record is what lets a runner with genuinely no self-reported models settle:
+ * without it, the cold-read rule ("empty cache → kick a warm") re-kicked on
+ * every poll, so `isWarming` was never false at read time and `deriveStatus`
+ * could never leave `loading` — opencode and grok spun forever instead of
+ * saying they have no model choice.
+ *
  * (The tool surface this warmer once also tracked went away with the
  * `ctx.tool` rail — issue #484.)
  *
@@ -45,6 +52,7 @@ export interface CatalogWarmerOptions {
 
 export class CatalogWarmer {
   private readonly inflight = new Map<string, Promise<void>>();
+  private readonly warmed = new Set<string>();
 
   constructor(private readonly opts: CatalogWarmerOptions) {}
 
@@ -58,6 +66,16 @@ export class CatalogWarmer {
   }
 
   /**
+   * Has a warm for this (kind, surface) ever run to completion in this
+   * process? True even when it enumerated nothing — the point is that the
+   * question has been ASKED, so a still-empty cache is an answer rather than
+   * a reason to ask again.
+   */
+  hasWarmed(kind: RunnerKind, surface: CatalogSurface): boolean {
+    return this.warmed.has(this.key(kind, surface));
+  }
+
+  /**
    * Start (or join) a warm for (kind, surface). Resolves when it finishes.
    * Concurrent calls for the same key share one enumeration.
    */
@@ -65,7 +83,10 @@ export class CatalogWarmer {
     const k = this.key(kind, surface);
     const existing = this.inflight.get(k);
     if (existing) return existing;
-    const run = this.run(kind, surface).finally(() => this.inflight.delete(k));
+    const run = this.run(kind, surface).finally(() => {
+      this.inflight.delete(k);
+      this.warmed.add(k);
+    });
     this.inflight.set(k, run);
     return run;
   }

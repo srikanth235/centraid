@@ -207,6 +207,7 @@ export default function ConnectFlow({
           state={state}
           dispatch={dispatch}
           ticketRef={ticketRef}
+          canGoBack={methods.length > 1}
         />
       ) : null}
 

@@ -179,6 +179,28 @@ async function withVaultHeader(init: RequestInit): Promise<RequestInit> {
   return { ...init, headers };
 }
 
+/**
+ * A body that isn't JSON means something other than the gateway answered —
+ * a captive portal, a stale service-worker shell, a proxy error page. The raw
+ * body is diagnostic, never user-facing (onboarding run B3 leaked
+ * `returned non-JSON: <!doctype html>…` into the Gateway screen), so it goes
+ * to the console and the thrown message stays in plain words.
+ */
+export function nonJsonError(
+  op: string,
+  status: number,
+  text: string
+): GatewayClientError {
+  console.warn(
+    `[centraid] ${op} returned a non-JSON body (HTTP ${status}):`,
+    text.slice(0, 200)
+  );
+  return new GatewayClientError(
+    "gateway_error",
+    `${op}: the gateway sent an unexpected response. It may be starting up or unreachable — check the console for details.`
+  );
+}
+
 export async function readJson<T>(res: Response, op: string): Promise<T> {
   const text = await res.text();
   if (!res.ok) {
@@ -206,9 +228,6 @@ export async function readJson<T>(res: Response, op: string): Promise<T> {
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new GatewayClientError(
-      "gateway_error",
-      `${op} returned non-JSON: ${text.slice(0, 200)}`
-    );
+    throw nonJsonError(op, res.status, text);
   }
 }

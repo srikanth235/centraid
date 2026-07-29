@@ -37,14 +37,19 @@ test("1.1 — first launch shows onboarding with the CTA disabled until a name i
   await seedRemoteGateway(env, gateway, { onboarding: true });
   const { app, page } = await launchApp(env);
   try {
-    // Desktop first run is chooser-first (#603); either choice lands on the
-    // shared identity step, where the CTA gating under test lives.
+    // Desktop first run is chooser-first (#603). Identity now comes LAST and
+    // only when the roster has no name for this person, so reach it via the
+    // fresh path: connect is instant there, then the service offer, then the
+    // name field whose CTA gating is under test.
     const chooser = page.getByTestId("first-run-choice");
     await chooser.waitFor({ state: "visible" });
     await chooser
-      .getByRole("button", { name: /connect with a ticket/iu })
+      .getByRole("button", { name: /start fresh on this mac/iu })
       .click();
     await page.getByTestId("onboarding-view").waitFor({ state: "visible" });
+    await page
+      .getByTestId("onboarding-service-decline")
+      .click({ timeout: 60_000 });
     const cta = page.getByRole("button", { name: "Continue" });
     const name = page.getByRole("textbox", { name: "Your name" });
     await expect(cta).toBeDisabled();
@@ -85,17 +90,19 @@ test('1.2 — "Start fresh on this Mac" auto-founds Shared + Personal and lands 
 
     const onboarding = page.getByTestId("onboarding-view");
     await onboarding.waitFor({ state: "visible" });
+
+    // The fresh/local path connects on mount, then offers the H5 OS-service
+    // install; decline it. Identity comes after — the gateway just founded
+    // itself, so its owner is still the placeholder "You" and the name is
+    // genuinely unknown.
+    await page
+      .getByTestId("onboarding-service-decline")
+      .click({ timeout: 60_000 });
+
     await page.getByRole("textbox", { name: "Your name" }).fill("Ada Lovelace");
     // Pick a specific swatch.
     await onboarding.getByRole("radio").nth(2).click();
     await page.getByRole("button", { name: "Continue" }).click();
-
-    // The fresh/local path offers the H5 OS-service install before finishing;
-    // decline it — the offer step renders inside onboarding-view, so the view
-    // only detaches after this choice.
-    await page
-      .getByTestId("onboarding-service-decline")
-      .click({ timeout: 60_000 });
 
     // Onboarding view gone, home shell present.
     await onboarding.waitFor({ state: "detached" });

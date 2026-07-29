@@ -794,11 +794,15 @@
   background: var(--bg-elev);
   overflow: hidden;
 }
+/* Wraps rather than squeezing: the title is the longest item but the meta is
+   `flex: none`, so without a wrap the title lost every pixel of the contest
+   and rendered one word per line in a narrow panel. */
 .panelHead {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 9px;
+  flex-wrap: wrap;
+  gap: 4px 9px;
   padding: 15px 18px 0;
 }
 .panelHead h2 {

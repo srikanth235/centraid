@@ -181,9 +181,11 @@ describe("devices-routes-invitations scenarios", () => {
     );
     expect(
       enrolled?.map((row) => ({ vaultId: row.vaultId, role: row.role }))
+      // Order is the INVITATION's, not the registry's: the redeeming device
+      // lands in `enrolled[0]`, so the first grant named stays first.
     ).toStrictEqual([
-      { vaultId: "vault-a", role: "read" },
       { vaultId: "vault-b", role: "write" },
+      { vaultId: "vault-a", role: "read" },
     ]);
     expect(enrolled?.every((row) => row.memberId === payload.memberId)).toBe(
       true
@@ -261,15 +263,15 @@ describe("devices-routes-invitations scenarios", () => {
     });
   });
 
-  test("an unnamed target mints against the registry default vault (Shared)", async () => {
+  test("an unnamed target mints against the registry default vault (Personal)", async () => {
     const f = await harness({
       vaultName: (vaultId) =>
-        vaultId === "vault-shared"
+        vaultId === "vault-a"
           ? "Shared"
-          : vaultId === "vault-a"
+          : vaultId === "vault-personal"
             ? "Personal"
             : undefined,
-      defaultVaultId: () => "vault-shared",
+      defaultVaultId: () => "vault-personal",
     });
     f.enrollments.enroll({
       endpointId: "owner-key",
@@ -279,7 +281,7 @@ describe("devices-routes-invitations scenarios", () => {
     });
     f.enrollments.enroll({
       endpointId: "owner-key",
-      vaultId: "vault-shared",
+      vaultId: "vault-personal",
       label: "Owner",
       role: "admin",
     });
@@ -291,10 +293,11 @@ describe("devices-routes-invitations scenarios", () => {
       body: JSON.stringify({ newMemberLabel: "Rhea" }),
     });
     expect(response.status).toBe(200);
-    // Not `vault-a`, which sorts first among the caller's enrollments.
+    // Not `vault-a` (the shared vault), which sorts first among the caller's
+    // enrollments — the default is the owner's own vault.
     await expect(response.json()).resolves.toMatchObject({
-      vaultId: "vault-shared",
-      vaultName: "Shared",
+      vaultId: "vault-personal",
+      vaultName: "Personal",
     });
   });
 

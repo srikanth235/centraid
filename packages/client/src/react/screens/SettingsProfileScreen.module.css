@@ -1,0 +1,169 @@
+/* Settings → Profile. Co-located with SettingsProfileScreen.tsx.
+
+   Settings is otherwise dense utility chrome — mono meta, chips, tight rows.
+   This page keeps that idiom but borrows ONE gesture from first-run
+   onboarding: the live avatar whose ring takes the colour you are picking.
+   It is the only place in Settings where the user is looking at themself, so
+   the identity block leads and the controls follow it. `--profile-accent` is
+   set inline from the selected swatch and is the single colour source for the
+   ring, the focus state, and the save affordance. */
+
+.identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 4px 0 14px;
+}
+/* `12ch` floor, not `auto`: without a basis the text column can be squeezed
+   below one word and wrap a name into a vertical stack of letters. Below that
+   it takes its own line under the avatar instead. */
+.identityText {
+  flex: 1 1 12ch;
+}
+
+.avatarWrap {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+}
+/* A ring, not a border: it sits outside the avatar so the colour reads as
+   ambient light rather than an outline, and it animates on colour change
+   without shifting layout. */
+.avatarRing {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--profile-accent) 45%, transparent);
+  box-shadow: 0 0 0 6px
+    color-mix(in srgb, var(--profile-accent) 9%, transparent);
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background: var(--profile-accent);
+  transition: background 220ms ease;
+}
+.initials {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+.identityText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.identityName {
+  font: var(--t-title);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+.identityName[data-placeholder="true"] {
+  color: var(--ink-3);
+}
+.identityWhere {
+  font: var(--t-small);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.fieldLabel {
+  font: var(--t-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.input {
+  width: min(320px, 100%);
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--profile-accent) 60%, var(--line));
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--profile-accent) 16%, transparent);
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.swatch {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  cursor: pointer;
+  /* The selected ring is drawn OUTSIDE the dot so every swatch keeps the same
+     footprint — a border would make the chosen one visibly smaller. */
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+.swatch:hover {
+  transform: translateY(-1px);
+}
+.swatch[data-selected="true"] {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 3.5px currentcolor;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+.status {
+  font: var(--t-small);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.status[data-tone="error"] {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar,
+  .avatarRing,
+  .swatch {
+    transition: none;
+  }
+  .swatch:hover {
+    transform: none;
+  }
+}

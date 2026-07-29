@@ -327,6 +327,7 @@ export default function AssistantRoute({
         title: runner.title,
         connected: runner.connected,
         sessionReady: runner.sessionReady,
+        ...(runner.sessionProbePending ? { sessionProbePending: true } : {}),
         // Breaker health belongs in the hint on every picker — a tripped
         // breaker is exactly what explains a runner that looks connected but
         // won't take the turn (matches builder + automations).

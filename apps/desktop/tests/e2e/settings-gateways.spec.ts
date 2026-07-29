@@ -25,19 +25,14 @@ import type { MockGateway, TestEnv } from "./fixtures";
 /**
  * Open Settings from the sidebar.
  *
- * Not `gotoNav(page, 'Settings')`: that helper matches the accessible name
- * EXACTLY, and the Settings row alone carries a trailing "live" status pill
- * (Sidebar.tsx:477-483), so its accessible name is "Settings live". Every other
- * sidebar row is bare, which is why only this spec needs the prefix match.
+ * Not `gotoNav(page, 'Settings')`: the sidebar foot is the account row now
+ * (#634), and Settings lives in the menu it opens alongside Pair device and
+ * Log out. The row's accessible name carries the person's name, so match on
+ * the stable "Account menu." suffix instead.
  */
-// The shared `gotoNav` fixture matches accessible names exactly, but the
-// Settings sidebar row carries a decorative <StatusPill>live</StatusPill>, so
-// its real accessible name is "Settings live". This prefix-matching local
-// helper works around that. Once the pill is marked aria-hidden
-// (https://github.com/srikanth235/centraid/issues/473) this can collapse back
-// to `gotoNav(page, 'Settings')`.
 async function gotoSettings(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /^Settings\b/u }).click();
+  await page.getByRole("button", { name: /Account menu\.$/u }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
 }
 
 let env: TestEnv;
@@ -202,7 +197,11 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
       .getByTestId("settings-nav")
       .getByRole("button", { name: "Agents" })
       .click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Agents");
+    // Scoped to the settings surface: it is an overlay now (#634), so the
+    // page underneath keeps its own <h1> mounted behind the dialog.
+    await expect(
+      page.getByTestId("settings-dialog").getByRole("heading", { level: 1 })
+    ).toHaveText("Agents");
     // Realigned: the exclusive "active agent" switch no longer exists. Per
     // SettingsProvidersScreen.tsx:103-113 the exclusive radio was retired by
     // per-subsystem runners and became the *default* lane of the Routing

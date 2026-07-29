@@ -72,6 +72,18 @@ export interface ResolveInvitationInput {
   grants: MemberGrant[];
 }
 
+function orderTargetFirst(
+  grants: readonly MemberGrant[],
+  input: ResolveInvitationInput
+): MemberGrant[] {
+  // Reorder for defaulted targets too: `target` is the personal vault when
+  // the caller named none, and grants[0] decides the ticket's landing vault.
+  const index = grants.findIndex((grant) => grant.vaultId === input.target);
+  if (index <= 0) return [...grants];
+  const picked = grants[index]!;
+  return [picked, ...grants.filter((_, at) => at !== index)];
+}
+
 export function resolveInvitation(
   input: ResolveInvitationInput
 ): InvitationDecision {
@@ -134,7 +146,11 @@ export function resolveInvitation(
     input.grants.length > 0
       ? input.grants
       : (isSelfPair && callerMember) || hostDefaultOwner
-        ? members.grants(existing!.memberId)
+        ? // A self-pair carries EVERY vault the member holds, but grants[0] is
+          // what the redeeming device lands in. When the caller named a vault
+          // (`--vault Personal`), that vault must be primary — otherwise the
+          // request is silently ignored and the device lands in the default.
+          orderTargetFirst(members.grants(existing!.memberId), input)
         : [{ vaultId: input.target, role: input.role }];
   if (grants.length === 0) {
     return {

@@ -143,10 +143,47 @@ describe("connectFlowIO scenarios", () => {
       await expect(connectFreshLocalGateway()).resolves.toStrictEqual({
         displayLabel: "This Mac",
         gatewayId: "local",
+        ownerVault: true,
         vaultId: "personal",
       });
       expect(window.CentraidApi.setActiveVault).toHaveBeenCalledWith({
         vaultId: "personal",
+      });
+    });
+
+    it("connectFreshLocalGateway finds the owner's vault by its marker after a rename", async () => {
+      listVaults.mockResolvedValue([
+        { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "personal",
+          name: "Ada",
+          personal: true,
+        },
+      ]);
+      await expect(connectFreshLocalGateway()).resolves.toStrictEqual({
+        displayLabel: "This Mac",
+        gatewayId: "local",
+        ownerVault: true,
+        vaultId: "personal",
+      });
+    });
+
+    // Issue #603 C10: a reinstall over data founded before the `personal`
+    // marker has no "Personal" vault either — it was renamed on the first
+    // first-run — and `vaults[0]` is the OLDEST vault, i.e. "Shared".
+    // Entering there is fine; flagging it renamable is not, because the host
+    // would rename everyone's shared space.
+    it("connectFreshLocalGateway never flags the fallback vault as the owner's", async () => {
+      listVaults.mockResolvedValue([
+        { ownerPartyId: "party-1", vaultId: "shared", name: "Shared" },
+        { ownerPartyId: "party-1", vaultId: "ada", name: "Ada" },
+      ]);
+      await expect(connectFreshLocalGateway()).resolves.toStrictEqual({
+        displayLabel: "This Mac",
+        gatewayId: "local",
+        ownerVault: false,
+        vaultId: "shared",
       });
     });
 

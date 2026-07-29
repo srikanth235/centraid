@@ -11,6 +11,12 @@ const ITERATIONS = 20;
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 
 await runFlow("mobile-volume-proof", async (ctx) => {
+  // Home only exists behind onboarding since #603, and this flow's own repeat
+  // loop never clears state — so it has to establish the paired state itself
+  // rather than inherit whatever a previously-run flow happened to leave on the
+  // device. configureGateway clears state, redeems a one-time ticket and lands
+  // on Home; every relaunch below then measures a warm, paired launch.
+  await ctx.configureGateway();
   const started = performance.now();
   await ctx.run(
     `appId: ${ctx.state.appId}

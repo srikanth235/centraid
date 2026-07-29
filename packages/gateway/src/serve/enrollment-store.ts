@@ -331,9 +331,22 @@ export class EnrollmentStore {
         ? grants.map((grant) => grant.vaultId)
         : this.members.grants(memberId).map((grant) => grant.vaultId)
     );
-    return this.list().filter(
-      (row) => row.endpointId === input.endpointId && vaultIds.has(row.vaultId)
+    // Row order is the CALLER's grant order, not the registry's: the redeeming
+    // device lands in `enrolled[0]`, so the ticket's primary vault must stay
+    // first (scenario B12 — `pair --vault Personal`).
+    const rank = new Map(
+      grants.map((grant, index) => [grant.vaultId, index] as const)
     );
+    return this.list()
+      .filter(
+        (row) =>
+          row.endpointId === input.endpointId && vaultIds.has(row.vaultId)
+      )
+      .sort(
+        (a, b) =>
+          (rank.get(a.vaultId) ?? Number.MAX_SAFE_INTEGER) -
+          (rank.get(b.vaultId) ?? Number.MAX_SAFE_INTEGER)
+      );
   }
 
   /**

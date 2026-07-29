@@ -14,11 +14,11 @@
  */
 
 import {
-  GatewayClientError,
   auth,
   authHeaders,
   doFetch,
   enc,
+  nonJsonError,
   readJson,
 } from "./gateway-client-core.js";
 import type { VaultParkedEntry } from "./gateway-client-vault.js";
@@ -151,10 +151,7 @@ async function readOutcome(res: Response, op: string): Promise<OutboxOutcome> {
   try {
     return JSON.parse(text) as OutboxOutcome;
   } catch {
-    throw new GatewayClientError(
-      "gateway_error",
-      `${op} returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`
-    );
+    throw nonJsonError(op, res.status, text);
   }
 }
 

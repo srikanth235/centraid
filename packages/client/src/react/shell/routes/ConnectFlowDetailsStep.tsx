@@ -27,10 +27,15 @@ export function GatewayDetailsStep({
   state,
   dispatch,
   ticketRef,
+  canGoBack = true,
 }: {
   state: ConnectFlowState;
   dispatch: Dispatch<ConnectFlowEvent>;
   ticketRef: RefObject<HTMLTextAreaElement | null>;
+  /** False when the caller forced a single method: "back" would land on a
+   *  chooser with one option, which is where onboarding's first screen sits.
+   *  The host's own escape (`onCancel` → "Start over") is the way out. */
+  canGoBack?: boolean;
 }): JSX.Element {
   const setField = (field: Field) => fieldSetter(dispatch, field);
   return (
@@ -62,28 +67,30 @@ export function GatewayDetailsStep({
       <label className={styles.rememberRow}>
         <input
           type="checkbox"
-          aria-label="Remember this device"
+          aria-label="Keep an offline copy"
           checked={state.rememberDevice}
           onChange={(event) =>
             dispatch({ type: "setRememberDevice", value: event.target.checked })
           }
         />
         <span>
-          <strong>Remember this device</strong>
+          <strong>Keep an offline copy</strong>
           <small>
-            Keep an encrypted offline replica, queued changes, and cached
-            previews.
+            An encrypted replica, queued changes, and cached previews stay on
+            this device. Either way it stays paired until you forget it.
           </small>
         </span>
       </label>
       <div className={styles.foot}>
-        <button
-          type="button"
-          className={controlsCss.chip}
-          onClick={() => dispatch({ type: "back" })}
-        >
-          Back
-        </button>
+        {canGoBack ? (
+          <button
+            type="button"
+            className={controlsCss.chip}
+            onClick={() => dispatch({ type: "back" })}
+          >
+            Back
+          </button>
+        ) : null}
         <span className={styles.spacer} />
         <button
           type="button"
