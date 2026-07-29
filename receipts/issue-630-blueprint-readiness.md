@@ -333,6 +333,10 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   entity-search shortcuts; and
   `tests/agent-e2e-mobile/flows/native-v0-resilience.mjs` retains the robust
   restart-per-surface journey while expanding it to all eight blueprint apps.
+- Converted #634's newly merged profile/shell/settings raw CSS colors to the
+  shared `--on-accent`/palette contract and removed the obsolete entries from
+  `tests/design-token-css-budget.json`, preserving W0.8's zero-regression
+  ratchet rather than relaxing it.
 
 ### Foundations, measurement, and trust
 
@@ -694,6 +698,8 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785351038-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 2243 | 0 | 196096 | 115 | 2358 | 0.0564 | 7708410 | 0 | 356695808 | 1008830 | feat(readiness): complete compound and polish surfaces (#630) -m governance: all |
 | codex-019fad18-4c1-1785351250-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 32662 | 0 | 1772544 | 5205 | 37867 | 0.6029 | 7741072 | 0 | 358468352 | 1014035 | merge: reconcile onboarding mainline (#630) |
 | codex-019fad18-4c1-1785351313-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 14266 | 0 | 514048 | 1081 | 15347 | 0.1804 | 7755338 | 0 | 358982400 | 1015116 | merge: reconcile onboarding mainline (#630) |
+| codex-019fad18-4c1-1785351530-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 54696 | 0 | 2960896 | 4566 | 59262 | 0.9455 | 7810034 | 0 | 361943296 | 1019682 | fix(ui): preserve token ratchet after mainline merge (#630) |
+| codex-019fad18-4c1-1785351624-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 6744 | 0 | 1069568 | 1567 | 8311 | 0.3078 | 7816778 | 0 | 363012864 | 1021249 | fix(ui): preserve token ratchet after mainline merge (#630) |
 
 ## Steering
 

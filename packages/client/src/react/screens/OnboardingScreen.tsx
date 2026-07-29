@@ -76,15 +76,8 @@ function initials(name: string): string {
 /**
  * First-run onboarding — connect → (local only) H5 OS service offer →
  * identity, and only when the household doesn't already know this person.
- *
- * Identity used to come FIRST and always. That asked every returning device
- * to re-introduce someone the gateway already has on its roster, and the
- * answer went nowhere: the name was written to device-local settings that
- * nothing rendered, while Household kept showing the placeholder "You". The
- * name now lands on the roster member (`profileData.ts`), so the step is only
- * worth showing when that member has no name yet.
- *
- * Styles in `OnboardingScreen.module.css`.
+ * Identity now lands on the roster member (`profileData.ts`), so returning
+ * devices no longer re-introduce someone the household already knows.
  */
 export default function OnboardingScreen({
   path,
@@ -115,14 +108,12 @@ export default function OnboardingScreen({
   const [wantsImport, setWantsImport] = useState(false);
   const [stagedCount, setStagedCount] = useState(0);
   const nameRef = useRef<HTMLInputElement>(null);
-  // The fresh path's connect effect must not re-run when a render produces a
-  // new `afterConnect` closure, so it reaches the continuation through a ref.
+  // Keep fresh-path dialing stable across new `afterConnect` closures.
   const afterConnectRef = useRef<(result: ConnectFlowResult) => void>(
     () => undefined
   );
 
-  // Where the OS keychain will prompt on the first secret write (dev/unsigned
-  // builds, some Linux keyrings — issue #603), say so before triggering it.
+  // Warn before first-write keychain prompts (dev/unsigned builds, #603).
   // The bridge method is desktop-only; a missing method means no prompt.
   useEffect(() => {
     const probe = window.CentraidApi.keychainPromptExpected;
@@ -190,12 +181,9 @@ export default function OnboardingScreen({
    * member that already has a name needs no introduction, so onboarding ends
    * here; anyone else gets the identity step.
    *
-   * "Anyone else" includes a roster this client cannot read at all — a gateway
-   * with no device plane answers 404. Skipping the question there would finish
-   * first run with an EMPTY name, which is both a worse product (nobody is
-   * ever asked) and an outright bug (the host then tries to rename the
-   * Personal vault to ""). Asking is always safe: a name we didn't need costs
-   * one screen, a name we never collected costs the identity.
+   * An unreadable roster also asks: one extra screen is safe, while skipping
+   * would finish with an empty identity and try to rename the Personal vault
+   * to an empty string.
    */
   const identityOrFinish = (result: ConnectFlowResult): void => {
     setSubmitting(true);
@@ -240,14 +228,12 @@ export default function OnboardingScreen({
     identityOrFinish(result);
   };
 
-  // Declared BEFORE the connect effect so mount order guarantees the ref is
-  // populated by the time that effect's promise can resolve.
+  // Populate the continuation ref before the connect effect can resolve.
   useEffect(() => {
     afterConnectRef.current = afterConnect;
   });
 
-  // The `fresh` path has nothing to paste: point this client at its own
-  // auto-founded gateway as soon as the screen mounts.
+  // A fresh client connects to its auto-founded gateway on mount.
   useEffect(() => {
     if (path !== "fresh") return;
     let cancelled = false;

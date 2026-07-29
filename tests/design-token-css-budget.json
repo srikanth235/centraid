@@ -69,16 +69,10 @@
   "packages/client/src/react/shell/automationTemplatePreview.module.css": {
     "rawHex": 1
   },
-  "packages/client/src/react/shell/chrome.module.css": {
-    "rawHex": 1
-  },
   "packages/client/src/react/shell/routes/AppViewRoute.module.css": {
     "rawHex": 1
   },
   "packages/client/src/react/shell/routes/InlineAppRoute.module.css": {
-    "rawHex": 1
-  },
-  "packages/client/src/react/shell/routes/SettingsRoute.module.css": {
     "rawHex": 1
   },
   "packages/client/src/react/shell/routes/SpaceModal.module.css": {
