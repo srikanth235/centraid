@@ -42,7 +42,7 @@ Vitest's `classNameStrategy: 'non-scoped'` (in `vitest.config.ts`) makes `styles
 
 ## Verify before committing
 
-`bun run typecheck` (both graphs) + `bun run test` + `bun run build` + `oxlint src/renderer/react` in `apps/desktop`. Then an integrity pass: no new `:global(.class)` escapes (attribute escapes above excepted), and no bare hyphenated string literals in `className` positions. There is no live-Electron visual check in CI.
+From the repository root, run `bun run typecheck` + `bun run test` + `bun run build` + `bun run lint`. Then perform an integrity pass: no new `:global(.class)` escapes (attribute escapes above excepted), and no bare hyphenated string literals in `className` positions. There is no live-Electron visual check in CI.
 
 **`bun run lint:css`** (`scripts/lint-css-classes.mjs`) automates the worst half of that pass: a `className={styles.foo}` whose module has no `.foo` rule. This is the one frontend bug every other gate passes — `typecheck` sees a permissive index signature, not a union of the rules that exist; `test` passes because `classNameStrategy: 'non-scoped'` makes `styles.foo === 'foo'`, so a test selecting `.foo` still matches with no rule behind it; `build` doesn't care. The element just renders unstyled. This was eyeballed for a long time and ten of them accumulated anyway, so it is a script now. It checks referenced-but-undefined only — the reverse direction (defined-but-unreferenced) is legitimately noisy, since descendant-only rules, `[data-*]` hooks, and the `:global` contracts above all look unused to a grep.
 

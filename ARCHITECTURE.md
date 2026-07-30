@@ -167,7 +167,7 @@ The gateway's cron scheduler is in-process and intentionally does not backfill a
 - `build` — depends on upstream `^build`; outputs `dist/**`.
 - `dev` — non-cached, persistent; depends on `^build`.
 - `typecheck` — depends on `^build` and `^typecheck`.
-- `lint` — depends on `^lint`; run via `oxlint .` at the root.
+- `lint` — depends on `^lint`; run via the root `bun run lint` command so the pinned binary, explicit config path, and deny-warnings policy always apply.
 - `test` — depends on `^build` and `build`; per-package `vitest run`.
 
 The desktop app builds its main process, preload bundle, and shared client renderer. The web app builds the same React shell as a service-worker-backed Vite PWA; its checked-in WASM binding is regenerated from `apps/web/iroh-wasm` with `bun run --cwd apps/web build:iroh`. The extension bundles that binding with its worker/content/popup code and packages reviewable Chrome and Firefox ZIPs via `bun run --cwd apps/extension package`. The gateway daemon bundles the static assets and serves them on a dedicated origin. The gateway, app-engine, agent-runtime, automation, skills, and blueprints packages each emit `dist/` via `tsc` (blueprints first builds a template manifest). The mobile app delegates dev/build to the Expo CLI.

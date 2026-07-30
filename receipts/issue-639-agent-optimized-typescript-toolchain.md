@@ -2,25 +2,25 @@
 
 ## Checklist
 
-- [ ] The ownership table is implemented: Ultracite presets, Oxfmt formatting, Oxlint lint policy, TypeScript compiler diagnostics, Knip hygiene, Vitest/e2e behavior
-- [ ] `oxlint.config.ts` and `oxfmt.config.ts` are the only root configs for their tools, and every invocation passes `-c` explicitly
-- [ ] `ultracite`, `oxlint`, `oxlint-tsgolint`, `oxfmt`, `typescript`, `knip`, and `vitest` are exact-pinned
-- [ ] Ultracite is used through reviewed modular presets plus non-mutating `toolchain:doctor`; routine format/lint scripts invoke Oxfmt/Oxlint directly
-- [ ] Oxfmt is the sole style owner, import sorting leaves side-effect imports ordered, and every ignore has a concrete ownership reason
-- [ ] Oxlint denies warnings, errors on unused disable directives, avoids formatter overlap, and uses explicit file/runtime profiles
-- [ ] Optional JS-plugin presets remain declined as bundles and the rule-adoption rubric is documented
-- [ ] Normal automation uses only Oxfmt writes and Oxlint safe `--fix`; suggestions/dangerous fixes are absent from scripts, hooks, and CI
-- [ ] Type-aware linting is either compiler-aligned or constrained by a documented compatibility allowlist; TypeScript remains authoritative
-- [ ] `no-unnecessary-type-assertion` is enabled only if compiler alignment and clean build/typecheck prove it safe; otherwise it is explicitly disabled
-- [ ] The four formerly hollow type-aware rules each fire on a live fixture and are enforced in exactly one pass
-- [ ] A mechanical guard prevents type-aware-only rules from being declared in a pass where they cannot execute
-- [ ] Source, tests, scripts, e2e, workers, and executable blueprint handlers are linted; only generated/vendor/negative-fixture exclusions remain
-- [ ] Sequential blueprint pagination has a narrow handler-profile decision without disabling other lint rules
-- [ ] `format`, `format:check`, `lint`, `lint:fix`, `lint:types`, `typecheck`, `test:affected`, `check:fast`, `check:pr`, `check:full`, and `toolchain:doctor` form a documented stable command API
-- [ ] Pre-commit and pre-push are deterministic and check-only; local and CI gates call the same scripts
-- [ ] `AGENTS.md` documents tool ownership and workflow without duplicating the generated rule catalog
-- [ ] Mechanical formatting, safe lint fixes, and behavioral corrections are isolated in separate commits
-- [ ] One issue receipt mirrors this checklist and records the chosen type-aware state plus all intentional profile exceptions
+- [x] The ownership table is implemented: Ultracite presets, Oxfmt formatting, Oxlint lint policy, TypeScript compiler diagnostics, Knip hygiene, Vitest/e2e behavior
+- [x] `oxlint.config.ts` and `oxfmt.config.ts` are the only root configs for their tools, and every invocation passes `-c` explicitly
+- [x] `ultracite`, `oxlint`, `oxlint-tsgolint`, `oxfmt`, `typescript`, `knip`, and `vitest` are exact-pinned
+- [x] Ultracite is used through reviewed modular presets plus non-mutating `toolchain:doctor`; routine format/lint scripts invoke Oxfmt/Oxlint directly
+- [x] Oxfmt is the sole style owner, import sorting leaves side-effect imports ordered, and every ignore has a concrete ownership reason
+- [x] Oxlint denies warnings, errors on unused disable directives, avoids formatter overlap, and uses explicit file/runtime profiles
+- [x] Optional JS-plugin presets remain declined as bundles and the rule-adoption rubric is documented
+- [x] Normal automation uses only Oxfmt writes and Oxlint safe `--fix`; suggestions/dangerous fixes are absent from scripts, hooks, and CI
+- [x] Type-aware linting is either compiler-aligned or constrained by a documented compatibility allowlist; TypeScript remains authoritative
+- [x] `no-unnecessary-type-assertion` is enabled only if compiler alignment and clean build/typecheck prove it safe; otherwise it is explicitly disabled
+- [x] The four formerly hollow type-aware rules each fire on a live fixture and are enforced in exactly one pass
+- [x] A mechanical guard prevents type-aware-only rules from being declared in a pass where they cannot execute
+- [x] Source, tests, scripts, e2e, workers, and executable blueprint handlers are linted; only generated/vendor/negative-fixture exclusions remain
+- [x] Sequential blueprint pagination has a narrow handler-profile decision without disabling other lint rules
+- [x] `format`, `format:check`, `lint`, `lint:fix`, `lint:types`, `typecheck`, `test:affected`, `check:fast`, `check:pr`, `check:full`, and `toolchain:doctor` form a documented stable command API
+- [x] Pre-commit and pre-push are deterministic and check-only; local and CI gates call the same scripts
+- [x] `AGENTS.md` documents tool ownership and workflow without duplicating the generated rule catalog
+- [x] Mechanical formatting, safe lint fixes, and behavioral corrections are isolated in separate commits
+- [x] One issue receipt mirrors this checklist and records the chosen type-aware state plus all intentional profile exceptions
 
 ## What changed
 
@@ -122,10 +122,44 @@
   `apps/desktop/tests/e2e/delete-app.spec.ts` by waiting for the dialog's
   documented delayed focus before sending Enter; the full gate exposed and the
   isolated rerun reproduced the former race.
+- Closed the final explicit-invocation audit gaps in
+  `apps/web/scripts/build-iroh-wasm.sh`,
+  `.governance/packs/srikanth235/centraid/directives/lint-check/directive.yaml`,
+  and
+  `.governance/packs/srikanth235/centraid/directives/lint-check/constitution.md`:
+  generated WASM bindings now use the root Oxfmt config with nested discovery
+  disabled, and governance guidance matches the pinned explicit-config,
+  deny-warnings Oxlint policy. `ARCHITECTURE.md` now names the root command API
+  instead of a discovery-dependent bare invocation.
+- Corrected the last stale bare lint instruction in
+  `packages/client/src/react/CSS-CONVENTIONS.md`; it now names the root
+  `bun run lint` command instead of an obsolete desktop-relative path.
+
+### Acceptance evidence
+
+- The ownership table is implemented: Ultracite presets, Oxfmt formatting, Oxlint lint policy, TypeScript compiler diagnostics, Knip hygiene, Vitest/e2e behavior — `docs/toolchain.md` assigns each concern and the stable commands exercise each owner.
+- `oxlint.config.ts` and `oxfmt.config.ts` are the only root configs for their tools, and every invocation passes `-c` explicitly — repository config discovery returns only those files, while root scripts, staged hooks, governance checks, and the type-aware pass name them explicitly and disable nested discovery.
+- `ultracite`, `oxlint`, `oxlint-tsgolint`, `oxfmt`, `typescript`, `knip`, and `vitest` are exact-pinned — six are direct exact root pins and TypeScript resolves through the exact `workspaces.catalog.typescript` pin.
+- Ultracite is used through reviewed modular presets plus non-mutating `toolchain:doctor`; routine format/lint scripts invoke Oxfmt/Oxlint directly — the root configs import reviewed Ultracite modules, while the command API calls the owner binaries.
+- Oxfmt is the sole style owner, import sorting leaves side-effect imports ordered, and every ignore has a concrete ownership reason — `oxfmt.config.ts` owns formatting and import organization, disables side-effect import sorting, and documents each generated/vendor exclusion.
+- Oxlint denies warnings, errors on unused disable directives, avoids formatter overlap, and uses explicit file/runtime profiles — `package.json` and `oxlint.config.ts` encode those policies.
+- Optional JS-plugin presets remain declined as bundles and the rule-adoption rubric is documented — `docs/toolchain.md` records both the declined bundles and evidence rubric.
+- Normal automation uses only Oxfmt writes and Oxlint safe `--fix`; suggestions/dangerous fixes are absent from scripts, hooks, and CI — static search found neither forbidden fix mode in those surfaces.
+- Type-aware linting is either compiler-aligned or constrained by a documented compatibility allowlist; TypeScript remains authoritative — `scripts/lint-types.sh` implements the documented eight-rule compatibility state after the compiler gate.
+- `no-unnecessary-type-assertion` is enabled only if compiler alignment and clean build/typecheck prove it safe; otherwise it is explicitly disabled — the compatibility policy explicitly verifies the disabled state.
+- The four formerly hollow type-aware rules each fire on a live fixture and are enforced in exactly one pass — `scripts/fixtures/lint-types/invalid.ts` and `scripts/lint-types-policy.mjs` require one diagnostic apiece and exactly one registration.
+- A mechanical guard prevents type-aware-only rules from being declared in a pass where they cannot execute — `scripts/lint-types-rules.mjs` catalogs all 59 pinned rules and the policy rejects any active ordinary-pass declaration.
+- Source, tests, scripts, e2e, workers, and executable blueprint handlers are linted; only generated/vendor/negative-fixture exclusions remain — the root target is the repository, with narrowly documented overrides and ignores.
+- Sequential blueprint pagination has a narrow handler-profile decision without disabling other lint rules — the executable-handler override disables only `no-await-in-loop` for dependency-ordered pagination.
+- `format`, `format:check`, `lint`, `lint:fix`, `lint:types`, `typecheck`, `test:affected`, `check:fast`, `check:pr`, `check:full`, and `toolchain:doctor` form a documented stable command API — all commands exist in root `package.json` and are documented in `docs/toolchain.md`.
+- Pre-commit and pre-push are deterministic and check-only; local and CI gates call the same scripts — hooks use explicit local binaries/configs without mutation, and CI delegates to the root command API.
+- `AGENTS.md` documents tool ownership and workflow without duplicating the generated rule catalog — it links to the detailed toolchain contract and states the stable workflow.
+- Mechanical formatting, safe lint fixes, and behavioral corrections are isolated in separate commits — the branch history contains dedicated style, safe-fix, suppression, and correctness commits.
+- One issue receipt mirrors this checklist and records the chosen type-aware state plus all intentional profile exceptions — this receipt records compatibility state, pagination, visual-fixture, and negative-fixture decisions.
 
 ### Formatter sweep paths
 
-+- `.design-sync/NOTES.md`
+- `.design-sync/NOTES.md`
 - `.design-sync/conventions.md`
 - `.design-sync/desktop.NOTES.md`
 - `.design-sync/desktop.conventions.md`
@@ -626,9 +660,20 @@ bun run check:pr
 bun run check:full
 ```
 
+Results:
+
+- PASS — frozen install, toolchain doctor, formatting, ordinary lint, the 19-workspace type-aware pass and its four live fixtures, TypeScript, Knip, affected tests, and the fast/PR gates.
+- PASS — `bun run check:pr`: 689 test files passed, one skipped; 5,515 tests passed and seven skipped, with the approved diff-coverage deviation unchanged.
+- PASS — the full-gate coverage segment: 811 files passed and four skipped; 6,805 tests passed and 36 skipped; every measured mutation floor and every low-end performance budget passed.
+- PASS after correction — the first `bun run check:full` exposed the desktop destructive-confirmation focus race. The isolated regression passed, then the complete desktop suite passed (54 passed, four skipped) and the web suite passed (14 passed).
+- PASS — config discovery found only `oxlint.config.ts` and `oxfmt.config.ts`; static search found no `--fix-suggestions` or `--fix-dangerously`; all seven requested tools resolve to exact pins.
+- PASS — the formatter commit was rewritten before publication so the legal-header `@ts-nocheck` preservation ships inside the mechanical migration itself; the later correctness commit now contains only comparator/type corrections.
+
 ## Audit
 
-PASS — fresh-context audit confirmed the staged contract diff, checklist mirror, and path coverage.
+PASS — fresh-context audit confirmed all 19 acceptance criteria, the exact
+19/19 checklist mirror, complete 539/539 non-exempt changed-path coverage, and
+fresh formatting, ordinary lint, and type-aware lint gates.
 
 ## Steering
 
@@ -658,3 +703,4 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785413333-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 53497 | 0 | 3828736 | 4973 | 58470 | 1.1655 | 555253 | 0 | 33432832 | 70152 | fix(toolchain): preserve compiler fixture contract (#639) |
 | codex-019fb2ae-33d-1785415280-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 268884 | 0 | 9742592 | 5758 | 274642 | 3.1942 | 824137 | 0 | 43175424 | 75910 | test(desktop): stabilize delete confirmation focus (#639) |
 | codex-019fb2ae-33d-1785415351-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 5591 | 0 | 980736 | 688 | 6279 | 0.2695 | 829728 | 0 | 44156160 | 76598 | test(desktop): stabilize delete confirmation focus (#639) |
+| codex-019fb2ae-33d-1785417546-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 237851 | 0 | 16182784 | 22828 | 260679 | 4.9827 | 1067579 | 0 | 60338944 | 99426 | build(toolchain): close explicit invocation audit (#639) -m governance: allow-to |
