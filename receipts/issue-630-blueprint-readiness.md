@@ -614,6 +614,14 @@ bun run check:pr:full
   cached app install, every committed mobile journey (including all native
   cover gates and 20 real stop-and-relaunch cycles), sensitive-diagnostic
   cleanup, and both evidence uploads were green.
+- [Final-tip iOS diagnostic run 30506103915](https://github.com/srikanth235/centraid/actions/runs/30506103915)
+  ran at audited receipt commit `cd5fa9328c4c39dd0e0d1483008cd8402da7e9c6`.
+  The workflow's one-shot `/status` check passed, but the first `home-loads`
+  setup encountered Metro's transient file-graph startup window and failed
+  before prewarming. Every later journey passed, including all eight native
+  covers and 20 real stop-and-relaunch cycles. The retained log led to a
+  bounded readiness poll in the harness, with focused unit coverage; a
+  genuinely unavailable Metro process still fails setup.
 - Fresh-context audit — PASS; see the final independent audit below.
 
 ## Accounting
@@ -814,6 +822,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785371213-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 419131 | 0 | 29714432 | 24900 | 444031 | 8.8499 | 9708920 | 0 | 459663872 | 1119911 | fix(mobile): stabilize exact-head journey evidence (#630) |
 | codex-019fad18-4c1-1785374654-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 268775 | 0 | 14503168 | 10430 | 279205 | 4.4542 | 9977695 | 0 | 474167040 | 1130341 | docs(receipt): record exact-head mobile proof (#630) |
 | codex-019fad18-4c1-1785375289-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 53735 | 0 | 4057600 | 2522 | 56257 | 1.1866 | 10031430 | 0 | 478224640 | 1132863 | docs(receipt): close blueprint readiness audit (#630) |
+| codex-019fad18-4c1-1785378226-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 220356 | 0 | 14240000 | 13770 | 234126 | 4.3174 | 10251786 | 0 | 492464640 | 1146633 | fix(mobile): wait for Metro readiness (#630) |
 
 ## Steering
 

@@ -30,8 +30,8 @@ import {
 import {
   METRO_ORIGIN,
   METRO_PORT,
-  metroReachable,
   prewarmMetroBundle,
+  waitForMetroReachable,
 } from "./metro.mjs";
 import { spawnLive, spawnQuiet } from "./spawn.mjs";
 
@@ -213,14 +213,15 @@ export async function setup({ runId } = {}) {
     );
   }
   if (device.platform === "android") {
-    // Must happen before metroReachable(): the dev client reaches Metro via
+    // Must happen before waitForMetroReachable(): the dev client reaches Metro via
     // the reverse forward, but the harness's own fetch goes directly.
     await ensureMetroReverseForAndroid(device.udid);
   }
-  if (!(await metroReachable())) {
+  if (!(await waitForMetroReachable())) {
     throw new Error(
-      `Metro bundler not reachable at ${METRO_ORIGIN}. The dev build needs it to ` +
-        "serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`."
+      `Metro bundler not reachable at ${METRO_ORIGIN} after the bounded readiness wait. ` +
+        "The dev build needs it to serve the JS bundle — start it with " +
+        "`cd apps/mobile && bun expo start --dev-client`."
     );
   }
   await prewarmMetroBundle(device.platform, appId);

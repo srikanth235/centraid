@@ -283,9 +283,12 @@ reaches Metro on the host. No manual port forwarding needed.
   a cold transform cache that dominates the flow: `home-loads` measured
   ~19s end-to-end against a warm Metro and ~43s against a cold one on an
   M-series Mac, and the nightly runner is slower still. `setup()`
-  prewarms the bundle, and flows use `FIRST_LAUNCH_TIMEOUT_MS` rather
-  than a hand-picked 30s. A 30s budget here is what broke the nightly
-  `mobile-e2e` lane against copy that was entirely correct.
+  first waits through Metro's bounded startup/reload window, then prewarms the
+  bundle; flows use `FIRST_LAUNCH_TIMEOUT_MS` rather than a hand-picked 30s.
+  This matters because Expo can answer `/status` once and briefly stop accepting
+  requests while its file graph settles. A 30s launch budget or a one-shot
+  readiness probe here makes the nightly `mobile-e2e` lane fail against copy
+  that is entirely correct.
 - **`launchApp: { clearState: true }`** wipes the Expo dev client's
   cached Metro URL. The very first relaunch after clearState may
   show a red "No script URL provided" screen. The harness's Metro

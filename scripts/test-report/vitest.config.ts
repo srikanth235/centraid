@@ -1,9 +1,10 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * Unit tests for pure test-report / mutation helpers + agent-e2e harness
- * (not part of package projects). Coverage is seeded on the ratchet-unit
- * lane (#545 D10) so scripts/ helpers cannot silently drop instrumented lines.
+ * Unit tests for pure test-report / mutation helpers + focused agent-e2e
+ * harness helpers (not part of package projects). Coverage is seeded on the
+ * ratchet-unit lane (#545 D10) so scripts/ helpers cannot silently drop
+ * instrumented lines.
  */
 export default defineConfig({
   test: {
@@ -12,6 +13,7 @@ export default defineConfig({
       "scripts/test-report/**/*.test.mjs",
       "scripts/mutation/**/*.test.mjs",
       "tests/agent-e2e-shared/**/*.test.mjs",
+      "tests/agent-e2e-mobile/lib/**/*.test.mjs",
     ],
     environment: "node",
     pool: "forks",

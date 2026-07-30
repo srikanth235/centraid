@@ -37,6 +37,35 @@ export async function metroReachable() {
   }
 }
 
+const pause = (delayMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
+
+/**
+ * Wait through Metro's transient startup/reload window before declaring the
+ * environment broken.
+ *
+ * Expo can answer `/status` once and then briefly stop accepting requests while
+ * its file graph settles. The workflow's initial curl therefore cannot be the
+ * harness's only readiness proof. Keep this bounded: a genuinely dead Metro
+ * process must still fail setup instead of turning into a flow timeout.
+ */
+export async function waitForMetroReachable({
+  attempts = 30,
+  intervalMs = 1_000,
+  probe = metroReachable,
+  sleep = pause,
+} = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- readiness probes must be sequential
+    if (await probe()) return true;
+    // oxlint-disable-next-line no-await-in-loop -- the delay separates readiness probes
+    if (attempt < attempts) await sleep(intervalMs);
+  }
+  return false;
+}
+
 /**
  * Query string the Expo dev client actually asks Metro for.
  *
