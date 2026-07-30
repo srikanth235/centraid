@@ -823,6 +823,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785374654-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 268775 | 0 | 14503168 | 10430 | 279205 | 4.4542 | 9977695 | 0 | 474167040 | 1130341 | docs(receipt): record exact-head mobile proof (#630) |
 | codex-019fad18-4c1-1785375289-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 53735 | 0 | 4057600 | 2522 | 56257 | 1.1866 | 10031430 | 0 | 478224640 | 1132863 | docs(receipt): close blueprint readiness audit (#630) |
 | codex-019fad18-4c1-1785378226-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 220356 | 0 | 14240000 | 13770 | 234126 | 4.3174 | 10251786 | 0 | 492464640 | 1146633 | fix(mobile): wait for Metro readiness (#630) |
+| codex-019fad18-4c1-1785378476-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 10666 | 0 | 1525760 | 2259 | 12925 | 0.4420 | 10262452 | 0 | 493990400 | 1148892 | docs(receipt): refresh Metro readiness audit (#630) |
 
 ## Steering
 
@@ -839,13 +840,18 @@ projection is a separate explicit unshare operation. -->
   metadata. The diff includes focused behavioral and integration coverage for
   those contracts.
 - PASS — `## What changed` faithfully represents the current diff, including
-  the time-engine lint target, schema/gate corrections, and the reconciled #634
-  identity/profile/pairing work. The current diff preserves the #634 receipt
-  and surfaces; it contains no earlier deletion/regression cited by the stale
-  audit.
+  the time-engine lint target, schema/gate corrections, bounded Metro readiness
+  repair, and the reconciled #634 identity/profile/pairing work. The current
+  diff preserves the #634 receipt and surfaces; it contains no earlier
+  deletion/regression cited by the stale audit.
 - PASS — All seven exit demonstrations have recorded evidence. The full local
   gate is green (781 coverage files, 6,365 passing tests, 84.9% diff coverage),
   and exact-head iOS proof run 30503161115 passed `mobile-e2e-ios` at
   implementation commit `8023936d744a218855b8a7b3bf2c7a64be1ec0cf`, including
   every committed mobile journey, eight native covers, and 20 stop/relaunch
   cycles.
+- PASS — The receipt accurately identifies run 30506103915 as a failed
+  final-tip diagnostic during Metro file-graph startup, rather than claiming it
+  passed. The repair makes at most 30 sequential readiness probes (with 29
+  one-second waits) before prewarming; its configured focused tests cover both
+  transient recovery and bounded exhaustion.
