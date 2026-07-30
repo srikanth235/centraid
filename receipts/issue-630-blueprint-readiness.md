@@ -1048,3 +1048,7 @@ Root-cause repairs after the #637 permissions tip restored the full job graph:
   reveal (presence is opt-in until configured).
 - Coverage floors for vault/gateway re-seeded 1pt under measured tip after
   #630 expansion; added locker-auth, schedule-organize, and push-wake tests.
+
+- Confirm a11y: document Enter still skips danger (`!opts.danger`); Confirm
+  is focused so native Enter activates delete for e2e 3.5d without violating
+  the accessibility contract test.
