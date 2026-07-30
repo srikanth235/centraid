@@ -427,7 +427,7 @@ export function Editor({
     bodyRef.current = v;
     setBody(v);
     clearTimeout(saveTimerRef.current);
-    performSave();
+    void performSave();
   };
 
   const toggleCheck = (lineIndex: number): void => {
@@ -566,7 +566,7 @@ export function Editor({
                     // collide on a field (autosave only ever sends title/
                     // body_text; a move only ever sends notebook_id), so this
                     // is a courtesy ordering, not a correctness requirement.
-                    flush();
+                    void flush();
                     onMove(note.note_id, e.target.value || null);
                   }}
                 >
@@ -593,7 +593,7 @@ export function Editor({
                   aria-label={note.pinned === 1 ? "Unpin note" : "Pin note"}
                   aria-pressed={note.pinned === 1}
                   onClick={() => {
-                    flush();
+                    void flush();
                     onTogglePin(note);
                   }}
                 >
@@ -628,7 +628,7 @@ export function Editor({
               onBlur={() => {
                 setTimeout(() => {
                   if (document.activeElement === textareaRef.current) return;
-                  flush();
+                  void flush();
                   exitEdit();
                 }, 120);
               }}

@@ -52,7 +52,9 @@ function store(): AutomationTriggerStore {
 }
 
 async function settle(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 describe("VaultCursorEngine cursor invariants", () => {
@@ -97,7 +99,9 @@ describe("VaultCursorEngine cursor invariants", () => {
     expect(cursors.getCursor("mail/backlog", 0)?.gapReason).toBeUndefined();
 
     engine.nudge();
-    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 30);
+    });
 
     expect(fired).toStrictEqual(["1", "2", "3", "4"]);
     expect(cursors.getCursor("mail/backlog", 0)?.positionJson).toBe('"4"');

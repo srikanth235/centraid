@@ -252,9 +252,9 @@ function spawnWranglerDev(): { child: ChildProcess; recentLog: () => string } {
 
 async function killProcessTree(child: ChildProcess): Promise<void> {
   if (child.pid === undefined || child.exitCode !== null) return;
-  const exited = new Promise<void>((resolve) =>
-    child.once("exit", () => resolve())
-  );
+  const exited = new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+  });
   try {
     process.kill(-child.pid, "SIGTERM");
   } catch {

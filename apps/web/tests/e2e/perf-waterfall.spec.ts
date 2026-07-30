@@ -145,7 +145,10 @@ async function waitForShellBundle(page: Page): Promise<void> {
           () => performance.getEntriesByType("resource").length
         );
         await page.evaluate(
-          () => new Promise((resolve) => setTimeout(resolve, 40))
+          () =>
+            new Promise((resolve) => {
+              setTimeout(resolve, 40);
+            })
         );
         const b = await page.evaluate(
           () => performance.getEntriesByType("resource").length
@@ -270,7 +273,10 @@ async function openInstalledAndMeasure(
             .catch(() => -1);
         const a = await count();
         await page.evaluate(
-          () => new Promise((resolve) => setTimeout(resolve, 40))
+          () =>
+            new Promise((resolve) => {
+              setTimeout(resolve, 40);
+            })
         );
         const b = await count();
         return a >= 0 && a === b;
@@ -559,7 +565,10 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
       async () => {
         const a = (await tunnel()).calls;
         await page.evaluate(
-          () => new Promise((resolve) => setTimeout(resolve, 40))
+          () =>
+            new Promise((resolve) => {
+              setTimeout(resolve, 40);
+            })
         );
         return (await tunnel()).calls === a;
       },

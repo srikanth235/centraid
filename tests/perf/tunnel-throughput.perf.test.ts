@@ -30,11 +30,14 @@ describe("tunnel-throughput.perf", () => {
       res.setHeader("content-length", String(payload.length));
       res.end(payload);
     });
-    await new Promise<void>((resolve) =>
-      gateway.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      gateway.listen(0, "127.0.0.1", resolve);
+    });
     onTestFinished(
-      () => new Promise<void>((resolve) => gateway.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          gateway.close(() => resolve());
+        })
     );
     const address = gateway.address();
     if (!address || typeof address === "string")

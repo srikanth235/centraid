@@ -37,7 +37,9 @@ describe("catalog-warmer", () => {
       catalogPath,
       enumerateModels: async () => {
         calls += 1;
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 20);
+        });
         return [{ id: "sonnet" }];
       },
     });

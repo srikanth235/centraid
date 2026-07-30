@@ -543,7 +543,9 @@ ${retryableTapCommands("Enter Centraid")}
   // (analogous to the desktop harness's flushMs before SIGTERM).
   ctx.restart = async () => {
     console.log("  restart …");
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 300);
+    });
     await ctx.run(
       `appId: ${state.appId}
 ---

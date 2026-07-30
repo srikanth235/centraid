@@ -46,7 +46,12 @@ async function mount(
     root = createRoot(host!);
     root.render(<StorageScreen {...props} />);
   });
-  await act(async () => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+  await act(
+    async () =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, 0);
+      })
+  );
   return host;
 }
 

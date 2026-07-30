@@ -237,7 +237,9 @@ export async function contributeIngressPreviews(
 
 /** Yield the event loop between items — preview CPU never starves live work. */
 function yieldTick(): Promise<void> {
-  return new Promise<void>((resolve) => setImmediate(resolve));
+  return new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
 }
 
 /**

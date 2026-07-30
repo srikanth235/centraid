@@ -652,9 +652,9 @@ describe("connector secrets (issue #293)", () => {
       // The response ECHOES the secret — the scrub net must catch it.
       res.end(`hello bearer ${req.headers.authorization ?? ""}`);
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const port = (server.address() as { port: number }).port;
     try {
       await writeAutomation(
@@ -913,9 +913,9 @@ describe("broker-injected connection credentials (issue #304)", () => {
   ): Promise<void> {
     const { createServer } = await import("node:http");
     const server = createServer(respond);
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const port = (server.address() as { port: number }).port;
     try {
       await run(port);
@@ -1352,9 +1352,9 @@ describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
       res.writeHead(200);
       res.end("ok");
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const port = (server.address() as { port: number }).port;
     try {
       await writeAutomation(

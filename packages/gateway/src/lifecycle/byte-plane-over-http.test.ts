@@ -55,7 +55,9 @@ async function waitForHealth(): Promise<void> {
     }
     if (attempt >= 99)
       throw new Error("byte-plane test daemon did not become healthy");
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 25);
+    });
     return poll(attempt + 1);
   };
   return poll(0);
@@ -131,7 +133,9 @@ describe.skipIf(!enabled)(
       if (child)
         await Promise.race([
           once(child, "exit"),
-          new Promise((resolve) => setTimeout(resolve, 1_000)),
+          new Promise((resolve) => {
+            setTimeout(resolve, 1_000);
+          }),
         ]);
       await reference?.close();
       if (provider) {

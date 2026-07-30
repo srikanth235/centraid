@@ -321,11 +321,14 @@ describe("outbox-executor", () => {
         JSON.stringify(tokenResponses.shift() ?? { error: "unscripted" })
       );
     });
-    await new Promise<void>((resolve) =>
-      tokenServer.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      tokenServer.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => tokenServer.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          tokenServer.close(() => resolve());
+        })
     );
     const tokenUrl = `http://127.0.0.1:${(tokenServer.address() as { port: number }).port}/token`;
 

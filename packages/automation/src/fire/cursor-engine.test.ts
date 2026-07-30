@@ -52,7 +52,9 @@ function store(): AutomationTriggerStore {
 }
 
 async function settle(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 describe(VaultCursorEngine, () => {
@@ -352,7 +354,9 @@ describe(VaultCursorEngine, () => {
     pending.push({ position: "10", occurredAt: 10 });
 
     engine.nudgeIngress("hook-id");
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 5);
+    });
 
     expect(fired).toStrictEqual(["10"]);
   });

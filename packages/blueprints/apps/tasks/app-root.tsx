@@ -551,7 +551,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               onRemoveTag={(tagId) => logic.removeTag(tagId)}
               onToggleProcess={(t) => logic.toggleProcess(t)}
               onCancel={(t) => {
-                logic.cancelTask(t);
+                void logic.cancelTask(t);
                 closeDetail();
               }}
             />

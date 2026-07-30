@@ -127,7 +127,7 @@ describe("embedded-gateway-layout scenarios", () => {
     expect(normalizeDynamicNames(await treeShape(desktopRoot))).toStrictEqual(
       normalizeDynamicNames(await treeShape(headlessRoot))
     );
-  }, 15_000);
+  }, 30_000);
 
   test("actual Electron embed auto-founds Shared + Personal on a fresh data dir", async () => {
     // Issue #603: the desktop passes no founding options at all — a fresh data

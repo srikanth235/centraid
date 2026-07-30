@@ -45,7 +45,9 @@ describe("vault-plane-blob-sweep", () => {
       if (await check()) return;
       if (Date.now() > deadline)
         throw new Error("timed out waiting for condition");
-      await new Promise((resolve) => setTimeout(resolve, 15));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 15);
+      });
       return poll();
     }
     return poll();
@@ -64,7 +66,9 @@ describe("vault-plane-blob-sweep", () => {
     async function poll(): Promise<boolean> {
       if (Date.now() >= deadline) return check();
       if (!check()) return false;
-      await new Promise((resolve) => setTimeout(resolve, 15));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 15);
+      });
       return poll();
     }
     return poll();

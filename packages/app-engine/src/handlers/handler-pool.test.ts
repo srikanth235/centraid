@@ -33,7 +33,9 @@ describe("handler-pool", () => {
 
   /** Let queued microtasks (pool refill) and a beat of the loop settle. */
   function tick(ms = 40): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   async function writeHandler(name: string, src: string): Promise<string> {

@@ -459,7 +459,9 @@ describe("blob", () => {
           authHeaders,
           requests,
           close: () =>
-            new Promise<void>((_resolve) => server.close(() => _resolve())),
+            new Promise<void>((_resolve) => {
+              server.close(() => _resolve());
+            }),
         });
       });
     });

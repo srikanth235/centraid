@@ -224,7 +224,9 @@ export async function startNativeDesktopTunnel(
       useN0Relays: options.relays !== "disabled",
     });
   } catch (error) {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
     throw error;
   }
 
@@ -258,7 +260,9 @@ export async function startNativeDesktopTunnel(
     },
     close: async () => {
       await relay!.close();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
     },
   };
 }

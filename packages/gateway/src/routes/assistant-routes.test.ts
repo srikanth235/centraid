@@ -90,14 +90,18 @@ async function bootstrap(
       }
     });
   });
-  await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server!.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server!.address() as AddressInfo;
   return `http://127.0.0.1:${port}`;
 }
 describe("assistant-routes suite", () => {
   afterEach(async () => {
     if (server)
-      await new Promise<void>((resolve) => server!.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server!.close(() => resolve());
+      });
     server = undefined;
     journal?.close();
     journal = undefined;

@@ -55,11 +55,14 @@ describe("blob-routes-hardening", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
     const address = server.address() as { port: number };
     return {
@@ -115,7 +118,9 @@ describe("blob-routes-hardening", () => {
     });
     const waitForDestroy = async (attempt: number): Promise<void> => {
       if (attempt >= 50 || slow.destroyed) return;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 10);
+      });
       return waitForDestroy(attempt + 1);
     };
     await waitForDestroy(0);

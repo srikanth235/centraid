@@ -352,7 +352,9 @@ describe("device-plane scenarios", () => {
 
     // Expiry: a stale ticket never redeems.
     const brief = store.mint(invite([{ vaultId: "v3", role: "write" }]), 1);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
     expect(store.redeem(brief.ticketId, brief.secret)).toBeUndefined();
   });
 

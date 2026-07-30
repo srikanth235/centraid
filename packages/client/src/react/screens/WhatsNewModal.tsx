@@ -69,6 +69,7 @@ function ReleaseSection({
       {notesHtml ? (
         <div
           className={styles.notes}
+          // oxlint-disable-next-line react/no-danger -- #639 changelogNotesToHtml escapes source text and rejects unsafe link protocols.
           dangerouslySetInnerHTML={{ __html: notesHtml }}
         />
       ) : (

@@ -117,6 +117,7 @@ export function AgentGlyph({
       aria-hidden="true"
       focusable="false"
       style={{ color }}
+      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{ __html: body }}
     />
   );

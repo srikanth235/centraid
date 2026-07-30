@@ -1,6 +1,10 @@
-// oxlint-tsgolint 7.0.2001's implemented type-aware-only rules. Keeping this
-// catalog executable lets the ordinary config force the entire engine surface
-// off before the compatibility pass admits its reviewed allowlist.
+import { pathToFileURL } from "node:url";
+
+// oxlint-tsgolint's implemented type-aware-only rules. The version handshake
+// in lint-types-policy.mjs makes an engine upgrade fail closed until this
+// catalog has been regenerated and reviewed.
+export const typeAwareCatalogVersion = "7.0.2001";
+
 export const typeAwareOnlyRules = [
   "typescript/await-thenable",
   "typescript/consistent-return",
@@ -63,20 +67,49 @@ export const typeAwareOnlyRules = [
   "typescript/use-unknown-in-catch-callback-variable",
 ];
 
-export const compatibilityRules = [
+export const allFileCompatibilityRules = [
   "typescript/no-misused-promises",
   "typescript/await-thenable",
   "typescript/switch-exhaustiveness-check",
-  "typescript/no-floating-promises",
   "typescript/no-for-in-array",
   "typescript/only-throw-error",
   "typescript/prefer-promise-reject-errors",
   "typescript/require-array-sort-compare",
 ];
 
-export const fixtureRules = [
-  "typescript/no-for-in-array",
-  "typescript/only-throw-error",
-  "typescript/prefer-promise-reject-errors",
-  "typescript/require-array-sort-compare",
+export const sourceOnlyCompatibilityRules = ["typescript/no-floating-promises"];
+
+export const compatibilityRules = [
+  ...allFileCompatibilityRules,
+  ...sourceOnlyCompatibilityRules,
 ];
+
+export const fixtureRules = [...compatibilityRules];
+
+// Blueprint React/DOM callback slots intentionally launch narrated async
+// actions. The engine's CLI cannot retain condition checks while disabling
+// void-return callbacks, and wrapping 126 handlers in `void` would only erase
+// the type signal without adding rejection handling.
+export const blueprintCompatibilityRules = allFileCompatibilityRules.filter(
+  (rule) => rule !== "typescript/no-misused-promises"
+);
+
+function printRules(group) {
+  const groups = {
+    all: allFileCompatibilityRules,
+    blueprint: blueprintCompatibilityRules,
+    source: sourceOnlyCompatibilityRules,
+  };
+  const rules = groups[group];
+  if (!rules) {
+    throw new Error(`unknown lint-types rule group: ${group}`);
+  }
+  process.stdout.write(`${rules.join("\n")}\n`);
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  printRules(process.argv[2]);
+}

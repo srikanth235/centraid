@@ -481,10 +481,12 @@ export default function BuilderCode({
             <span
               className={styles.treeChevron}
               data-open={String(isOpen)}
+              // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
               dangerouslySetInnerHTML={{ __html: ChevronIcon(11) }}
             />
             <span
               className={styles.treeIcon}
+              // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
               dangerouslySetInnerHTML={{ __html: FolderIcon(13) }}
             />
             <span className={styles.treeName}>{node.name}</span>
@@ -548,6 +550,7 @@ export default function BuilderCode({
         <div className={styles.search}>
           <span
             className={styles.searchIcon}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Search", 13) }}
           />
           <input
@@ -624,6 +627,7 @@ export default function BuilderCode({
                 className={styles.tabClose}
                 title={dirty ? "Unsaved changes" : "Close"}
                 onClick={() => closeTab(p)}
+                // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
                 dangerouslySetInnerHTML={
                   dirty ? undefined : { __html: iconSvg("X", 11, 2.5) }
                 }
@@ -751,6 +755,7 @@ export default function BuilderCode({
               className={styles.editPre}
               data-testid="code-edit-pre"
               ref={preRef}
+              // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
               dangerouslySetInnerHTML={{
                 __html: tokenize(buf.current, lang, TOKEN_CLASSES) + "\n",
               }}

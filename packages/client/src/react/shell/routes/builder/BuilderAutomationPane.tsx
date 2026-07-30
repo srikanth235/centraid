@@ -263,7 +263,9 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
         const rec = await readAutomationTurn({ turnId });
         if (rec && rec.endedAt !== undefined) return;
         if (Date.now() >= deadline) return;
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 1500);
+        });
         return waitForCompletion();
       };
       await waitForCompletion();

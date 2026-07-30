@@ -57,9 +57,9 @@ describe("changes-sse", () => {
         if (Date.now() - start >= timeoutMs) return;
         const { value, done } = await Promise.race([
           reader.read(),
-          new Promise<{ value?: undefined; done?: undefined }>((resolve) =>
-            setTimeout(() => resolve({}), 100)
-          ),
+          new Promise<{ value?: undefined; done?: undefined }>((resolve) => {
+            setTimeout(() => resolve({}), 100);
+          }),
         ]);
         if (done) return;
         if (value) {
@@ -281,7 +281,9 @@ describe("changes-sse", () => {
   }
 
   const settle = (): Promise<void> =>
-    new Promise((resolve) => setImmediate(resolve));
+    new Promise((resolve) => {
+      setImmediate(resolve);
+    });
 
   test("SSE cap: subscribers past the per-app limit get 503 + Retry-After; the count decrements on disconnect", async () => {
     const bus = new ChangeBus();

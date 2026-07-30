@@ -308,7 +308,9 @@ describe("serve scenarios", () => {
       const poll = await handle.backup!.status();
       lastBackupAt = poll[vaultId]?.lastBackupAt;
       if (lastBackupAt || remaining === 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 20);
+      });
       return awaitBackup(remaining - 1);
     };
     await awaitBackup(50);

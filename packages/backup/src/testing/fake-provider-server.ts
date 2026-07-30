@@ -408,7 +408,9 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
     );
   }
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const port = (server.address() as { port: number }).port;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -424,7 +426,9 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       });
     },
     close: async () => {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
       await s3.close();
     },
   };

@@ -93,11 +93,11 @@ export function createPopovers({
         ),
         popItem("Rename", () => {
           closePopover();
-          startRenameDoc(doc);
+          void startRenameDoc(doc);
         }),
         popItem(doc.starred ? "Remove star" : "Star", () => {
           closePopover();
-          toggleStar(doc);
+          void toggleStar(doc);
         }),
         popItem("Move to…", () => openMovePopover(anchor, [doc])),
         h("div", { class: "kit-popover-sep" }),

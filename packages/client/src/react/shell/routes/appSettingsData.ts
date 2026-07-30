@@ -173,7 +173,9 @@ export async function waitForAutomationRun(
       throw new Error("run did not finish within 6 minutes");
     const rec = await readAutomationTurn({ turnId: runId });
     if (rec && rec.endedAt !== undefined) return rec;
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1500);
+    });
     return poll();
   };
   return poll();

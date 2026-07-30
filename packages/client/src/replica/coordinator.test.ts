@@ -286,7 +286,9 @@ describe(ReplicaCoordinator, () => {
   test("uses the shared feed as a pull trigger and resolves overlays before cursor advance", async () => {
     const worker = new StateWorker();
     let applied!: () => void;
-    const batchApplied = new Promise<void>((resolve) => (applied = resolve));
+    const batchApplied = new Promise<void>((resolve) => {
+      applied = resolve;
+    });
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
       {
@@ -379,7 +381,9 @@ describe(ReplicaCoordinator, () => {
   test("retries a failed pull without requiring another feed cursor event", async () => {
     const worker = new StateWorker();
     let applied!: () => void;
-    const batchApplied = new Promise<void>((resolve) => (applied = resolve));
+    const batchApplied = new Promise<void>((resolve) => {
+      applied = resolve;
+    });
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
       {
@@ -438,9 +442,9 @@ describe(ReplicaCoordinator, () => {
     );
     const feed = createFeed();
     let required!: () => void;
-    const rebootstrapRequired = new Promise<void>(
-      (resolve) => (required = resolve)
-    );
+    const rebootstrapRequired = new Promise<void>((resolve) => {
+      required = resolve;
+    });
     let pulls = 0;
     const replica = new ReplicaCoordinator(
       client,
@@ -580,9 +584,9 @@ describe(ReplicaCoordinator, () => {
     );
     const feed = createFeed();
     let release!: (batch: ReplicaChangeBatch) => void;
-    const pending = new Promise<ReplicaChangeBatch>(
-      (resolve) => (release = resolve)
-    );
+    const pending = new Promise<ReplicaChangeBatch>((resolve) => {
+      release = resolve;
+    });
     const replica = new ReplicaCoordinator(
       client,
       new IntentQueue(new MemoryIntentStore()),

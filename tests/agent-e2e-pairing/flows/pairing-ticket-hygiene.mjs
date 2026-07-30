@@ -56,7 +56,9 @@ await runFlow("pairing-ticket-hygiene", async (ctx) => {
 
   // 2. Expired tickets never redeem.
   const b = (await ctx.mintTicket({ ttlMinutes: 0.001 })).payload; // 60ms
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await new Promise((resolve) => {
+    setTimeout(resolve, 500);
+  });
   const stale = await device.pairGateway(b.gw, {
     ticketId: b.t,
     secret: b.s,

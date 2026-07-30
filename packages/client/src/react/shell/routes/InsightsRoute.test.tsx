@@ -110,7 +110,9 @@ describe("InsightsRoute suite", () => {
     it("shows a loading line, then the dashboard once the summary resolves", async () => {
       let resolveSummary!: (value: InsightsSummary) => void;
       getInsightsSummary.mockReturnValue(
-        new Promise((resolve) => (resolveSummary = resolve))
+        new Promise((resolve) => {
+          resolveSummary = resolve;
+        })
       );
       const el = await render();
       expect(el.textContent).toContain("Loading insights…");

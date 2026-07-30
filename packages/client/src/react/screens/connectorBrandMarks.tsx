@@ -107,6 +107,7 @@ export function ConnectorBrandGlyph({
         color: "currentColor",
       }}
       // Embedded Iconify SVG — static markup, no user content.
+      // oxlint-disable-next-line react/no-danger -- #639 reviewed local Iconify constants are the complete HTML source.
       dangerouslySetInnerHTML={{ __html: unique }}
     />
   );

@@ -72,7 +72,9 @@ export async function harness(
   });
   const server = http.createServer((req, res) => void handler(req, res));
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address() as AddressInfo;
   return {
     base: `http://127.0.0.1:${port}`,

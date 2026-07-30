@@ -291,6 +291,7 @@ export default function AppSettingsPanel(
           <span
             className={styles.settingsIcon}
             style={iconStyle}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: snap.iconSvg }}
           />
           <div className={styles.settingsHeaderText}>
@@ -325,6 +326,7 @@ export default function AppSettingsPanel(
                 >
                   <span
                     className={styles.settingsTabGlyph}
+                    // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
                     dangerouslySetInnerHTML={{ __html: TAB_GLYPH[t.id] }}
                   />
                   <span>{t.label}</span>

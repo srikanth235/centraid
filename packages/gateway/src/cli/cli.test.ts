@@ -307,7 +307,9 @@ describe("cli scenarios", () => {
       expect(unauth.status).toBe(401);
     } finally {
       child.kill("SIGTERM");
-      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+      await new Promise<void>((resolve) => {
+        child.once("exit", () => resolve());
+      });
     }
 
     expect(stderr).toMatch(/SIGTERM received/u);

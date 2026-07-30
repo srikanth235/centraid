@@ -440,6 +440,7 @@ export default function Message({
             cb.wireCodeCopy(node);
           }
         }}
+        // oxlint-disable-next-line react/no-danger -- #639 richAnswerHtml escapes text and allowlists URLs before producing this markup.
         dangerouslySetInnerHTML={{ __html: m.html }}
       />
       <AiActions m={m} index={index} cb={cb} />

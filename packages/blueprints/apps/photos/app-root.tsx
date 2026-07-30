@@ -462,7 +462,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       const empty = $("empty");
       if (selectedAlbum === DUPLICATES) {
         empty.hidden = true;
-        duplicates.ensureLoaded();
+        void duplicates.ensureLoaded();
         duplicates.renderDuplicates();
         return;
       }

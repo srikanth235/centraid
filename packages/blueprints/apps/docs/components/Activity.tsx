@@ -28,7 +28,7 @@ export function Activity({
 
   useEffect(() => {
     let cancelled = false;
-    loadActivity(documentId).then((res) => {
+    void loadActivity(documentId).then((res) => {
       if (cancelled) return;
       setEvents(res?.events ?? []);
       setDenied(Boolean(res?.vaultDenied));

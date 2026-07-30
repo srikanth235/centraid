@@ -133,8 +133,8 @@ export function projectNameOf(dir) {
  */
 function dependentsOf(baseRef) {
   const res = spawnSync(
-    "bunx",
-    ["turbo", "run", "test", `--filter=...[${baseRef}]`, "--dry=json"],
+    "bun",
+    ["run", "turbo", "run", "test", `--filter=...[${baseRef}]`, "--dry=json"],
     { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
   );
   if (res.status !== 0 || !res.stdout) return null;
@@ -216,7 +216,8 @@ function main() {
 
   // Handler tests load built workers from dist, so dist must match src. turbo
   // caches this, so it is ~free on a repeat run.
-  const buildStatus = run("bunx", [
+  const buildStatus = run("bun", [
+    "run",
     "turbo",
     "run",
     "build",

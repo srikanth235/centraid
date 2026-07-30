@@ -159,7 +159,9 @@ describe("automation-revision", () => {
         },
         rewrite: async (persistPrompt) => {
           order.push(`rewrite-start:${label}`);
-          await new Promise((resolve) => setTimeout(resolve, rewriteDelayMs));
+          await new Promise((resolve) => {
+            setTimeout(resolve, rewriteDelayMs);
+          });
           await persistPrompt(`prompt-${label}`);
         },
         compile: async () => {

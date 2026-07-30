@@ -76,13 +76,18 @@ describe("storage-usage", () => {
       server.listen(0, "127.0.0.1", () => {
         const { port } = server.address() as AddressInfo;
         cleanups.push(
-          () => new Promise<void>((_resolve) => server.close(() => _resolve()))
+          () =>
+            new Promise<void>((_resolve) => {
+              server.close(() => _resolve());
+            })
         );
         resolve({
           url: `http://127.0.0.1:${port}`,
           requestCount: () => requests,
           close: () =>
-            new Promise<void>((_resolve) => server.close(() => _resolve())),
+            new Promise<void>((_resolve) => {
+              server.close(() => _resolve());
+            }),
         });
       });
     });
@@ -186,7 +191,9 @@ describe("storage-usage", () => {
     const stale = await poller.usageFor(connectionId);
     expect(stale.providerReported?.backup?.bytesStored).toBe(500); // still the old number, served instantly
     // Let the background refresh's microtasks/IO settle.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
     expect(fake.requestCount()).toBe(2);
   });
 
@@ -239,7 +246,9 @@ describe("storage-usage", () => {
     await fake.close();
     now = 5000;
     await poller.usageFor(connectionId); // triggers the background refresh
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
     const afterFailedRefresh = await poller.usageFor(connectionId);
     expect(afterFailedRefresh.providerReported?.backup?.bytesStored).toBe(777); // last-known-good preserved
   });

@@ -3,7 +3,7 @@
 export interface FetchJsonResult {
   ok: boolean;
   status: number;
-  body: any;
+  body: unknown;
 }
 export type FetchJson = (
   url: string,

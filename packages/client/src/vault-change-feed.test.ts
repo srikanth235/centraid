@@ -166,9 +166,9 @@ describe("vault-change-feed", () => {
 
     it("ignores a late response from the stream generation replaced by shape attestation", async () => {
       let resolveOld!: (response: Response) => void;
-      const oldResponse = new Promise<Response>(
-        (resolve) => (resolveOld = resolve)
-      );
+      const oldResponse = new Promise<Response>((resolve) => {
+        resolveOld = resolve;
+      });
       const current = controlledBody();
       core.doFetch.mockReturnValueOnce(oldResponse).mockResolvedValueOnce({
         ok: true,

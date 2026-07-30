@@ -502,7 +502,9 @@ describe("cache", () => {
     const observeQoS = async (): Promise<void> => {
       if (Date.now() >= holdDeadline) return;
       expect(h.remote.calls.put).toBe(putsBefore); // parked by QoS
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 10);
+      });
       return observeQoS();
     };
     await observeQoS();

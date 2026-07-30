@@ -353,6 +353,7 @@ export default function InlineAppRoute({
             color: finish.glyphColor,
             boxShadow: finish.boxShadow || undefined,
           }}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 11, 1.9) }}
         />
         {app.name}
@@ -369,6 +370,7 @@ export default function InlineAppRoute({
           aria-label="Build"
           title="Build"
           onClick={() => enterBuilder({ appContext: app })}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("Sparkle", 14) }}
         />
       ) : null}
@@ -384,6 +386,7 @@ export default function InlineAppRoute({
               settingsOpen ? null : { inlineRoot: appRootRef.current }
             )
           }
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
         />
         <span className={chrome.tooltip}>App settings</span>

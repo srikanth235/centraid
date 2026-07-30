@@ -28,8 +28,12 @@ describe("outbox-runner", () => {
     let maxInFlight = 0;
     let ready!: () => void;
     let release!: () => void;
-    const firstWaveReady = new Promise<void>((resolve) => (ready = resolve));
-    const gate = new Promise<void>((resolve) => (release = resolve));
+    const firstWaveReady = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const put = remote.put.bind(remote);
     remote.put = async (sha, bytes) => {
       inFlight += 1;

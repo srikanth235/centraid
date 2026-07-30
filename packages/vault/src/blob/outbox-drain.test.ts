@@ -433,12 +433,12 @@ describe("outbox-drain", () => {
     let settle = true;
     let verificationStarted!: () => void;
     let releaseVerification!: () => void;
-    const started = new Promise<void>(
-      (resolve) => (verificationStarted = resolve)
-    );
-    const release = new Promise<void>(
-      (resolve) => (releaseVerification = resolve)
-    );
+    const started = new Promise<void>((resolve) => {
+      verificationStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseVerification = resolve;
+    });
     const store: BlobStore = {
       kind: "close-fence-fake",
       put: async () => undefined,

@@ -258,14 +258,18 @@ describe("vault-plane", () => {
       });
 
     plane.start();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect(tick).not.toHaveBeenCalled();
     expect(plane.walShipper).toBe(shipper);
     expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
 
     backupConfigured = true;
     plane.rescheduleWalCapture();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect(tick).toHaveBeenCalledOnce();
     expect(plane.walShipper).toBe(shipper);
     expect(autocheckpointPages()).toStrictEqual([0, 0]);
@@ -900,9 +904,9 @@ describe("vault-plane", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
       () =>
         new Promise<void>((resolve) => {
@@ -1467,9 +1471,9 @@ describe("vault-plane", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
       () =>
         new Promise<void>((resolve) => {

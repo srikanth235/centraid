@@ -236,7 +236,9 @@ describe("transfers", () => {
     expect(coordinator.state.outbox(committed.sha256)).not.toBeNull();
 
     rejectOffline(new Error("provider offline"));
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect(coordinator.state.outbox(committed.sha256)?.last_error).toContain(
       "provider offline"
     );

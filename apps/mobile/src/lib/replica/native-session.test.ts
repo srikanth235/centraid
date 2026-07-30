@@ -251,7 +251,9 @@ async function until(
   const poll = async (): Promise<void> => {
     if (await predicate()) return;
     if (Date.now() > deadline) throw new Error("condition not reached in time");
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
     return poll();
   };
   return poll();

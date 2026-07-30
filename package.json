@@ -21,7 +21,7 @@
     "check:diff-coverage:full": "node scripts/test-report/diff-coverage-run.mjs --dependents",
     "check:fast": "bun run format:check && bun run lint && bun run typecheck:affected",
     "check:full": "bun run check:pr && bun run test:affected:full && bun run coverage && bun run test:mutation:pr && bun run test:perf:pr && bun run --cwd apps/desktop test:e2e && bun run --cwd apps/web e2e",
-    "check:pr": "bun install --frozen-lockfile && bun run lockfile:lint && bun run format:check && bun run lint && bun run lint:packages && turbo run lint && bun run lint:tsconfigs && bun run typecheck && bun run lint:types && bun run knip && bun run lint:css && bun run lint:design-tokens && bun run lint:e2e-flows && bun run lint:protocol-routes && bun run lint:acp-min-versions && bun run lint:workflow-pins && bun run test:matrix && bun run test:accessibility && bun run scripts:test && bun run test:governance-shell && bun run test:report:smoke && bun run test:ratchet && bun run test:ratchet:unit && bun run test:affected && bun run check:diff-coverage",
+    "check:pr": "bun install --frozen-lockfile && bun run lockfile:lint && bun run lint:node-version && bun run format:check && bun run lint && bun run lint:packages && bun run turbo run lint && bun run lint:tsconfigs && bun run typecheck && bun run lint:types && bun run knip && bun run lint:css && bun run lint:design-tokens && bun run lint:e2e-flows && bun run lint:protocol-routes && bun run lint:acp-min-versions && bun run lint:workflow-pins && bun run test:matrix && bun run test:accessibility && bun run scripts:test && bun run test:governance-shell && bun run test:report:smoke && bun run test:ratchet && bun run test:ratchet:unit && bun run test:affected && bun run check:diff-coverage",
     "ci": "bun run check:pr",
     "ci:retry": "node scripts/ci/retry.mjs",
     "coverage": "node scripts/test-report/prepare.mjs --lane vitest && node node_modules/vitest/vitest.mjs run --coverage --reporter=default --reporter=json --outputFile=artifacts/test-results/vitest.json",
@@ -53,6 +53,7 @@
     "lint:design-tokens": "node scripts/lint-design-tokens.mjs",
     "lint:e2e-flows": "node scripts/lint-e2e-flows.mjs",
     "lint:fix": "oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings --fix .",
+    "lint:node-version": "node scripts/ci/node-version.mjs",
     "lint:packages": "sherif",
     "lint:protocol-routes": "node scripts/lint-protocol-routes.mjs",
     "lint:tsconfigs": "node scripts/lint-tsconfigs.mjs",
@@ -89,6 +90,7 @@
     "test:report:smoke": "node scripts/test-report/smoke.mjs",
     "test:scale": "node scripts/test-report/prepare.mjs --lane scale && node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts",
     "toolchain:doctor": "ultracite doctor",
+    "turbo": "turbo",
     "typecheck": "turbo run typecheck && tsc -p tests",
     "typecheck:affected": "turbo run typecheck --filter='[origin/main]' && tsc -p tests",
     "web:build": "turbo run build --filter=@centraid/web",
@@ -106,10 +108,13 @@
     "oxlint-tsgolint": "7.0.2001",
     "pagefind": "^1.5.2",
     "sherif": "^1.13.0",
-    "turbo": "^2.10.7",
+    "turbo": "2.10.7",
     "typescript": "catalog:",
     "ultracite": "7.9.4",
     "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": "24.4.1"
   },
   "packageManager": "bun@1.3.13",
   "op-sqlite": {

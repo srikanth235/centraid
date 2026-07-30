@@ -133,7 +133,9 @@ describe("serve-scheduler-reconcile scenarios", () => {
       if (await pred()) return;
       if (Date.now() - start > ms)
         throw new Error("timeout waiting for condition");
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 25);
+      });
       return waitForNext();
     };
     return waitForNext();

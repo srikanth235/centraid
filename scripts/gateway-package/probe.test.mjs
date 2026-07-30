@@ -18,7 +18,9 @@ test("probeGatewayInfo accepts 200 with version", async () => {
     res.writeHead(404);
     res.end();
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address();
   const base = `http://127.0.0.1:${port}`;
   try {
@@ -36,7 +38,9 @@ test("probeGatewayInfo accepts 401 as listen proof", async () => {
     res.writeHead(401, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "unauthorized" }));
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address();
   try {
     const result = await probeGatewayInfo(`http://127.0.0.1:${port}`);
@@ -52,7 +56,9 @@ test("probeGatewayInfo rejects 200 without version string", async () => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ schemaEpoch: 1 }));
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address();
   try {
     const result = await probeGatewayInfo(`http://127.0.0.1:${port}`);
@@ -74,7 +80,9 @@ test("waitForGatewayInfo eventually succeeds", async () => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ version: "x" }));
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address();
   try {
     const result = await waitForGatewayInfo(`http://127.0.0.1:${port}`, {

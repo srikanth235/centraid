@@ -61,12 +61,14 @@ describe("connection-broker", () => {
       sockets.add(socket);
       socket.on("close", () => sockets.delete(socket));
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(async () => {
       for (const s of sockets) s.destroy();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
     });
     const port = (server.address() as { port: number }).port;
     return { url: `http://127.0.0.1:${port}/token` };
@@ -92,9 +94,9 @@ describe("connection-broker", () => {
         res.end(JSON.stringify(next.body));
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(() => {
       server.closeAllConnections();
       server.close();

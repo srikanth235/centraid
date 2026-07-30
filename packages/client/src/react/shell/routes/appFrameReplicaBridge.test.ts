@@ -204,7 +204,9 @@ describe("appFrameReplicaBridge", () => {
         },
         []
       );
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
       expect(read).not.toHaveBeenCalled();
 
       childPort.postMessage(
@@ -353,7 +355,9 @@ describe("appFrameReplicaBridge", () => {
         },
         []
       );
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
       expect(read).not.toHaveBeenCalled();
       expect(unsubscribe).toHaveBeenCalledTimes(2);
 
@@ -420,7 +424,9 @@ describe("appFrameReplicaBridge", () => {
         []
       );
       await vi.waitFor(() => expect(getSession).toHaveBeenCalledOnce());
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
       releaseSession?.(session);
 
       await vi.waitFor(() => expect(subscribe).toHaveBeenCalledOnce());

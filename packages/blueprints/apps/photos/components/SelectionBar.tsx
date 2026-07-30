@@ -74,7 +74,7 @@ export function SelectionBarView({
                   role="menuitem"
                   onClick={() => {
                     onCloseMenu();
-                    runBatchAddToAlbum(
+                    void runBatchAddToAlbum(
                       [...selectedIds],
                       album,
                       countRef.current,
@@ -105,7 +105,7 @@ export function SelectionBarView({
             })
           )
             return;
-          runBatchDelete([...selectedIds], countRef.current, {
+          void runBatchDelete([...selectedIds], countRef.current, {
             refresh,
             setBarBusy,
             exitSelectMode: onExit,

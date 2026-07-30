@@ -159,7 +159,9 @@ const TURN_BUSY_MAX_RETRIES = 4;
 
 /** Sleep helper for the bounded 429 backoff. */
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**

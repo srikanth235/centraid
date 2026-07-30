@@ -206,7 +206,9 @@ async function writeSse(
   });
   await forEachSequentially(frames, async (f) => {
     if (f.delayMs)
-      await new Promise((resolve) => setTimeout(resolve, f.delayMs));
+      await new Promise((resolve) => {
+        setTimeout(resolve, f.delayMs);
+      });
     res.write(`data: ${JSON.stringify(f.data)}\n\n`);
   });
   res.write("event: end\ndata: {}\n\n");
@@ -261,7 +263,9 @@ export async function startMockGateway(
     });
   });
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const addr = server.address();
   if (!addr || typeof addr === "string")
     throw new Error("mock gateway: no address");
@@ -1029,7 +1033,9 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
   }
   const exited =
     child.exitCode === null
-      ? new Promise<void>((resolve) => child.once("exit", () => resolve()))
+      ? new Promise<void>((resolve) => {
+          child.once("exit", () => resolve());
+        })
       : Promise.resolve();
 
   let timer: ReturnType<typeof setTimeout> | undefined;

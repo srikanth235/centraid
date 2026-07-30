@@ -288,6 +288,7 @@ export default function ConfigView({
           title="Edit trigger"
           disabled={saving || editing !== null}
           onClick={() => setEditing({ mode: "edit", index: i })}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: svgPencil12 }}
         />
       ) : null}
@@ -298,6 +299,7 @@ export default function ConfigView({
         title="Remove trigger"
         disabled={saving || editing !== null}
         onClick={() => handleRemoveTrigger(i)}
+        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
         dangerouslySetInnerHTML={{ __html: svgX12 }}
       />
     </div>

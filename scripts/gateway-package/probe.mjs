@@ -56,7 +56,9 @@ export async function waitForGatewayInfo(baseUrl, opts = {}) {
     if (Date.now() >= deadline) return last;
     last = await probeGatewayInfo(baseUrl, { timeoutMs: 2_000 });
     if (last.ok) return last;
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await new Promise((resolve) => {
+      setTimeout(resolve, intervalMs);
+    });
     return poll();
   };
   return poll();

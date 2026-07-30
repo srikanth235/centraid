@@ -42,12 +42,14 @@ function Row({
             boxShadow: row.tile.boxShadow,
             color: row.tile.glyphColor,
           }}
+          // oxlint-disable-next-line react/no-danger -- #639 palette rows receive SVG only from the local iconSvg catalog.
           dangerouslySetInnerHTML={{ __html: row.iconHtml }}
         />
       ) : (
         <span
           className={styles.rowIcon}
           data-accent={row.accent ? "true" : undefined}
+          // oxlint-disable-next-line react/no-danger -- #639 palette rows receive SVG only from the local iconSvg catalog.
           dangerouslySetInnerHTML={{ __html: row.iconHtml }}
         />
       )}

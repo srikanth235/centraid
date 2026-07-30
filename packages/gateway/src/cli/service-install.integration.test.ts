@@ -88,7 +88,9 @@ describe("service-install", () => {
           printed = "";
         }
         if (/state = running/u.test(printed) || attempt >= 39) return printed;
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 250);
+        });
         return waitForRunning(attempt + 1);
       };
       const printed = await waitForRunning(0);

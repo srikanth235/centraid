@@ -5,7 +5,7 @@ Stand up Centraid development without tribal knowledge. **Do not invent a new ma
 ## Prerequisites
 
 - [Bun](https://bun.sh) matching root `packageManager` (pinned in `package.json`)
-- Node ≥ 24 (built-in `node:sqlite` for gateway/runtime)
+- Node 24.4.1 (exactly; `.node-version` and `package.json#engines.node` are enforced)
 - For desktop: platform deps for Electron
 - For mobile: Xcode / Android SDK as needed
 - Optional: Docker for `tests/agent-e2e-pairing` cross-network relay

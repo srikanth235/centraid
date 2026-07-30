@@ -119,7 +119,9 @@ async function killAndWait(pid, { timeoutMs = 8000 } = {}) {
       }
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
     return waitForExit();
   };
   return waitForExit();
@@ -229,7 +231,9 @@ async function spawnDaemon(
         `daemon not ready in ${timeoutMs}ms (url=${wanted.url} endpoint=${wanted.endpointId}) — see ${logFile}`
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 150);
+    });
     return waitForReadiness();
   };
   return waitForReadiness();

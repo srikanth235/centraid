@@ -34,13 +34,20 @@ function caps(
   };
 }
 
+const compareStringValues = (
+  left: string | undefined,
+  right: string | undefined
+): number => {
+  const leftString = String(left);
+  const rightString = String(right);
+  return leftString < rightString ? -1 : leftString > rightString ? 1 : 0;
+};
+
 describe("agents-routes", () => {
   test("reports one entry per supported runner kind", async () => {
     const s = await readAgentsStatus();
-    expect(
-      s.agents.map((a) => a.kind).sort((a, b) => a.localeCompare(b))
-    ).toStrictEqual(
-      [...SUPPORTED_RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
+    expect(s.agents.map((a) => a.kind).sort(compareStringValues)).toStrictEqual(
+      [...SUPPORTED_RUNNER_KINDS].sort(compareStringValues)
     );
     // Every entry is self-describing: the client renders off these, never off a
     // local table keyed on kinds it happens to know.
@@ -88,10 +95,8 @@ describe("agents-routes", () => {
       },
     });
     // Every product-supported kind is offered the override, not just a known pair.
-    expect(
-      seen.sort((a, b) => String(a).localeCompare(String(b)))
-    ).toStrictEqual(
-      [...SUPPORTED_RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
+    expect(seen.sort(compareStringValues)).toStrictEqual(
+      [...SUPPORTED_RUNNER_KINDS].sort(compareStringValues)
     );
   });
 

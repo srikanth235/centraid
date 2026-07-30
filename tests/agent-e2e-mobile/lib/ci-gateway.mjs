@@ -77,7 +77,9 @@ const server = http.createServer((request, response) => {
     });
 });
 
-await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
+await new Promise((resolve) => {
+  server.listen(port, "127.0.0.1", resolve);
+});
 const endpoint = await devicePlane.startEndpoint({
   baseUrl: `http://127.0.0.1:${port}`,
   // The CI HTTP listener deliberately has no bearer. Iroh still proves and
@@ -92,7 +94,9 @@ runtime.endpoint = endpoint;
 console.log(`mobile CI gateway listening on http://127.0.0.1:${port}`);
 
 async function close() {
-  await new Promise((resolve) => server.close(resolve));
+  await new Promise((resolve) => {
+    server.close(resolve);
+  });
   await endpoint?.close();
   await gateway.stop();
   database.close();

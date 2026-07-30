@@ -86,7 +86,9 @@ describe("kit-inline", () => {
         source: "canonical",
       } as ReplicaInvalidation,
     ]);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
     expect(seen).toHaveLength(1);
     expect(seen[0]?.tables).toStrictEqual(["schedule.task"]);
     stop();

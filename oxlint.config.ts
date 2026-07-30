@@ -35,7 +35,6 @@ export default defineConfig({
     // with options.typeAware=false, so force the complete pinned engine
     // surface off here; scripts/lint-types.sh admits eight rules explicitly.
     ...Object.fromEntries(typeAwareOnlyRules.map((rule) => [rule, "off"])),
-
     // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
     // repo's profile as correctness + suspicious + perf with explicit
     // opinions, so these are pinned off rather than silently adopted. The
@@ -79,7 +78,7 @@ export default defineConfig({
     "no-negated-condition": "off",
     "no-nested-ternary": "off",
     "no-plusplus": "off",
-    "no-promise-executor-return": "off",
+    "no-promise-executor-return": "error",
     "no-restricted-imports": [
       "error",
       {
@@ -108,13 +107,16 @@ export default defineConfig({
     "promise/no-promise-in-callback": "off",
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
+    // react/react-compiler already validates referential stability across the
+    // repository. Enabling these older heuristic rules as well would duplicate
+    // that owner and flag constructions the compiler proves safe.
     "react-perf/jsx-no-new-function-as-prop": "off",
     "react/exhaustive-deps": "error",
     "react/jsx-curly-brace-presence": "off",
     "react/jsx-no-constructed-context-values": "off",
     "react/jsx-no-useless-fragment": "off",
     "react/no-array-index-key": "off",
-    "react/no-danger": "off",
+    "react/no-danger": "error",
     "react/no-unescaped-entities": "off",
     "react/rules-of-hooks": "error",
     "react/style-prop-object": "off",
@@ -273,14 +275,9 @@ export default defineConfig({
         // re-running the setup per assertion, which changes what is under test
         // and slows the suite for no coverage gain. Measured sensitivity across
         // the suite: max 5 -> 2030 findings, 10 -> 448, 15 -> 162, 20 -> 68,
-        // 30 -> 26. 20 keeps the rule a real gate on genuinely sprawling tests
-        // (the remaining 68 were split) while accepting the scenario style the
-        // repo already documents in TESTING.md. Same class of decision as
-        // valid-expect above: configuring the rule for this codebase, not
-        // relaxing it.
-        // One behavior-focused integration test may need a compact assertion
-        // matrix. 31 still catches sprawling tests while avoiding test splits
-        // driven solely by one additional assertion in a shared contract matrix.
+        // 30 -> 26. The reviewed ceiling is 31: it still catches sprawling
+        // tests while allowing one behavior-focused integration scenario to
+        // assert a compact contract matrix without a count-driven split.
         "vitest/max-expects": ["error", { max: 31 }],
       },
     },
@@ -390,12 +387,6 @@ export default defineConfig({
               "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
           },
         ],
-      },
-    },
-    {
-      files: ["packages/blueprints/kit/**", "packages/blueprints/apps/**"],
-      rules: {
-        "typescript/no-explicit-any": "off",
       },
     },
   ],

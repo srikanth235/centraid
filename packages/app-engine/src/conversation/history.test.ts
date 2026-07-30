@@ -921,7 +921,9 @@ describe(ConversationHistoryStore, () => {
 
   it("listSessions orders by updatedAt desc", async () => {
     const a = store.createSession(APP, "A");
-    await new Promise((resolve) => setTimeout(resolve, 4));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 4);
+    });
     const b = store.createSession(APP, "B");
     const list = store.listSessions(APP);
     expect(list[0]!.id).toBe(b.id);

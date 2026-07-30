@@ -454,7 +454,9 @@ async function registrationServer(webPush?: WebPushSender): Promise<{
     });
   });
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address() as AddressInfo;
   return { base: `http://127.0.0.1:${port}`, database };
 }
