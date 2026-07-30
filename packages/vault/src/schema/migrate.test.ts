@@ -232,6 +232,62 @@ describe("schema/migrate", () => {
     db.close();
   });
 
+  test("people_merge is absent after the drop rung (fresh + upgrade)", () => {
+    // Fresh vaults still create people_merge inside TIME_ORGANIZE_DDL, then
+    // DROP_PEOPLE_MERGE_DDL removes it so the tip schema has no residual.
+    const fresh = openVaultDb();
+    expect(
+      fresh.vault
+        .prepare(
+          `SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name = 'people_merge'`
+        )
+        .get()
+    ).toBeUndefined();
+    fresh.close();
+
+    // Upgrade path: a vault stuck one rung behind still holds people_merge.
+    const dir = tempDirSync();
+    const seeded = openVaultDb({ dir });
+    seeded.close();
+    const file = path.join(dir, "vault.db");
+    const raw = new DatabaseSync(file);
+    raw.exec(`
+      CREATE TABLE people_merge (
+        merge_id        TEXT PRIMARY KEY,
+        source_party_id TEXT NOT NULL,
+        target_party_id TEXT NOT NULL,
+        revision_id     TEXT NOT NULL,
+        merged_at       TEXT NOT NULL,
+        undone_at       TEXT
+      ) STRICT;
+      PRAGMA user_version = ${VAULT_MIGRATIONS.length - 1};
+    `);
+    raw.close();
+    expect(
+      (
+        new DatabaseSync(file)
+          .prepare(
+            `SELECT name FROM sqlite_master
+              WHERE type = 'table' AND name = 'people_merge'`
+          )
+          .get() as { name: string }
+      ).name
+    ).toBe("people_merge");
+
+    const upgraded = openVaultDb({ dir });
+    expect(
+      upgraded.vault
+        .prepare(
+          `SELECT name FROM sqlite_master
+            WHERE type = 'table' AND name = 'people_merge'`
+        )
+        .get()
+    ).toBeUndefined();
+    expect(userVersionOf(file)).toBe(VAULT_MIGRATIONS.length);
+    upgraded.close();
+  });
+
   test("v1 Locker data survives the user-presence credential migration", () => {
     const dir = tempDirSync();
     const seeded = openVaultDb({ dir });

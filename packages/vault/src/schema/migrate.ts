@@ -29,6 +29,7 @@ import {
   MEDIA_DDL,
 } from "./domains-social-knowledge-media.js";
 import { TALLY_DDL, TALLY_RECEIPT_DDL } from "./domains-tally.js";
+import { DROP_PEOPLE_MERGE_DDL } from "./drop-people-merge.js";
 import { ENRICH_DDL } from "./enrich.js";
 import { ENTITY_REVISIONS_DDL } from "./entity-revisions.js";
 import { APP_EXT_DDL } from "./ext.js";
@@ -100,6 +101,9 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   PEOPLE_PROFILE_LIFECYCLE_DDL,
   TALLY_RECEIPT_DDL,
   TIME_ORGANIZE_DDL,
+  // After soft people.merge_people was folded into core.merge_party (#630/#638),
+  // drop the unused people_merge residual without rewriting the organize band.
+  DROP_PEOPLE_MERGE_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

@@ -96,7 +96,9 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "meter_reading",
   ],
   business: ["client", "project", "time_entry", "invoice", "invoice_line"],
-  people: ["profile", "important_date", "merge"],
+  // `merge` was a soft people_merge residual; dropped after identity merge
+  // folded into core.merge_party (DROP_PEOPLE_MERGE_DDL).
+  people: ["profile", "important_date"],
   locker: ["item"],
   sync: [
     "connection",

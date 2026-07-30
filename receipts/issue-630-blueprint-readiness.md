@@ -1017,8 +1017,10 @@ compromised the #290 entity-resolution ontology.
   `target`→`survivor_party_id` and invokes `core.merge_party` (FK re-point +
   hard delete; Tier-4 confirm for non-owner callers).
 - Dropped `undo-merge` action, UI undo toasts, and atlas `people.merge` label.
-- `people_merge` table remains as a legacy residual band for migration
-  stability; nothing writes it.
+- `people_merge` CREATE stays in the already-applied TIME_ORGANIZE band for
+  rung stability; `DROP_PEOPLE_MERGE_DDL` is a new user_version step that
+  drops the residual table (fresh vaults create-then-drop; upgraded vaults
+  drop on open).
 
 ### Offline-write wrappers → surfaceWriteOutcome
 
