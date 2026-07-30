@@ -16,6 +16,10 @@ RULES_ALL=(
   -D typescript/no-misused-promises
   -D typescript/await-thenable
   -D typescript/switch-exhaustiveness-check
+  -D typescript/no-for-in-array
+  -D typescript/only-throw-error
+  -D typescript/prefer-promise-reject-errors
+  -D typescript/require-array-sort-compare
 )
 # Applied to source only. Vitest deliberately uses unawaited it()/test() calls.
 RULES_SRC_ONLY=(-D typescript/no-floating-promises)
@@ -86,6 +90,9 @@ run() {
     --type-aware
     --format=json
     --disable-nested-config
+    # Ordinary lint owns directive hygiene; -A all makes that signal hollow in
+    # this compatibility pass.
+    --report-unused-disable-directives-severity=allow
     -A all
     --tsconfig "$cfg"
   )
@@ -127,6 +134,15 @@ assert_envelope() {
 }
 
 assert_workspace_coverage
+policy_report="$(node scripts/lint-types-policy.mjs)"
+echo "$policy_report"
+baseline_rule_count="$(
+  sed -n 's/.*baseline \([0-9][0-9]*\)).*/\1/p' <<<"$policy_report"
+)"
+if [[ -z "$baseline_rule_count" ]]; then
+  echo "FAIL type-aware policy — baseline rule count was not reported"
+  exit 1
+fi
 fail=0
 for pkg in "${TARGETS[@]}"; do
   cfg="$pkg/tsconfig.test.json"
@@ -142,8 +158,8 @@ for pkg in "${TARGETS[@]}"; do
   out_all="$(run "$cfg" "" "${RULES_ALL[@]}" -- "$pkg/src" || true)"
   out_src="$(run "$cfg" '**/*.test.{ts,tsx}' "${RULES_SRC_ONLY[@]}" -- "$pkg/src" || true)"
 
-  if ! assert_envelope "$pkg" "all" "$(( ${#RULES_ALL[@]} / 2 ))" "$out_all" || \
-    ! assert_envelope "$pkg" "source" "$(( ${#RULES_SRC_ONLY[@]} / 2 ))" "$out_src"; then
+  if ! assert_envelope "$pkg" "all" "$(( baseline_rule_count + ${#RULES_ALL[@]} / 2 ))" "$out_all" || \
+    ! assert_envelope "$pkg" "source" "$(( baseline_rule_count + ${#RULES_SRC_ONLY[@]} / 2 ))" "$out_src"; then
     fail=1
     continue
   fi

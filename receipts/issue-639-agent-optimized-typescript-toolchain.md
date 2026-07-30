@@ -83,6 +83,17 @@
   `packages/blueprints/automations/notion-pull/automations/notion-pull/handler.js`,
   and
   `packages/blueprints/automations/doc-filer/automations/doc-filer/handler.js`.
+- Established the compatibility-state type-aware topology in
+  `oxlint.config.ts`, `scripts/lint-types.sh`,
+  `scripts/lint-types-rules.mjs`, and `scripts/lint-types-policy.mjs`:
+  TypeScript 5.9 stays authoritative, all 59 pinned type-aware-only engine
+  rules are mechanically forced off in the ordinary pass, and exactly the
+  eight reviewed compatibility rules are enabled once in the dedicated pass.
+- Added `scripts/fixtures/lint-types/invalid.ts` and
+  `scripts/fixtures/lint-types/tsconfig.json`; the four formerly hollow rules
+  must each emit against that live negative fixture. Its root override disables
+  only the two ordinary equivalents whose intentional violations would
+  otherwise duplicate the type-aware fixture signal.
 
 ### Formatter sweep paths
 
@@ -614,3 +625,4 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785411767-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 5054 | 0 | 223232 | 570 | 5624 | 0.0770 | 361531 | 0 | 21462784 | 37933 | chore(lint): apply safe connector fixes (#639) |
 | codex-019fb2ae-33d-1785411915-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 11061 | 0 | 474112 | 2286 | 13347 | 0.1805 | 372592 | 0 | 21936896 | 40219 | chore(lint): remove stale suppressions (#639) |
 | codex-019fb2ae-33d-1785412101-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 26182 | 0 | 864000 | 3728 | 29910 | 0.3374 | 398774 | 0 | 22800896 | 43947 | fix(blueprints): satisfy executable handler lint (#639) |
+| codex-019fb2ae-33d-1785412814-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 99172 | 0 | 6229760 | 20535 | 119707 | 2.1134 | 497946 | 0 | 29030656 | 64482 | build(lint): enforce type-aware compatibility policy (#639) -m governance: allow |

@@ -3,6 +3,8 @@ import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
+import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
+
 // Ultracite is the reviewed policy seed; Oxlint is the only routine lint
 // command and this file is the repository's only lint configuration.
 // core + react are extended, while vitest is NOT: it applies
@@ -27,10 +29,13 @@ export default defineConfig({
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
-    // Intentionally invalid programs used to prove type-aware diagnostics.
-    "scripts/fixtures/lint-types/**",
   ]),
   rules: {
+    // Ultracite's core preset contains type-aware rules. They cannot execute
+    // with options.typeAware=false, so force the complete pinned engine
+    // surface off here; scripts/lint-types.sh admits eight rules explicitly.
+    ...Object.fromEntries(typeAwareOnlyRules.map((rule) => [rule, "off"])),
+
     // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
     // repo's profile as correctness + suspicious + perf with explicit
     // opinions, so these are pinned off rather than silently adopted. The
@@ -130,6 +135,10 @@ export default defineConfig({
     "typescript/no-inferrable-types": "off",
     "typescript/no-invalid-void-type": "off",
     "typescript/no-non-null-assertion": "off",
+    // Keep this compatibility boundary visible even though the catalog above
+    // also disables it: tsgolint removes assertions still required by
+    // TypeScript 5.9 under noUncheckedIndexedAccess and in typed mocks.
+    "typescript/no-unnecessary-type-assertion": "off",
     "typescript/parameter-properties": "off",
     "unicorn/catch-error-name": "error",
     "unicorn/consistent-existence-index-check": "off",
@@ -168,6 +177,16 @@ export default defineConfig({
     "unicorn/text-encoding-identifier-case": "off",
   },
   overrides: [
+    {
+      // This deliberate negative fixture proves the corresponding type-aware
+      // rules emit. Disable only the ordinary equivalents so the fixture
+      // remains linted by every unrelated rule.
+      files: ["scripts/fixtures/lint-types/invalid.ts"],
+      rules: {
+        "no-throw-literal": "off",
+        "prefer-promise-reject-errors": "off",
+      },
+    },
     {
       // This large ES5-style in-page store is fixture data for the visual
       // harness and is never shipped. Rewriting its syntax would add risk
