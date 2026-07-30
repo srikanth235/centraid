@@ -32,6 +32,32 @@ import { createFingerprintAsync } from "@expo/fingerprint";
 // note in app.config.ts).
 const projectRoot = path.resolve(import.meta.dirname, "..");
 
+export const NATIVE_FINGERPRINT_IGNORE_PATHS = [
+  "native-fingerprints.json",
+  // Xcode creates this nested workspace on first open/build. The committed
+  // app uses Centraid.xcworkspace; this ignored IDE metadata is absent on a
+  // clean Linux checkout and must not make the iOS ratchet host-stateful.
+  "ios/Centraid.xcodeproj/project.xcworkspace/**/*",
+  // Kotlin 2.1 writes local daemon error reports here during a native
+  // compile. They describe the machine/build attempt, not binary inputs,
+  // and Expo's defaults do not yet exclude this directory. Without this,
+  // merely running the compile gate changes the next cache key.
+  "android/.kotlin/**/*",
+  // CocoaPods reconstructs these git-ignored Iroh bindings from the tag
+  // and checksum pinned in CentraidTunnel.podspec. Hashing the downloaded
+  // products as well as that recipe makes the result depend on whether
+  // `pod install` has run, so a clean CI checkout and a built worktree
+  // disagree even though their native inputs are identical.
+  "modules/centraid-tunnel/ios/Iroh.xcframework/**/*",
+  "modules/centraid-tunnel/ios/IrohLib.swift",
+  "modules/centraid-tunnel/ios/.iroh-version",
+  // The react-native-maps pod install rewrites this one-line marker from
+  // its package default to the app's Google Maps setting. The app config
+  // and package sources remain hashed; the reconstructed marker must not
+  // make either platform's identity depend on whether CocoaPods has run.
+  "../../node_modules/react-native-maps/ios/AirMaps/RNMapsDefines.h",
+];
+
 export async function fingerprintForPlatform(platform) {
   if (platform !== "ios" && platform !== "android") {
     throw new Error(`unsupported native fingerprint platform: ${platform}`);
@@ -40,27 +66,7 @@ export async function fingerprintForPlatform(platform) {
     platforms: [platform],
     // The committed expectation is the ratchet output, not an input. Including
     // it would make every refresh self-referential and impossible to settle.
-    ignorePaths: [
-      "native-fingerprints.json",
-      // Kotlin 2.1 writes local daemon error reports here during a native
-      // compile. They describe the machine/build attempt, not binary inputs,
-      // and Expo's defaults do not yet exclude this directory. Without this,
-      // merely running the compile gate changes the next cache key.
-      "android/.kotlin/**/*",
-      // CocoaPods reconstructs these git-ignored Iroh bindings from the tag
-      // and checksum pinned in CentraidTunnel.podspec. Hashing the downloaded
-      // products as well as that recipe makes the result depend on whether
-      // `pod install` has run, so a clean CI checkout and a built worktree
-      // disagree even though their native inputs are identical.
-      "modules/centraid-tunnel/ios/Iroh.xcframework/**/*",
-      "modules/centraid-tunnel/ios/IrohLib.swift",
-      "modules/centraid-tunnel/ios/.iroh-version",
-      // The react-native-maps pod install rewrites this one-line marker from
-      // its package default to the app's Google Maps setting. The app config
-      // and package sources remain hashed; the reconstructed marker must not
-      // make either platform's identity depend on whether CocoaPods has run.
-      "../../node_modules/react-native-maps/ios/AirMaps/RNMapsDefines.h",
-    ],
+    ignorePaths: NATIVE_FINGERPRINT_IGNORE_PATHS,
   });
   // Guard against a silent empty digest becoming a constant (always-hit) key.
   if (!fingerprint.hash || fingerprint.sources.length === 0) {

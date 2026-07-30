@@ -174,7 +174,7 @@ integer margin below the latest measured `bun run coverage` run (2026-07-29):
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
-| repo-wide (`lines`) | 64.68 / — | **64** / — |
+| repo-wide (`lines`) | 63.05 / — | **62** / — |
 | `packages/vault/src/**` | 88.57 / 75.24 | **88** / **74** |
 | `packages/backup/src/**` | 90.03 / 77.63 | **90** / **74** |
 | `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |

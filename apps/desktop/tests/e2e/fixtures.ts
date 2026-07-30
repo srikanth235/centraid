@@ -80,6 +80,8 @@ export interface MockState {
   prefs: Record<string, unknown>;
   /** GET /centraid/_insights/summary */
   insights: Record<string, unknown>;
+  /** GET /centraid/_brief/daily */
+  dailyBrief: Record<string, unknown>;
   /** GET /centraid/_turn/runner-status */
   runnerStatus: Record<string, unknown>;
   /** GET /centraid/_agents/status */
@@ -151,6 +153,14 @@ function defaultState(): MockState {
     filesById: {},
     prefs: {},
     insights: {},
+    dailyBrief: {
+      date: "2026-07-29",
+      events: [],
+      tasks: [],
+      newPhotos: 0,
+      balanceMinor: 0,
+      currency: "USD",
+    },
     runnerStatus: {
       ok: true,
       kind: "local",
@@ -528,6 +538,10 @@ async function route(
   // ---- insights ----
   if (p === "/centraid/_insights/summary" && method === "GET")
     return json(res, 200, s.insights);
+
+  // ---- home daily brief ----
+  if (p === "/centraid/_brief/daily" && method === "GET")
+    return json(res, 200, s.dailyBrief);
 
   // ---- runner / agents ----
   if (p === "/centraid/_turn/runner-status" && method === "GET")

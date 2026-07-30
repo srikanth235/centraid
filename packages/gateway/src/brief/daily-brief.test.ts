@@ -40,6 +40,15 @@ describe("daily brief", () => {
       .run(uuidv7(), now, now);
     db.vault
       .prepare(
+        `INSERT INTO core_event
+           (event_id, summary, dtstart, dtend, start_tz, rrule, status,
+            recurrence_semantics, sequence, created_at, updated_at)
+         VALUES (?, 'Daily review', '2026-07-28T08:00:00.000Z', NULL, 'UTC',
+                 'FREQ=DAILY;COUNT=3', 'confirmed', 'zoned', 0, ?, ?)`
+      )
+      .run(uuidv7(), now, now);
+    db.vault
+      .prepare(
         `INSERT INTO schedule_task
            (task_id, owner_party_id, title, status, priority, due_at)
          VALUES (?, ?, 'Submit report', 'needs-action', 5,
@@ -113,7 +122,7 @@ describe("daily brief", () => {
 
     expect(brief).toMatchObject({
       date: "2026-07-29",
-      events: [{ title: "Standup" }],
+      events: [{ title: "Daily review" }, { title: "Standup" }],
       tasks: [{ title: "Submit report" }],
       newPhotos: 1,
       balanceMinor: 2000,

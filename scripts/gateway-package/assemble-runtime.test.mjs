@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   existsSync,
   mkdtempSync,
+  readFileSync,
   readlinkSync,
   realpathSync,
   rmSync,
@@ -37,6 +38,25 @@ function underOut(resolved, out) {
   const resR = realpathSync(resolved);
   return resR === outR || resR.startsWith(outR + path.sep);
 }
+
+test("gateway runtime package list closes over production workspace dependencies", () => {
+  const included = new Set(GATEWAY_WORKSPACE_PACKAGES);
+  const missing = [];
+  for (const pkg of GATEWAY_WORKSPACE_PACKAGES) {
+    const manifest = JSON.parse(
+      readFileSync(path.join(root, pkg, "package.json"), "utf8")
+    );
+    for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
+      if (typeof version !== "string" || !version.startsWith("workspace:"))
+        continue;
+      const dependencyPath = `packages/${name.replace(/^@centraid\//u, "")}`;
+      if (!included.has(dependencyPath)) {
+        missing.push(`${pkg} -> ${dependencyPath}`);
+      }
+    }
+  }
+  assert.deepEqual(missing, []);
+});
 
 test("assembleRuntime rewrites @centraid links and resolves under out only", (t) => {
   if (!canAssemble()) {

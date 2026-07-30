@@ -11,6 +11,7 @@ import {
   requiredXcodeVersion,
   versionAtLeast,
 } from "./check-xcode-minimum.mjs";
+import { NATIVE_FINGERPRINT_IGNORE_PATHS } from "./native-fingerprint.mjs";
 import {
   podVersions,
   validateFingerprints,
@@ -69,6 +70,12 @@ describe("native state guards", () => {
       "ios native fingerprint mismatch: committed committed-ios, current current-ios; review the native diff and update apps/mobile/native-fingerprints.json",
       "android native fingerprint mismatch: committed committed-android, current current-android; review the native diff and update apps/mobile/native-fingerprints.json",
     ]);
+  });
+
+  test("ignores Xcode's uncommitted nested workspace metadata", () => {
+    expect(NATIVE_FINGERPRINT_IGNORE_PATHS).toContain(
+      "ios/Centraid.xcodeproj/project.xcworkspace/**/*"
+    );
   });
 
   test("parses and compares the React Native Xcode contract", () => {

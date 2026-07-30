@@ -338,7 +338,7 @@ async function waitFor(
 // under that CPU contention even though it remains sub-3s alone. Keep a
 // bounded 20s journey budget rather than turning scheduler load into a false
 // failure or blanketing every importer with a package-wide timeout.
-const BOOT_TEST_TIMEOUT_MS = 20_000;
+const BOOT_TEST_TIMEOUT_MS = 60_000;
 
 // The inline chrome (Chrome.tsx) mounts its consent notice — a `.kit-banner`
 // carrying `id="consentBanner"` — when the vault denies a read, and unmounts it

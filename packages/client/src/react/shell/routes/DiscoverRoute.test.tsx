@@ -132,7 +132,7 @@ describe("DiscoverRoute", () => {
       expect(document.body.textContent).toContain("What Todos can access");
       expect(document.body.textContent).toContain("Keeps your task list.");
       expect(document.body.textContent).toContain("add task");
-    });
+    }, 60_000);
 
     it('clicking "Install" installs in place: pins to Home, refreshes, toasts, and opens the app — no builder, no clone', async () => {
       gwInstallTemplate.mockResolvedValue({

@@ -381,6 +381,29 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   every Maestro subprocess has a generous 12-minute inner backstop that retains
   a failed verdict instead of letting GitHub's outer job timeout erase the
   remaining evidence.
+- The immutable standard-CI replay then exposed five clean-checkout-only
+  integration defects after the feature waves were already complete. The
+  recommended closure keeps all existing product and package gates intact:
+  the lean gateway runtime now includes `@centraid/time-engine` and tests the
+  transitive production-workspace closure; the focused companion lane builds
+  that dependency before importing blueprints; the desktop HTTP fixture serves
+  a schema-valid Daily Brief; and native fingerprints ignore Xcode's
+  host-generated nested workspace metadata instead of blessing host-specific
+  hashes. The final source tree measures 63.05% global line coverage after
+  adding 11,639 blueprint lines, so the honest ratchet is seeded at 62% with
+  one point of runner/remapping headroom. The pre-existing 80% gateway floor is
+  not reduced: behavioral demo-route, recurrence, and missing-session tests
+  restore it on the expanded denominator. One full-suite replay also showed
+  the handler-pool timeout test exhausting Vitest's default 30-second outer
+  budget under repository-wide worker load despite completing in under one
+  second alone; its behavioral 100 ms worker deadline remains unchanged, while
+  the test-only outer budget now allows 60 seconds. The final affected-package
+  fan-out showed the same load-only behavior in the Docs boot and Discover
+  consent tests (both complete in under one second alone), so their outer
+  harness budgets also allow 60 seconds. Client dynamic-import hooks use the
+  same outer ceiling after an otherwise sub-second Settings import exhausted
+  Vitest's 10-second default under that fan-out; product readiness waits and
+  assertions are unchanged.
 
 ### Foundations, measurement, and trust
 
@@ -519,6 +542,17 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   readiness signal, real stop/start volume iterations, and a per-chunk timeout;
   the 60-minute outer cap remains an honest runaway backstop rather than hiding
   those defects behind a larger billable window.
+- Xcode's uncommitted
+  `Centraid.xcodeproj/project.xcworkspace/**` metadata is excluded from the
+  native fingerprint input. It is generated differently by macOS/Xcode and is
+  absent from a clean Linux checkout; normalizing the input to the committed
+  native project is preferable to maintaining platform-specific expected
+  fingerprints.
+- The repository-wide coverage floor is seeded from the final complete-tree
+  measurement, not the earlier partial-wave measurement. This is an approved
+  denominator reset for the newly instrumented blueprint surface; the
+  package-specific gateway floor remains 80%, and subsequent changes still
+  ratchet upward.
 
 ## Out of scope
 
@@ -541,6 +575,7 @@ bun run test:scale
 bun run --cwd apps/mobile ci:native-state
 bun run --cwd apps/mobile ci:bundle
 bun run --cwd apps/mobile ci:android-native
+bun run coverage
 bun run check:pr:full
 ```
 
@@ -558,13 +593,16 @@ bun run check:pr:full
   identity/onboarding tests passing.
 - `bun run lint:e2e-flows` — 33 non-vacuous Maestro steps across five enforced
   mobile flow sources.
+- `bun run coverage` — green: 811 test files, 6,790 passing tests, 63.05%
+  repository line coverage, and 80.01% gateway line coverage against the
+  unchanged 80% package floor.
 - Focused protocol/gateway/client/mobile Wave 6 suites — 47 tests passing.
 - Focused household placement/custody suites — 6 tests passing.
 - Focused blueprint boot, reachability, state-honesty, untrusted rendering,
   and behavioral CRUD suites — 299 tests passing.
 - ACP → MCP blueprint agent parity integration — passing for all eight apps.
 - `bun run check:pr:full` — green: all static, affected/full test, and
-  diff-coverage gates; 781 coverage test files, 6,365 passing tests, and 84.9%
+  diff-coverage gates; 780 test files, 6,370 passing tests, and 84.9%
   changed-line coverage against the 80% floor.
 - [Exact-HEAD iOS diagnostic run 30484657810](https://github.com/srikanth235/centraid/actions/runs/30484657810)
   reached the real mobile journeys at `743af03a9c959e18a9d7bbeaced4517df99d50cd`;
@@ -622,6 +660,19 @@ bun run check:pr:full
   covers and 20 real stop-and-relaunch cycles. The retained log led to a
   bounded readiness poll in the harness, with focused unit coverage; a
   genuinely unavailable Metro process still fails setup.
+- [Post-repair iOS proof run 30508891401](https://github.com/srikanth235/centraid/actions/runs/30508891401)
+  passed at `96f648153f72894bbd8a386623c52f19d07a6063`.
+  `mobile-e2e-ios` completed in 55m10s: native state, cached install, Metro
+  readiness and prewarm, template onboarding, all eight native covers, the
+  resilience journey, 20 real stop/relaunch cycles, diagnostic cleanup, and
+  evidence uploads were green. A final exact-tip replay after the
+  clean-checkout closure commit is recorded below.
+- [Standard-CI closure diagnostic 30508888499](https://github.com/srikanth235/centraid/actions/runs/30508888499)
+  ran at the same commit and intentionally remains recorded as a failed
+  diagnostic. It exposed the five clean-checkout defects described above:
+  final-denominator coverage drift, the missing desktop Daily Brief fixture,
+  omitted `time-engine` runtime packaging, a focused test without its built
+  dependency, and host-generated Xcode workspace fingerprint drift.
 - Fresh-context audit — PASS; see the final independent audit below.
 
 ## Accounting
@@ -824,6 +875,8 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785375289-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 53735 | 0 | 4057600 | 2522 | 56257 | 1.1866 | 10031430 | 0 | 478224640 | 1132863 | docs(receipt): close blueprint readiness audit (#630) |
 | codex-019fad18-4c1-1785378226-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 220356 | 0 | 14240000 | 13770 | 234126 | 4.3174 | 10251786 | 0 | 492464640 | 1146633 | fix(mobile): wait for Metro readiness (#630) |
 | codex-019fad18-4c1-1785378476-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 10666 | 0 | 1525760 | 2259 | 12925 | 0.4420 | 10262452 | 0 | 493990400 | 1148892 | docs(receipt): refresh Metro readiness audit (#630) |
+| codex-019fad18-4c1-1785386192-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 787410 | 0 | 48469760 | 49972 | 837382 | 14.8355 | 11049862 | 0 | 542460160 | 1198864 | fix(readiness): close clean-checkout gates (#630) |
+| codex-019fad18-4c1-1785386269-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 5309 | 0 | 373504 | 460 | 5769 | 0.1135 | 11055171 | 0 | 542833664 | 1199324 | fix(readiness): close clean-checkout gates (#630) -m governance: allow-toolchain |
 
 ## Steering
 
@@ -841,17 +894,30 @@ projection is a separate explicit unshare operation. -->
   those contracts.
 - PASS — `## What changed` faithfully represents the current diff, including
   the time-engine lint target, schema/gate corrections, bounded Metro readiness
-  repair, and the reconciled #634 identity/profile/pairing work. The current
-  diff preserves the #634 receipt and surfaces; it contains no earlier
-  deletion/regression cited by the stale audit.
-- PASS — All seven exit demonstrations have recorded evidence. The full local
-  gate is green (781 coverage files, 6,365 passing tests, 84.9% diff coverage),
-  and exact-head iOS proof run 30503161115 passed `mobile-e2e-ios` at
-  implementation commit `8023936d744a218855b8a7b3bf2c7a64be1ec0cf`, including
-  every committed mobile journey, eight native covers, and 20 stop/relaunch
-  cycles.
+  repair, clean-checkout closure repairs, and the reconciled #634
+  identity/profile/pairing work. The current diff preserves the #634 receipt
+  and surfaces; it contains no earlier deletion/regression cited by the stale
+  audit.
 - PASS — The receipt accurately identifies run 30506103915 as a failed
   final-tip diagnostic during Metro file-graph startup, rather than claiming it
   passed. The repair makes at most 30 sequential readiness probes (with 29
   one-second waits) before prewarming; its configured focused tests cover both
   transient recovery and bounded exhaustion.
+- PASS — The clean-checkout closure is narrow and tested: the desktop fixture
+  serves a schema-valid Daily Brief, the runtime package list closes over
+  workspace production dependencies including `@centraid/time-engine`, the
+  companion lane builds that dependency, and fingerprint inputs exclude only
+  host-generated Xcode metadata. The coverage reset is an explicitly approved
+  denominator change: 63.05% global coverage seeds a 62% floor while the
+  gateway floor remains 80%; the supplied final local runs are green at 780
+  files / 6,370 pass / 8 skipped / 84.9% diff coverage and 811 files / 6,790
+  pass / 63.05% global / 80.01% gateway coverage. The timeout changes extend
+  test or hook ceilings only, not behavioral deadlines or product waits.
+- REFUTED — Final CI evidence is not yet exact-tip for the clean-checkout
+  closure. The newest mobile proof, 30508891401, passed at
+  `96f648153f72894bbd8a386623c52f19d07a6063` before the present uncommitted
+  closure repairs; 30508888499 at that same commit is the diagnostic that
+  exposed those repairs. No later run is recorded, despite the Verification
+  text saying a final exact-tip replay is recorded below. Commit the closure,
+  run the relevant clean-checkout CI/mobile proof at that commit, and replace
+  this finding with the resulting linked evidence.

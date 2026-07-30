@@ -21,5 +21,9 @@ export default jsdomProject({
   test: {
     name: "@centraid/client",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    // Full affected runs execute the client beside five dependency-heavy
+    // packages. Dynamic-import setup may be event-loop-starved even though it
+    // completes in under a second alone; assertions keep their own deadlines.
+    hookTimeout: 60_000,
   },
 });
