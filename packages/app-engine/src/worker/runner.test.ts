@@ -9,8 +9,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 const RUNNER = fileURLToPath(new URL("runner.ts", import.meta.url));
 

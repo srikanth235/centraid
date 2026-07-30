@@ -11,8 +11,9 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { openStorageConnectionStore } from "../backup/storage-connections.js";

@@ -1,6 +1,6 @@
 name: Set up the repo toolchain
 description: >-
-  Pin Bun from package.json `packageManager`, install dependencies, and warm the Turbo/Cargo build caches — the prologue every job in this repo shares.
+  Pin Node from `.node-version` and Bun from package.json `packageManager`, install dependencies, and warm the Turbo/Cargo build caches — the prologue every job in this repo shares.
 
 # #557 replaced 35 hand-copied `bun-version:` literals with a Bun-only version
 # of this action. The prologue around it stayed copied: 33 duplicate
@@ -92,6 +92,10 @@ runs:
     - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
       with:
         bun-version: ${{ steps.resolve.outputs.version }}
+
+    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version-file: ${{ inputs.working-directory }}/.node-version
 
     - name: Turbo remote cache (GitHub-backed, granular)
       if: inputs.turbo-cache == 'true'

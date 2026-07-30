@@ -1,11 +1,12 @@
 // CAS inventory collector unit tests (issue #545 B7) — mocked storage connections.
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import {
   bootstrapVault,
   openVaultDb,
   updateBlobStoreSettings,
 } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { collectCasInventory } from "./backup-cas-inventory.js";
 

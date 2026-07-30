@@ -1,5 +1,6 @@
-import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { describe, afterEach, expect, test } from "vitest";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import { hashControlToken } from "../serve/web-session-store.js";
 import {

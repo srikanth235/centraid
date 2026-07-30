@@ -298,7 +298,10 @@ function collectSources(root: string, rel = ""): string[] {
 /** Lets a test settle an app's un-awaited `refresh()` and its timers. Use this
  * only where the assertion needs a QUIET window (proving something did NOT
  * happen, or did not happen twice); for "X must appear", use waitFor. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
+const settle = () =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 80);
+  });
 
 /**
  * Polls until `predicate` holds, then returns; throws naming `what` on timeout.
@@ -325,7 +328,9 @@ async function waitFor(
     if (predicate()) return;
     if (Date.now() > deadline)
       throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
     return waitNext();
   };
   return waitNext();
@@ -689,7 +694,9 @@ export function describeAppBoot(
               value: true,
             });
             emitAgendaIntentState("parked");
-            await new Promise((resolve) => setTimeout(resolve, 250));
+            await new Promise((resolve) => {
+              setTimeout(resolve, 250);
+            });
             expect(
               document.querySelector(".kit-pending-chip")?.textContent
             ).toBe("cancel asked");

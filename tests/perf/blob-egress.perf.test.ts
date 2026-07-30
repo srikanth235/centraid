@@ -2,9 +2,10 @@ import { fork } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 
+import { describe, expect, onTestFinished, test } from "vitest";
+
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, onTestFinished, test } from "vitest";
 
 import { openVaultRegistry } from "../../packages/gateway/src/serve/vault-registry.js";
 

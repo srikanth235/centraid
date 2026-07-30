@@ -22,6 +22,8 @@ import {
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
 import {
   FsObjectStore,
   replayWalSegments,
@@ -33,7 +35,6 @@ import {
 } from "@centraid/backup";
 import type { WalDbName } from "@centraid/backup";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "./bootstrap.js";
 import { openVaultDb } from "./db.js";
@@ -757,7 +758,9 @@ describe("wal-shipper-detectors", () => {
       { db: "vault", reason: "first-run" },
     ]);
     const bases = shipper.pendingBases();
-    expect(bases.map((b) => b.db).sort()).toStrictEqual(["journal", "vault"]);
+    expect(
+      bases.map((b) => b.db).sort((a, b) => a.localeCompare(b))
+    ).toStrictEqual(["journal", "vault"]);
     for (const base of bases) {
       expect(existsSync(base.file)).toBe(true);
       const recomputed = createHash("sha256")
@@ -779,7 +782,7 @@ describe("wal-shipper-detectors", () => {
       r.breaks
         .filter((b) => b.reason === "base-cadence")
         .map((b) => b.db)
-        .sort()
+        .sort((a, b) => a.localeCompare(b))
     ).toStrictEqual(["journal", "vault"]);
     expect(shipper.status().dbs.vault!.generation).not.toBe(genBefore);
   });
@@ -1075,7 +1078,7 @@ describe("wal-shipper-detectors", () => {
       shipper
         .currentBases()
         .map((b) => b.db)
-        .sort()
+        .sort((a, b) => a.localeCompare(b))
     ).toStrictEqual(["journal", "vault"]);
     expect(shipper.status().dbs.vault!.basePending).toBe(false);
 
@@ -1152,7 +1155,7 @@ describe("wal-shipper-detectors", () => {
       r.breaks
         .filter((b) => b.reason === "local-budget")
         .map((b) => b.db)
-        .sort()
+        .sort((a, b) => a.localeCompare(b))
     ).toStrictEqual(["journal", "vault"]);
     expect(shipper.status().dbs.vault!.generation).not.toBe(genBefore);
     expect(shipper.status().dbs.vault!.basePending).toBe(true);

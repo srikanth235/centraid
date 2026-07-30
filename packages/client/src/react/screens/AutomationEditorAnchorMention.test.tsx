@@ -92,7 +92,9 @@ describe("AutomationEditorAnchorMention", () => {
       instructions.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 150);
+      });
     });
     await act(async () => {
       (container.querySelector(".mentionOption") as HTMLButtonElement).click();

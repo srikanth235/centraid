@@ -56,6 +56,7 @@ export default function ConnectFlowModal({
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Plug", 14) }}
           />
           <h2 className={spaceModalStyles.profModalTitle}>Add gateway</h2>
@@ -65,6 +66,7 @@ export default function ConnectFlowModal({
             title="Close"
             aria-label="Close"
             onClick={onCancel}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>

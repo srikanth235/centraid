@@ -2,13 +2,14 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
 /**
  * Authz matrix smoke (#496 G1): table-driven role/session × critical routes
  * against a real `serve()` daemon. Complements the denser per-route suites
  * with one compact cross-surface table the matrix can own.
  */
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.js";
 import { serve } from "./serve.js";

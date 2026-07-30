@@ -8,7 +8,7 @@ Centraid is often worked by several coding agents in parallel. These norms prote
 
 - Prefer **single-file** / package-filtered tests: `bunx vitest run path/to/file.test.ts` via repo conventions, or `turbo run test --filter=@centraid/<pkg>`.
 - Use **bail** on first failure for local loops.
-- Full monorepo verification is **CI** (`bun run check:pr` before *your* push is still required for the agent who owns the PR — not every sibling agent on every save).
+- Full monorepo verification is **CI** (`bun run check:pr` before _your_ push is still required for the agent who owns the PR — not every sibling agent on every save).
 
 ### Trust another agent's reported green
 

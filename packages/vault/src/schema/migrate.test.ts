@@ -1,8 +1,9 @@
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";

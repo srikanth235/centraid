@@ -11,8 +11,9 @@ import { spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 // This test lives at src/cli/; the built CLI is at <pkg>/dist/cli/ (rootDir
 // src mirrors into dist). Two levels up from src/cli reaches the package root.

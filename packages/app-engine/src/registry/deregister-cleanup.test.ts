@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { RegistryEntry } from "../types.ts";
 import { cleanupDeregisteredApp } from "./deregister-cleanup.ts";

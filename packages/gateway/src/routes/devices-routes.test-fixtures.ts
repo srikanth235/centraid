@@ -10,9 +10,10 @@ import { promises as fs } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
+import { vi } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { vi } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
@@ -71,7 +72,9 @@ export async function harness(
   });
   const server = http.createServer((req, res) => void handler(req, res));
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address() as AddressInfo;
   return {
     base: `http://127.0.0.1:${port}`,

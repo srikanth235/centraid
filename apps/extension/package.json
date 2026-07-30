@@ -6,8 +6,8 @@
   "scripts": {
     "build": "bun run scripts/build.mjs",
     "package": "bun run build && bun run scripts/package.mjs",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@centraid/protocol": "workspace:*",

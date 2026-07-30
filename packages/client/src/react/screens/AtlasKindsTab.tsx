@@ -87,7 +87,6 @@ function Sparkline({ counts }: { counts: number[] }): JSX.Element {
         const bh = c === 0 ? 0.75 : Math.max(1.5, (c / max) * h);
         return (
           <rect
-            // eslint-disable-next-line react/no-array-index-key -- (#441) fixed-length day axis; index IS the day
             key={i}
             x={i * (bw + gap)}
             y={h - bh}

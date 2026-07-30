@@ -1,10 +1,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { WAL_DB_FILES, wrapRecoveryKit } from "@centraid/backup";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";

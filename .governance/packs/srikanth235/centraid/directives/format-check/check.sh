@@ -41,7 +41,7 @@ while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     [[ -f "$file" ]] || continue
     case "$file" in
-    *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.mts | *.cts | *.json | *.jsonc | *.yml | *.yaml | *.css)
+    *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.mts | *.cts | *.json | *.jsonc | *.yml | *.yaml | *.css | *.scss | *.less | *.md | *.mdx | *.html | *.vue | *.svelte | *.astro | *.graphql | *.gql)
         staged+=("$file")
         ;;
     esac
@@ -52,18 +52,23 @@ if [[ ${#staged[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Mirror CI exactly: `bun run format:check` is `oxfmt -c oxfmt.config.mjs`.
+# Mirror CI exactly: `bun run format:check` names the one root config and
+# disables nested discovery.
 # Without the config oxfmt falls back to defaults and flags files that the
 # repo's own config considers formatted, so the gate must pass it too.
-config_args=()
-if [[ -f "$REPO_ROOT/oxfmt.config.mjs" ]]; then
-    config_args=(-c "$REPO_ROOT/oxfmt.config.mjs")
+if [[ ! -f "$REPO_ROOT/oxfmt.config.ts" ]]; then
+    violation "oxfmt.config.ts - root formatter configuration is missing"
+    directive_end
+    exit $?
 fi
+config_args=(-c "$REPO_ROOT/oxfmt.config.ts" --disable-nested-config)
 
 # oxfmt --check prints one offending path per line, then a summary. Match its
 # output back against the staged list so a path we never staged can't be
 # reported, and so the summary lines are ignored.
-output="$("$OXFMT" "${config_args[@]}" --check "${staged[@]}" 2>&1 || true)"
+output="$("$OXFMT" "${config_args[@]}" --check "${staged[@]}" 2>&1)"
+format_status=$?
+matched_violation=0
 while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     # Strip oxfmt's trailing timing annotation, e.g. "path/to/file.ts (12ms)".
@@ -71,9 +76,14 @@ while IFS= read -r line; do
     for file in "${staged[@]}"; do
         if [[ "$candidate" == "$file" ]]; then
             violation "$file - not formatted (run: bun run format)"
+            matched_violation=1
             break
         fi
     done
 done <<<"$output"
+
+if [[ $format_status -ne 0 && $matched_violation -eq 0 ]]; then
+    violation "oxfmt failed before reporting a staged path (exit $format_status): ${output//$'\n'/ }"
+fi
 
 directive_end

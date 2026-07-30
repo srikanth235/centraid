@@ -1,8 +1,4 @@
-import { parseWikiLinks } from "@centraid/blueprints/apps/notes/commonmark";
-// governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps
-// its CommonMark draft, lifecycle actions, wikilink powerbox, and backlinks in
-// one focus-contained editor so write outcomes cannot be silently orphaned.
-import type { ReplicaValue } from "@centraid/client/replica/native";
+/*! governance: allow-repo-hygiene file-size-limit — the native Notes cover keeps its CommonMark draft, lifecycle actions, wikilink powerbox, and backlinks in one focus-contained editor so write outcomes cannot be silently orphaned. */
 import { Feather } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 import React, { useEffect, useMemo, useState } from "react";
@@ -17,6 +13,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { parseWikiLinks } from "@centraid/blueprints/apps/notes/commonmark";
+import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";

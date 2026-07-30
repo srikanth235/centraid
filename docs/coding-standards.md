@@ -45,7 +45,6 @@ const run = POLICY[kind];
 run(input);
 ```
 
-
 Scattered branches for the same axis are how behavior drifts between call sites.
 
 ## Filename smells: `-utils` and `-manager`
@@ -70,6 +69,7 @@ User-visible or IPC/HTTP-facing work that can fail must expose failure to the UI
 - Handlers use `ctx.vault` / `ctx.*` — no provider SDKs in handler files (constitution).
 - Import package **barrels**, not deep internals (governance `no-deep-imports`).
 - Tools and checks: **repo scripts only** — `bun run …` / workspace scripts, never raw `npx <tool>` so the pinned toolchain always applies (issue #468 B2).
+- Quality ownership and safe-fix policy live in [toolchain.md](toolchain.md). Fix code before suppressing a diagnostic; never weaken policy only to make a gate green.
 
 ## Store atomicity
 

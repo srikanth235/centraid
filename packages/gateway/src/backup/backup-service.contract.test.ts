@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import {
   openLocalBackupProvider,
   wrapRecoveryKit,
@@ -17,7 +19,6 @@ import {
   sealKeyFileFor,
 } from "@centraid/vault";
 import type { BackupPolicyPatch } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";

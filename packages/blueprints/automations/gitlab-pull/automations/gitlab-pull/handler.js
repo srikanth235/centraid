@@ -10,7 +10,7 @@ const AUTH = { "PRIVATE-TOKEN": "{{connection:api_key}}" };
 const PAGE_SIZE = 100;
 
 async function api(ctx, path, opts = {}) {
-  const headers = { ...AUTH, ...(opts.headers || {}) };
+  const headers = { ...AUTH, ...opts.headers };
   const res = await ctx.fetch({
     url: path.startsWith("http") ? path : `${API}${path}`,
     headers,

@@ -15,7 +15,7 @@ SQLite has no namespaces, so logical `core.party` is physical `core_party`; `res
 
 1. **Identity** — callers authenticate as rows (`consent.app`, `agent.agent`, `consent.device`); unknown callers are dropped at transport, no receipt.
 2. **Consent** — active grant, scope covers schema+verb, row filters, field masks, purpose policy, command risk vs `risk_ceiling`. A deny is a receipted outcome, not an exception.
-3. **Contract** — JSON-Schema input validation, preconditions evaluated as real queries and recorded as `invocation_check` rows *before* anything mutates, `agent.judgment` consulted as constraints.
+3. **Contract** — JSON-Schema input validation, preconditions evaluated as real queries and recorded as `invocation_check` rows _before_ anything mutates, `agent.judgment` consulted as constraints.
 4. **Execution** — journal invocation → vault rows write order, idempotent replay off caller invocation ids, postconditions verified with rollback on failure.
 5. **Evidence** — receipt per read and command (allowed or denied), provenance per write, evidence + explanation rows.
 
@@ -46,18 +46,27 @@ Later packs extend the same contract to the rest of the projection band: **tasks
 ## Usage
 
 ```ts
-import * as vault from '@centraid/vault';
+import * as vault from "@centraid/vault";
 
-const db = vault.openVaultDb({ dir: '/path/to/vault' }); // omit dir for in-memory
-const boot = vault.bootstrapVault(db, { ownerName: 'Priya' });
+const db = vault.openVaultDb({ dir: "/path/to/vault" }); // omit dir for in-memory
+const boot = vault.bootstrapVault(db, { ownerName: "Priya" });
 const gw = vault.createGateway(db);
 vault.registerScheduleCommands(gw);
 
-const owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey } as const;
+const owner = {
+  kind: "device",
+  deviceId: boot.deviceId,
+  deviceKey: boot.deviceKey,
+} as const;
 const outcome = gw.invoke(owner, {
-  command: 'schedule.propose_event',
-  input: { summary: 'Standup', dtstart: '2026-07-03T09:00:00Z', dtend: '2026-07-03T09:15:00Z', calendar_id },
-  purpose: 'dpv:ServiceProvision',
+  command: "schedule.propose_event",
+  input: {
+    summary: "Standup",
+    dtstart: "2026-07-03T09:00:00Z",
+    dtend: "2026-07-03T09:15:00Z",
+    calendar_id,
+  },
+  purpose: "dpv:ServiceProvision",
 });
 ```
 

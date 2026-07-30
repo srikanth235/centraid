@@ -41,7 +41,7 @@ const FILING_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
     entity: "core.content_derivative",
@@ -147,4 +147,4 @@ export default async ({ ctx, log }) => {
         : "nothing new needed filing",
     output: { proposed },
   };
-};
+}

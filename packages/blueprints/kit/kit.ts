@@ -649,7 +649,11 @@ export function fileToDataUri(file: File): Promise<string> {
     r.addEventListener("load", () => resolve(String(r.result)), {
       once: true,
     });
-    r.addEventListener("error", () => reject(r.error), { once: true });
+    r.addEventListener(
+      "error",
+      () => reject(r.error ?? new Error("Unable to read file")),
+      { once: true }
+    );
     r.readAsDataURL(file);
   });
 }
@@ -1440,7 +1444,7 @@ export function wireThemeToggle(
       // iframe session, and the chip should never show stale consent state.
       refreshGrantChip(ov.querySelector("[data-kit-grant]"));
       maybeAutoLoadStoredConversation();
-      if (modelPicker) modelPicker.load();
+      if (modelPicker) void modelPicker.load();
       setTimeout(() => {
         if (input) input.focus();
       }, 60);
@@ -1957,7 +1961,7 @@ export function wireThemeToggle(
 
     function loadHistoryList() {
       historyNote("Loading…");
-      fetchJson(conversationsBase()).then((r) => {
+      void fetchJson(conversationsBase()).then((r) => {
         if (!r.ok) {
           historyNote("Couldn't load past conversations.");
           return;
@@ -2011,7 +2015,7 @@ export function wireThemeToggle(
 
     function openConversation(id) {
       historyNote("Loading…");
-      fetchJson(conversationPath(appId() || "", id)).then((r) => {
+      void fetchJson(conversationPath(appId() || "", id)).then((r) => {
         if (!r.ok) {
           if (r.status === 404) {
             loadHistoryList(); // a stale row — refresh the list in place
@@ -2027,15 +2031,15 @@ export function wireThemeToggle(
     }
 
     function deleteConversationRow(id) {
-      fetch(conversationPath(appId() || "", id), { method: "DELETE" }).then(
-        () => {
-          if (session.get() === id) {
-            session.clear();
-            resetLogToIntro();
-          }
-          loadHistoryList();
+      void fetch(conversationPath(appId() || "", id), {
+        method: "DELETE",
+      }).then(() => {
+        if (session.get() === id) {
+          session.clear();
+          resetLogToIntro();
         }
-      );
+        loadHistoryList();
+      });
     }
 
     historyBtn.addEventListener("click", () => {
@@ -2074,7 +2078,7 @@ export function wireThemeToggle(
       // "empty" == still just the intro bubble — a fresh page load, not a
       // conversation this panel has already rendered this session.
       if (!id || log.children.length > 1) return;
-      fetchJson(conversationPath(appId() || "", id)).then((r) => {
+      void fetchJson(conversationPath(appId() || "", id)).then((r) => {
         if (!r.ok) {
           if (r.status === 404) session.clear(); // stale id — a fresh vault, a restart
           return;
@@ -2370,7 +2374,7 @@ export function wireThemeToggle(
           case "tool.result": {
             const o = outcomeOf(ev.result);
             if (o && o.status === "parked" && o.invocationId)
-              renderParked(o.invocationId);
+              void renderParked(o.invocationId);
             else if (o && o.status === "denied") {
               say(
                 "The vault denied that write" +
@@ -2466,7 +2470,7 @@ export function wireThemeToggle(
           return consumeSse(res.body, handleEvent, { signal });
         });
       }
-      ensureConversationId()
+      void ensureConversationId()
         .then((id) => {
           return runTurn(id, false);
         })
@@ -3004,7 +3008,7 @@ export function attachMentionPopover(
       return;
     }
     if (pop && gesture.at === atIndex) renderList();
-    else open(gesture);
+    else void open(gesture);
   }
 
   function onKeydown(e) {

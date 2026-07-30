@@ -171,7 +171,8 @@ export function makeMultiplexReplicaRouteHandler(
             settled = true;
             resolve();
           };
-          if (signaled) return settle();
+          if (signaled) settle();
+          if (signaled) return;
           const timer = setTimeout(settle, heartbeatMs);
           timer.unref?.();
           wake = () => {

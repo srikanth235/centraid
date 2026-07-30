@@ -1,3 +1,7 @@
+// Proves SqliteIntentStore matches the durable-outbox spec by running the same
+// conformance corpus against it and the reference MemoryIntentStore.
+import { describe, expect, test } from "vitest";
+
 import {
   MemoryIntentStore,
   ReplicaProtocolError,
@@ -6,9 +10,6 @@ import type {
   IntentRecordStore,
   NewStoredIntent,
 } from "@centraid/client/replica/native";
-// Proves SqliteIntentStore matches the durable-outbox spec by running the same
-// conformance corpus against it and the reference MemoryIntentStore.
-import { describe, expect, test } from "vitest";
 
 import { NodeSqliteDriver } from "./node-sqlite-driver";
 import { SqliteIntentStore } from "./sqlite-intent-store";

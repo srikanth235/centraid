@@ -9,7 +9,7 @@
  * surfaced run, not a mutation.
  */
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const matches = Array.isArray(ctx.input?.rows) ? ctx.input.rows : [];
   const upcoming = matches
     .filter((row) => typeof row.dtstart === "string")
@@ -29,4 +29,4 @@ export default async ({ ctx, log }) => {
         : `${upcoming.length} deadlines in the next two weeks — first: ${lead.summary} on ${lead.due}`,
     output: { upcoming },
   };
-};
+}

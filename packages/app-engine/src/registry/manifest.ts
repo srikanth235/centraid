@@ -22,7 +22,6 @@
  */
 
 import type { ValidateFunction } from "ajv";
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Ajv2020 is both value (constructor) and type (instance). (#247)
 import { Ajv2020 } from "ajv/dist/2020.js";
 
 /** Current manifest schema version. Bump on any incompatible field change. */

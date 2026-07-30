@@ -63,9 +63,9 @@ function startDemoGateway() {
       '<html><body>hello from the desktop<script type="module" src="app.js"></script></body></html>'
     );
   });
-  return new Promise((resolve) =>
-    server.listen(0, "127.0.0.1", () => resolve(server))
-  );
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => resolve(server));
+  });
 }
 
 async function serve() {

@@ -395,12 +395,16 @@ const tMaterialize = performance.now();
     const sealed = await store.get(`chunks/${id}`);
     const plain = decrypt(dataKey, sealed);
     if (!out.write(Buffer.from(plain)))
-      await new Promise((resolve) => out.once("drain", resolve));
+      await new Promise((resolve) => {
+        out.once("drain", resolve);
+      });
     await store.delete(`chunks/${id}`); // remote store => no local footprint
     return materializeNextChunk(index + 1);
   };
   await materializeNextChunk(0);
-  await new Promise((resolve) => out.end(resolve));
+  await new Promise((resolve) => {
+    out.end(resolve);
+  });
 }
 const materializeSecs = secs(tMaterialize);
 mark("after base materialization");

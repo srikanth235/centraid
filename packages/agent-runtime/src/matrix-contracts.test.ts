@@ -1,9 +1,10 @@
-import { RUNNER_KINDS } from "@centraid/app-engine";
 /**
  * Matrix cell agent-runtime.contracts (#535 coverable-today).
  * Registry shape is the public contract every runner kind must satisfy.
  */
 import { describe, expect, test } from "vitest";
+
+import { RUNNER_KINDS } from "@centraid/app-engine";
 
 import { RUNNER_BACKENDS, getRunnerBackend } from "./registry.ts";
 
@@ -29,7 +30,7 @@ describe("matrix-contracts", () => {
 
   test("unknown kind is not silently present in the registry table", () => {
     expect(Object.keys(RUNNER_BACKENDS).sort()).toStrictEqual(
-      [...RUNNER_KINDS].sort()
+      [...RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
     );
   });
 });

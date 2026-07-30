@@ -2,9 +2,10 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive availability-probe contract shares executable fixtures and cache timing seams
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { FAKE_AGENT } from "./backends/acp/test-fixtures.js";
 import { writeCatalogEntry } from "./models/catalog.ts";

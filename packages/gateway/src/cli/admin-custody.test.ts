@@ -21,13 +21,14 @@
 import { promises as fs, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   KEY_STORE_ENVELOPE_MAGIC,
   listReplicaIntentOutcomes,
   recordReplicaIntentOutcome,
 } from "@centraid/vault";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { openVaultRegistry } from "../serve/vault-registry.ts";
 import { commandDevices } from "./device-admin.ts";

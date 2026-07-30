@@ -25,12 +25,12 @@
     "access": "public"
   },
   "scripts": {
-    "build:manifest": "node scripts/build-manifest.mjs",
     "build": "bun run build:manifest && tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit && bun run typecheck:apps",
-    "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit",
+    "build:manifest": "node scripts/build-manifest.mjs",
+    "clean": "rm -rf dist",
     "test": "vitest run",
-    "clean": "rm -rf dist"
+    "typecheck": "tsc -p tsconfig.test.json --noEmit && bun run typecheck:apps",
+    "typecheck:apps": "tsc -p tsconfig.apps.json --noEmit"
   },
   "dependencies": {
     "@centraid/blob-format": "workspace:*",

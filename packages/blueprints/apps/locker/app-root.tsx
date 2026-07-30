@@ -479,7 +479,6 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       stateRef.current.narrow = isNarrow;
       bump();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pre-paint seed, refs stable (#505)
   }, []);
   // Enable the drawer slide transition only after the first painted frame, so
   // the mount-time narrow snap above is instant and user open/close still

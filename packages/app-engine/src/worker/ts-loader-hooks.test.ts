@@ -6,8 +6,9 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, it } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { load, resolve } from "./ts-loader-hooks.js";
 

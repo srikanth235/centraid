@@ -1,5 +1,6 @@
-import { fc } from "@centraid/test-kit/fast-check";
 import { assert, describe, expect, test } from "vitest";
+
+import { fc } from "@centraid/test-kit/fast-check";
 
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,

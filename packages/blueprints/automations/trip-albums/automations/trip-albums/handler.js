@@ -47,7 +47,7 @@ function tripName(startIso, endIso) {
   return `Trip · ${sm} ${s.getUTCDate()} – ${em} ${e.getUTCDate()}, ${year}`;
 }
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const read = await ctx.vault.read({
     entity: "media.media_asset",
     where: [
@@ -112,4 +112,4 @@ export default async ({ ctx, log }) => {
     summary: `proposed ${rows.length} trip album(s) — awaiting your review`,
     output: { trips: rows.length },
   };
-};
+}

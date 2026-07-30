@@ -6,9 +6,10 @@ import crypto from "node:crypto";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { sealKeyFileFor } from "@centraid/vault";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { commandKey } from "./key-admin.ts";
 import { daemonLayoutFor } from "./paths.ts";

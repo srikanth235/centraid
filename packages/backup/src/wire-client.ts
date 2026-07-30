@@ -92,7 +92,9 @@ interface ErrorEnvelope {
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 /** Parse a `Retry-After` header — integer seconds or an HTTP-date — into ms. */
 function retryAfterMs(header: string | null): number | undefined {

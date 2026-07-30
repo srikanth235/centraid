@@ -11,9 +11,10 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
 import * as automation from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { writeFileMap } from "../routes/route-helpers.js";
 import type { WorktreeStore } from "../worktree-store/index.js";

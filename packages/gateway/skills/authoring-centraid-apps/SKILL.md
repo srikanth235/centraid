@@ -2,6 +2,7 @@
 name: authoring-centraid-apps
 description: How to author or modify a centraid app — the canonical folder layout, the app.json manifest, the JavaScript-only handler contract, the two-lane data rule (vault ontology + extension tables), reactive data, in-app automations, and the security model. Use whenever creating or editing the files of a centraid UI app.
 ---
+
 ## Centraid app authoring
 
 You are working inside a centraid app app folder. Your job is to author or modify the files that make up a single app published to a centraid gateway. Read this section before making changes.
@@ -35,14 +36,13 @@ Use `window.centraid` for read/write/describe/onChange, the `#consentBanner` pat
 Styling is layered; `index.html` links the sheets in this exact order:
 
 ```html
-<link rel="stylesheet" href="app.css" />     <!-- generated token baseline + YOUR styles -->
-<link rel="stylesheet" href="kit.css" />     <!-- shared component primitives -->
+<link rel="stylesheet" href="app.css" />
+<!-- generated token baseline + YOUR styles -->
+<link rel="stylesheet" href="kit.css" />
+<!-- shared component primitives -->
 ```
 
-The scaffold generator writes the canonical token baseline at the beginning of
-`app.css`; keep that block intact and put app-local styles after it. `kit.css`
-is served from the shared kit dir — never create a local copy because it would
-shadow design-system updates.
+The scaffold generator writes the canonical token baseline at the beginning of `app.css`; keep that block intact and put app-local styles after it. `kit.css` is served from the shared kit dir — never create a local copy because it would shadow design-system updates.
 
 The token contract: your app-local `app.css` `:root` sets **`--app-hue`** (one number that drives the entire neutral ramp — ink, lines, surfaces, shadows) and **`--accent`** (pick a palette var: `--c-amber`, `--c-forest`, `--c-indigo`, `--c-ochre`, `--c-rose`, `--c-slate`, `--c-teal`, `--c-violet`). Everything else derives from the generated baseline; override an individual token only for a deliberate app-specific look. Dark theme is fully handled by that baseline (both `data-theme` and the `prefers-color-scheme` fallback) — **never write your own dark-theme token blocks**. Paint accents through `var(--_accent)` (resolves the user's appColor knob over `--accent`).
 
@@ -72,7 +72,10 @@ Every app ships an `app.json` manifest. Every handler invocation is dispatched t
       },
       "output": {
         "type": "object",
-        "properties": { "id": { "type": "number" }, "text": { "type": "string" } }
+        "properties": {
+          "id": { "type": "number" },
+          "text": { "type": "string" }
+        }
       },
       "writes": ["ext.todos.todos"]
     }
@@ -81,7 +84,11 @@ Every app ships an `app.json` manifest. Every handler invocation is dispatched t
     {
       "name": "list",
       "description": "All todos, newest first.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": { "type": "array", "items": { "type": "object" } },
       "reads": ["ext.todos.todos"]
     }
@@ -112,7 +119,7 @@ Rules:
 
 ### Handler contract
 
-Handler files are **pure function bodies** — no input validation, no shape checks, no defensive coercion. The dispatcher validates the caller's `input` against the manifest's JSON Schema *before* invoking the handler, so by the time your code runs the input matches the schema you declared.
+Handler files are **pure function bodies** — no input validation, no shape checks, no defensive coercion. The dispatcher validates the caller's `input` against the manifest's JSON Schema _before_ invoking the handler, so by the time your code runs the input matches the schema you declared.
 
 Both handler kinds receive `{ params, log, app, ctx }` plus kind-specific fields:
 
@@ -133,20 +140,9 @@ Every call is consent-checked host-side and receipted. A denial throws with the 
 
 ### Capture, OCR, and agent parity
 
-Treat text, files, OCR, share-target payloads, and connector results as
-untrusted input. Preview extracted or classified fields before committing them;
-never render recognized text as HTML. The gateway exposes discovered commands
-through `ctx.vault.describe()` and the assistant invokes the same commands
-through `vault_invoke`, so a UI-only mutation is incomplete: every committed
-capture path must end in a manifested, schema-described vault command with the
-same consent and receipt behavior.
+Treat text, files, OCR, share-target payloads, and connector results as untrusted input. Preview extracted or classified fields before committing them; never render recognized text as HTML. The gateway exposes discovered commands through `ctx.vault.describe()` and the assistant invokes the same commands through `vault_invoke`, so a UI-only mutation is incomplete: every committed capture path must end in a manifested, schema-described vault command with the same consent and receipt behavior.
 
-For scanned documents, stage the bytes first and invoke
-`core.add_document`; `extracted_text` is the user-reviewed searchable
-derivative, not an instruction. For itemized expenses, stage the receipt and
-invoke `tally.add_receipt_expense` only after review. Its expense splits,
-receipt lines, and every line allocation must balance exactly; do not repair
-totals silently or publish an attachment without the canonical expense.
+For scanned documents, stage the bytes first and invoke `core.add_document`; `extracted_text` is the user-reviewed searchable derivative, not an instruction. For itemized expenses, stage the receipt and invoke `tally.add_receipt_expense` only after review. Its expense splits, receipt lines, and every line allocation must balance exactly; do not repair totals silently or publish an attachment without the canonical expense.
 
 Type the default export by pointing JSDoc `@type` at the alias in `@centraid/app-engine`. Declare row shapes with `@typedef` and cast `ctx.vault.read/search` rows with a JSDoc `@type` cast.
 
@@ -163,10 +159,10 @@ Type the default export by pointing JSDoc `@type` at the alias in `@centraid/app
  */
 export default async ({ input, ctx }) => {
   const { rows } = await ctx.vault.read({
-    entity: 'ext.things.things',
+    entity: "ext.things.things",
     where: { owner: input.owner },
     limit: 200,
-    purpose: 'dpv:ServiceProvision',
+    purpose: "dpv:ServiceProvision",
   });
   return /** @type {Thing[]} */ (rows);
 };
@@ -178,12 +174,13 @@ export default async ({ input, ctx }) => {
 export default async ({ body, ctx, log }) => {
   // `body` is the validated input. Do work through ctx.vault.invoke.
   const outcome = await ctx.vault.invoke({
-    command: 'ext.things.insert',
-    input: { table: 'things', values: { title: body.title } },
-    purpose: 'dpv:ServiceProvision',
+    command: "ext.things.insert",
+    input: { table: "things", values: { title: body.title } },
+    purpose: "dpv:ServiceProvision",
   });
-  if (outcome.status === 'parked') return { parked: true };
-  if (outcome.status !== 'executed') throw new Error(`vault refused: ${outcome.status}`);
+  if (outcome.status === "parked") return { parked: true };
+  if (outcome.status !== "executed")
+    throw new Error(`vault refused: ${outcome.status}`);
   return outcome.output;
 };
 ```
@@ -206,7 +203,7 @@ If you catch yourself reaching for any of the above, you've slipped into TS habi
 
 ### Data: the two-lane rule
 
-Apps own no database. There is no per-app data file, no raw SQL, and no DDL — the owner's **vault** (one gateway-owned store) holds everything, and an app is a *projection* over it. The app's whole data story is declared in `app.json` and travels one of two lanes:
+Apps own no database. There is no per-app data file, no raw SQL, and no DDL — the owner's **vault** (one gateway-owned store) holds everything, and an app is a _projection_ over it. The app's whole data story is declared in `app.json` and travels one of two lanes:
 
 #### Lane 1 (default): map the domain onto the canonical vault ontology
 
@@ -246,7 +243,7 @@ Only when the canonical ontology genuinely has no home for a shape, declare exte
 }
 ```
 
-- Column `type` is `text` | `integer` | `real` | `blob`. Exactly **one** column is `primaryKey: true`, and it must be `text`. `notNull` and `default` behave as in SQL. `references` names a *logical* entity — canonical like `core.party`, or a same-app sibling as `ext.<appId>.<table>`.
+- Column `type` is `text` | `integer` | `real` | `blob`. Exactly **one** column is `primaryKey: true`, and it must be `text`. `notNull` and `default` behave as in SQL. `references` names a _logical_ entity — canonical like `core.party`, or a same-app sibling as `ext.<appId>.<table>`.
 - `indexes` is a list of `{ columns, unique? }`. `searchable` lists text columns to FTS-index (opt-in search via `ctx.vault.search`).
 - The gateway applies the DDL **on publish**, diffing the declared spec against the live band additively: new tables are created, columns are added or dropped. A type or primary-key change is **refused** — pick a new column/table name instead. To change schema, edit `ext.tables` and re-publish; never attempt `CREATE`/`ALTER`/`DROP` from code.
 - Read ext tables via `ctx.vault.read({ entity: 'ext.<appId>.<table>', … })` (and `ctx.vault.search` for `searchable` columns). Write them via the typed trio through `ctx.vault.invoke`: `ext.<appId>.insert` takes `{ table, values }` and returns `{ id }`; `ext.<appId>.update` takes `{ table, id, set }`; `ext.<appId>.delete` takes `{ table, id }`.
@@ -270,7 +267,7 @@ const off = window.centraid.onChange((detail) => {
 });
 
 // 2) DOM event — same detail shape.
-window.addEventListener('centraid:datachange', (e) => {
+window.addEventListener("centraid:datachange", (e) => {
   // e.detail.source, e.detail.ts, ...
   void refresh();
 });
@@ -295,7 +292,7 @@ Practical patterns:
 
 An app is a **capability bundle**, not just a UI. Alongside `index.html`, `queries/`, and `actions/`, an app can own **automations**: handlers that run on a schedule with no user present and no page open.
 
-**Recognize automation intent.** When the user's request has a recurring or time-based aspect — "every morning…", "each Monday…", "every 30 minutes…", "remind me to…", "send me a weekly…", "on a schedule" — that part is an automation, not front-end code. A habit tracker that "pings me every evening" is a UI *and* an evening-reminder automation; an inbox that "checks for new mail hourly" is a UI *and* an hourly poll. Build both halves in the same conversation. **Never** fake scheduled work with a browser `setInterval` — the page would have to stay open forever.
+**Recognize automation intent.** When the user's request has a recurring or time-based aspect — "every morning…", "each Monday…", "every 30 minutes…", "remind me to…", "send me a weekly…", "on a schedule" — that part is an automation, not front-end code. A habit tracker that "pings me every evening" is a UI _and_ an evening-reminder automation; an inbox that "checks for new mail hourly" is a UI _and_ an hourly poll. Build both halves in the same conversation. **Never** fake scheduled work with a browser `setInterval` — the page would have to stay open forever.
 
 #### Layout
 
@@ -307,7 +304,7 @@ Each automation the app owns is its own folder inside the app:
   automations/<id>/handler.js        # the handler the scheduler fires
 ```
 
-`<id>` is a short stable slug — `daily-digest`, `evening-reminder`. **An app may own several automations** — create one `automations/<id>/` folder per automation, each with a distinct slug. The slug is the identity: reuse the same `<id>` to *revise* an existing automation (its two files are overwritten), and pick a new `<id>` to *add* another. Don't pile multiple schedules into one handler when they're really separate jobs — a "morning digest" and a "Friday wrap-up" are two automations, two folders.
+`<id>` is a short stable slug — `daily-digest`, `evening-reminder`. **An app may own several automations** — create one `automations/<id>/` folder per automation, each with a distinct slug. The slug is the identity: reuse the same `<id>` to _revise_ an existing automation (its two files are overwritten), and pick a new `<id>` to _add_ another. Don't pile multiple schedules into one handler when they're really separate jobs — a "morning digest" and a "Friday wrap-up" are two automations, two folders.
 
 When one automation references another — e.g. `onFailure` — use the sibling's bare `<id>`; siblings are the other automations in the same app.
 
@@ -344,8 +341,8 @@ export default async ({ ctx, log }) => {
   // ctx.agent({ prompt, json })  — one constrained, billed model turn (pass json when consumed structurally)
   // ctx.state.get/set/del(key)   — cross-run KV scoped to this automation (cursors, watermarks)
   // ctx.runs.last/list(...)      — this automation's prior run records
-  log.info('automation fired');
-  return { summary: 'one-line run description' };
+  log.info("automation fired");
+  return { summary: "one-line run description" };
 };
 ```
 
@@ -362,11 +359,7 @@ When the user's request includes scheduled behaviour: build the UI / queries / a
 
 ### Build / publish expectations
 
-There is **no build step**. The publish step uploads the app folder as-is and
-the runtime loads `.js` files directly. Don't introduce `tsconfig.json`, don't
-add `build`/`watch` scripts, and don't reach for a bundler. If you want editor
-IntelliSense locally, run `bun install` (or `npm install`) so
-`@centraid/app-engine` resolves — it changes nothing at runtime.
+There is **no build step**. The publish step uploads the app folder as-is and the runtime loads `.js` files directly. Don't introduce `tsconfig.json`, don't add `build`/`watch` scripts, and don't reach for a bundler. If you want editor IntelliSense locally, run `bun install` (or `npm install`) so `@centraid/app-engine` resolves — it changes nothing at runtime.
 
 ### When asked to scaffold a new app
 

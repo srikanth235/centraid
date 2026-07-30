@@ -1,3 +1,5 @@
+import { afterEach, describe, expect, test } from "vitest";
+
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 /*
@@ -8,7 +10,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
  * real in-process fake provider server (real HTTP, real grant flow).
  */
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { openStorageConnectionStore } from "./storage-connections.js";
 import { ensureProviderCasTarget } from "./storage-credentials.js";

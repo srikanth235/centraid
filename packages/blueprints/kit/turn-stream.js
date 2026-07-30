@@ -121,7 +121,7 @@ export async function consumeSseFrames(body, onFrame, opts = {}) {
     await consumeNext();
   } finally {
     try {
-      reader.cancel();
+      void reader.cancel();
     } catch {
       /* reader already released */
     }

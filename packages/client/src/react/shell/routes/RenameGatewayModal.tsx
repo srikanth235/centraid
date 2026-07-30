@@ -61,6 +61,7 @@ export default function RenameGatewayModal({
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Pencil", 14) }}
           />
           <h2 className={spaceModalStyles.profModalTitle}>Rename gateway</h2>
@@ -70,6 +71,7 @@ export default function RenameGatewayModal({
             title="Close"
             aria-label="Close"
             onClick={onCancel}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>

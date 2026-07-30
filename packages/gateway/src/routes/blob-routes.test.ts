@@ -6,10 +6,11 @@ import { promises as fs } from "node:fs";
 import http from "node:http";
 import { deflateSync } from "node:zlib";
 
-import { forEachSequentially } from "@centraid/test-kit/sequential";
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import jpegJs from "jpeg-js";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { createImagePreviewCodec } from "../preview/codec.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
@@ -129,11 +130,14 @@ describe("blob-routes", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
     const address = server.address() as { port: number };
     return {

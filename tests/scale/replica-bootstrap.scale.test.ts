@@ -1,6 +1,7 @@
+import { describe, expect, test } from "vitest";
+
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";
-import { describe, expect, test } from "vitest";
 
 import { exerciseWindowedBootstrap } from "../quality/replica-bootstrap-fixture.js";
 

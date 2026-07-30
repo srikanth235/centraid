@@ -1,5 +1,6 @@
-import type { ReplicaValue } from "@centraid/client/replica/native";
 import { describe, expect, it, vi } from "vitest";
+
+import type { ReplicaValue } from "@centraid/client/replica/native";
 
 import { searchBlueprints } from "./blueprint-search";
 

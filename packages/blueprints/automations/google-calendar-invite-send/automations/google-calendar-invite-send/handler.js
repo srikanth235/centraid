@@ -27,7 +27,7 @@ const SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const MAX_STAGED_PER_RUN = 10;
 
 const looksLikeEmail = (value) =>
-  typeof value === "string" && /^[^@\s]+@[^@\s]+$/.test(value);
+  typeof value === "string" && /^[^@\s]+@[^@\s]+$/u.test(value);
 
 async function rowsOf(ctx) {
   const input = ctx.input || {};
@@ -61,16 +61,16 @@ function icsStamp(iso) {
   if (Number.isNaN(d.getTime())) return "";
   return d
     .toISOString()
-    .replace(/[-:]/g, "")
-    .replace(/\.\d{3}Z$/, "Z");
+    .replace(/[-:]/gu, "")
+    .replace(/\.\d{3}Z$/u, "Z");
 }
 
 function icsEscape(text) {
   return String(text ?? "")
-    .replace(/\\/g, "\\\\")
-    .replace(/;/g, "\\;")
-    .replace(/,/g, "\\,")
-    .replace(/\n/g, "\\n");
+    .replace(/\\/gu, "\\\\")
+    .replace(/;/gu, "\\;")
+    .replace(/,/gu, "\\,")
+    .replace(/\n/gu, "\\n");
 }
 
 function buildIcs({
@@ -129,7 +129,7 @@ function rawRfc2822WithIcs(to, subject, bodyText, icsBody) {
   return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
 }
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   let staged = 0;
   let skipped = 0;
   const vaultRes = await ctx.vault.read({ entity: "core.vault" });
@@ -225,4 +225,4 @@ export default async ({ ctx, log }) => {
     summary: `staged ${staged} outbox item(s), skipped ${skipped}`,
     output: { staged, skipped },
   };
-};
+}

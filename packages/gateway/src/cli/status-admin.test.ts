@@ -12,11 +12,12 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
 import { buildGatewayInfoPayload } from "@centraid/protocol";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { endpointIdForSecret } from "@centraid/tunnel";
 import { KeyStore } from "@centraid/vault";
-import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { landlordBearerForEndpointSecret } from "./landlord-auth.ts";
 import { daemonLayoutFor } from "./paths.ts";

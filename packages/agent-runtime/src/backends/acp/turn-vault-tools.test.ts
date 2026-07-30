@@ -2,8 +2,9 @@
  * Direct unit tests for startTurnVaultTools (issue #545 B11).
  */
 
-import type { TurnStreamEvent } from "@centraid/app-engine";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { startTurnVaultTools } from "./turn-vault-tools.ts";
 import {

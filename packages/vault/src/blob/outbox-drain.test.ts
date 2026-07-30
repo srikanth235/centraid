@@ -2,8 +2,9 @@ import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { DEFAULT_BACKUP_POLICY } from "../backup-policy.js";
 import { openVaultDb } from "../db.js";
@@ -432,12 +433,12 @@ describe("outbox-drain", () => {
     let settle = true;
     let verificationStarted!: () => void;
     let releaseVerification!: () => void;
-    const started = new Promise<void>(
-      (resolve) => (verificationStarted = resolve)
-    );
-    const release = new Promise<void>(
-      (resolve) => (releaseVerification = resolve)
-    );
+    const started = new Promise<void>((resolve) => {
+      verificationStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseVerification = resolve;
+    });
     const store: BlobStore = {
       kind: "close-fence-fake",
       put: async () => undefined,

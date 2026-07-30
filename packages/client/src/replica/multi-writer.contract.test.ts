@@ -175,7 +175,13 @@ function cleanupDatabase(
     await new Promise<void>((resolve, reject) => {
       const request = factory.deleteDatabase(name);
       request.addEventListener("success", () => resolve());
-      request.addEventListener("error", () => reject(request.error));
+      request.addEventListener("error", () =>
+        reject(
+          new Error(request.error?.message ?? "database deletion failed", {
+            cause: request.error,
+          })
+        )
+      );
     });
   });
 }

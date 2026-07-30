@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { ChangeBus } from "../changes/change-bus.ts";
 import { Runtime } from "../runtime.ts";
@@ -56,9 +57,9 @@ describe("changes-sse", () => {
         if (Date.now() - start >= timeoutMs) return;
         const { value, done } = await Promise.race([
           reader.read(),
-          new Promise<{ value?: undefined; done?: undefined }>((resolve) =>
-            setTimeout(() => resolve({}), 100)
-          ),
+          new Promise<{ value?: undefined; done?: undefined }>((resolve) => {
+            setTimeout(() => resolve({}), 100);
+          }),
         ]);
         if (done) return;
         if (value) {
@@ -280,7 +281,9 @@ describe("changes-sse", () => {
   }
 
   const settle = (): Promise<void> =>
-    new Promise((resolve) => setImmediate(resolve));
+    new Promise((resolve) => {
+      setImmediate(resolve);
+    });
 
   test("SSE cap: subscribers past the per-app limit get 503 + Retry-After; the count decrements on disconnect", async () => {
     const bus = new ChangeBus();

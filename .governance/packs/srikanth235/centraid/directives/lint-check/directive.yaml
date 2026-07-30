@@ -3,19 +3,17 @@ category: Repo hygiene
 recommended: true
 summary: |
   Every staged file that oxlint owns (ts, tsx, js, jsx, mjs, cjs, mts, cts)
-  must already be free of oxlint errors. CI runs `bunx oxlint .` across the
-  whole tree in the `static` job, and `check:pr` runs it again before push —
-  but a lint error introduced at commit time survives until one of those
-  runs, which on a bad day is a 12-minute CI round trip for a violation the
-  linter can name in 50ms.
+  must already pass the repository's explicit `oxlint.config.ts` with warnings
+  denied. CI and `check:pr` invoke the same pinned root `lint` script before
+  push, but a lint error introduced at commit time otherwise survives until
+  one of those runs.
 
   Scope is STAGED FILES ONLY, matching the sibling `format-check` directive
   and for the same reason: a repo-wide gate fires on debt the author never
   touched, and a gate that fires for someone else's mess is one people learn
   to bypass.
 
-  Errors only, never warnings. CI's `bunx oxlint .` fails on errors and not
-  on warnings; a stricter local rule would block commits that CI would have
-  let through, which is its own kind of broken.
+  Errors or off, never warning debt. The staged check and repository-wide
+  local/CI gate all use the same explicit config and `--deny-warnings`.
 surface: repo-state
 hook: pre-commit

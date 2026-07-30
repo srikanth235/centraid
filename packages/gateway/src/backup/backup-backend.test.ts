@@ -1,5 +1,6 @@
-import type { BackupProvider } from "@centraid/backup";
 import { describe, expect, it, vi } from "vitest";
+
+import type { BackupProvider } from "@centraid/backup";
 
 import { resolveBackupBackend } from "./backup-backend.js";
 import type { StorageConnectionStore } from "./storage-connections.js";

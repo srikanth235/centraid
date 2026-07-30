@@ -1,5 +1,6 @@
-import type { TurnConfig, TurnInput } from "@centraid/app-engine";
 import { describe, expect, test } from "vitest";
+
+import type { TurnConfig, TurnInput } from "@centraid/app-engine";
 
 import { runTurn } from "./runtime.ts";
 

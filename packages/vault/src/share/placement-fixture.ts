@@ -6,8 +6,9 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { expect } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { sweepLocalOrphans } from "../blob/local-orphan-sweep.js";
 import { blobUriFor } from "../blob/store.js";

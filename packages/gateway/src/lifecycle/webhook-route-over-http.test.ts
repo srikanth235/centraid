@@ -13,8 +13,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";

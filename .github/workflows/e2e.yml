@@ -149,9 +149,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
       - uses: ./.github/actions/setup
         # #637 — deliberately no turbo-cache: macOS is 1-of-1 and must not
         # restore a Linux-built native/*.node even with RUNNER_OS in the hash.
@@ -240,7 +237,7 @@ jobs:
         # comes almost entirely from dropping @centraid/desktop (skills and
         # data-plane folded into gateway/tunnel in #495).
         run: |
-          bunx turbo run build --filter=@centraid/gateway
+          bun run turbo run build --filter=@centraid/gateway
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
@@ -416,9 +413,6 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
@@ -458,10 +452,10 @@ jobs:
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Build mobile workspace (host, before emulator)
-        run: bunx turbo run build --filter=@centraid/mobile...
+        run: bun run turbo run build --filter=@centraid/mobile...
       - name: Build and start the tokenless mobile test gateway
         run: |
-          bunx turbo run build --filter=@centraid/gateway
+          bun run turbo run build --filter=@centraid/gateway
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
@@ -592,10 +586,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -622,10 +613,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
-      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -652,11 +640,8 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
       - run: docker info
-      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       # Production must never silently fall back to the JS byte pump.
       - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
@@ -784,9 +769,6 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "22"
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"

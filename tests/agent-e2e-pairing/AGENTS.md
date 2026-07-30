@@ -1,18 +1,10 @@
 # AGENTS.md — device-pairing e2e
 
-Notes for any agent (or human) writing or running pairing flows. Pair this
-with [README.md](README.md); repo-wide rules in [../../AGENTS.md](../../AGENTS.md)
-still apply.
+Notes for any agent (or human) writing or running pairing flows. Pair this with [README.md](README.md); repo-wide rules in [../../AGENTS.md](../../AGENTS.md) still apply.
 
 ## What this layer is for
 
-The device-pairing ceremony (issue #289) crosses three processes — daemon,
-admin CLI, device — and the unit tests fake at least one of them. A flow here
-fakes none: real `centraid-gateway serve`, real `pair`/`devices` CLI
-invocations, real iroh QUIC dialing from `@centraid/tunnel`. Use it whenever
-you touch `pairing-store.ts`, `enrollment-store.ts`, `endpoint-host.ts`,
-`device-admin.ts`, or the tunnel's `gateway-endpoint.ts` / `client.ts`, and
-before claiming any pairing change "works".
+The device-pairing ceremony (issue #289) crosses three processes — daemon, admin CLI, device — and the unit tests fake at least one of them. A flow here fakes none: real `centraid-gateway serve`, real `pair`/`devices` CLI invocations, real iroh QUIC dialing from `@centraid/tunnel`. Use it whenever you touch `pairing-store.ts`, `enrollment-store.ts`, `endpoint-host.ts`, `device-admin.ts`, or the tunnel's `gateway-endpoint.ts` / `client.ts`, and before claiming any pairing change "works".
 
 ## Running
 
@@ -22,98 +14,37 @@ node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs     # non-burning 
 node tests/agent-e2e-pairing/flows/cross-network-relay.mjs        # real relay transport, needs Docker
 ```
 
-The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes
-no bootstrap flag: since issue #603 the daemon auto-founds `Shared` +
-`Personal` at construction, and `--init-vault` no longer exists. Flows target
-**`Shared`** — it is created first, so it is the registry default and the
-target of a `pair` with no `--vault`. The former `vps-phone-founding` flow
-(empty VPS → first phone owner + wrapped kit) is **deleted** along with the
-founding plane it exercised; the `gateway.journey` matrix cell now points at
-`device-pairing-lifecycle.mjs`.
+The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes no bootstrap flag: since issue #603 the daemon auto-founds `Shared` + `Personal` at construction, and `--init-vault` no longer exists. Flows target **`Shared`** — it is created first, so it is the registry default and the target of a `pair` with no `--vault`. The former `vps-phone-founding` flow (empty VPS → first phone owner + wrapped kit) is **deleted** along with the founding plane it exercised; the `gateway.journey` matrix cell now points at `device-pairing-lifecycle.mjs`.
 
-Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log`.
-On FAIL the workspace is kept — `gateway.db`, `keys/`, `vaults/`, and
-`gateway.log` are the ground truth to inspect. The Docker flow copies
-`gateway.db` into its run workspace before tearing down the container.
+Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log`. On FAIL the workspace is kept — `gateway.db`, `keys/`, `vaults/`, and `gateway.log` are the ground truth to inspect. The Docker flow copies `gateway.db` into its run workspace before tearing down the container.
 
-`cross-network-relay` is a different tool for a different job: the other two
-flows prove ceremony/hygiene semantics over a loopback transport (device
-relays explicitly disabled); this one proves the ceremony survives the REAL
-n0 relay/hole-punch path, by running gateway and device in separate Docker
-containers on separate, non-interconnected bridge networks. Use it when you
-touch `packages/tunnel/src/client.ts`, `iroh.ts`, or anything about how a
-connection actually gets negotiated — the other two flows will pass even if
-that layer is broken, because they never dial anything but loopback. See
-[flows/cross-network-relay.md](flows/cross-network-relay.md) for the full
-design, including two host-specific gotchas its harness
-(`lib/docker-harness.mjs`) works around: the container needs its own
-platform's `@number0/iroh` native addon (fetched additively if the host's own
-`bun install` targeted a different platform), and at least one real Docker
-install (OrbStack) doesn't isolate bridge networks from each other by
-default the way `ubuntu-latest`'s does — the harness enforces it explicitly
-with `DOCKER-USER` firewall rules and *proves* it with a raw TCP probe before
-running any part of the ceremony, rather than trusting the driver.
+`cross-network-relay` is a different tool for a different job: the other two flows prove ceremony/hygiene semantics over a loopback transport (device relays explicitly disabled); this one proves the ceremony survives the REAL n0 relay/hole-punch path, by running gateway and device in separate Docker containers on separate, non-interconnected bridge networks. Use it when you touch `packages/tunnel/src/client.ts`, `iroh.ts`, or anything about how a connection actually gets negotiated — the other two flows will pass even if that layer is broken, because they never dial anything but loopback. See [flows/cross-network-relay.md](flows/cross-network-relay.md) for the full design, including two host-specific gotchas its harness (`lib/docker-harness.mjs`) works around: the container needs its own platform's `@number0/iroh` native addon (fetched additively if the host's own `bun install` targeted a different platform), and at least one real Docker install (OrbStack) doesn't isolate bridge networks from each other by default the way `ubuntu-latest`'s does — the harness enforces it explicitly with `DOCKER-USER` firewall rules and _proves_ it with a raw TCP probe before running any part of the ceremony, rather than trusting the driver.
 
 ## Conventions
 
 - **Slug = filename = `runFlow()` first arg.** Same as the other e2e tiers.
-- **Throw on failure; return `{ pass: true, notes }` on success.** No
-  try/catch that swallows — let the harness write the FAIL verdict.
-- **`ctx.note(msg)` for observations the verdict should keep** ("replay
-  refused (invalid_ticket)").
-- **Assert durable state through its supported reader.** Enrollment truth is
-  `gateway.db`; read the device roster through the paired-device route and
-  prove it again after restart.
-- **Every negative check needs a positive control nearby.** "Tunnel refused"
-  only means something in a flow where an enrolled device tunneled
-  successfully (or would — `expectTunnelRefused` throws if admission
-  sneaks through).
-- **QUIC refusals are racy by nature — use `ctx.expectTunnelRefused`.** It
-  encodes the request → `connection.closed()` → request-again pattern from
-  `packages/tunnel/src/gateway-endpoint.test.ts`; don't hand-roll a single
-  request and hope the close beat it.
-- **Expired-ticket checks: mint with `ttlMinutes: 0.001` and sleep ≥ 500ms.**
-  Don't shave the sleep to make the flow faster; the mint→redeem roundtrip
-  must land clearly past expiry.
-- **Fresh device per trust boundary.** If a flow intentionally proves a wrong
-  secret does not burn a ticket, the same identity is its positive control;
-  use a different identity for unrelated attacker checks.
+- **Throw on failure; return `{ pass: true, notes }` on success.** No try/catch that swallows — let the harness write the FAIL verdict.
+- **`ctx.note(msg)` for observations the verdict should keep** ("replay refused (invalid_ticket)").
+- **Assert durable state through its supported reader.** Enrollment truth is `gateway.db`; read the device roster through the paired-device route and prove it again after restart.
+- **Every negative check needs a positive control nearby.** "Tunnel refused" only means something in a flow where an enrolled device tunneled successfully (or would — `expectTunnelRefused` throws if admission sneaks through).
+- **QUIC refusals are racy by nature — use `ctx.expectTunnelRefused`.** It encodes the request → `connection.closed()` → request-again pattern from `packages/tunnel/src/gateway-endpoint.test.ts`; don't hand-roll a single request and hope the close beat it.
+- **Expired-ticket checks: mint with `ttlMinutes: 0.001` and sleep ≥ 500ms.** Don't shave the sleep to make the flow faster; the mint→redeem roundtrip must land clearly past expiry.
+- **Fresh device per trust boundary.** If a flow intentionally proves a wrong secret does not burn a ticket, the same identity is its positive control; use a different identity for unrelated attacker checks.
 
 ## Gotchas
 
-- The live `/centraid/_gateway/info` response publishes the refreshable
-  EndpointTicket only after iroh binds, and only to an authenticated caller
-  (issue #568 item C — anonymous GETs omit it). The harness waits for that
-  field with the host-custody bearer; do not add sleeps or read retired cache
-  files, and do not scrape a retired `token:` stdout line for readiness.
-- The gateway's iroh endpoint binds with the production n0 relay/discovery
-  config — there's no daemon-side knob to disable it. Only the device side
-  disables relays and dials the ticket's direct loopback addresses, so the
-  requests themselves stay loopback-local; the daemon's `endpoint:`
-  readiness line can still be slow or fail on a fully airgapped machine.
+- The live `/centraid/_gateway/info` response publishes the refreshable EndpointTicket only after iroh binds, and only to an authenticated caller (issue #568 item C — anonymous GETs omit it). The harness waits for that field with the host-custody bearer; do not add sleeps or read retired cache files, and do not scrape a retired `token:` stdout line for readiness.
+- The gateway's iroh endpoint binds with the production n0 relay/discovery config — there's no daemon-side knob to disable it. Only the device side disables relays and dials the ticket's direct loopback addresses, so the requests themselves stay loopback-local; the daemon's `endpoint:` readiness line can still be slow or fail on a fully airgapped machine.
 - `--ttl-minutes` accepts fractions; that's what hygiene relies on.
-- The daemon and CLI coordinate through authenticated live routes and
-  `gateway.db`; flows must not edit control-plane state directly.
-- Vault ids are minted per run; never hard-code them. Parse them from the
-  pairing response. Vault **names** (`Shared`, `Personal`) are stable and may
-  be asserted on.
+- The daemon and CLI coordinate through authenticated live routes and `gateway.db`; flows must not edit control-plane state directly.
+- Vault ids are minted per run; never hard-code them. Parse them from the pairing response. Vault **names** (`Shared`, `Personal`) are stable and may be asserted on.
 
 ## Where to look
 
-- [lib/harness.mjs](lib/harness.mjs) — `runFlow` + the ctx verbs for the two
-  loopback flows. Read before adding a helper there.
-- [lib/docker-harness.mjs](lib/docker-harness.mjs) — `runFlow` for
-  `cross-network-relay`: network isolation (real, not assumed — see its
-  module docstring), native-addon preflight, container lifecycle.
-- [lib/device-redeem.mjs](lib/device-redeem.mjs) — the device role, run
-  standalone inside the device container by `cross-network-relay`.
-- [flows/device-pairing-lifecycle.mjs](flows/device-pairing-lifecycle.mjs) —
-  canonical example of the loopback-flow shape.
-- [flows/cross-network-relay.mjs](flows/cross-network-relay.mjs) —
-  canonical example of the Docker-flow shape.
-- [`packages/gateway/src/serve/pairing-store.ts`](../../packages/gateway/src/serve/pairing-store.ts),
-  [`enrollment-store.ts`](../../packages/gateway/src/serve/enrollment-store.ts),
-  [`../cli/endpoint-host.ts`](../../packages/gateway/src/cli/endpoint-host.ts) —
-  the policy under test.
-- [`packages/tunnel/src/gateway-endpoint.ts`](../../packages/tunnel/src/gateway-endpoint.ts) —
-  the ALPNs and pair protocol frames.
+- [lib/harness.mjs](lib/harness.mjs) — `runFlow` + the ctx verbs for the two loopback flows. Read before adding a helper there.
+- [lib/docker-harness.mjs](lib/docker-harness.mjs) — `runFlow` for `cross-network-relay`: network isolation (real, not assumed — see its module docstring), native-addon preflight, container lifecycle.
+- [lib/device-redeem.mjs](lib/device-redeem.mjs) — the device role, run standalone inside the device container by `cross-network-relay`.
+- [flows/device-pairing-lifecycle.mjs](flows/device-pairing-lifecycle.mjs) — canonical example of the loopback-flow shape.
+- [flows/cross-network-relay.mjs](flows/cross-network-relay.mjs) — canonical example of the Docker-flow shape.
+- [`packages/gateway/src/serve/pairing-store.ts`](../../packages/gateway/src/serve/pairing-store.ts), [`enrollment-store.ts`](../../packages/gateway/src/serve/enrollment-store.ts), [`../cli/endpoint-host.ts`](../../packages/gateway/src/cli/endpoint-host.ts) — the policy under test.
+- [`packages/tunnel/src/gateway-endpoint.ts`](../../packages/tunnel/src/gateway-endpoint.ts) — the ALPNs and pair protocol frames.

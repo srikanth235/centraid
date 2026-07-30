@@ -6,8 +6,9 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { describe, expect, test } from "vitest";
+
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 const OWNER = "tests/perf/tunnel-native.perf.test.ts";
 const nativeCandidates = [

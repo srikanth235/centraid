@@ -135,6 +135,7 @@ export default function AppInfoModal({
           className={cx(buttonCss.icon, modalCss.close)}
           aria-label="Close"
           onClick={onClose}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("X", 16, 1.7) }}
         />
         <div className={styles.head}>
@@ -145,6 +146,7 @@ export default function AppInfoModal({
               color: finish.glyphColor,
               boxShadow: finish.boxShadow || undefined,
             }}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{
               __html: iconSvg(app.iconKey || "Sparkle", 20, 1.85),
             }}

@@ -28,7 +28,7 @@ Brand families **Geist / JetBrains Mono / Space Grotesk** are self-hosted woff2 
 
 ## Component set
 
-8 **presentational** custom elements: `<kit-avatar>`, `<kit-meter>`, `<kit-line-chart>`, `<kit-bar-chart>`, `<kit-skeleton>`, `<kit-toast>`, `<kit-mention-chip>`, `<kit-reference-strip>`. The kit's **live-network controllers** are deliberately excluded (they can't render statically and are wired to the product's SSE/vault surfaces): the "Ask your vault" assistant and the vault-fetching @-mention *picker*. Unlike the old sync, they are **not** shipped as static React shells — a static shell would have re-introduced exactly the DOM duplication this migration removed. Only the presentational chip/strip that a resolved reference degrades to are in the set.
+8 **presentational** custom elements: `<kit-avatar>`, `<kit-meter>`, `<kit-line-chart>`, `<kit-bar-chart>`, `<kit-skeleton>`, `<kit-toast>`, `<kit-mention-chip>`, `<kit-reference-strip>`. The kit's **live-network controllers** are deliberately excluded (they can't render statically and are wired to the product's SSE/vault surfaces): the "Ask your vault" assistant and the vault-fetching @-mention _picker_. Unlike the old sync, they are **not** shipped as static React shells — a static shell would have re-introduced exactly the DOM duplication this migration removed. Only the presentational chip/strip that a resolved reference degrades to are in the set.
 
 ## Preview cards
 

@@ -1,3 +1,5 @@
+import { describe, expect, test } from "vitest";
+
 /**
  * Automations missed-window scan at volume (#496 PE2).
  *
@@ -12,7 +14,6 @@
  * "missed-window scan", not "fire".
  */
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
-import { describe, expect, test } from "vitest";
 
 import { computeMissedWindows } from "../../packages/automation/src/fire/scheduler-ledger.js";
 

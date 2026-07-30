@@ -16,6 +16,8 @@ import path from "node:path";
  */
 import { Readable } from "node:stream";
 
+import { afterAll, describe, expect, test, vi } from "vitest";
+
 import { S3TestServer } from "@centraid/backup/dist/testing/s3-test-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -30,7 +32,6 @@ import {
   unsealBlob,
 } from "@centraid/vault";
 import type { RemoteTier } from "@centraid/vault";
-import { afterAll, describe, expect, test, vi } from "vitest";
 
 vi.setConfig({ testTimeout: 30_000 });
 

@@ -1,5 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { ensureConversationLedger } from "@centraid/app-engine";
 // Sweep wiring for the conversation-ledger archival engine (issue #438
 // decision 7): the daily archival block in `runSweep` must invoke conversation
@@ -7,7 +9,6 @@ import { ensureConversationLedger } from "@centraid/app-engine";
 // when either engine wrote or pruned rows.
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultPlane } from "./vault-plane.js";
 

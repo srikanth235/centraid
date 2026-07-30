@@ -3,9 +3,10 @@ import { rmSync } from "node:fs";
 /** Direct-to-IA eligibility and local-first outbox replication doors for large media originals. */
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import {
   DEFAULT_BACKUP_POLICY,

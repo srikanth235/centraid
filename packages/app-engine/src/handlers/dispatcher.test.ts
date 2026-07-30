@@ -5,8 +5,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 // describe returns the manifest (there is no per-app schema to read).
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { assert, beforeEach, describe, expect, it } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { Registry } from "../registry/registry.js";
 import { Dispatcher } from "./dispatcher.js";

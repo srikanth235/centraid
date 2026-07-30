@@ -1,6 +1,8 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import {
   parseRecoveryKit,
@@ -9,7 +11,6 @@ import {
 } from "@centraid/backup";
 import type { RecoveryKitDocument } from "@centraid/backup";
 import { bootstrapVault, openVaultDb } from "@centraid/vault";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { BackupService } from "../backup/backup-service.js";
 import type { BackupTargetState } from "../backup/backup-state.js";

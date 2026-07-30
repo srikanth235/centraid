@@ -9,6 +9,8 @@ import crypto from "node:crypto";
 import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
 import {
   SNAPSHOT_FORMAT_V2,
   openLocalBackupProvider,
@@ -17,7 +19,6 @@ import {
 import type { BackupProvider } from "@centraid/backup";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { KeyStore } from "@centraid/vault";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";

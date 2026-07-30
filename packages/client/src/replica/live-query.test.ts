@@ -49,7 +49,10 @@ describe(LiveQuery, () => {
     let runs = 0;
     const query = new LiveQuery(async () => {
       runs += 1;
-      if (runs === 1) await new Promise<void>((resolve) => (release = resolve));
+      if (runs === 1)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
       return {
         value: runs,
         dependencies: [{ shapeId: "shape", entity: "entity" }],

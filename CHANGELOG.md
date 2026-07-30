@@ -2,12 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
-with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** / **D4** / **I12**):
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** / **D4** / **I12**):
 
-- **Patch** — every entry under *Fixed* only.
-- **Minor** — anything *Added*, *Changed*, or *Removed*.
+- **Patch** — every entry under _Fixed_ only.
+- **Minor** — anything _Added_, _Changed_, or _Removed_.
 - **Major** — not used before 1.0; agents never propose one.
 - GitHub Release bodies are generated from the matching section here (D3).
 - In-app "what's new" is re-wired from this feed as an explicit D3 checklist item (I12); no permanent placeholder UI.
@@ -18,7 +16,7 @@ with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** 
 
 - Fresh-install web closure ([#608](https://github.com/srikanth235/centraid/issues/608)): the sidebar can switch every reachable space and always exposes Add gateway; paired devices get distinguishable defaults and can be renamed from Household; Gateway now owns local Storage; Agents exposes the supported five-runner roster with explicit failover eligibility and recovery semantics.
 - Unified ACP routing across Assistant, in-app Ask, Builder, and Automations ([#567](https://github.com/srikanth235/centraid/issues/567)): per-surface model and effort controls, capability-driven context/folder/artifact support, canonical-ledger hydration across providers, turn-boundary failover with persistent circuit breakers, explicit per-conversation provider egress consent, editable automation ladders, and the same native status/consent experience on mobile.
-- Zero-ceremony first run ([#603](https://github.com/srikanth235/centraid/issues/603)): a gateway started on a **fresh** data directory creates two vaults for you, silently, before anything can talk to it — **Shared** (the household vault, where everyone who pairs later lands by default) and **Personal** (yours, renamed to your display name once you fill in your profile). An existing data directory is never touched. There is now exactly one kind of ticket, the **pair ticket**, and it always means *join a gateway that already exists*. On a VPS this is the whole story: `centraid-gateway serve` on a clean directory, then `centraid-gateway pair` to bring your phone in
+- Zero-ceremony first run ([#603](https://github.com/srikanth235/centraid/issues/603)): a gateway started on a **fresh** data directory creates two vaults for you, silently, before anything can talk to it — **Shared** (the household vault, where everyone who pairs later lands by default) and **Personal** (yours, renamed to your display name once you fill in your profile). An existing data directory is never touched. There is now exactly one kind of ticket, the **pair ticket**, and it always means _join a gateway that already exists_. On a VPS this is the whole story: `centraid-gateway serve` on a clean directory, then `centraid-gateway pair` to bring your phone in
 - Desktop first run is a two-option chooser ([#603](https://github.com/srikanth235/centraid/issues/603)): **Start fresh on this Mac** or **Connect with a ticket**. Both paths then ask for the same thing — a display name and an avatar colour — so every device, on every path, gets one journey. The local gateway (and the first write to your system keychain) does not start until you pick "Start fresh"
 - Where an OS keychain prompt can actually appear (development and unsigned macOS builds, some Linux keyrings), a one-line note now precedes the first secret write, so the system dialog is expected rather than alarming ([#603](https://github.com/srikanth235/centraid/issues/603))
 - `vault list` (CLI `--json` and HTTP), `status`, and the gateway's vault health component report vaults that **failed to mount** distinctly from an empty registry ([#603](https://github.com/srikanth235/centraid/issues/603)) — a schema-drift or custody failure can no longer look like "you have nothing"
@@ -32,6 +30,7 @@ with the release rules in [docs/release.md](docs/release.md) (issue #468 **D3** 
 
 ### Changed
 
+- The TypeScript toolchain now has one explicit command/config contract: exact-pinned Node, Turbo, TypeScript, Ultracite, Oxlint/tsgolint, Oxfmt, Knip, and Vitest; `check:fast`, `check:pr`, and `check:full` replace overlapping ad hoc gates; and type-aware lint covers shipped blueprints, scripts, tests, workers, and e2e programs with live fixtures ([#639](https://github.com/srikanth235/centraid/issues/639)).
 - Fresh gateways checkpoint bootstrap WAL once before steady-state shipping, repeated agent availability probes use a keyed 24-hour cache, bare `pair` tickets enroll the existing owner, the connector catalog offers only OAuth providers with an Assist path, and the fresh-install automation gallery is curated to eight runnable templates ([#608](https://github.com/srikanth235/centraid/issues/608)).
 - Settings → **Appearance** is now Light / Dark / **Match system** as one three-position control ([#608](https://github.com/srikanth235/centraid/issues/608)), and Match system is a standing mode that keeps following the OS rather than a button that snapped once. The page is now that control and nothing else
 - The whole sidebar identity row is the space/gateway switcher ([#608](https://github.com/srikanth235/centraid/issues/608)) — click the space name, the avatar, anywhere. The ⇅ glyph is now the affordance saying "this opens something" rather than the only 26 px that responded to a click. Household keeps its own sidebar nav entry, so the row no longer spends its hit area on a duplicate link to it

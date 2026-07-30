@@ -155,7 +155,9 @@ describe("screens/AutomationEditorScreen", () => {
       setValue(instructions, "Send a reminder to @Pri");
 
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 150);
+        });
       });
       expect(onSearchEntities).toHaveBeenCalledWith("Pri");
       expect(el.querySelector(".mentionPopover")?.textContent).toContain(

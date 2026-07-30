@@ -1,18 +1,8 @@
 # Agent-driven exploratory QA — device pairing
 
-The manual-QA verification loop for the device-pairing ceremony (issue #289),
-with promoted journeys scheduled inside the nightly
-[`.github/workflows/e2e.yml`](../../.github/workflows/e2e.yml) product lane
-(parallel jobs: lifecycle, ticket-hygiene, cross-network-relay). It shares
-run/verdict plumbing with [`tests/agent-e2e-mobile/`](../agent-e2e-mobile), but
-has no Electron or browser — each flow boots the REAL `centraid-gateway`
-daemon on a fresh data dir, drives the REAL admin CLI as separate processes,
-and plays the device role with `@centraid/tunnel` over real iroh QUIC.
+The manual-QA verification loop for the device-pairing ceremony (issue #289), with promoted journeys scheduled inside the nightly [`.github/workflows/e2e.yml`](../../.github/workflows/e2e.yml) product lane (parallel jobs: lifecycle, ticket-hygiene, cross-network-relay). It shares run/verdict plumbing with [`tests/agent-e2e-mobile/`](../agent-e2e-mobile), but has no Electron or browser — each flow boots the REAL `centraid-gateway` daemon on a fresh data dir, drives the REAL admin CLI as separate processes, and plays the device role with `@centraid/tunnel` over real iroh QUIC.
 
-This is the tier the unit tests can't reach: cross-process seams (the daemon
-persists host identity + grants in `gateway.db` → the live CLI mints a ticket
-→ a device proves its EndpointId over iroh → enrollment gates the tunnel)
-exercised the way an owner actually performs the ceremony.
+This is the tier the unit tests can't reach: cross-process seams (the daemon persists host identity + grants in `gateway.db` → the live CLI mints a ticket → a device proves its EndpointId over iroh → enrollment gates the tunnel) exercised the way an owner actually performs the ceremony.
 
 ## Running a flow
 
@@ -23,79 +13,49 @@ node tests/agent-e2e-pairing/flows/cross-network-relay.mjs      # needs Docker �
 node tests/agent-e2e-pairing/flows/extension-companion.mjs      # needs Playwright Chromium + display
 ```
 
-The first two run gateway + device as plain processes on the same host with
-the device's iroh relays explicitly disabled (`lib/harness.mjs`'s
-`newDevice()`), so every request dials a loopback address directly — real
-enough for ceremony/hygiene semantics, but it never exercises iroh's actual
-hole-punch/relay path. `cross-network-relay` is the one that does: it runs
-gateway and device in separate Docker containers on separate,
-non-interconnected bridge networks (`lib/docker-harness.mjs`), forcing
-`@centraid/tunnel`'s real n0-relay default. See
-[flows/cross-network-relay.md](flows/cross-network-relay.md) for the full
-writeup, including two host-specific gotchas it works around (missing linux
-native addon when the host's own `bun install` targeted a different
-platform; a Docker network driver — OrbStack, locally — that doesn't
-isolate bridge networks by default the way GitHub Actions' `ubuntu-latest`
-does).
+The first two run gateway + device as plain processes on the same host with the device's iroh relays explicitly disabled (`lib/harness.mjs`'s `newDevice()`), so every request dials a loopback address directly — real enough for ceremony/hygiene semantics, but it never exercises iroh's actual hole-punch/relay path. `cross-network-relay` is the one that does: it runs gateway and device in separate Docker containers on separate, non-interconnected bridge networks (`lib/docker-harness.mjs`), forcing `@centraid/tunnel`'s real n0-relay default. See [flows/cross-network-relay.md](flows/cross-network-relay.md) for the full writeup, including two host-specific gotchas it works around (missing linux native addon when the host's own `bun install` targeted a different platform; a Docker network driver — OrbStack, locally — that doesn't isolate bridge networks by default the way GitHub Actions' `ubuntu-latest` does).
 
 That's the whole loop for the first two flows. The harness:
 
-1. Runs a scoped build (`turbo run build --filter=@centraid/gateway
-   --filter=@centraid/tunnel`, dependency graph included) if
-   `packages/gateway/dist` or `packages/tunnel/dist` is missing
-   (turbo-cached, cheap when fresh).
-2. Creates `runs/<flow>-<timestamp>/workspace/gateway/` as the daemon's
-   `--data-dir` — every run is a factory-fresh gateway.
-3. Spawns `centraid-gateway serve`, waits for the HTTP listener + iroh
-   endpoint identity, streams daemon output to `runs/<runId>/gateway.log`.
+1. Runs a scoped build (`turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel`, dependency graph included) if `packages/gateway/dist` or `packages/tunnel/dist` is missing (turbo-cached, cheap when fresh).
+2. Creates `runs/<flow>-<timestamp>/workspace/gateway/` as the daemon's `--data-dir` — every run is a factory-fresh gateway.
+3. Spawns `centraid-gateway serve`, waits for the HTTP listener + iroh endpoint identity, streams daemon output to `runs/<runId>/gateway.log`.
 4. Runs the flow body with a `ctx` of ceremony verbs (see below).
 5. Writes `runs/<runId>/verdict.md` with PASS/FAIL and notes.
-6. Closes device endpoints and kills the daemon. On PASS the workspace is
-   wiped (verdict + gateway.log stay); on FAIL it's kept so you can inspect
-   `gateway.db`, `keys/`, and `vaults/`.
+6. Closes device endpoints and kills the daemon. On PASS the workspace is wiped (verdict + gateway.log stay); on FAIL it's kept so you can inspect `gateway.db`, `keys/`, and `vaults/`.
 
-Requirements: a `bun install`ed checkout and Node ≥ 22.5 (`@number0/iroh`
-native bindings). The device side runs with iroh relays disabled and dials
-the ticket's direct loopback addresses, so the requests themselves need no
-relay traffic. The daemon's own endpoint, though, binds with the production
-n0 relay/discovery config (there's no daemon-side knob to turn that off), so
-a fully airgapped machine may still fail or slow down on the `endpoint:`
-readiness line.
+Requirements: a `bun install`ed checkout and Node ≥ 22.5 (`@number0/iroh` native bindings). The device side runs with iroh relays disabled and dials the ticket's direct loopback addresses, so the requests themselves need no relay traffic. The daemon's own endpoint, though, binds with the production n0 relay/discovery config (there's no daemon-side knob to turn that off), so a fully airgapped machine may still fail or slow down on the `endpoint:` readiness line.
 
 ## ctx surface
 
 ```js
-ctx.gateway              // { url, token, endpointId, endpointTicket, pid }
-ctx.dataDir              // the daemon's --data-dir
-ctx.cli(args)            // admin CLI (vault/pair/devices/…); --data-dir appended
-ctx.mintTicket(opts)     // pair → { raw, payload }; opts: { vault, ttlMinutes }
-ctx.newDevice()          // fresh device identity (auto-closed at teardown)
-ctx.request(dev, path)   // one tunneled GET on a fresh connection
-ctx.requestJson(dev, method, path, body) // tunneled JSON request + parsed body
-ctx.expectTunnelRefused(dev) // assert the QUIC layer refuses this device
-ctx.restartGateway()     // SIGTERM + respawn on the same data dir
-ctx.note(msg)            // observation preserved in verdict.md
+ctx.gateway; // { url, token, endpointId, endpointTicket, pid }
+ctx.dataDir; // the daemon's --data-dir
+ctx.cli(args); // admin CLI (vault/pair/devices/…); --data-dir appended
+ctx.mintTicket(opts); // pair → { raw, payload }; opts: { vault, ttlMinutes }
+ctx.newDevice(); // fresh device identity (auto-closed at teardown)
+ctx.request(dev, path); // one tunneled GET on a fresh connection
+ctx.requestJson(dev, method, path, body); // tunneled JSON request + parsed body
+ctx.expectTunnelRefused(dev); // assert the QUIC layer refuses this device
+ctx.restartGateway(); // SIGTERM + respawn on the same data dir
+ctx.note(msg); // observation preserved in verdict.md
 ```
 
-Flows throw on failure and return `{ pass: true, notes }` on success — same
-contract as the other agent-e2e tiers.
+Flows throw on failure and return `{ pass: true, notes }` on success — same contract as the other agent-e2e tiers.
 
-`cross-network-relay` (`lib/docker-harness.mjs`) uses a different, Docker-backed
-ctx instead — see [flows/cross-network-relay.md](flows/cross-network-relay.md):
+`cross-network-relay` (`lib/docker-harness.mjs`) uses a different, Docker-backed ctx instead — see [flows/cross-network-relay.md](flows/cross-network-relay.md):
 
 ```js
-ctx.gateway                 // { url, token, endpointId } of the live daemon
-ctx.netB                    // the device-side network name
-ctx.gatewayExec(args)       // admin CLI, run via `docker exec` into the gateway container
-ctx.mintTicket(opts)        // pair → { raw, payload }
-ctx.runDevice(opts)         // run lib/device-redeem.mjs in a container on netB;
-                             // opts: { ticket, probeTarget } → parsed JSON result
-ctx.note(msg)               // observation preserved in verdict.md
+ctx.gateway; // { url, token, endpointId } of the live daemon
+ctx.netB; // the device-side network name
+ctx.gatewayExec(args); // admin CLI, run via `docker exec` into the gateway container
+ctx.mintTicket(opts); // pair → { raw, payload }
+ctx.runDevice(opts); // run lib/device-redeem.mjs in a container on netB;
+// opts: { ticket, probeTarget } → parsed JSON result
+ctx.note(msg); // observation preserved in verdict.md
 ```
 
-Same throw-on-failure / `{ pass: true, notes }` contract; same verdict.md /
-PASS-FAIL console shape. Requires Docker running locally (`docker info` to
-check) — no other setup.
+Same throw-on-failure / `{ pass: true, notes }` contract; same verdict.md / PASS-FAIL console shape. Requires Docker running locally (`docker info` to check) — no other setup.
 
 ## Layout
 
@@ -111,7 +71,7 @@ tests/agent-e2e-pairing/
 ## Relationship to the scripted tests
 
 | Layer | What it proves |
-|---|---|
+| --- | --- |
 | `packages/gateway/src/serve/device-plane.test.ts` | durable `gateway.db` grant/enrollment semantics |
 | `packages/gateway/src/cli/admin.test.ts` | CLI arg parsing + in-process command output |
 | `packages/tunnel/src/gateway-endpoint.test.ts` | iroh ALPN protocol against FAKE stores |
@@ -119,5 +79,4 @@ tests/agent-e2e-pairing/
 | `cross-network-relay` | the same ceremony over the real n0 relay/hole-punch transport |
 | `extension-companion` | the real MV3 worker + browser WASM, explicit Locker fill, receipt, and remote revocation |
 
-When a flow here stabilizes into a pure invariant, port it down into one of
-the vitest layers and keep this tier for the journey.
+When a flow here stabilizes into a pure invariant, port it down into one of the vitest layers and keep this tier for the journey.

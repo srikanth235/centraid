@@ -1,8 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 
-import { bootstrapVault, openVaultDb, readBackupPolicy } from "@centraid/vault";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import { bootstrapVault, openVaultDb, readBackupPolicy } from "@centraid/vault";
 
 import { failedCasOnlyReconciliation } from "../backup/backup-cas-reconciliation.js";
 import { failedReconciliation } from "../backup/backup-reconciliation.js";

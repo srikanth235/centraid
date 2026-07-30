@@ -274,7 +274,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         !l.anyModalOpen()
       ) {
         e.preventDefault();
-        handleOpenAddExpense();
+        void handleOpenAddExpense();
         return;
       }
       if (e.key !== "Escape") return;

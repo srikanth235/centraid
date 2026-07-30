@@ -4,8 +4,9 @@ import { rmSync } from "node:fs";
 // capped, receipted. The queries in here look like what the vault
 // assistant actually writes — joins, CTEs, window functions.
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { bootstrapVault, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";

@@ -1,6 +1,7 @@
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import webPush from "web-push";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";

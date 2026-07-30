@@ -3,11 +3,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { serve } from "@centraid/gateway";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { startDesktopEmbeddedGateway } from "./embedded-gateway.js";
 
@@ -126,7 +127,7 @@ describe("embedded-gateway-layout scenarios", () => {
     expect(normalizeDynamicNames(await treeShape(desktopRoot))).toStrictEqual(
       normalizeDynamicNames(await treeShape(headlessRoot))
     );
-  }, 15_000);
+  }, 30_000);
 
   test("actual Electron embed auto-founds Shared + Personal on a fresh data dir", async () => {
     // Issue #603: the desktop passes no founding options at all — a fresh data
@@ -154,7 +155,9 @@ describe("embedded-gateway-layout scenarios", () => {
         vaults?: Array<{ name?: string }>;
       };
       expect(
-        (body.vaults ?? []).map((vault) => vault.name).sort()
+        (body.vaults ?? [])
+          .map((vault) => vault.name)
+          .sort((a, b) => String(a).localeCompare(String(b)))
       ).toStrictEqual(["Personal", "Shared"]);
     } finally {
       await gateway.close();

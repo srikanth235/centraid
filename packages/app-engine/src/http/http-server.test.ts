@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { Runtime } from "../runtime.ts";
 import { startRuntimeHttpServer, AUTHED_DEVICE_HEADER } from "./http-server.ts";

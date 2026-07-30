@@ -3,8 +3,9 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { makeDemoRouteHandler } from "./demo-routes.js";
@@ -240,7 +241,9 @@ async function serve(
       });
   });
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const address = server.address() as AddressInfo;
   return `http://127.0.0.1:${address.port}`;
 }

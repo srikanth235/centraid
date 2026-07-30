@@ -61,7 +61,7 @@ const EXTRACT_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log: _log }) {
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
     entity: "media.media_asset",
@@ -178,4 +178,4 @@ export default async ({ ctx, log }) => {
     summary: `staged ${receipts} receipt(s), ${bookings} booking(s); ${other} other screenshot(s)`,
     output: { receipts, bookings, other },
   };
-};
+}

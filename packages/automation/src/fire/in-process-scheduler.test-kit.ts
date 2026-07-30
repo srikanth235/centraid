@@ -34,7 +34,9 @@ export const at = (hour: number, minute: number): Date =>
   new Date(2026, 0, 1, hour, minute, 0, 0);
 
 export async function settle(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 export { manifest };

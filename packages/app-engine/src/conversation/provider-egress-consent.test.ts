@@ -1,5 +1,6 @@
-import { plainSqliteRows } from "@centraid/test-kit/sqlite";
 import { describe, expect, test } from "vitest";
+
+import { plainSqliteRows } from "@centraid/test-kit/sqlite";
 
 import { ProviderEgressConsentStore } from "./provider-egress-consent.js";
 import { newProvider } from "./store-test-fixtures.js";

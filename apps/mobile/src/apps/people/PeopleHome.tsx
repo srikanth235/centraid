@@ -1,8 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit — native People intentionally
-// keeps the offline directory, channel CRUD, duplicate review, and merge
-// (via core.merge_party) in one first-class cover so every visible control
-// maps to a receipted action.
-import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
@@ -17,6 +12,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// governance: allow-repo-hygiene file-size-limit — native People intentionally
+// keeps the offline directory, channel CRUD, duplicate review, and merge
+// (via core.merge_party) in one first-class cover so every visible control
+// maps to a receipted action.
+import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import {

@@ -2,11 +2,12 @@ import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 // governance: allow-repo-hygiene file-size-limit #181 — cohesive
 // conversation-history suite; the build-kind coverage tips it just over 500
 // lines, not worth a split.
 import { beforeEach, describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { makeConversationRouteHandler } from "../http/conversation-routes.js";
 import { makeJournalDbProvider } from "../stores/gateway-db.js";
@@ -920,7 +921,9 @@ describe(ConversationHistoryStore, () => {
 
   it("listSessions orders by updatedAt desc", async () => {
     const a = store.createSession(APP, "A");
-    await new Promise((resolve) => setTimeout(resolve, 4));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 4);
+    });
     const b = store.createSession(APP, "B");
     const list = store.listSessions(APP);
     expect(list[0]!.id).toBe(b.id);

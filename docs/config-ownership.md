@@ -61,8 +61,8 @@ Editing `app.json` in a draft worktree does not change production grants until P
 
 ### Model catalog — runtime wins when file present
 
-| Path | Owner |
-| --- | --- |
+| Path                                   | Owner                           |
+| -------------------------------------- | ------------------------------- |
 | `model-catalog.json` under gateway dir | Runner status / Refresh catalog |
 
 Omit file → enumerate without persistence. File is rewritten on refresh.

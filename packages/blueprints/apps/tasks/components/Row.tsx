@@ -67,7 +67,7 @@ export function Row({
   const handleToggle = async () => {
     if (closed) return;
     if (!isOpen) {
-      onToggle(task);
+      void onToggle(task);
       return;
     }
     setCompleting(true);

@@ -31,10 +31,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "clean": "rm -rf dist",
     "coverage": "vitest run --coverage",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

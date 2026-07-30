@@ -11,7 +11,7 @@ const AUTH = { authorization: "Bearer {{connection:access_token}}" };
 const MAX_PAGES_PER_RUN = 3;
 
 async function api(ctx, path, opts = {}) {
-  const headers = { ...AUTH, ...(opts.headers || {}) };
+  const headers = { ...AUTH, ...opts.headers };
   const res = await ctx.fetch({
     url: path.startsWith("http") ? path : `${API}${path}`,
     headers,

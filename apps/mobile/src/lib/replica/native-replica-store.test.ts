@@ -1,6 +1,7 @@
+import { describe, expect, test } from "vitest";
+
 import { OnlineOnlyError } from "@centraid/client/replica/native";
 import type { ReplicaSnapshot } from "@centraid/client/replica/native";
-import { describe, expect, test } from "vitest";
 
 import { NativeReplicaStore } from "./native-replica-store";
 import { NodeSqliteDriver } from "./node-sqlite-driver";

@@ -1,4 +1,3 @@
-import { flushMacrotasks } from "@centraid/test-kit/flush";
 import {
   afterAll,
   beforeAll,
@@ -8,6 +7,8 @@ import {
   it,
   vi,
 } from "vitest";
+
+import { flushMacrotasks } from "@centraid/test-kit/flush";
 
 import type * as TypeImport_dar201 from "./gateway-client-core.js";
 import type * as TypeImport_lkae3t from "./vault-change-feed.js";
@@ -165,9 +166,9 @@ describe("vault-change-feed", () => {
 
     it("ignores a late response from the stream generation replaced by shape attestation", async () => {
       let resolveOld!: (response: Response) => void;
-      const oldResponse = new Promise<Response>(
-        (resolve) => (resolveOld = resolve)
-      );
+      const oldResponse = new Promise<Response>((resolve) => {
+        resolveOld = resolve;
+      });
       const current = controlledBody();
       core.doFetch.mockReturnValueOnce(oldResponse).mockResolvedValueOnce({
         ok: true,

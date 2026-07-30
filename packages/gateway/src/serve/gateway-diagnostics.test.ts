@@ -7,10 +7,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { bootstrapVault, openVaultDb } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { buildDiagnosticsBundle } from "./gateway-diagnostics.ts";
 import { GatewayLogStore } from "./gateway-log-store.ts";

@@ -141,7 +141,7 @@ export function History({
 
   useEffect(() => {
     let cancelled = false;
-    loadVersions(documentId).then((res) => {
+    void loadVersions(documentId).then((res) => {
       if (cancelled) return;
       setVersions(res?.versions ?? []);
       setDenied(Boolean(res?.vaultDenied));

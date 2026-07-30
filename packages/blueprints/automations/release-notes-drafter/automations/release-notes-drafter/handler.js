@@ -29,7 +29,7 @@ const RELEASE_NOTE_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const payload = ctx.input;
   const pr =
     payload && typeof payload === "object" ? payload.pull_request : null;
@@ -61,4 +61,4 @@ export default async ({ ctx, log }) => {
       : "release note drafted";
   log.info(`drafted release note for ${where || "merge"}: ${headline}`);
   return { summary: headline, output: draft };
-};
+}

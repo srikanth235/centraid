@@ -321,6 +321,9 @@ export async function startTypeScriptBytePlane(options: {
   });
   return {
     baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
-    close: () => new Promise((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+      }),
   };
 }

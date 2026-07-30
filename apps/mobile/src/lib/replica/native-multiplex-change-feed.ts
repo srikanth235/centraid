@@ -1,3 +1,5 @@
+import { fetch as expoFetch } from "expo/fetch";
+
 import {
   authHeaders,
   consumeVaultChangeSse,
@@ -11,7 +13,6 @@ import type {
   VaultChangeCursor,
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
-import { fetch as expoFetch } from "expo/fetch";
 
 import type { AsyncStorageLike, StreamFetch } from "./native-change-feed";
 import type { NativeChangeFeed } from "./native-session";

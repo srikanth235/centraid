@@ -32,6 +32,7 @@ export function Icon({
       strokeWidth={sw}
       strokeLinecap="round"
       strokeLinejoin="round"
+      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{ __html: ICON_PATHS[name] ?? "" }}
     />
   );
@@ -56,6 +57,7 @@ export function CatIcon({
       strokeWidth={sw}
       strokeLinecap="round"
       strokeLinejoin="round"
+      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{ __html: CAT_ICON_PATHS[type] ?? "" }}
     />
   );

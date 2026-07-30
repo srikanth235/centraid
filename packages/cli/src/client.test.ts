@@ -1,11 +1,12 @@
 import http from "node:http";
 
+import { describe, expect, test } from "vitest";
+
 import {
   GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
   ROUTES,
 } from "@centraid/protocol";
-import { describe, expect, test } from "vitest";
 
 import { getHealth, handshake, listApps } from "./client.ts";
 
@@ -66,7 +67,7 @@ function startMockGateway(): Promise<{
         close: () =>
           new Promise<void>((_resolve, _reject) => {
             server.close((err) => {
-              if (err) _reject(err);
+              if (err) _reject(new Error(err.message, { cause: err }));
               else _resolve();
             });
           }),

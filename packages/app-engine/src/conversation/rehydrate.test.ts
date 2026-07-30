@@ -8,8 +8,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { beforeEach, describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { makeConversationRouteHandler } from "../http/conversation-routes.js";
 import { makeJournalDbProvider } from "../stores/gateway-db.js";

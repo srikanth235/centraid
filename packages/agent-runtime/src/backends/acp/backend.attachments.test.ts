@@ -6,9 +6,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import type { TurnStreamEvent } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 import { notices, runFake } from "./test-fixtures.js";
 import type { RunOptions } from "./test-fixtures.js";

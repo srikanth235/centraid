@@ -10,6 +10,8 @@
  * `ctx.agent` routing at the one surviving seam.
  */
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import {
   ConversationStore,
   makeJournalDbProvider,
@@ -23,7 +25,6 @@ import type {
 } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { RUNNER_BACKENDS } from "../registry.ts";
 import type { RunnerKind } from "../types.ts";

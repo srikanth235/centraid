@@ -162,6 +162,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           color: finish.glyphColor,
           boxShadow: finish.boxShadow || undefined,
         }}
+        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
         dangerouslySetInnerHTML={{
           __html: iconSvg(vm.projIcon || "Sparkle", 11, 1.9),
         }}
@@ -227,6 +228,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           onClick={() =>
             vm.setChatView(vm.chatView === "history" ? "chat" : "history")
           }
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("History", 14) }}
         />
       )}
@@ -235,6 +237,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
         className={chrome.tbBtn}
         aria-label="More app actions"
         title="More"
+        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
         dangerouslySetInnerHTML={{ __html: iconSvg("MoreHoriz", 14) }}
       />
       <button
@@ -245,7 +248,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
         disabled={vm.primaryDisabled}
         onClick={vm.handlePrimary}
       >
-        <span dangerouslySetInnerHTML={{ __html: iconSvg(primaryGlyph, 11) }} />
+        <span
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
+          dangerouslySetInnerHTML={{ __html: iconSvg(primaryGlyph, 11) }}
+        />
         <span>{vm.primaryLabel}</span>
       </button>
     </span>
@@ -270,6 +276,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           title={`${d[0]!.toUpperCase()}${d.slice(1)} preview`}
           data-active={String(vm.previewDevice === d)}
           onClick={() => vm.setPreviewDevice(d)}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: glyph }}
         />
       ))}
@@ -290,6 +297,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
         aria-label="Reload preview"
         title="Reload preview"
         onClick={() => vm.setTab("preview")}
+        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
         dangerouslySetInnerHTML={{ __html: RefreshIcon }}
       />
     </div>
@@ -308,6 +316,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           onClick={() =>
             previewInfo && window.open(previewInfo.src, "_blank", "noopener")
           }
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("Share", 12) }}
         />
       )}
@@ -321,6 +330,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
             title={label}
             data-active={String(vm.tab === key)}
             onClick={() => vm.setTab(key)}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg(glyph, 13) }}
           />
         ))}

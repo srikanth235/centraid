@@ -140,7 +140,9 @@ export async function withConversationLock<T>(
   const key = `${appId}::${conversationId}`;
   const previous = conversationLocks.get(key) ?? Promise.resolve();
   let release!: () => void;
-  const next = new Promise<void>((resolve) => (release = resolve));
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   // The map holds the *chained* tail (previous → next) so newer callers
   // await everything ahead of them. Keep a reference to that exact promise
   // so the cleanup branch can identify "nobody else queued after me".

@@ -155,9 +155,9 @@ describe("screens/BackupCard", () => {
         NonNullable<BackupCardProps["streamCustody"]>
       >((onChange, signal) => {
         emit = onChange;
-        return new Promise<void>((resolve) =>
-          signal.addEventListener("abort", () => resolve())
-        );
+        return new Promise<void>((resolve) => {
+          signal.addEventListener("abort", () => resolve());
+        });
       });
       const loadStatus = vi
         .fn<BackupCardProps["loadStatus"]>()

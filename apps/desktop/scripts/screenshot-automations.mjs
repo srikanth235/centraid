@@ -360,11 +360,16 @@ async function startSeedServer() {
     if (p.endsWith("/_templates")) return json(res, TEMPLATES);
     return json(res, {});
   });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server.address();
   return {
     base: `http://127.0.0.1:${port}`,
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: () =>
+      new Promise((resolve) => {
+        server.close(resolve);
+      }),
   };
 }
 

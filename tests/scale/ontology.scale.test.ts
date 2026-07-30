@@ -1,5 +1,6 @@
-import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { describe, expect, test } from "vitest";
+
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { browseRows } from "../../packages/vault/src/schema/atlas-browse.js";
 import { createTestVault } from "../helpers/factories.js";

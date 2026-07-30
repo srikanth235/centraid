@@ -7,10 +7,11 @@ import path from "node:path";
 // longer exists (or whose input changed) fails HERE, not on an owner's
 // first click.
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { runHandler } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultPlane } from "./vault-plane.js";
 import type { VaultPlane } from "./vault-plane.js";

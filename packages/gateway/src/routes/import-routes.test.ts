@@ -4,9 +4,10 @@ import { promises as fs } from "node:fs";
 // file over HTTP, review its rows, publish, and see the batch in history.
 import http from "node:http";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -45,11 +46,14 @@ describe("import-routes", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
     const address = server.address() as { port: number };
     return {

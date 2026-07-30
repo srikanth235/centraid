@@ -211,7 +211,9 @@ function resolveNodeBin(): string {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /** How long to wait for a SIGTERM'd gateway to exit before escalating (H2). */

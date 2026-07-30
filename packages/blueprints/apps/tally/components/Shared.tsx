@@ -26,6 +26,7 @@ export function Icon({ svg }: { svg: string }) {
   return (
     <i
       style={{ display: "contents" }}
+      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

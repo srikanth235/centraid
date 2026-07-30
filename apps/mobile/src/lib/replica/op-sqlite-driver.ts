@@ -1,3 +1,6 @@
+import { open } from "@op-engineering/op-sqlite";
+import type { DB } from "@op-engineering/op-sqlite";
+
 import { replicaDatabaseName } from "@centraid/client/replica/native";
 import type {
   ReplicaBindValue,
@@ -5,8 +8,6 @@ import type {
   ReplicaIdentity,
   ReplicaSqliteDriver,
 } from "@centraid/client/replica/native";
-import { open } from "@op-engineering/op-sqlite";
-import type { DB } from "@op-engineering/op-sqlite";
 
 import { ReplicaFts5UnavailableError } from "./replica-fts5-error";
 import {

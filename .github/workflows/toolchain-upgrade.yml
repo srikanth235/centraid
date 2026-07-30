@@ -1,0 +1,49 @@
+name: Toolchain upgrade cadence
+
+on:
+  schedule:
+    - cron: "17 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  open-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Open this month's toolchain review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          month="$(date -u +%Y-%m)"
+          title="[toolchain] Monthly upgrade review — ${month}"
+          body_file="${RUNNER_TEMP}/toolchain-upgrade.md"
+          cat >"$body_file" <<EOF
+          ## Upgrade checklist
+
+          - [ ] Compare Node, Turbo, Ultracite, Oxlint, oxlint-tsgolint, Oxfmt, TypeScript, Knip, and Vitest with current releases.
+          - [ ] Record versions before and after; keep every accepted version exact-pinned.
+          - [ ] Review rules added, removed, or semantically changed.
+          - [ ] Regenerate and review \`typeAwareOnlyRules\` against the installed oxlint-tsgolint rule surface.
+          - [ ] Isolate formatter churn, safe lint fixes, and behavioral corrections in separate commits.
+          - [ ] Run \`bun run check:full\`.
+
+          This issue is the monthly owner for tools excluded from weekly Dependabot batches by #639.
+
+          Trigger: ${RUN_URL}
+          EOF
+          node scripts/ci/file-tracking-issue.mjs \
+            --title "$title" \
+            --search "$title" \
+            --body-file "$body_file" \
+            --label tech-debt \
+            --run-url "$RUN_URL"

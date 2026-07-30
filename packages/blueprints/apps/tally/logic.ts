@@ -147,7 +147,7 @@ export function createLogic({
     Object.assign(state, patch);
     state.detail = null;
     if (state.narrow) $("root").classList.remove("side-open");
-    loadView();
+    void loadView();
   }
 
   // ---------- Search ----------
@@ -182,7 +182,7 @@ export function createLogic({
     input.value = "";
     searchSeq += 1;
     state.search = "";
-    loadView();
+    void loadView();
   }
 
   // ---------- Expense detail popover ----------

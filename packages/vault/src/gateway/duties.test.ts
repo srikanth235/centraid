@@ -5,8 +5,9 @@ import { existsSync, promises as fs } from "node:fs";
 // the view service, and file custody.
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";

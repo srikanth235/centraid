@@ -1,9 +1,10 @@
-import type { ReplicaFetcher } from "@centraid/client/replica/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as BackgroundTask from "expo-background-task";
 import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
+
+import type { ReplicaFetcher } from "@centraid/client/replica/native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { authHeader, resolveGatewayBase } from "../gateway";

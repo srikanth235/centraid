@@ -7,10 +7,11 @@ import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { ReplicaIndex } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";

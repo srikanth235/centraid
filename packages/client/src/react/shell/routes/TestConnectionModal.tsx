@@ -73,6 +73,7 @@ export default function TestConnectionModal({
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Wifi", 14) }}
           />
           <h2 className={spaceModalStyles.profModalTitle}>
@@ -84,6 +85,7 @@ export default function TestConnectionModal({
             title="Close"
             aria-label="Close"
             onClick={onClose}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>

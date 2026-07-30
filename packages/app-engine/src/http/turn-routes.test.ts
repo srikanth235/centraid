@@ -2,9 +2,10 @@ import crypto from "node:crypto";
 import { promises as fs, mkdirSync } from "node:fs";
 import path from "node:path";
 
-import { tempDir, tempDirSync } from "@centraid/test-kit/temp-dir";
 // governance: allow-repo-hygiene file-size-limit (#408) one HTTP turn-routing suite sharing the same runtime and conversation-runner fixture; splitting would duplicate the protocol harness and its state assertions
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+import { tempDir, tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { ConversationHistoryStore } from "../conversation/history.ts";
 import type { ConversationRunner } from "../conversation/runner.ts";
@@ -303,7 +304,9 @@ describe("turn-routes", () => {
   test("two concurrent POSTs with the SAME idempotencyKey run the turn once (in-flight dedup) (#420)", async () => {
     let runs = 0;
     let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const runner: ConversationRunner = {
       async run(input) {
         runs += 1;
@@ -531,7 +534,9 @@ describe("turn-routes", () => {
     // -- Setup runtime A: runner hangs on `releaseA`.
     let releaseA!: () => void;
     let aStarted = false;
-    const aDone = new Promise<void>((resolve) => (releaseA = resolve));
+    const aDone = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
     const runnerA: ConversationRunner = {
       async run(input) {
         aStarted = true;
@@ -596,7 +601,7 @@ describe("turn-routes", () => {
           },
           body: JSON.stringify({ conversationId: "w1", message: "b" }),
         }).then((r) => r.text()),
-        new Promise<string>((_resolve, reject) =>
+        new Promise<string>((_resolve, reject) => {
           setTimeout(
             () =>
               reject(
@@ -605,8 +610,8 @@ describe("turn-routes", () => {
                 )
               ),
             2000
-          )
-        ),
+          );
+        }),
       ]);
 
       expect(bText).toMatch(/event: final/u);

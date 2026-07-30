@@ -1,8 +1,9 @@
+import * as Crypto from "expo-crypto";
+
 import type {
   ReplicaDigest,
   ReplicaIdFactory,
 } from "@centraid/client/replica/native";
-import * as Crypto from "expo-crypto";
 
 /**
  * Hex SHA-256 for replica storage keys and intent payload hashes. React

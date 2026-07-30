@@ -76,7 +76,9 @@ describe("confirm", () => {
         danger: true,
         confirmLabel: "Delete",
       });
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 40);
+      });
       const confirmBtn = document.querySelector(".danger") as HTMLButtonElement;
       expect(confirmBtn).not.toBeNull();
       expect(document.activeElement).toBe(confirmBtn);

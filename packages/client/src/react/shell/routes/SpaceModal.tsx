@@ -1,6 +1,7 @@
-import type { IconName } from "@centraid/design-tokens";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";
@@ -78,6 +79,7 @@ function Avatar({
   return (
     <span
       style={{ background: color, width: size, height: size } as CSSProperties}
+      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{
         __html: iconSvg(icon, Math.round(size * 0.42), 1.7),
       }}
@@ -137,6 +139,7 @@ export default function SpaceModal({
         <div className={styles.profModalHead}>
           <span
             className={styles.profModalHeadIcon}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("Users", 14) }}
           />
           <h2 className={styles.profModalTitle}>
@@ -148,6 +151,7 @@ export default function SpaceModal({
             title="Close"
             aria-label="Close"
             onClick={onCancel}
+            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
             dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>
@@ -196,6 +200,7 @@ export default function SpaceModal({
                   aria-label={ic}
                   data-selected={ic === icon ? "true" : "false"}
                   onClick={() => setIcon(ic)}
+                  // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
                   dangerouslySetInnerHTML={{ __html: iconSvg(ic, 16) }}
                 />
               ))}
@@ -242,6 +247,7 @@ export default function SpaceModal({
               onClick={onDelete}
             >
               <span
+                // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
                 dangerouslySetInnerHTML={{ __html: iconSvg("Trash", 12) }}
               />
               Delete

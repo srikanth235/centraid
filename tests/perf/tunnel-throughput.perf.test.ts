@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import http from "node:http";
 import path from "node:path";
 
+import { describe, expect, onTestFinished, test } from "vitest";
+
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -11,7 +13,6 @@ import {
   startDesktopTunnel,
   startLocalProxy,
 } from "@centraid/tunnel";
-import { describe, expect, onTestFinished, test } from "vitest";
 
 const OWNER = "tests/perf/tunnel-throughput.perf.test.ts";
 
@@ -29,11 +30,14 @@ describe("tunnel-throughput.perf", () => {
       res.setHeader("content-length", String(payload.length));
       res.end(payload);
     });
-    await new Promise<void>((resolve) =>
-      gateway.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      gateway.listen(0, "127.0.0.1", resolve);
+    });
     onTestFinished(
-      () => new Promise<void>((resolve) => gateway.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          gateway.close(() => resolve());
+        })
     );
     const address = gateway.address();
     if (!address || typeof address === "string")

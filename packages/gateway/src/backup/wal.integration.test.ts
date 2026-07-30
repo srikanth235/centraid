@@ -17,6 +17,8 @@ import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import {
   createSnapshot,
   openLocalBackupProvider,
@@ -35,7 +37,6 @@ import {
   verifyRestoredPair,
 } from "@centraid/vault";
 import type { WalShipper, WalShipperOptions } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
@@ -1099,8 +1100,8 @@ describe("wal", () => {
       f.shipper
         .pendingBases()
         .map((b) => b.generation)
-        .sort()
-    ).toStrictEqual([gen1, jgen1].sort());
+        .sort((a, b) => Number(a) - Number(b))
+    ).toStrictEqual([gen1, jgen1].sort((a, b) => Number(a) - Number(b)));
     expect(f.logs.some((l) => /no manifest anchors/u.test(l))).toBe(true);
 
     // And the retry HEALS it: the moment a manifest names the pair, and only

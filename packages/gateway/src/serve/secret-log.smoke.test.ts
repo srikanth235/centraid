@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 /**
  * Secret-in-logs / token leakage smoke (#496 G3).
@@ -10,7 +12,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
  * on-disk gateway JSONL log ring (when logsDir is configured).
  */
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.js";
 import { serve } from "./serve.js";

@@ -1,13 +1,14 @@
-import type {
-  InlineAppModule,
-  InlineAppProps,
-} from "@centraid/blueprints/apps/inline-types";
-import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type {
+  InlineAppModule,
+  InlineAppProps,
+} from "@centraid/blueprints/apps/inline-types";
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";

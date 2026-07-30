@@ -137,6 +137,7 @@ export default function AppViewRoute({
           color: finish.glyphColor,
           boxShadow: finish.boxShadow || undefined,
         }}
+        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
         dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 11, 1.9) }}
       />
       <span className={styles.brandChipName}>{app.name}</span>
@@ -157,6 +158,7 @@ export default function AppViewRoute({
           <button className={styles.modeSeg} type="button" data-active="true">
             <span
               className={styles.modeSegIcon}
+              // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
               dangerouslySetInnerHTML={{ __html: iconSvg("Eye", 12) }}
             />
             Use
@@ -168,6 +170,7 @@ export default function AppViewRoute({
           >
             <span
               className={styles.modeSegIcon}
+              // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
               dangerouslySetInnerHTML={{ __html: iconSvg("Sparkle", 12) }}
             />
             Build
@@ -185,6 +188,7 @@ export default function AppViewRoute({
             setSettingsTab("appearance");
             setSettingsOpen((open) => !open);
           }}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
         />
         <span className={chrome.tooltip}>App settings</span>
@@ -194,6 +198,7 @@ export default function AppViewRoute({
         type="button"
         aria-label="More"
         title="More"
+        // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
         dangerouslySetInnerHTML={{ __html: iconSvg("MoreHoriz", 14) }}
       />
     </span>

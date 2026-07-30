@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { describe, expect, test } from "vitest";
+
 import type {
   GatewayAuth,
   ReplicaChangeBatch,
@@ -10,7 +12,6 @@ import type {
   ReplicaSnapshotRow,
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
-import { describe, expect, test } from "vitest";
 
 import type { AppStateLike, NativeChangeFeed } from "./native-session";
 import { createNativeReplicaSession } from "./native-session";
@@ -250,7 +251,9 @@ async function until(
   const poll = async (): Promise<void> => {
     if (await predicate()) return;
     if (Date.now() > deadline) throw new Error("condition not reached in time");
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
     return poll();
   };
   return poll();

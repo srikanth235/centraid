@@ -1,11 +1,3 @@
-import {
-  allocateMinorUnits,
-  parseReceiptText,
-} from "@centraid/client/receipt-capture";
-import type {
-  ReceiptDraft,
-  ReceiptLineDraft,
-} from "@centraid/client/receipt-capture";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { File } from "expo-file-system";
 import React, {
@@ -24,6 +16,15 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  allocateMinorUnits,
+  parseReceiptText,
+} from "@centraid/client/receipt-capture";
+import type {
+  ReceiptDraft,
+  ReceiptLineDraft,
+} from "@centraid/client/receipt-capture";
 
 import { recognizeText } from "../../modules/centraid-ocr";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";

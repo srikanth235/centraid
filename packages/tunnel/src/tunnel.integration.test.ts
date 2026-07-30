@@ -3,8 +3,9 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   createTunnelClient,

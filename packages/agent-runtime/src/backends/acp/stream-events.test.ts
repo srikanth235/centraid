@@ -2,8 +2,9 @@
 // factory directly with hand-built ACP notifications so every update variant,
 // guard, and accumulation branch is exercised without a live agent.
 
-import type { TurnStreamEvent } from "@centraid/app-engine";
 import { describe, expect, test } from "vitest";
+
+import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { createSessionUpdateMapper } from "./stream-events.ts";
 

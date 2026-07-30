@@ -2,6 +2,8 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { plainSqliteRows } from "@centraid/test-kit/sqlite";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -10,7 +12,6 @@ import {
   currentReplicaLogState,
   readReplicaRow,
 } from "@centraid/vault";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { openVaultPlane } from "../serve/vault-plane.js";
 import type { VaultPlane } from "../serve/vault-plane.js";

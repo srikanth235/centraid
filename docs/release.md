@@ -36,11 +36,7 @@ Machine catalog: `scripts/release/surfaces.mjs`. Print: `bun run release:matrix`
 | `docs` | continuous | n/a | `ci.yml` (`docs` lane) |
 | `companion` | sideline | no | `release.yml` → `lane-release-companion.yml` |
 
-Since #557 a tag produces **one** run. `release.yml` is the only workflow that
-listens on `push: tags`; it fans out to the lanes above and `release-check`
-aggregates them into a single verdict, so a partial release (npm published,
-desktop packaging red) is one red check rather than three greens and a red
-scattered across four workflow runs.
+Since #557 a tag produces **one** run. `release.yml` is the only workflow that listens on `push: tags`; it fans out to the lanes above and `release-check` aggregates them into a single verdict, so a partial release (npm published, desktop packaging red) is one red check rather than three greens and a red scattered across four workflow runs.
 
 **Stamp vs ship:** every package.json gets the product version. Which artifacts leave the building is the **ship set** (`--surfaces` on publish). Continuous surfaces deploy from `main`, not from the tag ritual.
 
@@ -76,7 +72,7 @@ Supporting scripts:
 | --- | --- |
 | `bun run release:matrix` | Print surface catalog / ship set |
 | `bun run release:sync-versions` | Re-stamp workspace + mobile natives to root version |
-| `bun run release:verify-secrets` | Report secret *names* present/absent (never values) |
+| `bun run release:verify-secrets` | Report secret _names_ present/absent (never values) |
 | `bun run release:restamp` | I8 rewrite `releaseDate` / rollout on `latest*.yml` |
 | `bun run boot:smoke` | Structural desktop package surface |
 | `bun run web:build` / `web:smoke` | Public PWA artifact + smoke |
@@ -149,9 +145,7 @@ Do not fork process text into skills.
 | `web.yml` | path-filtered main push | CF deploy when token present (PR gate is ci.yml's `web-build`) |
 | `oauth-worker.yml` | path-filtered main push | protected deploy only when explicit flag + production evidence gates pass (PR gate is ci.yml's `oauth-worker`) |
 
-Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the
-desktop signing identity, `NPM_TOKEN` and GHCR push never reach a lane that has
-no business with them.
+Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the desktop signing identity, `NPM_TOKEN` and GHCR push never reach a lane that has no business with them.
 
 ## Enrollment / signing secrets
 

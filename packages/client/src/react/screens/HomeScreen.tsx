@@ -1,7 +1,8 @@
-import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Home surface (apps grid + drafts + templates); splitting would fragment one visual unit
 import { useRef, useState } from "react";
 import type { JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import { formatCurrencyMinor } from "../../capture.js";
 import { INTEGRATION_HUES } from "../format.js";

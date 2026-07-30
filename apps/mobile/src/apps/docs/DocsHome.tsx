@@ -1,4 +1,3 @@
-import { OnlineOnlyError } from "@centraid/client/replica/native";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
@@ -15,6 +14,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { OnlineOnlyError } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";

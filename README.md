@@ -72,10 +72,7 @@ centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --port 8765
 centraid-gateway pair --data-dir ./gw-data          # one-time ticket for a client
 ```
 
-For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data volume with
-`noatime`. ext4 does not provide reflink clones on common Pi kernels, so daily recovery bases
-fall back to a full database copy; the gateway detects that fallback and logs a storage-wear
-warning.
+For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data volume with `noatime`. ext4 does not provide reflink clones on common Pi kernels, so daily recovery bases fall back to a full database copy; the gateway detects that fallback and logs a storage-wear warning.
 
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it via Settings → Phone on the desktop (one-time QR).
 
@@ -88,7 +85,7 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 ## Layout
 
 | Path | What it is |
-|---|---|
+| --- | --- |
 | `apps/desktop` | Electron host for the shared React client. Embeds the gateway in-process. |
 | `apps/extension` | MV3 Centraid Companion for explicit Locker fill and web capture over paired Iroh/WASM. |
 | `apps/web` | Vite PWA host plus its application-specific Iroh/WASM transport; embeds no gateway. |
@@ -153,11 +150,7 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 
 ### Pair clients after install (VPS / headless)
 
-Start the gateway — a fresh data dir **auto-founds** two vaults, **Shared** and
-**Personal**, at construction (issue #603). There is no founding ceremony, no
-founding ticket, and no first-run wall; the only ticket concept left is the
-**pair ticket**, which always means *join an existing gateway*. An existing data
-dir is never modified.
+Start the gateway — a fresh data dir **auto-founds** two vaults, **Shared** and **Personal**, at construction (issue #603). There is no founding ceremony, no founding ticket, and no first-run wall; the only ticket concept left is the **pair ticket**, which always means _join an existing gateway_. An existing data dir is never modified.
 
 ```sh
 # Fresh VPS: serve creates Shared + Personal silently, then keeps serving.
@@ -210,31 +203,27 @@ docker run --rm -p 8787:8787 \
 
 ## Build / check
 
-Turborepo + Bun. **Before every push**, run the early PR gates locally so CI
-does not burn minutes on format/lint/type errors:
+Turborepo + Bun. **Before every push**, run the early PR gates locally so CI does not burn minutes on format/lint/type errors:
 
 ```sh
 bun run check:pr       # REQUIRED before push (mirrors ci.yml early steps)
 ```
 
-`check:pr` is: `format:check` → `oxlint` → turbo `lint` → `typecheck` →
-`lint:types` → `lint:css` → `test:matrix` (the GitHub `static` job). Vitest
-alone is not enough — package `typecheck` includes test files and catches TS
-errors tests still run under. GitHub `ci` runs `static` and `verify` in
-parallel (`verify` = build, native tunnel, data-plane, gateway perf,
-coverage), then a thin required `check` aggregator. On **main** only,
-`publish-report` deploys the public HTML test-health report:
-`https://srikanth235.github.io/centraid/test-report/main/`.
+`check:pr` is: frozen install → `format:check` → `lint` → package policy → `typecheck` → `lint:types` → Knip → policy checks → affected tests. Vitest alone is not enough — package `typecheck` includes test files and catches TS errors tests still run under. GitHub `ci` runs `static` and `verify` in parallel (`verify` = build, native tunnel, data-plane, gateway perf, coverage), then a thin required `check` aggregator. On **main** only, `publish-report` deploys the public HTML test-health report: `https://srikanth235.github.io/centraid/test-report/main/`.
 
 ```sh
 bun run build          # all apps + packages
+bun run check:fast     # edit loop: format + lint + affected typecheck
+bun run check:full     # shared infra: dependents + coverage + e2e
 bun run test           # per-package vitest (hundreds of test files)
 bun run coverage       # repo-wide v8 coverage
 bun run typecheck      # turbo typecheck + tests/ tsc (included in check:pr)
-bun run check          # format:check + oxlint + turbo lint only
 bun run lint:types     # type-aware lint (included in check:pr)
+bun run toolchain:doctor # non-mutating Ultracite/config drift check
 bun run ci             # alias of check:pr
 ```
+
+See [docs/toolchain.md](docs/toolchain.md) for the stable command API, rule rubric, runtime profiles, safe-fix policy, and dedicated-upgrade contract.
 
 Desktop e2e: Playwright tests across 14 scenario sections, driving the real Electron app against a mock gateway — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
 
@@ -246,8 +235,8 @@ Companion: `bun run --cwd apps/extension package` emits Chrome and Firefox ZIPs;
 
 The docs ([centraid.dev/docs](https://centraid.dev/docs/)) are Astro-built static HTML in [`scripts/docs-site`](scripts/docs-site/) — two personas, three pillars:
 
-| | |
-|---|---|
+|  |  |
+| --- | --- |
 | [Start](https://centraid.dev/docs/start/) | Install → vault → first app → pair a phone → always-on → key backup |
 | [Data](https://centraid.dev/docs/data/) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
 | [Apps](https://centraid.dev/docs/apps/) | The eight blueprints, app anatomy, the install model, attach & link, the agent surface, mobile |

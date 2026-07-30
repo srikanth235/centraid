@@ -70,4 +70,4 @@ A small "spend summary" panel — real components for the content, DS variables 
 </section>
 ```
 
-**Excluded on purpose**: the live "Ask your vault" assistant and the vault-fetching @-mention *picker* are runtime controllers wired to the product's SSE/vault surfaces — they are **not** in this component library (only the presentational `<kit-mention-chip>` and `<kit-reference-strip>` are). Build those flows against the live product, not here.
+**Excluded on purpose**: the live "Ask your vault" assistant and the vault-fetching @-mention _picker_ are runtime controllers wired to the product's SSE/vault surfaces — they are **not** in this component library (only the presentational `<kit-mention-chip>` and `<kit-reference-strip>` are). Build those flows against the live product, not here.

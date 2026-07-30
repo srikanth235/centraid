@@ -72,4 +72,6 @@ async function close(): Promise<void> {
 
 process.on("SIGINT", () => void close());
 process.on("SIGTERM", () => void close());
-await new Promise(() => undefined);
+await new Promise(() => {
+  void undefined;
+});

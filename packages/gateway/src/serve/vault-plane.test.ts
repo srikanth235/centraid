@@ -3,6 +3,8 @@ import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { Dispatcher, Registry } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -12,7 +14,6 @@ import {
   ensureAppEnrolled,
   uuidv7,
 } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import { openVaultPlane } from "./vault-plane.js";
@@ -257,14 +258,18 @@ describe("vault-plane", () => {
       });
 
     plane.start();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect(tick).not.toHaveBeenCalled();
     expect(plane.walShipper).toBe(shipper);
     expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
 
     backupConfigured = true;
     plane.rescheduleWalCapture();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect(tick).toHaveBeenCalledOnce();
     expect(plane.walShipper).toBe(shipper);
     expect(autocheckpointPages()).toStrictEqual([0, 0]);
@@ -899,9 +904,9 @@ describe("vault-plane", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
       () =>
         new Promise<void>((resolve) => {
@@ -1466,9 +1471,9 @@ describe("vault-plane", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
       () =>
         new Promise<void>((resolve) => {

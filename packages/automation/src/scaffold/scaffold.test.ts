@@ -1,9 +1,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { AppScaffoldError } from "@centraid/blueprints";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { parseManifest } from "../manifest/manifest.js";
 import { scaffoldApp, validateId, validateAppId } from "./scaffold.js";

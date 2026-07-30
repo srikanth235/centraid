@@ -2,9 +2,10 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { StorageConnectionStore } from "../backup/storage-connections.js";
 import {

@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { startPreferredDesktopTunnel } from "./desktop-tunnel.js";
 import { DeviceStore } from "./device-store.js";
