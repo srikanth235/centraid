@@ -50,6 +50,7 @@ Mirrors issue #637 acceptance criteria (implementation phases). Post-merge measu
 - Exclude `mobile-e2e-ios` from turbo-cache even after OS-aware hashing — zero-risk option from the issue open questions.
 - Registry `type=registry,mode=max` for Docker layer cache instead of GHA-backed cache, so multi-GB layers stay off the Actions pool.
 - Caller-side `permissions.packages: write` on `ci.yml` `gateway-package` (mirrors `release.yml` → `lane-release-gateway-image`); elevating only the reusable workflow is not enough when the parent workflow top-level is `contents: read`.
+- `lint-workflow-pins` allows `pull_request: types: [closed]` outside `ci.yml` so cache-cleanup can run post-merge without re-opening the multi-workflow required-check hazard.
 - Do not enable `org.gradle.caching` task-output cache; deps/wrapper only so mobile-smoke still executes compile tasks.
 - Per-stage production lock in the Docker deps stage left as a residual (called out in Dockerfile); not required for layer-cache correctness after manifests-first COPY.
 - Land on the existing #630 PR branch rather than a separate PR so the caching fixes ride the same CI surface under active load.

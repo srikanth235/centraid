@@ -150,6 +150,29 @@ ${clean.slice(clean.indexOf("jobs:"))}`;
   assert.deepEqual(lintWorkflowSource(".github/workflows/ci.yml", source), []);
 });
 
+test("closed-only pull_request is allowed for post-merge housekeeping", () => {
+  const source = `name: cache-cleanup
+on:
+  pull_request:
+    types: [closed]
+${clean.slice(clean.indexOf("jobs:"))}`;
+  assert.deepEqual(
+    lintWorkflowSource(".github/workflows/cache-cleanup.yml", source),
+    []
+  );
+});
+
+test("pull_request types that include open events are still blocked", () => {
+  const source = `name: extra
+on:
+  pull_request:
+    types: [opened, closed]
+${clean.slice(clean.indexOf("jobs:"))}`;
+  const errors = lintWorkflowSource(".github/workflows/extra.yml", source);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /only ci\.yml may/u);
+});
+
 test("a `pull_request` mention that is not a trigger is not flagged", () => {
   // `github.event.pull_request.number` in a concurrency group, and the word in
   // a comment, are both fine — only a two-space `pull_request:` key is a
