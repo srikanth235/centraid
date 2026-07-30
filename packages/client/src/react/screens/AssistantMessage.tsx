@@ -440,7 +440,6 @@ export default function Message({
             cb.wireCodeCopy(node);
           }
         }}
-        // eslint-disable-next-line react/no-danger -- (#325) markup from the trusted vanilla richAnswer renderer
         dangerouslySetInnerHTML={{ __html: m.html }}
       />
       <AiActions m={m} index={index} cb={cb} />

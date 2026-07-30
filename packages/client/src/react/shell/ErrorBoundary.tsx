@@ -18,7 +18,7 @@ interface ErrorBoundaryState {
 
 // Class error boundaries need setState + field state; house style prefers
 // functional components elsewhere. (#468)
-/* eslint-disable react/display-name, react/no-set-state, react/state-in-constructor, react/jsx-handler-names -- (#468) React error boundaries require a class component */
+/* eslint-disable react/no-set-state, react/state-in-constructor -- (#468) React error boundaries require a class component */
 export default class ErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
@@ -97,4 +97,4 @@ export default class ErrorBoundary extends Component<
     );
   }
 }
-/* eslint-enable react/display-name, react/no-set-state, react/state-in-constructor, react/jsx-handler-names */
+/* eslint-enable react/no-set-state, react/state-in-constructor */

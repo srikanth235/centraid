@@ -52,6 +52,17 @@
   `packages/blueprints/automations/slack-pull/automations/slack-pull/handler.js`,
   and
   `packages/blueprints/automations/todoist-pull/automations/todoist-pull/handler.js`.
+- Removed stale or partially stale lint directives, without changing runtime
+  behavior, from `packages/blueprints/apps/locker/app-root.tsx`,
+  `packages/blueprints/apps/docs/app-root.tsx`,
+  `packages/app-engine/src/registry/manifest.ts`,
+  `packages/client/src/react/screens/PaletteScreen.tsx`,
+  `packages/client/src/react/screens/AssistantMessage.tsx`,
+  `packages/client/src/react/shell/ErrorBoundary.tsx`,
+  `packages/client/src/react/screens/AppSettingsPanel.tsx`,
+  `packages/client/src/react/screens/AtlasKindsTab.tsx`,
+  `packages/client/src/react/screens/AutomationEditorConnectorsPicker.tsx`,
+  and `packages/client/src/react/screens/WhatsNewModal.tsx`.
 
 ### Formatter sweep paths
 
@@ -581,3 +592,4 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785411474-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 9079 | 0 | 260608 | 884 | 9963 | 0.1011 | 339706 | 0 | 20588544 | 35865 | style: apply repository oxfmt migration (#639) -m governance: allow-toolchain-co |
 | codex-019fb2ae-33d-1785411683-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 16771 | 0 | 651008 | 1498 | 18269 | 0.2271 | 356477 | 0 | 21239552 | 37363 | chore(lint): apply safe connector fixes (#639) |
 | codex-019fb2ae-33d-1785411767-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 5054 | 0 | 223232 | 570 | 5624 | 0.0770 | 361531 | 0 | 21462784 | 37933 | chore(lint): apply safe connector fixes (#639) |
+| codex-019fb2ae-33d-1785411915-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 11061 | 0 | 474112 | 2286 | 13347 | 0.1805 | 372592 | 0 | 21936896 | 40219 | chore(lint): remove stale suppressions (#639) |
