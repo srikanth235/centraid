@@ -12,8 +12,8 @@ export const BRAND = "#3EC8B4";
 
 // Teal accent ramp derived from BRAND. Used for the FAB, sparkle button,
 // primary CTAs, brand mark, focus rings, and active state in version
-// history. Only Centraid's own light/dark themes read these — the
-// emulation presets (Notion, GitHub, …) define their own accents inline.
+// history. Both registered themes declare this accent, and the pref layer
+// only overrides it once the owner picks a different one (#608 group P).
 // The base accent is BRAND itself (see above); the ramp extends from it.
 export const ACCENT_LIGHT = "#62D6C6";
 export const ACCENT_DEEP = "#2AA593";
@@ -23,14 +23,15 @@ export const ACCENT_VIOLET = "#7C5BD9";
 export const SUCCESS = "#5C8A4E";
 export const DANGER = "#C44A4A";
 
-// Mobile phones have dark bezels regardless of UI theme — keep the
-// phone-frame chrome constant across every preset.
-export const BEZEL = "#0a0d13";
-export const BEZEL_INNER = "#14181F";
+// The phone-frame bezel constants that used to live here existed so six
+// emulation presets could share one value. With the registry cut to Centraid
+// Light + Dark (#608 group O) both themes declare their own `bezel` /
+// `bezelInner` in centraid.ts, which is also the only file that reads them.
 
 export interface Theme {
   /** Light vs dark family — drives the picker grouping and the
-   * applicability of dark-only tuning knobs (cool-blue-cast, --bg-l). */
+   * applicability of dark-only tuning knobs (surface temperature, --bg-l).
+   * Must equal the theme's registry key; see themes/index.ts. */
   kind: "light" | "dark";
 
   /** Single brand accent — FAB, sparkle, primary CTAs, focus rings. */

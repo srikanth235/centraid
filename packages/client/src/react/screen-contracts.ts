@@ -938,26 +938,26 @@ export interface AutomationThreadBridgeProps {
 }
 
 // ── Settings: appearance + layout pages ─────────────────────────────────────
-export type SettingsTileVariant = "solid" | "gradient" | "glassy" | "flat";
+/** The three positions of the Appearance control. `system` is a standing mode
+ *  the shell keeps tracking, not a one-shot snap to the current OS value. */
+export type SettingsThemeMode = "light" | "dark" | "system";
+/** Appearance is the one visual-treatment page: theme, density, and card
+ *  surface. Layout was folded into it (#608). The accent swatches and the
+ *  app-tile treatment picker were cut but keep their prefs; the dark ramp's
+ *  surface temperature was removed outright, so dark has exactly one ramp —
+ *  parity with light, which never had a temperature.
+ *
+ *  `sidebarOpen` is deliberately absent: the sidebar has a toggle in the
+ *  chrome itself, so a settings switch for it was a second control for the
+ *  same state, one of them always stale-looking. The pref still exists and
+ *  the chrome toggle still writes it. */
 export interface SettingsAppearanceBridgeProps {
-  theme: string;
-  coolBlueCast: boolean;
-  accent: string;
-  tileVariant: SettingsTileVariant;
-  onSetTheme: (theme: string) => void;
-  onSetCoolCast: (on: boolean) => void;
-  onSetAccent: (key: string) => void;
-  onSetTile: (v: SettingsTileVariant) => void;
-  /** Resolve the OS appearance to a theme name + apply it; returns the name. */
-  onMatchSystem: () => string;
-}
-export interface SettingsLayoutBridgeProps {
+  themeMode: SettingsThemeMode;
   density: "compact" | "regular" | "comfy";
   cardVariant: "flat" | "outlined" | "elevated";
-  sidebarOpen: boolean;
+  onSetThemeMode: (mode: SettingsThemeMode) => void;
   onSetDensity: (v: "compact" | "regular" | "comfy") => void;
   onSetCards: (v: "flat" | "outlined" | "elevated") => void;
-  onSetSidebar: (open: boolean) => void;
 }
 
 // ── Settings: providers (agents console) ────────────────────────────────────

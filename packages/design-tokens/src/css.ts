@@ -120,23 +120,5 @@ export function toCss(): string {
     );
   }
 
-  // Tweaks · Cool blue cast — turning it off neutralises the dark ramp's
-  // hue + saturation (hue 0, sat 0%) while keeping the same --bg-l anchor,
-  // so the lightness slider still drives all four surfaces. Light themes
-  // have no blue cast to begin with and are unaffected. Redefining
-  // --bg-wall here neutralises the main panes AND the device-wall
-  // composite — which references var(--bg-wall) — in one place.
-  blocks.push(
-    block(`[data-theme='dark'][data-cool-cast='off']`, {
-      "--bg": "hsl(0 0% var(--bg-l))",
-      "--bg-app": "hsl(0 0% calc(var(--bg-l) - 5%))",
-      "--bg-elev": "hsl(0 0% calc(var(--bg-l) + 4.5%))",
-      "--bg-sunken": "hsl(0 0% calc(var(--bg-l) - 4%))",
-      "--bg-wall":
-        "linear-gradient(180deg, hsl(0 0% calc(var(--bg-l) + 2%)) 0%, hsl(0 0% calc(var(--bg-l) - 2%)) 100%)",
-      "--sidebar-bg": "hsl(0 0% calc(var(--bg-l) + 2%) / 0.65)",
-    })
-  );
-
   return blocks.join("\n\n") + "\n";
 }

@@ -1,263 +1,189 @@
-import { THEME_PRESETS, themes, tileFinish } from "@centraid/design-tokens";
-import type { IconName, ThemeName } from "@centraid/design-tokens";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import type {
   SettingsAppearanceBridgeProps,
-  SettingsTileVariant,
+  SettingsThemeMode,
 } from "../screen-contracts.js";
-import { Icon } from "../ui/index.js";
-import { DrawerGroup, DrawerRow, Switch } from "./settings-controls.js";
+import {
+  loadDefaultCronTimeZone,
+  saveDefaultCronTimeZone,
+} from "../shell/routes/settingsCronTimezoneData.js";
+import { DrawerGroup, DrawerRow, Segmented } from "./settings-controls.js";
 
-import a11y from "../styles/a11y.module.css";
-import linkBtnCss from "../styles/linkBtn.module.css";
-import segCss from "../styles/seg.module.css";
-import swatchCss from "../styles/swatch.module.css";
-import styles from "./SettingsAppearanceScreen.module.css";
+import sc from "./settings-controls.module.css";
 
-// Accent options — mirrors ACCENT_PALETTE (app-shell-context.ts) + the names
-// from makeSwatches. Kept inline so the React bundle stays decoupled.
-const ACCENTS: ReadonlyArray<{ key: string; name: string; color: string }> = [
-  { key: "teal", name: "Teal", color: "#3EC8B4" },
-  { key: "blue", name: "Electric", color: "#4950F6" },
-  { key: "violet", name: "Violet", color: "#7C5BD9" },
-  { key: "ochre", name: "Ochre", color: "#B47B3F" },
-  { key: "rose", name: "Rose", color: "#E55772" },
-];
+const THEME_MODES: readonly SettingsThemeMode[] = ["light", "dark", "system"];
 
-const TILE_VARIANTS: readonly SettingsTileVariant[] = [
-  "solid",
-  "gradient",
-  "glassy",
-  "flat",
-];
+const THEME_MODE_LABELS: Record<SettingsThemeMode, string> = {
+  dark: "Dark",
+  light: "Light",
+  system: "Match system",
+};
 
-const PREVIEW_SEEDS: ReadonlyArray<{
-  color: string;
-  icon: IconName;
-  name: string;
-}> = [
-  { color: "#4E68DD", icon: "Todo", name: "Tasks" },
-  { color: "#7C5BD9", icon: "Journal", name: "Journal" },
-  { color: "#E55772", icon: "Pencil", name: "Notes" },
-  { color: "#2EA098", icon: "Habit", name: "Weekly" },
-];
-
-function themePreview(name: ThemeName): {
-  bg: string;
-  elev: string;
-  accent: string;
-} {
-  const theme = themes[name];
-  const bgL = (theme as { bgL?: string }).bgL;
-  const bg = bgL ? `hsl(222 11% ${bgL.replace("%", "")}%)` : theme.bg;
-  const elev = bgL
-    ? `hsl(222 11% calc(${bgL.replace("%", "")}% + 4.5%))`
-    : theme.bgElev;
-  return { bg, elev, accent: theme.accent };
-}
+const DENSITIES = ["compact", "regular", "comfy"] as const;
+const CARDS = ["flat", "outlined", "elevated"] as const;
 
 /**
- * Settings → Appearance page, ported to React (issue #325, Phase 3). Theme
- * preset picker (live-preview cards), accent swatches, cool-blue-cast switch,
- * app-tile treatment, and the live tile preview. Mounted into the settings
- * route's appearance page host (the vanilla shell owns the inner-sidebar nav +
- * the still-vanilla profiles/providers pages). Each control calls the
- * vanilla-supplied setter, which re-themes the running app. Same classes.
+ * Settings → Appearance — the one visual-treatment page (issue #325 Phase 3;
+ * consolidated in #608).
+ *
+ * Theme is a three-position segment, not a preview grid: the registry offers
+ * exactly Centraid Light and Centraid Dark, and at that size a grid of
+ * live-preview cards is the wrong control (#608 group O). `Match system` is one
+ * of the three positions rather than a button that fires a one-shot snap — it
+ * is a standing mode the shell keeps tracking.
+ *
+ * Density and Cards were their own **Layout** page until #608 folded them in.
+ * Two adjacent pages both answering "how does Centraid look" is a split with
+ * nothing behind it, and Layout had been reduced to those two rows anyway.
+ *
+ * Four controls were cut rather than moved: accent swatches, app-tile
+ * treatment, the dark ramp's surface temperature, and the sidebar switch. The
+ * first two keep their prefs (a stored accent still paints, tiles keep their
+ * treatment) and simply have no control. Surface temperature was removed
+ * outright for parity — the light theme has no temperature. The sidebar switch
+ * was a duplicate of the toggle already in the chrome.
  */
 export default function SettingsAppearanceScreen({
-  theme,
-  coolBlueCast,
-  accent,
-  tileVariant,
-  onSetTheme,
-  onSetCoolCast,
-  onSetAccent,
-  onSetTile,
-  onMatchSystem,
+  themeMode,
+  density,
+  cardVariant,
+  onSetThemeMode,
+  onSetDensity,
+  onSetCards,
 }: SettingsAppearanceBridgeProps): JSX.Element {
-  const [curTheme, setCurTheme] = useState(theme);
-  const [curCast, setCurCast] = useState(coolBlueCast);
-  const [curAccent, setCurAccent] = useState(accent);
-  const [curTile, setCurTile] = useState<SettingsTileVariant>(tileVariant);
+  const [curMode, setCurMode] = useState(themeMode);
+  const [curDensity, setCurDensity] = useState(density);
+  const [curCards, setCurCards] = useState(cardVariant);
+  const [cronTz, setCronTz] = useState("");
+  const [cronTzError, setCronTzError] = useState<string | null>(null);
+  const [cronTzLoaded, setCronTzLoaded] = useState(false);
 
-  const pickTheme = (name: string): void => {
-    setCurTheme(name);
-    onSetTheme(name);
-  };
+  useEffect(() => {
+    let cancelled = false;
+    void loadDefaultCronTimeZone()
+      .then((value) => {
+        if (!cancelled) {
+          setCronTz(value);
+          setCronTzLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCronTzLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
       <DrawerGroup label="Theme">
         <DrawerRow
-          label="Color theme"
-          hint="Pick a preset for the Centraid shell. Apps stay in their own light/dark palette."
-          full
+          label="Appearance"
+          hint="Centraid Light, Centraid Dark, or whatever your OS is using. Apps stay in their own light/dark palette."
         >
-          <div
-            className={styles.themePicker}
-            role="radiogroup"
-            aria-label="Color theme"
-          >
-            {THEME_PRESETS.map((preset) => {
-              const p = themePreview(preset.name);
-              const active = preset.name === curTheme;
-              return (
-                <label
-                  key={preset.name}
-                  className={styles.themeCard}
-                  data-name={preset.name}
-                  data-active={String(active)}
-                >
-                  <input
-                    type="radio"
-                    className={a11y.srControl}
-                    name="settings-theme"
-                    aria-label={preset.label}
-                    checked={active}
-                    onChange={() => pickTheme(preset.name)}
-                  />
-                  <div
-                    className={styles.themeCardPreview}
-                    style={{ background: p.bg }}
-                  >
-                    <span
-                      className={styles.themeCardBar}
-                      style={{ background: p.elev }}
-                    />
-                    <span
-                      className={styles.themeCardDot}
-                      style={{ background: p.accent }}
-                    />
-                  </div>
-                  <div className={styles.themeCardFoot}>
-                    <span className={styles.themeCardLabel}>
-                      {preset.label}
-                    </span>
-                    <span className={styles.themeCardKind}>{preset.kind}</span>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-        </DrawerRow>
-        <DrawerRow
-          label="Match system"
-          hint="Snap the theme to your OS appearance right now."
-        >
-          <button
-            type="button"
-            className={linkBtnCss.linkBtn}
-            onClick={() => setCurTheme(onMatchSystem())}
-          >
-            Match system
-          </button>
-        </DrawerRow>
-        <DrawerRow
-          label="Cool blue cast"
-          hint="Tint dark surfaces toward blue. Off = neutral graphite. Centraid Dark only."
-        >
-          <Switch
-            on={curCast}
-            ariaLabel="Cool blue cast"
-            onToggle={(next) => {
-              setCurCast(next);
-              onSetCoolCast(next);
+          <Segmented
+            ariaLabel="Appearance"
+            labels={THEME_MODE_LABELS}
+            options={THEME_MODES}
+            selected={curMode}
+            onSelect={(next) => {
+              setCurMode(next);
+              onSetThemeMode(next);
             }}
           />
         </DrawerRow>
       </DrawerGroup>
-
-      <DrawerGroup label="Accent">
+      <DrawerGroup label="Density">
         <DrawerRow
-          label="Color"
-          hint="Used for the build button, sparkle, focus rings, and version badges."
+          label="Spacing"
+          hint="Affects row height, type sizes, and spacing across all apps."
         >
-          <div
-            className={swatchCss.swatches}
-            role="radiogroup"
-            aria-label="Accent"
-          >
-            {ACCENTS.map((a) => (
-              <label
-                key={a.key}
-                className={swatchCss.swatch}
-                data-active={String(a.key === curAccent)}
-              >
-                <input
-                  type="radio"
-                  className={a11y.srControl}
-                  name="settings-accent"
-                  checked={a.key === curAccent}
-                  onChange={() => {
-                    setCurAccent(a.key);
-                    onSetAccent(a.key);
-                  }}
-                />
-                <span
-                  className={styles.swatchChip}
-                  style={{ background: a.color }}
-                />
-                <span className={styles.swatchName}>{a.name}</span>
-              </label>
-            ))}
-          </div>
+          <Segmented
+            options={DENSITIES}
+            selected={curDensity}
+            ariaLabel="Density"
+            onSelect={(v) => {
+              setCurDensity(v);
+              onSetDensity(v);
+            }}
+          />
         </DrawerRow>
       </DrawerGroup>
-
-      <DrawerGroup label="App tiles">
+      <DrawerGroup label="Cards">
         <DrawerRow
-          label="Treatment"
-          hint="How icon tiles on the home grid look."
+          label="Surface"
+          hint="Affects every card-shaped surface — app tiles, message rows, settings groups."
         >
-          <div className={segCss.seg} role="tablist" aria-label="Treatment">
-            {TILE_VARIANTS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                role="tab"
-                aria-selected={v === curTile}
-                data-active={String(v === curTile)}
-                onClick={() => {
-                  setCurTile(v);
-                  onSetTile(v);
-                }}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-        </DrawerRow>
-        <DrawerRow
-          label="Preview"
-          hint="How the home grid looks with your current choices."
-          full
-        >
-          <div className="ap-preview-host">
-            <div className={styles.preview}>
-              {PREVIEW_SEEDS.map((s) => {
-                const finish = tileFinish(s.color, curTile);
-                return (
-                  <div key={s.name} className={styles.previewTile}>
-                    <div
-                      className={styles.previewTileIcon}
-                      style={{
-                        background: finish.background,
-                        boxShadow: finish.boxShadow,
-                        color: finish.glyphColor,
-                      }}
-                    >
-                      <Icon name={s.icon} size={18} strokeWidth={1.85} />
-                    </div>
-                    <span className={styles.previewTileName}>{s.name}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <Segmented
+            options={CARDS}
+            selected={curCards}
+            ariaLabel="Cards"
+            onSelect={(v) => {
+              setCurCards(v);
+              onSetCards(v);
+            }}
+          />
         </DrawerRow>
       </DrawerGroup>
+      {/* Not appearance, and it knows it. This rode along when Layout was
+          folded in (#608) because it had nowhere else to live — it is a
+          gateway-wide automation default, and the Automations surface is the
+          right home for it. Move it there rather than growing this group. */}
+      <DrawerGroup label="Automations">
+        <DrawerRow
+          label="Default cron timezone"
+          hint="IANA zone used when a schedule omits its own timezone. Empty keeps the host clock (pre-#570 behavior)."
+        >
+          <input
+            className={sc.input}
+            type="text"
+            value={cronTz}
+            disabled={!cronTzLoaded}
+            placeholder="Host local"
+            list="centraid-cron-timezones"
+            spellCheck={false}
+            aria-label="Default cron timezone"
+            data-testid="settings-default-cron-timezone"
+            onChange={(event) => {
+              setCronTz(event.target.value);
+              setCronTzError(null);
+            }}
+            onBlur={() => {
+              void saveDefaultCronTimeZone(cronTz).then((err) => {
+                setCronTzError(err);
+                if (!err) setCronTz(cronTz.trim());
+              });
+            }}
+          />
+        </DrawerRow>
+        {cronTzError ? (
+          <p role="alert" data-testid="settings-default-cron-timezone-error">
+            {cronTzError}
+          </p>
+        ) : null}
+      </DrawerGroup>
+      {/* Each suggestion carries its zone as text, not just as `value`: a
+          value-only <option> has no accessible name, so a screen reader
+          announces an unlabelled list. Label and value are identical, which
+          is what the picker already showed. */}
+      <datalist id="centraid-cron-timezones">
+        <option value="UTC">UTC</option>
+        <option value="America/New_York">America/New_York</option>
+        <option value="America/Chicago">America/Chicago</option>
+        <option value="America/Denver">America/Denver</option>
+        <option value="America/Los_Angeles">America/Los_Angeles</option>
+        <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+        <option value="Europe/London">Europe/London</option>
+        <option value="Europe/Paris">Europe/Paris</option>
+        <option value="Europe/Berlin">Europe/Berlin</option>
+        <option value="Asia/Kolkata">Asia/Kolkata</option>
+        <option value="Asia/Tokyo">Asia/Tokyo</option>
+        <option value="Asia/Shanghai">Asia/Shanghai</option>
+        <option value="Australia/Sydney">Australia/Sydney</option>
+      </datalist>
     </>
   );
 }

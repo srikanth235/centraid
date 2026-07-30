@@ -3,6 +3,7 @@ import type { CSSProperties, JSX } from "react";
 
 import { draftPreviewUrl } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
+import { parseAnchor } from "../../appearance.js";
 
 import styles from "./BuilderPreview.module.css";
 
@@ -42,13 +43,17 @@ function resolveTheme(): { theme: "light" | "dark"; bgL: number } {
   const shellTheme = html.dataset.theme || "dark";
   const themes = window.CentraidTokens.themes as Record<
     string,
-    { kind: "light" | "dark" } | undefined
+    { kind: "light" | "dark"; bgL?: string } | undefined
   >;
-  const theme = themes[shellTheme]?.kind ?? "dark";
-  const bgL = Number(
-    (html.style.getPropertyValue("--bg-l") || "5%").replace("%", "").trim()
-  );
-  return { theme, bgL: Number.isFinite(bgL) ? bgL : 5 };
+  const resolved = themes[shellTheme];
+  const theme = resolved?.kind ?? "dark";
+  // The lightness anchor is the ACTIVE theme's declaration unless the owner
+  // moved the knob, in which case an inline style shadows it (#608 group P).
+  // Reading the inline style alone used to mean the pref layer's value always
+  // won here; read the computed value so both cases resolve the same way.
+  const declared =
+    getComputedStyle(html).getPropertyValue("--bg-l") || resolved?.bgL || "";
+  return { theme, bgL: parseAnchor(declared) };
 }
 
 function Skeleton(): JSX.Element {

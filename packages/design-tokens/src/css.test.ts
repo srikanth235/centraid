@@ -62,17 +62,30 @@ describe("css", () => {
     }
   });
 
-  test("cool-cast off neutralises the dark ramp hue while keeping the --bg-l anchor", () => {
-    const off = blockFor("[data-theme='dark'][data-cool-cast='off']");
-    // Hue and saturation go to zero; every surface must still be derived from
-    // --bg-l so the lightness slider keeps driving all four.
+  test("the dark ramp is neutral greyscale, with no temperature variants", () => {
+    // There is exactly one dark ramp (#608). The light theme has no surface
+    // temperature, so the dark one does not either — a `[data-surface-temp]`
+    // block reappearing here means the knob crept back in.
+    expect(css).not.toContain("data-surface-temp");
+    const dark = blockFor("[data-theme='dark']");
+    expect(dark).toContain("--bg: hsl(0 0% var(--bg-l));");
+    // Zero saturation on every surface — no hue can leak into the greys.
+    expect(dark).not.toMatch(/hsl\((?!0 0%)/u);
+  });
+
+  test("every dark surface derives from the --bg-l anchor", () => {
+    const dark = blockFor("[data-theme='dark']");
+    // Moving the one anchor has to retune the whole ramp, so no surface may
+    // hardcode its lightness.
     for (const prop of ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"]) {
-      expect(off).toMatch(new RegExp(`${prop}: hsl\\(0 0%`, "u"));
+      expect(dark, prop).toMatch(new RegExp(`${prop}: hsl\\(0 0%`, "u"));
     }
-    expect(off).toContain("var(--bg-l)");
-    // The device-wall composite references --bg-wall, so redefining it here is
-    // what neutralises both the panes and the wall in one place.
-    expect(off).toContain("--bg-wall:");
+    expect(dark).toContain("--bg-wall: linear-gradient(180deg,");
+    // The sidebar keeps its gradient and its 0.92 alpha — the old binary
+    // cool-cast switch used to flatten both, which is how that asymmetry
+    // stayed invisible for so long (#608 group P).
+    expect(dark).toContain("--sidebar-bg: linear-gradient(180deg,");
+    expect(dark).toContain("/ 0.92)");
   });
 
   test("output is a single generated stylesheet with a do-not-edit banner", () => {

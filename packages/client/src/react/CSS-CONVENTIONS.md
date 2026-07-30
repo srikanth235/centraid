@@ -14,9 +14,10 @@ is a ~60-line reset.
    colors per theme, the **typography scale** (`--t-*` font shorthands +
    `--font-sans/-display/-mono` stacks, from `typography.ts`), density
    spacing, radii, shadows, palette, the shared **library-tile sizing**
-   (`--lib-*`, from `library.ts`), and theme knobs like the dark cool-cast
-   override. **Never** hard-code a hex, px-radius, or font stack a token
-   covers — add or edit tokens in the package's TS, not in CSS.
+   (`--lib-*`, from `library.ts`), and the dark ramp's `--bg-l` lightness
+   anchor. **Never** hard-code a hex, px-radius, or
+   font stack a token covers — add or edit tokens in the package's TS, not
+   in CSS.
 
 2. **Global base — `styles.css`.** Reset + base element defaults +
    scrollbar + `#root`. Frozen and tiny. It defines **zero** classes; if

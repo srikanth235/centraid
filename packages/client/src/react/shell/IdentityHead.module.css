@@ -1,7 +1,7 @@
-/* Sidebar identity row (issue #599, Decision 14). Where the space switcher
-   used to sit: an avatar + the member's own space name + the gateway it lives
-   on, opening Household rather than a space menu. The trailing switch button
-   appears only when more than one gateway is registered. */
+/* Sidebar identity row (issue #599, Decision 14). An avatar + the active space
+   name + the gateway it lives on. The WHOLE row is the switcher target — the
+   trailing ⇅ is decoration inside that one button, not a separate 26px hit
+   area at the right edge (#608). */
 
 .row {
   display: flex;
@@ -9,7 +9,8 @@
   margin-bottom: 6px;
   border-radius: 9px;
 }
-.row:hover {
+.row:hover,
+.row[data-open="true"] {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
@@ -69,27 +70,18 @@
   white-space: nowrap;
 }
 
+/* Decoration inside the row button — it says "this opens something". Not
+   interactive on its own, so it takes no hit area away from the row. */
 .switch {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  margin-right: 6px;
+  width: 20px;
   display: grid;
   place-items: center;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
   color: var(--ink-4);
-  cursor: pointer;
-  transition: background 120ms;
+  transition: color 120ms;
 }
-.switch:hover,
-.switch:focus-visible {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+.head:hover .switch,
+.head:focus-visible .switch,
+.row[data-open="true"] .switch {
   color: var(--ink-2);
-  outline: none;
-}
-.switch[data-open="true"] {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  color: var(--ink);
 }

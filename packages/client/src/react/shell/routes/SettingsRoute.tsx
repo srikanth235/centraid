@@ -2,16 +2,11 @@ import type { IconName } from "@centraid/design-tokens";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import type {
-  AccentKey,
-  AppearancePrefs,
-  ThemeName,
-} from "../../../app-shell-context.js";
+import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { isWebHost } from "../../host-platform.js";
 import ImportScreen from "../../screens/ImportScreen.js";
 import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
 import SettingsDeviceScreen from "../../screens/SettingsDeviceScreen.js";
-import SettingsLayoutScreen from "../../screens/SettingsLayoutScreen.js";
 import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
 import SettingsProvidersScreen from "../../screens/SettingsProvidersScreen.js";
 import SettingsSpaceScreen from "../../screens/SettingsSpaceScreen.js";
@@ -64,7 +59,6 @@ import styles from "./SettingsRoute.module.css";
 
 export type SettingsPageId =
   | "appearance"
-  | "layout"
   | "workspace"
   | "space"
   | "profile"
@@ -88,14 +82,7 @@ const ALL_PAGES: readonly PageDef[] = [
     section: "Workspace",
     icon: "Mood",
     subtitle:
-      "Visual treatment for Centraid chrome and the app tiles on your home screen.",
-  },
-  {
-    id: "layout",
-    label: "Layout",
-    section: "Workspace",
-    icon: "Code",
-    subtitle: "Density and surface treatment across every Centraid screen.",
+      "Theme, density, and card surface for Centraid chrome. Apps keep their own light/dark palette.",
   },
   {
     id: "workspace",
@@ -165,7 +152,7 @@ const PAGES = ALL_PAGES.filter(
   (page) => !HIDDEN.has(page.id) && (page.id !== "device" || isWebHost())
 );
 
-const AUTO_SAVE = new Set<SettingsPageId>(["appearance", "layout"]);
+const AUTO_SAVE = new Set<SettingsPageId>(["appearance"]);
 const SECTIONS = ["Workspace", "Account", "Models"];
 
 function isSettingsPageId(id: string | undefined): id is SettingsPageId {
@@ -406,32 +393,12 @@ export default function SettingsRoute({
             <div className={styles.settingsPage} data-testid="settings-page">
               {page === "appearance" ? (
                 <SettingsAppearanceScreen
-                  accent={prefs.accent}
-                  coolBlueCast={prefs.coolBlueCast}
-                  theme={prefs.theme}
-                  tileVariant={prefs.tileVariant}
-                  onMatchSystem={() => {
-                    const next: ThemeName = window.matchMedia(
-                      "(prefers-color-scheme: light)"
-                    ).matches
-                      ? ("light" as ThemeName)
-                      : ("dark" as ThemeName);
-                    setPrefs({ theme: next });
-                    return next;
-                  }}
-                  onSetAccent={(k) => setPrefs({ accent: k as AccentKey })}
-                  onSetCoolCast={(v) => setPrefs({ coolBlueCast: v })}
-                  onSetTheme={(t) => setPrefs({ theme: t as ThemeName })}
-                  onSetTile={(v) => setPrefs({ tileVariant: v })}
-                />
-              ) : page === "layout" ? (
-                <SettingsLayoutScreen
                   cardVariant={prefs.cardVariant}
                   density={prefs.density}
-                  sidebarOpen={prefs.sidebarOpen}
+                  themeMode={prefs.themeMode}
                   onSetCards={(v) => setPrefs({ cardVariant: v })}
                   onSetDensity={(v) => setPrefs({ density: v })}
-                  onSetSidebar={(v) => setPrefs({ sidebarOpen: v })}
+                  onSetThemeMode={(m) => setPrefs({ themeMode: m })}
                 />
               ) : page === "providers" ? (
                 <SettingsProvidersScreen
