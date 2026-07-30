@@ -62,7 +62,6 @@ export const CHANGE_TABLES = [
   "core.content_item",
   "core.party_identifier",
   "social.contact_channel",
-  "people.merge",
   "core.tag",
   "core.concept",
   "knowledge.note",

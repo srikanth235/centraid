@@ -515,24 +515,10 @@ export function createLogic({
       target_party_id: targetPartyId,
     });
     if (!narrate(outcome)) return;
-    const revisionId = String(outcome?.output?.revision_id ?? "");
     closeDetails();
     await refresh();
-    toast(`${source.name} merged · receipt`, {
-      duration: revisionId ? 10_000 : undefined,
-      undoLabel: revisionId ? "Undo" : undefined,
-      onUndo: revisionId
-        ? async () => {
-            const undo = await act("undo-merge", {
-              source_party_id: source.party_id,
-              revision_id: revisionId,
-            });
-            if (!narrate(undo)) return;
-            toast("Merge undone · receipt");
-            await refresh();
-          }
-        : undefined,
-    });
+    // core.merge_party is irreversible by design (#290 / #306 Tier 4).
+    toast(`${source.name} merged · receipt`);
   }
 
   // ---------- Add-person modal ----------

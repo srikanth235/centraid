@@ -38,6 +38,11 @@
       },
       {
         "schema": "core",
+        "table": "merge_party",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
         "table": "entity_revision",
         "verbs": "read",
         "rowFilter": [
@@ -680,7 +685,7 @@
     },
     {
       "name": "merge-people",
-      "description": "Merge a duplicate People profile into another while preserving identity and a durable undo receipt.",
+      "description": "Fold a duplicate person into a survivor via core.merge_party — every FK re-points and the merged party is deleted. Irreversible; confirm-gated.",
       "confirmation": "required",
       "input": {
         "type": "object",
@@ -689,29 +694,6 @@
           "target_party_id": { "type": "string", "minLength": 1 }
         },
         "required": ["source_party_id", "target_party_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      },
-      "writes": []
-    },
-    {
-      "name": "undo-merge",
-      "description": "Undo one People merge, restoring the source profile and its original channels.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "source_party_id": { "type": "string", "minLength": 1 },
-          "revision_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["source_party_id", "revision_id"],
         "additionalProperties": false
       },
       "output": {

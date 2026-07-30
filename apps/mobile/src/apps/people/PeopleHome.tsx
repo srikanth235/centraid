@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit — native People intentionally
-// keeps the offline directory, channel CRUD, duplicate review, and merge undo
-// in one first-class cover so every visible control maps to a receipted action.
+// keeps the offline directory, channel CRUD, duplicate review, and merge
+// (via core.merge_party) in one first-class cover so every visible control
+// maps to a receipted action.
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
@@ -236,7 +237,7 @@ export default function PeopleHome({
     if (!selected) return;
     Alert.alert(
       `Merge ${String(selected.name)} into ${String(target.name)}?`,
-      "The source identity and contact provenance remain recoverable.",
+      "This folds every reference into the survivor and deletes the duplicate. It cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -246,22 +247,13 @@ export default function PeopleHome({
             void write("merge-people", {
               source_party_id: selected.party_id,
               target_party_id: String(target.party_id),
-            }).then((result) => {
-              const revisionId = String(outputOf(result)?.revision_id ?? "");
-              const sourceId = String(selected.party_id);
+            }).then(() => {
               setSelectedId(String(target.party_id));
               setMergeOpen(false);
-              Alert.alert("People merged", "The merge can be undone once.", [
-                { text: "Done" },
-                {
-                  text: "Undo",
-                  onPress: () =>
-                    void write("undo-merge", {
-                      source_party_id: sourceId,
-                      revision_id: revisionId,
-                    }),
-                },
-              ]);
+              Alert.alert(
+                "People merged",
+                "The duplicate identity is gone; references now point at the survivor."
+              );
             }),
         },
       ]

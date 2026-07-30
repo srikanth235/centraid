@@ -1,8 +1,8 @@
-// governance: allow-repo-hygiene file-size-limit one cohesive People channel + merge/undo command contract whose validation, normalization, revision snapshots, and registration must stay reviewable together
-// Issue #630 People organization contract: normalized contact channels,
-// duplicate warnings, and durable merge/undo. Party rows are never destroyed
-// by a merge; the source profile is tombstoned and an explicit merge edge
-// preserves identity for sync/import provenance.
+// governance: allow-repo-hygiene file-size-limit one cohesive People channel command contract whose validation, normalization, revision snapshots, and registration must stay reviewable together
+// Issue #630 People organization contract: normalized contact channels and
+// duplicate warnings. Party identity merge is NOT forked here — folding a
+// duplicate person is `core.merge_party` (issue #290), the single ontology
+// primitive that re-points every FK and deletes the merged party.
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -26,12 +26,6 @@ interface ChannelRow {
   provenance_json: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface MergeSnapshot {
-  sourceDeletedAt: string | null;
-  sourcePurgeAt: string | null;
-  sourceChannels: ChannelRow[];
 }
 
 const STRING = { type: "string", minLength: 1 } as const;
@@ -348,173 +342,8 @@ const UNDO_CHANNEL: CommandDefinition = {
   },
 };
 
-const MERGE_PEOPLE: CommandDefinition = {
-  name: "people.merge_people",
-  ownerSchema: "people",
-  inputSchema: {
-    type: "object",
-    required: ["source_party_id", "target_party_id"],
-    additionalProperties: false,
-    properties: {
-      source_party_id: STRING,
-      target_party_id: STRING,
-    },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["merge_id", "revision_id", "undo_until"],
-    properties: {
-      merge_id: STRING,
-      revision_id: STRING,
-      undo_until: STRING,
-    },
-  },
-  preconditions: [],
-  postconditions: [],
-  idempotency: "once",
-  risk: "low",
-  handler: (ctx) => {
-    const input = ctx.input as {
-      source_party_id: string;
-      target_party_id: string;
-    };
-    if (input.source_party_id === input.target_party_id)
-      throw new Error("choose two different people");
-    const source = ctx.db
-      .prepare(
-        `SELECT deleted_at, purge_at FROM people_profile
-          WHERE party_id = ? AND deleted_at IS NULL`
-      )
-      .get(input.source_party_id) as
-      | { deleted_at: string | null; purge_at: string | null }
-      | undefined;
-    const target = ctx.db
-      .prepare(
-        "SELECT 1 AS x FROM people_profile WHERE party_id = ? AND deleted_at IS NULL"
-      )
-      .get(input.target_party_id);
-    if (!source || !target) throw new Error("both people must be active");
-    const sourceChannels = ctx.db
-      .prepare(
-        "SELECT * FROM social_contact_channel WHERE party_id = ? ORDER BY channel_id"
-      )
-      .all(input.source_party_id) as unknown as ChannelRow[];
-    const snapshot: MergeSnapshot = {
-      sourceDeletedAt: source.deleted_at,
-      sourcePurgeAt: source.purge_at,
-      sourceChannels,
-    };
-    const revision = recordEntityRevision(ctx, {
-      entityType: "people.merge",
-      entityId: input.source_party_id,
-      operation: "merge",
-      snapshot,
-    });
-    for (const channel of sourceChannels) {
-      const collision = ctx.db
-        .prepare(
-          `SELECT 1 AS x FROM social_contact_channel
-            WHERE party_id = ? AND kind = ? AND normalized_value = ?`
-        )
-        .get(input.target_party_id, channel.kind, channel.normalized_value);
-      if (collision) {
-        ctx.db
-          .prepare("DELETE FROM social_contact_channel WHERE channel_id = ?")
-          .run(channel.channel_id);
-      } else {
-        ctx.db
-          .prepare(
-            "UPDATE social_contact_channel SET party_id = ?, updated_at = ? WHERE channel_id = ?"
-          )
-          .run(input.target_party_id, ctx.now, channel.channel_id);
-      }
-      ctx.wrote("social.contact_channel", channel.channel_id);
-    }
-    ctx.db
-      .prepare(
-        "UPDATE people_profile SET deleted_at = ?, purge_at = NULL WHERE party_id = ?"
-      )
-      .run(ctx.now, input.source_party_id);
-    const mergeId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO people_merge
-          (merge_id, source_party_id, target_party_id, revision_id, merged_at, undone_at)
-         VALUES (?, ?, ?, ?, ?, NULL)`
-      )
-      .run(
-        mergeId,
-        input.source_party_id,
-        input.target_party_id,
-        revision.revisionId,
-        ctx.now
-      );
-    ctx.wrote("people.profile", input.source_party_id);
-    ctx.wrote("people.merge", mergeId);
-    return {
-      merge_id: mergeId,
-      revision_id: revision.revisionId,
-      undo_until: revision.undoUntil,
-    };
-  },
-};
-
-const UNDO_MERGE: CommandDefinition = {
-  name: "people.undo_merge",
-  ownerSchema: "people",
-  inputSchema: {
-    type: "object",
-    required: ["source_party_id"],
-    additionalProperties: false,
-    properties: { source_party_id: STRING, revision_id: STRING },
-  },
-  outputSchema: {
-    type: "object",
-    required: ["source_party_id"],
-    properties: { source_party_id: STRING },
-  },
-  preconditions: [],
-  postconditions: [],
-  idempotency: "once",
-  risk: "low",
-  handler: (ctx) => {
-    const input = ctx.input as {
-      source_party_id: string;
-      revision_id?: string;
-    };
-    const revision = loadEntityRevision<MergeSnapshot>(ctx, {
-      entityType: "people.merge",
-      entityId: input.source_party_id,
-      revisionId: input.revision_id,
-    });
-    ctx.db
-      .prepare(
-        `UPDATE people_profile SET deleted_at = ?, purge_at = ?
-          WHERE party_id = ?`
-      )
-      .run(
-        revision.snapshot.sourceDeletedAt,
-        revision.snapshot.sourcePurgeAt,
-        input.source_party_id
-      );
-    for (const row of revision.snapshot.sourceChannels)
-      restoreChannel(ctx, row);
-    ctx.db
-      .prepare(
-        "UPDATE people_merge SET undone_at = ? WHERE source_party_id = ? AND undone_at IS NULL"
-      )
-      .run(ctx.now, input.source_party_id);
-    markEntityRevisionUndone(ctx, revision.revisionId);
-    ctx.wrote("people.profile", input.source_party_id);
-    ctx.wrote("people.merge", input.source_party_id);
-    return { source_party_id: input.source_party_id };
-  },
-};
-
 export function registerPeopleOrganizeCommands(gateway: Gateway): void {
   gateway.registerCommand(SAVE_CHANNEL);
   gateway.registerCommand(DELETE_CHANNEL);
   gateway.registerCommand(UNDO_CHANNEL);
-  gateway.registerCommand(MERGE_PEOPLE);
-  gateway.registerCommand(UNDO_MERGE);
 }

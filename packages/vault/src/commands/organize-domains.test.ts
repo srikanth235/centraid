@@ -6,6 +6,7 @@ import type { VaultDb } from "../db.js";
 import { createGateway } from "../gateway/gateway.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
+import { registerPartyCommands } from "./parties.js";
 import { registerPeopleCommands } from "./people.js";
 import { convertCurrencyMinor } from "./tally-organize.js";
 import { registerTallyCommands } from "./tally.js";
@@ -20,6 +21,7 @@ describe("People and Tally organization contracts", () => {
     db = openVaultDb();
     const boot = bootstrapVault(db, { ownerName: "Priya" });
     gateway = createGateway(db);
+    registerPartyCommands(gateway);
     registerPeopleCommands(gateway);
     registerTallyCommands(gateway);
     ownerPartyId = boot.ownerPartyId;
@@ -47,7 +49,7 @@ describe("People and Tally organization contracts", () => {
     return (result as { output: { party_id: string } }).output.party_id;
   }
 
-  test("normalizes channels, warns on duplicates, and merges with one-shot undo", () => {
+  test("normalizes channels, warns on duplicates, and folds via core.merge_party", () => {
     const a = addPerson("Asha Rao");
     const b = addPerson("Asha R.");
     const first = invoke("people.save_contact_channel", {
@@ -74,36 +76,38 @@ describe("People and Tally organization contracts", () => {
       output: { duplicate_party_ids: [a] },
     });
 
-    const merged = invoke("people.merge_people", {
-      source_party_id: b,
-      target_party_id: a,
+    // People surface maps source→merged / target→survivor onto the single
+    // ontology primitive. Channels re-point (or dedupe on collision); the
+    // merged party row is deleted — no soft-tombstone / undo fork.
+    const merged = invoke("core.merge_party", {
+      survivor_party_id: a,
+      merged_party_id: b,
     });
     expect(merged.status).toBe("executed");
     expect(
       db.vault
-        .prepare("SELECT deleted_at FROM people_profile WHERE party_id = ?")
+        .prepare("SELECT 1 AS x FROM core_party WHERE party_id = ?")
         .get(b)
-    ).toMatchObject({ deleted_at: expect.any(String) });
-    const revisionId = (merged as { output: { revision_id: string } }).output
-      .revision_id;
-    expect(
-      invoke("people.undo_merge", {
-        source_party_id: b,
-        revision_id: revisionId,
-      }).status
-    ).toBe("executed");
+    ).toBeUndefined();
     expect(
       db.vault
-        .prepare("SELECT deleted_at FROM people_profile WHERE party_id = ?")
+        .prepare("SELECT 1 AS x FROM people_profile WHERE party_id = ?")
         .get(b)
-    ).toMatchObject({ deleted_at: null });
+    ).toBeUndefined();
     expect(
       db.vault
         .prepare(
           "SELECT normalized_value FROM social_contact_channel WHERE party_id = ?"
         )
-        .all(b)
+        .all(a)
     ).toMatchObject([{ normalized_value: "asha@example.com" }]);
+    expect(
+      db.vault
+        .prepare(
+          "SELECT count(*) AS n FROM social_contact_channel WHERE party_id = ?"
+        )
+        .get(b)
+    ).toMatchObject({ n: 0 });
   });
 
   test("uses fixed-point rates and idempotently materializes monthly expenses", () => {

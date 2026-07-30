@@ -312,7 +312,6 @@
         "actions/toggle-task.ts",
         "actions/trash-person.ts",
         "actions/undo-contact-channel.ts",
-        "actions/undo-merge.ts",
         "actions/undo-person.ts",
         "actions/unstar-person.ts",
         "app-inline.tsx",

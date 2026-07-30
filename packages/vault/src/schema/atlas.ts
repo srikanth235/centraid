@@ -327,10 +327,6 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     name: "Important dates",
     blurb: "Birthdays and anniversaries to remember.",
   },
-  "people.merge": {
-    name: "Contact merges",
-    blurb: "Undoable deduplication receipts between canonical people.",
-  },
   // locker
   "locker.item": {
     name: "Secrets",

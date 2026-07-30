@@ -83,6 +83,9 @@ CREATE INDEX social_contact_channel_duplicate_idx
 CREATE UNIQUE INDEX social_contact_channel_preferred_idx
   ON social_contact_channel(party_id, kind) WHERE is_preferred = 1;
 
+-- Legacy residual: soft people.merge_people / people_merge edge table from the
+-- #630 organize band. Identity merge is core.merge_party only; this table is
+-- no longer written. Kept so already-applied migration bands stay checksum-stable.
 CREATE TABLE people_merge (
   merge_id        TEXT PRIMARY KEY,
   source_party_id TEXT NOT NULL REFERENCES core_party(party_id),

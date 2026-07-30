@@ -1005,3 +1005,17 @@ Minors: `COUNT=0` clamps to 1; status no longer slides unlock sessions.
   surface status instead of silent success.
 - TallyHome drops unused whole-table `core.party` subscription.
 - `normalizeContactChannel` phone path aligns with `normalizeHandle("tel")`.
+
+### Ontology: people merge → core.merge_party
+
+`people.merge_people` / `people.undo_merge` were a soft-tombstone fork that
+only moved contact channels and left the source `core.party` alive. That
+compromised the #290 entity-resolution ontology.
+
+- Removed the people-domain merge/undo commands.
+- People `merge-people` action maps `source`→`merged_party_id` /
+  `target`→`survivor_party_id` and invokes `core.merge_party` (FK re-point +
+  hard delete; Tier-4 confirm for non-owner callers).
+- Dropped `undo-merge` action, UI undo toasts, and atlas `people.merge` label.
+- `people_merge` table remains as a legacy residual band for migration
+  stability; nothing writes it.
