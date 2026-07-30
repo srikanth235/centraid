@@ -1,5 +1,6 @@
-import type { RunnerKind } from "@centraid/app-engine";
 import { describe, expect, it } from "vitest";
+
+import type { RunnerKind } from "@centraid/app-engine";
 
 import { enumerateRunnerModels } from "./enumerators.js";
 

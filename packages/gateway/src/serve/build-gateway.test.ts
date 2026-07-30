@@ -4,8 +4,9 @@ import http from "node:http";
 import path from "node:path";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive gateway-construction suite shares one production graph harness
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { GatewayPaths } from "../paths.ts";
 import { buildGateway } from "./build-gateway.ts";

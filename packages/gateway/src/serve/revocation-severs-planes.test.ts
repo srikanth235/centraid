@@ -7,6 +7,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
+
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   createTunnelClient,
@@ -14,7 +16,6 @@ import {
   tunnelRequest,
 } from "@centraid/tunnel";
 import type { GatewayEndpointHandle, TunnelClient } from "@centraid/tunnel";
-import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { EnrollmentStore } from "./enrollment-store.ts";
 import { GatewayDatabase } from "./gateway-db.ts";

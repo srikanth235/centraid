@@ -16,8 +16,9 @@ import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { isDirectHostRequest } from "../routes/route-helpers.ts";
 import { buildGateway } from "./build-gateway.ts";

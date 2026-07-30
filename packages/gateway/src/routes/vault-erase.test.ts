@@ -4,10 +4,11 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
+import { describe, afterEach, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { KeyStore } from "@centraid/vault";
-import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { daemonLayoutFor } from "../cli/paths.js";

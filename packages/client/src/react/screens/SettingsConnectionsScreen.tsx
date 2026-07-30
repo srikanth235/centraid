@@ -1,7 +1,8 @@
-import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connectors gallery surface; splitting would fragment one visual unit
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import { ASSIST_HANDOFF_EVENT } from "../../assist-oauth-events.js";
 import type { AssistHandoffResult } from "../../assist-oauth-events.js";

@@ -1,4 +1,3 @@
-import { flushMacrotasks } from "@centraid/test-kit/flush";
 import {
   afterAll,
   beforeAll,
@@ -8,6 +7,8 @@ import {
   it,
   vi,
 } from "vitest";
+
+import { flushMacrotasks } from "@centraid/test-kit/flush";
 
 import type * as TypeImport_dar201 from "./gateway-client-core.js";
 import type * as TypeImport_lkae3t from "./vault-change-feed.js";

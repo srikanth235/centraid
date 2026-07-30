@@ -4,8 +4,9 @@
 
 import { promises as fs } from "node:fs";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { providerObservabilityConformanceCases } from "./conformance-observability.js";
 import type { ConformanceHarness } from "./conformance.js";

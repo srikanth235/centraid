@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import http from "node:http";
 import path from "node:path";
 
+import { describe, expect, onTestFinished, test } from "vitest";
+
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -11,7 +13,6 @@ import {
   startDesktopTunnel,
   startLocalProxy,
 } from "@centraid/tunnel";
-import { describe, expect, onTestFinished, test } from "vitest";
 
 const OWNER = "tests/perf/tunnel-throughput.perf.test.ts";
 

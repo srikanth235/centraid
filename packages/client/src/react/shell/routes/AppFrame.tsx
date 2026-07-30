@@ -1,6 +1,7 @@
-import { themes } from "@centraid/design-tokens";
 import { useEffect, useMemo, useRef } from "react";
 import type { CSSProperties, JSX } from "react";
+
+import { themes } from "@centraid/design-tokens";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { appLiveUrl } from "../../../gateway-client.js";

@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
-import { fc } from "@centraid/test-kit/fast-check";
 import { describe, expect, test } from "vitest";
+
+import { fc } from "@centraid/test-kit/fast-check";
 
 import type { ReplicaDigest } from "./digest.js";
 import { canonicalJson, intentPayloadHash } from "./payload-hash.js";

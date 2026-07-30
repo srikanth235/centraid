@@ -14,14 +14,15 @@
 import os from "node:os";
 import path from "node:path";
 
+import { app, BrowserWindow } from "electron";
+import QRCode from "qrcode";
+
 import {
   DeviceStore,
   loadEndpointSecret,
   startPreferredDesktopTunnel,
 } from "@centraid/tunnel";
 import type { DesktopTunnelHandle, PairedDevice } from "@centraid/tunnel";
-import { app, BrowserWindow } from "electron";
-import QRCode from "qrcode";
 
 import { deviceIrohKeyPersistence } from "./gateway-secrets.js";
 import { loadSettings } from "./settings.js";

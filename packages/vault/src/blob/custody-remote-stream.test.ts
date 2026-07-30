@@ -1,5 +1,6 @@
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { BlobCustody } from "./custody.js";
 import { FsBlobStore, MemoryBlobStore } from "./local.js";

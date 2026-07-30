@@ -6,9 +6,10 @@ import { statSync } from "node:fs";
 // after the last vault lets go.
 import path from "node:path";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { plainSqliteRow, plainSqliteRows } from "@centraid/test-kit/sqlite";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { FsBlobStore } from "../blob/local.js";
 import {

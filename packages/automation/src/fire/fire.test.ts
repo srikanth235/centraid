@@ -10,6 +10,8 @@ import { promises as fs } from "node:fs";
  */
 import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import {
   ConversationHistoryStore,
   ConversationStore,
@@ -18,7 +20,6 @@ import {
 } from "@centraid/app-engine";
 import type { AutomationTurnStreamEvent } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Manifest } from "../manifest/manifest.js";
 import { runFire } from "./fire.js";

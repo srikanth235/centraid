@@ -5,6 +5,8 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { afterEach, describe, expect, it, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import {
@@ -12,7 +14,6 @@ import {
   DEVICE_PROOF_HEADER,
   TUNNEL_FORWARDED_HEADER,
 } from "@centraid/tunnel";
-import { afterEach, describe, expect, it, test } from "vitest";
 
 import {
   writeFileMap,

@@ -2,9 +2,10 @@ import { existsSync, promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
+import { describe, afterEach, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import { EnrollmentStore } from "./enrollment-store.js";

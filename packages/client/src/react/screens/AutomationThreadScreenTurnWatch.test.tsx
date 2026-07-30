@@ -6,9 +6,10 @@
 // AutomationThreadScreen.test.tsx. Split from that file (500-line repo-hygiene
 // cap); shared fixtures in AutomationThreadScreen.test-fixtures.tsx.
 
-import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import type { AutomationThreadBridgeProps } from "../screen-contracts.js";
 import {

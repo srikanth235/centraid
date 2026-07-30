@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
 
+import { afterAll, describe, expect, test } from "vitest";
+
 import { S3TestServer } from "@centraid/backup/dist/testing/s3-test-server.js";
 /*
  * `VaultPlane`'s blob-sweep scheduling (issue #367 §C5/§C6/§C9): the
@@ -11,7 +13,6 @@ import { S3TestServer } from "@centraid/backup/dist/testing/s3-test-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { blobUriFor, updateBlobStoreSettings, uuidv7 } from "@centraid/vault";
-import { afterAll, describe, expect, test } from "vitest";
 
 import { blobSweepBackoff, openVaultPlane } from "./vault-plane.js";
 import type { VaultPlane } from "./vault-plane.js";

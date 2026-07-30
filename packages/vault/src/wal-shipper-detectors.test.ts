@@ -22,6 +22,8 @@ import {
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
 import {
   FsObjectStore,
   replayWalSegments,
@@ -33,7 +35,6 @@ import {
 } from "@centraid/backup";
 import type { WalDbName } from "@centraid/backup";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault } from "./bootstrap.js";
 import { openVaultDb } from "./db.js";

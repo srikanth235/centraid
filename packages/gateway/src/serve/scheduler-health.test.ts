@@ -1,5 +1,6 @@
-import type { SchedulerLedgerSnapshot } from "@centraid/automation";
 import { describe, expect, it } from "vitest";
+
+import type { SchedulerLedgerSnapshot } from "@centraid/automation";
 
 import { createSchedulerHealthProbe } from "./scheduler-health.js";
 

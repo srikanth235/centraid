@@ -3,10 +3,11 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { notifyReplicaCommit } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { WebPushSender } from "../push/web-push.js";
 import { EnrollmentStore } from "../serve/enrollment-store.js";

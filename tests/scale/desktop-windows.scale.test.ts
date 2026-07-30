@@ -1,8 +1,9 @@
+import { describe, expect, test } from "vitest";
+
 import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
-import { describe, expect, test } from "vitest";
 
 import { gatewayChangedPayload } from "../../apps/desktop/src/main/ipc-core.js";
 

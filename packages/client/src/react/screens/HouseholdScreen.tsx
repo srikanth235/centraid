@@ -1,6 +1,7 @@
+import type { JSX } from "react";
+
 import { tileFinish } from "@centraid/design-tokens";
 import type { IconName } from "@centraid/design-tokens";
-import type { JSX } from "react";
 
 import {
   canAdministerHousehold,

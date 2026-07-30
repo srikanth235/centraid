@@ -3,8 +3,9 @@
 // malformed-request handling, and idempotent teardown. Driven with raw fetch
 // against the real listener rather than through a spawned agent.
 
-import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import { vaultToolContext } from "./test-fixtures.ts";
 import { startVaultMcpServer } from "./vault-mcp-server.ts";

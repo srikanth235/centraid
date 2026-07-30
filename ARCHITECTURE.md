@@ -11,14 +11,7 @@ Centraid is personal software over a sovereign vault. Its backend is a single ho
 
 The web app (`apps/web`) is an installable Vite PWA and, like mobile, embeds no backend. It shares the browser-safe React shell in `packages/client` with desktop. Gateway connections are iroh-only through the Rust/WASM client; browsers have no UDP access, so the browser transport is relay-only. A service-worker bridge carries generated-app documents, assets, and streams over the same tunnel; their one-time app sessions remain vault- and app-scoped.
 
-Centraid Assist (`apps/oauth-worker`) is a separate stateless Cloudflare
-ceremony edge, not another backend. Google redirects to its one public
-callback; it returns a short-lived code to desktop/PWA and attaches the
-confidential Web-client secret only for gateway-originated exchange/refresh
-requests. State, PKCE, connection rows, imported data, and durable tokens stay
-on the gateway. There are no Worker storage bindings. See
-[docs/oauth-assist.md](docs/oauth-assist.md) and the threat model in
-[SECURITY.md](SECURITY.md#centraid-assist-oauth-model-b-code-courier).
+Centraid Assist (`apps/oauth-worker`) is a separate stateless Cloudflare ceremony edge, not another backend. Google redirects to its one public callback; it returns a short-lived code to desktop/PWA and attaches the confidential Web-client secret only for gateway-originated exchange/refresh requests. State, PKCE, connection rows, imported data, and durable tokens stay on the gateway. There are no Worker storage bindings. See [docs/oauth-assist.md](docs/oauth-assist.md) and the threat model in [SECURITY.md](SECURITY.md#centraid-assist-oauth-model-b-code-courier).
 
 The browser extension (`apps/extension`) is a narrower paired-device client over that same checked-in Iroh/WASM binding. Its MV3 worker enrolls with an owner-selected app allow-list that is persisted on the device row and re-enforced by the gateway before dispatch. It can reach only app tools plus narrow read-only status/module/count surfaces; every tool body is clamped to the enrolled app ids. Locker suggestions are secret-free and top-frame-only, explicit fill reveals carry a normalized origin in their receipt, and the extension stores no secret cache. Chrome is the v1 store target; the package also emits a Firefox 121+ build, while Safari needs a separate port.
 
@@ -26,7 +19,7 @@ The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun
 
 ### Deploy surfaces (issue #501 / #512)
 
-One **product version** stamps the monorepo; surfaces may skip *ship* but not diverge stamps. Connect uses **protocol version**, not product string. Catalog: `bun run release:matrix`.
+One **product version** stamps the monorepo; surfaces may skip _ship_ but not diverge stamps. Connect uses **protocol version**, not product string. Catalog: `bun run release:matrix`.
 
 | Surface | How it ships |
 | --- | --- |
@@ -44,11 +37,11 @@ Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [doc
 
 Centraid's first principle is that **everything is agentic chat** — automation is a conversation whose other side is a deterministic script instead of a person, and whose transcript is durable. A chat window, an automation, and a builder session are each a single-kind conversation, recorded in one ledger (the conversation-ledger band of the per-vault `journal.db` — the old per-app `runtime.sqlite` and central `analytics.sqlite` became a per-vault `transcripts.db` in #280, then folded into `journal.db` as a second band beside its audit stream). The vocabulary, per `packages/app-engine/src/conversation/schema.ts` and `packages/app-engine/src/stores/gateway-db.ts`:
 
-| Layer            | What it is                                                                 | Chat                   | Automation                       |
-| ---------------- | ------------------------------------------------------------------------- | ---------------------- | -------------------------------- |
-| **conversation** | the durable thread. `kind` ∈ `{chat, build, automation}` lives here.       | the chat session       | one long-lived conversation per automation ref |
-| **turn**         | one execution under it — `conversation_id` is a NOT-NULL, FK'd, CASCADE spine | one reply round | one headless compile or fire / `ctx.agent` round |
-| **item**         | the ordered trace. `kind` ∈ `{message_in, step, tool, agent}`             | inbound message + steps + tool calls | inbound trigger + steps + tool/agent calls |
+| Layer | What it is | Chat | Automation |
+| --- | --- | --- | --- |
+| **conversation** | the durable thread. `kind` ∈ `{chat, build, automation}` lives here. | the chat session | one long-lived conversation per automation ref |
+| **turn** | one execution under it — `conversation_id` is a NOT-NULL, FK'd, CASCADE spine | one reply round | one headless compile or fire / `ctx.agent` round |
+| **item** | the ordered trace. `kind` ∈ `{message_in, step, tool, agent}` | inbound message + steps + tool calls | inbound trigger + steps + tool/agent calls |
 
 `kind` lives on the **conversation**, not re-stamped per turn — a thread is single-kind. The inbound message (a person typing, a webhook firing, a cron tick) is a first-class `item` (`kind='message_in'`, ordinal 0); `step` is one primary model-inference call (per-call token + cost accounting); `tool`/`agent` are per-call audit rows. Uploaded attachments ride the `message_in` item and are content-addressed on disk. Agent-created files may instead attach to a tool item as a workspace path + SHA-256 reference, with no duplicate CAS copy. `conversation_harness_sessions` holds one conversation's per-runner ACP resume handles, cumulative usage snapshots, hydration watermarks, and active/warm/cold/stale lifecycle; `conversations.adapter_*` is the read-through active binding, so changing providers never changes the durable conversation id and A→B→A can resume A. `conversation_turn_locks` serializes the completed-turn/binding transaction, and `conversation_workspace_selection` persists the Centraid root plus explicitly shared realpaths. The tables are `conversations`, `conversation_harness_sessions`, `conversation_turn_locks`, `conversation_workspace_selection`, `conversation_provider_egress`, `runner_health`, `turns`, `items`, `attachments`, `automation_state`, and the `run_summary` view (see `CONVERSATION_LEDGER_DDL` in `gateway-db.ts`). There is no `run` layer and no `run_nodes` table — those were collapsed in issue #190.
 
@@ -58,58 +51,32 @@ Automation instructions use `@[schema.table/id]` for stable entity references. T
 
 An app declares **queries** (bounded reads) and **actions** (typed writes) in its `app.json`; the dispatcher (`packages/app-engine/src/handlers/dispatcher.ts`) validates input against the per-handler JSON Schema with Ajv, then runs the handler in a worker thread. The handler holds no database — every data touch goes through `ctx.vault`, crosses to the host, walks the consent pipeline, and comes back `executed` / `denied` / `parked` with a receipt id (issue #286 deleted the per-app `data.sqlite`, the `_sql` escape hatch, and the old `centraid_describe`/`centraid_read`/`centraid_write` tool trio). Agents see exactly one tool family — the **vault register**: `vault_sql` (one read-only statement over the whole vault), `vault_invoke` (one typed command, including every app's declared handlers), `vault_content` (the text of one document). UI buttons and `vault_invoke` land on the same handler — one calling convention. See the Apps § agents and Data § assistant docs at `https://centraid.dev/docs/apps/#agents` and `https://centraid.dev/docs/data/#assistant`.
 
-Issue #630 makes that shared calling convention a release invariant for all
-eight bundled apps. `packages/blueprints/src/handler-reachability.test.ts`
-requires every manifested handler to have a web and native dispatch site or a
-named, rationale-bearing agent/extension/platform fallback. The same package
-owns behavioral handler CRUD, cold-read state honesty, untrusted rendering,
-and offline/convergence contracts. The agent parity integration test starts a
-real ACP subprocess, crosses the loopback MCP transport, and invokes one
-representative command per blueprint through `vault_invoke`; it asserts
-executed and parked consent outcomes plus their receipts.
+Issue #630 makes that shared calling convention a release invariant for all eight bundled apps. `packages/blueprints/src/handler-reachability.test.ts` requires every manifested handler to have a web and native dispatch site or a named, rationale-bearing agent/extension/platform fallback. The same package owns behavioral handler CRUD, cold-read state honesty, untrusted rendering, and offline/convergence contracts. The agent parity integration test starts a real ACP subprocess, crosses the loopback MCP transport, and invokes one representative command per blueprint through `vault_invoke`; it asserts executed and parked consent outcomes plus their receipts.
 
-The compound home surfaces remain gateway/vault projections rather than a new
-application database. Vault FTS fans one search across the eight entity
-families; household sharing projects a complete domain closure into an
-independent audience vault; and `GET /centraid/_brief/today` computes a bounded
-events/tasks/photos/Tally summary from the current vault. Clients render these
-projections from the same replica/HTTP contracts, while morning notifications
-contain only an opaque route back to Home.
+The compound home surfaces remain gateway/vault projections rather than a new application database. Vault FTS fans one search across the eight entity families; household sharing projects a complete domain closure into an independent audience vault; and `GET /centraid/_brief/today` computes a bounded events/tasks/photos/Tally summary from the current vault. Clients render these projections from the same replica/HTTP contracts, while morning notifications contain only an opaque route back to Home.
 
 The same journalled command path backs **Vault Atlas** (#441), the Operations screen that renders the model as **Kinds / Relations / Browse** (`packages/client/src/react/screens/AtlasScreen.tsx`): the Browse table editor dispatches `atlas.insert_row|update_row|delete_row` — never raw SQL, sealed columns refuse writes — and its dependent-aware deletes consult the **polymorphic-reference registry** (`packages/vault/src/schema/poly-refs.ts`), the one enumeration of every polymorphic `(type, id)` pointer with a cleanup policy, swept on purge and Browse-delete so orphaned `consent_share`/`enrich_embedding`/`sync_external_entity` rows (previously never cleaned) can no longer survive a hard delete.
 
 ## Connector pull runtime
 
-Bundled pull connectors export a declarative `centraid.pull/v1` spec, not an
-imperative automation handler. A spec contains only a principal probe and a
-pull function that returns rows plus cursor updates. Its context exposes
-`now`, `input`, `abortSignal`, and broker-mediated `fetch`; it deliberately
-does not expose `vault`, `state`, `runs`, or `agent`.
+Bundled pull connectors export a declarative `centraid.pull/v1` spec, not an imperative automation handler. A spec contains only a principal probe and a pull function that returns rows plus cursor updates. Its context exposes `now`, `input`, `abortSignal`, and broker-mediated `fetch`; it deliberately does not expose `vault`, `state`, `runs`, or `agent`.
 
-The automation engine resolves the manifest's durable `connectionId` before
-the worker runs, opens the sync run after the observed-principal probe, and
-owns pause/refusal gates, row staging, cursor persistence, and success/failure
-finalization. Pull-spec code therefore cannot supply or override
-`kind`, `label`, or `connection_id`, and two accounts of the same provider
-cannot collapse into a label-derived shadow connection.
+The automation engine resolves the manifest's durable `connectionId` before the worker runs, opens the sync run after the observed-principal probe, and owns pause/refusal gates, row staging, cursor persistence, and success/failure finalization. Pull-spec code therefore cannot supply or override `kind`, `label`, or `connection_id`, and two accounts of the same provider cannot collapse into a label-derived shadow connection.
 
 Cursor semantics are explicit:
 
 - `cursor.highWater(key)` retains the greatest observed provider value.
 - `cursor.provider(key)` stores, replaces, or clears an opaque provider token.
-- Offset paging is not a supported persisted strategy because mutable
-  provider lists make offsets lossy.
+- Offset paging is not a supported persisted strategy because mutable provider lists make offsets lossy.
 
-The bundled blueprint guardrail in
-`packages/blueprints/src/app-manifests.test.ts` requires every `*-pull`
-template to use this protocol and pins its intended vault entity type.
+The bundled blueprint guardrail in `packages/blueprints/src/app-manifests.test.ts` requires every `*-pull` template to use this protocol and pins its intended vault entity type.
 
 ## App render paths
 
 An app UI reaches the screen one of two ways, and which one is a property of the app, not the host (#505):
 
 - **Inline** — the default for the 8 bundled system apps (Tasks, Agenda, Tally, People, Notes, Docs, Locker, Photos). The app mounts as a **React route inside the shared shell** (`packages/client/src/react/shell/routes/InlineAppRoute.tsx`), lazy-loading the co-located `packages/blueprints/apps/<app>/app-inline.tsx` chunk. There is no iframe, no opaque document, no postMessage bridge, and no second React runtime — the app is shell code with the shell's principal, inheriting design tokens synchronously. Data flows through the device **replica** (`ReplicaShellSession`): reads/subscriptions hit replica invalidations and writes ride the replica intent dispatch carrying `intentId` (the #406 idempotency contract), so a bundled app renders **fully offline from the local replica** with the gateway unreachable. Membership in `packages/client/src/react/shell/routes/inlineApps.ts` is the typed render-path signal; anything not listed falls to the served path.
-- **Served (iframe)** — the builder preview of edited/code-store apps and mobile WebViews. The gateway bakes an HTML document and serves it plus a prebuilt `_bundle.<hash>.js` (`packages/app-engine/src/http/static-server.ts`), injects `bridge-script.ts` for `window.centraid`, and isolates the app as an **opaque, same-origin document** under the blueprint CSP; theme/settings cross the frame by postMessage. This is the untrusted-code boundary and is left byte-for-byte by the inline work — only the render-path *decision* moved bundled apps off it. See [docs/traps/blueprint-csp.md](docs/traps/blueprint-csp.md).
+- **Served (iframe)** — the builder preview of edited/code-store apps and mobile WebViews. The gateway bakes an HTML document and serves it plus a prebuilt `_bundle.<hash>.js` (`packages/app-engine/src/http/static-server.ts`), injects `bridge-script.ts` for `window.centraid`, and isolates the app as an **opaque, same-origin document** under the blueprint CSP; theme/settings cross the frame by postMessage. This is the untrusted-code boundary and is left byte-for-byte by the inline work — only the render-path _decision_ moved bundled apps off it. See [docs/traps/blueprint-csp.md](docs/traps/blueprint-csp.md).
 
 ## Workspace layout
 
@@ -150,9 +117,7 @@ Each gateway host derives its own paths and passes absolute slots to the gateway
 
 ### At-rest formats (issue #555)
 
-What each on-disk slot actually is, and what protects it. The column that
-matters when reasoning about a stolen disk or a copied directory is the last
-one: *what a copy without custody yields*.
+What each on-disk slot actually is, and what protects it. The column that matters when reasoning about a stolen disk or a copied directory is the last one: _what a copy without custody yields_.
 
 | Slot | Format | Protected by | A copy without custody yields |
 | --- | --- | --- | --- |
@@ -167,12 +132,7 @@ one: *what a copy without custody yields*.
 | Provider snapshots / WAL | Chunked, **sealed with the backup keyring** before leaving the host | `keyring.key` | Ciphertext. This is why the provider is never trusted with plaintext |
 | Recovery kit (backup plane) | `centraid-recovery-kit-wrapped`: scrypt(N=2¹⁷) + AES-256-GCM over the canonical document | Its **password**, held only by the owner | Ciphertext. The kit carries the keyring and per-vault DEKs, so its password is load-bearing custody, not a formality. It is exported deliberately (`backup kit` / the Backup screen) and consumed by `recover` — first run never mints one (issue #603) |
 
-Two consequences worth stating out loud. First, the **provider API key is
-deliberately absent from the kit** (`FORMAT.md`) — reaching the provider and
-decrypting what is there are separate capabilities. Second, at-rest wrapping
-does not bound a **local** attacker: spawned coding-agent runners execute at the
-owner's uid and can read `keys/` regardless of scheme. The OS user boundary is
-the primary local boundary; see [SECURITY.md](SECURITY.md).
+Two consequences worth stating out loud. First, the **provider API key is deliberately absent from the kit** (`FORMAT.md`) — reaching the provider and decrypting what is there are separate capabilities. Second, at-rest wrapping does not bound a **local** attacker: spawned coding-agent runners execute at the owner's uid and can read `keys/` regardless of scheme. The OS user boundary is the primary local boundary; see [SECURITY.md](SECURITY.md).
 
 Those slots are also the **accounting** vocabulary the owner sees. `packages/gateway/src/serve/local-usage.ts` walks per-vault `ledger`, `vault-db`, `attachments`, `apps`, and `code`, plus gateway-wide `cache`, `logs`, and `templates`; there are no synthetic `backup` or `storage` directories. `GET /centraid/_gateway/storage/local` serves that alongside the volume's `statfs`. Owner-set storage limits live in `gateway.db`.
 
@@ -198,12 +158,7 @@ The gateway is the single canonical writer; devices hold **derived, consent-scop
 
 ## Cron catch-up policy
 
-The gateway's cron scheduler is in-process and intentionally does not backfill
-after sleep, restart, or downtime. Missed fire times are skipped rather than
-burst-executed; one bounded missed-window ledger entry per affected automation
-records the earliest missed fire for operator visibility. The next ordinary
-minute resumes normal scheduling. `scheduler-ledger.test.ts` is the executable
-contract for this policy.
+The gateway's cron scheduler is in-process and intentionally does not backfill after sleep, restart, or downtime. Missed fire times are skipped rather than burst-executed; one bounded missed-window ledger entry per affected automation records the earliest missed fire for operator visibility. The next ordinary minute resumes normal scheduling. `scheduler-ledger.test.ts` is the executable contract for this policy.
 
 ## Build orchestration
 

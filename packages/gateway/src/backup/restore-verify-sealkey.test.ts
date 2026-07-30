@@ -1,3 +1,5 @@
+import { afterEach, describe, expect, test } from "vitest";
+
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 /*
@@ -13,7 +15,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
  *     verify with the placebo problem (a real regression the check now catches).
  */
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
 import type { VaultPlane } from "../serve/vault-plane.js";

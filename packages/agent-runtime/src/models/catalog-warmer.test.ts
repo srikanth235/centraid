@@ -1,8 +1,9 @@
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import type { RunnerModel } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 import { CatalogWarmer, deriveStatus } from "./catalog-warmer.ts";
 import { readCatalog } from "./catalog.ts";

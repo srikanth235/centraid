@@ -5,8 +5,9 @@
  * what it actually returned.
  */
 
-import type { VaultBridge } from "@centraid/app-engine";
 import { describe, expect, it } from "vitest";
+
+import type { VaultBridge } from "@centraid/app-engine";
 
 import type { ConditionTrigger } from "../manifest/manifest.js";
 import { readConditionCursor, readDataCursor } from "./condition.js";

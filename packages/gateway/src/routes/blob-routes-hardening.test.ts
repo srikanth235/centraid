@@ -2,9 +2,10 @@ import crypto from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { DATA_PLANE_RELAY_HEADER } from "../serve/data-plane-handoff.js";
 import { openVaultPlane } from "../serve/vault-plane.js";

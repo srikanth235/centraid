@@ -1,4 +1,3 @@
-import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
@@ -10,6 +9,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+
+import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import { family, useTheme } from "../../kit/theme";
 

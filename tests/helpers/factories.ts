@@ -1,6 +1,8 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { onTestFinished } from "vitest";
+
 import type {
   BuildGatewayOptions,
   BuiltGateway,
@@ -8,7 +10,6 @@ import type {
 } from "@centraid/gateway";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import type { OpenVaultOptions, VaultDb } from "@centraid/vault";
-import { onTestFinished } from "vitest";
 
 const helpersDir = import.meta.dirname;
 

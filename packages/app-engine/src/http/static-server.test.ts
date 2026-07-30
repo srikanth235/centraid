@@ -10,8 +10,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import zlib from "node:zlib";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, it, vi } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { resolveStaticPath } from "./security.js";
 import { serveStatic } from "./static-server.js";

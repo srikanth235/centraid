@@ -1,6 +1,8 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { describe, expect, test } from "vitest";
+
 /**
  * Desktop cold-path budget (#496 PD3).
  * Crude first-import proxy for desktop main modules (not full Electron launch).
@@ -8,7 +10,6 @@ import { pathToFileURL } from "node:url";
  * with a continuous, CI-runnable floor.
  */
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
-import { describe, expect, test } from "vitest";
 
 const OWNER = "tests/perf/desktop-cold.perf.test.ts";
 const BUDGET_MS = 3_000;

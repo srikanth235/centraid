@@ -8,8 +8,9 @@ import type { Server } from "node:http";
 import net from "node:net";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { createBlobHandoffUrl } from "../serve/data-plane-handoff.js";
 import { startTypeScriptBytePlane } from "./byte-plane-reference.js";

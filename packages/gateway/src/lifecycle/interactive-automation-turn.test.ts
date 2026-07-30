@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { ConversationStore, makeJournalDbProvider } from "@centraid/app-engine";
 import type {
   AutomationTurnStreamEvent,
@@ -11,7 +13,6 @@ import type {
 import { validateManifest } from "@centraid/automation";
 import type { Row as AutomationRow } from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runInteractiveAutomationTurn } from "./interactive-automation-turn.js";
 

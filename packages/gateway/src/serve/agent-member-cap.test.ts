@@ -11,10 +11,11 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import type { VaultBridge } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test } from "vitest";
 
 import type { DeviceRole } from "./enrollment-store.js";
 import { runWithVaultContext } from "./vault-context.js";

@@ -9,9 +9,10 @@ import type * as TypeImport_rdfcd1 from "node:http";
  */
 import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import type { VaultBridge } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { isBrokerReadOnlyPost } from "../handler/runner.js";
 import { validateManifest } from "../manifest/manifest.js";

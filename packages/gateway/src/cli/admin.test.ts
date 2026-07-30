@@ -1,3 +1,5 @@
+// governance: allow-repo-hygiene file-size-limit (#639) — the stopped-daemon
+// admin scenarios share one fixture and command-dispatch contract.
 import crypto from "node:crypto";
 /*
  * Stopped-daemon filesystem maintenance (issue #289):
@@ -7,11 +9,12 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import type http from "node:http";
 
+import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
+
 import { buildGatewayInfoPayload } from "@centraid/protocol";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { endpointIdForSecret } from "@centraid/tunnel";
 import { KeyStore } from "@centraid/vault";
-import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.ts";
 import { MemberStore } from "../serve/member-store.ts";

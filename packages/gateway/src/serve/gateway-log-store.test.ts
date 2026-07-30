@@ -7,10 +7,11 @@ import fs from "node:fs";
  */
 import path from "node:path";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import type { RuntimeLogger } from "@centraid/app-engine";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { DiskFullTracker } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { GatewayLogStore } from "./gateway-log-store.ts";
 import type { GatewayLogEntry } from "./gateway-log-store.ts";

@@ -1,6 +1,7 @@
+import { describe, expect, test } from "vitest";
+
 import { fc } from "@centraid/test-kit/fast-check";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
-import { describe, expect, test } from "vitest";
 
 import { MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue } from "./intents.js";

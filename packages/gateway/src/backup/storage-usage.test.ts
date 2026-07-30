@@ -8,9 +8,10 @@ import type { AddressInfo } from "node:net";
  * calls. No mocked `fetch`.
  */
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { openStorageConnectionStore } from "./storage-connections.js";
 import type { StorageConnectionStore } from "./storage-connections.js";

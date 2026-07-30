@@ -10,58 +10,27 @@ When backup, restore, or blank-machine `recover` strands mid-flight. Product pat
 | **Lazy default** | Blobs may fetch on first access; `--full` is explicit |
 | **Fencing** | Successful recover adopts with generation bump so the old machine's next register fails (no split-brain) |
 | Keys | Sealing keys / recovery kit are outside casual vault copy — need the kit + provider credentials |
-| The kit is an **export**, not a first-run artifact | Since issue #603 nothing mints a kit for you. Export it deliberately (`centraid-gateway backup kit --out …`, or the Backup screen) *before* you need it |
+| The kit is an **export**, not a first-run artifact | Since issue #603 nothing mints a kit for you. Export it deliberately (`centraid-gateway backup kit --out …`, or the Backup screen) _before_ you need it |
 
 ## Schema-change recovery checklist
 
-Every change that creates a durable table or column must complete this checklist
-in the same PR; “the SQLite file is copied” is not evidence on its own:
+Every change that creates a durable table or column must complete this checklist in the same PR; “the SQLite file is copied” is not evidence on its own:
 
-- add an ordered migration from the immediately previous `user_version` and
-  prove an existing populated vault upgrades without erase/re-import;
-- seed the new data in the backup integration fixture, restore it to a side
-  directory, and assert the exact rows and references are readable;
-- seed the same data in the restore-after-erase recovery fixture and assert it
-  survives kit/provider recovery after the live DEK has been destroyed;
-- include new blob/content references in GC-root enumeration and integrity
-  manifests where applicable;
-- verify an older binary refuses a newer storage/protocol epoch before
-  downloading or mutating recovery material.
+- add an ordered migration from the immediately previous `user_version` and prove an existing populated vault upgrades without erase/re-import;
+- seed the new data in the backup integration fixture, restore it to a side directory, and assert the exact rows and references are readable;
+- seed the same data in the restore-after-erase recovery fixture and assert it survives kit/provider recovery after the live DEK has been destroyed;
+- include new blob/content references in GC-root enumeration and integrity manifests where applicable;
+- verify an older binary refuses a newer storage/protocol epoch before downloading or mutating recovery material.
 
-For issue #630, `locker_auth_credential` is the first post-base vault migration
-and is the preservation canary for this rule. The migration test starts from a
-populated v1 Locker, adds the credential table at v2, and proves the existing
-item is unchanged. Backup and restore fixtures must seed the credential row as
-well as a Locker item: restoring only `locker_item` would silently reset the
-owner's user-presence boundary. The verifier is usable only with the restored
-vault DEK; neither its source passphrase nor any live Locker session/item permit
-belongs in a snapshot, recovery kit, journal, or receipt.
+For issue #630, `locker_auth_credential` is the first post-base vault migration and is the preservation canary for this rule. The migration test starts from a populated v1 Locker, adds the credential table at v2, and proves the existing item is unchanged. Backup and restore fixtures must seed the credential row as well as a Locker item: restoring only `locker_item` would silently reset the owner's user-presence boundary. The verifier is usable only with the restored vault DEK; neither its source passphrase nor any live Locker session/item permit belongs in a snapshot, recovery kit, journal, or receipt.
 
-The receipt-capture migration extends this canary: recovery fixtures publish a
-real `tally.add_receipt_expense` and assert the canonical attachment,
-`tally_expense_receipt`, reviewed OCR text derivative, line items, and per-party
-allocations after both side-directory restore and restore-after-erase. Restoring
-only the image blob or only `tally_expense` is data loss.
+The receipt-capture migration extends this canary: recovery fixtures publish a real `tally.add_receipt_expense` and assert the canonical attachment, `tally_expense_receipt`, reviewed OCR text derivative, line items, and per-party allocations after both side-directory restore and restore-after-erase. Restoring only the image blob or only `tally_expense` is data loss.
 
-Push endpoint registrations are intentionally different from user data. Expo
-tokens, browser subscriptions, and the gateway VAPID private key are
-gateway/device capabilities in mode-0600 `gateway.db`; they are revoked on
-unlink and automatically re-registered after a device reconnects. Copying them
-into a vault snapshot would resurrect delivery authority after device
-revocation or blank-machine recovery, so they do not enter the vault backup
-plane. Reminder definitions and delivery state remain vault data and follow the
-normal checklist above.
+Push endpoint registrations are intentionally different from user data. Expo tokens, browser subscriptions, and the gateway VAPID private key are gateway/device capabilities in mode-0600 `gateway.db`; they are revoked on unlink and automatically re-registered after a device reconnects. Copying them into a vault snapshot would resurrect delivery authority after device revocation or blank-machine recovery, so they do not enter the vault backup plane. Reminder definitions and delivery state remain vault data and follow the normal checklist above.
 
-The recovery-kit passphrase wrap is **load-bearing key custody**, not a
-convenience. The kit contains the backup keyring and backed-up vault DEKs;
-without its password those keys remain unavailable even when the wrapped file
-and provider objects are both present. An UNWRAPPED kit is not accepted at all
-(issue #568) — accepting one also ignored the supplied password, which made
-possession of the plaintext file sufficient on three routes.
+The recovery-kit passphrase wrap is **load-bearing key custody**, not a convenience. The kit contains the backup keyring and backed-up vault DEKs; without its password those keys remain unavailable even when the wrapped file and provider objects are both present. An UNWRAPPED kit is not accepted at all (issue #568) — accepting one also ignored the supplied password, which made possession of the plaintext file sufficient on three routes.
 
-For an erase that stranded, or a restore that follows a completed erase, see
-[vault-erase.md](vault-erase.md) — erase destroys the vault DEK, so its
-recovery story is materially different from an ordinary restore.
+For an erase that stranded, or a restore that follows a completed erase, see [vault-erase.md](vault-erase.md) — erase destroys the vault DEK, so its recovery story is materially different from an ordinary restore.
 
 ## Symptoms
 
@@ -83,12 +52,7 @@ recovery story is materially different from an ordinary restore.
 
 Phases (conceptually): `discovering → fetching → replaying → fencing → adopting → warming`.
 
-`recover` is an **offline CLI verb** — it takes `gateway.db`'s exclusive lock and
-refuses while the daemon runs. There is no founding UI and no `vaults:restore`
-route (issue #603): keep the daemon stopped for the whole sequence, and on a
-data dir whose `vault/` is empty do not restart it between attempts — auto-founding
-would create a fresh `Shared` + `Personal` and the dir would no longer be
-vault-free.
+`recover` is an **offline CLI verb** — it takes `gateway.db`'s exclusive lock and refuses while the daemon runs. There is no founding UI and no `vaults:restore` route (issue #603): keep the daemon stopped for the whole sequence, and on a data dir whose `vault/` is empty do not restart it between attempts — auto-founding would create a fresh `Shared` + `Personal` and the dir would no longer be vault-free.
 
 1. Read gateway logs and the `centraid-gateway recover` error output ([logs.md](../logs.md)).
 2. If failure was before **adopting**, re-run `centraid-gateway recover --kit … --password-file … --api-key … --data-dir …`. Remove only the specifically named disposable cache/scratch path when instructed; never remove provider objects or the live vault root.

@@ -18,8 +18,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test, vi } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { VaultDiskFullError } from "../errors.js";
 import { FsBlobStore } from "./local.js";

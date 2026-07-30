@@ -1,6 +1,7 @@
+import type { JSX } from "react";
+
 import { tileFinish } from "@centraid/design-tokens";
 import type { IconName } from "@centraid/design-tokens";
-import type { JSX } from "react";
 
 import Icon from "../ui/Icon.js";
 import { DEFAULT_SPACE_ICON, PROFILE_COLORS } from "./routes/SpaceModal.js";

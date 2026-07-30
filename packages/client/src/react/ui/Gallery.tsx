@@ -1,6 +1,7 @@
+import type { JSX, ReactNode } from "react";
+
 import { apps, icons } from "@centraid/design-tokens";
 import type { IconName } from "@centraid/design-tokens";
-import type { JSX, ReactNode } from "react";
 
 import AppCard from "./AppCard.js";
 import Button from "./Button.js";

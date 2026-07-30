@@ -9,10 +9,11 @@ import path from "node:path";
  * the api-key.
  */
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-provider-server.js";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { BackupService } from "../backup/backup-service.js";
 import { HealthRegistry } from "../serve/health-registry.js";

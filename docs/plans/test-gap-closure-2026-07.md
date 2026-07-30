@@ -1,7 +1,6 @@
 # Test-gap closure map — 2026-07 (#545)
 
-Working checklist for [issue #545](https://github.com/srikanth235/centraid/issues/545).
-Close A first so later floors and CI honestly gate the rest.
+Working checklist for [issue #545](https://github.com/srikanth235/centraid/issues/545). Close A first so later floors and CI honestly gate the rest.
 
 ## Non-goals (from issue Out list only)
 

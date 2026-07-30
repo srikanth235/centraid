@@ -1,9 +1,10 @@
+import { describe, expect, test } from "vitest";
+
 import { cloneTemplateFiles, scaffoldAppFiles } from "@centraid/blueprints";
 import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
-import { describe, expect, test } from "vitest";
 
 const OWNER = "tests/scale/blueprint-clones.scale.test.ts";
 const APPS = 1_000;

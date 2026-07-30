@@ -1,6 +1,7 @@
-import type { IconName } from "@centraid/design-tokens";
 import { useState } from "react";
 import type { JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import { formatDuration } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";

@@ -3,6 +3,8 @@ import { promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { Dispatcher, Registry } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -12,7 +14,6 @@ import {
   ensureAppEnrolled,
   uuidv7,
 } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import { openVaultPlane } from "./vault-plane.js";

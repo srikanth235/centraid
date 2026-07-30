@@ -1,8 +1,9 @@
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
   clearGatewayCredentials,

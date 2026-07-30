@@ -1,5 +1,7 @@
 import http from "node:http";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // The Vault Atlas Browse routes (issue #441 Part B, B3): the owner-gated
 // table editor over HTTP. The read/write policy is proven in packages/vault;
@@ -7,7 +9,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 // a journalled insert that comes back on a read, and the dependent-blocked
 // delete returning a 409 with the polymorphic + engine payload.
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";

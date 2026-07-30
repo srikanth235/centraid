@@ -1,6 +1,7 @@
-import { flushMacrotasks } from "@centraid/test-kit/flush";
 // governance: allow-repo-hygiene file-size-limit cohesive coordinator regression suite; splitting would obscure issue #417 review
 import { describe, expect, test, vi } from "vitest";
+
+import { flushMacrotasks } from "@centraid/test-kit/flush";
 
 import type { VaultChangeMessage } from "../vault-change-feed.js";
 import { createReplicaCoordinator } from "./coordinator-web.js";

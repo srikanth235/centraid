@@ -13,9 +13,10 @@ import { promises as fs } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";

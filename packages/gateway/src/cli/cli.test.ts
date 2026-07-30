@@ -4,9 +4,10 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import url from "node:url";
 
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
 import type { PrefsStore } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 // Also name the pure helper module so cold-spot reachability is unambiguous.
 import { parseServeArgsPure as pureFromHelper } from "./cli-serve-args.ts";

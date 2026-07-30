@@ -1,3 +1,5 @@
+import { fetch as expoFetch } from "expo/fetch";
+
 import {
   authHeaders,
   consumeVaultChangeSse,
@@ -13,7 +15,6 @@ import type {
   VaultChangeCursor,
   VaultChangeMessage,
 } from "@centraid/client/replica/native";
-import { fetch as expoFetch } from "expo/fetch";
 
 /** The subset of `@react-native-async-storage/async-storage` the cursor uses. */
 export interface AsyncStorageLike {

@@ -14,6 +14,8 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
@@ -21,7 +23,6 @@ import {
 } from "@centraid/app-engine";
 import type { ConversationRunner, VaultWorkspace } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test } from "vitest";
 
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { makeAssistantRouteHandler } from "./assistant-routes.js";

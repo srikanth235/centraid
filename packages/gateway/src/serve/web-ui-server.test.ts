@@ -4,8 +4,9 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { brotliCompressSync } from "node:zlib";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { startWebUiServer } from "./web-ui-server.js";
 import type { WebUiServerHandle } from "./web-ui-server.js";

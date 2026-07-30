@@ -1,10 +1,11 @@
+// The multi-scope inline facade (issue #599): one app mounted over the
+// member's own scope plus every audience they belong to.
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import type {
   InlineAppModule,
   InlineScope,
 } from "@centraid/blueprints/apps/inline-types";
-// The multi-scope inline facade (issue #599): one app mounted over the
-// member's own scope plus every audience they belong to.
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";

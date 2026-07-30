@@ -16,8 +16,9 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test, vi } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { buildLaunchdPlist, launchAgentPlistPath } from "./service-unit.ts";
 import type { ServiceUnitSpec } from "./service-unit.ts";

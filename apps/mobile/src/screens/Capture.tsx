@@ -1,8 +1,3 @@
-import {
-  applyAgentCaptureKind,
-  classifyCapture,
-} from "@centraid/client/capture";
-import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
@@ -14,6 +9,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import {
+  applyAgentCaptureKind,
+  classifyCapture,
+} from "@centraid/client/capture";
+import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
 
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";

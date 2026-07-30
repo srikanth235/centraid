@@ -4,6 +4,8 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
+import { describe, afterEach, expect, test, vi } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -13,7 +15,6 @@ import {
   openVaultDb,
 } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
-import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";

@@ -1,5 +1,6 @@
-import boardQuery from "@centraid/blueprints/apps/tasks/queries/board";
 import { describe, expect, it } from "vitest";
+
+import boardQuery from "@centraid/blueprints/apps/tasks/queries/board";
 
 import type { ShellReplicaReadRequest } from "../../replica/shell-session.js";
 import type {

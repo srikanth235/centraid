@@ -3,6 +3,8 @@ import { existsSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import {
   BackupProviderError,
   openRemoteBackupProvider,
@@ -14,7 +16,6 @@ import { startFakeProviderServer } from "@centraid/backup/dist/testing/fake-prov
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { FsBlobStore, KeyStore, ReplicaIndex } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { daemonLayoutFor } from "../cli/paths.js";
 import { HealthRegistry } from "../serve/health-registry.js";

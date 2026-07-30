@@ -9,9 +9,10 @@ import path from "node:path";
 // object assembled from parts that may have been sealed across many different
 // process lifetimes.
 
+import { afterEach, describe, expect, it } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, it } from "vitest";
 
 import {
   decodeHeader,

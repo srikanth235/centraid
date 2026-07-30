@@ -3,8 +3,9 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { makeDemoRouteHandler } from "./demo-routes.js";

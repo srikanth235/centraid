@@ -7,8 +7,9 @@ import http from "node:http";
 import path from "node:path";
 import { deflateSync } from "node:zlib";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { BlobCustody, sealBlob, unsealBlob } from "./custody.js";
 import type { RemoteTier } from "./custody.js";

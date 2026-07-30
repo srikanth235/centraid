@@ -21,8 +21,9 @@ import fss, { promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { FsObjectStore } from "./object-store.js";
 import type { ObjectStore } from "./object-store.js";

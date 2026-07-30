@@ -4,10 +4,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { currentReplicaLogState } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { openVaultPlane } from "../serve/vault-plane.js";

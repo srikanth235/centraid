@@ -1,11 +1,12 @@
 // Pure phase-helper unit tests for recover() (issue #545 B7).
 
+import { describe, expect, test } from "vitest";
+
 import type {
   RecoveryKitTarget,
   SnapshotRow,
   WalReplayOutcome,
 } from "@centraid/backup";
-import { describe, expect, test } from "vitest";
 
 import {
   buildProviderFromTarget,

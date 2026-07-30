@@ -1,5 +1,6 @@
-import type { ReplicaRow } from "@centraid/client/replica/native";
 import { useMemo } from "react";
+
+import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import {
   combineReplicaQueryStates,

@@ -3,10 +3,11 @@
 // outbox state, and emitted HTTP can be asserted as one lifecycle (#630).
 import http from "node:http";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 /** The only approved-artifact-to-network path: credentials, host pins, retries, and review. */
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { ConnectionBroker } from "./connection-broker.js";
 import {

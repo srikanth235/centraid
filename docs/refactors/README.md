@@ -28,31 +28,34 @@ Examples of plan-like docs already in tree (treat as examples; migrate here when
 ```markdown
 # <Title>
 
-**Issue:** #<n>
-**Status:** proposed | in-progress | done | abandoned
-**Owner session:** <optional>
+**Issue:** #<n> **Status:** proposed | in-progress | done | abandoned **Owner session:** <optional>
 
 ## Goal
+
 One paragraph. What "done" means.
 
 ## Safety argument
-Why intermediate states are safe (compatibility, rollback, feature flags, dual-run).
-What will *not* happen (no silent dual writers, no epoch bump without handshake, …).
+
+Why intermediate states are safe (compatibility, rollback, feature flags, dual-run). What will _not_ happen (no silent dual writers, no epoch bump without handshake, …).
 
 ## Plan
+
 Numbered steps or PR slices. Each step shippable alone if possible.
 
 ## Progress log
-| Date | Step | PR/commit | Notes |
-| --- | --- | --- | --- |
-| YYYY-MM-DD | … | … | … |
+
+| Date       | Step | PR/commit | Notes |
+| ---------- | ---- | --------- | ----- |
+| YYYY-MM-DD | …    | …         | …     |
 
 ## Rejected alternatives
+
 | Idea | Why rejected |
-| --- | --- |
-| … | … |
+| ---- | ------------ |
+| …    | …            |
 
 ## Out of scope
+
 …
 ```
 

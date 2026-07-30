@@ -1,3 +1,5 @@
+import { describe, expect, test } from "vitest";
+
 import { BackupProviderError } from "@centraid/backup";
 import type {
   BackupProvider,
@@ -5,7 +7,6 @@ import type {
   ProviderCapabilities,
   ProviderInventoryObject,
 } from "@centraid/backup";
-import { describe, expect, test } from "vitest";
 
 import {
   collectInventory,

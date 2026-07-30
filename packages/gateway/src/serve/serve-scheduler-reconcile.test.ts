@@ -9,10 +9,11 @@ import { promises as fs } from "node:fs";
  */
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
 import type * as automation from "@centraid/automation";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "./serve.ts";

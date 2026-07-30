@@ -6,8 +6,9 @@ import { writeFile } from "node:fs/promises";
 // poison the pool for subsequent runs.
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { runHandler, HANDLER_WORKER_FILE } from "./handler-runner.js";
 import { workerMaxConcurrentFromEnv } from "./worker-admission.js";

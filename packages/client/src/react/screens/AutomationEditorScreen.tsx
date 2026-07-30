@@ -1,7 +1,8 @@
-import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#325) single cohesive screen component (Name/Instructions/trigger-picker/tabs form for one surface); splitting would fragment one visual unit
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import { relativeRunLabel } from "../../app-format.js";
 import { glyphForId, hueForId } from "../../automation-identity.js";

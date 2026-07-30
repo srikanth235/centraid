@@ -1,6 +1,7 @@
-import type { IconName } from "@centraid/design-tokens";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import type {
   AuOverviewData,

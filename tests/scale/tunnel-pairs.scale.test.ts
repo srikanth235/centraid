@@ -1,12 +1,13 @@
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { DeviceStore } from "@centraid/tunnel";
-import { describe, expect, test } from "vitest";
 
 const OWNER = "tests/scale/tunnel-pairs.scale.test.ts";
 const PAIRS = 200;

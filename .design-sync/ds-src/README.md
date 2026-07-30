@@ -10,7 +10,9 @@ Load the two shared files once, then write the tags:
 <link rel="stylesheet" href="styles/bundle.css" />
 <script type="module" src="components/elements.js"></script>
 
-<kit-bar-chart items='[{"label":"Rent","value":1650},{"label":"Dining","value":214,"muted":true}]'></kit-bar-chart>
+<kit-bar-chart
+  items='[{"label":"Rent","value":1650},{"label":"Dining","value":214,"muted":true}]'
+></kit-bar-chart>
 ```
 
 - **Theme**: `data-theme="dark | notion-light | github-dark | nord | …"` on an ancestor (default = light).
@@ -41,4 +43,4 @@ For your own layout glue, style with the DS variables (they re-resolve per `data
 - `components/elements.js` — the real, product-shipped custom-element definitions.
 - `previews/<tag>.html` — a rendered example of each element.
 
-**Excluded on purpose**: the live "Ask your vault" assistant and the vault-fetching @-mention *picker* are runtime controllers wired to the product's SSE/vault surfaces — only the presentational `<kit-mention-chip>` / `<kit-reference-strip>` are here.
+**Excluded on purpose**: the live "Ask your vault" assistant and the vault-fetching @-mention _picker_ are runtime controllers wired to the product's SSE/vault surfaces — only the presentational `<kit-mention-chip>` / `<kit-reference-strip>` are here.

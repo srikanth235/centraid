@@ -6,8 +6,9 @@
  * host).
  */
 
-import { SUPPORTED_RUNNER_KINDS } from "@centraid/agent-runtime";
 import { describe, expect, test } from "vitest";
+
+import { SUPPORTED_RUNNER_KINDS } from "@centraid/agent-runtime";
 
 import type { AgentAcpCapabilities } from "./agents-routes.ts";
 import { modelsFromCapabilities, readAgentsStatus } from "./agents-routes.ts";

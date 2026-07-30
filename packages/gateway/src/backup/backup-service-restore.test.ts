@@ -9,13 +9,14 @@ import path from "node:path";
  * that one) purely to stay under the repo-hygiene line cap.
  */
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { openLocalBackupProvider, WAL_DB_FILES } from "@centraid/backup";
 import type { BackupProvider } from "@centraid/backup";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { updateBlobStoreSettings } from "@centraid/vault";
 import type { BlobStore, RemoteTier } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";

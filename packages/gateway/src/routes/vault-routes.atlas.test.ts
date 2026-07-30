@@ -1,5 +1,7 @@
 import http from "node:http";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // The Vault Atlas owner routes (issue #441 Part B): stats / graph / pulse.
 // These assert the gateway wires the vault-package builders to owner-gated
@@ -7,7 +9,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 // and FK≠core_link invariants are proven in packages/vault; here we prove the
 // route surface and that numbers are computed from the live schema.
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";

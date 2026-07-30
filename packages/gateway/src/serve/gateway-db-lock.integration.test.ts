@@ -4,9 +4,10 @@ import { once } from "node:events";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { commandLockStatus } from "../cli/lock-admin.js";
 import { GatewayDatabase, GatewayLockError } from "./gateway-db.js";

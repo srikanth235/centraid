@@ -1,11 +1,12 @@
 import http from "node:http";
 
+import { describe, expect, test } from "vitest";
+
 import {
   GATEWAY_SCHEMA_EPOCH,
   GATEWAY_VERSION,
   ROUTES,
 } from "@centraid/protocol";
-import { describe, expect, test } from "vitest";
 
 import { getHealth, handshake, listApps } from "./client.ts";
 

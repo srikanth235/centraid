@@ -1,4 +1,3 @@
-import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 // L4 attribution + the on-behalf-of cap (issue #599 decisions 7–8).
 //
 // Two claims, both about the journal being able to answer "who did this?":
@@ -8,6 +7,8 @@ import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 //     Sid's assistant fails exactly where Sid would, and the refusal names
 //     both of them.
 import { describe, beforeEach, expect, test } from "vitest";
+
+import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 
 import {
   bootstrapVault,

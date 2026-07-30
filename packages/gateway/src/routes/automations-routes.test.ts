@@ -9,6 +9,8 @@ import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
+
 import {
   AnalyticsStore,
   ConversationStore,
@@ -16,7 +18,6 @@ import {
   makeJournalDbProvider,
 } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { WorktreeStore } from "../worktree-store/index.js";
 import { makeAutomationsRouteHandler } from "./automations-routes.ts";

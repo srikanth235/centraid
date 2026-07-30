@@ -12,10 +12,11 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { FsBlobStore, ReplicaIndex } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { reconcileAdoptedInventory } from "./recover-reconcile.js";
 

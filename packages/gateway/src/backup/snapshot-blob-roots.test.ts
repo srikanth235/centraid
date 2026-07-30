@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 
+import { describe, expect, test } from "vitest";
+
 import { sealManifest } from "@centraid/backup";
 import type {
   BackupProvider,
@@ -7,7 +9,6 @@ import type {
   ManifestEntry,
   SnapshotRow,
 } from "@centraid/backup";
-import { describe, expect, test } from "vitest";
 
 import {
   blobShasFromManifestEntries,

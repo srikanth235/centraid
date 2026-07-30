@@ -1,6 +1,7 @@
-import { ROUTES } from "@centraid/protocol";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
+
+import { ROUTES } from "@centraid/protocol";
 
 import { authHeader, fetchJson, requireGatewayBase } from "./gateway";
 

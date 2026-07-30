@@ -2,8 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { bootstrapVault, openVaultDb, uuidv7 } from "@centraid/vault";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { bootstrapVault, openVaultDb, uuidv7 } from "@centraid/vault";
 
 import { buildDailyBrief } from "./daily-brief.js";
 

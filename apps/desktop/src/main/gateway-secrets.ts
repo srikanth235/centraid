@@ -11,9 +11,10 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+import { safeStorage } from "electron";
+
 import type { EndpointSecretPersistence } from "@centraid/tunnel";
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
-import { safeStorage } from "electron";
 
 import { connectionSecretsFile } from "./gateway-paths.js";
 

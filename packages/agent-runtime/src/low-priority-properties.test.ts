@@ -1,5 +1,6 @@
-import { fc } from "@centraid/test-kit/fast-check";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { fc } from "@centraid/test-kit/fast-check";
 
 import { lowPriorityCommand } from "./low-priority.js";
 

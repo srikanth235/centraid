@@ -1,11 +1,12 @@
 import path from "node:path";
 
+import { describe, expect, it, vi } from "vitest";
+
 import {
   AutomationTriggerStore,
   makeJournalDbProvider,
 } from "@centraid/app-engine";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { describe, expect, it, vi } from "vitest";
 
 import type { Manifest } from "../manifest/manifest.js";
 import type { Row } from "../scaffold/app.js";

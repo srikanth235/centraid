@@ -43,9 +43,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { providerConformanceCases } from "./conformance.js";
 import type { ConformanceHarness } from "./conformance.js";

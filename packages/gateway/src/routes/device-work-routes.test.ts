@@ -4,11 +4,12 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { queueDeviceEnrichmentRequest } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { openVaultPlane } from "../serve/vault-plane.js";

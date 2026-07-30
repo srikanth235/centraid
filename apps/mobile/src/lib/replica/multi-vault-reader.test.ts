@@ -3,9 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
 import { encode as encodeJpeg } from "jpeg-js";
 import { describe, expect, test } from "vitest";
+
+import { ReplicaSqliteStore } from "@centraid/client/replica/native";
 
 import { MultiVaultReplicaReader } from "./multi-vault-reader";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
