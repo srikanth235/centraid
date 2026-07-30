@@ -4,28 +4,11 @@ The renderer is written as if it started life as a React app: every visual belon
 
 ## The three layers
 
-1. **Tokens — `@centraid/design-tokens`.** The single cross-platform design
-   contract, shared with mobile. `toCss()` generates every CSS custom
-   property the renderer uses and `theme-vars.ts` injects it at boot:
-   colors per theme, the **typography scale** (`--t-*` font shorthands +
-   `--font-sans/-display/-mono` stacks, from `typography.ts`), density
-   spacing, radii, shadows, palette, the shared **library-tile sizing**
-   (`--lib-*`, from `library.ts`), and the dark ramp's `--bg-l` lightness
-   anchor. **Never** hard-code a hex, px-radius, or
-   font stack a token covers — add or edit tokens in the package's TS, not
-   in CSS.
+1. **Tokens — `@centraid/design-tokens`.** The single cross-platform design contract, shared with mobile. `toCss()` generates every CSS custom property the renderer uses and `theme-vars.ts` injects it at boot: colors per theme, the **typography scale** (`--t-*` font shorthands + `--font-sans/-display/-mono` stacks, from `typography.ts`), density spacing, radii, shadows, palette, the shared **library-tile sizing** (`--lib-*`, from `library.ts`), and the dark ramp's `--bg-l` lightness anchor. **Never** hard-code a hex, px-radius, or font stack a token covers — add or edit tokens in the package's TS, not in CSS.
 
-2. **Global base — `styles.css`.** Reset + base element defaults +
-   scrollbar + `#root`. Frozen and tiny. It defines **zero** classes; if
-   you're adding a class selector here, you're in the wrong file.
+2. **Global base — `styles.css`.** Reset + base element defaults + scrollbar + `#root`. Frozen and tiny. It defines **zero** classes; if you're adding a class selector here, you're in the wrong file.
 
-3. **Component modules — `*.module.css`, co-located.** Each component/screen
-   owns a `Foo.module.css` next to `Foo.tsx`, scoped by Vite CSS Modules
-   (`vite.config.ts` → readable `[name]__[local]__[hash]`). Author local
-   names in `camelCase` (`.stageBg`, `.rowLabel`); reference them as
-   `styles.stageBg`. Cross-screen looks live either as a **shared component
-   in `react/ui/`** (preferred) or a **shared module in `react/styles/`**
-   that every consumer imports.
+3. **Component modules — `*.module.css`, co-located.** Each component/screen owns a `Foo.module.css` next to `Foo.tsx`, scoped by Vite CSS Modules (`vite.config.ts` → readable `[name]__[local]__[hash]`). Author local names in `camelCase` (`.stageBg`, `.rowLabel`); reference them as `styles.stageBg`. Cross-screen looks live either as a **shared component in `react/ui/`** (preferred) or a **shared module in `react/styles/`** that every consumer imports.
 
 ## The primitives (`react/ui/`)
 

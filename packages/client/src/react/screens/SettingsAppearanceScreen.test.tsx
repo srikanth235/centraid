@@ -3,8 +3,6 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { THEME_PRESETS } from "@centraid/design-tokens";
-
 import type { SettingsAppearanceBridgeProps } from "../screen-contracts.js";
 import type * as CronTimezoneData from "../shell/routes/settingsCronTimezoneData.js";
 import SettingsAppearanceScreen from "./SettingsAppearanceScreen.js";
