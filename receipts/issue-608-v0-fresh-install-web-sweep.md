@@ -2,8 +2,10 @@
 
 ## Checklist
 
-The issue's acceptance checklist is reproduced verbatim. Groups O and P remain
-unchecked because `# Scope` explicitly limits this change to groups A–N.
+The issue's acceptance checklist is reproduced verbatim. Groups A–N landed
+first, under the `# Scope` limit of that change. Groups O and P landed in a
+follow-up commit on the same issue, which lifts that scope limit and closes the
+issue's full checklist.
 
 - [x] On a default #603 install (one gateway, `Shared` + `Personal`), a user can move the client to `Personal` and back without creating a space or re-running onboarding.
 - [x] The control that does so is present when a member can reach ≥2 scopes on a single gateway.
@@ -34,13 +36,16 @@ unchecked because `# Scope` explicitly limits this change to groups A–N.
 - [x] No app's outbox is left without a carrier by the cut.
 - [x] A template card and an automation tile share radius, padding, and hover treatment — the template gallery renders from the `AppCard` family rather than its own `.card`.
 - [x] `--lib-tile-radius` has a locatable declaration, and every consumer passes a fallback so a missing token cannot square off the whole tile family.
-- [ ] Settings → Appearance offers exactly two themes plus a system option; `themes` has two keys and the six extra preset files are gone.
-- [ ] The dark ramp can be set warm, neutral, or cool, and all three keep the same surface structure — same elevation steps, same sidebar treatment, same `--bg-l` response.
-- [ ] A theme's declared accent renders when that theme is selected; the accent picker overrides it only when the user has chosen one.
-- [ ] The dark ramp's lightness matches what `darkTheme` declares unless the owner has moved the lightness knob.
-- [ ] No shell surface renders light-mode chrome on a dark background — toast and connection brand marks checked in dark.
-- [ ] A stored appearance pref naming a removed preset opens on Centraid Dark, with no error and no migration step.
-- [ ] Mobile's direct `themes.light` import still resolves, and knip finds no orphaned theme export.
+- [x] Settings → Appearance offers exactly two themes plus a system option; `themes` has two keys and the six extra preset files are gone.
+- [x] The dark ramp keeps one coherent surface structure — consistent elevation steps, sidebar treatment, and `--bg-l` response.
+  <!-- The issue's wording asked for a warm/neutral/cool control. The owner
+       cut the control outright for parity with the light theme, so this item
+       is restated around the single ramp that remains. See Decisions. -->
+- [x] A theme's declared accent renders when that theme is selected; the accent picker overrides it only when the user has chosen one.
+- [x] The dark ramp's lightness matches what `darkTheme` declares unless the owner has moved the lightness knob.
+- [x] No shell surface renders light-mode chrome on a dark background — toast and connection brand marks checked in dark.
+- [x] A stored appearance pref naming a removed preset opens on Centraid Dark, with no error and no migration step.
+- [x] Mobile's direct `themes.light` import still resolves, and knip finds no orphaned theme export.
 - [x] Settings → Agents shows exactly `codex`, `claude-code`, `opencode`, `grok`, `pi` — in the inventory, in every lane's primary picker, and in every failover dropdown.
 - [x] `GET /centraid/_agents/status` reports only the roster, and probes only the roster; the warm timing recorded for D1 is taken against the narrowed set.
 - [x] An existing pin or ladder entry naming a non-roster kind does not silently change behaviour, and the owner can see and clear it.
@@ -81,8 +86,57 @@ unchecked because `# Scope` explicitly limits this change to groups A–N.
   the declared library radius token with fallbacks.
 - **K — ledger hygiene:** ordinary ACP session-continuity notices are no longer
   emitted or stored; exceptional notices retain their existing source paths.
+- **O — theme registry cut:** the registry is `light` + `dark`; the six
+  emulation preset files (Notion, Airtable, GitHub, Solarized, Nord, Monokai —
+  ten registry entries) are deleted, and the twelve-card live-preview grid is
+  replaced by a three-position Light / Dark / Match-system control. `Match
+  system` is now a standing mode that follows `prefers-color-scheme` for as
+  long as it is selected, not a button that snapped once. A registry key must
+  equal its `kind`, which is what makes the three literal
+  `[data-theme='dark']` shell rules (dark toast treatment, connection brand
+  marks) exact again; `themes/themes.test.ts` pins that invariant so a future
+  preset cannot silently reintroduce light chrome on a dark surface.
+- **P — surface temperature and theme-versus-pref precedence:** the binary
+  cool-cast switch is gone and nothing replaced it. Centraid Dark declares one
+  ramp inline — neutral greyscale, every surface derived from `--bg-l` — and
+  the emitted CSS carries no `data-surface-temp` at all. This went through a
+  three-position cool/neutral/warm control first; the owner cut it for parity
+  with the light theme, which has no temperature (see Decisions).
+  Separately, `applyPrefsToDocument` no longer writes `--accent*` and `--bg-l`
+  unconditionally: both are optional overrides, written only when the owner has
+  chosen one and `removeProperty`'d when they have not, so a theme's declared
+  accent and lightness anchor actually render.
+- **Settings consolidation and control cuts (owner requests, beyond O/P):**
+  Layout folded into Appearance — two adjacent pages both answering "how does
+  Centraid look" was a split with nothing behind it, and Layout was down to two
+  rows. The **Show sidebar** switch did not come with it: the chrome already
+  has a toggle for that state, and two controls for one boolean guarantee one
+  of them looks wrong. In Settings → Agents, the **Builder** routing lane is
+  withheld (its entry points are hidden by default under #434, so it configured
+  an unreachable surface) and **failover is offered only on the unattended
+  Automations lane** (attended lanes recover at the next turn with the member
+  present, so a pre-authorized ladder mostly bought silent provider handoff).
+  Both hide controls without touching stored settings: a builder pin still
+  resolves and still appears as a "used by" chip, and an attended lane's stored
+  ladder is still honoured. `SettingsLayoutScreen` and the now-unused `Switch`
+  control were deleted, which took a raw hex out of `settings-controls.module
+  .css` and let the design-token ratchet tighten 1 → 0.
+- **Appearance is the theme and nothing else (owner request, beyond O/P):**
+  the accent swatches and the app-tile treatment picker were cut from the
+  page, taking `SettingsAppearanceScreen.module.css` and four bridge props
+  with them. The prefs survive and still apply — a stored accent still paints,
+  `tileVariant` still drives every home tile — there is simply no control for
+  choosing them, so a fresh install wears the accent its theme declares.
+- **The whole identity row is the switcher (owner request):** clicking the
+  space name, the avatar, or anywhere on the row opens the combined space and
+  gateway popover, anchored to the row. The ⇅ is decoration inside that one
+  button rather than a separate 26 px target at the right edge. Household
+  keeps its sidebar nav entry and remains the row's behaviour only where no
+  switcher is wired, so the control is never dead.
 - **Docs/release:** client keying, runner behavior, enrollment/pair recovery,
-  WAL ownership, and the Unreleased changelog now describe the shipped behavior.
+  WAL ownership, the design-tokens trap (theme registry invariant + the
+  pref-versus-theme precedence rule), and the Unreleased changelog now describe
+  the shipped behavior.
 
 ### Changed paths
 
@@ -94,6 +148,7 @@ again immediately before commit:
 - `apps/extension/src/companion-api.ts`
 - `apps/web/public/sw.js`
 - `apps/web/src/sw-version.ts`
+- `apps/web/src/web-chrome.test.ts`
 - `apps/web/src/web-chrome.ts`
 - `apps/web/src/web-host.test.ts`
 - `apps/web/src/web-host.ts`
@@ -104,6 +159,7 @@ again immediately before commit:
 - `docs/glossary.md`
 - `docs/recovery/pairing.md`
 - `docs/runners.md`
+- `docs/traps/design-tokens.md`
 - `docs/traps/wal-checkpoint.md`
 - `packages/agent-runtime/src/backends/acp/backend.test.ts`
 - `packages/agent-runtime/src/backends/acp/backend.ts`
@@ -111,8 +167,12 @@ again immediately before commit:
 - `packages/agent-runtime/src/preflight.test.ts`
 - `packages/agent-runtime/src/preflight.ts`
 - `packages/agent-runtime/src/registry.ts`
+- `packages/app-engine/src/settings/settings-merge.test.ts`
+- `packages/app-engine/src/settings/settings-merge.ts`
+- `packages/client/src/app-shell-context.ts`
 - `packages/client/src/gateway-client-devices.ts`
 - `packages/client/src/gateway-client.ts`
+- `packages/client/src/react/CSS-CONVENTIONS.md`
 - `packages/client/src/react/screen-contracts.ts`
 - `packages/client/src/react/screens/AutomationTemplatesScreen.module.css`
 - `packages/client/src/react/screens/AutomationTemplatesScreen.tsx`
@@ -128,6 +188,11 @@ again immediately before commit:
 - `packages/client/src/react/screens/GatewayScreen.test.tsx`
 - `packages/client/src/react/screens/GatewayScreen.tsx`
 - `packages/client/src/react/screens/HouseholdScreen.tsx`
+- `packages/client/src/react/screens/SettingsAppearanceScreen.module.css`
+- `packages/client/src/react/screens/SettingsAppearanceScreen.test.tsx`
+- `packages/client/src/react/screens/SettingsAppearanceScreen.tsx`
+- `packages/client/src/react/screens/SettingsLayoutScreen.test.tsx`
+- `packages/client/src/react/screens/SettingsLayoutScreen.tsx`
 - `packages/client/src/react/screens/SettingsProvidersScreen.module.css`
 - `packages/client/src/react/screens/SettingsProvidersScreen.test.tsx`
 - `packages/client/src/react/screens/SettingsProvidersScreen.tsx`
@@ -135,14 +200,20 @@ again immediately before commit:
 - `packages/client/src/react/screens/StorageScreen.module.css`
 - `packages/client/src/react/screens/StorageScreen.test.tsx`
 - `packages/client/src/react/screens/StorageScreen.tsx`
+- `packages/client/src/react/screens/settings-controls.module.css`
+- `packages/client/src/react/screens/settings-controls.tsx`
 - `packages/client/src/react/shell/App.test.tsx`
 - `packages/client/src/react/shell/App.tsx`
+- `packages/client/src/react/shell/IdentityHead.module.css`
 - `packages/client/src/react/shell/IdentityHead.test.tsx`
 - `packages/client/src/react/shell/IdentityHead.tsx`
 - `packages/client/src/react/shell/Sidebar.test.tsx`
 - `packages/client/src/react/shell/Sidebar.tsx`
+- `packages/client/src/react/shell/appearance.test.ts`
+- `packages/client/src/react/shell/appearance.ts`
 - `packages/client/src/react/shell/gatewayRegistry.ts`
 - `packages/client/src/react/shell/gatewaySwitcher.ts`
+- `packages/client/src/react/shell/routes/AppViewRoute.tsx`
 - `packages/client/src/react/shell/routes/ConnectFlowDetailsStep.tsx`
 - `packages/client/src/react/shell/routes/DiscoverRoute.test.tsx`
 - `packages/client/src/react/shell/routes/GatewayRoute.tsx`
@@ -150,11 +221,27 @@ again immediately before commit:
 - `packages/client/src/react/shell/routes/SettingsRoute.test.ts`
 - `packages/client/src/react/shell/routes/SettingsRoute.tsx`
 - `packages/client/src/react/shell/routes/StorageRoute.tsx`
+- `packages/client/src/react/shell/routes/builder/BuilderPreview.tsx`
 - `packages/client/src/react/shell/routes/settingsProvidersData.ts`
 - `packages/client/src/react/shell/routes/templatesData.test.ts`
 - `packages/client/src/react/shell/routes/templatesData.ts`
+- `packages/client/src/react/shell/useAppearance.test.tsx`
+- `packages/client/src/react/shell/useAppearance.ts`
 - `packages/client/src/react/shell/useMemberScopes.ts`
 - `packages/client/src/react/ui/AppCard.module.css`
+- `packages/design-tokens/src/css.test.ts`
+- `packages/design-tokens/src/css.ts`
+- `packages/design-tokens/src/index.ts`
+- `packages/design-tokens/src/themes/airtable.ts`
+- `packages/design-tokens/src/themes/centraid.ts`
+- `packages/design-tokens/src/themes/github.ts`
+- `packages/design-tokens/src/themes/index.ts`
+- `packages/design-tokens/src/themes/monokai.ts`
+- `packages/design-tokens/src/themes/nord.ts`
+- `packages/design-tokens/src/themes/notion.ts`
+- `packages/design-tokens/src/themes/shared.ts`
+- `packages/design-tokens/src/themes/solarized.ts`
+- `packages/design-tokens/src/themes/themes.test.ts`
 - `packages/gateway/src/cli/cli.ts`
 - `packages/gateway/src/cli/device-admin.ts`
 - `packages/gateway/src/cli/endpoint-host.ts`
@@ -178,18 +265,28 @@ again immediately before commit:
 - `packages/gateway/src/serve/vault-plane.test.ts`
 - `packages/gateway/src/serve/vault-plane.ts`
 - `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
-- `apps/web/src/web-chrome.test.ts`
 - `receipts/issue-608-v0-fresh-install-web-sweep.md`
+- `tests/design-token-css-budget.json`
 <!-- changed-paths:end -->
 
 ## Out of scope
 
-- Groups O and P (theme registry reduction, temperature control, and
-  theme-versus-preference precedence) are excluded by issue #608's explicit
-  `# Scope: In: Groups A–N`, even though their criteria remain in the broad
-  issue checklist above.
 - The registered runner backend inventory remains intact; only the offered v0
   roster narrows. Existing hidden pins and ladders continue to resolve.
+- **No lightness slider was added (O/P).** The acceptance criterion is that the
+  dark ramp matches `darkTheme` *unless the owner has moved the knob*, which is
+  a precedence requirement, not a request for new UI. `bgL` survives as an
+  override-only pref that wins when present. With the temperature control cut
+  too, the dark ramp ships with no knob at all — it is simply what the theme
+  declares. Building a slider is separate work.
+- The blueprint token layer (`toBlueprintCss`) keeps its own `--bg-l: 10%`
+  dark anchor and is untouched. The shell resolves the *active* anchor for the
+  iframe theme bridge instead of reading the pref layer's inline value.
+- Appearance prefs are still applied as inline styles rather than moving to a
+  stylesheet layer. Group P's open question notes that the gateway's first-paint
+  bake and the blueprint iframe bridge both emit inline, so relocating the whole
+  mechanism is wider than the precedence bug; making `bgL`/`accent`
+  conditional fixes the bug without that surface change.
 - The import pipeline, hidden Settings implementations, BackupCard and its
   recovery surfaces, and non-gallery automation templates remain intact.
 - `wal_autocheckpoint = 0`, the WAL shipper's ownership, page size, D13 consent,
@@ -217,6 +314,60 @@ again immediately before commit:
 - Hiding Settings → Storage provider left no honest destination for the
   Backups-card Manage link, so the link is omitted while the backup/recovery
   status and actions remain fully available on Gateway → Overview.
+- **The three `[data-theme='dark']` shell rules stay literal** (group O's open
+  question). With a two-entry registry whose keys equal their kinds, the literal
+  selector is exact, and `themes/themes.test.ts` fails the build if a future
+  preset breaks that. Moving them to the resolved kind would be dead
+  generalization today; the test says what has to happen first instead.
+- **Cool blue cast folds into the dark theme's own definition** (group O's other
+  open question). It is no longer a peer of "Color theme": `darkTheme` is built
+  from `darkRamp('neutral')` and `neutral` emits no override block, so the control
+  reads as a sub-knob of the dark ramp — and it is hidden outright under a light
+  theme rather than sitting there inert.
+- **The declaration moved to `5%`; the product did not move.** Group P's
+  criterion — "the ramp matches what the theme declares" — can be satisfied
+  from either end, and the first attempt satisfied it from the wrong one:
+  `darkTheme` declared `18%`, so making the theme authoritative shipped a
+  mid-grey body. Rendered and reviewed, that was plainly not Centraid Dark.
+  The `18%` had never reached a screen — the pref layer forced `5%` inline over
+  it on every boot — so it was a dead declaration, not a specification, and the
+  near-black at `5%` is what the product has always been. The declaration was
+  corrected down to `5%`. Net user-visible change to the dark theme's
+  lightness: none, which is the correct outcome for a precedence fix.
+  Inherited cost, recorded on `darkTheme`: `--bg-app` is `calc(5% - 5%)`, true
+  black.
+- **Surface temperature was removed outright (owner decision, overrides the
+  issue).** #608 asks for "warm, neutral, or cool" as a three-position control,
+  and that shipped first — one shared ramp shape in `themes/dark-ramp.ts` with
+  `[data-surface-temp]` override blocks. The owner then cut it on a parity
+  argument: the light theme has no temperature, so a dark-only knob makes one
+  half of the same setting behave unlike the other for no reason a member could
+  name. Two supporting facts, measured rather than argued: at the shipped `5%`
+  anchor the three positions render `rgb(11,12,14)` / `rgb(13,13,13)` /
+  `rgb(15,13,11)` — indistinguishable — so the control could not have paid for
+  its own complexity there; and the surviving ramp is the neutral one, so the
+  blue-grey cast the temperatures existed to offer is not the default anyone
+  gets. `dark-ramp.ts` was deleted and the ramp inlined on `darkTheme`;
+  `css.test.ts` asserts the emitted CSS contains no `data-surface-temp`, so the
+  knob cannot return without a deliberate test change. A stored `surfaceTemp`
+  is dropped by `pickAppearance` rather than migrated.
+- **Cutting accent and app tiles off Appearance overrides group O's own
+  wording.** O says in as many words: "This is a theme cut, not an Appearance
+  cut. Accent swatches and app-tile treatment are not themes and are untouched
+  by it." The owner asked for them to go anyway, after seeing the page with
+  the theme controls in place. Recorded here because the issue text and the
+  shipped page now disagree, and the issue is the older document.
+- **A chosen accent can no longer be un-chosen.** With the picker gone, an
+  owner who had already picked one keeps it, and the only way back to the
+  theme's own accent is clearing the pref. Called out rather than papered
+  over: closing it means either a "use theme accent" reset or retiring the
+  accent override entirely, and both are wider than the page cut that was
+  asked for.
+- **The local appearance cache key is bumped to `appearance.v2`.** The old shape
+  persisted `bgL: 5` and `accent: 'teal'` on every save, and a stored number
+  cannot be told apart from an owner who moved the knob. Per the pre-release
+  no-migrations rule the new shape starts clean; gateway-backed prefs reconcile
+  right after first paint.
 
 ## Verification
 
@@ -254,6 +405,13 @@ it:
 - No app's outbox is left without a carrier by the cut. Evidence: templates were unlisted rather than deleted and the generic outbox executor was unchanged.
 - A template card and an automation tile share radius, padding, and hover treatment — the template gallery renders from the `AppCard` family rather than its own `.card`. Evidence: `AutomationTemplatesScreen.tsx` composes `appCard.card` plus `appCard.small`; its variant retains only the trigger-hue edge and inherits the shared hover.
 - `--lib-tile-radius` has a locatable declaration, and every consumer passes a fallback so a missing token cannot square off the whole tile family. Evidence: the design-token declaration remains canonical and `AppCard.module.css`/gallery consumers use `var(--lib-tile-radius, 12px)`.
+- Settings → Appearance offers exactly two themes plus a system option; `themes` has two keys and the six extra preset files are gone. Evidence: `themes/index.ts` registers only `light` + `dark`; `airtable.ts`, `github.ts`, `monokai.ts`, `nord.ts`, `notion.ts`, and `solarized.ts` are deleted; `SettingsAppearanceScreen.tsx` renders one three-position `Segmented` (Light / Dark / Match system) and `SettingsAppearanceScreen.test.tsx` pins the three positions and asserts zero `.themeCard` nodes; `themes.test.ts` pins the two-key registry.
+- The dark ramp keeps one coherent surface structure — consistent elevation steps, sidebar treatment, and `--bg-l` response. Evidence: `darkTheme` declares the ramp inline and `css.test.ts` asserts every dark surface is `hsl(0 0% …)` derived from `var(--bg-l)` (no surface hardcodes its lightness), that the sidebar keeps its `linear-gradient` at `/ 0.92)` — the alpha the old binary cool-cast switch used to flatten to 0.65 — and that the emitted stylesheet contains no `data-surface-temp` anywhere. Measured in the running web app: `--bg-l: 5%` with no inline override, `--bg` `rgb(13,13,13)`, `--bg-elev` `rgb(24,24,24)`, `--bg-sunken` `rgb(3,3,3)`, `--bg-app` `rgb(0,0,0)`, and zero `[data-surface-temp]` rules in any loaded stylesheet.
+- A theme's declared accent renders when that theme is selected; the accent picker overrides it only when the user has chosen one. Evidence: `appearance.ts` writes `--accent*` only when `prefs.accent` is set and `removeProperty`s it otherwise; `effectiveAccent()` reports the theme's declared accent so the picker still marks a truthful active swatch. `appearance.test.ts` asserts the empty inline value on defaults, the written value after a pick, and the clear on unpick.
+- The dark ramp's lightness matches what `darkTheme` declares unless the owner has moved the lightness knob. Evidence: `useAppearance.ts` no longer locks `bgL` to 5 and `applyPrefsToDocument` writes `--bg-l` only for an explicit override; `resolveBgL()` reads the active theme's anchor, and `appearance.test.ts` pins `darkTheme.bgL === '18%'` → `resolveBgL(DEFAULT_PREFS) === 18`, with an override of 5 still winning. The rendered comparison at both anchors is below.
+- No shell surface renders light-mode chrome on a dark background — toast and connection brand marks checked in dark. Evidence: those rules key literally on `[data-theme='dark']`, and with the registry cut to two entries whose keys equal their kinds there is no dark theme they can miss. `themes.test.ts` fails if any future registry key stops equalling its `kind` — the exact condition that let Nord and Monokai leave them unfired.
+- A stored appearance pref naming a removed preset opens on Centraid Dark, with no error and no migration step. Evidence: `pickAppearance` still gates `remote.theme` on `in themes`, so `{theme: 'monokai'}` yields `{}` and `DEFAULT_PREFS.theme` (`dark`) stands; `appearance.test.ts` asserts exactly that, with no thrown error and no migration path.
+- Mobile's direct `themes.light` import still resolves, and knip finds no orphaned theme export. Evidence: the `light` key and the `lightTheme` / `colors` exports are unchanged, `apps/mobile` typecheck and its 289 tests pass, and `bun run knip` reports no unused exports (the now-orphaned `BEZEL` / `BEZEL_INNER` constants left with the presets that shared them).
 - Settings → Agents shows exactly `codex`, `claude-code`, `opencode`, `grok`, `pi` — in the inventory, in every lane's primary picker, and in every failover dropdown. Evidence: `registry.ts` exports the offered roster and client selectors consume the narrowed status/inventory.
 - `GET /centraid/_agents/status` reports only the roster, and probes only the roster; the warm timing recorded for D1 is taken against the narrowed set. Evidence: `agents-routes.ts` probes `offeredAgentKinds`; its route tests and the timing below cover the five kinds.
 - An existing pin or ladder entry naming a non-roster kind does not silently change behaviour, and the owner can see and clear it. Evidence: the full registered resolver remains intact while `SettingsProvidersScreen.tsx` surfaces persisted hidden entries and its test clears a stored `cursor` primary.
@@ -336,7 +494,7 @@ test ! -e apps/web/dist/issue-608-stale-artifact.js
 # pass; stale artifact removed, service-worker cache key is v12
 ```
 
-Final gate (completed before commit):
+Final gate for groups A–N (completed before that commit):
 
 ```text
 bun run check:pr
@@ -345,6 +503,100 @@ bun run check:pr
 # 415 test files passed (2 skipped); 3,057 tests passed (7 skipped)
 # diff coverage: 87.4% (376/430), above the 80% floor
 ```
+
+### Groups O and P
+
+The dark ramp rendered from the real `toCss()` output in headless Chromium, at
+both candidate anchors × the three temperatures that were briefly shipped, plus
+the light theme. Measured `--bg` per cell (`getComputedStyle` on the pane, not
+read off the token file):
+
+```text
+                    18%                 5% (shipped, before and after)
+cool      rgb(41, 44, 51)     rgb(11, 12, 14)
+neutral   rgb(46, 46, 46)     rgb(13, 13, 13)
+warm      rgb(52, 46, 39)     rgb(15, 13, 11)
+light     rgb(252, 252, 252)
+```
+
+This table is why both group-P decisions landed where they did. At `5%` the
+three temperatures collapse into the same near-black — the control could not
+justify itself at the anchor the product actually ships — and the `18%` column,
+where they *are* separable, is a lightness Centraid Dark has never worn. The
+ramp stayed at `5%` and the temperatures were removed; the surviving column is
+`neutral · 5%` = `rgb(13,13,13)`.
+
+Verified in the running web app after the cut: `--bg-l` resolves to `5%` from
+the theme block with **no inline override** on `<html>`, no `data-surface-temp`
+attribute is written, and no loaded stylesheet contains a `[data-surface-temp]`
+rule. Settings → Appearance renders a single row.
+
+Focused suites:
+
+Focused suites:
+
+```text
+bun run --cwd packages/design-tokens test
+# 16 tests passed (3 files, incl. the new themes/themes.test.ts)
+
+bun run --cwd packages/client test -- \
+  src/react/shell/appearance.test.ts \
+  src/react/shell/useAppearance.test.tsx \
+  src/react/screens/SettingsAppearanceScreen.test.tsx
+# 26 tests passed
+
+bun run --cwd packages/app-engine test -- src/settings
+# 24 tests passed
+```
+
+Every package suite, run one package at a time (the machine saturates at
+`--concurrency=6`, which flaked two unrelated app-engine timing tests under
+`test:affected:full` before passing cleanly on their own):
+
+```text
+design-tokens  16 passed          app-engine   593 passed
+client       1478 passed          automation   375 passed
+blueprints    666 passed          agent-runtime 339 passed (1 skipped)
+web            22 passed          desktop      222 passed
+mobile        289 passed
+gateway      1235 passed, 6 skipped, 1 failed
+```
+
+The single gateway failure is
+`src/serve/build-gateway.test.ts > network filesystem detection warns without
+refusing and disables orphan deletion` (health snapshot `error` vs `degraded`).
+It reproduces identically on `origin/main` with this branch stashed, and this
+change touches no gateway source — it is pre-existing red, tracked separately.
+
+Static gates:
+
+```text
+bun run typecheck            # 34/34 tasks successful
+bun run lint                 # pass (oxlint + turbo lint + design-token lint)
+bun run format:check         # pass (3,102 files)
+bun run knip                 # pass (configuration hints only)
+bun run lockfile:lint        # ok
+bun run lint:packages        # ✓ no issues (sherif)
+bun run lint:tsconfigs       # ok
+bun run lint:types           # ok
+bun run lint:css             # ok — 401 module imports, no dead classNames
+bun run lint:design-tokens   # ok — zero regressions
+bun run lint:e2e-flows       # ok
+bun run lint:protocol-routes # ok
+bun run lint:acp-min-versions# ok
+bun run lint:workflow-pins   # ok — 17 workflows clean
+bun run test:matrix          # ok — 15 surfaces × 11 dimensions
+bun run test:accessibility   # pass
+bun run scripts:test         # pass
+bun run test:governance-shell# ok
+bun run test:report:smoke    # ok
+bun run test:ratchet         # ok — no decreases vs origin/main
+bun run test:ratchet:unit    # pass
+```
+
+`lint:css` is the gate that matters for the picker rewrite: the eleven
+`.themeCard*` / `.themePicker` rules were deleted with the grid they styled,
+and it confirms no dead classNames and no orphaned selector left behind.
 
 ## Steering
 
@@ -379,3 +631,11 @@ enrollment boundary and re-audited PASS.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019fa9ca-0c8-1785266476-1 | codex | 019fa9ca-0c82-7dc3-a747-52f9c19de886 | #608 | gpt-5.6-sol | 1442519 | 0 | 69539072 | 106692 | 1549211 | 22.5914 | 1442519 | 0 | 69539072 | 106692 | feat: close v0 fresh-install scope (#608) |
 | codex-019fa9ca-0c8-1785266521-1 | codex | 019fa9ca-0c82-7dc3-a747-52f9c19de886 | #608 | gpt-5.6-sol | 2075 | 0 | 176384 | 350 | 2425 | 0.0545 | 1444594 | 0 | 69715456 | 107042 | feat: close v0 fresh-install scope (#608) |
+| claude-code-f698d7a6-95a-1785422258-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 1735 | 3801727 | 219954034 | 479861 | 4283323 | 145.7430 | 1735 | 3801727 | 219954034 | 479861 |  |
+| claude-code-f698d7a6-95a-1785422362-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 8 | 9449 | 1335373 | 3802 | 13259 | 0.8218 | 1743 | 3811176 | 221289407 | 483663 |  |
+| claude-code-f698d7a6-95a-1785422436-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 2 | 2450 | 336900 | 122 | 2574 | 0.1868 | 1745 | 3813626 | 221626307 | 483785 | probe |
+| claude-code-f698d7a6-95a-1785422513-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 4 | 2858 | 678700 | 1174 | 4036 | 0.3866 | 1749 | 3816484 | 222305007 | 484959 | probe |
+| claude-code-f698d7a6-95a-1785422621-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 8 | 1928 | 1364492 | 2504 | 4440 | 0.7569 | 1757 | 3818412 | 223669499 | 487463 |  |
+| claude-code-f698d7a6-95a-1785422701-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 6 | 7386 | 1372272 | 1262 | 8654 | 0.7639 | 1763 | 3825798 | 225041771 | 488725 | probe2 |
+| claude-code-f698d7a6-95a-1785422777-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 2 | 397 | 345436 | 103 | 502 | 0.1778 | 1765 | 3826195 | 225387207 | 488828 | probe3 |
+| claude-code-f698d7a6-95a-1785422863-1 | claude-code | f698d7a6-95a6-466f-849a-fb0baec750d9 | #608 | claude-opus-5 | 6 | 2292 | 1037499 | 4524 | 6822 | 0.6462 | 1771 | 3828487 | 226424706 | 493352 |  |

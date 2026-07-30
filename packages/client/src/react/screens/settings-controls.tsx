@@ -7,7 +7,7 @@ import segCss from "../styles/seg.module.css";
 import styles from "./settings-controls.module.css";
 
 // Shared Settings control primitives — React ports of the vanilla
-// drawerGroup / drawerRowH / makeSwitch / makeSegmented (app-settings.ts),
+// drawerGroup / drawerRowH / makeSegmented (app-settings.ts),
 // emitting the same classes so the global styles.css renders them identically.
 
 export function DrawerGroup({
@@ -51,40 +51,21 @@ export function DrawerRow({
   );
 }
 
-export function Switch({
-  on,
-  onToggle,
-  ariaLabel,
-}: {
-  on: boolean;
-  onToggle: (next: boolean) => void;
-  ariaLabel?: string;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      className={styles.switch}
-      role="switch"
-      aria-checked={on}
-      aria-label={ariaLabel}
-      data-on={String(on)}
-      onClick={() => onToggle(!on)}
-    >
-      <span className={styles.switchThumb} />
-    </button>
-  );
-}
-
 export function Segmented<T extends string>({
   options,
   selected,
   onSelect,
   ariaLabel,
+  labels,
 }: {
   options: readonly T[];
   selected: T;
   onSelect: (v: T) => void;
   ariaLabel?: string;
+  /** Display text per option. Defaults to the option value itself, which the
+   *  seg styles capitalize — supply this when the stored value is not the
+   *  words to show (`system` → `Match system`). */
+  labels?: Partial<Record<T, string>>;
 }): JSX.Element {
   return (
     <div className={segCss.seg} role="tablist" aria-label={ariaLabel}>
@@ -95,9 +76,10 @@ export function Segmented<T extends string>({
           role="tab"
           aria-selected={opt === selected}
           data-active={String(opt === selected)}
+          data-value={opt}
           onClick={() => onSelect(opt)}
         >
-          {opt}
+          {labels?.[opt] ?? opt}
         </button>
       ))}
     </div>

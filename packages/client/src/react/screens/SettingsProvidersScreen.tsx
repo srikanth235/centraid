@@ -65,7 +65,7 @@ function clearTimers(
  * a lane left unset inherits the default lane. Before per-subsystem runners
  * these were model-only overrides hanging off one globally-active agent.
  */
-const SUBSYSTEM_ROWS: ReadonlyArray<{
+const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
   key: ModelSubsystem;
   label: string;
   hint: string;
@@ -83,6 +83,18 @@ const SUBSYSTEM_ROWS: ReadonlyArray<{
     hint: "Background automations & enrichers.",
   },
 ];
+
+/**
+ * The lanes that get a routing row. Builder is withheld: every builder entry
+ * point is hidden by default (#434), so a routing control for a surface the
+ * member cannot open is configuration for nothing.
+ *
+ * It stays in `ALL_SUBSYSTEM_ROWS` on purpose, because that list also feeds the
+ * inventory's "used by" chips. A stored builder pin keeps resolving, and
+ * hiding the row must not also hide the fact that an agent is carrying that
+ * lane — invisible-but-active routing is what group D was about.
+ */
+const ROUTING_ROWS = ALL_SUBSYSTEM_ROWS.filter((row) => row.key !== "builder");
 
 /**
  * One routing lane. `runner === ''` means inherit the default lane, and the
@@ -196,106 +208,114 @@ function RouteRow({
           <span className={styles.routeHint}>—</span>
         )}
       </div>
-      <div className={styles.ladderRow}>
-        <span className={styles.routeHint}>
-          {unattended ? "In-fire failover" : "Next-turn failover"}
-        </span>
-        {activeLadder.length === 0 ? (
-          <span className={styles.routeHint}>None</span>
-        ) : (
-          activeLadder.map((kind, index) => {
-            const card = cards.find((candidate) => candidate.kind === kind);
-            return (
-              <span className={styles.ladderMember} key={kind}>
-                {card?.title ?? kind}
-                <button
-                  type="button"
-                  aria-label={`Move ${card?.title ?? kind} earlier for ${label}`}
-                  disabled={index === 0}
-                  onClick={() => {
-                    const next = [...activeLadder];
-                    [next[index - 1], next[index]] = [
-                      next[index]!,
-                      next[index - 1]!,
-                    ];
-                    onSetLadder(next);
-                  }}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Move ${card?.title ?? kind} later for ${label}`}
-                  disabled={index === activeLadder.length - 1}
-                  onClick={() => {
-                    const next = [...activeLadder];
-                    [next[index], next[index + 1]] = [
-                      next[index + 1]!,
-                      next[index]!,
-                    ];
-                    onSetLadder(next);
-                  }}
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Remove ${card?.title ?? kind} from ${label} failover`}
-                  onClick={() =>
-                    onSetLadder(activeLadder.filter((entry) => entry !== kind))
-                  }
-                >
-                  ×
-                </button>
+      {/* Failover is configurable only for the unattended lane. Attended lanes
+          recover at the next turn with the member right there to see it and
+          pick differently, so a stored ladder mostly served to hand the
+          conversation to another provider without being asked. Automations
+          fire with nobody watching, which is the case that needs a ladder. An
+          attended lane's existing ladder is left stored and still honoured. */}
+      {unattended ? (
+        <div className={styles.ladderRow}>
+          <span className={styles.routeHint}>In-fire failover</span>
+          {activeLadder.length === 0 ? (
+            <span className={styles.routeHint}>None</span>
+          ) : (
+            activeLadder.map((kind, index) => {
+              const card = cards.find((candidate) => candidate.kind === kind);
+              return (
+                <span className={styles.ladderMember} key={kind}>
+                  {card?.title ?? kind}
+                  <button
+                    type="button"
+                    aria-label={`Move ${card?.title ?? kind} earlier for ${label}`}
+                    disabled={index === 0}
+                    onClick={() => {
+                      const next = [...activeLadder];
+                      [next[index - 1], next[index]] = [
+                        next[index]!,
+                        next[index - 1]!,
+                      ];
+                      onSetLadder(next);
+                    }}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Move ${card?.title ?? kind} later for ${label}`}
+                    disabled={index === activeLadder.length - 1}
+                    onClick={() => {
+                      const next = [...activeLadder];
+                      [next[index], next[index + 1]] = [
+                        next[index + 1]!,
+                        next[index]!,
+                      ];
+                      onSetLadder(next);
+                    }}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${card?.title ?? kind} from ${label} failover`}
+                    onClick={() =>
+                      onSetLadder(
+                        activeLadder.filter((entry) => entry !== kind)
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })
+          )}
+          <select
+            className={styles.ladderAdd}
+            aria-label={`Add fallback agent for ${label}`}
+            value={fallbackPick}
+            disabled={availableFallbacks.length === 0}
+            onChange={(event) => {
+              const kind = event.target.value as AgentRunnerKind;
+              if (!kind) return;
+              setFallbackPick(kind);
+              setFallbackFeedback(null);
+              const title =
+                cards.find((card) => card.kind === kind)?.title ?? kind;
+              void openConfirm({
+                confirmLabel: "Add fallback",
+                title: `Add ${title} to ${label} failover?`,
+                message: `If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
+              }).then((approved) => {
+                if (approved) {
+                  onSetLadder([...activeLadder, kind]);
+                  setFallbackFeedback(`${title} added`);
+                } else {
+                  setFallbackFeedback(`${title} was not added`);
+                }
+                setFallbackPick("");
+              });
+            }}
+          >
+            <option value="">Add fallback…</option>
+            {availableFallbacks.map((card) => (
+              <option key={card.kind} value={card.kind}>
+                {card.title}
+              </option>
+            ))}
+          </select>
+          {fallbackFeedback ? (
+            <span className={styles.routeHint}>{fallbackFeedback}</span>
+          ) : null}
+          {cards
+            .filter((card) => card.connected && !card.sessionReady)
+            .map((card) => (
+              <span className={styles.routeHint} key={card.kind}>
+                {card.title}: {card.fallbackBlockedReason}
               </span>
-            );
-          })
-        )}
-        <select
-          className={styles.ladderAdd}
-          aria-label={`Add fallback agent for ${label}`}
-          value={fallbackPick}
-          disabled={availableFallbacks.length === 0}
-          onChange={(event) => {
-            const kind = event.target.value as AgentRunnerKind;
-            if (!kind) return;
-            setFallbackPick(kind);
-            setFallbackFeedback(null);
-            const title =
-              cards.find((card) => card.kind === kind)?.title ?? kind;
-            void openConfirm({
-              confirmLabel: "Add fallback",
-              title: `Add ${title} to ${label} failover?`,
-              message: `If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
-            }).then((approved) => {
-              if (approved) {
-                onSetLadder([...activeLadder, kind]);
-                setFallbackFeedback(`${title} added`);
-              } else {
-                setFallbackFeedback(`${title} was not added`);
-              }
-              setFallbackPick("");
-            });
-          }}
-        >
-          <option value="">Add fallback…</option>
-          {availableFallbacks.map((card) => (
-            <option key={card.kind} value={card.kind}>
-              {card.title}
-            </option>
-          ))}
-        </select>
-        {fallbackFeedback ? (
-          <span className={styles.routeHint}>{fallbackFeedback}</span>
-        ) : null}
-        {cards
-          .filter((card) => card.connected && !card.sessionReady)
-          .map((card) => (
-            <span className={styles.routeHint} key={card.kind}>
-              {card.title}: {card.fallbackBlockedReason}
-            </span>
-          ))}
-      </div>
+            ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -488,7 +508,7 @@ export default function SettingsProvidersScreen({
   const resolvedKind = (s: ModelSubsystem): AgentRunnerKind =>
     runnerBySubsystem[s] ?? defaultKind;
   const usedBy = (kind: AgentRunnerKind): string[] =>
-    SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map(
+    ALL_SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map(
       (r) => r.label
     );
 
@@ -497,7 +517,7 @@ export default function SettingsProvidersScreen({
       <DrawerGroup label="Routing">
         <div className={controlsCss.note}>
           Each surface picks its own agent and model. A lane left on “Use
-          default” follows the default lane below, so you can run the Builder on
+          default” follows the default lane below, so you can run Automations on
           one agent and everything else on another.
         </div>
         {status === null ? (
@@ -542,7 +562,7 @@ export default function SettingsProvidersScreen({
                 </span>
               </div>
             </div>
-            {SUBSYSTEM_ROWS.map((row) => {
+            {ROUTING_ROWS.map((row) => {
               const kind = resolvedKind(row.key);
               const card = cardFor(kind);
               return (

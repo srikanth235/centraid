@@ -4,6 +4,7 @@ import type { JSX, ReactNode } from "react";
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
 import { useShellActions } from "../actions.js";
+import { resolveBgL } from "../appearance.js";
 import { iconSvg } from "../iconSvg.js";
 import { openPrompt } from "../prompt.js";
 import type { ShellNav } from "../ShellApp.js";
@@ -227,7 +228,7 @@ export default function AppViewRoute({
               appId={appId}
               accentColor={app.color}
               theme={prefs.theme}
-              bgL={prefs.bgL}
+              bgL={resolveBgL(prefs)}
             />
           </div>
         </div>

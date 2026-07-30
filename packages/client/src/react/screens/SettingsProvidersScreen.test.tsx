@@ -172,18 +172,16 @@ describe("SettingsProvidersScreen suite", () => {
   describe(SettingsProvidersScreen, () => {
     it("renders a routing lane per subsystem plus the default lane, and the agent inventory", async () => {
       const el = await mount(makeProps());
-      // 1 default lane + 4 subsystem lanes.
-      expect(el.querySelectorAll(".routeRow")).toHaveLength(5);
+      // 1 default lane + 3 routed lanes. Builder has no row — its entry
+      // points are hidden by default (#434), so the control configured a
+      // surface the member cannot open.
+      expect(el.querySelectorAll(".routeRow")).toHaveLength(4);
       expect(el.querySelector('.routeRow[data-default="true"]')).toBeTruthy();
       expect(el.textContent).toContain("Routing");
-      for (const label of [
-        "Assistant",
-        "In-app Ask",
-        "Builder",
-        "Automations",
-      ]) {
+      for (const label of ["Assistant", "In-app Ask", "Automations"]) {
         expect(el.textContent).toContain(label);
       }
+      expect(el.querySelector('[aria-label="Agent for Builder"]')).toBeNull();
       // Inventory still lists every detected agent with its default model.
       expect(el.querySelectorAll(".entry")).toHaveLength(2);
       expect(sel(el, "Default model for Codex").value).toBe("gpt-5");
@@ -214,9 +212,9 @@ describe("SettingsProvidersScreen suite", () => {
           .mockResolvedValue(makeStatusBothConnected()),
       });
       const el = await mount(props);
-      await pick(sel(el, "Agent for Builder"), "claude-code");
+      await pick(sel(el, "Agent for In-app Ask"), "claude-code");
       expect(props.setSubsystemRunner).toHaveBeenCalledWith(
-        "builder",
+        "ask",
         "claude-code"
       );
       // The default lane is untouched — this is the whole point of the change.
@@ -229,14 +227,14 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatusBothConnected({
-              subsystemRunnerByKey: { builder: "claude-code" },
+              subsystemRunnerByKey: { ask: "claude-code" },
             })
           ),
       });
       const el = await mount(props);
-      expect(sel(el, "Agent for Builder").value).toBe("claude-code");
-      await pick(sel(el, "Agent for Builder"), "");
-      expect(props.setSubsystemRunner).toHaveBeenCalledWith("builder", "");
+      expect(sel(el, "Agent for In-app Ask").value).toBe("claude-code");
+      await pick(sel(el, "Agent for In-app Ask"), "");
+      expect(props.setSubsystemRunner).toHaveBeenCalledWith("ask", "");
     });
 
     it("requires explicit confirmation before adding ordered failover membership", async () => {
@@ -248,18 +246,31 @@ describe("SettingsProvidersScreen suite", () => {
       });
       const el = await mount(props);
       await act(async () => {
-        await pick(sel(el, "Add fallback agent for Assistant"), "claude-code");
+        await pick(
+          sel(el, "Add fallback agent for Automations"),
+          "claude-code"
+        );
       });
       expect(dialog.openConfirm).toHaveBeenCalledOnce();
-      expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith("assistant", [
-        "claude-code",
-      ]);
+      expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith(
+        "automations",
+        ["claude-code"]
+      );
     });
 
-    it("labels chat and automation failover by their actual recovery boundary", async () => {
+    it("offers failover only on the unattended lane", async () => {
       const el = await mount(makeProps());
-      expect(el.textContent).toContain("Next-turn failover");
+      // Attended lanes recover at the next turn with the member watching, so
+      // there is nothing to pre-authorize; only Automations fires unattended.
+      expect(el.textContent).not.toContain("Next-turn failover");
       expect(el.textContent).toContain("In-fire failover");
+      expect(el.querySelectorAll(".ladderRow")).toHaveLength(1);
+      expect(
+        el.querySelector('[aria-label="Add fallback agent for Automations"]')
+      ).toBeTruthy();
+      expect(
+        el.querySelector('[aria-label="Add fallback agent for Assistant"]')
+      ).toBeNull();
     });
 
     it("shows explicit feedback when fallback consent is cancelled", async () => {
@@ -270,7 +281,7 @@ describe("SettingsProvidersScreen suite", () => {
           .mockResolvedValue(withSessionReady(makeStatusBothConnected())),
       });
       const el = await mount(props);
-      await pick(sel(el, "Add fallback agent for Assistant"), "claude-code");
+      await pick(sel(el, "Add fallback agent for Automations"), "claude-code");
       await act(async () => {
         await Promise.resolve();
       });
@@ -287,7 +298,7 @@ describe("SettingsProvidersScreen suite", () => {
           .mockResolvedValue(makeStatusBothConnected()),
       });
       const el = await mount(props);
-      const add = sel(el, "Add fallback agent for Assistant");
+      const add = sel(el, "Add fallback agent for Automations");
       expect(
         [...add.querySelectorAll("option")].map((option) => option.value)
       ).toStrictEqual([""]);
@@ -347,25 +358,29 @@ describe("SettingsProvidersScreen suite", () => {
           .mockResolvedValue(
             withSessionReady(
               makeStatusBothConnected({
-                subsystemRunnerLadders: { assistant: ["codex", "claude-code"] },
+                subsystemRunnerLadders: {
+                  automations: ["codex", "claude-code"],
+                },
               })
             )
           ),
       });
       const el = await mount(props);
       expect(
-        el.querySelector('[aria-label="Remove Codex from Assistant failover"]')
+        el.querySelector(
+          '[aria-label="Remove Codex from Automations failover"]'
+        )
       ).toBeTruthy();
       // …and an edit re-saves the same membership rather than silently pruning it.
       await act(async () => {
         el.querySelector<HTMLButtonElement>(
-          '[aria-label="Move Claude Code earlier for Assistant"]'
+          '[aria-label="Move Claude Code earlier for Automations"]'
         )?.click();
       });
-      expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith("assistant", [
-        "claude-code",
-        "codex",
-      ]);
+      expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith(
+        "automations",
+        ["claude-code", "codex"]
+      );
     });
 
     it('names what an inheriting lane resolves to rather than saying "use default"', async () => {
@@ -378,7 +393,7 @@ describe("SettingsProvidersScreen suite", () => {
       );
       // …and the model inherit option names the resolved agent's default model.
       expect(
-        sel(el, "Model for Builder").querySelector('option[value=""]')
+        sel(el, "Model for In-app Ask").querySelector('option[value=""]')
           ?.textContent
       ).toBe("Use default · GPT-5");
     });
@@ -389,12 +404,12 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatusBothConnected({
-              subsystemRunnerByKey: { builder: "claude-code" },
+              subsystemRunnerByKey: { ask: "claude-code" },
             })
           ),
       });
       const el = await mount(props);
-      const model = sel(el, "Model for Builder");
+      const model = sel(el, "Model for In-app Ask");
       // Claude Code's model, not Codex's — the lane resolved to a new agent.
       expect(
         [...model.querySelectorAll("option")].map((o) => o.value)
@@ -410,17 +425,17 @@ describe("SettingsProvidersScreen suite", () => {
           .fn<SettingsProvidersBridgeProps["loadStatus"]>()
           .mockResolvedValue(
             makeStatusBothConnected({
-              subsystemRunnerByKey: { builder: "claude-code" },
+              subsystemRunnerByKey: { ask: "claude-code" },
             })
           ),
       });
       const el = await mount(props);
-      await pick(sel(el, "Model for Builder"), "opus-4-8");
+      await pick(sel(el, "Model for In-app Ask"), "opus-4-8");
       // Keyed by 'claude-code' (the lane's resolved agent) — not 'codex' (the
       // default). Writing it against the default would strand the override.
       expect(props.setSubsystemModel).toHaveBeenCalledWith(
         "claude-code",
-        "builder",
+        "ask",
         "opus-4-8"
       );
     });
@@ -604,7 +619,9 @@ describe("SettingsProvidersScreen suite", () => {
         })
       );
       // It reaches the pickers rather than being filtered out as unrecognised…
-      const opts = [...sel(el, "Agent for Builder").querySelectorAll("option")];
+      const opts = [
+        ...sel(el, "Agent for In-app Ask").querySelectorAll("option"),
+      ];
       const future = opts.find((o) => o.value === "some-future-agent");
       expect(future).toBeTruthy();
       // …and an unavailable agent is offered disabled, not silently missing.

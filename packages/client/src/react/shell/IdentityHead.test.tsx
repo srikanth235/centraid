@@ -5,9 +5,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import IdentityHead from "./IdentityHead.js";
 
-// Successor to the sidebar's space switcher (#599, Decision 14). The point of
-// these tests is what the row is NOT: it does not switch spaces, and it does
-// not offer a gateway switch to a household with one gateway.
+// The sidebar identity row (#599, Decision 14). It names the active space and
+// gateway, and the WHOLE row is the switcher (#608) — Slack's workspace
+// header, not a 26px glyph at the right edge. Household moved to its own nav
+// entry, and stays the row's behaviour only where no switcher is wired.
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -50,22 +51,6 @@ describe("IdentityHead suite", () => {
       expect(el.textContent).toContain("This Mac");
     });
 
-    it("opens Household — it is an identity row, not a space menu", () => {
-      const onOpenHousehold =
-        vi.fn<React.ComponentProps<typeof IdentityHead>["onOpenHousehold"]>();
-      const el = render(
-        <IdentityHead
-          space={{ name: "Priya" }}
-          gatewayLabel="This Mac"
-          onOpenHousehold={onOpenHousehold}
-        />
-      );
-      const head = el.querySelector("button") as HTMLButtonElement;
-      expect(head.getAttribute("aria-label")).toContain("Household");
-      act(() => head.click());
-      expect(onOpenHousehold).toHaveBeenCalledWith();
-    });
-
     it("hides the gateway switch when there is nothing to switch between", () => {
       const el = render(
         <IdentityHead
@@ -77,31 +62,54 @@ describe("IdentityHead suite", () => {
       expect(el.querySelector('[aria-label="Switch gateway"]')).toBeNull();
     });
 
-    it("offers the gateway switch with its own button when a second gateway exists", () => {
+    it("makes the WHOLE row the switcher, not a glyph at the right edge", () => {
       const onSwitchGateway =
         vi.fn<
           NonNullable<
             React.ComponentProps<typeof IdentityHead>["onSwitchGateway"]
           >
         >();
+      const onOpenHousehold = vi.fn<() => void>();
       const el = render(
         <IdentityHead
           space={{ name: "Priya" }}
           gatewayLabel="Office"
-          onOpenHousehold={() => {}}
+          onOpenHousehold={onOpenHousehold}
           onSwitchGateway={onSwitchGateway}
           switcherOpen
         />
       );
-      const sw = el.querySelector(
-        '[aria-label="Switch space or gateway"]'
-      ) as HTMLButtonElement;
-      expect(sw).not.toBeNull();
-      expect(sw.dataset.open).toBe("true");
-      act(() => sw.click());
+      // Exactly one button — the row itself. The ⇅ is decoration inside it, so
+      // it cannot take hit area away from the name the user aimed at.
+      const buttons = el.querySelectorAll("button");
+      expect(buttons).toHaveLength(1);
+      const row = buttons[0] as HTMLButtonElement;
+      expect(row.getAttribute("aria-label")).toBe(
+        "Priya on Office. Switch space or gateway."
+      );
+      expect(row.getAttribute("aria-haspopup")).toBe("menu");
+      expect(row.getAttribute("aria-expanded")).toBe("true");
+      act(() => row.click());
       expect(onSwitchGateway).toHaveBeenCalledWith(
         expect.objectContaining({ width: 0, height: 0 })
       );
+      // Household is a sidebar nav entry now; the row does not double as one.
+      expect(onOpenHousehold).not.toHaveBeenCalled();
+    });
+
+    it("falls back to Household when no switcher is wired", () => {
+      const onOpenHousehold = vi.fn<() => void>();
+      const el = render(
+        <IdentityHead
+          space={{ name: "Priya" }}
+          gatewayLabel="This Mac"
+          onOpenHousehold={onOpenHousehold}
+        />
+      );
+      const row = el.querySelector("button") as HTMLButtonElement;
+      expect(row.getAttribute("aria-label")).toContain("Household");
+      act(() => row.click());
+      expect(onOpenHousehold).toHaveBeenCalledWith();
     });
 
     it("renders a quiet placeholder, disabled, until the scope registry resolves", () => {

@@ -273,7 +273,7 @@ describe("App suite", () => {
       expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
         "closed"
       );
-      expect(store.get("appearance")).toMatchObject({ sidebarOpen: false });
+      expect(store.get("appearance.v2")).toMatchObject({ sidebarOpen: false });
     });
 
     it("switches the active space through the combined sidebar switcher", async () => {
@@ -297,8 +297,10 @@ describe("App suite", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
+      // The whole identity row is the switcher (#608) — its label names the
+      // space and gateway it is switching, so match on the action.
       const switcher = el.querySelector<HTMLButtonElement>(
-        'button[aria-label="Switch space or gateway"]'
+        'button[aria-label$="Switch space or gateway."]'
       )!;
       await act(async () => switcher.click());
       const personal = document.querySelector<HTMLButtonElement>(

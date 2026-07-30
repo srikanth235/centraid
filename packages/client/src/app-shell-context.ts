@@ -6,6 +6,8 @@
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
+/** What the owner asked for. `system` tracks the OS appearance live. */
+export type ThemeMode = ThemeName | "system";
 export type Density = "compact" | "regular" | "comfy";
 export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
 export type AccentKey = "blue" | "violet" | "teal" | "ochre" | "rose";
@@ -32,16 +34,27 @@ export type GatewayProfile = Awaited<
   ReturnType<typeof window.CentraidApi.listGateways>
 >[number];
 
+/**
+ * The renderer's appearance prefs.
+ *
+ * `bgL` and `accent` are OVERRIDES, not values (#608 group P). They are
+ * applied as inline styles on `<html>`, which outrank every
+ * `[data-theme='…']` block, so writing them unconditionally means a theme's
+ * own accent and lightness anchor can never render. Absent = the active
+ * theme's declaration wins.
+ */
 export interface AppearancePrefs {
+  /** The owner's pick. `system` re-resolves on OS appearance changes. */
+  themeMode: ThemeMode;
+  /** The resolved theme actually applied — `themeMode` unless it is `system`. */
   theme: ThemeName;
   density: Density;
   tileVariant: TileVariant;
   sidebarOpen: boolean;
-  /** Dark ramp lightness anchor (10–35). Drives `--bg-l`. */
-  bgL: number;
-  /** Hue 222 + 11% sat when true, neutral grey (hue 0, 0% sat) when false. */
-  coolBlueCast: boolean;
-  accent: AccentKey;
+  /** Dark ramp lightness override, in percent. Absent = the theme's `bgL`. */
+  bgL?: number;
+  /** Accent override. Absent = the accent the active theme declares. */
+  accent?: AccentKey;
   cardVariant: CardVariant;
 }
 

@@ -1,6 +1,6 @@
 // Centraid Light + Dark — the shipping defaults.
 // Light: Notion/Linear-inspired near-white surfaces with warm dark ink.
-// Dark: blue-tinted ramp derived from a single `--bg-l` knob so the
+// Dark: a neutral greyscale ramp derived from a single `--bg-l` knob so the
 // whole surface ramp retunes by changing one value. Mobile reads
 // `themes.light` directly, so the dark theme's `var()` references —
 // which RN cannot resolve — never reach it.
@@ -61,13 +61,35 @@ export const darkTheme: Theme = {
   accentLight: ACCENT_LIGHT,
   accentMidnight: ACCENT_MIDNIGHT,
   accentViolet: ACCENT_VIOLET,
-  bgL: "18%",
-  bg: "hsl(222 11% var(--bg-l))",
-  bgApp: "hsl(222 12% calc(var(--bg-l) - 5%))",
-  bgElev: "hsl(222 11% calc(var(--bg-l) + 4.5%))",
-  bgSunken: "hsl(222 11% calc(var(--bg-l) - 4%))",
+  // The ramp is neutral greyscale, and that is the only dark ramp there is
+  // (#608). A hue/saturation "surface temperature" knob used to sit on top of
+  // this; it was cut for parity — the light theme has no temperature, so the
+  // dark one having three made the two halves of the same setting behave
+  // differently for no reason a member could name.
+  //
+  // The anchor is `5%` because that is the surface Centraid Dark has always
+  // rendered — the near-black the product is known by, not the mid-grey a
+  // literal `18%` produces. `18%` sat here unread while the pref layer forced
+  // `5%` inline over it, so it was never the shipped ramp; once the precedence
+  // was corrected (a theme's own values render), the declaration had to become
+  // the value that was actually on screen rather than the reverse.
+  //
+  // Every surface below derives from `--bg-l`, so moving that one anchor
+  // retunes the whole ramp. `--bg-app` is `calc(5% - 5%)`, i.e. true black —
+  // inherited from the shipped ramp, and deliberate.
+  bgL: "5%",
+  bg: "hsl(0 0% var(--bg-l))",
+  bgApp: "hsl(0 0% calc(var(--bg-l) - 5%))",
+  bgElev: "hsl(0 0% calc(var(--bg-l) + 4.5%))",
+  bgSunken: "hsl(0 0% calc(var(--bg-l) - 4%))",
+  // The `--device-wall` composite layers its crosshatch over `var(--bg-wall)`,
+  // so redefining the wall retunes both in one place.
   bgWall:
-    "linear-gradient(180deg, hsl(222 13% calc(var(--bg-l) + 2%)) 0%, hsl(222 14% calc(var(--bg-l) - 2%)) 100%)",
+    "linear-gradient(180deg, hsl(0 0% calc(var(--bg-l) + 2%)) 0%, " +
+    "hsl(0 0% calc(var(--bg-l) - 2%)) 100%)",
+  sidebarBg:
+    "linear-gradient(180deg, hsl(0 0% calc(var(--bg-l) + 5%) / 0.92) 0%, " +
+    "hsl(0 0% calc(var(--bg-l) + 2%) / 0.92) 100%)",
   bezel: "#0a0d13",
   bezelInner: "#14181F",
   deviceWall:
@@ -85,8 +107,6 @@ export const darkTheme: Theme = {
   shadowLg: "0 2px 4px rgba(0,0,0,.35), 0 32px 64px -16px rgba(0,0,0,.55)",
   shadowMd: "0 1px 0 rgba(0,0,0,.35), 0 12px 32px -8px rgba(0,0,0,.45)",
   shadowSm: "0 1px 0 rgba(0,0,0,.35)",
-  sidebarBg:
-    "linear-gradient(180deg, hsl(222 14% calc(var(--bg-l) + 5%) / 0.92) 0%, hsl(222 13% calc(var(--bg-l) + 2%) / 0.92) 100%)",
   sidebarBlur: "blur(28px) saturate(180%)",
   sidebarDivider: "0.5px solid rgba(255,255,255,0.10)",
   success: SUCCESS,

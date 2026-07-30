@@ -55,24 +55,13 @@ const asPercent = (v: unknown): string | undefined => {
   if (typeof v === "string" && /^\d+(?:\.\d+)?$/u.test(v)) return `${v}%`;
   return undefined;
 };
-const asBoolFlag =
-  (onValue: string, offValue: string) =>
-  (v: unknown): string | undefined => {
-    if (typeof v === "boolean") return v ? onValue : offValue;
-    if (v === "on" || v === "off") return v;
-    return undefined;
-  };
-
 export const KNOWN_KEYS: Record<string, KeySpec> = {
   theme: { kind: "data", attr: "theme", coerce: asString },
   density: { kind: "data", attr: "density", coerce: asString },
   cards: { kind: "data", attr: "cards", coerce: asString },
-  coolCast: {
-    kind: "data",
-    attr: "cool-cast",
-    coerce: asBoolFlag("on", "off"),
-  },
-  // bgL is stored as a number (slider value 0-35); the CSS var wants `<n>%`.
+  // bgL is an explicit lightness OVERRIDE stored as a number; the CSS var
+  // wants `<n>%`. Absent means the active theme's own anchor governs, so this
+  // must not be defaulted anywhere in the pipeline.
   bgL: { kind: "css", cssVar: "bg-l", coerce: asPercent },
   accent: { kind: "css", cssVar: "accent", coerce: asString },
   accentLight: { kind: "css", cssVar: "accent-light", coerce: asString },

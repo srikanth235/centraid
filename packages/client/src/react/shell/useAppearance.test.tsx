@@ -15,6 +15,28 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   saveUserPrefs,
 }));
 
+// Mirrors the CACHE_KEY in useAppearance.ts — bumped for #608 group P.
+const CACHE_KEY = "appearance.v2";
+
+/** A controllable `prefers-color-scheme` for the `system` mode. */
+function stubScheme(light: boolean): { set: (next: boolean) => void } {
+  const listeners = new Set<() => void>();
+  let isLight = light;
+  vi.stubGlobal("matchMedia", () => ({
+    get matches() {
+      return isLight;
+    },
+    addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+    removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+  }));
+  return {
+    set: (next) => {
+      isLight = next;
+      for (const fn of listeners) fn();
+    },
+  };
+}
+
 let useAppearance: typeof TypeImport_t83a9s.useAppearance;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -40,6 +62,7 @@ describe("useAppearance", () => {
     host?.remove();
     root = null;
     host = null;
+    vi.unstubAllGlobals();
   });
 
   let ctl: ReturnType<typeof useAppearance>;
@@ -62,10 +85,33 @@ describe("useAppearance", () => {
 
   describe("useAppearance", () => {
     it("seeds from defaults + the Store cache and writes <html>", async () => {
-      store.set("appearance", { accent: "rose" });
+      store.set(CACHE_KEY, { accent: "rose" });
       await mount();
       expect(ctl.prefs.accent).toBe("rose");
       expect(document.documentElement.dataset.theme).toBe(ctl.prefs.theme);
+    });
+
+    it("ignores a cache written in the pre-#608 shape", async () => {
+      // The old shape persisted `bgL` and an accent on every save —
+      // indistinguishable from an owner who chose them, and written inline
+      // where they outranked the theme's own declarations. The bumped key
+      // starts the new shape clean instead of inheriting that.
+      store.set("appearance", { bgL: 5, accent: "rose", coolBlueCast: false });
+      await mount();
+      expect(ctl.prefs.bgL).toBeUndefined();
+      expect(ctl.prefs.accent).toBeUndefined();
+      expect(document.documentElement.style.getPropertyValue("--bg-l")).toBe(
+        ""
+      );
+    });
+
+    it("tracks the OS appearance while the mode is `system`", async () => {
+      const scheme = stubScheme(true);
+      store.set(CACHE_KEY, { themeMode: "system" });
+      await mount();
+      expect(ctl.prefs.theme).toBe("light");
+      await act(async () => scheme.set(false));
+      expect(ctl.prefs.theme).toBe("dark");
     });
 
     it("reconciles recognised keys from the gateway after mount", async () => {
@@ -84,16 +130,22 @@ describe("useAppearance", () => {
         ctl.setPrefs({ accent: "violet" });
       });
       expect(ctl.prefs.accent).toBe("violet");
-      expect(store.get("appearance")).toMatchObject({ accent: "violet" });
+      expect(store.get(CACHE_KEY)).toMatchObject({ accent: "violet" });
       expect(saveUserPrefs).toHaveBeenCalledWith(
         expect.objectContaining({ accentKey: "violet" })
       );
     });
 
-    it("locks bgL to 5 regardless of the cached value", async () => {
-      store.set("appearance", { bgL: 40 });
+    it("re-resolves the applied theme when the caller sets a mode", async () => {
+      stubScheme(true);
       await mount();
-      expect(ctl.prefs.bgL).toBe(5);
+      await act(async () => {
+        ctl.setPrefs({ themeMode: "system" });
+      });
+      expect(ctl.prefs.theme).toBe("light");
+      expect(saveUserPrefs).toHaveBeenCalledWith(
+        expect.objectContaining({ themeMode: "system", theme: "light" })
+      );
     });
   });
 });

@@ -53,9 +53,6 @@
     "rawHex": 26,
     "literalFontFamily": 7
   },
-  "packages/client/src/react/screens/SettingsAppearanceScreen.module.css": {
-    "rawHex": 1
-  },
   "packages/client/src/react/screens/SettingsConnectionsScreen.module.css": {
     "rawHex": 15
   },
@@ -63,7 +60,7 @@
     "rawHex": 1
   },
   "packages/client/src/react/screens/settings-controls.module.css": {
-    "rawHex": 1,
+    "rawHex": 0,
     "literalFontFamily": 1
   },
   "packages/client/src/react/shell/automationTemplatePreview.module.css": {

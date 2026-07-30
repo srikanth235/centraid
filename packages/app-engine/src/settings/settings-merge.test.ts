@@ -19,13 +19,18 @@ describe(buildSettingsInject, () => {
     expect(out.cssVars).toStrictEqual({});
   });
 
-  it("coerces booleans for coolCast", () => {
-    expect(buildSettingsInject([{ coolCast: true }]).dataAttrs).toStrictEqual({
-      "cool-cast": "on",
-    });
-    expect(buildSettingsInject([{ coolCast: false }]).dataAttrs).toStrictEqual({
-      "cool-cast": "off",
-    });
+  it("bakes no surface-temperature attribute — dark has one ramp", () => {
+    // The knob was removed for parity with the light theme (#608). Neither the
+    // old boolean `coolCast` nor the three-position `surfaceTemp` may smear an
+    // attribute onto <html> any more.
+    for (const v of ["cool", "neutral", "warm", true, "tepid"]) {
+      expect(buildSettingsInject([{ surfaceTemp: v }]).dataAttrs).toStrictEqual(
+        {}
+      );
+    }
+    expect(buildSettingsInject([{ coolCast: false }]).dataAttrs).toStrictEqual(
+      {}
+    );
   });
 
   it("coerces numeric bgL into a percentage string", () => {
