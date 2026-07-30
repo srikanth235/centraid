@@ -21,6 +21,10 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - CentraidNetworkStatus (0.1.0):
+    - ExpoModulesCore
+  - CentraidOcr (0.1.0):
+    - ExpoModulesCore
   - CentraidStorage (0.1.0):
     - ExpoModulesCore
   - CentraidTunnel (0.1.0):
@@ -75,6 +79,8 @@ PODS:
     - ExpoCamera
     - ZXingObjC/OneD
     - ZXingObjC/PDF417
+  - ExpoClipboard (57.0.1):
+    - ExpoModulesCore
   - ExpoCrypto (57.0.1):
     - ExpoModulesCore
   - ExpoDocumentPicker (57.0.1):
@@ -2569,6 +2575,8 @@ PODS:
 
 DEPENDENCIES:
   - "AsyncStorage (from `../../../node_modules/@react-native-async-storage/async-storage`)"
+  - CentraidNetworkStatus (from `../modules/centraid-network-status/ios`)
+  - CentraidOcr (from `../modules/centraid-ocr/ios`)
   - CentraidStorage (from `../modules/centraid-storage/ios`)
   - CentraidTunnel (from `../modules/centraid-tunnel/ios`)
   - EASClient (from `../../../node_modules/expo-eas-client/ios`)
@@ -2583,6 +2591,7 @@ DEPENDENCIES:
   - ExpoBlur (from `../../../node_modules/expo-blur/ios`)
   - ExpoCamera (from `../../../node_modules/expo-camera/ios`)
   - ExpoCameraBarcodeScanning (from `../../../node_modules/expo-camera/ios`)
+  - ExpoClipboard (from `../../../node_modules/expo-clipboard/ios`)
   - ExpoCrypto (from `../../../node_modules/expo-crypto/ios`)
   - ExpoDocumentPicker (from `../../../node_modules/expo-document-picker/ios`)
   - "ExpoDomWebView (from `../../../node_modules/@expo/dom-webview/ios`)"
@@ -2717,6 +2726,10 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   AsyncStorage:
     :path: "../../../node_modules/@react-native-async-storage/async-storage"
+  CentraidNetworkStatus:
+    :path: "../modules/centraid-network-status/ios"
+  CentraidOcr:
+    :path: "../modules/centraid-ocr/ios"
   CentraidStorage:
     :path: "../modules/centraid-storage/ios"
   CentraidTunnel:
@@ -2745,6 +2758,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-camera/ios"
   ExpoCameraBarcodeScanning:
     :path: "../../../node_modules/expo-camera/ios"
+  ExpoClipboard:
+    :path: "../../../node_modules/expo-clipboard/ios"
   ExpoCrypto:
     :path: "../../../node_modules/expo-crypto/ios"
   ExpoDocumentPicker:
@@ -2981,6 +2996,8 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AsyncStorage: 163ab23f6aa37a58b7f2379d0b4ee7ac84d6655c
+  CentraidNetworkStatus: c2dc85168a36e8c2a5eb8b3bf6c359a8d663cde5
+  CentraidOcr: 31de01baf4ae3706a6aa1146a0450c03c3b0e1f7
   CentraidStorage: 042014182213c2ee7b71bf1c6aded6ab3ec2c1ee
   CentraidTunnel: 22901955e3c8708cf3e297f60e0c8a1b952b514c
   EASClient: 81f44ce9f07ec3d01606507213d21510a5f97388
@@ -2995,6 +3012,7 @@ SPEC CHECKSUMS:
   ExpoBlur: 69e67b4fbfed6f7325377af2aefa8aa4f00cd2af
   ExpoCamera: a5e9d9ce2fc06689eb2dd676f1f8d5f22f8aa292
   ExpoCameraBarcodeScanning: b869ac87ebe30bb99b26c55b0e0471301383c90b
+  ExpoClipboard: 95055b11758f339b61d4d8064dd799df1cf03b7f
   ExpoCrypto: 366380ffafeb22cc9795438cddcbfa299e1aaf42
   ExpoDocumentPicker: 6fb67a6f39ba9beb53a4b4a3f2949e0b5e9bc3bf
   ExpoDomWebView: beaec034e51bd028428b98bb1f2633ab79c6d095
@@ -3024,7 +3042,7 @@ SPEC CHECKSUMS:
   EXUpdates: cbdbe424e30c11983c2841930050114c1b8bea0c
   EXUpdatesInterface: 92d2aa5194b6fb93ca8ab749db75665cb28b2e60
   FBLazyVector: 3c3be9a019176b5699455f7f66c5444b78a411c6
-  hermes-engine: 9052ccd34e5f375bf5e93b4f6e059cac41641a6e
+  hermes-engine: 07b876e0c66c84f67a9c8814da36e6a319a6fc3c
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
