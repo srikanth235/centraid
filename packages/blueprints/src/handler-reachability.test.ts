@@ -175,9 +175,20 @@ function sourceTree(root: string, skipHandlers: boolean): string {
     .join("\n");
 }
 
+/** Drop line/block comments so a name only in a comment cannot pass. */
+function withoutComments(source: string): string {
+  // Line comments first: otherwise `// path/*.ts` would open a block comment
+  // at the `/*` and swallow the rest of the file until a later `*/`.
+  return source
+    .replace(/(?<lead>^|[^:])\/\/[^\n]*/gu, "$<lead>")
+    .replace(/\/\*[\s\S]*?\*\//gu, " ");
+}
+
 function hasLiteral(source: string, value: string): boolean {
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`["']${escaped}["']`, "u").test(source);
+  // Comments do not count as reachability — a name only mentioned in a note
+  // or disabled block is not a live call site.
+  return new RegExp(`["']${escaped}["']`, "u").test(withoutComments(source));
 }
 
 function handlers(manifest: AppManifest): Array<{ kind: Kind; name: string }> {

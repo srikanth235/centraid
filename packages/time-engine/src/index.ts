@@ -1,9 +1,11 @@
 export {
   applyRecurrenceExceptions,
+  canonicalizeRrule,
   describeRecurrence,
   expandRecurrence,
   nextOccurrence,
   parseRrule,
+  rruleLine,
   shiftTemporal,
   type ExpandRecurrenceInput,
   type ParsedRrule,

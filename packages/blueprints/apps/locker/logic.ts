@@ -400,7 +400,14 @@ export function clearSecretClipboard(): void {
     .then((current) =>
       current === secret ? navigator.clipboard.writeText("") : undefined
     )
-    .catch(() => {});
+    .catch((error: unknown) => {
+      // Clipboard wipe is best-effort under missing permissions; still log so
+      // a policy denial is visible when debugging secret residual lifetime.
+      console.warn(
+        "locker clipboard wipe failed",
+        error instanceof Error ? error.message : error
+      );
+    });
 }
 
 export function copy(text: string, label?: string, secret?: boolean) {

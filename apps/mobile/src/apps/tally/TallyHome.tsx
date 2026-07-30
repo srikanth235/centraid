@@ -1,6 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit — this native Tally cover
 // keeps fixed-point currency input, offline ledger writes, and recurring
 // occurrence controls together so their monetary invariants remain reviewable.
+import { formatCurrencyMinor } from "@centraid/client/capture";
 import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
 import React, { useMemo, useState } from "react";
@@ -34,16 +35,8 @@ import type { TallyScreenProps } from "../../navigation";
 const asString = (value: unknown): string =>
   value == null ? "" : String(value);
 const cents = (value: string): number => Math.round(Number(value) * 100);
-const money = (minor: number, currency: string): string => {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-    }).format(minor / 100);
-  } catch {
-    return `${currency} ${(minor / 100).toFixed(2)}`;
-  }
-};
+const money = (minor: number, currency: string): string =>
+  formatCurrencyMinor(minor, currency);
 const convert = (original: number, scaled: number): number =>
   Number((BigInt(original) * BigInt(scaled) + 500_000n) / 1_000_000n);
 const outputOf = (
@@ -74,10 +67,6 @@ export default function TallyHome({
     "tally",
     useMemo(() => ({ entity: "social.circle_member" }), [])
   );
-  const parties = useReplicaQuery(
-    "tally",
-    useMemo(() => ({ entity: "core.party" }), [])
-  );
   const expenses = useReplicaQuery(
     "tally",
     useMemo(() => ({ entity: "tally.expense" }), [])
@@ -95,7 +84,6 @@ export default function TallyHome({
     groups,
     circles,
     members,
-    parties,
     expenses,
     templates,
     exceptions,
@@ -320,7 +308,6 @@ export default function TallyHome({
             groups.refresh(),
             circles.refresh(),
             members.refresh(),
-            parties.refresh(),
             expenses.refresh(),
             templates.refresh(),
             exceptions.refresh(),

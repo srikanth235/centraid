@@ -142,6 +142,51 @@ export function classifyCapture(raw: string, now = new Date()): CapturePreview {
   };
 }
 
+/** OCR card fields shared by web CaptureScanPanel and mobile Scan. */
+export function parseCard(text: string): {
+  cardholder: string;
+  cardNumber: string;
+  expiry: string;
+} {
+  const cardNumber =
+    text.match(/\b(?:\d[ -]*?){13,19}\b/u)?.[0]?.replace(/\D/gu, "") ?? "";
+  const expiry =
+    text.match(/\b(?:0[1-9]|1[0-2])\s*[/.-]\s*\d{2,4}\b/u)?.[0] ?? "";
+  const cardholder =
+    text
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find(
+        (line) =>
+          /^[\p{L}][\p{L} .'-]{2,80}$/u.test(line) &&
+          !/\b(?:visa|mastercard|debit|credit)\b/iu.test(line)
+      ) ?? "";
+  return { cardholder, cardNumber, expiry };
+}
+
+/**
+ * Minor units → localized currency. Tolerates missing/invalid ISO codes so a
+ * brief or Tally row never crashes the shell (see desktop e2e currency bug).
+ */
+export function formatCurrencyMinor(
+  minor: number | null | undefined,
+  currency?: string | null
+): string {
+  const value = Number(minor ?? 0) / 100;
+  const code =
+    typeof currency === "string" && /^[A-Za-z]{3}$/u.test(currency)
+      ? currency.toUpperCase()
+      : "USD";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+    }).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${code}`;
+  }
+}
+
 /** Validate the deliberately tiny JSON shape accepted from agent fallback. */
 export function applyAgentCaptureKind(
   preview: CapturePreview,

@@ -287,6 +287,8 @@ function expandRecurringEvents(
       });
       continue;
     }
+    // Unsupported FREQ (parseRrule → null → empty expand) keeps the anchor so
+    // a free-text RRULE mistake does not erase the event from the agenda.
     const durationMs = eventDurationMs(ev);
     const eventExceptions = exceptions.filter(
       (exception) => exception.target_id === ev.event_id
@@ -304,8 +306,18 @@ function expandRecurringEvents(
         ...(override.start === undefined ? {} : { start: override.start }),
       };
     });
+    const expanded = cachedInstances(ev, fromDate, toDate, time);
     const instances = time.applyRecurrenceExceptions(
-      cachedInstances(ev, fromDate, toDate, time),
+      expanded.length > 0
+        ? expanded
+        : [
+            {
+              originalStart: ev.dtstart,
+              start: ev.dtstart,
+              wallStart: ev.dtstart,
+              overlap: false,
+            },
+          ],
       recurrenceExceptions
     );
     if (instances.length === 0) continue;

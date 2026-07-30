@@ -7,6 +7,22 @@ import {
   nextOccurrence,
 } from "./recurrence.js";
 
+describe("canonicalizeRrule", () => {
+  it("strips a Google/ICS RRULE: prefix so parsers share one bare form", async () => {
+    const { canonicalizeRrule, parseRrule, rruleLine } =
+      await import("./recurrence.js");
+    expect(canonicalizeRrule("RRULE:FREQ=WEEKLY;BYDAY=MO")).toBe(
+      "FREQ=WEEKLY;BYDAY=MO"
+    );
+    expect(parseRrule("RRULE:FREQ=DAILY;COUNT=3")).toMatchObject({
+      freq: "DAILY",
+      count: 3,
+    });
+    expect(rruleLine("FREQ=MONTHLY")).toBe("RRULE:FREQ=MONTHLY");
+    expect(rruleLine("RRULE:FREQ=MONTHLY")).toBe("RRULE:FREQ=MONTHLY");
+  });
+});
+
 describe(expandRecurrence, () => {
   it("materializes a multi-year monthly series near the requested window", () => {
     const instances = expandRecurrence({

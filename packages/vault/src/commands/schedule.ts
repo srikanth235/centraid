@@ -3,6 +3,8 @@
 // and receipted end to end. Command implementations are domain-owned; the
 // gateway hosts and checks them (§10 negative space).
 
+import { canonicalizeRrule } from "@centraid/time-engine";
+
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
@@ -85,7 +87,8 @@ const PROPOSE_EVENT: CommandDefinition = {
       // Full RFC 5545 parsing happens read-side (recurrence/rrule.ts); this
       // is only a fast, cheap reject of obvious garbage before it's stored.
       name: "rrule_looks_valid",
-      sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%') AS n",
+      // Accept bare FREQ=… and a legacy/Google RRULE:FREQ=… prefix.
+      sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%' OR :rrule LIKE 'RRULE:FREQ=%') AS n",
       column: "n",
       op: "eq",
       value: 1,
@@ -145,7 +148,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       input.dtstart,
       input.dtend,
       input.start_tz ?? null,
-      input.rrule ?? null,
+      input.rrule ? canonicalizeRrule(input.rrule) : null,
       input.location_place_id ?? null,
       ctx.identity.partyId,
       ctx.now,

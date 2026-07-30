@@ -989,3 +989,19 @@ Minors: `COUNT=0` clamps to 1; status no longer slides unlock sessions.
   follow-up when pure modules absorb the coverable logic.
 - **COUNT fast-forward**: only unbounded rules jump to `rangeFrom` so COUNT=1
   far-past anchors still exhaust in O(1) periods.
+
+### Review minors (single follow-up)
+
+- Reachability: comments no longer count as call sites; CRUD smoke checks
+  `command:` literals match invoke targets and requires `schema.command` form.
+- RRULE: `canonicalizeRrule` / bare storage; ICS export and Google writeback
+  never double-prefix; schedule preconditions accept bare or prefixed.
+- Unsupported FREQ falls back to the anchor occurrence (mobile + web agenda).
+- Recurring instances filter with `overlapsWindow` on mobile.
+- `armDue` coalesced 10s like wake timers (no per-commit full scans).
+- Portable export: sequential blob load + early `MAX_ZIP_ENTRIES` check.
+- Shared `parseCard` / `formatCurrencyMinor` in `@centraid/client/capture`.
+- Empty catches in Locker lock/trash/clipboard and Capture load paths log or
+  surface status instead of silent success.
+- TallyHome drops unused whole-table `core.party` subscription.
+- `normalizeContactChannel` phone path aligns with `normalizeHandle("tel")`.

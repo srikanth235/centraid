@@ -5,26 +5,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { family } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 
-export function parseCard(text: string): {
-  cardholder: string;
-  cardNumber: string;
-  expiry: string;
-} {
-  const cardNumber =
-    text.match(/\b(?:\d[ -]*?){13,19}\b/u)?.[0]?.replace(/\D/gu, "") ?? "";
-  const expiry =
-    text.match(/\b(?:0[1-9]|1[0-2])\s*[/.-]\s*\d{2,4}\b/u)?.[0] ?? "";
-  const cardholder =
-    text
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .find(
-        (line) =>
-          /^[\p{L}][\p{L} .'-]{2,80}$/u.test(line) &&
-          !/\b(?:visa|mastercard|debit|credit)\b/iu.test(line)
-      ) ?? "";
-  return { cardholder, cardNumber, expiry };
-}
+export { parseCard } from "@centraid/client/capture";
 
 export function CloseHeader({
   colors,

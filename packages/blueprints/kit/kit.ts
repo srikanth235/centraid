@@ -385,6 +385,8 @@ export function fmtMoney(
   minor: number | null | undefined,
   currency?: string
 ): string {
+  // Keep the same contract as @centraid/client formatCurrencyMinor so web
+  // Home, Tally, and Capture never diverge on invalid ISO codes.
   const value = Number(minor ?? 0) / 100;
   const code =
     typeof currency === "string" && /^[A-Za-z]{3}$/u.test(currency)

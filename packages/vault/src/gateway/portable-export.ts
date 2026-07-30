@@ -6,7 +6,11 @@ import { createHash } from "node:crypto";
 import { sha256OfBytes } from "../blob/store.js";
 import type { VaultDb } from "../db.js";
 import { serializeMarkdownNote } from "../ingest/markdown.js";
-import { readZipEntries, writeZipEntries } from "../ingest/zip.js";
+import {
+  MAX_ZIP_ENTRIES,
+  readZipEntries,
+  writeZipEntries,
+} from "../ingest/zip.js";
 import type { ZipEntry } from "../ingest/zip.js";
 import { contentText } from "../schema/fts.js";
 import { canonicalJson, exportVault } from "./portability.js";
@@ -93,7 +97,12 @@ export function exportIcs(db: VaultDb): string {
       row.start_tz && !row.dtstart.endsWith("Z") ? `;TZID=${row.start_tz}` : "";
     lines.push(`DTSTART${tz}:${icsDate(row.dtstart)}`);
     if (row.dtend) lines.push(`DTEND${tz}:${icsDate(row.dtend)}`);
-    if (row.rrule) lines.push(`RRULE:${row.rrule}`);
+    if (row.rrule) {
+      // Storage is bare `FREQ=…`; strip a legacy `RRULE:` so we never emit
+      // `RRULE:RRULE:…` for Google-sourced rows that were stored prefixed.
+      const bare = row.rrule.replace(/^\s*RRULE:/iu, "").trim();
+      if (bare) lines.push(`RRULE:${bare}`);
+    }
     lines.push(`STATUS:${row.status.toUpperCase()}`, "END:VEVENT");
   }
   lines.push("END:VCALENDAR", "");
@@ -329,17 +338,26 @@ export async function exportPortableVault(
         WHERE content_uri LIKE 'blob:sha256-%' ORDER BY sha256`
     )
     .all() as { sha256: string }[];
-  const contentFiles = await Promise.all(
-    blobRows.map(async (row): Promise<ZipEntry> => {
-      const bytes = await db.blobs.open(row.sha256);
-      if (!bytes)
-        throw new Error(`portable export cannot read content ${row.sha256}`);
-      if (sha256OfBytes(bytes) !== row.sha256)
-        throw new Error(`portable export content hash mismatch: ${row.sha256}`);
-      return { name: `content/${row.sha256}`, data: bytes };
-    })
-  );
-  files.push(...contentFiles);
+  // Entry count is checked before any blob is opened so a huge vault fails
+  // cheaply instead of buffering every object then rejecting at zip write.
+  // Blobs load sequentially so peak resident set is one content file + zip
+  // accumulator rather than every blob at once.
+  if (files.length + blobRows.length + 1 > MAX_ZIP_ENTRIES) {
+    throw new Error(
+      `portable export has too many entries (max ${MAX_ZIP_ENTRIES})`
+    );
+  }
+  // Sequential on purpose: peak RSS is one content object + the zip buffer,
+  // not every blob resident at once (review finding on portable export).
+  await blobRows.reduce(async (prior, row) => {
+    await prior;
+    const bytes = await db.blobs.open(row.sha256);
+    if (!bytes)
+      throw new Error(`portable export cannot read content ${row.sha256}`);
+    if (sha256OfBytes(bytes) !== row.sha256)
+      throw new Error(`portable export content hash mismatch: ${row.sha256}`);
+    files.push({ name: `content/${row.sha256}`, data: bytes });
+  }, Promise.resolve());
   const vault = db.vault
     .prepare("SELECT vault_id FROM core_vault LIMIT 1")
     .get() as { vault_id: string };

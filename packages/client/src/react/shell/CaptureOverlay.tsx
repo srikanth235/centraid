@@ -78,8 +78,13 @@ export function CaptureOverlay({
           );
           setAgenda(next);
           setCalendarId(String(next.calendars?.[0]?.calendar_id ?? ""));
-        } catch {
+        } catch (error) {
           setAgenda({ calendars: [] });
+          setStatus(
+            error instanceof Error
+              ? error.message
+              : "Could not load calendars for this capture."
+          );
         }
       })();
     }
@@ -92,8 +97,13 @@ export function CaptureOverlay({
           );
           setTally(next);
           setGroupId(String(next.groups?.[0]?.group_id ?? ""));
-        } catch {
+        } catch (error) {
           setTally({ groups: [] });
+          setStatus(
+            error instanceof Error
+              ? error.message
+              : "Could not load Tally groups for this capture."
+          );
         }
       })();
     }

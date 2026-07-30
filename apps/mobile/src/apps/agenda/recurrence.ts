@@ -78,31 +78,47 @@ export function expandEvent(
   }
   const semantics = event.recurrenceSemantics ?? "zoned";
   const durationMs = eventDuration(event, semantics);
+  const expanded = expandRecurrence({
+    rrule: event.rrule,
+    start: event.start,
+    rangeFrom: from.toISOString(),
+    rangeTo: to.toISOString(),
+    timeZone: event.timezone ?? "Etc/UTC",
+    semantics,
+    maxInstances: max,
+  });
+  // Unsupported FREQ (e.g. HOURLY) used to vanish entirely; fall back to the
+  // single anchor occurrence so free-text RRULE mistakes stay visible.
   const instances = applyRecurrenceExceptions(
-    expandRecurrence({
-      rrule: event.rrule,
-      start: event.start,
-      rangeFrom: from.toISOString(),
-      rangeTo: to.toISOString(),
-      timeZone: event.timezone ?? "Etc/UTC",
-      semantics,
-      maxInstances: max,
-    }),
+    expanded.length > 0
+      ? expanded
+      : [
+          {
+            originalStart: event.start,
+            start: event.start,
+            wallStart: event.start,
+            overlap: false,
+          },
+        ],
     exceptions
   );
-  return instances.map((instance) => {
-    const end =
-      semantics === "zoned"
-        ? new Date(Date.parse(instance.start) + durationMs).toISOString()
-        : shiftTemporal(instance.start, durationMs);
-    return {
-      ...event,
-      start: instance.start,
-      end,
-      originalStart: instance.originalStart,
-      instanceKey: `${event.id}:${instance.originalStart}`,
-      isRecurrenceInstance: instance.originalStart !== event.start,
-      overlap: instance.overlap,
-    };
-  });
+  return instances
+    .map((instance) => {
+      const end =
+        semantics === "zoned"
+          ? new Date(Date.parse(instance.start) + durationMs).toISOString()
+          : shiftTemporal(instance.start, durationMs);
+      return {
+        ...event,
+        start: instance.start,
+        end,
+        originalStart: instance.originalStart,
+        instanceKey: `${event.id}:${instance.originalStart}`,
+        isRecurrenceInstance: instance.originalStart !== event.start,
+        overlap: instance.overlap,
+      };
+    })
+    .filter((instance) =>
+      overlapsWindow(instance.start, instance.end, from, to)
+    );
 }

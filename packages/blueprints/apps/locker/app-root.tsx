@@ -241,7 +241,14 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       .then((r) => {
         if (r && !r.vaultDenied) state.trashRows = r.items ?? [];
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        // Trash is advisory UI; a failed pull must not leave the unlock
+        // surface looking successful with a stale list — surface in console.
+        console.warn(
+          "locker trash refresh failed",
+          error instanceof Error ? error.message : error
+        );
+      });
 
     // Drop a selection whose item vanished (unless it now lives in trash).
     if (
@@ -285,7 +292,13 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         void authenticate({
           operation: "lock",
           sessionToken,
-        }).catch(() => {});
+        }).catch((error: unknown) => {
+          // Host-side lock is security-relevant; never swallow silently.
+          console.warn(
+            "locker host lock failed",
+            error instanceof Error ? error.message : error
+          );
+        });
       }
     },
     [authenticate, clearSecretState]

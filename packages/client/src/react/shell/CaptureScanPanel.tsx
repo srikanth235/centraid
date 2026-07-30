@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { parseCard } from "../../capture.js";
 import {
   recognizeCaptureImage,
   runBlueprintCaptureAction,
@@ -56,8 +57,14 @@ export function CaptureScanPanel({
         );
         setDashboard(value);
         setGroupId(String(value.groups?.[0]?.group_id ?? ""));
-      } catch {
+      } catch (error) {
         setDashboard({ groups: [] });
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Could not load Tally groups for this scan."
+        );
+        setFailed(true);
       }
     })();
   }, [dashboard, destination]);
@@ -76,9 +83,15 @@ export function CaptureScanPanel({
         setSelected(
           next.map((member) => String(member.party_id ?? "")).filter(Boolean)
         );
-      } catch {
+      } catch (error) {
         setMembers([]);
         setSelected([]);
+        setStatus(
+          error instanceof Error
+            ? error.message
+            : "Could not load group members for this scan."
+        );
+        setFailed(true);
       }
     })();
   }, [groupId]);
@@ -369,25 +382,4 @@ export function CaptureScanPanel({
       ) : null}
     </section>
   );
-}
-
-function parseCard(text: string): {
-  cardholder: string;
-  cardNumber: string;
-  expiry: string;
-} {
-  const cardNumber =
-    text.match(/\b(?:\d[ -]*?){13,19}\b/u)?.[0]?.replace(/\D/gu, "") ?? "";
-  const expiry =
-    text.match(/\b(?:0[1-9]|1[0-2])\s*[/.-]\s*\d{2,4}\b/u)?.[0] ?? "";
-  const cardholder =
-    text
-      .split(/\r?\n/u)
-      .map((line) => line.trim())
-      .find(
-        (line) =>
-          /^[\p{L}][\p{L} .'-]{2,80}$/u.test(line) &&
-          !/\b(?:visa|mastercard|debit|credit)\b/iu.test(line)
-      ) ?? "";
-  return { cardholder, cardNumber, expiry };
 }

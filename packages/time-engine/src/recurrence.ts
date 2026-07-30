@@ -64,9 +64,27 @@ function positiveInteger(value: string | undefined): number | undefined {
   return parsed > 0 ? parsed : 1;
 }
 
+/**
+ * Canonical bare RRULE body (`FREQ=…`). Strips a leading `RRULE:` (Google
+ * Calendar and ICS both emit the prefixed form) and collapses whitespace so
+ * schedule preconditions, parseRrule, and ICS export share one shape.
+ */
+export function canonicalizeRrule(value: string): string {
+  return value
+    .replace(/^\s*RRULE:/iu, "")
+    .replace(/\s+/gu, "")
+    .trim();
+}
+
+/** Prefixed RRULE line for Google/ICS writeback without double-prefixing. */
+export function rruleLine(value: string): string {
+  const bare = canonicalizeRrule(value);
+  return bare ? `RRULE:${bare}` : "";
+}
+
 export function parseRrule(value: string): ParsedRrule | null {
   const parts = new Map<string, string>();
-  for (const segment of value.split(";")) {
+  for (const segment of canonicalizeRrule(value).split(";")) {
     const equals = segment.indexOf("=");
     if (equals < 0) continue;
     parts.set(

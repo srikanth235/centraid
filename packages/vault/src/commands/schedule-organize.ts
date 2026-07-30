@@ -1,3 +1,5 @@
+import { canonicalizeRrule } from "@centraid/time-engine";
+
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
 import { queueProviderWriteback } from "./provider-writeback.js";
@@ -117,7 +119,14 @@ function editEvent(ctx: HandlerCtx): Record<string, unknown> {
     ["start_tz", input.start_tz],
     ["end_tz", input.end_tz],
     ["recurrence_semantics", input.recurrence_semantics],
-    ["rrule", input.clear_rrule ? null : input.rrule],
+    [
+      "rrule",
+      input.clear_rrule
+        ? null
+        : input.rrule === undefined
+          ? undefined
+          : canonicalizeRrule(input.rrule),
+    ],
     ["description", input.clear_description ? null : input.description],
     [
       "location_place_id",

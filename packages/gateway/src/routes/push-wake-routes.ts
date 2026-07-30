@@ -128,6 +128,8 @@ export class PushWakeRelay {
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #dueTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #dueKeys = new Map<string, Set<string>>();
+  /** Vaults waiting for a coalesced armDue after a commit storm. */
+  readonly #dueArmPending = new Set<string>();
 
   constructor(
     private readonly vaults: VaultRegistry,
@@ -152,7 +154,9 @@ export class PushWakeRelay {
       plane.boot.vaultId,
       subscribeReplicaCommits(plane.db.vault, () => {
         this.schedule(plane.boot.vaultId);
-        this.armDue(plane);
+        // Coalesce due-arming with the same 10s wake timer rather than
+        // scanning task/event/tally tables on every vault commit.
+        this.scheduleDue(plane);
       })
     );
     this.armDue(plane);
@@ -166,6 +170,7 @@ export class PushWakeRelay {
     this.#timers.clear();
     this.#dueTimers.clear();
     this.#dueKeys.clear();
+    this.#dueArmPending.clear();
   }
 
   private schedule(vaultId: string): void {
@@ -176,6 +181,18 @@ export class PushWakeRelay {
     }, 10_000);
     timer.unref?.();
     this.#timers.set(vaultId, timer);
+  }
+
+  /** Coalesce armDue onto a short timer so commit storms do not N-scan. */
+  private scheduleDue(plane: VaultPlane): void {
+    const vaultId = plane.boot.vaultId;
+    if (this.#dueArmPending.has(vaultId)) return;
+    this.#dueArmPending.add(vaultId);
+    const timer = setTimeout(() => {
+      this.#dueArmPending.delete(vaultId);
+      this.armDue(plane);
+    }, 10_000);
+    timer.unref?.();
   }
 
   private armDue(plane: VaultPlane): void {

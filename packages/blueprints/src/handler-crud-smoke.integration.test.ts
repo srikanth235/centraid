@@ -183,14 +183,35 @@ function permits(
   verb: "read" | "act" | "reveal"
 ): boolean {
   const parsed = splitTarget(target);
-  return scopes.some(
-    (scope) =>
-      scope.schema === parsed.schema &&
-      (scope.table == null || scope.table === parsed.table) &&
-      (scope.verbs === verb ||
-        scope.verbs.split("+").includes(verb) ||
-        (verb === "read" && scope.verbs === "read+act"))
-  );
+  return scopes.some((scope) => {
+    if (scope.schema !== parsed.schema) return false;
+    const verbs =
+      scope.verbs === verb ||
+      scope.verbs.split("+").includes(verb) ||
+      (verb === "read" && scope.verbs === "read+act");
+    if (!verbs) return false;
+    // Table-less act scopes used to match any command in the schema
+    // (schedule.foo_bar with only `{schema: schedule, verbs: act}`). Require
+    // the command's second segment so a renamed engine command fails smoke.
+    if (scope.table == null) {
+      if (verb !== "act") return true;
+      // Accept schema-level act only when the target has a real command name
+      // (schema.command), not a bare schema or free-form string.
+      return parsed.table.length > 0 && /^[a-z][a-z0-9_]*$/u.test(parsed.table);
+    }
+    return scope.table === parsed.table;
+  });
+}
+
+/** Extract vault command names the action source actually dispatches. */
+function declaredCommands(source: string): string[] {
+  const found = new Set<string>();
+  for (const match of source.matchAll(
+    /command\s*:\s*["'](?<command>[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)["']/gu
+  )) {
+    if (match.groups?.command) found.add(match.groups.command);
+  }
+  return [...found];
 }
 
 function scopedSeededCtx(manifest: AppJson) {
@@ -225,6 +246,11 @@ function scopedSeededCtx(manifest: AppJson) {
         }) => {
           checkPurpose(input);
           check("invoke", input.command, "act");
+          if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(input.command)) {
+            violations.push(
+              `invoke command "${input.command}" is not schema.command form`
+            );
+          }
           return {
             status: "executed",
             output: { id: `seed-${input.command.replaceAll(".", "-")}` },
@@ -326,6 +352,8 @@ describe("blueprint handler behavioural contract", () => {
       expect(module.default).toBeTypeOf("function");
       const seam = scopedSeededCtx(manifest);
       const input = schemaFixture(handler.input);
+      const source = readFileSync(file!, "utf8");
+      const expectedCommands = declaredCommands(source);
 
       const result = await module.default({
         body: input,
@@ -336,9 +364,15 @@ describe("blueprint handler behavioural contract", () => {
 
       expect(result).toMatchObject({ status: 200 });
       expect(schemaMismatch(result.body, handler.output)).toBeNull();
+      const invokes = seam.calls.filter((call) => call.method === "invoke");
+      expect(invokes).toHaveLength(1);
+      // A renamed engine command must fail: the action source's `command:`
+      // literal has to match the string actually invoked. Actions that build
+      // the command dynamically leave expectedCommands empty and skip this.
       expect(
-        seam.calls.filter((call) => call.method === "invoke")
-      ).toHaveLength(1);
+        expectedCommands.length === 0 ||
+          expectedCommands.includes(invokes[0]!.target)
+      ).toBe(true);
       expect(seam.violations).toStrictEqual([]);
     }
   );

@@ -70,12 +70,23 @@ function eventArtifact(
           ...(event.start_tz ? { timeZone: event.start_tz } : {}),
         };
   };
+  // Google expects prefixed RRULE lines. Canonical storage is bare `FREQ=…`
+  // (and may still hold legacy `RRULE:…` from older pulls) — never double-prefix.
+  const recurrence = event.rrule
+    ? event.rrule
+        .split("\n")
+        .map((line) => {
+          const bare = line.replace(/^\s*RRULE:/iu, "").trim();
+          return bare ? `RRULE:${bare}` : "";
+        })
+        .filter(Boolean)
+    : [];
   const patch = {
     summary: event.summary,
     description: event.description,
     start: googleDate(event.dtstart),
     end: googleDate(event.dtend),
-    recurrence: event.rrule ? event.rrule.split("\n") : [],
+    recurrence,
     status: event.status,
   };
   const provenance = Object.fromEntries(

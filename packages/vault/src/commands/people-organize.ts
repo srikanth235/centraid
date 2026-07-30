@@ -53,9 +53,12 @@ export function normalizeContactChannel(
     return normalized;
   }
   if (kind === "phone") {
+    // Align with normalizeHandle("tel"): keep a leading + and strip every
+    // separator (spaces, parens, dots, dashes) without inventing a second
+    // digit-only dialect that disagreed on international prefixes.
     const prefix = value.startsWith("+") ? "+" : "";
-    const digits = value.replace(/\D/gu, "");
-    if (digits.length < 7 || digits.length > 15)
+    const digits = value.replace(/[\s().-]/gu, "").replace(/^\+/u, "");
+    if (!/^\d{7,15}$/u.test(digits))
       throw new Error("enter a phone number with 7 to 15 digits");
     return `${prefix}${digits}`;
   }
