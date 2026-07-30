@@ -361,6 +361,74 @@ describe("push-wake-routes", () => {
 
     expect(send).toHaveBeenCalledOnce();
   });
+
+  test("PushWakeRelay stop clears due-arm debounce so closed vaults do not throw", async () => {
+    vi.useFakeTimers();
+    const { plane, enrollments, database, vaults } = await wakeFixture();
+    enrollments.enroll({
+      endpointId: "closed-phone",
+      label: "Closed",
+      memberLabel: "Priya",
+      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+    });
+    const send = vi.fn<typeof fetch>(
+      async () => new Response("{}", { status: 200 })
+    );
+    const relay = new PushWakeRelay(vaults, enrollments, database, send);
+    relays.push(relay);
+    relay.start();
+
+    // Schedule a coalesced armDue, then tear down the plane + relay before it
+    // fires. Without clearing #dueArmTimers this re-entered armDue on a closed
+    // DatabaseSync and surfaced as vitest unhandled ERR_INVALID_STATE.
+    notifyReplicaCommit(plane.db.vault);
+    plane.stop();
+    relay.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushMicrotasks();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test("PushWakeRelay armDue swallows closed-database errors after plane.stop", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-29T12:00:00.000Z"));
+    const { plane, enrollments, database, vaults } = await wakeFixture();
+    enrollments.enroll({
+      endpointId: "race-phone",
+      label: "Race",
+      memberLabel: "Priya",
+      grants: [{ vaultId: plane.boot.vaultId, role: "write" }],
+    });
+    insertRegistration(
+      database,
+      "race-phone",
+      "ExponentPushToken[race]",
+      "ios"
+    );
+    plane.db.vault
+      .prepare(
+        `INSERT INTO schedule_task
+          (task_id, owner_party_id, title, status, priority, due_at,
+           remind_before_min)
+         VALUES ('race-task', ?, 'Soon', 'needs-action', 0,
+                 '2026-07-29T12:00:05.000Z', 0)`
+      )
+      .run(plane.boot.ownerPartyId);
+    const send = vi.fn<typeof fetch>(
+      async () => new Response("{}", { status: 200 })
+    );
+    const relay = new PushWakeRelay(vaults, enrollments, database, send);
+    relays.push(relay);
+    relay.start();
+    // Close the vault while the next-fire timer is still armed, without
+    // stop()ing the relay — exercises the closed-DB catch in armDue.
+    plane.stop();
+    await vi.advanceTimersByTimeAsync(5_000);
+    await flushMicrotasks();
+    // No unhandled rejection; wake must not fire against a dead plane.
+    expect(send).not.toHaveBeenCalled();
+    relay.stop();
+  });
 });
 
 async function registrationServer(webPush?: WebPushSender): Promise<{

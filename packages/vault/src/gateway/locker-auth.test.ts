@@ -160,4 +160,132 @@ describe("Locker user-presence authentication", () => {
       )
     ).toThrow(/locked/u);
   });
+
+  test("authorizeReveal gates UI permits and fill sessions only after configure", () => {
+    expect(auth.isConfigured()).toBe(false);
+    expect(auth.isUnlocked()).toBe(false);
+    // Unconfigured: both arms are open (opt-in presence).
+    expect(() => auth.authorizeReveal(undefined, "item-a", "ui")).not.toThrow();
+    expect(() =>
+      auth.authorizeReveal(undefined, "item-a", "fill")
+    ).not.toThrow();
+
+    const configured = auth.handle({
+      operation: "configure",
+      secret: "correct horse battery staple",
+    });
+    expect(auth.isConfigured()).toBe(true);
+    expect(auth.isUnlocked()).toBe(true);
+    expect(configured.sessionToken).toBeTypeOf("string");
+
+    expect(() => auth.authorizeReveal(undefined, "item-a", "ui")).toThrow(
+      /locked/u
+    );
+    // Fill only needs any live unlock session, not an item permit.
+    expect(() =>
+      auth.authorizeReveal(undefined, "item-a", "fill")
+    ).not.toThrow();
+
+    auth.handle({ operation: "lock" }); // lock all sessions
+    expect(auth.isUnlocked()).toBe(false);
+    expect(() => auth.authorizeReveal(undefined, "item-a", "fill")).toThrow(
+      /locked/u
+    );
+
+    const unlocked = auth.handle({
+      operation: "unlock",
+      secret: "correct horse battery staple",
+    });
+    const permit = auth.handle({
+      operation: "authorize-item",
+      sessionToken: unlocked.sessionToken!,
+      secret: "correct horse battery staple",
+      itemId: "item-a",
+    });
+    expect(() =>
+      auth.authorizeReveal(
+        { sessionToken: unlocked.sessionToken, itemToken: permit.itemToken },
+        "item-a",
+        "ui"
+      )
+    ).not.toThrow();
+  });
+
+  test("enroll-device and revoke-device cover session and primary guards", () => {
+    const configured = auth.handle({
+      operation: "configure",
+      secret: "correct horse battery staple",
+    });
+    const sessionToken = configured.sessionToken!;
+    const deviceSecret = "d".repeat(32);
+
+    expect(
+      auth.handle({
+        operation: "enroll-device",
+        sessionToken: "dead-session",
+        secret: deviceSecret,
+        label: "Phone",
+      })
+    ).toMatchObject({ ok: false, code: "SESSION_EXPIRED" });
+
+    expect(
+      auth.handle({
+        operation: "enroll-device",
+        sessionToken,
+        secret: "too-short",
+        label: "Phone",
+      })
+    ).toMatchObject({ ok: false, code: "WEAK_DEVICE_SECRET" });
+
+    const enrolled = auth.handle({
+      operation: "enroll-device",
+      sessionToken,
+      secret: deviceSecret,
+      label: "  ",
+    });
+    expect(enrolled).toMatchObject({
+      ok: true,
+      credentialId: expect.any(String),
+    });
+    const deviceId = enrolled.credentialId!;
+
+    expect(
+      auth.handle({
+        operation: "revoke-device",
+        sessionToken: "dead-session",
+        credentialId: deviceId,
+      })
+    ).toMatchObject({ ok: false, code: "SESSION_EXPIRED" });
+
+    expect(
+      auth.handle({
+        operation: "revoke-device",
+        sessionToken,
+        credentialId: LOCKER_PRIMARY_CREDENTIAL_ID,
+      })
+    ).toMatchObject({ ok: false, code: "PRIMARY_CREDENTIAL" });
+
+    expect(
+      auth.handle({
+        operation: "revoke-device",
+        sessionToken,
+        credentialId: deviceId,
+      })
+    ).toMatchObject({ ok: true, authenticated: true });
+
+    // Device credential unlock path after enroll (before revoke above we
+    // already revoked — re-enroll and unlock with device secret).
+    const again = auth.handle({
+      operation: "enroll-device",
+      sessionToken,
+      secret: deviceSecret,
+      label: "Watch",
+    });
+    const unlocked = auth.handle({
+      operation: "unlock",
+      secret: deviceSecret,
+      credentialId: again.credentialId,
+    });
+    expect(unlocked).toMatchObject({ ok: true, authenticated: true });
+  });
 });

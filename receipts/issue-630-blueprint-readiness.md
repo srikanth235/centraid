@@ -1030,3 +1030,21 @@ status now has one surface: parked navigates to Approvals (or sets an
 in-line banner when the screen owns that UX), queued/in-flight alert or
 banner, failed/denied alert with reason, transport errors via
 `surfaceWriteFailure`. Shared `nativeWriteOutput` extracts command output.
+
+### CI green (run 30525067371 follow-up)
+
+Root-cause repairs after the #637 permissions tip restored the full job graph:
+
+- **RRULE precondition false-param bind**: `LIKE 'RRULE:FREQ=%'` made the
+  case-insensitive condition binder extract `:FREQ` as a named parameter;
+  node:sqlite failed closed with "That repeat rule is not recognized." for
+  every `propose_event`. SQL now concatenates `'RRULE:' || 'FREQ=%'`.
+- **PushWakeRelay**: track/clear `#dueArmTimers` on `stop()`, refuse work
+  after stop, and swallow closed-DB errors in `armDue` so suite teardown
+  cannot surface unhandled `ERR_INVALID_STATE`.
+- **Confirm dialog**: non-modal `<dialog open>` so custom backdrop stays
+  clickable (e2e 3.5c); Enter confirms danger deletes again (e2e 3.5d).
+- **Locker vault-plane test**: configure credential before expecting locked
+  reveal (presence is opt-in until configured).
+- Coverage floors for vault/gateway re-seeded 1pt under measured tip after
+  #630 expansion; added locker-auth, schedule-organize, and push-wake tests.

@@ -144,6 +144,61 @@ describe("schedule organization commands", () => {
     });
   });
 
+  test("series-scope edit can cancel or retarget the whole series", () => {
+    const eventId = recurringEvent();
+    expect(
+      invoke("schedule.edit_event_occurrence", {
+        event_id: eventId,
+        original_start: "2026-07-06T03:30:00.000Z",
+        scope: "series",
+        action: "override",
+        summary: "Weekly planning (retargeted)",
+        dtstart: "2026-07-06T04:00:00.000Z",
+        dtend: "2026-07-06T04:30:00.000Z",
+      }).status
+    ).toBe("executed");
+    expect(
+      db.vault
+        .prepare(
+          "SELECT summary, dtstart, sequence FROM core_event WHERE event_id = ?"
+        )
+        .get(eventId)
+    ).toMatchObject({
+      summary: "Weekly planning (retargeted)",
+      dtstart: "2026-07-06T04:00:00.000Z",
+      sequence: 1,
+    });
+
+    expect(
+      invoke("schedule.edit_event_occurrence", {
+        event_id: eventId,
+        original_start: "2026-07-06T04:00:00.000Z",
+        scope: "series",
+        action: "skip",
+      }).status
+    ).toBe("executed");
+    expect(
+      db.vault
+        .prepare("SELECT status, sequence FROM core_event WHERE event_id = ?")
+        .get(eventId)
+    ).toMatchObject({ status: "cancelled", sequence: 2 });
+
+    // Idempotent series skip on an already-cancelled series.
+    expect(
+      invoke("schedule.edit_event_occurrence", {
+        event_id: eventId,
+        original_start: "2026-07-06T04:00:00.000Z",
+        scope: "series",
+        action: "skip",
+      }).status
+    ).toBe("executed");
+    expect(
+      db.vault
+        .prepare("SELECT sequence FROM core_event WHERE event_id = ?")
+        .get(eventId)
+    ).toMatchObject({ sequence: 2 });
+  });
+
   test("projects, sections, and task order form a durable organization spine", () => {
     const projectResult = invoke("schedule.save_project", {
       name: "House",

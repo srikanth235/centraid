@@ -20,6 +20,17 @@ export const PUSH_REGISTRATIONS_PATH = "/centraid/_gateway/push/registrations";
 export const PUSH_VAPID_KEY_PATH = "/centraid/_gateway/push/vapid-key";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 
+function isClosedDatabaseError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code =
+    "code" in error && typeof (error as { code?: unknown }).code === "string"
+      ? (error as { code: string }).code
+      : undefined;
+  return (
+    code === "ERR_INVALID_STATE" || /database is not open/iu.test(error.message)
+  );
+}
+
 export function makePushRegistrationRouteHandler(
   gatewayDatabase: GatewayDatabase,
   webPush: WebPushSender = createWebPushSender(gatewayDatabase)
@@ -127,9 +138,12 @@ export class PushWakeRelay {
   readonly #unsubscribes = new Map<string, () => void>();
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #dueTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Coalesced armDue debounce timers (distinct from the next-fire arm). */
+  readonly #dueArmTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #dueKeys = new Map<string, Set<string>>();
   /** Vaults waiting for a coalesced armDue after a commit storm. */
   readonly #dueArmPending = new Set<string>();
+  #stopped = false;
 
   constructor(
     private readonly vaults: VaultRegistry,
@@ -142,6 +156,7 @@ export class PushWakeRelay {
   ) {}
 
   start(): void {
+    this.#stopped = false;
     for (const info of this.vaults.list()) {
       const plane = this.vaults.get(info.vaultId);
       if (plane) this.attach(plane);
@@ -163,18 +178,21 @@ export class PushWakeRelay {
   }
 
   stop(): void {
+    this.#stopped = true;
     for (const unsubscribe of this.#unsubscribes.values()) unsubscribe();
     for (const timer of this.#timers.values()) clearTimeout(timer);
     for (const timer of this.#dueTimers.values()) clearTimeout(timer);
+    for (const timer of this.#dueArmTimers.values()) clearTimeout(timer);
     this.#unsubscribes.clear();
     this.#timers.clear();
     this.#dueTimers.clear();
+    this.#dueArmTimers.clear();
     this.#dueKeys.clear();
     this.#dueArmPending.clear();
   }
 
   private schedule(vaultId: string): void {
-    if (this.#timers.has(vaultId)) return;
+    if (this.#stopped || this.#timers.has(vaultId)) return;
     const timer = setTimeout(() => {
       this.#timers.delete(vaultId);
       void this.wake(vaultId);
@@ -185,17 +203,21 @@ export class PushWakeRelay {
 
   /** Coalesce armDue onto a short timer so commit storms do not N-scan. */
   private scheduleDue(plane: VaultPlane): void {
+    if (this.#stopped) return;
     const vaultId = plane.boot.vaultId;
     if (this.#dueArmPending.has(vaultId)) return;
     this.#dueArmPending.add(vaultId);
     const timer = setTimeout(() => {
       this.#dueArmPending.delete(vaultId);
+      this.#dueArmTimers.delete(vaultId);
       this.armDue(plane);
     }, 10_000);
     timer.unref?.();
+    this.#dueArmTimers.set(vaultId, timer);
   }
 
   private armDue(plane: VaultPlane): void {
+    if (this.#stopped) return;
     const vaultId = plane.boot.vaultId;
     const prior = this.#dueTimers.get(vaultId);
     if (prior) clearTimeout(prior);
@@ -203,14 +225,23 @@ export class PushWakeRelay {
     const now = new Date();
     const seen = this.#dueKeys.get(vaultId) ?? new Set<string>();
     this.#dueKeys.set(vaultId, seen);
-    const due = computeDueReminders(plane.db, now.toISOString()).filter(
-      (reminder) => !seen.has(reminder.key)
-    );
+    let due: ReturnType<typeof computeDueReminders>;
+    let next: string | null | undefined;
+    try {
+      due = computeDueReminders(plane.db, now.toISOString()).filter(
+        (reminder) => !seen.has(reminder.key)
+      );
+      next = nextReminderFireAt(plane.db, now.toISOString());
+    } catch (error) {
+      // Plane/tests may close the vault after stop(); never surface a
+      // closed-DB timer as an unhandled exception (vitest fails the suite).
+      if (isClosedDatabaseError(error)) return;
+      throw error;
+    }
     if (due.length > 0) {
       for (const reminder of due) seen.add(reminder.key);
       void this.wake(vaultId);
     }
-    const next = nextReminderFireAt(plane.db, now.toISOString());
     if (!next) return;
     const delay = Math.max(
       0,

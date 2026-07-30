@@ -172,10 +172,8 @@ describe("vault-plane", () => {
         },
       });
 
-    await expect(reveal()).resolves.toMatchObject({
-      ok: false,
-      error: expect.stringMatching(/locked/u),
-    });
+    // Presence is opt-in until a credential is configured; after that, every
+    // UI reveal needs a one-time item permit (fill only needs an unlock session).
     const configured = await bridge({
       op: "authenticate",
       payload: {
@@ -186,6 +184,10 @@ describe("vault-plane", () => {
     expect(configured.ok).toBe(true);
     const sessionToken = (configured.result as { sessionToken: string })
       .sessionToken;
+    await expect(reveal()).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/locked/u),
+    });
     const authorized = await bridge({
       op: "authenticate",
       payload: {

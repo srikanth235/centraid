@@ -40,16 +40,29 @@ describe("confirm", () => {
       expect(document.querySelector(".danger")).not.toBeNull();
     });
 
-    it("Enter confirms safe actions and cannot confirm danger actions", async () => {
+    it("Enter confirms safe and danger actions; Escape cancels", async () => {
       const p1 = openConfirm({ title: "T", message: "M" });
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
       await expect(p1).resolves.toBe(true);
 
       const p2 = openConfirm({ title: "T", message: "M", danger: true });
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
-      expect(document.querySelector(".card")).not.toBeNull();
+      await expect(p2).resolves.toBe(true);
+
+      const p3 = openConfirm({ title: "T", message: "M", danger: true });
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-      await expect(p2).resolves.toBe(false);
+      await expect(p3).resolves.toBe(false);
+    });
+
+    it("backdrop click dismisses without confirming", async () => {
+      const p = openConfirm({ title: "T", message: "M", danger: true });
+      const backdrop = document.querySelector(
+        '[data-testid="modal-backdrop"]'
+      ) as HTMLElement;
+      expect(backdrop).not.toBeNull();
+      backdrop.click();
+      await expect(p).resolves.toBe(false);
+      expect(document.querySelector(".card")).toBeNull();
     });
   });
 });

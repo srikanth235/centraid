@@ -88,7 +88,11 @@ const PROPOSE_EVENT: CommandDefinition = {
       // is only a fast, cheap reject of obvious garbage before it's stored.
       name: "rrule_looks_valid",
       // Accept bare FREQ=… and a legacy/Google RRULE:FREQ=… prefix.
-      sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%' OR :rrule LIKE 'RRULE:FREQ=%') AS n",
+      // Build the RRULE: prefix with concat so the condition param binder
+      // (which scans for :name tokens case-insensitively) does not treat
+      // the "FREQ" inside the string literal as a named parameter — that
+      // mis-bind made every propose_event fail closed with this message.
+      sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%' OR :rrule LIKE ('RRULE:' || 'FREQ=%')) AS n",
       column: "n",
       op: "eq",
       value: 1,
