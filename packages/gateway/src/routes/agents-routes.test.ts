@@ -88,7 +88,9 @@ describe("agents-routes", () => {
       },
     });
     // Every product-supported kind is offered the override, not just a known pair.
-    expect(seen.sort((a, b) => a.localeCompare(b))).toStrictEqual(
+    expect(
+      seen.sort((a, b) => String(a).localeCompare(String(b)))
+    ).toStrictEqual(
       [...SUPPORTED_RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
     );
   });

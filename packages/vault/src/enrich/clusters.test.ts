@@ -109,7 +109,9 @@ describe("clusters", () => {
       purpose: "dpv:ServiceProvision",
     }).rows;
     expect(
-      rows.map((r) => r.asset_id).sort((x, y) => x.localeCompare(y))
+      rows
+        .map((r) => r.asset_id)
+        .sort((x, y) => String(x).localeCompare(String(y)))
     ).toStrictEqual([a, b].sort());
   });
 });

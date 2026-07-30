@@ -114,6 +114,10 @@
   `packages/client/src/replica/coordinator.ts`,
   `packages/gateway/src/serve/power-context.ts`, and
   `packages/gateway/src/backup/backup-conflict-provider.ts`.
+- Preserved the leading `@ts-nocheck` contract in
+  `packages/blueprints/src/query-handlers.test.ts` with an Oxfmt-stable legal
+  header, after the authoritative compiler gate proved that import sorting had
+  displaced the original directive.
 
 ### Formatter sweep paths
 
@@ -647,3 +651,4 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785412101-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 26182 | 0 | 864000 | 3728 | 29910 | 0.3374 | 398774 | 0 | 22800896 | 43947 | fix(blueprints): satisfy executable handler lint (#639) |
 | codex-019fb2ae-33d-1785412814-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 99172 | 0 | 6229760 | 20535 | 119707 | 2.1134 | 497946 | 0 | 29030656 | 64482 | build(lint): enforce type-aware compatibility policy (#639) -m governance: allow |
 | codex-019fb2ae-33d-1785412888-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 3810 | 0 | 573440 | 697 | 4507 | 0.1633 | 501756 | 0 | 29604096 | 65179 | fix(lint): satisfy type-aware compatibility rules (#639) |
+| codex-019fb2ae-33d-1785413333-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 53497 | 0 | 3828736 | 4973 | 58470 | 1.1655 | 555253 | 0 | 33432832 | 70152 | fix(toolchain): preserve compiler fixture contract (#639) |
