@@ -26,7 +26,7 @@ const SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const MAX_STAGED_PER_RUN = 10;
 
 const looksLikeEmail = (value) =>
-  typeof value === "string" && /^[^@\s]+@[^@\s]+$/.test(value);
+  typeof value === "string" && /^[^@\s]+@[^@\s]+$/u.test(value);
 
 async function rowsOf(ctx) {
   const input = ctx.input || {};
@@ -95,7 +95,7 @@ function rawRfc2822(to, subject, body) {
   return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
 }
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   let staged = 0;
   let skipped = 0;
   for (const message of await rowsOf(ctx)) {
@@ -165,4 +165,4 @@ export default async ({ ctx, log }) => {
     summary: `staged ${staged} outbox item(s), skipped ${skipped}`,
     output: { staged, skipped },
   };
-};
+}

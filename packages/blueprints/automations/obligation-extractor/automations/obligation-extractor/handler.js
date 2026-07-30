@@ -41,7 +41,7 @@ const OBLIGATIONS_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
     entity: "core.content_derivative",
@@ -74,7 +74,7 @@ export default async ({ ctx, log }) => {
       (obligation, n) => {
         if (
           typeof obligation.date !== "string" ||
-          !/^\d{4}-\d{2}-\d{2}/.test(obligation.date)
+          !/^\d{4}-\d{2}-\d{2}/u.test(obligation.date)
         ) {
           return; // dateless or malformed — dropped, never invented
         }
@@ -112,4 +112,4 @@ export default async ({ ctx, log }) => {
         : "no dated obligations found",
     output: { obligations: rows.length },
   };
-};
+}

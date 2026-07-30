@@ -63,6 +63,26 @@
   `packages/client/src/react/screens/AtlasKindsTab.tsx`,
   `packages/client/src/react/screens/AutomationEditorConnectorsPicker.tsx`,
   and `packages/client/src/react/screens/WhatsNewModal.tsx`.
+- Resolved the remaining executable-blueprint correctness findings by naming
+  default handlers, retaining positional call contracts while marking one
+  unused logger, adding Unicode regex semantics and Gmail address capture
+  names, removing an unused Linear kind, and normalizing catch naming in:
+  `packages/blueprints/automations/screenshot-extractor/automations/screenshot-extractor/handler.js`,
+  `packages/blueprints/automations/release-notes-drafter/automations/release-notes-drafter/handler.js`,
+  `packages/blueprints/automations/google-gmail-send/automations/google-gmail-send/handler.js`,
+  `packages/blueprints/automations/google-gmail-pull/automations/google-gmail-pull/handler.js`,
+  `packages/blueprints/automations/renewal-reminders/automations/renewal-reminders/handler.js`,
+  `packages/blueprints/automations/face-proposer/automations/face-proposer/handler.js`,
+  `packages/blueprints/automations/google-calendar-invite-send/automations/google-calendar-invite-send/handler.js`,
+  `packages/blueprints/automations/linear-pull/automations/linear-pull/handler.js`,
+  `packages/blueprints/automations/obligation-extractor/automations/obligation-extractor/handler.js`,
+  `packages/blueprints/automations/photo-captioner/automations/photo-captioner/handler.js`,
+  `packages/blueprints/automations/trip-albums/automations/trip-albums/handler.js`,
+  `packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/handler.js`,
+  `packages/blueprints/automations/doc-entity-linker/automations/doc-entity-linker/handler.js`,
+  `packages/blueprints/automations/notion-pull/automations/notion-pull/handler.js`,
+  and
+  `packages/blueprints/automations/doc-filer/automations/doc-filer/handler.js`.
 
 ### Formatter sweep paths
 
@@ -593,3 +613,4 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785411683-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 16771 | 0 | 651008 | 1498 | 18269 | 0.2271 | 356477 | 0 | 21239552 | 37363 | chore(lint): apply safe connector fixes (#639) |
 | codex-019fb2ae-33d-1785411767-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 5054 | 0 | 223232 | 570 | 5624 | 0.0770 | 361531 | 0 | 21462784 | 37933 | chore(lint): apply safe connector fixes (#639) |
 | codex-019fb2ae-33d-1785411915-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 11061 | 0 | 474112 | 2286 | 13347 | 0.1805 | 372592 | 0 | 21936896 | 40219 | chore(lint): remove stale suppressions (#639) |
+| codex-019fb2ae-33d-1785412101-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 26182 | 0 | 864000 | 3728 | 29910 | 0.3374 | 398774 | 0 | 22800896 | 43947 | fix(blueprints): satisfy executable handler lint (#639) |

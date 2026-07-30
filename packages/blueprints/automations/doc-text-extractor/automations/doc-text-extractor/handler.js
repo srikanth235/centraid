@@ -47,7 +47,7 @@ const SUMMARY_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const derivativeCursor = (await ctx.state.get("derivativeCursor")) ?? "";
   const now = ctx.now;
@@ -233,4 +233,4 @@ export default async ({ ctx, log }) => {
     summary: `OCRed ${ocred}, summarized ${summarized}, skipped ${skipped}`,
     output: { ocred, summarized, skipped },
   };
-};
+}

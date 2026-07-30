@@ -52,7 +52,7 @@ const CAPTION_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const cursor = (await ctx.state.get("cursor")) ?? "";
   // Posters can arrive long after the original video crossed the asset
   // cursor. Follow the derivative's own UUIDv7 cursor as a second durable
@@ -241,4 +241,4 @@ export default async ({ ctx, log }) => {
     summary: `captioned ${captioned} photo(s), skipped ${skipped}${published ? " (auto-published)" : rows.length > 0 ? " (staged for review)" : ""}`,
     output: { captioned, skipped, staged: rows.length },
   };
-};
+}

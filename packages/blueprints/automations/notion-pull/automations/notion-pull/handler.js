@@ -14,7 +14,7 @@ const AUTH = {
 const MAX_PAGES_PER_RUN = 3;
 
 async function api(ctx, path, opts = {}) {
-  const headers = { ...AUTH, ...(opts.headers || {}) };
+  const headers = { ...AUTH, ...opts.headers };
   const res = await ctx.fetch({
     url: path.startsWith("http") ? path : `${API}${path}`,
     headers,
@@ -98,7 +98,7 @@ export default {
           start &&
           error &&
           error.status === 400 &&
-          /cursor|start_cursor/i.test(
+          /cursor|start_cursor/iu.test(
             String(error.responseText || error.message || "")
           );
         if (!invalidCursor || resetTried) throw error;

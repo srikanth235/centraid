@@ -33,7 +33,9 @@ async function api(ctx, path) {
 /** `Name <a@b.c>` → { name, email } — enough for the party resolver. */
 function parseFrom(value) {
   if (!value) return { name: null, email: null };
-  const m = value.match(/^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/);
+  const m = value.match(
+    /^\s*(?:"?(?<name>[^"<]*)"?\s*)?<(?<email>[^>]+)>\s*$/u
+  );
   if (m)
     return {
       name: (m[1] || "").trim() || null,
