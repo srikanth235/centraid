@@ -665,15 +665,28 @@ bun run check:pr:full
   `mobile-e2e-ios` completed in 55m10s: native state, cached install, Metro
   readiness and prewarm, template onboarding, all eight native covers, the
   resilience journey, 20 real stop/relaunch cycles, diagnostic cleanup, and
-  evidence uploads were green. A final exact-tip replay after the
-  clean-checkout closure commit is recorded below.
+  evidence uploads were green. After the clean-checkout closure commit, the
+  owner explicitly selected green pull-request CI as the final proof and
+  waived another 55-minute exact-tip iOS replay; this earlier successful iOS
+  run remains historical evidence rather than a claim about the final tip.
 - [Standard-CI closure diagnostic 30508888499](https://github.com/srikanth235/centraid/actions/runs/30508888499)
   ran at the same commit and intentionally remains recorded as a failed
   diagnostic. It exposed the five clean-checkout defects described above:
   final-denominator coverage drift, the missing desktop Daily Brief fixture,
   omitted `time-engine` runtime packaging, a focused test without its built
   dependency, and host-generated Xcode workspace fingerprint drift.
-- Fresh-context audit — PASS; see the final independent audit below.
+- [Pull request #638](https://github.com/srikanth235/centraid/pull/638)
+  supersedes the closed #636 and carries closure commit
+  `92095b95f48551c49031cb0c64e1d7c0f6b0faee`.
+  [PR CI run 30514951506](https://github.com/srikanth235/centraid/actions/runs/30514951506)
+  proved repository coverage, static, governance, mutation, package/container,
+  mobile-smoke, web, docs, OAuth, companion, and completed browser lanes, but
+  its `verify` job failed the changed-line gate at 41.0% (8,532 / 20,832)
+  against the 80% floor. The owner subsequently directed that this failure not
+  be pursued and that the receipt update be pushed as-is; this receipt therefore
+  makes no claim that the PR build is green.
+- Fresh-context implementation audit — PASS; final proof audit — REFUTED. See
+  the independent audit below.
 
 ## Accounting
 
@@ -877,12 +890,26 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785378476-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 10666 | 0 | 1525760 | 2259 | 12925 | 0.4420 | 10262452 | 0 | 493990400 | 1148892 | docs(receipt): refresh Metro readiness audit (#630) |
 | codex-019fad18-4c1-1785386192-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 787410 | 0 | 48469760 | 49972 | 837382 | 14.8355 | 11049862 | 0 | 542460160 | 1198864 | fix(readiness): close clean-checkout gates (#630) |
 | codex-019fad18-4c1-1785386269-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 5309 | 0 | 373504 | 460 | 5769 | 0.1135 | 11055171 | 0 | 542833664 | 1199324 | fix(readiness): close clean-checkout gates (#630) -m governance: allow-toolchain |
+| codex-019fad18-4c1-1785387947-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 214721 | 0 | 15365888 | 14130 | 228851 | 4.5902 | 11269892 | 0 | 558199552 | 1213454 | docs(receipt): record PR closure status (#630) |
+| codex-019fad18-4c1-1785388194-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 35659 | 0 | 660736 | 2171 | 37830 | 0.2869 | 11305551 | 0 | 558860288 | 1215625 | docs(receipt): record PR closure status (#630) |
+
+### Steering
+
+| steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| steer-019fad18-1785388124-1 | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | correction | classifier | Skip extra mobile proof; use PR CI as remaining signal | docs(receipt): record PR closure status (#630) | 17779 | 2026-07-30T04:48:11.129Z |
+| steer-019fad18-1785388124-2 | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | correction | classifier | Do not pursue PR failure; push the receipt update | docs(receipt): record PR closure status (#630) | 18085 | 2026-07-30T05:04:52.489Z |
 
 ## Steering
 
-- PASS — The supplied session transcript has one initial human task request and
-  no later human interrupt or correction. No steering-ledger rows are
-  warranted.
+- PASS — The transcript has two true mid-task corrections, both recorded in
+  `## Accounting` → `### Steering`: ordinal 17779 redirects the remaining
+  proof from another mobile run to PR CI, and ordinal 18085 redirects the agent
+  from pursuing that failed PR signal to publishing the receipt. Their rows use
+  the transcript timestamps, `correction` type, and `classifier` tier.
+- PASS — There is no interrupt sentinel. The initial issue request, status
+  question, receipt question, ordinary “go ahead”/completion messages, and any
+  tool denials are not recorded as steering events.
 
 ## Audit
 
@@ -913,11 +940,12 @@ projection is a separate explicit unshare operation. -->
   files / 6,370 pass / 8 skipped / 84.9% diff coverage and 811 files / 6,790
   pass / 63.05% global / 80.01% gateway coverage. The timeout changes extend
   test or hook ceilings only, not behavioral deadlines or product waits.
-- REFUTED — Final CI evidence is not yet exact-tip for the clean-checkout
-  closure. The newest mobile proof, 30508891401, passed at
-  `96f648153f72894bbd8a386623c52f19d07a6063` before the present uncommitted
-  closure repairs; 30508888499 at that same commit is the diagnostic that
-  exposed those repairs. No later run is recorded, despite the Verification
-  text saying a final exact-tip replay is recorded below. Commit the closure,
-  run the relevant clean-checkout CI/mobile proof at that commit, and replace
-  this finding with the resulting linked evidence.
+- REFUTED — Final closure proof is not green. The closure repairs are committed
+  at `92095b95f48551c49031cb0c64e1d7c0f6b0faee`, and PR run 30514951506
+  successfully executes the repository coverage suite plus the clean-checkout
+  package, fingerprint, companion, desktop-fixture, and other completed lanes.
+  Its `verify` job nevertheless reports 41.0% changed-line coverage
+  (8,532 / 20,832) against the 80% floor. The owner explicitly waived another
+  exact-tip iOS run and then directed the agent not to pursue this PR failure.
+  The implementation findings above remain PASS, but this evidence does not
+  support a green final-proof verdict.
