@@ -12,6 +12,10 @@ import {
 } from "react-native";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import {
@@ -88,30 +92,22 @@ export default function DocsItemActions({
         input: input as ReplicaValue,
         optimistic,
       });
-      if (result.status === "parked") {
-        onClose();
-        onParked();
+      if (
+        !surfaceWriteOutcome(result, {
+          onParked: () => {
+            onClose();
+            onParked();
+          },
+          queuedMessage:
+            "This change will sync automatically after reconnecting.",
+          failureTitle: "Not applied",
+        })
+      )
         return;
-      }
-      if (result.status === "queued") {
-        Alert.alert(
-          "Saved offline",
-          "This change will sync automatically after reconnecting."
-        );
-      } else if (result.status === "denied" || result.status === "failed") {
-        Alert.alert(
-          "Not applied",
-          result.reason ?? "The vault rejected this change."
-        );
-        return;
-      }
       onClose();
       await onChanged();
     } catch (error) {
-      Alert.alert(
-        "Action failed",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      surfaceWriteFailure(error, "Action failed");
     }
   };
 

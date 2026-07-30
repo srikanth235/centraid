@@ -10,6 +10,10 @@ import { WebView } from "react-native-webview";
 
 import OptionSheet from "../../kit/components/OptionSheet";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
@@ -139,24 +143,15 @@ export default function DocumentViewer({
       // A parked write (e.g. moving to trash is medium-risk) must surface for
       // Approve/Discard rather than silently vanish (M5); denials/failures are
       // shown, not swallowed.
-      if (result.status === "parked") {
-        navigation.navigate("Settings", { screen: "Approvals" });
-      } else if (result.status === "queued") {
-        Alert.alert(
-          "Saved offline",
-          "This change will sync automatically when the gateway reconnects."
-        );
-      } else if (result.status === "denied" || result.status === "failed") {
-        Alert.alert(
-          "Not applied",
-          result.reason ?? "The vault rejected this change."
-        );
-      }
+      surfaceWriteOutcome(result, {
+        onParked: () =>
+          navigation.navigate("Settings", { screen: "Approvals" }),
+        queuedMessage:
+          "This change will sync automatically when the gateway reconnects.",
+        failureTitle: "Not applied",
+      });
     } catch (error) {
-      Alert.alert(
-        "Action failed",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      surfaceWriteFailure(error, "Action failed");
     }
   };
   const place = async (targetVaultId: string): Promise<void> => {

@@ -6,7 +6,6 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -28,8 +27,12 @@ import {
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  nativeWriteOutput,
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, radii, useTheme } from "../../kit/theme";
-import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { TallyScreenProps } from "../../navigation";
 
 const asString = (value: unknown): string =>
@@ -39,12 +42,6 @@ const money = (minor: number, currency: string): string =>
   formatCurrencyMinor(minor, currency);
 const convert = (original: number, scaled: number): number =>
   Number((BigInt(original) * BigInt(scaled) + 500_000n) / 1_000_000n);
-const outputOf = (
-  result: NativeWriteResult | undefined
-): Record<string, ReplicaValue> | undefined =>
-  result && "output" in result && result.output
-    ? (result.output as Record<string, ReplicaValue>)
-    : undefined;
 
 export default function TallyHome({
   navigation,
@@ -136,15 +133,21 @@ export default function TallyHome({
 
   const write = async (action: string, input: Record<string, ReplicaValue>) => {
     if (!session) return undefined;
-    const result = await session.write("tally", { action, input });
-    if (result.status === "queued")
-      Alert.alert(
-        "Saved offline",
-        "This Tally change will sync automatically."
-      );
-    if (result.status === "parked")
-      navigation.navigate("Settings", { screen: "Approvals" });
-    return result;
+    try {
+      const result = await session.write("tally", { action, input });
+      if (
+        !surfaceWriteOutcome(result, {
+          onParked: () =>
+            navigation.navigate("Settings", { screen: "Approvals" }),
+          queuedMessage: "This Tally change will sync automatically.",
+        })
+      )
+        return undefined;
+      return result;
+    } catch (error) {
+      surfaceWriteFailure(error, "Tally change failed");
+      return undefined;
+    }
   };
   const createGroup = async (): Promise<void> => {
     if (!groupDraft.trim()) return;
@@ -154,7 +157,7 @@ export default function TallyHome({
       member_ids: [],
     });
     setGroupDraft("");
-    const id = asString(outputOf(result)?.group_id);
+    const id = asString(nativeWriteOutput(result)?.group_id);
     if (id) setGroupId(id);
   };
   const saveExpense = async (): Promise<void> => {
@@ -212,7 +215,7 @@ export default function TallyHome({
         time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         ...currencyFields,
       });
-      const templateId = asString(outputOf(result)?.template_id);
+      const templateId = asString(nativeWriteOutput(result)?.template_id);
       if (templateId)
         await write("materialize-recurring-expense", {
           template_id: templateId,

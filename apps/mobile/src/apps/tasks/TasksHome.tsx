@@ -4,7 +4,6 @@ import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   FlatList,
   Modal,
   PanResponder,
@@ -25,21 +24,17 @@ import {
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  nativeWriteOutput,
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, radii, useTheme } from "../../kit/theme";
-import type {
-  NativeOptimisticMutation,
-  NativeWriteResult,
-} from "../../lib/replica/native-session";
+import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
 import type { TasksScreenProps } from "../../navigation";
 
 type TaskView = "inbox" | "today" | "upcoming" | `project:${string}`;
 const day = (): string => new Date().toISOString().slice(0, 10);
-const outputOf = (
-  result: NativeWriteResult | undefined
-): Record<string, ReplicaValue> | undefined =>
-  result && "output" in result && result.output
-    ? (result.output as Record<string, ReplicaValue>)
-    : undefined;
 
 function DragTaskRow({
   row,
@@ -173,16 +168,25 @@ export default function TasksHome({
     optimistic?: NativeOptimisticMutation[]
   ) => {
     if (!session) return undefined;
-    const result = await session.write("tasks", {
-      action,
-      input,
-      ...(optimistic ? { optimistic } : {}),
-    });
-    if (result.status === "queued")
-      Alert.alert("Saved offline", "This change will sync automatically.");
-    if (result.status === "parked")
-      navigation.navigate("Settings", { screen: "Approvals" });
-    return result;
+    try {
+      const result = await session.write("tasks", {
+        action,
+        input,
+        ...(optimistic ? { optimistic } : {}),
+      });
+      if (
+        !surfaceWriteOutcome(result, {
+          onParked: () =>
+            navigation.navigate("Settings", { screen: "Approvals" }),
+          queuedMessage: "This Tasks change will sync automatically.",
+        })
+      )
+        return undefined;
+      return result;
+    } catch (error) {
+      surfaceWriteFailure(error, "Tasks change failed");
+      return undefined;
+    }
   };
 
   const addTask = async (): Promise<void> => {
@@ -217,12 +221,8 @@ export default function TasksHome({
         },
       ]
     );
-    const taskId = String(outputOf(result)?.task_id ?? "");
-    if (
-      taskId &&
-      (activeProjectId || completionAnchor) &&
-      (result?.status === "executed" || result?.status === "queued")
-    )
+    const taskId = String(nativeWriteOutput(result)?.task_id ?? "");
+    if (taskId && (activeProjectId || completionAnchor) && result)
       await write("organize-task", {
         task_id: taskId,
         ...(activeProjectId

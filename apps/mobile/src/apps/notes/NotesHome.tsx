@@ -22,8 +22,11 @@ import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
-import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { NotesScreenProps } from "../../navigation";
 import { searchBlueprints } from "../../screens/home/blueprint-search";
 import type { BlueprintSearchHit } from "../../screens/home/blueprint-search";
@@ -36,16 +39,6 @@ interface WikiToken {
   label: string;
   start: number;
   end: number;
-}
-
-function outcomeMessage(result: NativeWriteResult): string | undefined {
-  if (result.status === "queued" || result.status === "in-flight") {
-    return "Saved offline. This change will sync automatically.";
-  }
-  if (result.status === "denied" || result.status === "failed") {
-    return result.reason ?? "The vault rejected this change.";
-  }
-  return undefined;
 }
 
 function anchorExact(reference: NativeNote["references"][number]): string {
@@ -220,30 +213,16 @@ export default function NotesHome({
         note?.sourceVaultId && session.writeTo
           ? await session.writeTo(note.sourceVaultId, "notes", request)
           : await session.write("notes", request);
-      if (result.status === "parked") {
-        closeEditor();
-        navigation.navigate("Settings", { screen: "Approvals" });
-        return false;
-      }
-      const message = outcomeMessage(result);
-      if (message) {
-        Alert.alert(
-          result.status === "queued" || result.status === "in-flight"
-            ? "Saved"
-            : "Not applied",
-          message
-        );
-      }
-      return (
-        result.status === "executed" ||
-        result.status === "queued" ||
-        result.status === "in-flight"
-      );
+      return surfaceWriteOutcome(result, {
+        onParked: () => {
+          closeEditor();
+          navigation.navigate("Settings", { screen: "Approvals" });
+        },
+        queuedMessage: "This Notes change will sync automatically.",
+        failureTitle: "Not applied",
+      });
     } catch (error) {
-      Alert.alert(
-        "Action failed",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      surfaceWriteFailure(error, "Action failed");
       return false;
     }
   };

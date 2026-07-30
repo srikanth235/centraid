@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { surfaceWriteFailure, surfaceWriteOutcome } from "./write-outcome";
+import {
+  nativeWriteOutput,
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "./write-outcome";
 
 const { alert } = vi.hoisted(() => ({
   alert: vi.fn<typeof import("react-native").Alert.alert>(),
@@ -52,8 +56,50 @@ describe("native write outcome surface", () => {
     );
   });
 
+  it("lets callers own parked/queued UX without double alerts", () => {
+    const onParked = vi.fn<() => void>();
+    const onQueued = vi.fn<() => void>();
+    const onInFlight = vi.fn<() => void>();
+    expect(
+      surfaceWriteOutcome(
+        { intentId: "p", status: "parked" },
+        { onParked, onQueued, onInFlight }
+      )
+    ).toBe(false);
+    expect(
+      surfaceWriteOutcome(
+        { intentId: "q", status: "queued" },
+        { onParked, onQueued, onInFlight }
+      )
+    ).toBe(true);
+    expect(
+      surfaceWriteOutcome(
+        { intentId: "f", status: "in-flight" },
+        { onParked, onQueued, onInFlight }
+      )
+    ).toBe(true);
+    expect(onParked).toHaveBeenCalledOnce();
+    expect(onQueued).toHaveBeenCalledOnce();
+    expect(onInFlight).toHaveBeenCalledOnce();
+    expect(alert).not.toHaveBeenCalled();
+  });
+
   it("surfaces rejected write promises", () => {
     surfaceWriteFailure(new Error("transport down"), "Album not renamed");
     expect(alert).toHaveBeenCalledWith("Album not renamed", "transport down");
+  });
+
+  it("reads command output from successful write results", () => {
+    expect(
+      nativeWriteOutput({
+        intentId: "i",
+        status: "executed",
+        output: { party_id: "p1" },
+      })
+    ).toStrictEqual({ party_id: "p1" });
+    expect(
+      nativeWriteOutput({ intentId: "q", status: "queued" })
+    ).toBeUndefined();
+    expect(nativeWriteOutput(undefined)).toBeUndefined();
   });
 });

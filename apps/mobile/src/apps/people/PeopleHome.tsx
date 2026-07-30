@@ -26,8 +26,12 @@ import {
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  nativeWriteOutput,
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, radii, useTheme } from "../../kit/theme";
-import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PeopleScreenProps } from "../../navigation";
 
 type ChannelKind = "phone" | "email" | "address" | "handle";
@@ -38,12 +42,6 @@ type PersonRow = ReplicaRow & {
 };
 const text = (row: ReplicaRow | undefined, key: string): string =>
   row?.[key] == null ? "" : String(row[key]);
-const outputOf = (
-  result: NativeWriteResult | undefined
-): Record<string, ReplicaValue> | undefined =>
-  result && "output" in result && result.output
-    ? (result.output as Record<string, ReplicaValue>)
-    : undefined;
 
 export default function PeopleHome({
   navigation,
@@ -141,15 +139,21 @@ export default function PeopleHome({
 
   const write = async (action: string, input: Record<string, ReplicaValue>) => {
     if (!session) return undefined;
-    const result = await session.write("people", { action, input });
-    if (result.status === "queued")
-      Alert.alert(
-        "Saved offline",
-        "This People change will sync automatically."
-      );
-    if (result.status === "parked")
-      navigation.navigate("Settings", { screen: "Approvals" });
-    return result;
+    try {
+      const result = await session.write("people", { action, input });
+      if (
+        !surfaceWriteOutcome(result, {
+          onParked: () =>
+            navigation.navigate("Settings", { screen: "Approvals" }),
+          queuedMessage: "This People change will sync automatically.",
+        })
+      )
+        return undefined;
+      return result;
+    } catch (error) {
+      surfaceWriteFailure(error, "People change failed");
+      return undefined;
+    }
   };
   const addPerson = async (): Promise<void> => {
     if (!name.trim()) return;
@@ -160,7 +164,7 @@ export default function PeopleHome({
     });
     setName("");
     setRole("");
-    const id = String(outputOf(result)?.party_id ?? "");
+    const id = String(nativeWriteOutput(result)?.party_id ?? "");
     if (id) setSelectedId(id);
   };
   const resetChannel = (): void => {
@@ -181,7 +185,8 @@ export default function PeopleHome({
       preferred,
       provenance: { source: "manual", entered_via: "mobile-people" },
     });
-    const output = outputOf(result);
+    if (!result) return;
+    const output = nativeWriteOutput(result);
     const duplicates = Array.isArray(output?.duplicate_party_ids)
       ? output.duplicate_party_ids.length
       : 0;
@@ -216,7 +221,9 @@ export default function PeopleHome({
           void write("delete-contact-channel", {
             channel_id: String(channel.channel_id),
           }).then((result) => {
-            const revisionId = String(outputOf(result)?.revision_id ?? "");
+            const revisionId = String(
+              nativeWriteOutput(result)?.revision_id ?? ""
+            );
             if (!revisionId) return;
             Alert.alert("Contact deleted", "You can restore it now.", [
               { text: "Done" },
@@ -247,7 +254,8 @@ export default function PeopleHome({
             void write("merge-people", {
               source_party_id: selected.party_id,
               target_party_id: String(target.party_id),
-            }).then(() => {
+            }).then((result) => {
+              if (!result) return;
               setSelectedId(String(target.party_id));
               setMergeOpen(false);
               Alert.alert(

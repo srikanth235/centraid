@@ -16,6 +16,10 @@ import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
 import AgendaCreateModal from "./AgendaCreateModal";
@@ -127,26 +131,15 @@ export default function AgendaHome({
           },
         ],
       });
-      if (result.status === "parked")
-        navigation.navigate("Settings", { screen: "Approvals" });
-      else if (result.status === "queued")
-        Alert.alert(
-          "Saved offline",
-          "This event will sync automatically when the gateway reconnects."
-        );
-      else if (result.status === "denied" || result.status === "failed") {
-        Alert.alert(
-          "Event not created",
-          result.reason ?? "The vault rejected this event."
-        );
-        return false;
-      }
-      return true;
+      return surfaceWriteOutcome(result, {
+        onParked: () =>
+          navigation.navigate("Settings", { screen: "Approvals" }),
+        queuedMessage:
+          "This event will sync automatically when the gateway reconnects.",
+        failureTitle: "Event not created",
+      });
     } catch (error) {
-      Alert.alert(
-        "Event not created",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      surfaceWriteFailure(error, "Event not created");
       return false;
     }
   };

@@ -1019,3 +1019,12 @@ compromised the #290 entity-resolution ontology.
 - Dropped `undo-merge` action, UI undo toasts, and atlas `people.merge` label.
 - `people_merge` table remains as a legacy residual band for migration
   stability; nothing writes it.
+
+### Offline-write wrappers → surfaceWriteOutcome
+
+Folded per-app offline write handlers (People, Notes, Tasks, Tally, Agenda,
+Docs) onto `apps/mobile/src/kit/replica/write-outcome.ts`. Every admission
+status now has one surface: parked navigates to Approvals (or sets an
+in-line banner when the screen owns that UX), queued/in-flight alert or
+banner, failed/denied alert with reason, transport errors via
+`surfaceWriteFailure`. Shared `nativeWriteOutput` extracts command output.

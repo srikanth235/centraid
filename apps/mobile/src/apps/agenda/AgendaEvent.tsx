@@ -12,6 +12,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import type { NativeWriteInput } from "../../lib/replica/native-session";
@@ -75,26 +79,16 @@ export default function AgendaEvent({
   );
 
   const applyOutcome = (
-    result: { status: string; reason?: string },
+    result: Parameters<typeof surfaceWriteOutcome>[0],
     verb: string
-  ): void => {
-    if (result.status === "parked") {
-      setPending(`${verb} awaiting approval`);
-    } else if (result.status === "queued") {
-      setPending(`${verb} saved offline · will sync when connected`);
-    } else if (result.status === "denied" || result.status === "failed") {
-      Alert.alert(
-        `${verb} not applied`,
-        result.reason ?? "The vault rejected this change."
-      );
-    }
-  };
-  const reportFailure = (verb: string, error: unknown): void => {
-    Alert.alert(
-      `${verb} failed`,
-      error instanceof Error ? error.message : "Please try again."
-    );
-  };
+  ): boolean =>
+    surfaceWriteOutcome(result, {
+      failureTitle: `${verb} not applied`,
+      onParked: () => setPending(`${verb} awaiting approval`),
+      onQueued: () =>
+        setPending(`${verb} saved offline · will sync when connected`),
+      onInFlight: () => setPending(`${verb} saving on the gateway`),
+    });
 
   const writeEdit = async (request: {
     action: string;
@@ -108,14 +102,9 @@ export default function AgendaEvent({
         input: request.input,
         optimistic: request.optimistic,
       });
-      applyOutcome(result, "Event edit");
-      return (
-        result.status === "executed" ||
-        result.status === "queued" ||
-        result.status === "in-flight"
-      );
+      return applyOutcome(result, "Event edit");
     } catch (error) {
-      reportFailure("Event edit", error);
+      surfaceWriteFailure(error, "Event edit failed");
       return false;
     }
   };
@@ -139,7 +128,7 @@ export default function AgendaEvent({
       });
       applyOutcome(result, "Cancellation");
     } catch (error) {
-      reportFailure("Cancellation", error);
+      surfaceWriteFailure(error, "Cancellation failed");
     }
   };
   const rsvp = async (partstat: string): Promise<void> => {
@@ -161,7 +150,7 @@ export default function AgendaEvent({
       });
       applyOutcome(result, "RSVP");
     } catch (error) {
-      reportFailure("RSVP", error);
+      surfaceWriteFailure(error, "RSVP failed");
     }
   };
   const remind = async (): Promise<void> => {

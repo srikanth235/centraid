@@ -20,6 +20,10 @@ import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
 import { optimisticRowId } from "../../lib/replica/optimistic";
 import { backupDocument } from "../../lib/upload/media-producer";
@@ -259,29 +263,23 @@ export default function DocsHome({
       });
       setFolderName("");
       setAddOpen(false);
-      if (result.status === "parked") {
-        navigation.navigate("Settings", { screen: "Approvals" });
-      } else if (result.status === "queued") {
-        Alert.alert(
-          "Saved offline",
-          "The folder will appear everywhere after the gateway reconnects."
-        );
-      } else if (result.status === "denied" || result.status === "failed") {
-        Alert.alert(
-          "Folder not created",
-          result.reason ?? "The vault rejected this change."
-        );
-      } else {
+      if (
+        surfaceWriteOutcome(result, {
+          onParked: () =>
+            navigation.navigate("Settings", { screen: "Approvals" }),
+          queuedMessage:
+            "The folder will appear everywhere after the gateway reconnects.",
+          failureTitle: "Folder not created",
+        }) &&
+        result.status === "executed"
+      ) {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
       }
     } catch (error) {
       setAddOpen(false);
-      Alert.alert(
-        "Folder not created",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      surfaceWriteFailure(error, "Folder not created");
     }
   };
   const selectFilter = (next: LibraryFilter): void => {

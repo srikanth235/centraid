@@ -4,8 +4,13 @@ import type { NativeWriteResult } from "../../lib/replica/native-session";
 
 export interface SurfaceWriteOutcomeOptions {
   failureTitle?: string;
+  /** Replaces the default parked Alert (e.g. navigate to Approvals). */
   onParked?: () => void;
   queuedMessage?: string;
+  /** Replaces the default queued Alert (e.g. an in-line pending banner). */
+  onQueued?: () => void;
+  /** Replaces the default in-flight Alert. */
+  onInFlight?: () => void;
 }
 
 /**
@@ -14,7 +19,7 @@ export interface SurfaceWriteOutcomeOptions {
  * mutation; every other state needs an explicit affordance.
  *
  * Returns whether the caller may continue an optimistic success flow (for
- * example, close a modal or navigate away).
+ * example, close a modal, extract `output`, or navigate away).
  */
 export function surfaceWriteOutcome(
   result: NativeWriteResult,
@@ -31,18 +36,22 @@ export function surfaceWriteOutcome(
     return false;
   }
   if (result.status === "queued") {
-    Alert.alert(
-      "Saved offline",
-      options.queuedMessage ??
-        "This change will sync automatically when the gateway reconnects."
-    );
+    if (options.onQueued) options.onQueued();
+    else
+      Alert.alert(
+        "Saved offline",
+        options.queuedMessage ??
+          "This change will sync automatically when the gateway reconnects."
+      );
     return true;
   }
   if (result.status === "in-flight") {
-    Alert.alert(
-      "Saving",
-      "This change is queued on the gateway. Its final status remains visible in sync status."
-    );
+    if (options.onInFlight) options.onInFlight();
+    else
+      Alert.alert(
+        "Saving",
+        "This change is queued on the gateway. Its final status remains visible in sync status."
+      );
     return true;
   }
   Alert.alert(
@@ -60,4 +69,12 @@ export function surfaceWriteFailure(
     failureTitle,
     error instanceof Error ? error.message : "Please try again."
   );
+}
+
+/** Extract the executed/queued command output bag when present. */
+export function nativeWriteOutput(
+  result: NativeWriteResult | undefined
+): Record<string, unknown> | undefined {
+  if (!result || !("output" in result) || !result.output) return undefined;
+  return result.output as Record<string, unknown>;
 }
