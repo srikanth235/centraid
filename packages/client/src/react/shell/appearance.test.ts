@@ -1,5 +1,6 @@
-import { darkTheme } from "@centraid/design-tokens";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { darkTheme } from "@centraid/design-tokens";
 
 import { ACCENT_PALETTE } from "../../app-shell-context.js";
 import {
