@@ -435,6 +435,12 @@ jobs:
   gateway-package:
     needs: changes
     if: needs.changes.outputs.gateway == 'true' || needs.changes.outputs.all == 'true'
+    # #637 — lane-gateway-package requests packages: write for GHCR buildcache.
+    # Caller must grant it; otherwise the whole ci workflow fails at startup
+    # with packages: none (same pattern as release.yml → lane-release-gateway-image).
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/lane-gateway-package.yml
 
   # Required-check-capable mobile liveness gate (#587 E22–E23/F26–F29).

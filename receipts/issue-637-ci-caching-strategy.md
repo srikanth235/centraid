@@ -34,6 +34,7 @@ Mirrors issue #637 acceptance criteria (implementation phases). Post-merge measu
 
 - `Dockerfile` — `# syntax=docker/dockerfile:1.7-labs`; COPY root manifests + `COPY --parents packages/*/package.json apps/*/package.json` before `bun install`, then COPY sources; base images digest-pinned (Phase 2 — Root Dockerfile COPYs workspace manifests before bun install).
 - `.github/workflows/lane-gateway-package.yml` — buildx + `docker/build-push-action` with `push: false`/`load: true`, `cache-from` registry `…/centraid-gateway:buildcache`, `cache-to` only on main; `packages: write` permission (Phase 2 — gateway-package uses buildx registry-backed layer cache).
+- `.github/workflows/ci.yml` `gateway-package` job — grants `packages: write` to the reusable lane (required; without it GitHub rejects the call with `packages: none` and the entire `ci` workflow hits `startup_failure`).
 
 ### Phase 3 — Gradle dependency cache for mobile-smoke
 
@@ -48,6 +49,7 @@ Mirrors issue #637 acceptance criteria (implementation phases). Post-merge measu
 - Save cargo only on main (Gradle-style write-on-default-branch), not “save on exact miss from any ref”, so PR branches never grow the 10 GB pool.
 - Exclude `mobile-e2e-ios` from turbo-cache even after OS-aware hashing — zero-risk option from the issue open questions.
 - Registry `type=registry,mode=max` for Docker layer cache instead of GHA-backed cache, so multi-GB layers stay off the Actions pool.
+- Caller-side `permissions.packages: write` on `ci.yml` `gateway-package` (mirrors `release.yml` → `lane-release-gateway-image`); elevating only the reusable workflow is not enough when the parent workflow top-level is `contents: read`.
 - Do not enable `org.gradle.caching` task-output cache; deps/wrapper only so mobile-smoke still executes compile tasks.
 - Per-stage production lock in the Docker deps stage left as a residual (called out in Dockerfile); not required for layer-cache correctness after manifests-first COPY.
 - Land on the existing #630 PR branch rather than a separate PR so the caching fixes ride the same CI surface under active load.
@@ -92,7 +94,7 @@ gh api repos/srikanth235/centraid/actions/cache/usage
 
 ## Audit
 
-- **PASS** — (1) `## What changed` faithfully describes the #637 surface on disk: cargo restore-always / save-only-on-main in `.github/actions/setup/action.yml` (three presets); new `.github/workflows/cache-cleanup.yml` deleting `refs/heads/<head_ref>` and `refs/pull/<n>/merge` on `pull_request: closed`; `turbo.json` `globalEnv: ["RUNNER_OS"]`; `turbo-cache: "true"` on build-bearing `e2e.yml` jobs with `mobile-e2e-ios` deliberately uncached; `turbo-cache` on `ci.yml` `mutation-pr` and `lane-gateway-package.yml`; root `Dockerfile` manifests-first `COPY` + `1.7-labs` + digest-pinned bases; gateway-package buildx with registry `cache-from` / main-only `cache-to` and `packages: write`; `mobile-smoke` `gradle/actions/setup-gradle@3f131e8634…` with `cache-read-only` off main. No material misdescription of those paths.
+- **PASS** — (1) `## What changed` faithfully describes the #637 surface on disk: cargo restore-always / save-only-on-main in `.github/actions/setup/action.yml` (three presets); new `.github/workflows/cache-cleanup.yml` deleting `refs/heads/<head_ref>` and `refs/pull/<n>/merge` on `pull_request: closed`; `turbo.json` `globalEnv: ["RUNNER_OS"]`; `turbo-cache: "true"` on build-bearing `e2e.yml` jobs with `mobile-e2e-ios` deliberately uncached; `turbo-cache` on `ci.yml` `mutation-pr` and `lane-gateway-package.yml`; root `Dockerfile` manifests-first `COPY` + `1.7-labs` + digest-pinned bases; gateway-package buildx with registry `cache-from` / main-only `cache-to` and `packages: write` (caller `ci.yml` job also grants `packages: write`); `mobile-smoke` `gradle/actions/setup-gradle@3f131e8634…` with `cache-read-only` off main. No material misdescription of those paths.
 - **PASS** — (2) Every `[x]` checklist item is realized in the tree: Phase 0 cargo main-only save + cache-cleanup workflow; Phase 1 turbo wiring + OS hash + iOS exclusion; Phase 2 Dockerfile + registry buildcache; Phase 3 Gradle SHA pin with write-on-main. The three unchecked items (≤8 GB steady-state, ios-app/AVD week survival, one-time cargo purge) remain intentionally open as post-merge / operator work and are not claimed done.
 - **PASS** — (3) `## Checklist` mirrors issue #637 acceptance criteria: Phase 0–3 implementation bullets map 1:1 to the issue’s cargo save policy, closed-PR deletion, turbo warm wiring (e2e + gateway-package/mutation-pr), macOS native hazard (hash + exclude), Dockerfile manifests-first + buildx registry cache, and setup-gradle pin/write policy; open post-merge items (usage ≤ 8 GB, ios-app/AVD survival, manual cargo purge) stay unchecked, matching criteria that need warm traffic or operator action.
 
