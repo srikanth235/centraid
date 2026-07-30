@@ -29,6 +29,10 @@
 - Made `scripts/lint-staged.sh`, `scripts/lint-types.sh`, `.governance/packs/srikanth235/centraid/directives/format-check/check.sh`, and `.governance/packs/srikanth235/centraid/directives/lint-check/check.sh` name the root configuration explicitly; `.github/workflows/ci.yml` now invokes the same `package.json` lint script as local gates.
 - Updated `packages/blueprints/README.md` to point at the root-owned lint profile.
 - Added this durable record at `receipts/issue-639-agent-optimized-typescript-toolchain.md`.
+- Removed the stale `react/no-array-index-key` suppression from
+  `packages/client/src/react/screens/SettingsConnectionsScreen.tsx` in a
+  dedicated safe-lint commit before the formatting sweep, because the new
+  check-only staged hook correctly rejects unused directives.
 
 ## Out of scope
 
@@ -41,6 +45,8 @@
 - Chose the compatibility state: TypeScript 5.9.3 remains authoritative and type-aware linting is restricted to a proven allowlist.
 - Blueprint connector pagination keeps a narrow `no-await-in-loop` exception because each page token depends on the prior response.
 - The visual-harness mock retains a fixture-specific legacy-JavaScript profile; it is linted for runtime correctness without a risky style rewrite of fixture data.
+- Removed one already-stale lint suppression before the formatter sweep so the
+  change could remain isolated while satisfying the newly strict staged gate.
 
 ## Verification
 
@@ -78,3 +84,4 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785410282-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 3318 | 0 | 849920 | 488 | 3806 | 0.2281 | 263863 | 0 | 11773184 | 24016 | build(toolchain): establish agent command contract (#639) -m governance: allow-t |
 | codex-019fb2ae-33d-1785410329-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 4054 | 0 | 643328 | 487 | 4541 | 0.1783 | 267917 | 0 | 12416512 | 24503 | build(toolchain): establish agent command contract (#639) -m governance: allow-t |
 | codex-019fb2ae-33d-1785410642-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 15914 | 0 | 3290368 | 3162 | 19076 | 0.9098 | 283831 | 0 | 15706880 | 27665 | build(toolchain): establish agent command contract (#639) -m governance: allow-t |
+| codex-019fb2ae-33d-1785411162-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 37575 | 0 | 4226304 | 6155 | 43730 | 1.2428 | 321406 | 0 | 19933184 | 33820 | chore(lint): remove stale suppression (#639) |

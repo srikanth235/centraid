@@ -547,7 +547,6 @@ function SetupGuide({ steps }: { steps: string[] }): JSX.Element {
       {open ? (
         <ol className={styles.setupList}>
           {steps.map((s, i) => (
-            // eslint-disable-next-line react/no-array-index-key -- (#330) static step list
             <li key={i}>{s}</li>
           ))}
         </ol>
