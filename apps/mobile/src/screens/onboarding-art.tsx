@@ -1,18 +1,10 @@
-// Decorative artwork for the first-run onboarding flow (screens/Onboarding).
-// Split out so the flow file stays under the repo file-size limit; these are
-// pure, stateless SVG marks with no onboarding logic in them.
+// Small marks for the first-run onboarding flow (screens/Onboarding). Split out
+// so the flow file stays under the repo file-size limit; these are pure,
+// stateless SVG glyphs with no onboarding logic in them. The flow's hero lives
+// in onboarding-home-art.tsx, which needs animation and its own file.
 
 import React from "react";
-import Svg, {
-  Circle,
-  Defs,
-  Ellipse,
-  G,
-  Path,
-  RadialGradient,
-  Rect,
-  Stop,
-} from "react-native-svg";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 
 import { BRAND_TEAL } from "../lib/profile";
 
@@ -22,68 +14,6 @@ export function BrandMark({ size = 22 }: { size?: number }): React.JSX.Element {
       <Rect x={0} y={0} width={24} height={24} rx={7} fill={BRAND_TEAL} />
       <Circle cx={12} cy={12} r={7} stroke="#fff" strokeWidth={2} />
       <Circle cx={12} cy={12} r={2.2} fill="#fff" />
-    </Svg>
-  );
-}
-
-/** Simplified "Centraid orbit" hero — a glowing core with orbiting app tiles. */
-export function OrbitArt(): React.JSX.Element {
-  return (
-    <Svg width={280} height={200} viewBox="0 0 200 150" fill="none">
-      <Defs>
-        <RadialGradient id="core" cx="38%" cy="28%" r="80%">
-          <Stop offset="0%" stopColor="#63E2C6" />
-          <Stop offset="55%" stopColor="#22A78F" />
-          <Stop offset="100%" stopColor="#0E7B6C" />
-        </RadialGradient>
-        <RadialGradient id="glow" cx="50%" cy="50%" r="50%">
-          <Stop offset="0%" stopColor="#33B8A1" stopOpacity={0.45} />
-          <Stop offset="100%" stopColor="#33B8A1" stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Ellipse cx={100} cy={76} rx={74} ry={62} fill="url(#glow)" />
-      <G transform="rotate(-16 100 76)">
-        <Ellipse
-          cx={100}
-          cy={76}
-          rx={46}
-          ry={30}
-          fill="none"
-          stroke="rgba(51,184,161,.45)"
-          strokeWidth={1.3}
-        />
-        <Ellipse
-          cx={100}
-          cy={76}
-          rx={72}
-          ry={47}
-          fill="none"
-          stroke="rgba(51,184,161,.26)"
-          strokeWidth={1.3}
-        />
-      </G>
-      <G transform="rotate(-10 46 52)">
-        <Rect x={39.5} y={45.5} width={13} height={13} rx={4} fill="#4E68DD" />
-      </G>
-      <G transform="rotate(9 150 46)">
-        <Rect x={143.5} y={39.5} width={13} height={13} rx={4} fill="#E55772" />
-      </G>
-      <G transform="rotate(-8 160 96)">
-        <Rect x={153.5} y={89.5} width={13} height={13} rx={4} fill="#E89A3C" />
-      </G>
-      <G transform="rotate(10 52 104)">
-        <Rect x={45.5} y={97.5} width={13} height={13} rx={4} fill="#5C8A4E" />
-      </G>
-      <Circle cx={100} cy={76} r={21} fill="url(#core)" />
-      <Circle
-        cx={100}
-        cy={76}
-        r={7.6}
-        stroke="#fff"
-        strokeWidth={1.8}
-        fill="none"
-      />
-      <Circle cx={100} cy={76} r={2.4} fill="#fff" />
     </Svg>
   );
 }
@@ -99,6 +29,87 @@ export function DoneCheck(): React.JSX.Element {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </Svg>
+  );
+}
+
+/**
+ * Viewfinder mark for the pairing step's primary action: QR finder modules
+ * inside four camera brackets. It has to read as "point your camera at
+ * something" rather than "submit a form", because scanning is the way in and
+ * pasting a ticket is only the fallback — a plain label on a plain pill leaves
+ * that ambiguous.
+ */
+export function ScanTargetMark({
+  size = 58,
+}: {
+  size?: number;
+}): React.JSX.Element {
+  const brackets = [
+    "M2 15V6a4 4 0 0 1 4-4h9",
+    "M41 2h9a4 4 0 0 1 4 4v9",
+    "M54 41v9a4 4 0 0 1-4 4h-9",
+    "M15 54H6a4 4 0 0 1-4-4v-9",
+  ];
+  // Three finder squares plus a scatter of data modules: enough of a QR to be
+  // recognised at 58pt, far short of enough to be mistaken for a real code.
+  const finders = [
+    [16, 16],
+    [31, 16],
+    [16, 31],
+  ];
+  const modules = [
+    [31, 31],
+    [36, 31],
+    [31, 36],
+    [36, 36],
+    [40.5, 34],
+    [34, 40.5],
+  ];
+  return (
+    <Svg width={size} height={size} viewBox="0 0 56 56" fill="none">
+      {brackets.map((d) => (
+        <Path
+          key={d}
+          d={d}
+          stroke="#fff"
+          strokeOpacity={0.55}
+          strokeWidth={2.6}
+          strokeLinecap="round"
+        />
+      ))}
+      {finders.map(([x, y]) => (
+        <React.Fragment key={`${x}-${y}`}>
+          <Rect
+            x={x}
+            y={y}
+            width={9}
+            height={9}
+            rx={1.8}
+            stroke="#fff"
+            strokeWidth={2.2}
+          />
+          <Rect
+            x={(x as number) + 3.4}
+            y={(y as number) + 3.4}
+            width={2.2}
+            height={2.2}
+            rx={0.6}
+            fill="#fff"
+          />
+        </React.Fragment>
+      ))}
+      {modules.map(([x, y]) => (
+        <Rect
+          key={`m-${x}-${y}`}
+          x={x}
+          y={y}
+          width={3.2}
+          height={3.2}
+          rx={0.9}
+          fill="#fff"
+        />
+      ))}
     </Svg>
   );
 }

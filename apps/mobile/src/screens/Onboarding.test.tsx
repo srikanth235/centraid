@@ -114,6 +114,9 @@ vi.mock(import("react-native"), async () => {
       }),
     View: ({ children }: { children?: React.ReactNode }) =>
       element("div", { children }),
+    // The flow sizes its hero against the window and the safe area; a fixed
+    // iPhone-sized viewport keeps that arithmetic deterministic here.
+    useWindowDimensions: () => ({ height: 874, scale: 3, width: 402 }),
   } as unknown as Partial<ReactNative>;
 });
 
@@ -122,7 +125,31 @@ vi.mock(import("react-native-safe-area-context"), async () => {
   return {
     SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
       ReactModule.createElement("section", null, children),
+    useSafeAreaInsets: () => ({ bottom: 34, left: 0, right: 0, top: 59 }),
   } as unknown as Partial<SafeAreaContext>;
+});
+
+// The hero art animates. Stub the driver rather than the art itself, so the
+// real artwork still renders here and a crash in it fails this suite.
+vi.mock(import("react-native-reanimated"), async () => {
+  const identity = <T,>(value: T): T => value;
+  return {
+    createAnimatedComponent: identity,
+    default: { createAnimatedComponent: identity },
+    Easing: {
+      cubic: identity,
+      linear: identity,
+      out: identity,
+    },
+    interpolate: (_value: number, _input: number[], output: number[]) =>
+      output[output.length - 1],
+    useAnimatedProps: (build: () => unknown) => build(),
+    useReducedMotion: () => false,
+    useSharedValue: (value: number) => ({ value }),
+    withDelay: (_delay: number, animation: unknown) => animation,
+    withRepeat: (animation: unknown) => animation,
+    withTiming: (value: number) => value,
+  } as unknown as typeof import("react-native-reanimated");
 });
 
 vi.mock(import("react-native-svg"), async () => {
@@ -142,6 +169,8 @@ vi.mock(import("react-native-svg"), async () => {
     Defs: component("defs"),
     Ellipse: component("ellipse"),
     G: component("g"),
+    Line: component("line"),
+    LinearGradient: component("linearGradient"),
     Path: component("path"),
     RadialGradient: component("radialGradient"),
     Rect: component("rect"),
@@ -303,20 +332,31 @@ describe("Onboarding scenarios", () => {
     });
   }
 
+  /**
+   * Reveal the pasted-code fallback. Scanning is the primary path, so the code
+   * box does not exist until someone asks for it — every paste-based scenario
+   * has to open it first, exactly as a person would.
+   */
+  function revealPasteFallback(): void {
+    click(button("Can't scan? Paste a code instead"));
+  }
+
   /** Paste a pair ticket and land on the profile step. */
   async function pairWithPastedTicket(deviceName?: string): Promise<void> {
     if (deviceName !== undefined)
       typeValue(container!.querySelector("input")!, deviceName);
+    revealPasteFallback();
     typeValue(container!.querySelector("textarea")!, "pair-ticket");
-    click(button("Continue with pasted code"));
+    click(button("Connect"));
     await flush();
     expect(container!.textContent).toContain("Who's using");
   }
 
   /** Paste a pair ticket without asserting which step it lands on. */
   async function pasteTicket(): Promise<void> {
+    revealPasteFallback();
     typeValue(container!.querySelector("textarea")!, "pair-ticket");
-    click(button("Continue with pasted code"));
+    click(button("Connect"));
     await flush();
   }
 
@@ -383,8 +423,25 @@ describe("Onboarding scenarios", () => {
       expect(mocks.setProfileName).toHaveBeenCalledWith("Grace");
     });
 
+    // Scanning is the way in; pasting a ticket is the fallback for when it
+    // cannot work. The screen has to say so by what it shows, not only by what
+    // it calls things — a permanent code box outweighs any button label.
+    it("offers scanning first and keeps the code box out of the way", () => {
+      expect(button("Scan the QR code")).toBeTruthy();
+      expect(container!.querySelector("textarea")).toBeNull();
+      expect(container!.textContent).not.toContain("PAIRING CODE");
+
+      revealPasteFallback();
+      expect(container!.querySelector("textarea")).toBeTruthy();
+      expect(container!.textContent).toContain("PAIRING CODE");
+
+      // …and the way back to the primary path stays open.
+      click(button("Scan the QR code instead"));
+      expect(container!.querySelector("textarea")).toBeNull();
+    });
+
     it("scans a pair ticket through the camera path", async () => {
-      click(button("Scan QR instead"));
+      click(button("Scan the QR code"));
       expect(container!.textContent).toContain("Point at the code");
       click(container!.querySelector('[data-testid="camera"]')!);
       await flush();
@@ -395,15 +452,18 @@ describe("Onboarding scenarios", () => {
 
     it("reports a pairing failure honestly and allows a retry", async () => {
       mocks.pair.mockRejectedValueOnce(new Error("gateway refused the ticket"));
+      revealPasteFallback();
       typeValue(container!.querySelector("textarea")!, "pair-ticket");
-      click(button("Continue with pasted code"));
+      click(button("Connect"));
       await flush();
 
       expect(container!.textContent).toContain("gateway refused the ticket");
+      // A rejected ticket must leave the code the person pasted on screen to
+      // fix, never bounce them back to the scanner with their typing gone.
       expect(container!.textContent).toContain("PAIRING CODE");
       expect(mocks.setOnboarded).not.toHaveBeenCalled();
 
-      click(button("Continue with pasted code"));
+      click(button("Connect"));
       await flush();
       expect(container!.textContent).toContain("Who's using");
     });
