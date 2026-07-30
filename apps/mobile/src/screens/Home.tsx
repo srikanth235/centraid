@@ -288,7 +288,22 @@ export default function HomeScreen({
             onTally={() => navigation.navigate("Tally")}
           />
 
-          <Text style={styles.railLabel}>YOUR APPS</Text>
+          <Text
+            // The launcher grid is intentionally visible while its gateway
+            // data loads, but the Daily Brief above it can still arrive and
+            // move every tile. Publish that distinction to assistive tech (and
+            // device-driving journeys) so an early "YOUR APPS" sighting is not
+            // mistaken for a stable, tappable layout.
+            accessibilityLabel={
+              state.kind === "loading"
+                ? "Your apps, loading"
+                : "Your apps, ready"
+            }
+            accessibilityLiveRegion="polite"
+            style={styles.railLabel}
+          >
+            YOUR APPS
+          </Text>
           <LauncherGrid items={items} onOpen={openItem} />
         </ScrollView>
 

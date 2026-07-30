@@ -14,7 +14,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { runFlow } from "../lib/harness.mjs";
+import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -193,7 +193,7 @@ await runFlow("template-gate", async (ctx) => {
     clearState: false
 - extendedWaitUntil:
     visible:
-      text: "YOUR APPS"
+      text: "${HOME_READY_MARKER}"
     timeout: 30000
 # Home renders its eight tiles before the app registry answers, and an app that
 # is not installed yet publishes "<name>, on your desktop — tap to pair" instead

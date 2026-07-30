@@ -33,6 +33,7 @@ import {
   metroReachable,
   prewarmMetroBundle,
 } from "./metro.mjs";
+import { spawnLive, spawnQuiet } from "./spawn.mjs";
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -67,6 +68,12 @@ const appIdForPlatform = (platform) =>
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
+export const HOME_READY_MARKER = "Your apps, ready";
+// An individual chunk owns one coherent user interaction. Fresh pairing is the
+// slowest legitimate chunk (~4 minutes on the reviewed CI runner); 12 minutes
+// leaves ample network/render headroom while still terminating a wedged
+// accessibility driver before the workflow's outer timeout destroys evidence.
+const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -81,28 +88,6 @@ function spawnText(cmd, args, opts = {}) {
         reject(
           new Error(`${cmd} ${args.join(" ")} exited ${code}: ${err || out}`)
         );
-    });
-    p.on("error", reject);
-  });
-}
-
-function spawnLive(cmd, args, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { ...opts, stdio: "inherit" });
-    p.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${cmd} ${args.join(" ")} exited ${code}`));
-    });
-    p.on("error", reject);
-  });
-}
-
-function spawnQuiet(cmd, args, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { ...opts, stdio: "ignore" });
-    p.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${cmd} sensitive flow exited ${code}`));
     });
     p.on("error", reject);
   });
@@ -297,6 +282,7 @@ async function runMaestroChunk(
       {
         cwd: state.screenshotsDir,
         env: { ...process.env, ...maestroEnv },
+        timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
       }
     );
   } finally {
@@ -538,11 +524,11 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # ignored, so retry only while the source control remains visible. The Home
 # marker below remains mandatory and prevents a vacuous pass.
 ${retryableTapCommands("Enter Centraid")}
-# The springboard Home has no tagline — "YOUR APPS" is the rail label above the
-# launcher grid (apps/mobile/src/screens/Home.tsx) and is the only Home-unique
-# string that survives every gateway state (the grid renders even with no apps).
+# The rail remains visible while Home loads, and the async Daily Brief can move
+# every tile when it arrives. Wait for its explicit settled accessibility label
+# so the next tap never uses coordinates captured before that layout shift.
 - extendedWaitUntil:
-    visible: "YOUR APPS"
+    visible: "${HOME_READY_MARKER}"
     timeout: 30000
 `,
       "complete-onboarding"

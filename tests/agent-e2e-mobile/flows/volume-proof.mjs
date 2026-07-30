@@ -4,7 +4,7 @@ import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "../../agent-e2e-shared/harness.mjs";
-import { runFlow } from "../lib/harness.mjs";
+import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 const OWNER = "tests/agent-e2e-mobile/flows/volume-proof.mjs";
 const ITERATIONS = 20;
@@ -24,10 +24,11 @@ await runFlow("mobile-volume-proof", async (ctx) => {
 - repeat:
     times: ${ITERATIONS}
     commands:
+      - stopApp
       - launchApp
       - extendedWaitUntil:
           visible:
-            text: "YOUR APPS"
+            text: "${HOME_READY_MARKER}"
           timeout: 30000
 `,
     "mobile-volume"

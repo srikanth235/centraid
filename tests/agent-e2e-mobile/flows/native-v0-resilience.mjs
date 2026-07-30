@@ -1,5 +1,9 @@
 import { retryableTapCommands } from "../lib/first-run.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import {
+  FIRST_LAUNCH_TIMEOUT_MS,
+  HOME_READY_MARKER,
+  runFlow,
+} from "../lib/harness.mjs";
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
@@ -95,7 +99,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
 - launchApp:
     clearState: false
 - extendedWaitUntil:
-    visible: "YOUR APPS"
+    visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${openCommands}
 - extendedWaitUntil:
@@ -115,7 +119,7 @@ ${openCommands}
     `appId: ${ctx.state.appId}
 ---
 - extendedWaitUntil:
-    visible: "YOUR APPS"
+    visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: after-force-kill
 `,
