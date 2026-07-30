@@ -9,6 +9,11 @@ description: >-
 # single file). Copies drift silently — a cache key fixed in one lane and missed
 # in four others produces no error, just slower jobs nobody attributes.
 #
+# #637 — Cargo caches use restore on every ref and save only from `main`, so
+# PR branches stop re-saving multi-GB cargo-* duplicates into the 10 GB pool.
+# Turbo remote cache remains opt-in per job; `turbo.json` hashes `RUNNER_OS`
+# so Linux/macOS never share `native/*.node` artifacts.
+#
 # The version is read from package.json at run time with `sed` rather than
 # `node -p`, because this action runs BEFORE any toolchain is installed — the
 # only thing guaranteed present is the shell. `shell: bash` resolves to git-bash
@@ -38,7 +43,7 @@ inputs:
     default: "false"
   cargo-cache:
     description: >-
-      Which Cargo cache preset to restore — `none`, `data-plane`, `iroh-wasm`, or `verify` (both crates). The presets stay separate on purpose: one shared key would let jobs with different target/ contents overwrite each other's entry, which surfaces only as unexplained cold builds.
+      Which Cargo cache preset to restore — `none`, `data-plane`, `iroh-wasm`, or `verify` (both crates). The presets stay separate on purpose: one shared key would let jobs with different target/ contents overwrite each other's entry, which surfaces only as unexplained cold builds. Saves only on `main` (#637).
     required: false
     default: "none"
 
@@ -92,11 +97,12 @@ runs:
       if: inputs.turbo-cache == 'true'
       uses: rharkor/caching-for-turbo@75f8ebf4a43d2c60b23bc2a27082cfea94ffdad9 # v2.5.0
 
-    # `turbo lint` runs the data-plane's `cargo fmt` + `clippy`; a warm target/
-    # cuts ~1.5 min off the package-lint step on subsequent PR pushes.
-    - name: Cache Cargo (data-plane)
+    # #637 Phase 0: restore always, save only from main. Per-ref cargo saves were
+    # ~2.7 GB of duplicate waste in the 10 GB Actions cache pool.
+    - name: Restore Cargo (data-plane)
+      id: cargo-dataplane
       if: inputs.cargo-cache == 'data-plane'
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ~/.cargo/registry/index
@@ -107,9 +113,22 @@ runs:
         restore-keys: |
           cargo-dataplane-${{ runner.os }}-
 
-    - name: Cache Cargo (iroh-wasm)
+    - name: Save Cargo (data-plane)
+      if: >
+        inputs.cargo-cache == 'data-plane' && github.ref == 'refs/heads/main' && steps.cargo-dataplane.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          packages/tunnel/data-plane/target
+        key: ${{ steps.cargo-dataplane.outputs.cache-primary-key }}
+
+    - name: Restore Cargo (iroh-wasm)
+      id: cargo-iroh-wasm
       if: inputs.cargo-cache == 'iroh-wasm'
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ~/.cargo/registry/index
@@ -121,9 +140,23 @@ runs:
         restore-keys: |
           cargo-iroh-wasm-${{ runner.os }}-
 
-    - name: Cache Cargo (data-plane + iroh-wasm)
+    - name: Save Cargo (iroh-wasm)
+      if: >
+        inputs.cargo-cache == 'iroh-wasm' && github.ref == 'refs/heads/main' && steps.cargo-iroh-wasm.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ~/.cargo/bin
+          apps/web/iroh-wasm/target
+        key: ${{ steps.cargo-iroh-wasm.outputs.cache-primary-key }}
+
+    - name: Restore Cargo (data-plane + iroh-wasm)
+      id: cargo-verify
       if: inputs.cargo-cache == 'verify'
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ~/.cargo/registry/index
@@ -136,6 +169,20 @@ runs:
         restore-keys: |
           cargo-verify-${{ runner.os }}-
           cargo-dataplane-${{ runner.os }}-
+
+    - name: Save Cargo (data-plane + iroh-wasm)
+      if: >
+        inputs.cargo-cache == 'verify' && github.ref == 'refs/heads/main' && steps.cargo-verify.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ~/.cargo/bin
+          packages/tunnel/data-plane/target
+          apps/web/iroh-wasm/target
+        key: ${{ steps.cargo-verify.outputs.cache-primary-key }}
 
     # No Bun cache: a cold `bun install` is faster than restoring one (#538).
     - name: Install dependencies

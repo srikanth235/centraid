@@ -1,0 +1,61 @@
+# governance: allow-toolchain-config issue #637 Phase 0 — delete PR-branch
+# Actions caches on close so cargo/turbo entries stop filling the 10 GB pool.
+name: cache-cleanup
+
+# When a PR closes (merge or abandon), drop every Actions cache entry scoped to
+# that head ref and the ephemeral pull-request merge ref. Without this, each PR
+# that ever saved a cache leaves multi-hundred-MB entries until LRU eviction —
+# the audit for #637 found 1,072 turbogha_* keys alone.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  delete-pr-caches:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete caches for the closed PR refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # `gh cache list --ref` accepts the full git ref. PR branches land as
+          # refs/heads/<head>; the temporary merge commit is refs/pull/N/merge.
+          refs=(
+            "refs/heads/${HEAD_REF}"
+            "refs/pull/${PR_NUMBER}/merge"
+          )
+          deleted=0
+          for ref in "${refs[@]}"; do
+            # Paginate: a long-lived PR can accumulate more than one page.
+            while true; do
+              mapfile -t ids < <(
+                gh cache list -R "$REPO" --ref "$ref" --limit 100 --json id \
+                  --jq '.[].id' 2>/dev/null || true
+              )
+              if [ "${#ids[@]}" -eq 0 ]; then
+                break
+              fi
+              for id in "${ids[@]}"; do
+                if gh cache delete -R "$REPO" "$id"; then
+                  deleted=$((deleted + 1))
+                  echo "deleted cache id=${id} ref=${ref}"
+                else
+                  echo "::warning::failed to delete cache id=${id} ref=${ref}"
+                fi
+              done
+              # Fewer than a full page means we are done for this ref.
+              if [ "${#ids[@]}" -lt 100 ]; then
+                break
+              fi
+            done
+          done
+          echo "Deleted ${deleted} cache entr(y/ies) for PR #${PR_NUMBER} (${HEAD_REF})."

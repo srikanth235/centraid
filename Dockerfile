@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7-labs
 # Gateway-only image (issue #504 packaging Phase C + hardening).
 # Build context: monorepo root (see .dockerignore).
 # Vault/data: bind-mount a host path or named volume at /data — bare runs
@@ -7,8 +8,12 @@
 #
 # Tunneling is required: this image builds the native iroh napi relay
 # (packages/tunnel/native) so remote devices can dial the gateway over QUIC.
+#
+# #637 Phase 2 — manifests-first COPY so source-only commits keep the
+# rustup + bun install layers warm under registry-backed BuildKit cache.
+# Base images are digest-pinned (multi-arch index) to match Action SHA pins.
 
-FROM oven/bun:1.3.14-slim AS build
+FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 AS build
 WORKDIR /src
 
 # Native tunnel (napi + data-plane): rustc 1.91 matches packages/tunnel/*/Cargo.toml.
@@ -26,13 +31,18 @@ RUN apt-get update \
     | sh -s -- -y --default-toolchain 1.91.0 --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-COPY package.json bun.lock turbo.json tsconfig.base.json ./
+# Workspace manifests only — invalidates install only when deps change.
+COPY package.json bun.lock turbo.json tsconfig.base.json tsconfig.electron.json tsconfig.expo.json ./
+COPY --parents packages/*/package.json apps/*/package.json ./
+
+RUN bun install --frozen-lockfile
+
+# Full sources after install so code edits do not re-run bun install.
 COPY packages ./packages
 # apps/* package.json kept via .dockerignore for lockfile workspaces; web needs sources to embed.
 COPY apps ./apps
 COPY scripts/gateway-package ./scripts/gateway-package
 
-RUN bun install --frozen-lockfile
 # Full dependency graph for gateway. Native tunnel is mandatory for this image.
 ENV CENTRAID_REQUIRE_NATIVE_TUNNEL=1
 RUN bunx turbo run build --filter=@centraid/gateway \
@@ -41,14 +51,16 @@ RUN bunx turbo run build --filter=@centraid/gateway \
 RUN node scripts/gateway-package/assemble-runtime.mjs --root=/src --out=/runtime --packages-only
 
 # Fresh production install against the lean workspace (resolves esbuild, ajv, sharp, …).
-FROM oven/bun:1.3.14-slim AS deps
+FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 AS deps
 WORKDIR /app
 COPY --from=build /runtime/ /app/
 # Gateway-only workspace + stripped devDependencies — monorepo bun.lock is not
 # a bit-for-bit match; allow lock refresh for this install-only stage.
+# #637 note: a per-stage lock would pin this tree; deferred until assemble-runtime
+# emits one. Prefer frozen monorepo lock when the lean workspace can use it.
 RUN rm -f bun.lock && bun install --production
 
-FROM node:26-bookworm-slim AS runtime
+FROM node:26-bookworm-slim@sha256:2d49d876e96237d76de412761cf05dbfe5aee325cc4406a4d41d5824c5bb8beb AS runtime
 
 ARG VERSION=0.1.0
 ARG REVISION=unknown

@@ -1,3 +1,5 @@
+# governance: allow-toolchain-config issue #637 — turbo-cache on the gateway
+# closure build; buildx + registry-backed layer cache for the Docker image.
 name: lane-gateway-package
 
 # A `ci.yml` lane, not an independently-triggered workflow (#557) — the `lane-`
@@ -12,6 +14,9 @@ on:
 
 permissions:
   contents: read
+  # #637 Phase 2 — registry-backed BuildKit cache lives on GHCR (outside the
+  # 10 GB Actions pool). The lane still does not push the final runtime image.
+  packages: write
 
 jobs:
   trace-and-smoke:
@@ -21,6 +26,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
 
       - name: Build gateway dependency closure
         # turbo honors package.json dependsOn so protocol → vault → app-engine →
@@ -42,13 +49,29 @@ jobs:
       - name: Host install smoke
         run: node scripts/gateway-package/smoke.mjs --gateway-bin packages/gateway/dist/cli/cli.js --port 18787
 
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c # v4.5.2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Docker build gateway image
-        run: |
-          docker build \
-            --build-arg VERSION=0.1.0 \
-            --build-arg REVISION="${{ github.sha }}" \
-            -t "centraid-gateway:ci-${{ github.sha }}" \
-            .
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: centraid-gateway:ci-${{ github.sha }}
+          build-args: |
+            VERSION=0.1.0
+            REVISION=${{ github.sha }}
+          # Registry-backed cache (not GHA pool). Write only from main so PR
+          # branches do not thrash the shared buildcache tag.
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/centraid-gateway:buildcache
+          cache-to: ${{ github.ref == 'refs/heads/main' && format('type=registry,ref=ghcr.io/{0}/centraid-gateway:buildcache,mode=max', github.repository_owner) || null }}
 
       - name: Container install smoke (volume at /data)
         env:

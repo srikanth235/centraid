@@ -1,3 +1,5 @@
+# governance: allow-toolchain-config issue #637 — turbo-cache on mutation-pr;
+# setup-gradle on mobile-smoke (deps only; read-only off main).
 name: ci
 
 on:
@@ -402,6 +404,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+        with:
+          # #637 — this lane re-builds package dist for Stryker seeds.
+          turbo-cache: "true"
       - name: Fetch merge base for affected mutation
         run: git fetch --no-tags --depth=1 origin main 2>/dev/null || true
       # Workspace package entry points (dist/) must exist so vitest can resolve
@@ -446,6 +451,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # #637 Phase 3 — dependency/wrapper cache only (not task-output cache).
+      # Writes only on the default branch by setup-gradle defaults; keeps the
+      # 431 compile tasks honest so this smoke lane still catches native breaks.
+      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Check Expo's compatibility map
         continue-on-error: true
         run: bun run --cwd apps/mobile ci:versions
