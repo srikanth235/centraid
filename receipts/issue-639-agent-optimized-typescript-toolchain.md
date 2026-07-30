@@ -118,6 +118,10 @@
   `packages/blueprints/src/query-handlers.test.ts` with an Oxfmt-stable legal
   header, after the authoritative compiler gate proved that import sorting had
   displaced the original directive.
+- Stabilized the destructive-confirmation keyboard contract in
+  `apps/desktop/tests/e2e/delete-app.spec.ts` by waiting for the dialog's
+  documented delayed focus before sending Enter; the full gate exposed and the
+  isolated rerun reproduced the former race.
 
 ### Formatter sweep paths
 
@@ -652,3 +656,5 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785412814-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 99172 | 0 | 6229760 | 20535 | 119707 | 2.1134 | 497946 | 0 | 29030656 | 64482 | build(lint): enforce type-aware compatibility policy (#639) -m governance: allow |
 | codex-019fb2ae-33d-1785412888-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 3810 | 0 | 573440 | 697 | 4507 | 0.1633 | 501756 | 0 | 29604096 | 65179 | fix(lint): satisfy type-aware compatibility rules (#639) |
 | codex-019fb2ae-33d-1785413333-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 53497 | 0 | 3828736 | 4973 | 58470 | 1.1655 | 555253 | 0 | 33432832 | 70152 | fix(toolchain): preserve compiler fixture contract (#639) |
+| codex-019fb2ae-33d-1785415280-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 268884 | 0 | 9742592 | 5758 | 274642 | 3.1942 | 824137 | 0 | 43175424 | 75910 | test(desktop): stabilize delete confirmation focus (#639) |
+| codex-019fb2ae-33d-1785415351-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 5591 | 0 | 980736 | 688 | 6279 | 0.2695 | 829728 | 0 | 44156160 | 76598 | test(desktop): stabilize delete confirmation focus (#639) |
