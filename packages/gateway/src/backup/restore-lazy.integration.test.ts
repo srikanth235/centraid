@@ -25,6 +25,8 @@ import crypto, { randomBytes } from "node:crypto";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { describe, expect, test, vi } from "vitest";
+
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { BlobCustody, FsBlobStore, ReplicaIndex } from "@centraid/vault";
 import type {
@@ -33,7 +35,6 @@ import type {
   BlobStore,
   RemoteTier,
 } from "@centraid/vault";
-import { describe, expect, test, vi } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
 import type { VaultPlane } from "../serve/vault-plane.js";

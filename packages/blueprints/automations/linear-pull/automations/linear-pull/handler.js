@@ -2,7 +2,6 @@
  * Linear pull — GraphQL over api.linear.app with an API key.
  */
 
-const KIND = "pull.linear";
 const API = "https://api.linear.app/graphql";
 const AUTH = {
   authorization: "{{connection:api_key}}",

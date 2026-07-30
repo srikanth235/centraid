@@ -49,7 +49,9 @@ function canvasBlob(
   const context = canvas.getContext("2d");
   if (!context) return Promise.resolve(null);
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.84));
+  return new Promise((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", 0.84);
+  });
 }
 
 /** One canonical hardware-decoded poster/thumb capture pipeline for every browser surface. */

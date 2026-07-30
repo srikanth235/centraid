@@ -5,9 +5,10 @@
 // This file is bundled to CJS by `bun build` (Electron `sandbox: true` requires
 // CJS preload). Renderer typings live in `renderer/centraid-api.d.ts`.
 
-import * as tokens from "@centraid/design-tokens";
 import { contextBridge, ipcRenderer } from "electron";
 import type { IpcRendererEvent } from "electron";
+
+import * as tokens from "@centraid/design-tokens";
 
 import { Channel, hostCapabilities } from "./main/ipc-core.js";
 import { createDeepLinkBuffer } from "./main/oauth-deep-link.js";

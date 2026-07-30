@@ -265,6 +265,12 @@ test("3.5d — Enter confirms the delete", async () => {
     await page.reload();
     await waitForHome(page);
     await openDeleteDialog(page, id);
+    await expect(
+      page.getByRole("dialog").getByRole("button", {
+        name: "Delete",
+        exact: true,
+      })
+    ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.locator(`[data-app-id="${id}"]`)).toHaveCount(0);
     // Realigned copy — see HomeRoute.tsx:148.

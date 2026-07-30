@@ -1,5 +1,7 @@
 import type { ServerResponse } from "node:http";
 
+import { describe, expect, it, vi } from "vitest";
+
 import {
   VaultBlobAuthorizationError,
   VaultBlobBackpressureError,
@@ -8,7 +10,6 @@ import {
   VaultBlobSessionError,
   VaultDiskFullError,
 } from "@centraid/vault";
-import { describe, expect, it, vi } from "vitest";
 
 import { sendBlobRouteError } from "./blob-route-errors.js";
 

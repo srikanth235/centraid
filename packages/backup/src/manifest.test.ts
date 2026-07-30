@@ -1,7 +1,8 @@
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { createKeyring } from "./crypto.js";
 import {

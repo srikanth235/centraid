@@ -52,7 +52,9 @@ describe("ordered work", () => {
     const mapped = mapWithConcurrency([1, 2, 3], 2, async (value) => {
       active++;
       peak = Math.max(peak, active);
-      await new Promise<void>((resolve) => releases.push(resolve));
+      await new Promise<void>((resolve) => {
+        releases.push(resolve);
+      });
       active--;
       return value * 2;
     });

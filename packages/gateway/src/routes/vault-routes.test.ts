@@ -1,5 +1,7 @@
 import http from "node:http";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // The outbox edit-before-send route slice (issue #308 A5 UI slice):
 // approve-with-edit rebuilds the gmail.send wire request server-side from
@@ -8,7 +10,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 // client-supplied raw "request" is refused outright (the owner surface
 // never handles the wire request — see `outbox-edit.ts`).
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
@@ -42,11 +43,14 @@ describe("vault-routes", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
     const addr = server.address() as { port: number };
     return `http://127.0.0.1:${addr.port}`;

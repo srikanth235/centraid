@@ -1,3 +1,5 @@
+import { afterEach, describe, expect, test } from "vitest";
+
 import {
   createGateway,
   createGrant,
@@ -7,7 +9,6 @@ import {
   purposeConceptId,
 } from "@centraid/vault";
 import type { Credential } from "@centraid/vault";
-import { afterEach, describe, expect, test } from "vitest";
 
 import {
   AutomationAnchorError,

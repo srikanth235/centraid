@@ -4,8 +4,9 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { brotliCompressSync } from "node:zlib";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { startWebUiServer } from "./web-ui-server.js";
 import type { WebUiServerHandle } from "./web-ui-server.js";
@@ -143,9 +144,9 @@ describe("web-ui-server", () => {
     // reject (which would take down the whole gateway) — it falls back to an
     // ephemeral port and comes up on a different, listening URL.
     const squatter = http.createServer((_req, res) => res.end());
-    await new Promise<void>((resolve) =>
-      squatter.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      squatter.listen(0, "127.0.0.1", resolve);
+    });
     const taken = (squatter.address() as AddressInfo).port;
 
     const collided = await startWebUiServer({
@@ -159,7 +160,9 @@ describe("web-ui-server", () => {
       expect((await fetch(collided.url)).status).toBe(200);
     } finally {
       await collided.close();
-      await new Promise<void>((resolve) => squatter.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        squatter.close(() => resolve());
+      });
     }
   });
 

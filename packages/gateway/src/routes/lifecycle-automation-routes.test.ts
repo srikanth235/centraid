@@ -10,9 +10,10 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
+
 import { hashWebhookSecret } from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import type { GatewayPaths } from "../paths.ts";
 import { serve } from "../serve/serve.ts";

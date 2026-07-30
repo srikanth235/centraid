@@ -1,8 +1,9 @@
 import { mkdirSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { BlobStore, hashBytes, blobUrl } from "./blob-store.js";
 

@@ -412,10 +412,11 @@ describe("search", () => {
         query: "dehumid",
         purpose: PURPOSE,
       });
-      expect(byName.rows.map((r) => r.item_id).toSorted()).toStrictEqual([
-        "it-1",
-        "it-2",
-      ]);
+      expect(
+        byName.rows
+          .map((r) => r.item_id)
+          .toSorted((a, b) => String(a).localeCompare(String(b)))
+      ).toStrictEqual(["it-1", "it-2"]);
       const bySerial = gw.search(owner, {
         entity: "home.asset_item",
         query: "SN-9981",

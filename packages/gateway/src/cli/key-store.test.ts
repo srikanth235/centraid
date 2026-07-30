@@ -3,9 +3,10 @@ import type * as TypeImport_1u70gh7 from "node:child_process";
 import { promises as fs, statSync } from "node:fs";
 import path from "node:path";
 
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { daemonKeyStore, headlessCredentialFile } from "./key-store.js";
 

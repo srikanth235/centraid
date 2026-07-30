@@ -5,6 +5,8 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { afterEach, describe, expect, it, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import {
@@ -12,7 +14,6 @@ import {
   DEVICE_PROOF_HEADER,
   TUNNEL_FORWARDED_HEADER,
 } from "@centraid/tunnel";
-import { afterEach, describe, expect, it, test } from "vitest";
 
 import {
   writeFileMap,
@@ -56,7 +57,10 @@ describe("route-helpers scenarios", () => {
   afterEach(async () =>
     forEachSequentially(
       servers.splice(0).toReversed(),
-      (server) => new Promise<void>((resolve) => server.close(() => resolve()))
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     )
   );
 
@@ -65,9 +69,9 @@ describe("route-helpers scenarios", () => {
       sendJson(res, 200, body);
     });
     servers.push(server);
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   }
 

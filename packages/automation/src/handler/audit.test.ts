@@ -2,8 +2,9 @@
  * Direct unit tests for automation handler audit helpers (issue #545 B5).
  */
 
-import type { ConversationStore, Turn } from "@centraid/app-engine";
 import { describe, expect, it, vi } from "vitest";
+
+import type { ConversationStore, Turn } from "@centraid/app-engine";
 
 import type { RunEventSink } from "./audit.js";
 import {

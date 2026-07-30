@@ -12,9 +12,7 @@
 # on pre-existing debt in files the author never opened, which is how
 # `--no-verify` becomes muscle memory.
 #
-# Errors only. `bunx oxlint .` in CI exits non-zero on errors, not warnings, and
-# a local gate that is stricter than the gate it stands in for would block
-# commits CI would have accepted.
+# Warnings are denied by the root policy, matching `bun run lint` in CI.
 set -u
 source "$(dirname "$0")/../../../../../lib.sh"
 directive_start "lint-check"
@@ -58,8 +56,8 @@ fi
 # a parse error under this binary (#565). CI's static lane passes -c too, so
 # this also keeps the hook's verdict identical to the gate it stands in for.
 config_args=()
-if [[ -f "$REPO_ROOT/oxlint.config.mjs" ]]; then
-    config_args=(-c "$REPO_ROOT/oxlint.config.mjs")
+if [[ -f "$REPO_ROOT/oxlint.config.ts" ]]; then
+    config_args=(-c "$REPO_ROOT/oxlint.config.ts" --disable-nested-config --deny-warnings)
 fi
 
 # oxlint's exit code is the verdict: non-zero means at least one error. Its
@@ -78,7 +76,7 @@ if [[ $status -ne 0 ]]; then
     done <<<"$output"
     # A non-zero exit with no printed diagnostic still has to fail closed.
     if [[ -z "$output" ]]; then
-        violation "oxlint exited $status with no diagnostic (run: bunx oxlint .)"
+        violation "oxlint exited $status with no diagnostic (run: bun run lint)"
     fi
 fi
 

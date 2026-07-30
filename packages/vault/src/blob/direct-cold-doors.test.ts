@@ -13,9 +13,10 @@ import { rmSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { resolveBackupPolicy } from "../backup-policy.js";
 import type { BackupPolicy } from "../backup-policy.js";
@@ -94,7 +95,9 @@ describe("direct-cold-doors", () => {
           url: `http://127.0.0.1:${addr.port}`,
           requests,
           close: () =>
-            new Promise<void>((_resolve) => server.close(() => _resolve())),
+            new Promise<void>((_resolve) => {
+              server.close(() => _resolve());
+            }),
         });
       });
     });

@@ -1,6 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit — one native Tasks cover keeps
-// the offline replica projection and its receipted interaction surface together.
-import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
+/*! governance: allow-repo-hygiene file-size-limit — one native Tasks cover keeps the offline replica projection and its receipted interaction surface together. */
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
@@ -15,6 +13,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
 
 import HomeKey from "../../kit/components/HomeKey";
 import {

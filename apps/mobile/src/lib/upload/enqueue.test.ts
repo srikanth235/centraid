@@ -5,8 +5,9 @@ import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { FRAME_BYTES } from "./cbsf";
 import { enqueueLocalFile, sha256OfFile } from "./enqueue";

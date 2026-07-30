@@ -133,7 +133,9 @@ describe("condition-trigger watches", () => {
     s.tick();
     expect(fires).toStrictEqual(["studio/chaser"]);
     expect(evals).toStrictEqual([["studio/chaser", 1]]);
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
 
     // 08:05 — neither.
     clock = at(8, 5);
@@ -165,7 +167,9 @@ describe("condition-trigger watches", () => {
     await expect(s.list()).resolves.toStrictEqual(["studio/chaser"]);
     s.tick();
     expect(evals).toStrictEqual([0]);
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     clock = at(9, 3);
     s.tick();
     expect(evals).toStrictEqual([0]);
@@ -372,12 +376,16 @@ describe("InProcessScheduler.nudge", () => {
     journal.push("prov-2");
 
     s.tick();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect({ cursor, fires }).toStrictEqual({ cursor: "prov-2", fires: 1 });
 
     clock = at(9, 1);
     s.tick();
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect({ cursor, fires }).toStrictEqual({ cursor: "prov-2", fires: 1 });
   });
 

@@ -1,5 +1,6 @@
-import type { ScaffoldFile } from "@centraid/blueprints";
 import { describe, expect, it } from "vitest";
+
+import type { ScaffoldFile } from "@centraid/blueprints";
 
 import { lintHandlerSource } from "../handler/lint.js";
 import {

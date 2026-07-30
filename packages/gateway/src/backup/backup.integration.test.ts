@@ -18,6 +18,8 @@ import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+
 import {
   openLocalBackupProvider,
   openManifest,
@@ -34,7 +36,6 @@ import {
   unsealValue,
   updateBackupPolicy,
 } from "@centraid/vault";
-import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 import { commandBackup } from "../cli/backup-admin.js";
 import { daemonKeyStore } from "../cli/key-store.js";

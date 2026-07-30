@@ -2,6 +2,7 @@
 name: automation-authoring
 description: How to author a centraid automation app — the automation.json manifest, the scheduled handler.js contract (ctx.vault/agent/state/runs/fetch), cron, webhook, data and condition triggers (with their required vault block), and the draft-then-enable flow. Use whenever creating or editing the files of a UI-less automation app.
 ---
+
 ## Centraid automation authoring
 
 You are working inside a centraid **automation app** — an app folder that runs a scheduled, deterministic job with no human in the loop. It has no UI: the work you maintain is a manifest and a handler under `automations/`. Read this section before making changes.
@@ -44,7 +45,10 @@ The two files under `automations/<id>/` ARE the automation. Maintain both across
   },
   "onFailure": "alert-me",
   "history": { "keep": { "count": 100 } },
-  "costEstimate": { "model": "anthropic/claude-3-5-sonnet", "tokensPerFire": 5000 },
+  "costEstimate": {
+    "model": "anthropic/claude-3-5-sonnet",
+    "tokensPerFire": 5000
+  },
   "generated": { "by": "centraid-builder", "at": "<ISO-8601 timestamp>" }
 }
 ```
@@ -54,7 +58,7 @@ Rules for editing `automation.json`:
 - **Never set `enabled` to `true`.** The automation stays a draft (`enabled: false`) until the user explicitly enables it from the builder. Enabling it starts the cron firing before the user has reviewed the result — that decision is the user's, not yours. Leave `enabled` exactly as the scaffold wrote it.
 - **`triggers`** is an array. A cron trigger is `{ "kind": "cron", "expr": "<5-field UTC cron>" }`. Translate the user's natural-language schedule into a cron expression yourself: "every morning" → `0 9 * * *`, "every 30 minutes" → `*/30 * * * *`, "weekdays at 9" → `0 9 * * MON-FRI`, "top of every hour" → `0 * * * *`. An empty `triggers` array is legal — that's a manual-fire-only automation.
 - **Webhook triggers.** When the user wants the automation to fire on an inbound HTTP POST, declare the trigger as `{ "kind": "webhook", "pending": true }` — nothing else. You cannot mint the route `id` or `secretHash`; that is a privileged server step, so never invent them. After your turn the builder provisions the webhook (mints the id + secret, rewrites the trigger to its final form) and shows the user the endpoint URL + secret once. At most one webhook trigger per automation; combine it with cron triggers freely.
-- **Data triggers** — fire when watched vault entities change. Declare `{ "kind": "data", "entities": ["<schema>.<table>", ...], "every": "<5-field cron>" }`. On the `every` gate (omit it for the default `* * * * *`, every minute) the host polls the vault's consented change feed (`ctx.vault.changes`) for those entities and fires with the new change entries as `ctx.input`. The cursor is a strictly time-ordered journal id persisted across evaluations and bootstrapped at the *current* watermark — a fresh watcher reacts to what happens next, never to history. Use this when a data change should provoke work: "a credit posted → reconcile the invoice", "my parked send was confirmed → resume". Example:
+- **Data triggers** — fire when watched vault entities change. Declare `{ "kind": "data", "entities": ["<schema>.<table>", ...], "every": "<5-field cron>" }`. On the `every` gate (omit it for the default `* * * * *`, every minute) the host polls the vault's consented change feed (`ctx.vault.changes`) for those entities and fires with the new change entries as `ctx.input`. The cursor is a strictly time-ordered journal id persisted across evaluations and bootstrapped at the _current_ watermark — a fresh watcher reacts to what happens next, never to history. Use this when a data change should provoke work: "a credit posted → reconcile the invoice", "my parked send was confirmed → resume". Example:
 
   ```json
   {
@@ -65,6 +69,7 @@ Rules for editing `automation.json`:
   ```
 
   (`outbox.*` entities cannot be watched — a drain's own receipts would re-fire the automation; validation rejects them.)
+
 - **Condition triggers** — fire when a row matches a data-state window. Declare `{ "kind": "condition", "entity": "<schema>.<table>", "where": [{ "column", "op", "value" }], "every": "<5-field cron>" }`. On the `every` gate (omit it for the default `*/5 * * * *`, every five minutes) the host runs the declared consented read under the automation's grant and fires **once per row it has not seen before** — row-content dedup: a row that changes fires again, one that merely stays matched does not. The `op` is one of: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `is-null`, `not-null`, `within-days`, `within-next-days`. This makes "due in N days" a fire without wall-clock guesswork — the time semantics live in the data, the trigger just watches the window. Example — "invoice due in 3 days":
 
   ```json
@@ -79,7 +84,7 @@ Rules for editing `automation.json`:
   }
   ```
 
-- **Data/condition triggers require a `vault` block (hard rule).** A data or condition trigger *is* a consented vault read, so the manifest must carry a top-level `vault` block whose read scopes cover every watched entity — validation rejects the manifest otherwise, and at runtime the read runs under that owner-approved grant (a receipted deny disables the evaluation, it never widens it). Mirror the shape real templates use: a `purpose` (`"dpv:ServiceProvision"`), a one-line `why`, and a `scopes` array. Each scope is `{ "schema": "<schema>", "verbs": "read" }` to cover a whole domain, or add `"table": "<table>"` to narrow to one entity. For the two examples above:
+- **Data/condition triggers require a `vault` block (hard rule).** A data or condition trigger _is_ a consented vault read, so the manifest must carry a top-level `vault` block whose read scopes cover every watched entity — validation rejects the manifest otherwise, and at runtime the read runs under that owner-approved grant (a receipted deny disables the evaluation, it never widens it). Mirror the shape real templates use: a `purpose` (`"dpv:ServiceProvision"`), a one-line `why`, and a `scopes` array. Each scope is `{ "schema": "<schema>", "verbs": "read" }` to cover a whole domain, or add `"table": "<table>"` to narrow to one entity. For the two examples above:
 
   ```json
   "vault": {
@@ -92,10 +97,11 @@ Rules for editing `automation.json`:
   ```
 
   A watched entity whose schema no scope covers is an incoherent manifest — grant the covering `read` scope for every `entities[]`/`entity` you declare.
+
 - **Which trigger?** React to a data change as it happens → **data**. A data-state time window ("due / expiring in N days") → **condition** (`within-next-days`). A wall-clock schedule ("every morning", "top of the hour") → **cron**. An inbound HTTP POST → **webhook**. Do **not** approximate data-reactivity with a cron poll that re-scans and re-diffs the vault yourself — that is exactly what data/condition triggers exist to do, with a persisted cursor and dedup the host owns. Reach for cron only when the fire is genuinely tied to the clock, not to the data.
 - Keep `prompt` current — it is the canonical record of what the user asked for.
 - **No tool allowlist.** Deterministic work goes through the built-in `ctx.vault` / `ctx.fetch` / `ctx.state` rails, which need no declaration — there is no `requires.tools` field (it was removed with the `ctx.tool` rail). Leave `requires` to just `model` unless you need an MCP for `ctx.agent`.
-- `requires.model` is the capability tier `ctx.agent` routes through (`provider/model-id`). Pick the **cheapest tier that does the inference** — a small/cheap tier for summarize/classify/extract; reserve a stronger tier for genuinely hard reasoning. `ctx.agent` is the only billed path (see *Two cost rails* below), so the tier you declare is the per-fire cost.
+- `requires.model` is the capability tier `ctx.agent` routes through (`provider/model-id`). Pick the **cheapest tier that does the inference** — a small/cheap tier for summarize/classify/extract; reserve a stronger tier for genuinely hard reasoning. `ctx.agent` is the only billed path (see _Two cost rails_ below), so the tier you declare is the per-fire cost.
 - The runtime validates the manifest on every read; a malformed shape is rejected. Keep the structure exactly as shown.
 
 ### The handler — `handler.js`
@@ -105,9 +111,9 @@ A plain `.js` ES module. The same JS-only discipline as app handlers applies —
 ```js
 /** @type {import('@centraid/automation').AutomationHandler} */
 export default async ({ ctx, log }) => {
-  log.info('automation fired');
+  log.info("automation fired");
   // do work
-  return { summary: 'one-line run description', output: { /* ... */ } };
+  return { summary: "one-line run description", output: {/* ... */} };
 };
 ```
 
@@ -131,7 +137,7 @@ There is **no runtime retry** on `ctx.fetch` or `ctx.agent` — a failed call re
 
 Every outside effect **must go through the `ctx.*` surface**. `ctx.vault` / `ctx.fetch` / `ctx.agent` / `ctx.state` / `ctx.runs` calls are recorded in the run ledger (the run history you see per fire). A raw `fetch(...)` or `fs` call is **invisible to the run history** — so it never appears in a fire's trace and can't be reasoned about. Reach external HTTP with `ctx.fetch`, never a bare `fetch`.
 
-Keep the handler **deterministic** too. A fire has no crash-resume journal: if a fire dies partway, it simply re-runs from the top. A handler that reads the wall clock or a random value produces a *different* result on that re-run and re-fires effects under fresh ids — non-idempotent and hard to dedup. So a handler **must not**:
+Keep the handler **deterministic** too. A fire has no crash-resume journal: if a fire dies partway, it simply re-runs from the top. A handler that reads the wall clock or a random value produces a _different_ result on that re-run and re-fires effects under fresh ids — non-idempotent and hard to dedup. So a handler **must not**:
 
 - Read the wall clock: no `Date.now()`, no `new Date()` (argless), no `performance.now()`. (`new Date(value)` with an explicit argument is fine.)
 - Use randomness: no `Math.random()`, no `crypto.randomUUID()` / `randomBytes()` / `getRandomValues()`.
@@ -149,7 +155,7 @@ There is no `ctx.random()` / `ctx.uuid()` — get these needs deterministically 
 - **Deterministic rails are free.** `ctx.vault`, `ctx.fetch`, `ctx.state`, and `ctx.runs` are serviced parent-side, in-process, by the gateway — **zero model tokens, zero child processes, zero HTTP servers**, on every runner kind. A fire whose handler never calls `ctx.agent` cannot bill anything. Prefer these (plus plain JS) for anything that doesn't need judgment: reading/writing vault data, fetching external HTTP, listing, filtering, shaping.
 - **`ctx.agent` is the only billed path.** It is a bounded one-shot turn against the user's real provider. Reserve it for genuine inference — summarize, classify, extract, draft. Don't reach for it to do work a `ctx.vault` / `ctx.fetch` call or a deterministic JS transform already covers. When you do use it, pass a `json` schema and batch (one structured call over the whole set, never a per-item `ctx.agent` loop), and declare the cheapest sufficient `requires.model` tier.
 
-The publish gate lints for the removed `ctx.tool` rail: a handler that calls it fails with *"ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent."*
+The publish gate lints for the removed `ctx.tool` rail: a handler that calls it fails with _"ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent."_
 
 Also avoid in handlers:
 

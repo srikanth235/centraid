@@ -1,62 +1,34 @@
 # Inline system apps — iframe reserved for builder, app-scoped RPC, token-plane retirement
 
-**Issue:** #505
-**Status:** in-progress
-**Owner session:** claude/centraid-issue-505-b4d50f
+**Issue:** #505 **Status:** in-progress **Owner session:** claude/centraid-issue-505-b4d50f
 
 ## Goal
 
-Bundled (system) apps mount as inline React routes in the shared shell — no iframe, no
-opaque document, no postMessage bridge, no second React runtime — reading and writing
-through the shell's replica. The `AppFrame` + `opaqueAppDocument` + `appFrameReplicaBridge`
-path remains byte-for-byte, scoped to builder/code-store apps only. The `/centraid/_tool/centraid_*`
-app-RPC shim is renamed to app-scoped routes once the iframe bridge is no longer a caller.
-The shared admin token plane (`token.bin` / `print-token`) is retired in favor of a
-per-device revocable `owner` enrollment trust tier.
+Bundled (system) apps mount as inline React routes in the shared shell — no iframe, no opaque document, no postMessage bridge, no second React runtime — reading and writing through the shell's replica. The `AppFrame` + `opaqueAppDocument` + `appFrameReplicaBridge` path remains byte-for-byte, scoped to builder/code-store apps only. The `/centraid/_tool/centraid_*` app-RPC shim is renamed to app-scoped routes once the iframe bridge is no longer a caller. The shared admin token plane (`token.bin` / `print-token`) is retired in favor of a per-device revocable `owner` enrollment trust tier.
 
 ## Safety argument
 
 - v0 is pre-release: no backward compatibility or data migrations are owed (repo policy).
-- The opaque-document isolation machinery is **not modified** — only the render-path
-  decision changes (bundled → inline; code-store → the unchanged `AppFrame` path), so the
-  security boundary for actually-untrusted code is untouched.
-- Inline apps are shell code with the shell's principal; that is the deliberate decision
-  recorded in #505 (the sandbox existed because the tunnel made apps same-origin with the
-  shell, not because bundled bytes are untrusted).
+- The opaque-document isolation machinery is **not modified** — only the render-path decision changes (bundled → inline; code-store → the unchanged `AppFrame` path), so the security boundary for actually-untrusted code is untouched.
+- Inline apps are shell code with the shell's principal; that is the deliberate decision recorded in #505 (the sandbox existed because the tunnel made apps same-origin with the shell, not because bundled bytes are untrusted).
 - Phases land as separate commits; each phase boundary holds `bun run check:pr` green.
-- Writes from inline apps go through the replica intent dispatch carrying `intentId`, the
-  same idempotency contract the bridge used (#406 multi-tab findings).
-- Token retirement (Phase 7) keeps the per-boot proof header and desktop loopback token;
-  identity on iroh paths is already handshake-first, so removing bearer checks there
-  removes dead weight, not protection.
+- Writes from inline apps go through the replica intent dispatch carrying `intentId`, the same idempotency contract the bridge used (#406 multi-tab findings).
+- Token retirement (Phase 7) keeps the per-boot proof header and desktop loopback token; identity on iroh paths is already handshake-first, so removing bearer checks there removes dead weight, not protection.
 
 ## Plan
 
-0. **Baseline measurement** (go/no-go gate) — cold+warm bundled-app open via the existing
-   PWA waterfall harness; remote-tunnel cost modeled as measured request count × RTT.
-1. **Prerequisites** — CSS scoping for the 8 blueprint apps; bundled-vs-code-store as a
-   typed render-path signal; written surface inventory (below).
-2. **Shell app services** — one shell-side service per inventoried surface, bound to the
-   replica intent dispatch.
-3. **Pilot** — Tasks inline end-to-end (lazy chunk, error boundary, sync theming, offline
-   render from replica).
+0. **Baseline measurement** (go/no-go gate) — cold+warm bundled-app open via the existing PWA waterfall harness; remote-tunnel cost modeled as measured request count × RTT.
+1. **Prerequisites** — CSS scoping for the 8 blueprint apps; bundled-vs-code-store as a typed render-path signal; written surface inventory (below).
+2. **Shell app services** — one shell-side service per inventoried surface, bound to the replica intent dispatch.
+3. **Pilot** — Tasks inline end-to-end (lazy chunk, error boundary, sync theming, offline render from replica).
 4. **Rollout** — agenda, docs, locker, notes, people, photos, tally on the proven contract.
-5. **App-scoped RPC** — `/centraid/_tool/centraid_*` → `/centraid/<app>/actions|queries/<name>`;
-   Companion + builder bridge re-pointed; no dual-route compat window.
-6. **Cleanup + docs write-back** — `centraid_sql_*` ghosts deleted; ARCHITECTURE.md,
-   docs/traps/blueprint-csp.md, docs/protocol.md updated.
-7. **Token landlord-plane retirement** — `owner` enrollment trust tier; `token.bin` /
-   `print-token` / URL+token paste deleted; `direct`-tier decision recorded in
-   docs/decisions.md; revocation severs all planes.
+5. **App-scoped RPC** — `/centraid/_tool/centraid_*` → `/centraid/<app>/actions|queries/<name>`; Companion + builder bridge re-pointed; no dual-route compat window.
+6. **Cleanup + docs write-back** — `centraid_sql_*` ghosts deleted; ARCHITECTURE.md, docs/traps/blueprint-csp.md, docs/protocol.md updated.
+7. **Token landlord-plane retirement** — `owner` enrollment trust tier; `token.bin` / `print-token` / URL+token paste deleted; `direct`-tier decision recorded in docs/decisions.md; revocation severs all planes.
 
 ## Surface inventory (Phase 1 deliverable)
 
-Every router surface bundled apps consume today, with the serving code, the in-app
-consumer, and the shell-native replacement inline apps bind to. Router parse:
-`packages/app-engine/src/http/router.ts` (one `Route` kind per row). The generic
-opaque-app server retains these seams for future app-owned documents, but no v0
-bundled system app consumes that path: desktop/web render inline and mobile is
-native Expo.
+Every router surface bundled apps consume today, with the serving code, the in-app consumer, and the shell-native replacement inline apps bind to. Router parse: `packages/app-engine/src/http/router.ts` (one `Route` kind per row). The generic opaque-app server retains these seams for future app-owned documents, but no v0 bundled system app consumes that path: desktop/web render inline and mobile is native Expo.
 
 | Surface | Serving code | App-side consumer | Shell-native replacement |
 | --- | --- | --- | --- |
@@ -72,50 +44,18 @@ native Expo.
 
 Notes settled by this inventory (issue open questions 2 and 3):
 
-- **Embedded chat is universal** — all 8 apps mount the kit ask panel, not a subset.
-  The inline equivalent is one shared shell service, priced once, not per app.
-- **`/_query/<name>.mjs` bundles are redundant inline** — query modules are
-  relative-import-only and confined to `queries/`, so the shell imports them
-  directly; bundled system apps have no network UI bundle.
+- **Embedded chat is universal** — all 8 apps mount the kit ask panel, not a subset. The inline equivalent is one shared shell service, priced once, not per app.
+- **`/_query/<name>.mjs` bundles are redundant inline** — query modules are relative-import-only and confined to `queries/`, so the shell imports them directly; bundled system apps have no network UI bundle.
 
 ## Settled architecture (Phases 2–4)
 
-- **Single system-app consumption path**: each bundled app exposes
-  `app-inline.tsx` (an `InlineAppModule` descriptor with appId, changeTables,
-  query modules, kitAsk config, and React Root), `app-root.tsx`, `Chrome.tsx`,
-  and scoped CSS modules. The retired served `app.tsx` adapters and duplicated
-  app-local `app.css`/`wall.css` layers are absent. `index.html` remains only as
-  the current app-listing `hasIndex` marker and contains no scripts or styles.
-- **Normal React ownership**: blueprint components import from `react`, resolved
-  and bundled by the main client like every other React component. There is no
-  checked-in React bundle, JSX-runtime shim, vendor generator, ambient
-  declaration, or client React alias. Only the relative `./kit.ts` specifier is
-  adapted by client build config to `kit-inline.ts`, keeping shell-specific
-  data/gateway overrides at the build boundary without forking source.
-- **Data plane**: `centraid-inline.ts` installs `window.centraid` backed by
-  `ReplicaShellSession.read/search/write/subscribe`; writes carry `intentId` through
-  the replica intent dispatch (the #406 dedupe lives there, not duplicated). Query
-  modules (`queries/<name>.ts`) are imported directly and run via `inlineQueryCtx.ts`,
-  which reproduces the bridge's `runLocalQuery` ctx exactly — including
-  `ctx.vault.resolve` degrading to `{cards:[]}` offline (a rejection would blank the
-  board).
-- **Chat**: the kit ask panel is reused (all 8 apps embed it); `kit-ask-inline.ts`
-  points its `_turn` SSE + parked-consent calls at the gateway via gateway-client.
-  Online-only, lazy, never on the render path.
-- **Render decision**: `inlineApps.ts` registry (append-only, one line per converted
-  app) is the typed signal — membership = bundled-and-inlined; anything else falls to
-  the unchanged `AppFrame` path, so rollout is safe mid-flight. `InlineAppRoute.tsx`
-  hosts: Suspense + error boundary with retry, `window.centraid` install/teardown,
-  best-effort non-blocking knob fetch.
-- **Lazy chunks stay** (orchestrator overrule of the design agent's static-import
-  recommendation): the desktop `file://` build already emits and loads split chunks
-  (`react-pdf-*.js`), so dynamic import works there, and the issue's acceptance
-  criteria require per-app lazy chunks so PWA initial-load JS does not regress. PWA
-  offline coverage of lazy chunks is verified/extended in the service worker.
-- **CSS**: `tokens.css`/`wall.css` are not loaded by bundled system apps (shell
-  design tokens already define the vars); common `.kit-app-*` structure and
-  `.kit-*` primitives load once from `kit.css`, while app identity and layout
-  remain scoped in `Chrome.module.css` and component modules.
+- **Single system-app consumption path**: each bundled app exposes `app-inline.tsx` (an `InlineAppModule` descriptor with appId, changeTables, query modules, kitAsk config, and React Root), `app-root.tsx`, `Chrome.tsx`, and scoped CSS modules. The retired served `app.tsx` adapters and duplicated app-local `app.css`/`wall.css` layers are absent. `index.html` remains only as the current app-listing `hasIndex` marker and contains no scripts or styles.
+- **Normal React ownership**: blueprint components import from `react`, resolved and bundled by the main client like every other React component. There is no checked-in React bundle, JSX-runtime shim, vendor generator, ambient declaration, or client React alias. Only the relative `./kit.ts` specifier is adapted by client build config to `kit-inline.ts`, keeping shell-specific data/gateway overrides at the build boundary without forking source.
+- **Data plane**: `centraid-inline.ts` installs `window.centraid` backed by `ReplicaShellSession.read/search/write/subscribe`; writes carry `intentId` through the replica intent dispatch (the #406 dedupe lives there, not duplicated). Query modules (`queries/<name>.ts`) are imported directly and run via `inlineQueryCtx.ts`, which reproduces the bridge's `runLocalQuery` ctx exactly — including `ctx.vault.resolve` degrading to `{cards:[]}` offline (a rejection would blank the board).
+- **Chat**: the kit ask panel is reused (all 8 apps embed it); `kit-ask-inline.ts` points its `_turn` SSE + parked-consent calls at the gateway via gateway-client. Online-only, lazy, never on the render path.
+- **Render decision**: `inlineApps.ts` registry (append-only, one line per converted app) is the typed signal — membership = bundled-and-inlined; anything else falls to the unchanged `AppFrame` path, so rollout is safe mid-flight. `InlineAppRoute.tsx` hosts: Suspense + error boundary with retry, `window.centraid` install/teardown, best-effort non-blocking knob fetch.
+- **Lazy chunks stay** (orchestrator overrule of the design agent's static-import recommendation): the desktop `file://` build already emits and loads split chunks (`react-pdf-*.js`), so dynamic import works there, and the issue's acceptance criteria require per-app lazy chunks so PWA initial-load JS does not regress. PWA offline coverage of lazy chunks is verified/extended in the service worker.
+- **CSS**: `tokens.css`/`wall.css` are not loaded by bundled system apps (shell design tokens already define the vars); common `.kit-app-*` structure and `.kit-*` primitives load once from `kit.css`, while app identity and layout remain scoped in `Chrome.module.css` and component modules.
 
 ## Progress log
 

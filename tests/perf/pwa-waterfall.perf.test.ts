@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 
-import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { describe, expect, test } from "vitest";
+
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { perfBudgets } from "../../apps/web/tests/e2e/perf-budgets.js";
 

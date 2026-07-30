@@ -2,13 +2,14 @@ import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, afterEach, beforeEach, expect, test } from "vitest";
+
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 /**
  * Gateway multi-session headroom (#496 PE1).
  * Spins many concurrent session-shaped HTTP probes against a real serve().
  */
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import { serve } from "../../packages/gateway/src/serve/serve.js";
 import type { GatewayServeHandle } from "../../packages/gateway/src/serve/serve.js";

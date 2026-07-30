@@ -3,8 +3,9 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   PrefsStore,

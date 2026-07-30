@@ -53,7 +53,7 @@ const MENTIONS_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const read = await ctx.vault.read({
     entity: "core.content_derivative",
@@ -128,10 +128,10 @@ export default async ({ ctx, log }) => {
           purpose: PURPOSE,
         });
         linked += 1;
-      } catch (err) {
+      } catch (error) {
         // An identical live link is the command's own idempotency refusal —
         // expected on re-runs, never an error worth failing the fire over.
-        log.info(`link skipped (${person.display_name}): ${err.message}`);
+        log.info(`link skipped (${person.display_name}): ${error.message}`);
       }
     }
   }
@@ -140,4 +140,4 @@ export default async ({ ctx, log }) => {
     summary: `linked ${linked} mention(s); ${dropped} named nobody in the vault`,
     output: { linked, dropped },
   };
-};
+}

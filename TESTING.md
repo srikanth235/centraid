@@ -1,40 +1,20 @@
 # Testing strategy
 
-Centraid tests protect important product flows and invariants, not a test-file
-count. This document supersedes the product-shape assumptions from #212 and is
-the durable contract for the suite reorganized in #458.
+Centraid tests protect important product flows and invariants, not a test-file count. This document supersedes the product-shape assumptions from #212 and is the durable contract for the suite reorganized in #458.
 
 ## Principles
 
-1. **Coverage of flows, not count of tests.** Every important flow has one
-   owner. More tests and more runtime are costs, not progress.
-2. **One flow, one home.** Prove a flow at the cheapest tier that can falsify
-   it. A higher tier does not repeat a lower tier's ownership.
-3. **Runtime is a budget.** Unit, integration, and contracts run per PR. Full
-   cross-client UI journeys, performance, and scale run nightly and on demand.
-   Path-filtered client e2e and boot-the-artifact smoke are the PR-time client
-   gates (issue #468 **L1** / **E2** — see [PR vs nightly](#pr-vs-nightly-l1--e2)).
-4. **Duplication is visible.** Two candidate owners for one flow are merged;
-   they are not both added to the catalog.
-5. **Coverage floors ratchet up, never down.** A lower floor requires an
-   approved constitutional deviation, not an ordinary refactor.
+1. **Coverage of flows, not count of tests.** Every important flow has one owner. More tests and more runtime are costs, not progress.
+2. **One flow, one home.** Prove a flow at the cheapest tier that can falsify it. A higher tier does not repeat a lower tier's ownership.
+3. **Runtime is a budget.** Unit, integration, and contracts run per PR. Full cross-client UI journeys, performance, and scale run nightly and on demand. Path-filtered client e2e and boot-the-artifact smoke are the PR-time client gates (issue #468 **L1** / **E2** — see [PR vs nightly](#pr-vs-nightly-l1--e2)).
+4. **Duplication is visible.** Two candidate owners for one flow are merged; they are not both added to the catalog.
+5. **Coverage floors ratchet up, never down.** A lower floor requires an approved constitutional deviation, not an ordinary refactor.
 
-The machine-readable source of product-flow ownership is
-[`tests/matrix.json`](tests/matrix.json). `bun run test:matrix` verifies its
-surface/dimension references, owning paths, unique flow ids, and minimum size
-of named contract suites. A new test either claims an unowned flow/cell or
-extends its existing owner.
+The machine-readable source of product-flow ownership is [`tests/matrix.json`](tests/matrix.json). `bun run test:matrix` verifies its surface/dimension references, owning paths, unique flow ids, and minimum size of named contract suites. A new test either claims an unowned flow/cell or extends its existing owner.
 
 ## Runner and test taxonomy
 
-[Vitest](https://vitest.dev) is the single unit/integration/contract runner.
-Every package extends one of the presets in
-[`packages/test-kit`](packages/test-kit), and every node preset explicitly uses
-the `forks` pool so `node:sqlite` and Worker threads are process-isolated. The
-node and jsdom presets also set **`expect.requireAssertions: true`** (#496 E5)
-so an assertion-free test fails; perf/scale configs opt out intentionally.
-The root [`vitest.config.ts`](vitest.config.ts) aggregates all projects for one
-v8 coverage result.
+[Vitest](https://vitest.dev) is the single unit/integration/contract runner. Every package extends one of the presets in [`packages/test-kit`](packages/test-kit), and every node preset explicitly uses the `forks` pool so `node:sqlite` and Worker threads are process-isolated. The node and jsdom presets also set **`expect.requireAssertions: true`** (#496 E5) so an assertion-free test fails; perf/scale configs opt out intentionally. The root [`vitest.config.ts`](vitest.config.ts) aggregates all projects for one v8 coverage result.
 
 | Tier | Marker / location | Owns | Schedule |
 | --- | --- | --- | --- |
@@ -52,8 +32,7 @@ v8 coverage result.
 
 ### PR vs nightly (L1 / E2)
 
-Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite
-[docs/decisions.md](docs/decisions.md).
+Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite [docs/decisions.md](docs/decisions.md).
 
 | Lane | Runs |
 | --- | --- |
@@ -67,39 +46,17 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite
 
 Soft SLA (auto-issue, not a hard age gate):
 
-1. A **scheduled** nightly that fails opens or updates a single tracking issue
-   titled `[nightly] e2e lane red — tracking` with the Actions run URL and the
-   report link. The report link is the **immutable dated slot** for that run
-   (`test-report/nightly/runs/<date>-<runId>/`), not the `nightly/` alias — the
-   alias is overwritten the next night, so an issue citing it would silently
-   start describing a different run (#557).
-2. **Expected response:** within **24 hours** or before the next scheduled run
-   — triage, fix, or document a temporary waiver in the issue.
-3. A job result of `cancelled` counts as red alongside `failure` (#557): a dead
-   runner is not a pass. The condition reads `needs.*.result` in aggregate, so a
-   job added to `needs:` is covered without editing a second list.
-4. Branch `workflow_dispatch` runs **do not** publish to GitHub Pages (main-only
-   guard on `publish-nightly-report`) so they cannot spuriously red the workflow
-   with a Pages deploy error.
-5. A **failed** `test-health-report` job still publishes (#557). The report's
-   purpose is to show red, and the job fails on its own honesty exits *after*
-   writing the HTML — gating publish on success meant every honesty exit also
-   suppressed the page that would have shown the failure. Only `cancelled` and
-   `skipped` suppress the publish; `skipped` because single-lane dispatch skips
-   the report job and publishing then would false-alarm "HTML missing".
-6. Missing nightly HTML is **visible** (error annotation + tracking issue + a
-   failed job), not a silent `::warning` only.
-7. The scheduled `companion` lane in `extension-e2e.yml` and the weekly
-   `backup-interop` lane both file their own tracking issues on the same terms.
+1. A **scheduled** nightly that fails opens or updates a single tracking issue titled `[nightly] e2e lane red — tracking` with the Actions run URL and the report link. The report link is the **immutable dated slot** for that run (`test-report/nightly/runs/<date>-<runId>/`), not the `nightly/` alias — the alias is overwritten the next night, so an issue citing it would silently start describing a different run (#557).
+2. **Expected response:** within **24 hours** or before the next scheduled run — triage, fix, or document a temporary waiver in the issue.
+3. A job result of `cancelled` counts as red alongside `failure` (#557): a dead runner is not a pass. The condition reads `needs.*.result` in aggregate, so a job added to `needs:` is covered without editing a second list.
+4. Branch `workflow_dispatch` runs **do not** publish to GitHub Pages (main-only guard on `publish-nightly-report`) so they cannot spuriously red the workflow with a Pages deploy error.
+5. A **failed** `test-health-report` job still publishes (#557). The report's purpose is to show red, and the job fails on its own honesty exits _after_ writing the HTML — gating publish on success meant every honesty exit also suppressed the page that would have shown the failure. Only `cancelled` and `skipped` suppress the publish; `skipped` because single-lane dispatch skips the report job and publishing then would false-alarm "HTML missing".
+6. Missing nightly HTML is **visible** (error annotation + tracking issue + a failed job), not a silent `::warning` only.
+7. The scheduled `companion` lane in `extension-e2e.yml` and the weekly `backup-interop` lane both file their own tracking issues on the same terms.
 
 ### Floors ratchet (#496 E4, extended #532)
 
-`tests/coverage-floors.json` values, matrix flow `minimumTests`, and
-`tests/mutation-floors.json` scores **move only upward**. Perf budget files
-(`apps/web/tests/e2e/perf-budgets.ts`,
-`packages/gateway/benchmarks/low-end-budgets.json`) are **tighten-only**:
-ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails.
-CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
+`tests/coverage-floors.json` values, matrix flow `minimumTests`, and `tests/mutation-floors.json` scores **move only upward**. Perf budget files (`apps/web/tests/e2e/perf-budgets.ts`, `packages/gateway/benchmarks/low-end-budgets.json`) are **tighten-only**: ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails. CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
 
 - top-level `approvedDeviation` on `coverage-floors.json` or `mutation-floors.json`,
 - per-flow `approvedMinimumTestsDeviation` on the lowered flow, or
@@ -107,13 +64,8 @@ CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
 
 ### Skipped-gate honesty + partial → solid (#496 B2/B3)
 
-- Env-gated **cell or flow owners** (`CENTRAID_*`, `CLAWGNITION_*`, whole-file
-  `describe.skipIf` / early `t.skip`) cannot keep a `solid` or `partial`
-  assessment — `bun run test:matrix` fails until the gate is removed or the
-  assessment is demoted.
-- Closing a QUALITY / matrix note item **must** promote the assessment and
-  delete/update the note. `partial` is temporary evidence, not permanent
-  furniture.
+- Env-gated **cell or flow owners** (`CENTRAID_*`, `CLAWGNITION_*`, whole-file `describe.skipIf` / early `t.skip`) cannot keep a `solid` or `partial` assessment — `bun run test:matrix` fails until the gate is removed or the assessment is demoted.
+- Closing a QUALITY / matrix note item **must** promote the assessment and delete/update the note. `partial` is temporary evidence, not permanent furniture.
 
 ### Confidence map (#496 J1)
 
@@ -131,46 +83,17 @@ Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 
 `TESTING.md` wins over any suite README that contradicts this split (**L3**).
 
-Playwright alone owns desktop and web regression journeys. The mobile journey
-layer is the committed agent-driven flows under
-[`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving
-substrate is **Maestro**, spawned by the harness
-([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk`
-runs `maestro --udid … test <flow.yaml>` per step) against an installed
-development app on a booted iOS Simulator or Android emulator. The `mobile-e2e`
-job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and
-runs those flows nightly. There is no second native suite and no Detox suite.
-Desktop agent-driven flows were retired after their unique restart/persistence
-assertions moved to Electron Playwright.
+Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e` job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and runs those flows nightly. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
 
-Property-style checks follow the normal `*.test.ts` convention and say
-`property` in the suite name. `.spec.ts` is Playwright-only.
+Property-style checks follow the normal `*.test.ts` convention and say `property` in the suite name. `.spec.ts` is Playwright-only.
 
-Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which
-bootstrap real vault/daemon layouts and are therefore fsync-bound — get a 30s
-default from the shared `nodeProject` preset in
-[`packages/test-kit/src/vitest.ts`](packages/test-kit/src/vitest.ts); the
-measurements justifying that number are in the comment there. jsdom projects do
-no disk I/O and keep Vitest's tight 5s default. The budget is sized for
-hosted-runner **disk latency variance**, which was measured at up to ~10x
-between two runner instances executing the identical command — not for v8
-coverage instrumentation, which is enabled in the per-PR `ci` lane too. Files
-slower still than the node default escalate locally with `vi.setConfig` (the
-gateway CLI suites use 60s); do not add a per-test `timeout` option that sits
-*below* its file's budget.
+Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which bootstrap real vault/daemon layouts and are therefore fsync-bound — get a 30s default from the shared `nodeProject` preset in [`packages/test-kit/src/vitest.ts`](packages/test-kit/src/vitest.ts); the measurements justifying that number are in the comment there. jsdom projects do no disk I/O and keep Vitest's tight 5s default. The budget is sized for hosted-runner **disk latency variance**, which was measured at up to ~10x between two runner instances executing the identical command — not for v8 coverage instrumentation, which is enabled in the per-PR `ci` lane too. Files slower still than the node default escalate locally with `vi.setConfig` (the gateway CLI suites use 60s); do not add a per-test `timeout` option that sits _below_ its file's budget.
 
 ## Product tiers and coverage gates
 
-The deeply gated engine is vault, client replica, gateway, app-engine,
-automation, backup, blueprints (including its co-located app and kit runtime),
-agent-runtime, plus pure libraries design-tokens, tunnel, protocol, and cli.
-Renderer screens and mobile UI are covered by extracted logic plus journeys,
-not by a whole-surface line percentage. `packages/client/src/replica/**` is
-gated independently from `packages/client/src/react/**` for that reason.
+The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app and kit runtime), agent-runtime, plus pure libraries design-tokens, tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason.
 
-Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and
-are consumed directly by the root Vitest config. Floors are a conservative
-integer margin below the latest measured `bun run coverage` run (2026-07-29):
+Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config. Floors are a conservative integer margin below the latest measured `bun run coverage` run (2026-07-29):
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
@@ -193,84 +116,52 @@ integer margin below the latest measured `bun run coverage` run (2026-07-29):
 | `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **55** |
 
-The #630 denominator expansion is an approved measurement deviation: the old
-71% aggregate excluded 11,639 executable lines under
-`packages/blueprints/apps` and `packages/blueprints/kit`. Their initial floors
-record the first honest baseline; real handler contracts and platform journeys
-own correctness while the line/branch floors ratchet upward from here.
+The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/blueprints/kit`. Their initial floors record the first honest baseline; real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here.
 
-`bun run test` prints the active floors after package tests so the local loop
-never hides the CI contract; `bun run coverage` measures and enforces them.
-Floors move only upward (`bun run test:ratchet`).
+`bun run test` prints the active floors after package tests so the local loop never hides the CI contract; `bun run coverage` measures and enforces them. Floors move only upward (`bun run test:ratchet`).
 
 ### agent-runtime coverage strategy
 
-`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor
-was ratcheted to **~72%** once measured coverage cleared the old deliberate 27%
-seed (spawn-heavy adapters remain covered by contracts + integration rather
-than a pure line chase).
+`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor was ratcheted to **~72%** once measured coverage cleared the old deliberate 27% seed (spawn-heavy adapters remain covered by contracts + integration rather than a pure line chase).
 
-Do **not** raise the agent-runtime line floor without a dedicated coverage
-campaign. Do **not** lower any engine floor in this table without an explicit
-issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit
-tests over expanding spawn-heavy turn drivers for coverage alone.
+Do **not** raise the agent-runtime line floor without a dedicated coverage campaign. Do **not** lower any engine floor in this table without an explicit issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit tests over expanding spawn-heavy turn drivers for coverage alone.
 
 ## Named invariant contracts
 
-These suites encode product law and are cataloged by name. The matrix validator
-also records their current minimum test count so a contract cannot silently
-shrink in CI.
+These suites encode product law and are cataloged by name. The matrix validator also records their current minimum test count so a contract cannot silently shrink in CI.
 
-1. Vault consent gateway and journalled writes —
-   `packages/vault/src/gateway/gateway.contract.test.ts`
-2. Backup/restore round-trip and fencing —
-   `packages/gateway/src/backup/backup-service.contract.test.ts`
-3. Blob custody / CAS state machine —
-   `packages/vault/src/blob/custody-proven.contract.test.ts`
-4. Replica convergence, intent identity, and multi-writer admission —
-   `packages/client/src/replica/intents.contract.test.ts` and
-   `packages/client/src/replica/multi-writer.contract.test.ts`
-5. Handler validation and worker isolation —
-   `packages/app-engine/src/handlers/handler-runner.contract.test.ts`
-6. Control/app/device session boundaries —
-   `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
-7. Scheduler no-backfill semantics —
-   `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
-8. Conversation digest → archive → custody-gated prune —
-   `packages/app-engine/src/conversation/archive/archive.contract.test.ts`
+1. Vault consent gateway and journalled writes — `packages/vault/src/gateway/gateway.contract.test.ts`
+2. Backup/restore round-trip and fencing — `packages/gateway/src/backup/backup-service.contract.test.ts`
+3. Blob custody / CAS state machine — `packages/vault/src/blob/custody-proven.contract.test.ts`
+4. Replica convergence, intent identity, and multi-writer admission — `packages/client/src/replica/intents.contract.test.ts` and `packages/client/src/replica/multi-writer.contract.test.ts`
+5. Handler validation and worker isolation — `packages/app-engine/src/handlers/handler-runner.contract.test.ts`
+6. Control/app/device session boundaries — `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
+7. Scheduler no-backfill semantics — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
+8. Conversation digest → archive → custody-gated prune — `packages/app-engine/src/conversation/archive/archive.contract.test.ts`
 
-Generated-state properties cover blob custody and replica intent idempotency.
-The replica admission contract owns the multi-tab/same-id writer race.
+Generated-state properties cover blob custody and replica intent idempotency. The replica admission contract owns the multi-tab/same-id writer race.
 
 ## Shared test infrastructure
 
-`@centraid/test-kit` is a private, source-exported workspace package. Use it
-for:
+`@centraid/test-kit` is a private, source-exported workspace package. Use it for:
 
 - `tempDir()` / `tempDirSync()` with automatic test-file cleanup;
 - `useFakeClock()` with automatic real-timer restoration;
 - bootstrapped `createTestVault()` and listener-free `buildTestGateway()`;
 - node and jsdom+JSX+CSS-module Vitest presets;
-- deterministic parties, photos, conversations, turns, and blob custody
-  volume fixtures;
+- deterministic parties, photos, conversations, turns, and blob custody volume fixtures;
 - perf/scale JSON result emission.
 
 Do not add another local helper when the shared package already owns the seam.
 
-Deterministic automation fires need no mock: their handlers run in-process
-against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only
-`ctx.agent` reaches a provider. In tests that provider turn is faked through
-the ACP fake-agent fixture
-(`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam
-chat turns use — there is no automation-specific mock LLM (the
-`@centraid/mock-llm` package was removed with the `ctx.tool` rail).
+Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.agent` reaches a provider. In tests that provider turn is faked through the ACP fake-agent fixture (`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam chat turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
 ## Lane schedule and commands
 
 | Command / workflow | Contents |
 | --- | --- |
 | `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + knip + lint:css + test:matrix + **test:ratchet** + **test:ratchet:unit** + **test:affected**. Superset of CI `static` (which omits `test:affected`; full vitest is on `verify`). Vitest alone is not a substitute. |
-| `bun run check:pr:full` | Same as `check:pr`, but runs **dependents** via `turbo --filter='...[origin/main]'` (`test:affected:full`). Use before requesting merge when a shared package changed. |
+| `bun run check:full` | `check:pr` plus affected dependents, unified coverage, affected mutation/perf, and desktop/web e2e. Required before requesting merge when shared infrastructure changed. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
 | `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='[origin/main]'` — changed packages only; dependents stay on full CI `verify`) |
 | `bun run test:affected:full` | vitest for changed packages **and dependents** (`turbo --filter='...[origin/main]'`) |
@@ -290,10 +181,7 @@ chat turns use — there is no automation-specific mock LLM (the
 
 ### Test-health report (main + nightly)
 
-Public HTML publishes only from **main** (per-merge `ci`) and the **nightly**
-e2e workflow — not from pull requests. Every `verify` / nightly report job
-still writes a Job Summary and uploads the `test-health-report` artifact for
-that run.
+Public HTML publishes only from **main** (per-merge `ci`) and the **nightly** e2e workflow — not from pull requests. Every `verify` / nightly report job still writes a Job Summary and uploads the `test-health-report` artifact for that run.
 
 | Slot | URL |
 | --- | --- |
@@ -302,236 +190,83 @@ that run.
 | A specific nightly (**immutable**, HTML kept 30 deep) | `…/test-report/nightly/runs/<date>-<runId>/` |
 | Landing | `https://srikanth235.github.io/centraid/` |
 
-Cite the dated slot when linking a report from an issue or a PR; the `nightly/`
-alias is only correct for "whatever ran most recently". The full run series
-(never pruned, even after its HTML is) is `…/test-report/history/index.json`.
+Cite the dated slot when linking a report from an issue or a PR; the `nightly/` alias is only correct for "whatever ran most recently". The full run series (never pruned, even after its HTML is) is `…/test-report/history/index.json`.
 
-Performance and scale budgets use generous regression multipliers. A noisy
-budget is fixed or removed; it is never promoted to the per-PR loop. Lane
-results are JSON under `artifacts/perf` and `artifacts/scale`; the nightly
-workflow restores and appends their bounded cross-run history before the
-combined report is published. Coverage, desktop Playwright, web Playwright,
-performance, and scale commands stamp distinct lane-start markers: a cached
-result not refreshed by that invocation turns grey immediately. Vitest,
-Playwright, agent-e2e, performance, and scale evidence all carries a capture
-time and expires after 36 hours. This staleness signal exists because a
-nightly-only suite rots silently: #458 found the entire desktop Playwright
-suite red after the React/CSS-modules migrations — hard-coded selectors like
-`.cd-sb-item`, `.ctx-menu`, and `.modal-card` had all gone dead, exactly the
-#225-class silent rot — while the per-PR loop stayed green. Grey (or expired)
-evidence in the report is the standing guard against that class of drift.
+Performance and scale budgets use generous regression multipliers. A noisy budget is fixed or removed; it is never promoted to the per-PR loop. Lane results are JSON under `artifacts/perf` and `artifacts/scale`; the nightly workflow restores and appends their bounded cross-run history before the combined report is published. Coverage, desktop Playwright, web Playwright, performance, and scale commands stamp distinct lane-start markers: a cached result not refreshed by that invocation turns grey immediately. Vitest, Playwright, agent-e2e, performance, and scale evidence all carries a capture time and expires after 36 hours. This staleness signal exists because a nightly-only suite rots silently: #458 found the entire desktop Playwright suite red after the React/CSS-modules migrations — hard-coded selectors like `.cd-sb-item`, `.ctx-menu`, and `.modal-card` had all gone dead, exactly the #225-class silent rot — while the per-PR loop stayed green. Grey (or expired) evidence in the report is the standing guard against that class of drift.
 
-The full nightly has a stricter contract than a PR/main report: **zero grey**.
-Every declared owner must emit matchable evidence, every lane must run, and an
-owner may not die silently. PR/main reports may remain grey because the nightly
-lanes deliberately do not run there. A matrix `skip` means structural N/A for
-the product; missing but valuable proof is a `gap` with a live tracking issue.
-`partial` means real evidence exists but the cell note names the precise depth
-still missing. Performance harnesses live in `tests/perf/`, scale rigs in
-`tests/scale/`, and both write `recordQualityResult` evidence whose `OWNER`
-matches `tests/matrix.json` exactly.
+The full nightly has a stricter contract than a PR/main report: **zero grey**. Every declared owner must emit matchable evidence, every lane must run, and an owner may not die silently. PR/main reports may remain grey because the nightly lanes deliberately do not run there. A matrix `skip` means structural N/A for the product; missing but valuable proof is a `gap` with a live tracking issue. `partial` means real evidence exists but the cell note names the precise depth still missing. Performance harnesses live in `tests/perf/`, scale rigs in `tests/scale/`, and both write `recordQualityResult` evidence whose `OWNER` matches `tests/matrix.json` exactly.
 
 ### Quality-dimension decisions (#587 D21)
 
-- **Supply chain:** accepted as a cross-cutting gate, not a matrix column. The
-  lockfile linter and dependency-review job already own it; duplicating the
-  same result 15 times would imply per-surface evidence that does not exist.
-- **Bundle/app weight:** accepted for a follow-up lane and tracking issue.
-  Desktop, web, and mobile have materially different artifacts and need
-  measured baselines before budgets can be honest.
-- **Accessibility:** accepted for a follow-up lane and tracking issue. It
-  belongs in the matrix because failures are surface-specific; the first work
-  should establish web/desktop automated coverage and the mobile device path.
+- **Supply chain:** accepted as a cross-cutting gate, not a matrix column. The lockfile linter and dependency-review job already own it; duplicating the same result 15 times would imply per-surface evidence that does not exist.
+- **Bundle/app weight:** accepted for a follow-up lane and tracking issue. Desktop, web, and mobile have materially different artifacts and need measured baselines before budgets can be honest.
+- **Accessibility:** accepted for a follow-up lane and tracking issue. It belongs in the matrix because failures are surface-specific; the first work should establish web/desktop automated coverage and the mobile device path.
 
-The report also consumes `QUALITY.md`'s `## Open` section so field-observed
-problems sit beside laboratory evidence instead of living in a separate,
-unseen ledger.
+The report also consumes `QUALITY.md`'s `## Open` section so field-observed problems sit beside laboratory evidence instead of living in a separate, unseen ledger.
 
 ### Mobile liveness and native consistency (#587 E/F)
 
-A green mobile unit lane proves correctness of the code paths it executes; it
-does **not** prove that Metro can transform/resolve the app or that either
-native project builds. Expo/React Native peer ranges can accept incompatible
-major Babel versions at install time. The required PR `mobile-smoke` job is the
-compensating control: it runs Expo's compatibility check as an advisory, then
-requires iOS and Android Metro exports plus compilation of the Android
-application and its native modules to succeed. `expo install --check`
-currently catches Expo's bundled-native-module version drift, but it does not model the
-Babel-core/runtime constraints that broke #565 or Kotlin members added by a
-new Expo Module base class. Metro catches the transform-time and resolve-time
-failures; the Kotlin compile catches native source/API collisions.
+A green mobile unit lane proves correctness of the code paths it executes; it does **not** prove that Metro can transform/resolve the app or that either native project builds. Expo/React Native peer ranges can accept incompatible major Babel versions at install time. The required PR `mobile-smoke` job is the compensating control: it runs Expo's compatibility check as an advisory, then requires iOS and Android Metro exports plus compilation of the Android application and its native modules to succeed. `expo install --check` currently catches Expo's bundled-native-module version drift, but it does not model the Babel-core/runtime constraints that broke #565 or Kotlin members added by a new Expo Module base class. Metro catches the transform-time and resolve-time failures; the Kotlin compile catches native source/API collisions.
 
-Dependabot continues to propose production major-version updates. Patch and
-minor updates stay grouped for noise control; each major arrives in its own PR
-so the test suite can identify precisely which upgrade works and which one
-breaks a compatibility contract. A failing gate is evidence about that proposed
-upgrade, not a policy that majors are forbidden.
+Dependabot continues to propose production major-version updates. Patch and minor updates stay grouped for noise control; each major arrives in its own PR so the test suite can identify precisely which upgrade works and which one breaks a compatibility contract. A failing gate is evidence about that proposed upgrade, not a policy that majors are forbidden.
 
-The same job verifies the committed iOS Pod lock against resolved Expo and
-React Native, including `React-Core`, `React-Core-prebuilt`,
-`ReactNativeDependencies`, and Hermes; rejects machine/worktree-shaped native
-paths; and compares both platforms with
-`apps/mobile/native-fingerprints.json`. A native dependency, SDK,
-config-plugin, or generated-project change therefore requires an explicit
-fingerprint rebaseline after reviewing the native diff.
-The fingerprint hashes the Iroh tag and separate framework/Swift checksums in
-`CentraidTunnel.podspec`, not its git-ignored reconstructed framework and
-Swift binding; running CocoaPods must not change the same checkout's native
-input identity. It likewise hashes the app's maps configuration and the
-`react-native-maps` package, but not the package's `RNMapsDefines.h` marker
-that CocoaPods rewrites from those inputs.
+The same job verifies the committed iOS Pod lock against resolved Expo and React Native, including `React-Core`, `React-Core-prebuilt`, `ReactNativeDependencies`, and Hermes; rejects machine/worktree-shaped native paths; and compares both platforms with `apps/mobile/native-fingerprints.json`. A native dependency, SDK, config-plugin, or generated-project change therefore requires an explicit fingerprint rebaseline after reviewing the native diff. The fingerprint hashes the Iroh tag and separate framework/Swift checksums in `CentraidTunnel.podspec`, not its git-ignored reconstructed framework and Swift binding; running CocoaPods must not change the same checkout's native input identity. It likewise hashes the app's maps configuration and the `react-native-maps` package, but not the package's `RNMapsDefines.h` marker that CocoaPods rewrites from those inputs.
 
-The nightly iOS lane runs on `macos-26` and selects Xcode ≥26.4 before the
-build. Expo SDK 57's `expo-modules-jsi` declares `swift-tools-version: 6.2`
-and documents Xcode 26.4+ (Swift 6.3); `macos-15`'s default Xcode 16.4
-satisfies React Native's 16.1 floor but fails the JSI xcframework step with
-exit 65 and an empty "Could not resolve package dependencies" footer
-(run 30417451436). `apps/mobile/scripts/check-xcode-minimum.mjs` takes the
-max of React Native's helper minimum and that ExpoModulesJSI floor so a
-future image roll that drops below 26.4 fails as an `infra-mismatch` before
-the cold build.
+The nightly iOS lane runs on `macos-26` and selects Xcode ≥26.4 before the build. Expo SDK 57's `expo-modules-jsi` declares `swift-tools-version: 6.2` and documents Xcode 26.4+ (Swift 6.3); `macos-15`'s default Xcode 16.4 satisfies React Native's 16.1 floor but fails the JSI xcframework step with exit 65 and an empty "Could not resolve package dependencies" footer (run 30417451436). `apps/mobile/scripts/check-xcode-minimum.mjs` takes the max of React Native's helper minimum and that ExpoModulesJSI floor so a future image roll that drops below 26.4 fails as an `infra-mismatch` before the cold build.
 
-Android decisions mirror iOS where the artifact exists: Android uses the same
-fingerprint ratchet and path-safe `require.resolve` project configuration.
-There is no separately committed Android dependency-resolution lock equivalent
-to `Podfile.lock`, so F26 is structurally N/A there; Gradle resolves against the
-root Bun install, Metro smoke, and PR-time tunnel-module compile. The nightly
-Android toolchain remains separately pinned by its JDK/Gradle setup; unlike
-iOS, React Native exposes no single checked-in minimum-host-version contract to
-compare before Gradle configuration, so E24's explicit minimum-version
-preflight is iOS-only.
+Android decisions mirror iOS where the artifact exists: Android uses the same fingerprint ratchet and path-safe `require.resolve` project configuration. There is no separately committed Android dependency-resolution lock equivalent to `Podfile.lock`, so F26 is structurally N/A there; Gradle resolves against the root Bun install, Metro smoke, and PR-time tunnel-module compile. The nightly Android toolchain remains separately pinned by its JDK/Gradle setup; unlike iOS, React Native exposes no single checked-in minimum-host-version contract to compare before Gradle configuration, so E24's explicit minimum-version preflight is iOS-only.
 
 ## Unified report
 
-[`scripts/test-report`](scripts/test-report) ingests the matrix, Vitest JSON,
-`coverage/coverage-summary.json`, every Playwright JSON result, agent-e2e
-evidence, and perf/scale JSON. It emits one self-contained page at
-`dist/test-report/index.html` with:
+[`scripts/test-report`](scripts/test-report) ingests the matrix, Vitest JSON, `coverage/coverage-summary.json`, every Playwright JSON result, agent-e2e evidence, and perf/scale JSON. It emits one self-contained page at `dist/test-report/index.html` with:
 
 - the clickable surface × quality-dimension heatmap first;
 - canonical owners, tier, lane, last status, and runtime in the cell inspector;
-- coverage versus floor, per-package wall clock, slowest ten files, and skip
-  counts;
+- coverage versus floor, per-package wall clock, slowest ten files, and skip counts;
 - perf/scale trends;
 - grey missing or stale evidence instead of an absent lane.
 
-PR CI uploads the report even when coverage fails. Nightly jobs upload surface
-evidence; the final job merges the latest pairing/relay artifact, reruns the
-full Vitest coverage suite, then publishes one report after performance and
-scale run. `bun run test:report:smoke` verifies the generator without requiring
-prior test artifacts.
+PR CI uploads the report even when coverage fails. Nightly jobs upload surface evidence; the final job merges the latest pairing/relay artifact, reruns the full Vitest coverage suite, then publishes one report after performance and scale run. `bun run test:report:smoke` verifies the generator without requiring prior test artifacts.
 
 ## The test convention
 
-Every test in this repo follows these rules. They are objective enough for an
-agent to self-check and for review to enforce.
+Every test in this repo follows these rules. They are objective enough for an agent to self-check and for review to enforce.
 
-- **Behaviour over implementation.** Assert observable outcomes — return values,
-  persisted state, emitted events — never that a private helper ran or a mock was
-  called. If the refactor is behaviour-preserving, the test must still pass.
-- **Real deps; fake only at the edges.** Use the real sqlite, real workers, real
-  modules. Fake only what is non-deterministic or external: clock, network, fs
-  randomness. The backend already does this; keep it the default.
-- **One behaviour per test.** A test names a single behaviour and asserts it. No
-  grab-bag tests that drift into asserting incidentals.
-- **Assert outcomes, not mock calls.** `expect(result).toEqual(...)`, not
-  `expect(mock).toHaveBeenCalled()`. A `toHaveBeenCalled` assertion is a smell —
-  justify it or replace it with an outcome assertion.
-- **Deterministic.** No real time (`Date.now()`/timers — inject or fake), no real
-  randomness, no network. No committed `.only`. A test must pass on every run.
-- **Clear failure output.** A failing test must say _what_ broke without a
-  debugger. Prefer specific matchers and meaningful expected values over
-  `toBeTruthy()`.
+- **Behaviour over implementation.** Assert observable outcomes — return values, persisted state, emitted events — never that a private helper ran or a mock was called. If the refactor is behaviour-preserving, the test must still pass.
+- **Real deps; fake only at the edges.** Use the real sqlite, real workers, real modules. Fake only what is non-deterministic or external: clock, network, fs randomness. The backend already does this; keep it the default.
+- **One behaviour per test.** A test names a single behaviour and asserts it. No grab-bag tests that drift into asserting incidentals.
+- **Assert outcomes, not mock calls.** `expect(result).toEqual(...)`, not `expect(mock).toHaveBeenCalled()`. A `toHaveBeenCalled` assertion is a smell — justify it or replace it with an outcome assertion.
+- **Deterministic.** No real time (`Date.now()`/timers — inject or fake), no real randomness, no network. No committed `.only`. A test must pass on every run.
+- **Clear failure output.** A failing test must say _what_ broke without a debugger. Prefer specific matchers and meaningful expected values over `toBeTruthy()`.
 
-When in doubt, apply the adversarial check: _could the code be wrong and this
-test still pass?_ If yes, the test is not yet meaningful.
+When in doubt, apply the adversarial check: _could the code be wrong and this test still pass?_ If yes, the test is not yet meaningful.
 
 ### ultracite vitest preset (#573)
 
-The convention above is now mechanically enforced where it can be: as of #573
-the repo lints test files with **ultracite's `vitest` oxlint preset**, on top of
-the `core` + `react` presets it already composed. Wiring and caveats:
+The convention above is now mechanically enforced where it can be: as of #573 the repo lints test files with **ultracite's `vitest` oxlint preset**, on top of the `core` + `react` presets it already composed. Wiring and caveats:
 
-- **It is spliced, not extended.** The preset delivers every rule through a
-  single `overrides` entry, and an extended preset's overrides outrank the
-  consumer's — so `extends: [vitest]` would leave no way to scope it. Its
-  override is therefore spread into `overrides` in `oxlint.config.mjs`
-  verbatim (same rules, same `**/*.{test,spec}.*` glob); only the ordering is
-  ours. This is what makes the two scoping decisions below expressible at all.
-  Partial adoption is otherwise impossible: you cannot turn one of its rules off
-  from the top-level `rules` block the way the core/react opinions are pinned.
-- **Playwright e2e is out of scope.** The preset's glob also matches
-  `apps/*/tests/e2e/**.spec.ts`, which are Playwright, not vitest. Left in
-  scope, `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on
-  top of the `@playwright/test` one and the files stop parsing. A later override
-  turns the `vitest/*` rules off there. This is about which runner owns the
-  file, not about opting out of a rule.
-- **`prefer-to-be-truthy` / `prefer-to-be-falsy` are off.** They are the only
-  two rules in the preset that contradict the convention above —
-  `expect(x).toBe(true)` asserts `x` is exactly `true`, `toBeTruthy()` also
-  passes for `1`, `'x'`, `[]`, `{}`. Autofixing them over this suite rewrote
-  1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker assertions, so
-  they stay off and `toBe(true)` / `toBe(false)` remain the house style.
-- **`prefer-strict-equal` rewrites were hand-reviewed.** The autofix converted
-  2,436 `toEqual` call sites to `toStrictEqual`, which additionally compares
-  prototypes, `undefined`-valued keys, and array sparseness. Every test the
-  rewrite broke was fixed by tightening the assertion, never by reverting the
-  matcher.
-- **Null-prototype rows.** `node:sqlite` returns rows as null-prototype
-  objects, so `expect(stmt.get()).toStrictEqual({ … })` fails against an object
-  literal even when every column matches. The house fix is to spread the actual
-  — `expect({ ...stmt.get() }).toStrictEqual({ … })` — which compares the column
-  data (the contract) without asserting the driver's choice of prototype, and
-  keeps strictness over keys and values. Do not reach for `toEqual` here.
-- **`prefer-called-with` autofixes are unsound.** It rewrites
-  `expect(fn).toHaveBeenCalled()` to `expect(fn).toHaveBeenCalledWith()`, which
-  asserts the mock was called with *zero* arguments. Comply by naming the real
-  arguments, which is what the rule is actually asking for — and what the
-  convention above wants anyway.
-- **`valid-expect` is configured with `maxArgs: 2`.** The rule defaults to
-  jest's signature; vitest's `expect` takes an optional second argument, the
-  message printed on failure — `expect(res.status, JSON.stringify(body)).toBe(400)`.
-  Complying with the default would mean deleting those messages. Reach for that
-  second argument when a bare boolean assertion would otherwise print nothing
-  useful — comparing two ordered strings, say, where `toBeGreaterThan` cannot be
-  used because it only accepts a number or bigint:
+- **It is spliced, not extended.** The preset delivers every rule through a single `overrides` entry, and an extended preset's overrides outrank the consumer's — so `extends: [vitest]` would leave no way to scope it. Its override is therefore spread into `overrides` in `oxlint.config.ts` verbatim (same rules, same `**/*.{test,spec}.*` glob); only the ordering is ours. This is what makes the two scoping decisions below expressible at all. Partial adoption is otherwise impossible: you cannot turn one of its rules off from the top-level `rules` block the way the core/react opinions are pinned.
+- **Playwright e2e is out of scope.** The preset's glob also matches `apps/*/tests/e2e/**.spec.ts`, which are Playwright, not vitest. Left in scope, `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on top of the `@playwright/test` one and the files stop parsing. A later override turns the `vitest/*` rules off there. This is about which runner owns the file, not about opting out of a rule.
+- **`prefer-to-be-truthy` / `prefer-to-be-falsy` are off.** They are the only two rules in the preset that contradict the convention above — `expect(x).toBe(true)` asserts `x` is exactly `true`, `toBeTruthy()` also passes for `1`, `'x'`, `[]`, `{}`. Autofixing them over this suite rewrote 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker assertions, so they stay off and `toBe(true)` / `toBe(false)` remain the house style.
+- **`prefer-strict-equal` rewrites were hand-reviewed.** The autofix converted 2,436 `toEqual` call sites to `toStrictEqual`, which additionally compares prototypes, `undefined`-valued keys, and array sparseness. Every test the rewrite broke was fixed by tightening the assertion, never by reverting the matcher.
+- **Null-prototype rows.** `node:sqlite` returns rows as null-prototype objects, so `expect(stmt.get()).toStrictEqual({ … })` fails against an object literal even when every column matches. The house fix is to spread the actual — `expect({ ...stmt.get() }).toStrictEqual({ … })` — which compares the column data (the contract) without asserting the driver's choice of prototype, and keeps strictness over keys and values. Do not reach for `toEqual` here.
+- **`prefer-called-with` autofixes are unsound.** It rewrites `expect(fn).toHaveBeenCalled()` to `expect(fn).toHaveBeenCalledWith()`, which asserts the mock was called with _zero_ arguments. Comply by naming the real arguments, which is what the rule is actually asking for — and what the convention above wants anyway.
+- **`valid-expect` is configured with `maxArgs: 2`.** The rule defaults to jest's signature; vitest's `expect` takes an optional second argument, the message printed on failure — `expect(res.status, JSON.stringify(body)).toBe(400)`. Complying with the default would mean deleting those messages. Reach for that second argument when a bare boolean assertion would otherwise print nothing useful — comparing two ordered strings, say, where `toBeGreaterThan` cannot be used because it only accepts a number or bigint:
 
   ```ts
   expect(a > b, `${a} > ${b}`).toBe(true);
   ```
-- **`prefer-import-in-mock` is a type upgrade, so expect fallout.** Rewriting
-  `vi.mock('m', factory)` to `vi.mock(import('m'), factory)` makes vitest
-  typecheck the factory against the real module. That caught 53 mock factories
-  whose stand-ins did not match the module's real types (most often because
-  `Parameters<typeof x>` captures only the *last* overload of an overloaded
-  export). Fix the factory rather than reverting the form; assert on the single
-  offending property, never the whole module. Two further notes: drop any now-
-  redundant `importOriginal<typeof import('m')>()` type argument, and be aware
-  that the typed form pulls the target into the TS program — for a module
-  outside the package's `rootDir` that breaks typecheck, which is why
-  `packages/blueprints/src/photos-media.test.ts` carries the repo's one
-  justified suppression of this rule.
-- **`prefer-describe-function-title` can produce invalid code.** It swaps a
-  string title for a same-named import without checking that the import is
-  callable, so `describe('WAL_CAPTURE_ORDER', …)` became
-  `describe(WAL_CAPTURE_ORDER, …)` — `describe` takes a string or a function,
-  so that fails typecheck. Title such blocks in prose instead. Three sites hit
-  this, and only `typecheck` catches it: the tests still *run*.
+
+- **`prefer-import-in-mock` is a type upgrade, so expect fallout.** Rewriting `vi.mock('m', factory)` to `vi.mock(import('m'), factory)` makes vitest typecheck the factory against the real module. That caught 53 mock factories whose stand-ins did not match the module's real types (most often because `Parameters<typeof x>` captures only the _last_ overload of an overloaded export). Fix the factory rather than reverting the form; assert on the single offending property, never the whole module. Two further notes: drop any now- redundant `importOriginal<typeof import('m')>()` type argument, and be aware that the typed form pulls the target into the TS program — for a module outside the package's `rootDir` that breaks typecheck, which is why `packages/blueprints/src/photos-media.test.ts` carries the repo's one justified suppression of this rule.
+- **`prefer-describe-function-title` can produce invalid code.** It swaps a string title for a same-named import without checking that the import is callable, so `describe('WAL_CAPTURE_ORDER', …)` became `describe(WAL_CAPTURE_ORDER, …)` — `describe` takes a string or a function, so that fails typecheck. Title such blocks in prose instead. Three sites hit this, and only `typecheck` catches it: the tests still _run_.
 
 ### Diff coverage (#532)
 
-After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It
-intersects `git diff origin/main` added lines (instrumentable `packages/*` /
-`apps/*` sources plus the co-located blueprint app/kit runtimes) with
-Istanbul/v8 `coverage/coverage-final.json`. Threshold is **80%** of changed
-instrumentable lines. Failures name uncovered hunks.
-Waive with a non-empty `approvedDeviation` in
-`tests/diff-coverage-deviation.json` (constitutional exception — temporary).
+After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It intersects `git diff origin/main` added lines (instrumentable `packages/*` / `apps/*` sources plus the co-located blueprint app/kit runtimes) with Istanbul/v8 `coverage/coverage-final.json`. Threshold is **80%** of changed instrumentable lines. Failures name uncovered hunks. Waive with a non-empty `approvedDeviation` in `tests/diff-coverage-deviation.json` (constitutional exception — temporary).
 
 ### Mutation testing (#532)
 
-Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on property-defended core
-packages:
+Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on property-defended core packages:
 
 - `packages/vault` (custody)
 - `packages/client/src/replica` (intents + payload-hash)
@@ -542,30 +277,18 @@ packages:
 - `packages/tunnel` (wire frame / pair QR / sanitize)
 - `packages/app-engine` (pricing cost formula)
 
-Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`)
-mutate the property-defended modules; root pointers live under `tests/mutation/`.
-`bun run test:mutation` writes `artifacts/mutation/scores.json` for the
-test-health report. Floors live in `tests/mutation-floors.json` and ratchet
-up-only (measured 2026-07-23/24 — see file comment).
+Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules; root pointers live under `tests/mutation/`. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
 
-**Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs
-Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD`
-(or all seeds when mutation infra / floors change), then **enforces** floors on
-measured packages. Unrelated PRs skip Stryker in ~1s. Nightly still runs the
-full eight-package lane.
+**Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly still runs the full eight-package lane.
 
-**Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget
-gate (`packages/gateway` `perf:low-end`, fsync-required on Linux). Perf budget
-*numbers* also tighten-only via `test:ratchet`. Full `test:perf` / Playwright
-waterfall remains nightly.
+**Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget gate (`packages/gateway` `perf:low-end`, fsync-required on Linux). Perf budget _numbers_ also tighten-only via `test:ratchet`. Full `test:perf` / Playwright waterfall remains nightly.
 
 ### Property contracts (fast-check, #532)
 
-`@centraid/test-kit/fast-check` re-exports a pinned `fast-check`. Core contracts
-use model-based / property tests across the load-bearing pure surfaces:
+`@centraid/test-kit/fast-check` re-exports a pinned `fast-check`. Core contracts use model-based / property tests across the load-bearing pure surfaces:
 
 | Flow | Owner | `minimumTests` |
-| --- | --- | ---: |
+| --- | --- | --: |
 | `blob-custody-properties` | vault custody-properties | **12** |
 | `vault-json-schema-properties` | vault json-schema-properties | **7** |
 | `replica-intent-properties` | client intent-idempotency-properties | **10** |
@@ -580,23 +303,16 @@ use model-based / property tests across the load-bearing pure surfaces:
 
 ### Coverage-scope reachability (#532)
 
-Governance directive `coverage-scope-reachability` fails when a `packages/*` or
-`apps/*` tree, or either co-located blueprint `apps` / `kit` runtime, has
-non-test executable source but no coverage floor, matrix owner, or intentional
-allowlist entry — so a new product surface cannot land invisible to every
-floor.
+Governance directive `coverage-scope-reachability` fails when a `packages/*` or `apps/*` tree, or either co-located blueprint `apps` / `kit` runtime, has non-test executable source but no coverage floor, matrix owner, or intentional allowlist entry — so a new product surface cannot land invisible to every floor.
 
 ## Deliberately deferred
 
 - A second React Native component-test toolchain.
 - Per-PR UI / scale / full Playwright perf waterfall (nightly only).
 - Chasing 100% or testing trivial getters.
-- Mutating whole large modules (WAL seal/replay, tunnel stream I/O, keyring I/O,
-  React shells) — pure property-defended mutate sets only.
+- Mutating whole large modules (WAL seal/replay, tunnel stream I/O, keyring I/O, React shells) — pure property-defended mutate sets only.
 
 ## Related
 
-- [Issue #458](https://github.com/srikanth235/centraid/issues/458) — current
-  product-shape audit and reorganization.
-- [Issue #212](https://github.com/srikanth235/centraid/issues/212) — original
-  runner and meaningful-coverage strategy.
+- [Issue #458](https://github.com/srikanth235/centraid/issues/458) — current product-shape audit and reorganization.
+- [Issue #212](https://github.com/srikanth235/centraid/issues/212) — original runner and meaningful-coverage strategy.

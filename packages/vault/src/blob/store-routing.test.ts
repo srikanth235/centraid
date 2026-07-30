@@ -89,7 +89,9 @@ function startFakeS3(): Promise<FakeS3> {
         objects,
         requests,
         close: () =>
-          new Promise<void>((_resolve) => server.close(() => _resolve())),
+          new Promise<void>((_resolve) => {
+            server.close(() => _resolve());
+          }),
       });
     });
   });

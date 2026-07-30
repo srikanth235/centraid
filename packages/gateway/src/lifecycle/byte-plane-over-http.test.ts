@@ -8,8 +8,9 @@ import type { Server } from "node:http";
 import net from "node:net";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { createBlobHandoffUrl } from "../serve/data-plane-handoff.js";
 import { startTypeScriptBytePlane } from "./byte-plane-reference.js";
@@ -54,7 +55,9 @@ async function waitForHealth(): Promise<void> {
     }
     if (attempt >= 99)
       throw new Error("byte-plane test daemon did not become healthy");
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 25);
+    });
     return poll(attempt + 1);
   };
   return poll(0);
@@ -130,7 +133,9 @@ describe.skipIf(!enabled)(
       if (child)
         await Promise.race([
           once(child, "exit"),
-          new Promise((resolve) => setTimeout(resolve, 1_000)),
+          new Promise((resolve) => {
+            setTimeout(resolve, 1_000);
+          }),
         ]);
       await reference?.close();
       if (provider) {

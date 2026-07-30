@@ -124,7 +124,7 @@ export function useTotp(seed: string | null | undefined): {
   useEffect(() => {
     if (!seed || !key || OTP_CACHE.has(key)) return undefined;
     let cancelled = false;
-    computeTotp(seed, step).then((value) => {
+    void computeTotp(seed, step).then((value) => {
       OTP_CACHE.set(key, value);
       if (OTP_CACHE.size > 40) {
         const oldest = OTP_CACHE.keys().next().value;

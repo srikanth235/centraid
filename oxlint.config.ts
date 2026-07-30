@@ -3,13 +3,11 @@ import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
 import vitest from "ultracite/oxlint/vitest";
 
-// Ultracite ships its oxlint presets as ESM modules from 7.5 on, so the former
-// .oxlintrc.json "extends" paths stopped resolving and the config moved here.
-// oxlint loads a JS config through Node, which is why the lint scripts invoke
-// it via node rather than bunx.
-//
-// core + react are the two presets this repo has always composed; vitest joined
-// them in #573. core and react are `extends`ed, but vitest is NOT: it applies
+import { typeAwareOnlyRules } from "./scripts/lint-types-rules.mjs";
+
+// Ultracite is the reviewed policy seed; Oxlint is the only routine lint
+// command and this file is the repository's only lint configuration.
+// core + react are extended, while vitest is NOT: it applies
 // entirely through "overrides", and an extended preset's overrides outrank the
 // consumer's, so `extends: [vitest]` would leave no way to say "these rules,
 // but not on the Playwright specs". Its override is therefore spliced into
@@ -17,16 +15,26 @@ import vitest from "ultracite/oxlint/vitest";
 // ours. See TESTING.md, "ultracite vitest preset (#573)".
 export default defineConfig({
   extends: [core, react],
+  options: {
+    denyWarnings: true,
+    reportUnusedDisableDirectives: "deny",
+    // The pinned TypeScript compiler owns compiler diagnostics. The separate
+    // compatibility pass in scripts/lint-types.sh admits only proven rules.
+    typeAware: false,
+    typeCheck: false,
+  },
   ignorePatterns: (core.ignorePatterns ?? []).concat([
     "**/dist/**",
     "**/.expo/**",
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
-    "packages/blueprints/automations/**",
-    "packages/blueprints/visual-harness/mock-centraid.js",
   ]),
   rules: {
+    // Ultracite's core preset contains type-aware rules. They cannot execute
+    // with options.typeAware=false, so force the complete pinned engine
+    // surface off here; scripts/lint-types.sh admits eight rules explicitly.
+    ...Object.fromEntries(typeAwareOnlyRules.map((rule) => [rule, "off"])),
     // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
     // repo's profile as correctness + suspicious + perf with explicit
     // opinions, so these are pinned off rather than silently adopted. The
@@ -70,7 +78,7 @@ export default defineConfig({
     "no-negated-condition": "off",
     "no-nested-ternary": "off",
     "no-plusplus": "off",
-    "no-promise-executor-return": "off",
+    "no-promise-executor-return": "error",
     "no-restricted-imports": [
       "error",
       {
@@ -99,13 +107,16 @@ export default defineConfig({
     "promise/no-promise-in-callback": "off",
     "promise/prefer-await-to-callbacks": "off",
     "promise/prefer-await-to-then": "off",
+    // react/react-compiler already validates referential stability across the
+    // repository. Enabling these older heuristic rules as well would duplicate
+    // that owner and flag constructions the compiler proves safe.
     "react-perf/jsx-no-new-function-as-prop": "off",
     "react/exhaustive-deps": "error",
     "react/jsx-curly-brace-presence": "off",
     "react/jsx-no-constructed-context-values": "off",
     "react/jsx-no-useless-fragment": "off",
     "react/no-array-index-key": "off",
-    "react/no-danger": "off",
+    "react/no-danger": "error",
     "react/no-unescaped-entities": "off",
     "react/rules-of-hooks": "error",
     "react/style-prop-object": "off",
@@ -123,13 +134,13 @@ export default defineConfig({
     "typescript/no-empty-object-type": "off",
     "typescript/no-explicit-any": "error",
     "typescript/no-import-type-side-effects": "error",
-    "typescript/no-for-in-array": "error",
-    "typescript/only-throw-error": "error",
-    "typescript/prefer-promise-reject-errors": "error",
-    "typescript/require-array-sort-compare": "error",
     "typescript/no-inferrable-types": "off",
     "typescript/no-invalid-void-type": "off",
     "typescript/no-non-null-assertion": "off",
+    // Keep this compatibility boundary visible even though the catalog above
+    // also disables it: tsgolint removes assertions still required by
+    // TypeScript 5.9 under noUncheckedIndexedAccess and in typed mocks.
+    "typescript/no-unnecessary-type-assertion": "off",
     "typescript/parameter-properties": "off",
     "unicorn/catch-error-name": "error",
     "unicorn/consistent-existence-index-check": "off",
@@ -168,12 +179,69 @@ export default defineConfig({
     "unicorn/text-encoding-identifier-case": "off",
   },
   overrides: [
+    {
+      // This deliberate negative fixture proves the corresponding type-aware
+      // rules emit. Disable only the ordinary equivalents so the fixture
+      // remains linted by every unrelated rule.
+      files: ["scripts/fixtures/lint-types/invalid.ts"],
+      rules: {
+        "no-throw-literal": "off",
+        "prefer-promise-reject-errors": "off",
+      },
+    },
+    {
+      // This large ES5-style in-page store is fixture data for the visual
+      // harness and is never shipped. Rewriting its syntax would add risk
+      // without improving the product; keep the useful runtime undefined-name
+      // check while leaving style to the fixture's established form.
+      files: ["packages/blueprints/visual-harness/mock-centraid.js"],
+      env: {
+        browser: true,
+        es2024: true,
+        node: false,
+      },
+      rules: {
+        ...Object.fromEntries(
+          Object.keys(core.rules ?? {}).map((rule) => [rule, "off"])
+        ),
+        "no-undef": "error",
+      },
+    },
     // The vitest preset applies through `overrides`, and an extended preset's
     // overrides outrank the consumer's — so extending it leaves no way to say
     // "not these files". Its single override is therefore spliced in here
     // verbatim (rules unchanged, glob unchanged: wholesale adoption) purely so
     // the Playwright exclusion below can be ordered after it.
     ...vitest.overrides,
+    {
+      // Blueprint automation handlers execute under the gateway's handler
+      // runtime. Connector pagination/batching is intentionally sequential,
+      // because each cursor or page token depends on the prior response.
+      // Every other rule from the root profile still applies.
+      files: ["packages/blueprints/automations/**/handler.js"],
+      env: {
+        browser: false,
+        es2024: true,
+        node: true,
+      },
+      rules: {
+        "no-await-in-loop": "off",
+      },
+    },
+    {
+      // Blueprint app handlers and seeds execute in the gateway's Bun/Node
+      // runtime; app roots and kit modules remain browser-profiled.
+      files: [
+        "packages/blueprints/apps/**/actions/*.js",
+        "packages/blueprints/apps/**/queries/*.js",
+        "packages/blueprints/apps/**/seed.js",
+      ],
+      env: {
+        browser: false,
+        es2024: true,
+        node: true,
+      },
+    },
     {
       // The two rules in the preset that trade assertion precision for
       // brevity, and the only two that contradict a rule this repo already
@@ -207,14 +275,9 @@ export default defineConfig({
         // re-running the setup per assertion, which changes what is under test
         // and slows the suite for no coverage gain. Measured sensitivity across
         // the suite: max 5 -> 2030 findings, 10 -> 448, 15 -> 162, 20 -> 68,
-        // 30 -> 26. 20 keeps the rule a real gate on genuinely sprawling tests
-        // (the remaining 68 were split) while accepting the scenario style the
-        // repo already documents in TESTING.md. Same class of decision as
-        // valid-expect above: configuring the rule for this codebase, not
-        // relaxing it.
-        // One behavior-focused integration test may need a compact assertion
-        // matrix. 31 still catches sprawling tests while avoiding test splits
-        // driven solely by one additional assertion in a shared contract matrix.
+        // 30 -> 26. The reviewed ceiling is 31: it still catches sprawling
+        // tests while allowing one behavior-focused integration scenario to
+        // assert a compact contract matrix without a count-driven split.
         "vitest/max-expects": ["error", { max: 31 }],
       },
     },
@@ -324,12 +387,6 @@ export default defineConfig({
               "Keep the mobile/time-engine bundle on the reviewed Hermes Array surface; use an explicit forward scan instead.",
           },
         ],
-      },
-    },
-    {
-      files: ["packages/blueprints/kit/**", "packages/blueprints/apps/**"],
-      rules: {
-        "typescript/no-explicit-any": "off",
       },
     },
   ],

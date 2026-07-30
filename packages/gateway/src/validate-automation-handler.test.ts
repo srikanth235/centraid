@@ -5,8 +5,9 @@ import { promises as fs } from "node:fs";
 // mis-resumed under the #166 journal/replay runtime.
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { validateManifestAt } from "./validate-manifest.ts";
 

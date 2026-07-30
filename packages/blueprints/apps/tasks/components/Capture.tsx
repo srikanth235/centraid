@@ -78,7 +78,7 @@ export function Capture({ onSubmit, registerFocus }: CaptureProps) {
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              submit();
+              void submit();
             }
           }}
         />

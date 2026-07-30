@@ -1,6 +1,7 @@
+import { describe, expect, onTestFinished, test } from "vitest";
+
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, onTestFinished, test } from "vitest";
 
 import { BlobCache } from "../../packages/vault/src/blob/cache.js";
 import {

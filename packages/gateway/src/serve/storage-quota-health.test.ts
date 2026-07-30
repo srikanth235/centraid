@@ -1,5 +1,6 @@
-import type { UsageByStore } from "@centraid/backup";
 import { describe, expect, it } from "vitest";
+
+import type { UsageByStore } from "@centraid/backup";
 
 import {
   createStorageQuotaHealthProbe,

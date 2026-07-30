@@ -43,9 +43,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { providerConformanceCases } from "./conformance.js";
 import type { ConformanceHarness } from "./conformance.js";
@@ -169,7 +170,7 @@ async function assertPortFree(port: number, label: string): Promise<void> {
           )
         );
       } else {
-        reject(err);
+        reject(new Error(err.message, { cause: err }));
       }
     });
     srv.once("listening", () => srv.close(() => resolve()));
@@ -203,7 +204,7 @@ function runCommand(
     child.stderr?.on("data", (d: Buffer) => (output += d.toString()));
     child.on("error", (err) => {
       clearTimeout(timer);
-      reject(err);
+      reject(new Error(err.message, { cause: err }));
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
@@ -251,9 +252,9 @@ function spawnWranglerDev(): { child: ChildProcess; recentLog: () => string } {
 
 async function killProcessTree(child: ChildProcess): Promise<void> {
   if (child.pid === undefined || child.exitCode !== null) return;
-  const exited = new Promise<void>((resolve) =>
-    child.once("exit", () => resolve())
-  );
+  const exited = new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+  });
   try {
     process.kill(-child.pid, "SIGTERM");
   } catch {

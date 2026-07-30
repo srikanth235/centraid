@@ -109,7 +109,9 @@ class Semaphore {
       this.available--;
       return () => this.release();
     }
-    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    await new Promise<void>((resolve) => {
+      this.waiters.push(resolve);
+    });
     this.available--;
     return () => this.release();
   }

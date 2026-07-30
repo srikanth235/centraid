@@ -3,13 +3,14 @@ import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 // governance: allow-repo-hygiene file-size-limit one suite per concern of the
 // whole-app bundling seam (issue #404): HTML rewrite, bundle serving/ETag/304,
 // draft exemption, invalidation, shared-asset precedence, JSX runtime, CSS
 // inlining, and the request-count collapse the feature exists for — all share
 // one fixture builder.
 import { beforeEach, describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   clearBundleCaches,

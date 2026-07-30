@@ -25,11 +25,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/embed-web.mjs",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit",
-    "test": "vitest run",
+    "clean": "rm -rf dist",
     "perf:low-end": "node scripts/bench-low-end.mjs --check",
     "perf:runtime-probe": "node scripts/probe-runtime-sqlite.mjs",
-    "clean": "rm -rf dist"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "@centraid/agent-runtime": "workspace:*",

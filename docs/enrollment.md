@@ -33,13 +33,13 @@ Probe without printing values: `bun run release:verify-secrets`.
 
 **GitHub Actions secret names (desktop Windows):**
 
-| Name | Purpose |
-| --- | --- |
-| `AZURE_TENANT_ID` | Tenant |
-| `AZURE_CLIENT_ID` | App registration |
-| `AZURE_CLIENT_SECRET` | Client secret (prefer OIDC later) |
-| `AZURE_CODE_SIGNING_ACCOUNT` | Trusted Signing account |
-| `AZURE_CERT_PROFILE` | Certificate profile name |
+| Name                         | Purpose                           |
+| ---------------------------- | --------------------------------- |
+| `AZURE_TENANT_ID`            | Tenant                            |
+| `AZURE_CLIENT_ID`            | App registration                  |
+| `AZURE_CLIENT_SECRET`        | Client secret (prefer OIDC later) |
+| `AZURE_CODE_SIGNING_ACCOUNT` | Trusted Signing account           |
+| `AZURE_CERT_PROFILE`         | Certificate profile name          |
 
 **Blocks:** I3 Windows installers and SmartScreen-trustable updates.
 
@@ -53,31 +53,26 @@ Probe without printing values: `bun run release:verify-secrets`.
 
 **GitHub Actions / env secret names (Android upload key — J1):**
 
-| Name | Purpose |
-| --- | --- |
-| `CENTRAID_UPLOAD_STORE_FILE` | Path to upload keystore file in the job |
-| `CENTRAID_UPLOAD_STORE_PASSWORD` | Keystore password |
-| `CENTRAID_UPLOAD_KEY_ALIAS` | Key alias |
-| `CENTRAID_UPLOAD_KEY_PASSWORD` | Key password |
+| Name                             | Purpose                                 |
+| -------------------------------- | --------------------------------------- |
+| `CENTRAID_UPLOAD_STORE_FILE`     | Path to upload keystore file in the job |
+| `CENTRAID_UPLOAD_STORE_PASSWORD` | Keystore password                       |
+| `CENTRAID_UPLOAD_KEY_ALIAS`      | Key alias                               |
+| `CENTRAID_UPLOAD_KEY_PASSWORD`   | Key password                            |
 
 **Blocks:** J1 production Android; store submission.
 
 ## 4. Expo / EAS (mobile build + submit)
 
 - [ ] Create Expo account + EAS project for `apps/mobile`.
-- [ ] Set `EAS_PROJECT_ID` to enable the emergency EAS hotfix lane. Without it,
-      generated app config deliberately sets `updates.enabled = false` and
-      routine releases remain store-only.
+- [ ] Set `EAS_PROJECT_ID` to enable the emergency EAS hotfix lane. Without it, generated app config deliberately sets `updates.enabled = false` and routine releases remain store-only.
 - [ ] Store `EXPO_TOKEN` in GitHub Actions for `lane-release-mobile.yml` (reached via `release.yml`).
-- [ ] Add the real numeric `ascAppId` to the iOS submit profiles in
-      `apps/mobile/eas.json` after the App Store Connect app exists. Until then,
-      iOS non-interactive submission is intentionally not configured; no fake
-      store id ships.
+- [ ] Add the real numeric `ascAppId` to the iOS submit profiles in `apps/mobile/eas.json` after the App Store Connect app exists. Until then, iOS non-interactive submission is intentionally not configured; no fake store id ships.
 - [ ] **Do not** add routine `eas update` to CI (J7 — dormant hotfix lane only).
 
-| Name | Purpose |
-| --- | --- |
-| `EXPO_TOKEN` | EAS CI auth |
+| Name             | Purpose                               |
+| ---------------- | ------------------------------------- |
+| `EXPO_TOKEN`     | EAS CI auth                           |
 | `EAS_PROJECT_ID` | Expo project id for updates URL + EAS |
 
 ## 5. Cloudflare (public web PWA)
@@ -85,27 +80,20 @@ Probe without printing values: `bun run release:verify-secrets`.
 - [ ] Bind **`app.centraid.dev`** to the `centraid-web` worker/assets project (`apps/web/wrangler.json`).
 - [ ] Store deploy credentials if using GHA wrangler (optional if CF Git integration is used instead).
 
-| Name | Purpose |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Wrangler deploy |
-| `CLOUDFLARE_ACCOUNT_ID` | Account |
+| Name                    | Purpose         |
+| ----------------------- | --------------- |
+| `CLOUDFLARE_API_TOKEN`  | Wrangler deploy |
+| `CLOUDFLARE_ACCOUNT_ID` | Account         |
 
 Marketing + docs remain the apex `centraid` worker (`wrangler.json` → `./dist/site`).
 
 ### Centraid Assist OAuth edge
 
-- [ ] Bind **`oauth.centraid.dev`** as the only custom route for
-      `apps/oauth-worker`; disable `workers.dev` and preview URLs.
-- [ ] Create protected GitHub Environment **`oauth-production`** with the
-      maintainer as required reviewer.
-- [ ] Set repository variable `OAUTH_WORKER_DEPLOY_ENABLED=true` only after
-      [the Google/Cloudflare evidence gates](release/oauth-assist-google.md)
-      pass.
-- [ ] Store `GOOGLE_CLIENT_SECRET` and `CALLBACK_RECEIPT_SECRET` with
-      Cloudflare Worker Secrets, not GitHub or the gateway. The public
-      `GOOGLE_CLIENT_ID` is a Worker variable and gateway coordinate.
-- [ ] Establish two alert recipients and a rotation owner; exercise the
-      [Assist recovery runbook](recovery/oauth-assist.md).
+- [ ] Bind **`oauth.centraid.dev`** as the only custom route for `apps/oauth-worker`; disable `workers.dev` and preview URLs.
+- [ ] Create protected GitHub Environment **`oauth-production`** with the maintainer as required reviewer.
+- [ ] Set repository variable `OAUTH_WORKER_DEPLOY_ENABLED=true` only after [the Google/Cloudflare evidence gates](release/oauth-assist-google.md) pass.
+- [ ] Store `GOOGLE_CLIENT_SECRET` and `CALLBACK_RECEIPT_SECRET` with Cloudflare Worker Secrets, not GitHub or the gateway. The public `GOOGLE_CLIENT_ID` is a Worker variable and gateway coordinate.
+- [ ] Establish two alert recipients and a rotation owner; exercise the [Assist recovery runbook](recovery/oauth-assist.md).
 
 ## 6. Cross-cutting
 
@@ -115,12 +103,7 @@ Marketing + docs remain the apex `centraid` worker (`wrangler.json` → `./dist/
 
 ## 7. Device enrollment vocabulary
 
-Routine device pairing is identity-preserving: a bare
-`centraid-gateway pair --data-dir …` targets the existing owner. Creating a
-new household member must be explicit with `--new-member`; selecting an
-existing one uses `--member`. Device display names belong to the redeeming
-browser/extension and remain distinct from the gateway connection label.
-See [recovery/pairing.md](recovery/pairing.md) for the operational runbook.
+Routine device pairing is identity-preserving: a bare `centraid-gateway pair --data-dir …` targets the existing owner. Creating a new household member must be explicit with `--new-member`; selecting an existing one uses `--member`. Device display names belong to the redeeming browser/extension and remain distinct from the gateway connection label. See [recovery/pairing.md](recovery/pairing.md) for the operational runbook.
 
 ## After enrollment
 

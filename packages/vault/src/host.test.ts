@@ -1,5 +1,6 @@
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { bootstrapVault, createGrant } from "./bootstrap.js";
 import { registerTaskCommands } from "./commands/tasks.js";

@@ -7,9 +7,10 @@
  *    published prompt ahead of the compiled handler with nothing to reconcile.
  */
 
+import { describe, expect, test } from "vitest";
+
 import { validateManifest } from "@centraid/automation";
 import type { Row as AutomationRow } from "@centraid/automation";
-import { describe, expect, test } from "vitest";
 
 import { reviseAutomationInstructions } from "./automation-revision.js";
 
@@ -158,7 +159,9 @@ describe("automation-revision", () => {
         },
         rewrite: async (persistPrompt) => {
           order.push(`rewrite-start:${label}`);
-          await new Promise((resolve) => setTimeout(resolve, rewriteDelayMs));
+          await new Promise((resolve) => {
+            setTimeout(resolve, rewriteDelayMs);
+          });
           await persistPrompt(`prompt-${label}`);
         },
         compile: async () => {

@@ -145,7 +145,7 @@ export async function defaultBatteryProbe(
 function runPmset(): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile("pmset", ["-g", "batt"], { timeout: 2_000 }, (err, stdout) => {
-      if (err) reject(err);
+      if (err) reject(new Error(err.message, { cause: err }));
       else resolve(stdout);
     });
   });

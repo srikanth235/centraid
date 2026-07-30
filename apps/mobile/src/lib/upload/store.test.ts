@@ -3,8 +3,9 @@ import { rmSync } from "node:fs";
 // guarantee that the replica store's schema rebuild is not collateral damage.
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { NodeSqliteFileDriver } from "./node-sqlite-driver";
 import { UploadQueueStore } from "./store";

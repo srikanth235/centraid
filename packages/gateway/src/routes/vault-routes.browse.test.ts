@@ -1,5 +1,7 @@
 import http from "node:http";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // The Vault Atlas Browse routes (issue #441 Part B, B3): the owner-gated
 // table editor over HTTP. The read/write policy is proven in packages/vault;
@@ -7,7 +9,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 // a journalled insert that comes back on a read, and the dependent-blocked
 // delete returning a 409 with the polymorphic + engine payload.
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { openVaultRegistry } from "../serve/vault-registry.js";
@@ -40,11 +41,14 @@ describe("vault-routes.browse", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
     const addr = server.address() as { port: number };
     return `http://127.0.0.1:${addr.port}`;

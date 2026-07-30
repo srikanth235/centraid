@@ -1,5 +1,6 @@
-import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import { providerConformanceCases } from "./conformance.js";
 import type { ConformanceHarness } from "./conformance.js";

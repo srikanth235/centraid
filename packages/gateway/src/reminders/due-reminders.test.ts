@@ -1,3 +1,5 @@
+import { beforeEach, describe, expect, test } from "vitest";
+
 import {
   bootstrapVault,
   createGateway,
@@ -6,7 +8,6 @@ import {
   registerTaskCommands,
 } from "@centraid/vault";
 import type { Gateway, Credential, VaultDb } from "@centraid/vault";
-import { beforeEach, describe, expect, test } from "vitest";
 
 import { computeDueReminders, nextReminderFireAt } from "./due-reminders.js";
 

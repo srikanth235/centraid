@@ -1,7 +1,8 @@
-import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#539) single cohesive screen component (header/consent-strip/chat-turn spine/steering composer of one thread surface); splitting would fragment one visual unit
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, JSX, SetStateAction } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import type {
   AsstModelPickerDTO,

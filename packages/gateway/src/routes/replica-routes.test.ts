@@ -5,13 +5,14 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   currentReplicaLogState,
   recordReplicaIntentOutcome,
 } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { runWithVaultContext, vaultContext } from "../serve/vault-context.js";

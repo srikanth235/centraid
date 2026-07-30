@@ -4,10 +4,11 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
+import { describe, afterEach, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { KeyStore } from "@centraid/vault";
-import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { daemonLayoutFor } from "../cli/paths.js";
@@ -141,11 +142,14 @@ describe("vault-erase scenarios", () => {
       );
     });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
     const response = await fetch(`${base}/centraid/_vault/vaults:erase`, {
@@ -253,9 +257,9 @@ describe("vault-erase scenarios", () => {
           server.close(() => resolve());
         })
     );
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
     const response = await fetch(`${base}/centraid/_vault/vaults:erase`, {
@@ -372,11 +376,14 @@ describe("vault-erase scenarios", () => {
       );
     });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     return {
       base,

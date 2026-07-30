@@ -1,8 +1,9 @@
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import type { RunnerModel } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 import { CatalogWarmer, deriveStatus } from "./catalog-warmer.ts";
 import { readCatalog } from "./catalog.ts";
@@ -36,7 +37,9 @@ describe("catalog-warmer", () => {
       catalogPath,
       enumerateModels: async () => {
         calls += 1;
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 20);
+        });
         return [{ id: "sonnet" }];
       },
     });

@@ -1,8 +1,9 @@
-import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 import type * as TypeImport_bmsl46 from "../../gateway-client.js";
 import OnboardingScreen from "./OnboardingScreen.js";

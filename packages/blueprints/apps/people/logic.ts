@@ -159,11 +159,11 @@ export function createLogic({
       box.append(
         popItem("Open profile", () => {
           closePopover();
-          openDetails(p.party_id);
+          void openDetails(p.party_id);
         }),
         popItem(p.starred ? "Remove favorite" : "Add to favorites", () => {
           closePopover();
-          toggleStar(p);
+          void toggleStar(p);
         }),
         h("div", { class: "kit-popover-sep" }),
         h("p", { class: "kit-popover-head" }, "Move to list"),
@@ -171,7 +171,7 @@ export function createLogic({
           "No list",
           () => {
             closePopover();
-            movePerson(p, null, "no list");
+            void movePerson(p, null, "no list");
           },
           { disabled: p.list_id == null, dotColor: "var(--ink-3)" }
         ),
@@ -180,7 +180,7 @@ export function createLogic({
             c.name,
             () => {
               closePopover();
-              movePerson(p, c.list_id, c.name);
+              void movePerson(p, c.list_id, c.name);
             },
             {
               disabled: p.list_id === c.list_id,

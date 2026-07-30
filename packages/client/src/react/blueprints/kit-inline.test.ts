@@ -1,8 +1,9 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import {
   fmtMoney as kitFmtMoney,
   relTime as kitRelTime,
 } from "@centraid/blueprints/kit/kit.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
@@ -85,7 +86,9 @@ describe("kit-inline", () => {
         source: "canonical",
       } as ReplicaInvalidation,
     ]);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
     expect(seen).toHaveLength(1);
     expect(seen[0]?.tables).toStrictEqual(["schedule.task"]);
     stop();

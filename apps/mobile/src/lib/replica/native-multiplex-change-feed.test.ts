@@ -63,7 +63,9 @@ describe(NativeMultiplexChangeFeed, () => {
     family.setActive(true);
 
     await expect(revoked).resolves.toBe("family");
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
     feed.close();
     expect(
       [...storage.values.keys()].some((key) => key.includes("family"))

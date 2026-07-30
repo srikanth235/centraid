@@ -12,7 +12,6 @@
 // gateway, the grid still renders — the eight apps show, gateway-hosted ones
 // dimmed — so the launcher always advertises the full surface.
 
-import type { AppMetaResolved } from "@centraid/design-tokens";
 import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text } from "react-native";
@@ -20,6 +19,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useSharedValue } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import type { AppMetaResolved } from "@centraid/design-tokens";
 
 import { family, useTheme } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";

@@ -85,7 +85,7 @@ export function LightboxInfo({
   const [tagText, setTagText] = useState("");
 
   useEffect(() => {
-    renderFaces(facesHostRef.current!, asset.asset_id, noteRef.current!);
+    void renderFaces(facesHostRef.current!, asset.asset_id, noteRef.current!);
     // (#360) this component remounts fresh per asset/refresh (keyed by renderSeq in the shell)
   }, [asset.asset_id]);
 

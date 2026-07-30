@@ -1,13 +1,14 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import { runHandler } from "@centraid/app-engine";
 import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 const OWNER = "tests/perf/app-engine-handler.perf.test.ts";
 const RUNS = 20;

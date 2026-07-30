@@ -2,9 +2,10 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 import { createTestVault } from "../helpers/factories.js";
 

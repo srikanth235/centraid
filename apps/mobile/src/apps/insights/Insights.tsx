@@ -7,7 +7,6 @@
 // title, floating Home key. Both surfaces load independently (useInsights), so a
 // gateway serving one but not the other still shows what it has.
 
-import { palette } from "@centraid/design-tokens";
 import { Feather } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
@@ -22,6 +21,8 @@ import Svg, {
   Path,
   Stop,
 } from "react-native-svg";
+
+import { palette } from "@centraid/design-tokens";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useTheme } from "../../kit/theme";

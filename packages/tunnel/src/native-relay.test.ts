@@ -3,8 +3,9 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { createTunnelClient, tunnelRequest } from "./client.js";
 import type { TunnelClient } from "./client.js";
@@ -80,9 +81,9 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== "1")(
           res.end(Buffer.concat(chunks));
         })().catch((error) => res.destroy(error as Error));
       });
-      await new Promise<void>((resolve) =>
-        server.listen(0, "127.0.0.1", resolve)
-      );
+      await new Promise<void>((resolve) => {
+        server.listen(0, "127.0.0.1", resolve);
+      });
       const port = (server.address() as AddressInfo).port;
       endpoint = await startGatewayEndpoint({
         secretKey: randomBytes(32),
@@ -101,7 +102,9 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== "1")(
     afterAll(async () => {
       await client?.close();
       await endpoint?.close();
-      await new Promise<void>((resolve) => server?.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server?.close(() => resolve());
+      });
     });
 
     test("owns pairing and streamed request/response bytes inside Rust", async () => {

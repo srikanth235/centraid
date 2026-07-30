@@ -1,7 +1,8 @@
-import { THEME_PRESETS, themes, tileFinish } from "@centraid/design-tokens";
-import type { IconName, ThemeName } from "@centraid/design-tokens";
 import { useState } from "react";
 import type { JSX } from "react";
+
+import { THEME_PRESETS, themes, tileFinish } from "@centraid/design-tokens";
+import type { IconName, ThemeName } from "@centraid/design-tokens";
 
 import type {
   SettingsAppearanceBridgeProps,

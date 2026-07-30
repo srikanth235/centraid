@@ -354,7 +354,9 @@ async function waitForGatewayReady(
         `gateway container ${containerName} exited before ready — see ${logFile}`
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 300);
+    });
     return waitForNextReadinessCheck();
   };
   return waitForNextReadinessCheck();
@@ -559,7 +561,9 @@ async function verifyNetworksIsolated(netA, netB, hostAddrs, fwName) {
       `d.bind(${PROBE_UDP_PORT},'0.0.0.0');`,
   ]);
   try {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 500);
+    });
     const ip = (
       await sh("docker", [
         "inspect",

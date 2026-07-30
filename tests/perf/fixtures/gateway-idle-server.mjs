@@ -25,7 +25,9 @@ process.on("message", async (message) => {
     const cpuStart = process.cpuUsage();
     const wallStart = performance.now();
     // Let the gateway sit fully idle: no requests, just its own timers.
-    await new Promise((resolve) => setTimeout(resolve, windowMs));
+    await new Promise((resolve) => {
+      setTimeout(resolve, windowMs);
+    });
     const cpu = process.cpuUsage(cpuStart);
     const wallMs = performance.now() - wallStart;
     process.send?.({

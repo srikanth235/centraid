@@ -5,6 +5,7 @@ Map of the durable docs an agent (or human) should read before working in this r
 `CLAUDE.md` must be a **symlink to this file** (`ln -sf AGENTS.md CLAUDE.md`) so every agent CLI reads the same manual with zero sync burden (issue #468 A2).
 
 <!-- governance: rules-to-follow -->
+
 ## Rules to follow
 
 If you are an agent — or a human — working in this repo, **read [CONSTITUTION.md](CONSTITUTION.md) and follow it**. It defines the principles, guidelines, and directives that every change in this repo must satisfy.
@@ -43,6 +44,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/decisions.md](docs/decisions.md) | Settled #468 decisions (H1, C1, D4, F1, J5, signing, …) |
 | [docs/glossary.md](docs/glossary.md) | Vocabulary + forbidden synonyms + code pointers |
 | [docs/coding-standards.md](docs/coding-standards.md) | Agent failure modes (try/catch, `?.`, refactors, fallible actions) |
+| [docs/toolchain.md](docs/toolchain.md) | Tool ownership, stable commands, rule rubric, profiles, and upgrades |
 | [docs/protocol.md](docs/protocol.md) | C1 two-contract, COMPAT tags, wire-schema purity, RPC plane naming |
 | [docs/platform-gating.md](docs/platform-gating.md) | `isWeb` / `isNative` / Electron / compact form-factor |
 | [docs/client-keying.md](docs/client-keying.md) | Cache/UI key axes (vault path, gateway, conversation) |
@@ -81,7 +83,8 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 - **Audit trailers on every commit.** The `.githooks/` dispatchers stamp `Agent` / `Token-*` / `Cost-*` / `Steer-*` trailers automatically and write rows to [COSTS.md](COSTS.md) and [STEERING.md](STEERING.md). Skipping with `SKIP_GOVERNANCE=1` is allowed for true emergencies; CI still enforces.
 - **Quality observations live in [QUALITY.md](QUALITY.md).** Bugs and rough edges between releases go in `## Open`; resolved items roll to `## Resolved`.
 - **Tests follow [TESTING.md](TESTING.md).** One runner (vitest), behaviour-over-implementation convention, per-layer coverage intent. `bun run test` (per-package via turbo) and `bun run coverage` (repo-wide v8, enforces the seeded engine floors). Read it before writing or migrating a test.
-- **The gate loop runs itself (#576).** Hooks enforce it, so there is nothing here to remember. **pre-commit** checks *staged files only* — oxfmt, oxlint, governance directives. **pre-push** runs `bun run check:pr`, the local superset of the CI `static` job. Tier budgets, the gate list, what is deliberately CI-only, and the escape hatches (`SKIP_CHECK_PR=1`, `SKIP_GOVERNANCE=1`) are in [docs/dev-environment.md](docs/dev-environment.md#the-local-gate-loop). Two things still need judgement: run **`bun run check:pr:full`** before requesting merge when a shared package changed (adds dependents to the affected set), and remember **vitest green alone is not enough** — package typecheck catches TS errors that still execute under vitest.
+- **One tool owner, one command contract.** Ultracite seeds policy; Oxfmt formats; Oxlint lints; TypeScript typechecks; Knip owns dead code/dependencies; Vitest/e2e own behaviour. Use the scripts in [docs/toolchain.md](docs/toolchain.md), safe fixes only, and never weaken policy to make a PR green.
+- **The gate loop runs itself (#576).** **pre-commit** checks staged files without rewriting them. **pre-push** runs `bun run check:pr`; shared infrastructure requires **`bun run check:full`**. Tier budgets and escape hatches are in [docs/dev-environment.md](docs/dev-environment.md#the-local-gate-loop). Vitest green alone is not enough — package typecheck catches TS errors that still execute under vitest.
 - **knip is strict.** Unused files, unused/undeclared deps, unused exports/types (with `ignoreExportsUsedInFile`, so same-file-only `Props`/`Deps` interfaces don't count), and duplicate exports all fail. Exports that are genuinely used but invisible to knip (dynamic import, script-level `cp`) are tagged `@public` or listed in `knip.json` with a reason.
 - **Tools only via repo scripts (B2).** Invoke the toolchain through root/package `package.json` scripts (`bun run test`, `bun run typecheck`, `bun run format`, …). **Never** raw `npx <tool>` / ad-hoc global CLIs for format, lint, test, or typecheck — the pinned versions and flags must apply.
 - **Canonical logs.** Start debugging at [docs/logs.md](docs/logs.md) (`gateway-logs/` under the gateway data dir / desktop `userData/gateways/<id>/`).
@@ -97,7 +100,6 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure path + threat model.
 - [docs/decisions.md](docs/decisions.md) — settled product/engineering decisions from #468.
 - [docs/logs.md](docs/logs.md) — where logs live.
+- [docs/toolchain.md](docs/toolchain.md) — quality-tool ownership and commands.
 
-Governance hooks activate through git's `core.hooksPath` (pointed at `.githooks/`).
-`governance install`/`update` set this; on a fresh clone run
-`git config core.hooksPath .githooks` once.
+Governance hooks activate through git's `core.hooksPath` (pointed at `.githooks/`). `governance install`/`update` set this; on a fresh clone run `git config core.hooksPath .githooks` once.

@@ -24,12 +24,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && mkdir -p dist/backends/acp && cp src/backends/acp/vault-mcp-stdio-proxy.mjs dist/backends/acp/",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "clean": "rm -rf dist",
+    "probe:all-adapters": "bun scripts/probe-all-adapters.ts",
     "test": "vitest run",
     "test:live-adapters": "bun scripts/live-adapter-smoke.ts",
     "test:live-automation-failover": "CENTRAID_LIVE_AUTOMATION=1 vitest run src/automation/live-automation-failover.test.ts",
-    "probe:all-adapters": "bun scripts/probe-all-adapters.ts",
-    "clean": "rm -rf dist"
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.63.0",

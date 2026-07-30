@@ -1,16 +1,8 @@
 # Agent-driven exploratory QA — mobile
 
-This is the committed manual-QA adapter for the Expo app on an iOS Simulator
-or Android emulator. Desktop regression ownership lives in Playwright; this
-directory is mobile-only and drives the native surface via
-[Maestro](https://docs.maestro.dev/). The three stable journeys are also run
-nightly, while ad-hoc agent exploration remains its primary authoring loop.
+This is the committed manual-QA adapter for the Expo app on an iOS Simulator or Android emulator. Desktop regression ownership lives in Playwright; this directory is mobile-only and drives the native surface via [Maestro](https://docs.maestro.dev/). The three stable journeys are also run nightly, while ad-hoc agent exploration remains its primary authoring loop.
 
-The structural payoff matches the desktop layer: the device (sim,
-emulator, or real) outlives the runner, so an agent (Claude Code) can
-attach, inspect the screen, take ad-hoc actions, screenshot, and
-resume. Maestro ships a first-party **MCP server** that exposes
-exactly that surface to Claude Code.
+The structural payoff matches the desktop layer: the device (sim, emulator, or real) outlives the runner, so an agent (Claude Code) can attach, inspect the screen, take ad-hoc actions, screenshot, and resume. Maestro ships a first-party **MCP server** that exposes exactly that surface to Claude Code.
 
 ## One-time setup
 
@@ -37,12 +29,7 @@ bun run --filter=@centraid/mobile android
 claude mcp add maestro -- maestro mcp
 ```
 
-After step 4, Claude Code gains MCP tools: `list_devices`,
-`inspect_view_hierarchy` (compact JSON tree), `take_screenshot`,
-`run_flow` (inline YAML), `tap_on`, `input_text`, `launch_app`,
-`stop_app`, `back`, plus `check_flow_syntax` / `query_docs` /
-`cheat_sheet`. That's the CDP-equivalent attach point — restart Claude
-Code after step 4 so it loads the new MCP server.
+After step 4, Claude Code gains MCP tools: `list_devices`, `inspect_view_hierarchy` (compact JSON tree), `take_screenshot`, `run_flow` (inline YAML), `tap_on`, `input_text`, `launch_app`, `stop_app`, `back`, plus `check_flow_syntax` / `query_docs` / `cheat_sheet`. That's the CDP-equivalent attach point — restart Claude Code after step 4 so it loads the new MCP server.
 
 ## Running flows
 
@@ -58,9 +45,7 @@ Then drive a flow:
 node tests/agent-e2e-mobile/flows/home-loads.mjs
 ```
 
-By default the harness picks **iOS first** if both a booted Simulator
-and a running emulator are present. Force a side with the
-`MAESTRO_PLATFORM` env var:
+By default the harness picks **iOS first** if both a booted Simulator and a running emulator are present. Force a side with the `MAESTRO_PLATFORM` env var:
 
 ```sh
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
@@ -87,9 +72,7 @@ runs/<slug>-<runId>/
 
 `runs/` is gitignored — workspaces are tied to local sim UDIDs.
 
-Maestro also keeps its own per-step debug artifacts (ai-report.html,
-failure screenshots) at `~/.maestro/tests/<timestamp>/`. Useful when a
-flow fails and the on-disk state alone isn't enough.
+Maestro also keeps its own per-step debug artifacts (ai-report.html, failure screenshots) at `~/.maestro/tests/<timestamp>/`. Useful when a flow fails and the on-disk state alone isn't enough.
 
 ## Authoring a flow
 
@@ -104,79 +87,60 @@ flows/
 Skeleton:
 
 ```js
-import { runFlow, FIRST_LAUNCH_TIMEOUT_MS } from '../lib/harness.mjs';
+import { runFlow, FIRST_LAUNCH_TIMEOUT_MS } from "../lib/harness.mjs";
 
-await runFlow('my-flow', async (ctx) => {
+await runFlow("my-flow", async (ctx) => {
   // `ctx.state.appId` is the installed package for the resolved platform —
   // `dev.centraid.mobile` on iOS, `dev.centraid.mobile.debug` on Android
   // (debug builds carry the `.debug` applicationIdSuffix). Don't hardcode it.
-  await ctx.run(`appId: ${ctx.state.appId}
+  await ctx.run(
+    `appId: ${ctx.state.appId}
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:
     visible: { text: "Everything you build, in one place." }
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: home
-`, 'home');
+`,
+    "home"
+  );
 
-  ctx.note('observation worth keeping in verdict.md');
+  ctx.note("observation worth keeping in verdict.md");
 
-  await ctx.restart();        // stopApp + launchApp without clearState
+  await ctx.restart(); // stopApp + launchApp without clearState
 
-  await ctx.run(`...`, 'after-restart');
-  return { pass: true, notes: 'one-line summary for verdict' };
+  await ctx.run(`...`, "after-restart");
+  return { pass: true, notes: "one-line summary for verdict" };
 });
 ```
 
 ctx surface:
 
 - `ctx.state` — `{ runId, runDir, screenshotsDir, flowsDir, udid, appId }`
-- `ctx.run(yaml, hint?, options?)` — execute a Maestro YAML chunk. Each call
-  spawns `maestro test` once (~hundreds of ms overhead), so batch
-  many directives per call rather than one-per-action. The harness uses the
-  internal `sensitive` option only for capability-bearing input; it suppresses
-  console/debug retention and keeps the live value in a `MAESTRO_*` variable.
-- `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with
-  a 300ms pre-stop delay (analogous to the desktop harness's flushMs
-  before SIGTERM, gives AsyncStorage time to flush).
-- `ctx.configureGateway(url?, token?)` — clear app state, mint a run-unique
-  write-role member ticket from the declared gateway, redeem it through the
-  real ticket-only onboarding UI, and complete the test profile. Journeys that
-  need a gateway call this themselves so their prerequisites do not depend on
-  execution order. Live tickets and their Maestro diagnostics are never kept
-  in uploaded run artifacts.
-- `ctx.note(msg)` — record an observation; surfaces under `## Notes`
-  in `verdict.md`.
+- `ctx.run(yaml, hint?, options?)` — execute a Maestro YAML chunk. Each call spawns `maestro test` once (~hundreds of ms overhead), so batch many directives per call rather than one-per-action. The harness uses the internal `sensitive` option only for capability-bearing input; it suppresses console/debug retention and keeps the live value in a `MAESTRO_*` variable.
+- `ctx.restart()` — `stopApp` + `launchApp { clearState: false }` with a 300ms pre-stop delay (analogous to the desktop harness's flushMs before SIGTERM, gives AsyncStorage time to flush).
+- `ctx.configureGateway(url?, token?)` — clear app state, mint a run-unique write-role member ticket from the declared gateway, redeem it through the real ticket-only onboarding UI, and complete the test profile. Journeys that need a gateway call this themselves so their prerequisites do not depend on execution order. Live tickets and their Maestro diagnostics are never kept in uploaded run artifacts.
+- `ctx.note(msg)` — record an observation; surfaces under `## Notes` in `verdict.md`.
 
 Authoring rules of thumb (carried over from desktop):
 
-- **Throw on failure, return `{ pass: true, notes }` on success.** Let
-  the harness write the FAIL verdict — don't swallow with try/catch.
-- **Verify the actual unit of truth.** For persistence claims, read
-  the AsyncStorage manifest directly via
-  `xcrun simctl get_app_container <udid> dev.centraid.mobile data`
-  rather than only trusting Maestro's text matcher (see "Known
-  caveats" below).
-- **Slug = filename = `runFlow()` first arg.** Keeps verdicts and run
-  dirs greppable.
+- **Throw on failure, return `{ pass: true, notes }` on success.** Let the harness write the FAIL verdict — don't swallow with try/catch.
+- **Verify the actual unit of truth.** For persistence claims, read the AsyncStorage manifest directly via `xcrun simctl get_app_container <udid> dev.centraid.mobile data` rather than only trusting Maestro's text matcher (see "Known caveats" below).
+- **Slug = filename = `runFlow()` first arg.** Keeps verdicts and run dirs greppable.
 
 ## Layered model
 
 | Layer | Tool | When |
-|---|---|---|
+| --- | --- | --- |
 | Agent-driven exploratory | Claude Code ⇄ Maestro MCP | "try this journey, tell me what breaks" — no committed flow needed |
 | Committed regression (this dir) | `node flows/<slug>.mjs` → `maestro test` | flows that stabilized and you want runnable |
 | CI-grade native invariants | Detox (not wired up) | hard invariants that must never flake |
 
-For tight DOM-level assertions inside the in-app WebView (the
-`AppDetail` screen), `apps/desktop/tests/e2e/`-style Playwright over
-CDP against the WebView's debug port is the right tier, not Maestro.
+For tight DOM-level assertions inside the in-app WebView (the `AppDetail` screen), `apps/desktop/tests/e2e/`-style Playwright over CDP against the WebView's debug port is the right tier, not Maestro.
 
 ## Android setup
 
-The Android path is more stable than iOS at this stage (Maestro 2.x's
-UIAutomator2 driver hardens against Android API churn faster than its
-XCUITest driver against iOS 26.4). One-time setup:
+The Android path is more stable than iOS at this stage (Maestro 2.x's UIAutomator2 driver hardens against Android API churn faster than its XCUITest driver against iOS 26.4). One-time setup:
 
 ```sh
 # 1. Modern cmdline-tools (Android Studio not required). The legacy
@@ -208,95 +172,28 @@ adb wait-for-device
 bun run --filter=@centraid/mobile android
 ```
 
-The committed `apps/mobile/android/` directory is missing some
-generated drawable resources (notably `splashscreen_logo`). If the
-first build fails with `error: resource drawable/splashscreen_logo …
-not found`, regenerate with:
+The committed `apps/mobile/android/` directory is missing some generated drawable resources (notably `splashscreen_logo`). If the first build fails with `error: resource drawable/splashscreen_logo … not found`, regenerate with:
 
 ```sh
 cd apps/mobile && bunx expo prebuild --no-install --platform android --clean
 ```
 
-That re-runs Expo's native-template generation. The resulting changes
-under `apps/mobile/android/` are local-only artifacts (similar to how
-`apps/mobile/ios/Centraid.xcodeproj/project.pbxproj` gets rewritten by
-`pod install`) — don't commit them. Reverting them after the build
-succeeds is safe; gradle's incremental build keeps working.
+That re-runs Expo's native-template generation. The resulting changes under `apps/mobile/android/` are local-only artifacts (similar to how `apps/mobile/ios/Centraid.xcodeproj/project.pbxproj` gets rewritten by `pod install`) — don't commit them. Reverting them after the build succeeds is safe; gradle's incremental build keeps working.
 
-The harness automatically runs `adb reverse tcp:8081 tcp:8081` during
-`setup()` so the dev client (which fetches `http://localhost:8081`)
-reaches Metro on the host. No manual port forwarding needed.
+The harness automatically runs `adb reverse tcp:8081 tcp:8081` during `setup()` so the dev client (which fetches `http://localhost:8081`) reaches Metro on the host. No manual port forwarding needed.
 
 ## Known caveats
 
-- **Maestro `2.0-dev.1`'s iOS driver is flaky** on iOS 26.4 / Xcode
-  26.4.1 once a flow gets past ~10 commands — common failure modes
-  are `Failed to connect to /127.0.0.1:7001`,
-  `kAXErrorInvalidUIElement` from the accessibility tree, and
-  visibility polls timing out on elements that *are* visible in the
-  hierarchy. **Keep iOS flows short and batch directives** until 2.x
-  ships a stable release. `home-loads.mjs` (5 directives) runs
-  reliably on both platforms; longer flows on iOS have hit driver
-  disconnects during text input. The Android driver (UIAutomator2)
-  doesn't exhibit this — flows that work on both targets are best
-  validated against Android first.
-- **Maestro's text matcher misses RN `TextInput` values** in some
-  cases — the value appears in `inspect_view_hierarchy` (under both
-  `text=` and `value=`), but `assertVisible: "<substring>"` against
-  it doesn't match. Read AsyncStorage from disk (see "Authoring
-  rules of thumb") rather than relying on UI assertions for state.
-- **A passing step is not a working step.** Every one of these was
-  green in CI while doing nothing, and all of them came from writing
-  selectors out of the React source instead of off a running app.
-  Drive the simulator and read `inspect_view_hierarchy` before you
-  trust a selector:
-  - *Matching is substring-based.* `tapOn: "http://127.0.0.1:18789"`
-    matched the help paragraph that mentions the URL, not the input
-    below it. The tap "COMPLETED", the `inputText` went nowhere, and
-    Save persisted an empty string. Disambiguate with a relative
-    anchor (`below: "Dev fallback for simulators.*"`).
-  - *An off-screen element still matches.* Maestro matches elements
-    hidden behind the tab bar. Home's "Pair desktop" button is one, so
-    tapping it is a silent no-op. `scrollUntilVisible` with
-    `visibilityPercentage: 100` before asserting or tapping.
-  - *Prefer a string unique to the target screen.* `assertVisible:
-    "Settings"` passes on Home — the header gear, the tab, and the
-    screen title are all "Settings". Assert "Gateway link" instead.
-    Same trap for every tab label, which is on screen everywhere.
-  - *Route names are not labels.* Settings calls
-    `navigation.navigate('Apps', …)`, so `visible: "Apps"` looks right
-    in the source — but the tab renders as "Home" and no "Apps" string
-    exists in the app at all.
-  - *The keyboard covers the bottom of the screen.* `hideKeyboard`
-    before tapping anything below an input (e.g. Save).
-  - *The first `inputText` on a clean simulator raises iOS's keyboard
-    onboarding sheet* ("Type English and Dutch … Continue"), which
-    covers the tab bar and swallows later taps. CI boots a fresh
-    simulator every run, so it hits this every time — use
-    `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.mjs` after typing.
-- **`RN accessibilityLabel` on `TextInput` does not reach the iOS a11y
-  tree** — the node keeps the placeholder as its `hintText` and gains no
-  `accessibilityText`. Adding one to make a field selectable does not
-  work; use a relative anchor instead.
-- **Budget for a cold JS bundle.** `clearState: true` drops the dev
-  build's cached bundle, so the first launch refetches it from Metro. On
-  a cold transform cache that dominates the flow: `home-loads` measured
-  ~19s end-to-end against a warm Metro and ~43s against a cold one on an
-  M-series Mac, and the nightly runner is slower still. `setup()`
-  first waits through Metro's bounded startup/reload window, then prewarms the
-  bundle; flows use `FIRST_LAUNCH_TIMEOUT_MS` rather than a hand-picked 30s.
-  This matters because Expo can answer `/status` once and briefly stop accepting
-  requests while its file graph settles. A 30s launch budget or a one-shot
-  readiness probe here makes the nightly `mobile-e2e` lane fail against copy
-  that is entirely correct.
-- **`launchApp: { clearState: true }`** wipes the Expo dev client's
-  cached Metro URL. The very first relaunch after clearState may
-  show a red "No script URL provided" screen. The harness's Metro
-  reachability check catches the obvious failure mode; if the
-  redbox still appears, deep-link the dev client once with
-  `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"`
-  to re-inject the URL.
-- **Metro starts from `apps/mobile/` cwd.** Running it from the repo
-  root resolves to an empty project root and fails with
-  `Unable to resolve module expo`. Use `bunx expo start` from
-  `apps/mobile/`, not `bun run` from root.
+- **Maestro `2.0-dev.1`'s iOS driver is flaky** on iOS 26.4 / Xcode 26.4.1 once a flow gets past ~10 commands — common failure modes are `Failed to connect to /127.0.0.1:7001`, `kAXErrorInvalidUIElement` from the accessibility tree, and visibility polls timing out on elements that _are_ visible in the hierarchy. **Keep iOS flows short and batch directives** until 2.x ships a stable release. `home-loads.mjs` (5 directives) runs reliably on both platforms; longer flows on iOS have hit driver disconnects during text input. The Android driver (UIAutomator2) doesn't exhibit this — flows that work on both targets are best validated against Android first.
+- **Maestro's text matcher misses RN `TextInput` values** in some cases — the value appears in `inspect_view_hierarchy` (under both `text=` and `value=`), but `assertVisible: "<substring>"` against it doesn't match. Read AsyncStorage from disk (see "Authoring rules of thumb") rather than relying on UI assertions for state.
+- **A passing step is not a working step.** Every one of these was green in CI while doing nothing, and all of them came from writing selectors out of the React source instead of off a running app. Drive the simulator and read `inspect_view_hierarchy` before you trust a selector:
+  - _Matching is substring-based._ `tapOn: "http://127.0.0.1:18789"` matched the help paragraph that mentions the URL, not the input below it. The tap "COMPLETED", the `inputText` went nowhere, and Save persisted an empty string. Disambiguate with a relative anchor (`below: "Dev fallback for simulators.*"`).
+  - _An off-screen element still matches._ Maestro matches elements hidden behind the tab bar. Home's "Pair desktop" button is one, so tapping it is a silent no-op. `scrollUntilVisible` with `visibilityPercentage: 100` before asserting or tapping.
+  - _Prefer a string unique to the target screen._ `assertVisible: "Settings"` passes on Home — the header gear, the tab, and the screen title are all "Settings". Assert "Gateway link" instead. Same trap for every tab label, which is on screen everywhere.
+  - _Route names are not labels._ Settings calls `navigation.navigate('Apps', …)`, so `visible: "Apps"` looks right in the source — but the tab renders as "Home" and no "Apps" string exists in the app at all.
+  - _The keyboard covers the bottom of the screen._ `hideKeyboard` before tapping anything below an input (e.g. Save).
+  - _The first `inputText` on a clean simulator raises iOS's keyboard onboarding sheet_ ("Type English and Dutch … Continue"), which covers the tab bar and swallows later taps. CI boots a fresh simulator every run, so it hits this every time — use `DISMISS_KEYBOARD_ONBOARDING` from `lib/first-run.mjs` after typing.
+- **`RN accessibilityLabel` on `TextInput` does not reach the iOS a11y tree** — the node keeps the placeholder as its `hintText` and gains no `accessibilityText`. Adding one to make a field selectable does not work; use a relative anchor instead.
+- **Budget for a cold JS bundle.** `clearState: true` drops the dev build's cached bundle, so the first launch refetches it from Metro. On a cold transform cache that dominates the flow: `home-loads` measured ~19s end-to-end against a warm Metro and ~43s against a cold one on an M-series Mac, and the nightly runner is slower still. `setup()` first waits through Metro's bounded startup/reload window, then prewarms the bundle; flows use `FIRST_LAUNCH_TIMEOUT_MS` rather than a hand-picked 30s. This matters because Expo can answer `/status` once and briefly stop accepting requests while its file graph settles. A 30s launch budget or a one-shot readiness probe here makes the nightly `mobile-e2e` lane fail against copy that is entirely correct.
+- **`launchApp: { clearState: true }`** wipes the Expo dev client's cached Metro URL. The very first relaunch after clearState may show a red "No script URL provided" screen. The harness's Metro reachability check catches the obvious failure mode; if the redbox still appears, deep-link the dev client once with `xcrun simctl openurl <udid> "dev.centraid.mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"` to re-inject the URL.
+- **Metro starts from `apps/mobile/` cwd.** Running it from the repo root resolves to an empty project root and fails with `Unable to resolve module expo`. Use `bunx expo start` from `apps/mobile/`, not `bun run` from root.

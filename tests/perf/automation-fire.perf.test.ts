@@ -1,6 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import { runFire } from "@centraid/automation";
 import type { OpenDispatch } from "@centraid/automation";
 import {
@@ -8,7 +10,6 @@ import {
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 const OWNER = "tests/perf/automation-fire.perf.test.ts";
 const FIRES = 10;

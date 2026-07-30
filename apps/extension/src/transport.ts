@@ -114,9 +114,9 @@ async function requestWithRetry(
       ) {
         throw error;
       }
-      await new Promise((resolve) =>
-        setTimeout(resolve, attempt === 0 ? 250 : 750)
-      );
+      await new Promise((resolve) => {
+        setTimeout(resolve, attempt === 0 ? 250 : 750);
+      });
       return requestAttempt(attempt + 1);
     } finally {
       if (timer) clearTimeout(timer);

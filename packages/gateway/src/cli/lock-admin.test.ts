@@ -1,11 +1,12 @@
 import { promises as fs } from "node:fs";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { buildGatewayInfoPayload } from "@centraid/protocol";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { endpointIdForSecret } from "@centraid/tunnel";
 import { KeyStore } from "@centraid/vault";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { commandDevices } from "./device-admin.js";

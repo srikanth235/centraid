@@ -1,10 +1,3 @@
-import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
-import { toBlueprintCss } from "@centraid/design-tokens";
-
-// The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
-// banners, ask panel) that blueprint component modules reference. Loaded once,
-// globally, by the route host — same as the served path's <link rel=kit.css>.
-import "@centraid/blueprints/kit/kit.css";
 import {
   Suspense,
   use,
@@ -15,6 +8,13 @@ import {
   useState,
 } from "react";
 import type { JSX, ReactNode } from "react";
+
+// The kit's :global(.kit-*) vocabulary (buttons, segmented chips, search,
+// banners, ask panel) that blueprint component modules reference. Loaded once,
+// globally, by the route host — same as the served path's <link rel=kit.css>.
+import "@centraid/blueprints/kit/kit.css";
+import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
+import { toBlueprintCss } from "@centraid/design-tokens";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
 import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
@@ -353,6 +353,7 @@ export default function InlineAppRoute({
             color: finish.glyphColor,
             boxShadow: finish.boxShadow || undefined,
           }}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 11, 1.9) }}
         />
         {app.name}
@@ -369,6 +370,7 @@ export default function InlineAppRoute({
           aria-label="Build"
           title="Build"
           onClick={() => enterBuilder({ appContext: app })}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("Sparkle", 14) }}
         />
       ) : null}
@@ -384,6 +386,7 @@ export default function InlineAppRoute({
               settingsOpen ? null : { inlineRoot: appRootRef.current }
             )
           }
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
         />
         <span className={chrome.tooltip}>App settings</span>

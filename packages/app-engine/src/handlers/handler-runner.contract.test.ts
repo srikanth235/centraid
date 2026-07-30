@@ -11,8 +11,9 @@ import { writeFile } from "node:fs/promises";
 // cheap to exercise without spinning up dozens of real worker threads.
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { runHandler } from "./handler-runner.js";
 import type { HandlerOutcome } from "./handler-runner.js";

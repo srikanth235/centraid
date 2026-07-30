@@ -44,11 +44,11 @@ Every back-compat shim carries a machine-grepable comment:
 // COMPAT(replica-epoch-v1): added 2026-07-01, drop when floor >= 0.4.0
 ```
 
-| Required | Meaning |
-| --- | --- |
-| `name` | Stable id for the shim family |
-| `added` | Version or date introduced |
-| `drop when floor >= …` | When cleanup is allowed |
+| Required               | Meaning                       |
+| ---------------------- | ----------------------------- |
+| `name`                 | Stable id for the shim family |
+| `added`                | Version or date introduced    |
+| `drop when floor >= …` | When cleanup is allowed       |
 
 **Ban:** untagged `??` / dual-path code that exists only for older peers. One `rg 'COMPAT\('` must produce the complete cleanup backlog.
 
@@ -136,25 +136,11 @@ The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0
 
 ### Blueprint-readiness feature contracts (#630)
 
-Mobile judges the normal gateway handshake before mounting a replica. The
-mutual protocol window and the required `multiVaultReplica` /
-`crossVaultPlacements` capabilities are evaluated once in
-`mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one
-“update gateway” or “update app” wall. Feature code does not retry older route
-shapes or silently fall back to an online-only client.
+Mobile judges the normal gateway handshake before mounting a replica. The mutual protocol window and the required `multiVaultReplica` / `crossVaultPlacements` capabilities are evaluated once in `mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one “update gateway” or “update app” wall. Feature code does not retry older route shapes or silently fall back to an online-only client.
 
-Household placement uses the gateway control plane because one request names
-an origin and an audience vault. `gatewayPlacements` is the durable,
-link-token-idempotent client outbox ingress; `gatewayShare`,
-`gatewayShareRemove`, and `gatewayShareReceipts` are the explicit
-share/unshare/audit gestures. The gateway resolves both vault handles and
-member roles before entering either single-vault context.
+Household placement uses the gateway control plane because one request names an origin and an audience vault. `gatewayPlacements` is the durable, link-token-idempotent client outbox ingress; `gatewayShare`, `gatewayShareRemove`, and `gatewayShareReceipts` are the explicit share/unshare/audit gestures. The gateway resolves both vault handles and member roles before entering either single-vault context.
 
-`briefToday` is a read-only feature-plane projection. The caller supplies an
-explicit local-day `[from,to)` range, date, and IANA time zone; the response is
-bounded events, due tasks, the day's photo count, and the owner's Tally net
-position. Notification schedulers may wake Home but must not copy those titles
-or balances into a push payload.
+`briefToday` is a read-only feature-plane projection. The caller supplies an explicit local-day `[from,to)` range, date, and IANA time zone; the response is bounded events, due tasks, the day's photo count, and the owner's Tally net position. Notification schedulers may wake Home but must not copy those titles or balances into a push payload.
 
 ## Stream authority
 

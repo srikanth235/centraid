@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { readBackupPolicy } from "../backup-policy.js";
 import { bootstrapVault } from "../bootstrap.js";
@@ -235,7 +236,9 @@ describe("transfers", () => {
     expect(coordinator.state.outbox(committed.sha256)).not.toBeNull();
 
     rejectOffline(new Error("provider offline"));
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
     expect(coordinator.state.outbox(committed.sha256)?.last_error).toContain(
       "provider offline"
     );

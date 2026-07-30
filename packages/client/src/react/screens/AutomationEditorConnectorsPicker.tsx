@@ -115,7 +115,6 @@ function ConnectInlineForm({
           {guideOpen ? (
             <ol className={styles.connGuideList}>
               {item.setup.map((step, i) => (
-                // eslint-disable-next-line react/no-array-index-key -- (#524) static setup steps
                 <li key={i}>{step}</li>
               ))}
             </ol>

@@ -1,6 +1,7 @@
-import type { IconName } from "@centraid/design-tokens";
 import { useState } from "react";
 import type { CSSProperties, JSX } from "react";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import type { ActiveSpaceData } from "../shell/routes/settingsAccountData.js";
 import { PROFILE_COLORS, PROFILE_ICONS } from "../shell/routes/SpaceModal.js";

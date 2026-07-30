@@ -1,8 +1,9 @@
 // Coverage for launch planning: native vs adapter-backed spawns, the per-kind
 // launch env, and the root-bypass opt-in notice.
 
-import type { TurnStreamEvent } from "@centraid/app-engine";
 import { afterEach, describe, expect, test } from "vitest";
+
+import type { TurnStreamEvent } from "@centraid/app-engine";
 
 import { planLaunch } from "./launch.ts";
 import type { AcpTurnConfig } from "./types.ts";

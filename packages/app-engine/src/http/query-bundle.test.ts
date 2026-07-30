@@ -7,8 +7,9 @@ import type {
 } from "node:http";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { Runtime } from "../runtime.js";
 import {

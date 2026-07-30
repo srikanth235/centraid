@@ -143,7 +143,9 @@ async function waitForAutomationRun(
     if (rec && rec.endedAt !== undefined) return rec;
     if (Date.now() >= deadline)
       throw new Error("run did not finish within 6 minutes");
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1500);
+    });
     return poll();
   };
   return poll();
@@ -379,6 +381,7 @@ export default function BuilderCloud({
       data-active={String(active === key)}
       data-ready={String(ready)}
       onClick={() => selectSection(key, ready)}
+      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{
         __html: `${renderIcon(14)}<span class="${styles.railLabel}">${label}</span>`,
       }}
@@ -438,6 +441,7 @@ export default function BuilderCloud({
                 )}
                 title="Refresh logs"
                 onClick={() => void refreshLogs()}
+                // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
                 dangerouslySetInnerHTML={{
                   __html: `${refreshIconSvg(13)}<span>Refresh</span>`,
                 }}
@@ -454,6 +458,7 @@ export default function BuilderCloud({
                 )}
                 title="Refresh automations"
                 onClick={() => void refreshAutomations()}
+                // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
                 dangerouslySetInnerHTML={{
                   __html: `${refreshIconSvg(13)}<span>Refresh</span>`,
                 }}
@@ -546,6 +551,7 @@ function Overview({
       // Same as the rail items: the label lives in the injected HTML.
       aria-label={label}
       onClick={onClick}
+      // oxlint-disable-next-line react/no-danger -- #639 both the SVG and label are selected from module-owned constants.
       dangerouslySetInnerHTML={{ __html: `${glyph}<span>${label}</span>` }}
     />
   );
@@ -575,6 +581,7 @@ function Overview({
         <div
           className={styles.heroTile}
           data-status={liveUrl ? "live" : "off"}
+          // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
           dangerouslySetInnerHTML={{ __html: iconSvg("Eye", 21) }}
         />
         {liveUrl ? (
@@ -693,6 +700,7 @@ function Overview({
               <div className={styles.feedRow} key={v.versionId}>
                 <div
                   className={styles.feedTile}
+                  // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
                   dangerouslySetInnerHTML={{ __html: iconSvg("Save", 14) }}
                 />
                 <div className={styles.feedTitleRow}>

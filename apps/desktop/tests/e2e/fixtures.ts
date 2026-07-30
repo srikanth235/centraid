@@ -4,12 +4,13 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { forEachSequentially } from "@centraid/test-kit/sequential";
 // governance: allow-repo-hygiene file-size-limit — one cohesive e2e harness (mock
 // gateway + record builders + DOM helpers) shared by every spec; splitting it would
 // scatter the single source of fixture truth. See receipts/issue-225-desktop-e2e-suite.md.
 import { _electron, test } from "@playwright/test";
 import type { ElectronApplication, Page } from "@playwright/test";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
@@ -205,7 +206,9 @@ async function writeSse(
   });
   await forEachSequentially(frames, async (f) => {
     if (f.delayMs)
-      await new Promise((resolve) => setTimeout(resolve, f.delayMs));
+      await new Promise((resolve) => {
+        setTimeout(resolve, f.delayMs);
+      });
     res.write(`data: ${JSON.stringify(f.data)}\n\n`);
   });
   res.write("event: end\ndata: {}\n\n");
@@ -260,7 +263,9 @@ export async function startMockGateway(
     });
   });
 
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const addr = server.address();
   if (!addr || typeof addr === "string")
     throw new Error("mock gateway: no address");
@@ -1028,7 +1033,9 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
   }
   const exited =
     child.exitCode === null
-      ? new Promise<void>((resolve) => child.once("exit", () => resolve()))
+      ? new Promise<void>((resolve) => {
+          child.once("exit", () => resolve());
+        })
       : Promise.resolve();
 
   let timer: ReturnType<typeof setTimeout> | undefined;

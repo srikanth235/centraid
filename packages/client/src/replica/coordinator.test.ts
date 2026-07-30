@@ -1,6 +1,7 @@
-import { flushMacrotasks } from "@centraid/test-kit/flush";
 // governance: allow-repo-hygiene file-size-limit cohesive coordinator regression suite; splitting would obscure issue #417 review
 import { describe, expect, test, vi } from "vitest";
+
+import { flushMacrotasks } from "@centraid/test-kit/flush";
 
 import type { VaultChangeMessage } from "../vault-change-feed.js";
 import { createReplicaCoordinator } from "./coordinator-web.js";
@@ -285,7 +286,9 @@ describe(ReplicaCoordinator, () => {
   test("uses the shared feed as a pull trigger and resolves overlays before cursor advance", async () => {
     const worker = new StateWorker();
     let applied!: () => void;
-    const batchApplied = new Promise<void>((resolve) => (applied = resolve));
+    const batchApplied = new Promise<void>((resolve) => {
+      applied = resolve;
+    });
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
       {
@@ -378,7 +381,9 @@ describe(ReplicaCoordinator, () => {
   test("retries a failed pull without requiring another feed cursor event", async () => {
     const worker = new StateWorker();
     let applied!: () => void;
-    const batchApplied = new Promise<void>((resolve) => (applied = resolve));
+    const batchApplied = new Promise<void>((resolve) => {
+      applied = resolve;
+    });
     worker.onApply = applied;
     const { client } = await ReplicaWorkerClient.connect(
       {
@@ -437,9 +442,9 @@ describe(ReplicaCoordinator, () => {
     );
     const feed = createFeed();
     let required!: () => void;
-    const rebootstrapRequired = new Promise<void>(
-      (resolve) => (required = resolve)
-    );
+    const rebootstrapRequired = new Promise<void>((resolve) => {
+      required = resolve;
+    });
     let pulls = 0;
     const replica = new ReplicaCoordinator(
       client,
@@ -579,9 +584,9 @@ describe(ReplicaCoordinator, () => {
     );
     const feed = createFeed();
     let release!: (batch: ReplicaChangeBatch) => void;
-    const pending = new Promise<ReplicaChangeBatch>(
-      (resolve) => (release = resolve)
-    );
+    const pending = new Promise<ReplicaChangeBatch>((resolve) => {
+      release = resolve;
+    });
     const replica = new ReplicaCoordinator(
       client,
       new IntentQueue(new MemoryIntentStore()),

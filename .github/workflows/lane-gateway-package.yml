@@ -32,7 +32,7 @@ jobs:
       - name: Build gateway dependency closure
         # turbo honors package.json dependsOn so protocol → vault → app-engine →
         # agent-runtime → automation → gateway build in order (full graph).
-        run: bunx turbo run build --filter=@centraid/gateway
+        run: bun run turbo run build --filter=@centraid/gateway
 
       - name: Probe unit tests
         run: node --test scripts/gateway-package/probe.test.mjs

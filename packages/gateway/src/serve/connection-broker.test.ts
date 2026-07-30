@@ -1,6 +1,8 @@
 import http from "node:http";
 import type * as TypeImport_1cs0ag8 from "node:net";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 // governance: allow-repo-hygiene file-size-limit #526 Keep broker custody and Assist regression scenarios together.
 // The connection broker (issue #304): token custody correctness. The three
@@ -8,7 +10,6 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 // single-flight refresh under concurrency, invalid_grant flips needs-auth
 // with an owner-readable note while a 5xx stays transient (no flip).
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from "./assist-oauth.js";
 import { ConnectionBroker } from "./connection-broker.js";
@@ -60,12 +61,14 @@ describe("connection-broker", () => {
       sockets.add(socket);
       socket.on("close", () => sockets.delete(socket));
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(async () => {
       for (const s of sockets) s.destroy();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
     });
     const port = (server.address() as { port: number }).port;
     return { url: `http://127.0.0.1:${port}/token` };
@@ -91,9 +94,9 @@ describe("connection-broker", () => {
         res.end(JSON.stringify(next.body));
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(() => {
       server.closeAllConnections();
       server.close();

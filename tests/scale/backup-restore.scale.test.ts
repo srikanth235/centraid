@@ -3,6 +3,8 @@ import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { describe, expect, test } from "vitest";
+
 import {
   createKeyring,
   createSnapshot,
@@ -14,7 +16,6 @@ import { recordQualityResult } from "@centraid/test-kit/quality-result";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { generateVolumeFixture } from "@centraid/test-kit/volume-fixture";
 import { FsBlobStore, sha256OfBytes, blobUriFor } from "@centraid/vault";
-import { describe, expect, test } from "vitest";
 
 import { createTestVault } from "../helpers/factories.js";
 

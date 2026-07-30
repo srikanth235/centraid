@@ -4,9 +4,10 @@
  * 500-line cap) — this file owns the preamble module's tests.
  */
 
+import { describe, expect, it } from "vitest";
+
 import { validateManifest } from "@centraid/automation";
 import type { Row as AutomationRow } from "@centraid/automation";
-import { describe, expect, it } from "vitest";
 
 import { automationContextPreamble } from "./automation-turn-context.js";
 

@@ -8,8 +8,9 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { InsightsStore } from "../../insights/insights-store.js";
 import {

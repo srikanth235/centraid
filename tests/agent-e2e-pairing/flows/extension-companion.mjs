@@ -26,7 +26,9 @@ const loginServer = createServer((_request, response) => {
     <label>Code <input autocomplete="one-time-code" name="otp"></label>
     <button>Sign in</button></form>`);
 });
-await new Promise((resolve) => loginServer.listen(0, "127.0.0.1", resolve));
+await new Promise((resolve) => {
+  loginServer.listen(0, "127.0.0.1", resolve);
+});
 const address = loginServer.address();
 if (!address || typeof address === "string")
   throw new Error("login server did not bind");
@@ -204,5 +206,7 @@ try {
     };
   });
 } finally {
-  await new Promise((resolve) => loginServer.close(resolve));
+  await new Promise((resolve) => {
+    loginServer.close(resolve);
+  });
 }

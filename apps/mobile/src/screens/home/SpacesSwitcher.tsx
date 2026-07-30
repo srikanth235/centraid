@@ -16,8 +16,6 @@
 // accents, a prominent active card. Mechanics mirror the Space/Photos drawers (a
 // transparent Modal, an Animated slide, a fading scrim that closes on tap).
 
-import { icons as ICON_SET } from "@centraid/design-tokens";
-import type { IconName } from "@centraid/design-tokens";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -31,6 +29,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { icons as ICON_SET } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design-tokens";
 
 import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";

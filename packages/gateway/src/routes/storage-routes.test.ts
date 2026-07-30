@@ -3,11 +3,12 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrapVault, openVaultDb } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { openStorageConnectionStore } from "../backup/storage-connections.js";

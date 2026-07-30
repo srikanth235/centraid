@@ -1,5 +1,7 @@
 import { existsSync } from "node:fs";
 
+import { describe, expect, test } from "vitest";
+
 import { RUNNER_KINDS } from "@centraid/app-engine";
 import type {
   RunnerKind,
@@ -8,7 +10,6 @@ import type {
   TurnStreamEvent,
 } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 import { resolveAdapterEntry } from "./backends/acp/adapter-bin.ts";
 import { planLaunch } from "./backends/acp/launch.ts";

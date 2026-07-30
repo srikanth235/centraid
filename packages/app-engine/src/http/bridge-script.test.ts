@@ -139,7 +139,9 @@ describe("bridge-script", () => {
 
   /** Flush pending microtasks so dedup-map cleanup (`.then`) settles. */
   function flush(): Promise<void> {
-    return new Promise((resolve) => setImmediate(resolve));
+    return new Promise((resolve) => {
+      setImmediate(resolve);
+    });
   }
 
   test("concurrent identical reads share one fetch and one result", async () => {

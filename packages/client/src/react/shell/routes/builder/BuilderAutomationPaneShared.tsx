@@ -17,6 +17,7 @@ export function Glyph({
     <span
       className={className}
       aria-hidden="true"
+      // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

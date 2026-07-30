@@ -12,12 +12,13 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
 import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrapVault, blobUriFor, openVaultDb } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
-import { describe, afterEach, expect, test } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
@@ -146,9 +147,9 @@ describe("share-routes suite", () => {
       })();
     });
     servers.push(server);
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     const { port } = server.address() as AddressInfo;
     return {
       url: `http://127.0.0.1:${port}/centraid/_gateway/share`,

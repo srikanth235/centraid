@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { afterEach, describe, expect, it, vi } from "vitest";
+
 import {
   ConversationStore,
   ProviderEgressConsentStore,
@@ -9,7 +11,6 @@ import {
 import type { ConversationRunner } from "@centraid/app-engine";
 import { validateManifest } from "@centraid/automation";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ResolvedAutomationAnchor } from "./automation-anchor-scopes.js";
 import {

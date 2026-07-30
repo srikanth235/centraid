@@ -2,8 +2,9 @@ import { statSync } from "node:fs";
 // Share-by-placement lifecycle: failure atomicity, unshare, and the GC
 // interplay between vaults that hardlink the same inode (issue #599 d11).
 
-import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 import { describe, afterEach, expect, test } from "vitest";
+
+import { plainSqliteRow } from "@centraid/test-kit/sqlite";
 
 import { sweepLocalOrphans } from "../blob/local-orphan-sweep.js";
 import { liveBlobShas } from "../blob/read.js";

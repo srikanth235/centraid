@@ -49,6 +49,18 @@ updates:
     # split below already separates the two streams.
     commit-message:
       prefix: "chore(deps)"
+    # The monthly toolchain-upgrade issue owns these coupled exact pins. A
+    # grouped weekly bump would bypass the rule/catalog/formatter review in
+    # docs/toolchain.md.
+    ignore:
+      - dependency-name: ultracite
+      - dependency-name: oxlint
+      - dependency-name: oxlint-tsgolint
+      - dependency-name: oxfmt
+      - dependency-name: typescript
+      - dependency-name: knip
+      - dependency-name: vitest
+      - dependency-name: turbo
     groups:
       # Toolchain churn (lint/format/test/build) is noisy and low-risk to batch.
       dev-toolchain:

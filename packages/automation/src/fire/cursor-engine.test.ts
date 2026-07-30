@@ -1,11 +1,12 @@
 import path from "node:path";
 
+import { describe, expect, it, vi } from "vitest";
+
 import {
   AutomationTriggerStore,
   makeJournalDbProvider,
 } from "@centraid/app-engine";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { describe, expect, it, vi } from "vitest";
 
 import type { Manifest } from "../manifest/manifest.js";
 import type { Row } from "../scaffold/app.js";
@@ -51,7 +52,9 @@ function store(): AutomationTriggerStore {
 }
 
 async function settle(): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 describe(VaultCursorEngine, () => {
@@ -351,7 +354,9 @@ describe(VaultCursorEngine, () => {
     pending.push({ position: "10", occurredAt: 10 });
 
     engine.nudgeIngress("hook-id");
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 5);
+    });
 
     expect(fired).toStrictEqual(["10"]);
   });

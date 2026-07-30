@@ -1,5 +1,6 @@
-import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";

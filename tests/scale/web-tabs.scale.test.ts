@@ -1,10 +1,11 @@
 import { BroadcastChannel } from "node:worker_threads";
 
+import { describe, expect, onTestFinished, test } from "vitest";
+
 import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
-import { describe, expect, onTestFinished, test } from "vitest";
 
 const OWNER = "tests/scale/web-tabs.scale.test.ts";
 const TABS = 64;

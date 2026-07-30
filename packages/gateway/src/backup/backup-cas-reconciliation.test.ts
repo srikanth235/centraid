@@ -1,5 +1,6 @@
-import { bootstrapVault, openVaultDb, ReplicaIndex } from "@centraid/vault";
 import { afterEach, describe, expect, test } from "vitest";
+
+import { bootstrapVault, openVaultDb, ReplicaIndex } from "@centraid/vault";
 
 import { runCasOnlyReconciliation } from "./backup-cas-reconciliation.js";
 

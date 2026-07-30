@@ -2,9 +2,10 @@ import crypto from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { DATA_PLANE_RELAY_HEADER } from "../serve/data-plane-handoff.js";
 import { openVaultPlane } from "../serve/vault-plane.js";
@@ -54,11 +55,14 @@ describe("blob-routes-hardening", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
     const address = server.address() as { port: number };
     return {
@@ -114,7 +118,9 @@ describe("blob-routes-hardening", () => {
     });
     const waitForDestroy = async (attempt: number): Promise<void> => {
       if (attempt >= 50 || slow.destroyed) return;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 10);
+      });
       return waitForDestroy(attempt + 1);
     };
     await waitForDestroy(0);

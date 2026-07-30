@@ -95,9 +95,9 @@ async function stageRung(
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
   canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", 0.82)
-  );
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/jpeg", 0.82);
+  });
   if (!blob) return;
   await stageDerivative(parentSha, variant, blob, "image/jpeg");
 }
@@ -486,7 +486,7 @@ export function wireUpload({
     dragDepth = 0;
     $("dropOverlay").hidden = true;
     const files = [...(e.dataTransfer?.files ?? [])];
-    if (files.length > 0) uploadFiles(files);
+    if (files.length > 0) void uploadFiles(files);
   });
 
   // Paste an image (screenshot, copied photo) straight into the library.
@@ -494,6 +494,6 @@ export function wireUpload({
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return; // never hijack a text field
     const files = [...(e.clipboardData?.files ?? [])];
-    if (files.length > 0) uploadFiles(files);
+    if (files.length > 0) void uploadFiles(files);
   });
 }

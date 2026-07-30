@@ -2,10 +2,11 @@ import { createHmac } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { endpointIdForSecret } from "@centraid/tunnel";
 import { KeyStore } from "@centraid/vault";
-import { describe, expect, test } from "vitest";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { deriveBackupSourceInstanceId } from "./backup-state.js";

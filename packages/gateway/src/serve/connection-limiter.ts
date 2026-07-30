@@ -19,7 +19,9 @@ export function authDeadError(message: string): Error {
 
 /** Resolve after `ms` — the shared transient-retry / rate-gate sleep. */
 export function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -49,7 +51,9 @@ export class ConnectionLimiter {
 
   private async acquire(): Promise<void> {
     if (this.inFlight >= this.maxConcurrent) {
-      await new Promise<void>((resolve) => this.queue.push(resolve));
+      await new Promise<void>((resolve) => {
+        this.queue.push(resolve);
+      });
     }
     this.inFlight += 1;
     const wait = this.lastStart + this.minIntervalMs - Date.now();

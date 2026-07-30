@@ -14,12 +14,12 @@ describe("capture classify route", () => {
   afterEach(
     async () =>
       void (await Promise.all(
-        servers
-          .splice(0)
-          .map(
-            (server) =>
-              new Promise<void>((resolve) => server.close(() => resolve()))
-          )
+        servers.splice(0).map(
+          (server) =>
+            new Promise<void>((resolve) => {
+              server.close(() => resolve());
+            })
+        )
       ))
   );
 
@@ -98,7 +98,9 @@ async function request(
 ): Promise<{ status: number; body: unknown }> {
   const server = createServer((req, res) => void handler(req, res));
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("no address");
   const response = await fetch(
@@ -120,7 +122,9 @@ async function requestRaw(
 ): Promise<{ status: number; body: unknown }> {
   const server = createServer((req, res) => void handler(req, res));
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("no address");
   const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {

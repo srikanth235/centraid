@@ -6,8 +6,9 @@ import { writeFile } from "node:fs/promises";
 // poison the pool for subsequent runs.
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { runHandler, HANDLER_WORKER_FILE } from "./handler-runner.js";
 import { workerMaxConcurrentFromEnv } from "./worker-admission.js";
@@ -32,7 +33,9 @@ describe("handler-pool", () => {
 
   /** Let queued microtasks (pool refill) and a beat of the loop settle. */
   function tick(ms = 40): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   async function writeHandler(name: string, src: string): Promise<string> {

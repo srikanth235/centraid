@@ -30,7 +30,7 @@ Use a **private** `--data-dir` / Electron profile for any gateway you start.
 - [ ] `bun install` + necessary `build` in this worktree
 - [ ] Unique ports and data dirs
 - [ ] No kill of other agents' gateways
-- [ ] `check:pr` only when preparing *this* branch for push
+- [ ] `check:pr` only when preparing _this_ branch for push
 
 ## Related
 

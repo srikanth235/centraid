@@ -1,7 +1,8 @@
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { makeJournalDbProvider } from "../stores/gateway-db.js";
 import { AutomationTriggerStore } from "./trigger-store.js";

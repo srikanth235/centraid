@@ -215,7 +215,9 @@ async function requestPermission(sessionId, toolCallId) {
     { optionId: "always", name: "Always allow", kind: "allow_always" },
     { optionId: "reject", name: "Reject", kind: "reject_once" },
   ];
-  const done = new Promise((resolve) => pendingClient.set(id, resolve));
+  const done = new Promise((resolve) => {
+    pendingClient.set(id, resolve);
+  });
   send({
     jsonrpc: "2.0",
     id,

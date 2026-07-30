@@ -1,11 +1,12 @@
 import { randomBytes } from "node:crypto";
 
+import { describe, expect, test } from "vitest";
+
 import { decrypt, encrypt } from "@centraid/backup";
 import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
-import { describe, expect, test } from "vitest";
 
 const OWNER = "tests/perf/backup-throughput.perf.test.ts";
 const BYTES = 32 * 1024 * 1024;

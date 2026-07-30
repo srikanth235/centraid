@@ -4,8 +4,9 @@
  * cursor-engine.test.ts.
  */
 
-import type { AutomationTriggerCursor } from "@centraid/app-engine";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import type { AutomationTriggerCursor } from "@centraid/app-engine";
 
 import { wallClockFields } from "../cron-timezone.js";
 import { dueInstants, floorMinute, readCronCursor } from "./cron-cursor.js";

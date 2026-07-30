@@ -43,7 +43,7 @@ const FACES_SCHEMA = {
   },
 };
 
-export default async ({ ctx, log }) => {
+export default async function handler({ ctx, log }) {
   const cursor = (await ctx.state.get("cursor")) ?? "";
   // The on-demand queue drains FIRST (issue #352 phase 3/4) — see header.
   const requested = await ctx.vault.read({
@@ -157,4 +157,4 @@ export default async ({ ctx, log }) => {
     summary: `proposed ${rows.length} face region(s) in ${proposed} photo(s)`,
     output: { regions: rows.length, photos: proposed },
   };
-};
+}

@@ -1,5 +1,6 @@
-import type { RuntimeLogger } from "@centraid/app-engine";
 import { describe, expect, it } from "vitest";
+
+import type { RuntimeLogger } from "@centraid/app-engine";
 
 import { RESOURCE_KNOB_BOUNDS } from "./hardware-profile.js";
 import { HealthRegistry } from "./health-registry.js";

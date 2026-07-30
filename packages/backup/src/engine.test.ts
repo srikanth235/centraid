@@ -4,8 +4,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { ALGO_STORE, ALGO_ZSTD, unframeChunkPayload } from "./compress.js";
 import {

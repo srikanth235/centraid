@@ -1,10 +1,11 @@
-import { recordQualityResult } from "@centraid/test-kit/quality-result";
 /**
  * Replica-sync real-IO perf budget (#496 PD2).
  * Touches IndexedDB store open + enqueue/list — not an in-memory Map stringify.
  */
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+import { recordQualityResult } from "@centraid/test-kit/quality-result";
 
 import { IndexedDbIntentStore } from "../../packages/client/src/replica/intent-store.js";
 import { IntentQueue } from "../../packages/client/src/replica/intents.js";

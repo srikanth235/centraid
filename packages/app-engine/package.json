@@ -21,9 +21,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && cp src/pricing/litellm-snapshot.json dist/pricing/litellm-snapshot.json",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "clean": "rm -rf dist",
     "test": "vitest run",
-    "clean": "rm -rf dist"
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
     "ajv": "^8.17.1",

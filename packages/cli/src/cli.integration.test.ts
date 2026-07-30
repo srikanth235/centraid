@@ -1,15 +1,16 @@
 import http from "node:http";
 
-import {
-  GATEWAY_SCHEMA_EPOCH,
-  GATEWAY_VERSION,
-  ROUTES,
-} from "@centraid/protocol";
 /**
  * Product CLI entry against a real HTTP gateway surface (issue #504).
  * Drives `main()` — the shipped bin path — not a reimplementation of client helpers.
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
+
+import {
+  GATEWAY_SCHEMA_EPOCH,
+  GATEWAY_VERSION,
+  ROUTES,
+} from "@centraid/protocol";
 
 import { main } from "./cli.ts";
 
@@ -22,7 +23,7 @@ describe("cli", () => {
     if (!server) return;
     await new Promise<void>((resolve, reject) => {
       server!.close((err) => {
-        if (err) reject(err);
+        if (err) reject(new Error(err.message, { cause: err }));
         else resolve();
       });
     });

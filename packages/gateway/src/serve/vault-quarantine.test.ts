@@ -7,9 +7,10 @@ import { promises as fs } from "node:fs";
 // publish, not a SQL update; see `vault-quarantine.ts`'s header).
 import path from "node:path";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { openVaultPlane } from "./vault-plane.js";
 import type { VaultPlane } from "./vault-plane.js";

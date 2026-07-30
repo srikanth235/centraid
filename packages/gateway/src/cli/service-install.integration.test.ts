@@ -16,8 +16,9 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test, vi } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { buildLaunchdPlist, launchAgentPlistPath } from "./service-unit.ts";
 import type { ServiceUnitSpec } from "./service-unit.ts";
@@ -87,7 +88,9 @@ describe("service-install", () => {
           printed = "";
         }
         if (/state = running/u.test(printed) || attempt >= 39) return printed;
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => {
+          setTimeout(resolve, 250);
+        });
         return waitForRunning(attempt + 1);
       };
       const printed = await waitForRunning(0);

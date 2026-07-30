@@ -10,11 +10,12 @@
 // bar gave; the Assistant spine — the primary action — fires a heavier `Medium`
 // impact so it reads as the more consequential tap.
 
-import type { IconName } from "@centraid/design-tokens";
 import * as Haptics from "expo-haptics";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import type { IconName } from "@centraid/design-tokens";
 
 import GlassBar from "../../kit/components/GlassBar";
 import Icon from "../../kit/components/Icon";

@@ -10,8 +10,9 @@
 // session exposes `read`/`subscribe` directly) so it needs no React tree of its
 // own and survives screen mount/unmount — the hook API is unchanged.
 
-import type { ReplicaRow } from "@centraid/client/replica/native";
 import * as MediaLibrary from "expo-media-library";
+
+import type { ReplicaRow } from "@centraid/client/replica/native";
 
 import { authHeader } from "../../lib/gateway";
 import type { MobileReplicaSession } from "../../lib/replica/native-session";

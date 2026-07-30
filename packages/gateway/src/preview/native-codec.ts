@@ -1,5 +1,6 @@
-import type { PreviewCodec, PreviewOutput } from "@centraid/vault";
 import sharp from "sharp";
+
+import type { PreviewCodec, PreviewOutput } from "@centraid/vault";
 
 import { rgbaToThumbHash } from "./thumbhash.js";
 

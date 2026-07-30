@@ -27,8 +27,9 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { cloneDbFile } from "./wal-shipper.js";
 

@@ -12,9 +12,10 @@
 // legacy `colors` export stays light-only for callers that read it at module
 // scope; anything that needs to follow the OS theme should call `useTheme()`.
 
+import type { TextStyle } from "react-native";
+
 import { type as typeTokens } from "@centraid/design-tokens";
 import type { TypeKey } from "@centraid/design-tokens";
-import type { TextStyle } from "react-native";
 
 export { spacing, radii } from "@centraid/design-tokens";
 

@@ -66,7 +66,7 @@ export function QuickAdd({
         onKeyDown={(e) => {
           if (e.key === "Enter" && !open) {
             e.preventDefault();
-            submit();
+            void submit();
           }
         }}
       />
@@ -81,7 +81,7 @@ export function QuickAdd({
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                 e.preventDefault();
-                submit();
+                void submit();
               }
             }}
           />

@@ -12,9 +12,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 import type { VaultInvokeRunner } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 import { runFake, types, vaultToolContext } from "./test-fixtures.js";
 

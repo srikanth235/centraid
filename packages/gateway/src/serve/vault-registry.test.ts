@@ -2,9 +2,10 @@ import { existsSync, promises as fs } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
+import { describe, afterEach, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { makeVaultRouteHandler } from "../routes/vault-routes.js";
 import { EnrollmentStore } from "./enrollment-store.js";
@@ -289,11 +290,14 @@ describe("vault-registry scenarios", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(
-      () => new Promise<void>((resolve) => server.close(() => resolve()))
+      () =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        })
     );
     const addr = server.address();
     if (!addr || typeof addr === "string") throw new Error("no address");

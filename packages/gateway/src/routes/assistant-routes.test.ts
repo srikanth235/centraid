@@ -14,6 +14,8 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
+import { describe, afterEach, expect, test } from "vitest";
+
 import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
@@ -21,7 +23,6 @@ import {
 } from "@centraid/app-engine";
 import type { ConversationRunner, VaultWorkspace } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test } from "vitest";
 
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { makeAssistantRouteHandler } from "./assistant-routes.js";
@@ -89,14 +90,18 @@ async function bootstrap(
       }
     });
   });
-  await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server!.listen(0, "127.0.0.1", resolve);
+  });
   const { port } = server!.address() as AddressInfo;
   return `http://127.0.0.1:${port}`;
 }
 describe("assistant-routes suite", () => {
   afterEach(async () => {
     if (server)
-      await new Promise<void>((resolve) => server!.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        server!.close(() => resolve());
+      });
     server = undefined;
     journal?.close();
     journal = undefined;

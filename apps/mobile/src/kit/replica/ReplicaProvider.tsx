@@ -1,8 +1,3 @@
-import { fetchReplicaBootstrapPage } from "@centraid/client/replica/native";
-import type {
-  GatewayAuth,
-  ReplicaFetcher,
-} from "@centraid/client/replica/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Network from "expo-network";
 import React, {
@@ -13,6 +8,12 @@ import React, {
   useState,
 } from "react";
 import { AppState } from "react-native";
+
+import { fetchReplicaBootstrapPage } from "@centraid/client/replica/native";
+import type {
+  GatewayAuth,
+  ReplicaFetcher,
+} from "@centraid/client/replica/native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { scheduleDailyBriefNotification } from "../../lib/daily-brief";

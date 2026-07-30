@@ -5,6 +5,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { describe, afterEach, expect, test, vi } from "vitest";
+
 import { Dispatcher, Registry } from "@centraid/app-engine";
 import type { ToolResult } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
@@ -14,7 +16,6 @@ import {
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
 } from "@centraid/vault";
-import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { replicaDispatchOutcome } from "../serve/build-gateway.js";
 import { openVaultPlane } from "../serve/vault-plane.js";

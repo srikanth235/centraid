@@ -179,7 +179,9 @@ describe("AutomationEditorAccountChoice", () => {
       connectorsButton.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
     await act(async () => {
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      await new Promise<void>((resolve) => {
+        queueMicrotask(resolve);
+      });
     });
 
     const picker = el.querySelector(
@@ -204,7 +206,9 @@ describe("AutomationEditorAccountChoice", () => {
       connectorsButton.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
     await act(async () => {
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      await new Promise<void>((resolve) => {
+        queueMicrotask(resolve);
+      });
     });
 
     // The binding is NOT silently re-pointed at the surviving account — that
@@ -290,7 +294,9 @@ describe("AutomationEditorAccountChoice", () => {
       connectorsButton.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
     await act(async () => {
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      await new Promise<void>((resolve) => {
+        queueMicrotask(resolve);
+      });
     });
     const row = el.querySelector(
       '[data-kind="pull.github"] button'

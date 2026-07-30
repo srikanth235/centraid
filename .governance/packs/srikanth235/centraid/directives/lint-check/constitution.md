@@ -12,13 +12,13 @@ The check is scoped to staged files, like `format-check` beside it. Blocking a
 commit on lint debt in files the author never opened trains people to reach for
 `--no-verify`, and a gate people routinely bypass protects nothing.
 
-Errors only, never warnings. The CI gate this stands in for (`bunx oxlint .`)
-fails on errors alone. A local gate stricter than the remote one it previews
-blocks commits that would have been accepted, which is a worse failure than the
-one it prevents.
+Errors or off, never warning debt. The staged check and repository-wide
+local/CI gate use the pinned root config with `--deny-warnings`, so every
+surface applies the same blocking policy.
 
-**Fix:** `bunx oxlint <file>` — or `bun run check:pr` for the whole tree.
+**Fix:** `bun run lint` (or `bun run lint:fix` for reviewed safe fixes), then
+`bun run check:pr` for the complete gate.
 
 **Waiver:** none at the hook. A rule that genuinely does not apply belongs in
-`.oxlintrc.json`, or behind an `oxlint-disable` comment on the line itself,
-where the exception is visible in review.
+an explicit root `oxlint.config.ts` profile decision, or behind a narrow
+reasoned `oxlint-disable` comment where the exception is visible in review.

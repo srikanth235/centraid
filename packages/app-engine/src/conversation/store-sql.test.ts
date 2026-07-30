@@ -6,8 +6,9 @@
 
 import path from "node:path";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, it } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { openJournalDb } from "../stores/gateway-db.js";
 import {

@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { describe, expect, test } from "vitest";
+
 /**
  * Agent chat journey (#496 P1): message → side effect → transcript.
  *
@@ -11,7 +13,6 @@ import path from "node:path";
  * integration journey is the product-risk owner until that unblocks.
  */
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, expect, test } from "vitest";
 
 import { deltas, runFake, types, vaultToolContext } from "./test-fixtures.js";
 

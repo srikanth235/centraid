@@ -131,7 +131,7 @@ function Tile({
           }
           onClick={(e) => {
             e.stopPropagation();
-            toggleFavorite(asset, refresh);
+            void toggleFavorite(asset, refresh);
           }}
         >
           <HeartIcon size={16} filled={!!asset.favorite} />

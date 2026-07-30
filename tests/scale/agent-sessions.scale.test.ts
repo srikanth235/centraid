@@ -1,10 +1,11 @@
+import { describe, expect, test } from "vitest";
+
 import { RUNNER_BACKENDS, runTurn } from "@centraid/agent-runtime";
 import type { TurnConfig, TurnInput } from "@centraid/agent-runtime";
 import {
   qualityRegressionBudget,
   recordQualityResult,
 } from "@centraid/test-kit/quality-result";
-import { describe, expect, test } from "vitest";
 
 const OWNER = "tests/scale/agent-sessions.scale.test.ts";
 const SESSIONS = 256;

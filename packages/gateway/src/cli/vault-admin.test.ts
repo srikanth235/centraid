@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { commandVault } from "./vault-admin.ts";
 

@@ -1,8 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
   cloneTemplate,

@@ -1,8 +1,9 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 // The inline kit is imported (transitively, via the module under test) FIRST so
 // its `./suppress-served-ask` side effect runs before the real kit module. This
 // suite exercises the generic blob-image authorizer (issue #505 Phase 4).
 import { flushMacrotasks } from "@centraid/test-kit/flush";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import { installInlineBlobImages } from "./inline-blob-images.js";

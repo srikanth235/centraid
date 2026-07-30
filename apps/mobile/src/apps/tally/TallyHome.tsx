@@ -1,9 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit — this native Tally cover
-// keeps fixed-point currency input, offline ledger writes, and recurring
-// occurrence controls together so their monetary invariants remain reviewable.
-import { formatCurrencyMinor } from "@centraid/client/capture";
-import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
-import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
+/*! governance: allow-repo-hygiene file-size-limit — this native Tally cover keeps fixed-point currency input, offline ledger writes, and recurring occurrence controls together so their monetary invariants remain reviewable. */
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
@@ -17,6 +12,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { formatCurrencyMinor } from "@centraid/client/capture";
+import type { ReplicaRow, ReplicaValue } from "@centraid/client/replica/native";
+import { describeRecurrence, expandRecurrence } from "@centraid/time-engine";
 
 import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import HomeKey from "../../kit/components/HomeKey";

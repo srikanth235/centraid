@@ -9,9 +9,10 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { describe, expect, it } from "vitest";
+
 import { validateAppManifest } from "@centraid/app-engine";
 import type { AppManifest } from "@centraid/app-engine";
-import { describe, expect, it } from "vitest";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 const quotedSource = (value: string) =>

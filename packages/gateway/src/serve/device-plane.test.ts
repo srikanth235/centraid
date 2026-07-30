@@ -10,9 +10,10 @@ import { promises as fs } from "node:fs";
  */
 import path from "node:path";
 
+import { describe, afterEach, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
@@ -351,7 +352,9 @@ describe("device-plane scenarios", () => {
 
     // Expiry: a stale ticket never redeems.
     const brief = store.mint(invite([{ vaultId: "v3", role: "write" }]), 1);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 5);
+    });
     expect(store.redeem(brief.ticketId, brief.secret)).toBeUndefined();
   });
 

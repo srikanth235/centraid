@@ -154,7 +154,7 @@ jobs:
       - run: bun run lockfile:lint
       - run: bun run format:check
       # `--format github` emits inline PR annotations on the offending lines.
-      - run: bunx oxlint -c oxlint.config.mjs --deny-warnings --format github .
+      - run: bun run lint -- --format github
       # Monorepo package.json hygiene: unused/undeclared deps, version drift
       # across workspaces, misplaced @types (sherif). Fast, offline.
       - run: bun run lint:packages
@@ -168,7 +168,7 @@ jobs:
 
       # Per-package lint scripts (mobile import boundaries, blueprint app
       # no-undef, data-plane cargo fmt/clippy) only exist under turbo.
-      - run: bunx turbo run lint
+      - run: bun run turbo run lint
       - run: bun run lint:tsconfigs
       # `typecheck` dependsOn `^build` in turbo.json, so this also builds
       # package dist for consumers — no separate full-repo `build` here.
@@ -413,7 +413,7 @@ jobs:
       # @centraid/* imports when Stryker runs from a package cwd. Without this,
       # vault/automation dry-runs fail with "No tests were executed".
       - name: Build packages for mutation seeds
-        run: bunx turbo run build --filter='./packages/*'
+        run: bun run turbo run build --filter='./packages/*'
       - name: Per-PR mutation (affected seeds + floors)
         run: bun run test:mutation:pr
 
@@ -557,7 +557,7 @@ jobs:
       - uses: ./.github/actions/setup
       # Extension unit suite + locker companion query handlers. Avoid full
       # blueprints app-boot (jsdom teardown noise unrelated to Companion).
-      - run: bunx turbo run build test --filter=@centraid/extension
+      - run: bun run turbo run build test --filter=@centraid/extension
       # The focused blueprint test imports the shared recurrence engine but
       # intentionally bypasses Turbo's dependency graph, so build that package
       # explicitly on a clean runner before invoking Vitest directly.

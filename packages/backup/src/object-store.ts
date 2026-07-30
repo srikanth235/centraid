@@ -95,9 +95,9 @@ export class FsObjectStore implements ObjectStore {
                 return;
               }
               if (!ws.write(next.value)) {
-                await new Promise<void>((_resolve) =>
-                  ws.once("drain", () => _resolve())
-                );
+                await new Promise<void>((_resolve) => {
+                  ws.once("drain", () => _resolve());
+                });
               }
               return writeNext();
             };

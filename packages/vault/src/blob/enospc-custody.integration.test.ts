@@ -1,6 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 /**
  * Always-on fault-injected ENOSPC custody proof (#496 P4 / B1).
  *
@@ -10,7 +12,6 @@ import path from "node:path";
  * in `disk-full.integration.test.ts` behind CENTRAID_DISKFULL_E2E=1 (darwin).
  */
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { VaultDiskFullError } from "../errors.js";
 import { FsBlobStore } from "./local.js";

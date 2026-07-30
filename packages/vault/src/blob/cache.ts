@@ -186,7 +186,10 @@ export class BlobCache {
     this.nowMs = options.nowMs ?? (() => Date.now());
     this.sleepFn =
       options.sleep ??
-      ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+      ((ms) =>
+        new Promise((resolve) => {
+          setTimeout(resolve, ms);
+        }));
   }
 
   // ---- spool accounting (issue #405 §3/§7) ----

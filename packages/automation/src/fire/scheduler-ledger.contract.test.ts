@@ -1,5 +1,6 @@
-import { fc } from "@centraid/test-kit/fast-check";
 import { describe, expect, it, test } from "vitest";
+
+import { fc } from "@centraid/test-kit/fast-check";
 
 import type { Trigger } from "../manifest/manifest.js";
 import {

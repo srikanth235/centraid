@@ -3,9 +3,10 @@ import http from "node:http";
 /** BYO OAuth PKCE ceremony over HTTP, including sealed tokens and safe health output. */
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive connection-route suite shares one real OAuth and sealed-store harness
 
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { ASSIST_DEVELOPMENT_WORKER_ORIGIN } from "../serve/assist-oauth.js";
 import { ConnectionBroker } from "../serve/connection-broker.js";
@@ -39,9 +40,9 @@ describe("connections-routes", () => {
         }
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(() => {
       server.closeAllConnections();
       server.close();
@@ -74,9 +75,9 @@ describe("connections-routes", () => {
         res.end(JSON.stringify(next.body));
       });
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve)
-    );
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
     cleanups.push(() => {
       server.closeAllConnections();
       server.close();

@@ -8,7 +8,7 @@ const KIND = "pull.todoist";
 const API = "https://api.todoist.com/rest/v2";
 const AUTH = { authorization: "Bearer {{connection:api_key}}" };
 async function api(ctx, path, opts = {}) {
-  const headers = { ...AUTH, ...(opts.headers || {}) };
+  const headers = { ...AUTH, ...opts.headers };
   const res = await ctx.fetch({
     url: path.startsWith("http") ? path : `${API}${path}`,
     headers,

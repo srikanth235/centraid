@@ -54,6 +54,10 @@ const nodePreset = {
     // 29755774783 while everything around it had 30s. They are gone. A test
     // genuinely slower than 30s should say so with an override ABOVE it.
     testTimeout: 30_000,
+    // The same SQLite bootstrap work commonly lives in beforeEach/afterEach;
+    // leaving Vitest's 10s hook default in place gives setup less headroom
+    // than the test it prepares and flakes under instrumented parallel runs.
+    hookTimeout: 30_000,
   },
 } satisfies ProjectConfig;
 

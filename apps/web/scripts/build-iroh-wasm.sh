@@ -91,6 +91,8 @@ if [[ ! -x "$OXFMT" ]]; then
   exit 1
 fi
 "$OXFMT" \
+  -c "$REPO_ROOT/oxfmt.config.ts" \
+  --disable-nested-config \
   "$OUT/centraid_web_iroh.js" \
   "$OUT/centraid_web_iroh.d.ts" \
   "$OUT/centraid_web_iroh_bg.wasm.d.ts"

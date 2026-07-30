@@ -3,9 +3,10 @@ import { rmSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 
+import { afterEach, describe, expect, test } from "vitest";
+
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, describe, expect, test } from "vitest";
 
 import { readBackupPolicy } from "../backup-policy.js";
 import { bootstrapVault } from "../bootstrap.js";
@@ -494,7 +495,8 @@ describe("stream-ingress", () => {
     expect(
       unsealBlob(h.keys.getOrCreate(sha), sha, h.fake.objects.get(sha)!)
     ).toStrictEqual(plain);
-    // This is a deliberate 60s raise: real two-part sealing/hashing/writes take
-    // ~4.6s locally and can approach 46s under hosted-runner disk variance.
-  }, 60_000);
+    // This is a deliberate integration budget: real two-part
+    // sealing/hashing/writes take ~4.6s alone, but the sanctioned six-package
+    // affected sweep can exceed 60s while other SQLite suites contend for disk.
+  }, 120_000);
 });

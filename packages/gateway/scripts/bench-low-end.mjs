@@ -242,7 +242,9 @@ async function runInternal() {
     const idleResourcesBefore = resourceCounters();
     const idleProcBefore = await readProcIo();
     const idleStarted = performance.now();
-    await new Promise((resolve) => setTimeout(resolve, idleMs));
+    await new Promise((resolve) => {
+      setTimeout(resolve, idleMs);
+    });
     const idleDurationMs = performance.now() - idleStarted;
     const idleResourcesAfter = resourceCounters();
     const idleProcAfter = await readProcIo();

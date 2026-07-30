@@ -19,6 +19,12 @@ let gw: Gateway;
 let boot: BootstrapResult;
 let owner: Credential;
 
+const compareStringValues = (left: unknown, right: unknown): number => {
+  const leftString = String(left);
+  const rightString = String(right);
+  return leftString < rightString ? -1 : leftString > rightString ? 1 : 0;
+};
+
 describe("clusters", () => {
   beforeEach(() => {
     db = openVaultDb();
@@ -108,6 +114,8 @@ describe("clusters", () => {
       where: [{ column: "cluster_id", op: "not-null" }],
       purpose: "dpv:ServiceProvision",
     }).rows;
-    expect(rows.map((r) => r.asset_id).sort()).toStrictEqual([a, b].sort());
+    expect(rows.map((r) => r.asset_id).sort(compareStringValues)).toStrictEqual(
+      [a, b].sort(compareStringValues)
+    );
   });
 });
