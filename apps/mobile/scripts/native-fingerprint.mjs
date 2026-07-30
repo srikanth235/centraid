@@ -25,7 +25,7 @@ import { pathToFileURL } from "node:url";
  * Usage: `node scripts/native-fingerprint.mjs <ios|android>` → prints the hash
  * to stdout with no trailing newline, suitable for `>> "$GITHUB_OUTPUT"`.
  */
-import { createFingerprintAsync } from "@expo/fingerprint";
+import { createFingerprintAsync, SourceSkips } from "@expo/fingerprint";
 
 // scripts/ → apps/mobile. Resolve relative to this file, not cwd: gradle and
 // the monorepo root both invoke Expo tooling from different cwds (see the same
@@ -58,16 +58,36 @@ export const NATIVE_FINGERPRINT_IGNORE_PATHS = [
   "../../node_modules/react-native-maps/ios/AirMaps/RNMapsDefines.h",
 ];
 
-export async function fingerprintForPlatform(platform) {
+/**
+ * Fingerprint options shared by the CLI and the identity ratchet (#646).
+ *
+ * `PackageJsonScriptsAll` deafens pure script-key reorders (oxfmt
+ * `sortPackageJson.sortScripts`, hand edits) so they do not move iOS/Android
+ * identity without real native intent. Tradeoff: a script that genuinely
+ * altered prebuild output would no longer bust the cache — nothing in
+ * `apps/mobile` scripts does that today.
+ */
+export const NATIVE_FINGERPRINT_SOURCE_SKIPS =
+  SourceSkips.PackageJsonScriptsAll;
+
+export function nativeFingerprintOptions(platform) {
   if (platform !== "ios" && platform !== "android") {
     throw new Error(`unsupported native fingerprint platform: ${platform}`);
   }
-  const fingerprint = await createFingerprintAsync(projectRoot, {
+  return {
     platforms: [platform],
     // The committed expectation is the ratchet output, not an input. Including
     // it would make every refresh self-referential and impossible to settle.
     ignorePaths: NATIVE_FINGERPRINT_IGNORE_PATHS,
-  });
+    sourceSkips: NATIVE_FINGERPRINT_SOURCE_SKIPS,
+  };
+}
+
+export async function fingerprintForPlatform(platform) {
+  const fingerprint = await createFingerprintAsync(
+    projectRoot,
+    nativeFingerprintOptions(platform)
+  );
   // Guard against a silent empty digest becoming a constant (always-hit) key.
   if (!fingerprint.hash || fingerprint.sources.length === 0) {
     throw new Error(
