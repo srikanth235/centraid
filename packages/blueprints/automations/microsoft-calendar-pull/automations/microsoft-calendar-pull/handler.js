@@ -11,7 +11,7 @@ const MAX_PAGES_PER_RUN = 3;
 const WINDOW_ROLL_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 async function api(ctx, path, opts = {}) {
-  const headers = { ...AUTH, ...(opts.headers || {}) };
+  const headers = { ...AUTH, ...opts.headers };
   const res = await ctx.fetch({
     url: path.startsWith("http") ? path : `${API}${path}`,
     headers,

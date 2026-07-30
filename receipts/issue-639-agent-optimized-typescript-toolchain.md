@@ -40,6 +40,18 @@
   `apps/mobile/src/apps/tally/TallyHome.tsx`,
   `apps/mobile/src/apps/tasks/TasksHome.tsx`, and
   `packages/gateway/src/cli/admin.test.ts`.
+- Applied Oxlint's safe fixer in a dedicated commit to remove redundant empty
+  object fallbacks from nine connector-handler object spreads:
+  `packages/blueprints/automations/dropbox-pull/automations/dropbox-pull/handler.js`,
+  `packages/blueprints/automations/gitlab-pull/automations/gitlab-pull/handler.js`,
+  `packages/blueprints/automations/google-drive-pull/automations/google-drive-pull/handler.js`,
+  `packages/blueprints/automations/microsoft-calendar-pull/automations/microsoft-calendar-pull/handler.js`,
+  `packages/blueprints/automations/microsoft-contacts-pull/automations/microsoft-contacts-pull/handler.js`,
+  `packages/blueprints/automations/microsoft-onedrive-pull/automations/microsoft-onedrive-pull/handler.js`,
+  `packages/blueprints/automations/microsoft-outlook-pull/automations/microsoft-outlook-pull/handler.js`,
+  `packages/blueprints/automations/slack-pull/automations/slack-pull/handler.js`,
+  and
+  `packages/blueprints/automations/todoist-pull/automations/todoist-pull/handler.js`.
 
 ### Formatter sweep paths
 
@@ -567,3 +579,5 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785411162-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 37575 | 0 | 4226304 | 6155 | 43730 | 1.2428 | 321406 | 0 | 19933184 | 33820 | chore(lint): remove stale suppression (#639) |
 | codex-019fb2ae-33d-1785411328-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 9221 | 0 | 394752 | 1161 | 10382 | 0.1392 | 330627 | 0 | 20327936 | 34981 | style: apply repository oxfmt migration (#639) -m governance: allow-toolchain-co |
 | codex-019fb2ae-33d-1785411474-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 9079 | 0 | 260608 | 884 | 9963 | 0.1011 | 339706 | 0 | 20588544 | 35865 | style: apply repository oxfmt migration (#639) -m governance: allow-toolchain-co |
+| codex-019fb2ae-33d-1785411683-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 16771 | 0 | 651008 | 1498 | 18269 | 0.2271 | 356477 | 0 | 21239552 | 37363 | chore(lint): apply safe connector fixes (#639) |
+| codex-019fb2ae-33d-1785411767-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 5054 | 0 | 223232 | 570 | 5624 | 0.0770 | 361531 | 0 | 21462784 | 37933 | chore(lint): apply safe connector fixes (#639) |
