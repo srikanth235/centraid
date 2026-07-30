@@ -614,7 +614,7 @@ bun run check:pr:full
   cached app install, every committed mobile journey (including all native
   cover gates and 20 real stop-and-relaunch cycles), sensitive-diagnostic
   cleanup, and both evidence uploads were green.
-- Fresh-context audit — pending final re-audit below.
+- Fresh-context audit — PASS; see the final independent audit below.
 
 ## Accounting
 
@@ -813,30 +813,30 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785366656-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 267202 | 0 | 15006976 | 13845 | 281047 | 4.6274 | 9289789 | 0 | 429949440 | 1095011 | fix(mobile): keep native covers Hermes compatible (#630) |
 | codex-019fad18-4c1-1785371213-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 419131 | 0 | 29714432 | 24900 | 444031 | 8.8499 | 9708920 | 0 | 459663872 | 1119911 | fix(mobile): stabilize exact-head journey evidence (#630) |
 | codex-019fad18-4c1-1785374654-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 268775 | 0 | 14503168 | 10430 | 279205 | 4.4542 | 9977695 | 0 | 474167040 | 1130341 | docs(receipt): record exact-head mobile proof (#630) |
+| codex-019fad18-4c1-1785375289-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 53735 | 0 | 4057600 | 2522 | 56257 | 1.1866 | 10031430 | 0 | 478224640 | 1132863 | docs(receipt): close blueprint readiness audit (#630) |
 
 ## Steering
 
-- PASS — The supplied session transcript contains one initial human task request
-  and no later human interrupt or correction. It contains no tool-denial event
-  to record. Therefore no steering-ledger rows are warranted.
+- PASS — The supplied session transcript has one initial human task request and
+  no later human interrupt or correction. No steering-ledger rows are
+  warranted.
 
 ## Audit
 
-- REFUTED — `## What changed` now names the time-engine lint target and final
-  schema/gate corrections, but it does not describe the full current diff. In
-  particular, the diff deletes #634's receipt and its Settings/profile/pairing
-  surfaces (`receipts/issue-634-onboarding-identity-pairing.md`,
-  `SettingsDeviceScreen.tsx`, `SettingsProfileScreen.tsx`, and
-  `PairDeviceModal.tsx`) without a corresponding #630 narrative.
-- REFUTED — W0.7 is checked but its required exact-HEAD iOS nightly proof is
-  absent. The receipt states the branch was not pushed; `git ls-remote` finds
-  no branch and `gh run list --branch codex/issue-630-blueprint-readiness`
-  returns no runs for HEAD `8c510b21a0d3f00e655fb2d4770dad3b398e2ce3`.
-  The passed local `check:pr:full` gate cannot establish that remote exit
-  criterion.
-- REFUTED — Although the 93 W0.1–W6.16/E1–E5 identifiers now crosswalk to the
-  issue, the checklist does not faithfully mirror W0.7: issue #630 requires
-  proving `mobile-e2e-ios` green at HEAD, whereas the receipt substitutes
-  “carry the exact-HEAD iOS evidence boundary honestly.” The issue's seven
-  exit-gate demonstrations likewise remain required evidence, not a weaker
-  documentation boundary.
+- PASS — The 93 checked W0.1–W6.16/E1–E5 entries match the issue checklist and
+  are implemented across the coverage/reachability gates, Locker and lifecycle
+  contracts, native/web state surfaces, capture/push, recurrence/organization,
+  import/sync, compound sharing/search, accessibility, scale, and release
+  metadata. The diff includes focused behavioral and integration coverage for
+  those contracts.
+- PASS — `## What changed` faithfully represents the current diff, including
+  the time-engine lint target, schema/gate corrections, and the reconciled #634
+  identity/profile/pairing work. The current diff preserves the #634 receipt
+  and surfaces; it contains no earlier deletion/regression cited by the stale
+  audit.
+- PASS — All seven exit demonstrations have recorded evidence. The full local
+  gate is green (781 coverage files, 6,365 passing tests, 84.9% diff coverage),
+  and exact-head iOS proof run 30503161115 passed `mobile-e2e-ios` at
+  implementation commit `8023936d744a218855b8a7b3bf2c7a64be1ec0cf`, including
+  every committed mobile journey, eight native covers, and 20 stop/relaunch
+  cycles.
