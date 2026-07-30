@@ -52,12 +52,13 @@ if [[ ${#staged[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Mirror CI exactly: `bun run format:check` is `oxfmt -c oxfmt.config.mjs`.
+# Mirror CI exactly: `bun run format:check` names the one root config and
+# disables nested discovery.
 # Without the config oxfmt falls back to defaults and flags files that the
 # repo's own config considers formatted, so the gate must pass it too.
 config_args=()
-if [[ -f "$REPO_ROOT/oxfmt.config.mjs" ]]; then
-    config_args=(-c "$REPO_ROOT/oxfmt.config.mjs")
+if [[ -f "$REPO_ROOT/oxfmt.config.ts" ]]; then
+    config_args=(-c "$REPO_ROOT/oxfmt.config.ts" --disable-nested-config)
 fi
 
 # oxfmt --check prints one offending path per line, then a summary. Match its

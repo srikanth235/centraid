@@ -154,7 +154,7 @@ jobs:
       - run: bun run lockfile:lint
       - run: bun run format:check
       # `--format github` emits inline PR annotations on the offending lines.
-      - run: bunx oxlint -c oxlint.config.mjs --deny-warnings --format github .
+      - run: bun run lint -- --format github
       # Monorepo package.json hygiene: unused/undeclared deps, version drift
       # across workspaces, misplaced @types (sherif). Fast, offline.
       - run: bun run lint:packages

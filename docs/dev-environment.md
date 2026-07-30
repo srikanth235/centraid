@@ -43,87 +43,54 @@ Parameterize ports via CLI flags / env documented on each package; do not hardco
 
 ### `CENTRAID_GATEWAY_TOKEN`: do not pin it by hand
 
-The daemon's loopback bearer is **derived from custody, not minted per boot**:
-`HMAC(endpoint-key.bin, "centraid/landlord-http/v1")` ([SECURITY.md](../SECURITY.md)).
-Every local process that can open the gateway's `KeyStore` — the admin CLI
-included — derives the same value, so **the default needs no configuration**.
+The daemon's loopback bearer is **derived from custody, not minted per boot**: `HMAC(endpoint-key.bin, "centraid/landlord-http/v1")` ([SECURITY.md](../SECURITY.md)). Every local process that can open the gateway's `KeyStore` — the admin CLI included — derives the same value, so **the default needs no configuration**.
 
-Pinning `CENTRAID_GATEWAY_TOKEN` is only for a **parent process that spawns the
-daemon** and needs to know the bearer without deriving it (the desktop does
-this). If you pin it in your shell and then run `centraid-gateway pair` (or any
-admin verb) in a shell that does not carry the same value, the daemon rejects
-the CLI's derived bearer and `pair` now fails with an explicit bearer-mismatch
-error naming `CENTRAID_GATEWAY_TOKEN` (issue #603 — it used to lie and say "the
-iroh endpoint is not ready"). Either restart the daemon without the pin, or
-export the identical value in both shells.
+Pinning `CENTRAID_GATEWAY_TOKEN` is only for a **parent process that spawns the daemon** and needs to know the bearer without deriving it (the desktop does this). If you pin it in your shell and then run `centraid-gateway pair` (or any admin verb) in a shell that does not carry the same value, the daemon rejects the CLI's derived bearer and `pair` now fails with an explicit bearer-mismatch error naming `CENTRAID_GATEWAY_TOKEN` (issue #603 — it used to lie and say "the iroh endpoint is not ready"). Either restart the daemon without the pin, or export the identical value in both shells.
 
-The product CLI's `--token` / `CENTRAID_TOKEN` is a separate, wire-client
-concern and is unaffected.
+The product CLI's `--token` / `CENTRAID_TOKEN` is a separate, wire-client concern and is unaffected.
 
 ## Preview the web app in a browser against an existing vault
 
-The desktop app runs its gateway **in-process**, so a fresh browser origin served
-by a standalone gateway lands on onboarding rather than your data. Web onboarding
-is **ticket-only** since issue #603 — there is no "This Mac" card and no founding
-probe in a browser tab, because a browser cannot start a gateway. The supported
-(and only) way to reach an existing vault from a browser is **pair a device**,
-exactly like a phone or a second desktop:
+The desktop app runs its gateway **in-process**, so a fresh browser origin served by a standalone gateway lands on onboarding rather than your data. Web onboarding is **ticket-only** since issue #603 — there is no "This Mac" card and no founding probe in a browser tab, because a browser cannot start a gateway. The supported (and only) way to reach an existing vault from a browser is **pair a device**, exactly like a phone or a second desktop:
 
-1. **Serve the existing vault.** Point a gateway at the data dir that already has
-   the vault. Desktop's lives at
-   `~/Library/Application Support/@centraid/desktop/gateways/local`.
+1. **Serve the existing vault.** Point a gateway at the data dir that already has the vault. Desktop's lives at `~/Library/Application Support/@centraid/desktop/gateways/local`.
 
    ```sh
    centraid-gateway serve --data-dir "<data-dir>" --host 127.0.0.1 --port 17832
    ```
 
-   The gateway serves the **API** on `--port` and the **web UI on a second port**
-   — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup.
-   The web UI it serves is the **build-time snapshot** embedded in
-   `packages/gateway/dist/web`. To preview *uncommitted client edits*, rebuild and
-   re-embed first (no full gateway rebuild needed):
+   The gateway serves the **API** on `--port` and the **web UI on a second port** — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup. The web UI it serves is the **build-time snapshot** embedded in `packages/gateway/dist/web`. To preview _uncommitted client edits_, rebuild and re-embed first (no full gateway rebuild needed):
 
    ```sh
    bun run --cwd apps/web build && node packages/gateway/scripts/embed-web.mjs
    ```
 
-2. **Mint a pairing ticket** for the vault (one line; redeems only over the iroh
-   pairing ALPN `centraid/gw-pair/1` — the HTTP `POST /centraid/_gateway/pair`
-   twin was removed in #555):
+2. **Mint a pairing ticket** for the vault (one line; redeems only over the iroh pairing ALPN `centraid/gw-pair/1` — the HTTP `POST /centraid/_gateway/pair` twin was removed in #555):
 
    ```sh
    centraid-gateway pair --data-dir "<same data-dir>" --vault "<name-or-id>"
    ```
 
-   Omitting `--vault` targets the registry default — the owner's `Personal`
-   vault on an auto-founded gateway, never `Shared`.
+   Omitting `--vault` targets the registry default — the owner's `Personal` vault on an auto-founded gateway, never `Shared`.
 
-3. **Open the web UI in the browser pane.** Register the web port in
-   `.claude/launch.json` and start it with the preview tool — ad-hoc navigation to
-   a bare `http://localhost:<port>` is policy-blocked, but a `preview_start`-managed
-   server (a config with just a `url` **attaches** to the already-running gateway)
-   is the sanctioned path:
+3. **Open the web UI in the browser pane.** Register the web port in `.claude/launch.json` and start it with the preview tool — ad-hoc navigation to a bare `http://localhost:<port>` is policy-blocked, but a `preview_start`-managed server (a config with just a `url` **attaches** to the already-running gateway) is the sanctioned path:
 
    ```json
-   { "version": "0.0.1",
-     "configurations": [{ "name": "centraid-web", "url": "http://127.0.0.1:17833", "port": 17833 }] }
+   {
+     "version": "0.0.1",
+     "configurations": [
+       {
+         "name": "centraid-web",
+         "url": "http://127.0.0.1:17833",
+         "port": 17833
+       }
+     ]
+   }
    ```
 
-4. Web onboarding opens straight on the ticket path — paste the ticket, then
-   fill in the profile step (display name + avatar colour). The ConnectFlow
-   (`packages/client/src/react/shell/routes/ConnectFlow.tsx`) is shared with
-   desktop's **Connect with a ticket** option and the switcher's **Add
-   gateway**; web passes `methods={['gateway']}` plus `initialMethod="gateway"`,
-   so there is no method chooser — it opens directly on the ticket field. The
-   ticket redeems over iroh, records this
-   device's EndpointId enrollment, and connects to the existing vault — its
-   automations, runs, and data appear as in desktop.
+4. Web onboarding opens straight on the ticket path — paste the ticket, then fill in the profile step (display name + avatar colour). The ConnectFlow (`packages/client/src/react/shell/routes/ConnectFlow.tsx`) is shared with desktop's **Connect with a ticket** option and the switcher's **Add gateway**; web passes `methods={['gateway']}` plus `initialMethod="gateway"`, so there is no method chooser — it opens directly on the ticket field. The ticket redeems over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its automations, runs, and data appear as in desktop.
 
-There is no remote URL+token connection path and no SSH-routed connect (the SSH
-code was deleted in #603). Browser clients use iroh-wasm and the same EndpointId
-pairing contract. Do not point a standalone gateway at a
-data dir the desktop app is **also** running against: `gateway.db` rejects the
-second writer immediately (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
+There is no remote URL+token connection path and no SSH-routed connect (the SSH code was deleted in #603). Browser clients use iroh-wasm and the same EndpointId pairing contract. Do not point a standalone gateway at a data dir the desktop app is **also** running against: `gateway.db` rejects the second writer immediately (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
 
 ## Worktrees
 
@@ -143,37 +110,19 @@ If a local `.claude/launch.json` exists (may be gitignored), treat it as the **n
 
 ## The local gate loop
 
-Three tiers, each with a cost budget, each enforced by a hook. Nothing here is
-something you have to remember to run.
+Three tiers, each with a cost budget, each enforced by a hook. Nothing here is something you have to remember to run.
 
 | Tier | When | Cost | What runs |
 | --- | --- | --- | --- |
 | 0 | pre-commit | ~36s (see below) | Governance directives, plus `oxfmt` and `oxlint` **on staged files only** |
 | 1 | pre-push | ~90s + affected tests + diff coverage | `bun run check:pr` — the local superset of the CI `static` job |
-| 2 | before requesting merge | minutes | `bun run check:pr:full`, mutation, anything needing Linux or a container |
+| 2 | before requesting merge | minutes | `bun run check:full`, including dependents, coverage, mutation/perf, and client e2e |
 
-**Tier 0 is over budget and the reason is upstream.** The target is 2s. The
-gates this repo owns hit it easily — staged-file `oxfmt` 0.16s, staged-file
-`oxlint` 0.09s, every repo-local directive under 0.5s. The 36s is two vendored
-`governance-kit` directives that are repo-wide by construction: `repo-hygiene`
-(18.7s, `git grep` + `git ls-files` across the tree) and `receipt-per-issue`
-(13.2s, re-reads the receipt corpus). Both carry digests in `.governance/packs.lock`
-and `managed-tree-integrity` exists to stop them being hand-edited, so scoping
-them to the staged set is an upstream change. Until then, `git commit` costs
-about half a minute; `SKIP_GOVERNANCE=1` is the pressure valve for a rapid
-commit loop, and CI still enforces.
+**Tier 0 is over budget and the reason is upstream.** The target is 2s. The gates this repo owns hit it easily — staged-file `oxfmt` 0.16s, staged-file `oxlint` 0.09s, every repo-local directive under 0.5s. The 36s is two vendored `governance-kit` directives that are repo-wide by construction: `repo-hygiene` (18.7s, `git grep` + `git ls-files` across the tree) and `receipt-per-issue` (13.2s, re-reads the receipt corpus). Both carry digests in `.governance/packs.lock` and `managed-tree-integrity` exists to stop them being hand-edited, so scoping them to the staged set is an upstream change. Until then, `git commit` costs about half a minute; `SKIP_GOVERNANCE=1` is the pressure valve for a rapid commit loop, and CI still enforces.
 
-**Why these tiers and not others (#576).** A CI round trip is 12.3 minutes of
-wall clock. Local gates do not shrink that — a green PR takes 12.3 minutes no
-matter what runs here — so the only thing a local gate buys is not paying those
-12.3 minutes twice. That makes the rule arithmetic: a gate earns its slot if it
-fails more often than `local_cost / 738s`. `oxlint` at 1.7s needs a 0.2% hit
-rate; `knip` at 28.8s needs 3.9%; a full instrumented `coverage` run at 418s
-needs 57%, which is why it is scoped rather than run whole.
+**Why these tiers and not others (#576).** A CI round trip is 12.3 minutes of wall clock. Local gates do not shrink that — a green PR takes 12.3 minutes no matter what runs here — so the only thing a local gate buys is not paying those 12.3 minutes twice. That makes the rule arithmetic: a gate earns its slot if it fails more often than `local_cost / 738s`. `oxlint` at 1.7s needs a 0.2% hit rate; `knip` at 28.8s needs 3.9%; a full instrumented `coverage` run at 418s needs 57%, which is why it is scoped rather than run whole.
 
-Tier 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time
-fires on debt in files you never opened, and a gate that fires for someone
-else's mess is one people learn to bypass.
+Tier 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time fires on debt in files you never opened, and a gate that fires for someone else's mess is one people learn to bypass.
 
 ### Escape hatches
 
@@ -183,39 +132,21 @@ SKIP_GOVERNANCE=1 git push   # skip every governance hook
 git push --no-verify         # skip all hooks entirely
 ```
 
-All three are legitimate for a WIP branch or a spike, and all three leave CI as
-the enforcing copy. A gate with no exit is a gate people disable permanently.
+All three are legitimate for a WIP branch or a spike, and all three leave CI as the enforcing copy. A gate with no exit is a gate people disable permanently.
 
 ### Diff coverage
 
-`check:diff-coverage` scores changed lines against an instrumented run, scoped
-to the packages the diff touches (`vitest.diff-coverage.config.ts`). A diff with
-no instrumentable source in it — docs, config, workflow, tests-only — skips the
-run entirely. The repo-wide `bun run coverage` in the CI `verify` job stays
-authoritative: it enforces the seeded floors and catches a file covered only by
-another package's tests, which a scoped run cannot see.
+`check:diff-coverage` scores changed lines against an instrumented run, scoped to the packages the diff touches (`vitest.diff-coverage.config.ts`). A diff with no instrumentable source in it — docs, config, workflow, tests-only — skips the run entirely. The repo-wide `bun run coverage` in the CI `verify` job stays authoritative: it enforces the seeded floors and catches a file covered only by another package's tests, which a scoped run cannot see.
 
 ### What deliberately does not run locally
 
-The strace fsync perf gate, the actionlint container, cargo data-plane, the wasm
-toolchain, e2e browsers, `gateway-package`, and `dependency-review`. All are
-platform-specific, container-bound, or rarely red — running them locally costs
-minutes and lowers the odds of a red CI by almost nothing. `bun run lint:actions`
-works if you have actionlint installed.
+The strace fsync perf gate, the actionlint container, cargo data-plane, the wasm toolchain, e2e browsers, `gateway-package`, and `dependency-review`. All are platform-specific, container-bound, or rarely red — running them locally costs minutes and lowers the odds of a red CI by almost nothing. `bun run lint:actions` works if you have actionlint installed.
 
 ### How CI is shaped
 
-`ci.yml` is the **only** workflow listening on `pull_request`, and `release.yml`
-the only one on `push: tags` (#557, enforced by `lint:workflow-pins`). Every PR
-gate is a job there, rolling up into one required `check` aggregator. Lanes the
-diff does not touch report `skipped`, which `check` treats as satisfied;
-`cancelled` is a failure. This is why the one-workflow rule is mechanical: a
-lane in its own path-filtered workflow reports no status on unrelated PRs, so it
-can never be a required check.
+`ci.yml` is the **only** workflow listening on `pull_request`, and `release.yml` the only one on `push: tags` (#557, enforced by `lint:workflow-pins`). Every PR gate is a job there, rolling up into one required `check` aggregator. Lanes the diff does not touch report `skipped`, which `check` treats as satisfied; `cancelled` is a failure. This is why the one-workflow rule is mechanical: a lane in its own path-filtered workflow reports no status on unrelated PRs, so it can never be a required check.
 
-`static` runs the lint/typecheck gates plus matrix and ratchet. `verify` runs
-build, native tunnel, data-plane, gateway perf, coverage, and diff-coverage.
-Neither runs `test:affected` — full package vitest lives under `verify`.
+`static` runs the lint/typecheck gates plus matrix and ratchet. `verify` runs build, native tunnel, data-plane, gateway perf, coverage, and diff-coverage. Neither runs `test:affected` — full package vitest lives under `verify`.
 
 ## Tools only via repo scripts
 
@@ -225,10 +156,11 @@ Never raw `npx vitest`, `npx tsc`, etc. Use:
 bun run test
 bun run typecheck
 bun run check:pr    # required before push
+bun run check:full  # required for shared infrastructure
 bun run format
 ```
 
-Pinned toolchain lives in root `package.json` / workspaces.
+Pinned toolchain lives in root `package.json` / workspaces. The complete ownership and command contract is [toolchain.md](toolchain.md).
 
 ## Related
 

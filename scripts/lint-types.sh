@@ -82,6 +82,7 @@ run() {
   shift
   local target="$1"
   local args=(
+    -c oxlint.config.ts
     --type-aware
     --format=json
     --disable-nested-config
@@ -89,7 +90,7 @@ run() {
     --tsconfig "$cfg"
   )
   [[ -n "$ignore" ]] && args+=(--ignore-pattern "$ignore")
-  bunx oxlint "${args[@]}" "${rules[@]}" "$target"
+  oxlint "${args[@]}" "${rules[@]}" "$target"
 }
 
 assert_envelope() {

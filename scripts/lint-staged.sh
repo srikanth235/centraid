@@ -43,7 +43,8 @@ if [[ ! -x "$OXFMT" || ! -x "$OXLINT" ]]; then
     exit 1
 fi
 
-if ! "$OXFMT" --check --no-error-on-unmatched-pattern "${staged[@]}"; then
+if ! "$OXFMT" -c oxfmt.config.ts --disable-nested-config --check \
+    --no-error-on-unmatched-pattern "${staged[@]}"; then
     cat >&2 <<'EOF'
 
 ✗ Commit blocked by oxfmt.
@@ -53,9 +54,10 @@ EOF
     exit 1
 fi
 
-# oxlint takes file lists positionally; the .oxlintrc.json at the repo
-# root applies automatically.
-if ! "$OXLINT" "${staged[@]}"; then
+# Pass the one root configuration explicitly so hook, editor, local, and CI
+# behavior cannot drift through working-directory discovery.
+if ! "$OXLINT" -c oxlint.config.ts --disable-nested-config \
+    --deny-warnings "${staged[@]}"; then
     cat >&2 <<'EOF'
 
 ✗ Commit blocked by oxlint.

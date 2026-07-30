@@ -1,16 +1,6 @@
 # @centraid/blueprints
 
-Bundled Centraid blueprints follow two runtime paths. Full UI apps under
-`apps/<id>/` are **installed in place**: installation enrolls the shipped app
-and grants its declared vault scopes, while the main client compiles its React
-UI directly from this package and upgrades it with the Centraid release. The
-gateway still reads the shipped directory for app metadata, scopes, and generic
-opaque-app compatibility; it is not a second system-app UI runtime. Automation
-templates under `automations/<id>/` are **cloned** into user-owned code so the
-generated automation can be edited independently. A UI blueprint carries its
-React modules plus `queries/`, `actions/`, `migrations/`, and `app.json`; an
-automation blueprint carries the manifest and handler files compiled by the
-builder.
+Bundled Centraid blueprints follow two runtime paths. Full UI apps under `apps/<id>/` are **installed in place**: installation enrolls the shipped app and grants its declared vault scopes, while the main client compiles its React UI directly from this package and upgrades it with the Centraid release. The gateway still reads the shipped directory for app metadata, scopes, and generic opaque-app compatibility; it is not a second system-app UI runtime. Automation templates under `automations/<id>/` are **cloned** into user-owned code so the generated automation can be edited independently. A UI blueprint carries its React modules plus `queries/`, `actions/`, `migrations/`, and `app.json`; an automation blueprint carries the manifest and handler files compiled by the builder.
 
 ## Layout
 
@@ -29,45 +19,23 @@ packages/blueprints/
 
 The bundled tree doubles as the remote tree, so a GitHub-raw URL serving `manifest.json` + `<apps|automations>/<id>/<file>` works as a remote template source unchanged.
 
-The package carries all three ways code enters the runtime: the **blank
-scaffolders** (`scaffoldApp`/`scaffoldAppFiles`, moved here from
-`@centraid/app-engine` in #151), the **automation clone** path, and the bundled
-UI-app **install-in-place** catalog. Its runtime code depends only on
-`@centraid/design-tokens` — no engine, no store. Consumed by
-`@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the
-`ScaffoldFile` contract).
+The package carries all three ways code enters the runtime: the **blank scaffolders** (`scaffoldApp`/`scaffoldAppFiles`, moved here from `@centraid/app-engine` in #151), the **automation clone** path, and the bundled UI-app **install-in-place** catalog. Its runtime code depends only on `@centraid/design-tokens` — no engine, no store. Consumed by `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the `ScaffoldFile` contract).
 
 ## Bundled-app readiness contract
 
-The eight bundled apps are one capability set across web/PWA, iOS, Android,
-and the assistant. Adding or changing a query/action therefore requires:
+The eight bundled apps are one capability set across web/PWA, iOS, Android, and the assistant. Adding or changing a query/action therefore requires:
 
 1. a behavioral handler test against a real vault;
-2. a web dispatch site and a native dispatch site, or an explicit
-   `agent-only`, `extension-only`, or `platform-fallback` entry with a durable
-   rationale in `src/handler-reachability.test.ts`;
-3. honest loading, empty, offline, denied, and error presentation on the
-   consuming surface;
-4. an agent-invocable schema through `vault_invoke`, preserving consent,
-   `intentId`, outcome, and receipt semantics; and
+2. a web dispatch site and a native dispatch site, or an explicit `agent-only`, `extension-only`, or `platform-fallback` entry with a durable rationale in `src/handler-reachability.test.ts`;
+3. honest loading, empty, offline, denied, and error presentation on the consuming surface;
+4. an agent-invocable schema through `vault_invoke`, preserving consent, `intentId`, outcome, and receipt semantics; and
 5. regeneration of `manifest.json` whenever shipped files or manifests move.
 
-The reachability gate is intentionally capability-by-capability, not a source
-coverage heuristic. WebView-backed covers may reuse the proved bundled React
-UI; native covers are scanned separately. A platform fallback means the
-always-available Assistant can invoke the exact same manifested handler—it is
-not permission for a stub or a silent missing control.
+The reachability gate is intentionally capability-by-capability, not a source coverage heuristic. WebView-backed covers may reuse the proved bundled React UI; native covers are scanned separately. A platform fallback means the always-available Assistant can invoke the exact same manifested handler—it is not permission for a stub or a silent missing control.
 
 ## Browser dependencies
 
-Built-in apps are bundled into the main client and use normal workspace/package
-imports. React, `@centraid/blob-format`, video-frame support, and `pdfjs-dist`
-therefore follow the same Vite dependency graph as the rest of the client; the
-kit does not ship generated copies of those runtimes or design tokens. The main
-client, Expo theme generator, and dormant framework-free scaffold consume
-`@centraid/design-tokens` directly. Blueprint app and kit sources are included
-in the root `oxlint .` pass; the package-local `.oxlintrc.json` supplies their
-mixed browser/Node globals without a separate lint script.
+Built-in apps are bundled into the main client and use normal workspace/package imports. React, `@centraid/blob-format`, video-frame support, and `pdfjs-dist` therefore follow the same Vite dependency graph as the rest of the client; the kit does not ship generated copies of those runtimes or design tokens. The main client, Expo theme generator, and dormant framework-free scaffold consume `@centraid/design-tokens` directly. Blueprint app and kit sources are included in the root `bun run lint` pass; the root `oxlint.config.ts` supplies their mixed browser/Node globals without a separate lint script.
 
 ## Adding a template
 
@@ -82,23 +50,11 @@ The kind-segment directory (`apps/` vs `automations/`) is **derived from `kind`*
 
 ## Installing and cloning at runtime
 
-The gateway owns the template catalog and keeps the two kinds deliberately
-separate:
+The gateway owns the template catalog and keeps the two kinds deliberately separate:
 
 - serves display metadata at `GET /centraid/_templates` (`makeTemplatesRouteHandler` → `resolveTemplates()`),
-- installs a bundled UI app with `POST /centraid/_apps/_install`: the gateway
-  writes a `consent.app` row with `origin: 'installed'` and the app's declared
-  scope grants. It copies no files; the main client already contains the UI,
-  the gateway reads app metadata and scopes from `apps/<id>/`, and uninstall
-  revokes access while leaving vault data intact,
-- clones an automation template with `POST /centraid/_apps/_clone`
-  (`{ templateId, publish? }`): the gateway reads the template files
-  (`readTemplateFiles`), rewrites them for a fresh, non-colliding `(id, name)`
-  (`suggestCloneIdentityFrom` + `cloneTemplateFiles`), mints pending webhook
-  secrets, and stages the result into a user-owned draft git-store session.
-  Passing `publish: true` flips the draft live in one call. The builder remains
-  the automation compiler and is hidden in v1 unless the dev-only
-  `builderEnabled` flag is on.
+- installs a bundled UI app with `POST /centraid/_apps/_install`: the gateway writes a `consent.app` row with `origin: 'installed'` and the app's declared scope grants. It copies no files; the main client already contains the UI, the gateway reads app metadata and scopes from `apps/<id>/`, and uninstall revokes access while leaving vault data intact,
+- clones an automation template with `POST /centraid/_apps/_clone` (`{ templateId, publish? }`): the gateway reads the template files (`readTemplateFiles`), rewrites them for a fresh, non-colliding `(id, name)` (`suggestCloneIdentityFrom` + `cloneTemplateFiles`), mints pending webhook secrets, and stages the result into a user-owned draft git-store session. Passing `publish: true` flips the draft live in one call. The builder remains the automation compiler and is hidden in v1 unless the dev-only `builderEnabled` flag is on.
 
 `cloneTemplateFiles` rewrites `app.json` (fresh `id`/`name`, `version` → `"0.1.0"`, carried `description`), `package.json#name` → `centraid-app-<id>` (only when it followed the convention), the `index.html` `<title>`, and each `automations/<id>/automation.json#name` (re-stamping `generated`); it seeds an `automations/README.md` brief when the template ships no automations.
 

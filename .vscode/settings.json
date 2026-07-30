@@ -3,6 +3,14 @@
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "explicit"
   },
+  "editor.formatOnSaveMode": "file",
+  "oxc.configPath": "oxlint.config.ts",
+  "oxc.disableNestedConfig": true,
+  "oxc.fixKind": "safe_fix",
+  "oxc.fmt.configPath": "oxfmt.config.ts",
+  "oxc.fmt.disableNestedConfig": true,
+  "oxc.requireConfig": true,
+  "oxc.typeAware": false,
   "typescript.tsdk": "node_modules/typescript/lib",
   "[javascript]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
   "[javascriptreact]": { "editor.defaultFormatter": "oxc.oxc-vscode" },
