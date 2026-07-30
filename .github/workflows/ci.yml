@@ -463,9 +463,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-      - name: Check Expo's compatibility map
+      # Advisory only (#646): long pin skew lists must not drown real L4 failures.
+      # Hard Expo pin alignment is a dedicated follow-up; this step never fails the job.
+      - name: Advisory — Expo compatibility map (non-blocking)
         continue-on-error: true
-        run: bun run --cwd apps/mobile ci:versions
+        run: |
+          set +e
+          bun run --cwd apps/mobile ci:versions > /tmp/ci-versions.out 2>&1
+          code=$?
+          {
+            echo "## Advisory: Expo compatibility map (non-blocking)"
+            echo ""
+            echo "Exit code: \`$code\` (does not fail mobile-smoke)."
+            echo ""
+            echo '```'
+            cat /tmp/ci-versions.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/ci-versions.out
+          exit 0
       - name: Verify native locks, paths, and fingerprint ratchets
         run: bun run --cwd apps/mobile ci:native-state
       - name: Bundle iOS and Android through Metro

@@ -75,6 +75,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/traps/electron-screenshot.md](docs/traps/electron-screenshot.md) | Preview capture / Playwright screenshots |
 | [docs/traps/blueprint-csp.md](docs/traps/blueprint-csp.md) | App CSP vs loose-file development |
 | [docs/traps/manifest-regeneration.md](docs/traps/manifest-regeneration.md) | `manifest.json` / vendor rebuilds |
+| [docs/traps/mobile-native-state.md](docs/traps/mobile-native-state.md) | Mobile recipe completeness vs fingerprint ratchet (L1–L4) |
 
 ## Conventions agents should know
 
