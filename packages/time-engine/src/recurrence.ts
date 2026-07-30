@@ -58,7 +58,10 @@ export interface NextOccurrenceInput {
 function positiveInteger(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   const parsed = Math.trunc(Number(value));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  // COUNT=0 is invalid ICS (and previously clamped to 1). Treat non-positive
+  // bounds as a single occurrence rather than unbounded expansion.
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed > 0 ? parsed : 1;
 }
 
 export function parseRrule(value: string): ParsedRrule | null {
@@ -234,8 +237,21 @@ export function expandRecurrence(
 
   const limit = Math.max(1, Math.min(input.maxInstances ?? 366, 10_000));
   const results: RecurrenceInstance[] = [];
+  // Fast-forward analytically to the first period that can intersect
+  // rangeFrom. Counting periods from the series anchor made long-lived
+  // monthly/daily templates permanently unmaterializable once the walk
+  // exhausted `limit * 16` periods before reaching the requested window.
+  let period = firstPeriodAtOrAfter(initial, rule, from, semantics);
   let emitted = 0;
-  let period = 0;
+  if (rule.count !== undefined && period > 0) {
+    emitted = countEmittedBeforePeriod(
+      initial,
+      rule,
+      period,
+      semantics,
+      input.timeZone
+    );
+  }
   let guard = 0;
   while (results.length < limit && guard < limit * 16) {
     guard += 1;
@@ -258,6 +274,106 @@ export function expandRecurrence(
     period += 1;
   }
   return results;
+}
+
+/**
+ * Smallest period index whose candidates can land on or after `fromMs`.
+ * Overshoots by at most one interval so the subsequent walk still applies
+ * BYDAY / UNTIL / COUNT filters exactly.
+ */
+function firstPeriodAtOrAfter(
+  initial: WallTime,
+  rule: ParsedRrule,
+  fromMs: number,
+  semantics: RecurrenceSemantics
+): number {
+  const anchorMs = wallEpoch(initial);
+  if (fromMs <= anchorMs) return 0;
+  const deltaMs = fromMs - anchorMs;
+  switch (rule.freq) {
+    case "DAILY":
+      return Math.max(
+        0,
+        Math.floor(deltaMs / (86_400_000 * rule.interval)) - 1
+      );
+    case "WEEKLY":
+      return Math.max(
+        0,
+        Math.floor(deltaMs / (7 * 86_400_000 * rule.interval)) - 1
+      );
+    case "MONTHLY": {
+      // Approximate months from civil fields, then back up one interval.
+      const fromWall = wallFromComparisonMs(fromMs, semantics);
+      if (!fromWall) return 0;
+      const months =
+        (fromWall.year - initial.year) * 12 + (fromWall.month - initial.month);
+      return Math.max(0, Math.floor(months / rule.interval) - 1);
+    }
+    case "YEARLY": {
+      const fromWall = wallFromComparisonMs(fromMs, semantics);
+      if (!fromWall) return 0;
+      const years = fromWall.year - initial.year;
+      return Math.max(0, Math.floor(years / rule.interval) - 1);
+    }
+  }
+}
+
+function wallFromComparisonMs(
+  ms: number,
+  semantics: RecurrenceSemantics
+): WallTime | null {
+  if (Number.isNaN(ms)) return null;
+  // instantForComparison for floating/all-day uses wallEpoch, so the reverse
+  // is UTC-parts of that epoch — not a timezone conversion.
+  if (semantics !== "zoned") {
+    const date = new Date(ms);
+    return {
+      year: date.getUTCFullYear(),
+      month: date.getUTCMonth() + 1,
+      day: date.getUTCDate(),
+      hour: date.getUTCHours(),
+      minute: date.getUTCMinutes(),
+      second: date.getUTCSeconds(),
+      millisecond: date.getUTCMilliseconds(),
+    };
+  }
+  // Zoned fromMs is a real UTC instant; month/year distance only needs the
+  // UTC calendar of that instant for a conservative lower bound.
+  const date = new Date(ms);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+    hour: date.getUTCHours(),
+    minute: date.getUTCMinutes(),
+    second: date.getUTCSeconds(),
+    millisecond: date.getUTCMilliseconds(),
+  };
+}
+
+/** COUNT still measures from the series start — tally emissions before the jump. */
+function countEmittedBeforePeriod(
+  initial: WallTime,
+  rule: ParsedRrule,
+  period: number,
+  semantics: RecurrenceSemantics,
+  timeZone: string | undefined
+): number {
+  let emitted = 0;
+  for (let index = 0; index < period; index += 1) {
+    const walls =
+      rule.freq === "WEEKLY" && rule.byDay
+        ? weeklyCandidates(initial, rule, index)
+        : [stepAnchor(initial, rule, index)];
+    for (const wall of walls) {
+      if (wallEpoch(wall) < wallEpoch(initial)) continue;
+      const instance = resolveCandidate(wall, semantics, timeZone);
+      if (!instance) continue;
+      if (!withinUntil(instance, rule.until, semantics)) return emitted;
+      emitted += 1;
+    }
+  }
+  return emitted;
 }
 
 export function applyRecurrenceExceptions(
@@ -288,17 +404,50 @@ export function applyRecurrenceExceptions(
     if ((exception.scope ?? "occurrence") === "occurrence") {
       return [{ ...instance, start: exception.start }];
     }
-    const delta =
-      Date.parse(exception.start) - Date.parse(exception.originalStart);
-    return Number.isNaN(delta)
+    const delta = wallDeltaMs(exception.originalStart, exception.start);
+    return delta === null
       ? [{ ...instance, start: exception.start }]
-      : [
-          {
-            ...instance,
-            start: new Date(Date.parse(instance.start) + delta).toISOString(),
-          },
-        ];
+      : [{ ...instance, start: shiftTemporal(instance.start, delta) }];
   });
+}
+
+/**
+ * Shift a wall-clock or zoned instant by `deltaMs` without converting floating
+ * / all-day strings through the host's local timezone.
+ */
+export function shiftTemporal(value: string, deltaMs: number): string {
+  if (isZonedInstant(value)) {
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? value : new Date(ms + deltaMs).toISOString();
+  }
+  const wall = parseWallIso(value);
+  if (!wall) return value;
+  const shifted = new Date(wallEpoch(wall) + deltaMs);
+  const next: WallTime = {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+    second: shifted.getUTCSeconds(),
+    millisecond: shifted.getUTCMilliseconds(),
+  };
+  return wallIso(next, value.includes("T"));
+}
+
+function isZonedInstant(value: string): boolean {
+  return /(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+}
+
+function wallDeltaMs(from: string, to: string): number | null {
+  if (isZonedInstant(from) || isZonedInstant(to)) {
+    const delta = Date.parse(to) - Date.parse(from);
+    return Number.isNaN(delta) ? null : delta;
+  }
+  const fromWall = parseWallIso(from);
+  const toWall = parseWallIso(to);
+  if (!fromWall || !toWall) return null;
+  return wallEpoch(toWall) - wallEpoch(fromWall);
 }
 
 export function nextOccurrence(input: NextOccurrenceInput): string | null {

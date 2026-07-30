@@ -201,6 +201,30 @@ const MAX_TOTAL_INSTANCES = 1500;
 const EXPANSION_CACHE = new Map<string, RecurrenceInstance[]>();
 const EXPANSION_CACHE_MAX = 500;
 
+/**
+ * Duration between dtstart and dtend preserving floating/all-day wall clocks.
+ * `Date.parse` on bare wall strings is host-TZ dependent and must not be used
+ * for non-zoned series when deriving instance ends.
+ */
+function eventDurationMs(ev: RawEvent): number {
+  if (!ev.dtend) return 0;
+  const semantics = ev.recurrence_semantics ?? "zoned";
+  if (semantics === "zoned") {
+    const delta = Date.parse(ev.dtend) - Date.parse(ev.dtstart);
+    return Number.isFinite(delta) ? delta : 0;
+  }
+  // Wall strings share a comparable lexicographic / civil-time layout; parse
+  // as UTC components so the delta is timezone-independent.
+  const start = Date.parse(
+    ev.dtstart.includes("T") ? `${ev.dtstart}Z` : `${ev.dtstart}T00:00:00Z`
+  );
+  const end = Date.parse(
+    ev.dtend.includes("T") ? `${ev.dtend}Z` : `${ev.dtend}T00:00:00Z`
+  );
+  const delta = end - start;
+  return Number.isFinite(delta) ? delta : 0;
+}
+
 function cachedInstances(
   ev: RawEvent,
   rangeFrom: Date,
@@ -263,9 +287,7 @@ function expandRecurringEvents(
       });
       continue;
     }
-    const durationMs = ev.dtend
-      ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime()
-      : 0;
+    const durationMs = eventDurationMs(ev);
     const eventExceptions = exceptions.filter(
       (exception) => exception.target_id === ev.event_id
     );
@@ -318,7 +340,7 @@ function expandRecurringEvents(
         dtend:
           override?.end ??
           (ev.dtend && Number.isFinite(durationMs)
-            ? new Date(new Date(startIso).getTime() + durationMs).toISOString()
+            ? time.shiftTemporal(startIso, durationMs)
             : ev.dtend),
         is_recurrence_instance: !isAnchor,
         instance_key: `${ev.event_id}:${instance.originalStart}`,

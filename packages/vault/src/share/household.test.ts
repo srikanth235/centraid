@@ -70,6 +70,78 @@ describe("household audience placement", () => {
     ).toMatchObject({ n: 0 });
   });
 
+  test("shares an album when the cover bytes already exist under another content id", () => {
+    const { origin, originBoot, audience } = household();
+    const first = seedPhoto(origin, originBoot, "cover-dedupe");
+    // Pre-seed the same bytes in the audience under a different content id so
+    // projection dedupes by sha256 — the album cover must use that audience id.
+    const foreignContentId = uuidv7();
+    const now = nowIso();
+    const originContent = origin.vault
+      .prepare(
+        "SELECT media_type, content_uri, sha256, byte_size, title, language, created_at FROM core_content_item WHERE content_id = ?"
+      )
+      .get(first.contentId) as {
+      media_type: string;
+      content_uri: string;
+      sha256: string;
+      byte_size: number;
+      title: string | null;
+      language: string | null;
+      created_at: string;
+    };
+    audience.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, title, language,
+            creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)`
+      )
+      .run(
+        foreignContentId,
+        originContent.media_type,
+        originContent.content_uri,
+        originContent.sha256,
+        originContent.byte_size,
+        originContent.title,
+        originContent.language,
+        now
+      );
+    const collectionId = uuidv7();
+    origin.vault
+      .prepare(
+        `INSERT INTO core_collection
+           (collection_id, owner_party_id, name, cover_content_id,
+            parent_collection_id, sort_order, created_at)
+         VALUES (?, ?, 'Dedupe cover', ?, NULL, 0, ?)`
+      )
+      .run(collectionId, originBoot.ownerPartyId, first.contentId, now);
+    origin.vault
+      .prepare(
+        `INSERT INTO core_collection_entry
+           (entry_id, collection_id, target_type, target_id, position, added_at)
+         VALUES (?, ?, 'media.media_asset', ?, 0, ?)`
+      )
+      .run(uuidv7(), collectionId, first.assetId, now);
+
+    const shared = shareToVault({
+      origin,
+      originVaultId: "vault-priya",
+      audience,
+      itemType: "core.collection",
+      itemId: collectionId,
+      sharedByMember: "member-priya",
+    });
+
+    expect(
+      audience.vault
+        .prepare(
+          "SELECT cover_content_id FROM core_collection WHERE collection_id = ?"
+        )
+        .get(shared.itemId)
+    ).toMatchObject({ cover_content_id: foreignContentId });
+  });
+
   test("re-encrypts a family Locker item under the audience vault key", () => {
     const { origin, audience } = household();
     const itemId = uuidv7();

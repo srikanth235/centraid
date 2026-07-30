@@ -1,11 +1,12 @@
 /*
  * `GET /centraid/_reminders/due` — every task/event reminder whose fire
  * time has arrived (`schedule_task.remind_before_min` / `core_event`'s
- * `schedule_event_ext.reminders_json`), computed live against the request
- * time. Stateless on purpose (see reminders/due-reminders.ts) — the desktop
- * main process's poller owns "have I already surfaced this one" bookkeeping,
- * the same split gateway-monitor.ts already uses for the downtime alert.
- * Behind the host bearer check like every non-public route.
+ * `schedule_event_ext.reminders_json`), plus due Tally recurring previews
+ * and outstanding household pairing invitations, computed live against
+ * the request time. Stateless on purpose (see reminders/due-reminders.ts)
+ * — the desktop main process's poller owns "have I already surfaced this
+ * one" bookkeeping, the same split gateway-monitor.ts already uses for the
+ * downtime alert. Behind the host bearer check like every non-public route.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -16,13 +17,21 @@ import { nowIso } from "@centraid/vault";
 import { buildDailyBrief } from "../brief/daily-brief.js";
 import { computeDueReminders } from "../reminders/due-reminders.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
+import type { EnrollmentStore } from "../serve/enrollment-store.js";
+import type { PairingTicketStore } from "../serve/pairing-store.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { sendError, sendJson } from "./route-helpers.js";
 
 const DUE_PATH = "/centraid/_reminders/due";
 const BRIEF_PATH = ROUTES.briefToday;
 
-export function makeRemindersRouteHandler(vaults: VaultRegistry): RouteHandler {
+export function makeRemindersRouteHandler(
+  vaults: VaultRegistry,
+  devicePairing?: {
+    tickets: PairingTicketStore;
+    enrollments: EnrollmentStore;
+  }
+): RouteHandler {
   return async (
     req: IncomingMessage,
     res: ServerResponse
@@ -58,7 +67,25 @@ export function makeRemindersRouteHandler(vaults: VaultRegistry): RouteHandler {
           })
         );
       }
-      const reminders = computeDueReminders(vaults.current().db, nowIso());
+      const pendingInvitations = devicePairing
+        ? devicePairing.tickets.listActive().map((ticket) => {
+            const member = devicePairing.enrollments.members.get(
+              ticket.memberId
+            );
+            return {
+              ticketId: ticket.ticketId,
+              memberLabel: member?.label ?? ticket.memberId,
+              createdAt: ticket.createdAt,
+              expiresAt: ticket.expiresAt,
+            };
+          })
+        : [];
+      const reminders = computeDueReminders(
+        vaults.current().db,
+        nowIso(),
+        undefined,
+        pendingInvitations
+      );
       return sendJson(res, 200, { reminders });
     } catch (error) {
       return sendError(res, error);

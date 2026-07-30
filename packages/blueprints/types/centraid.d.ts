@@ -160,6 +160,8 @@ interface TimeApi {
     exceptions: readonly RecurrenceException[]
   ) => RecurrenceInstance[];
   describeRecurrence: (rrule: string) => string | null;
+  /** Shift a wall-clock or zoned instant without host-TZ conversion. */
+  shiftTemporal: (value: string, deltaMs: number) => string;
 }
 
 /** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault, and time. */

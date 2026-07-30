@@ -149,6 +149,7 @@ export class PairingTicketStore {
     ticketId: string;
     memberId: string;
     grants: MemberGrant[];
+    createdAt: string;
     expiresAt: number;
   }> {
     const now = Date.now();
@@ -162,6 +163,7 @@ export class PairingTicketStore {
     ).map((row) => ({
       ...invitationOf(row),
       ticketId: row.ticket_id,
+      createdAt: row.created_at,
       expiresAt: row.expires_at,
     }));
   }

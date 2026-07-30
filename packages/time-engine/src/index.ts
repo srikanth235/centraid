@@ -4,6 +4,7 @@ export {
   expandRecurrence,
   nextOccurrence,
   parseRrule,
+  shiftTemporal,
   type ExpandRecurrenceInput,
   type ParsedRrule,
   type RecurrenceException,

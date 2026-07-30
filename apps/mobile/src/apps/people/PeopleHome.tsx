@@ -51,15 +51,37 @@ export default function PeopleHome({
   const { session } = useReplica();
   const profiles = useReplicaQuery(
     "people",
-    useMemo(() => ({ entity: "people.profile" }), [])
+    useMemo(() => ({ entity: "people.profile", limit: 5000 }), [])
   );
+  const partyIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of profiles.rows) {
+      if (typeof row.party_id === "string" && row.party_id)
+        ids.add(row.party_id);
+    }
+    return [...ids];
+  }, [profiles.rows]);
   const parties = useReplicaQuery(
     "people",
-    useMemo(() => ({ entity: "core.party" }), [])
+    useMemo(
+      () =>
+        partyIds.length === 0
+          ? {
+              entity: "core.party",
+              where: [{ column: "party_id", op: "eq", value: "__none__" }],
+              limit: 1,
+            }
+          : {
+              entity: "core.party",
+              where: [{ column: "party_id", op: "in", value: partyIds }],
+              limit: Math.max(partyIds.length, 1),
+            },
+      [partyIds]
+    )
   );
   const channels = useReplicaQuery(
     "people",
-    useMemo(() => ({ entity: "social.contact_channel" }), [])
+    useMemo(() => ({ entity: "social.contact_channel", limit: 10_000 }), [])
   );
   const queryState = combineReplicaQueryStates([profiles, parties, channels]);
   const [selectedId, setSelectedId] = useState<string>();

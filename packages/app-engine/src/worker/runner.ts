@@ -248,16 +248,19 @@ function execute(req: WorkerRequest): void {
             applyRecurrenceExceptions: (...args: unknown[]) => unknown;
             describeRecurrence: (...args: unknown[]) => unknown;
             expandRecurrence: (...args: unknown[]) => unknown;
+            shiftTemporal: (...args: unknown[]) => unknown;
           })
         : {
             applyRecurrenceExceptions: unavailableTime,
             describeRecurrence: unavailableTime,
             expandRecurrence: unavailableTime,
+            shiftTemporal: unavailableTime,
           };
       const time = Object.freeze({
         applyRecurrenceExceptions: timeModule.applyRecurrenceExceptions,
         describeRecurrence: timeModule.describeRecurrence,
         expandRecurrence: timeModule.expandRecurrence,
+        shiftTemporal: timeModule.shiftTemporal,
       });
       // A TS handler graph needs the esbuild loader hook before it can import
       // under plain Node; a JS handler skips this entirely.

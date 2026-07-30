@@ -27,7 +27,7 @@ const SEEN_TTL_MS = 48 * 60 * 60 * 1000;
 
 interface DueReminder {
   key: string;
-  kind: "task" | "event";
+  kind: "task" | "event" | "tally" | "invite";
   id: string;
   title: string;
   at: string;
@@ -54,10 +54,21 @@ function leadLabel(minutesBefore: number): string {
 
 function notify(reminder: DueReminder): void {
   if (!Notification.isSupported()) return;
-  const noun = reminder.kind === "task" ? "Task due" : "Event starting";
+  const noun =
+    reminder.kind === "task"
+      ? "Task due"
+      : reminder.kind === "event"
+        ? "Event starting"
+        : reminder.kind === "tally"
+          ? "Expense ready to review"
+          : "Household invitation";
+  const body =
+    reminder.kind === "task" || reminder.kind === "event"
+      ? `${noun} — reminder set ${leadLabel(reminder.minutesBefore)} before.`
+      : noun;
   const n = new Notification({
     title: reminder.title,
-    body: `${noun} — reminder set ${leadLabel(reminder.minutesBefore)} before.`,
+    body,
   });
   n.show();
 }

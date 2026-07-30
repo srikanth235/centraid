@@ -10,6 +10,8 @@ import {
 } from "../schema/sealed.js";
 import type {
   CollectionClosure,
+  ContentItemRow,
+  DerivativeRow,
   ProjectionResult,
   ShareClosure,
   ShareableItemType,
@@ -118,6 +120,65 @@ export function readTallyGroupClosure(
         )
         .all(String(template.template_id)) as Array<Record<string, unknown>>
   );
+  const receipts = expenses.flatMap((expense) =>
+    rows(
+      origin,
+      "tally_expense_receipt",
+      "expense_id",
+      String(expense.expense_id)
+    )
+  );
+  const lineItems = receipts.flatMap((receipt) =>
+    rows(
+      origin,
+      "tally_expense_line_item",
+      "receipt_id",
+      String(receipt.receipt_id)
+    )
+  );
+  const lineAllocations = lineItems.flatMap((line) =>
+    rows(
+      origin,
+      "tally_expense_line_allocation",
+      "line_item_id",
+      String(line.line_item_id)
+    )
+  );
+  const receiptContentItems: ContentItemRow[] = [];
+  const receiptDerivatives: Array<{
+    contentId: string;
+    rows: DerivativeRow[];
+  }> = [];
+  const shas = new Set<string>();
+  for (const receipt of receipts) {
+    const contentId = String(receipt.content_id);
+    const content = origin
+      .prepare(
+        `SELECT content_id, media_type, content_uri, sha256, byte_size, title,
+                language, deleted_at, purge_at, created_at
+           FROM core_content_item WHERE content_id = ?`
+      )
+      .get(contentId) as ContentItemRow | undefined;
+    if (!content) continue;
+    receiptContentItems.push(content);
+    if (
+      typeof content.content_uri === "string" &&
+      content.content_uri.startsWith("blob:")
+    ) {
+      shas.add(content.sha256);
+    }
+    const derivatives = origin
+      .prepare(
+        `SELECT derivative_id, variant, sha256, media_type, byte_size,
+                text_content, created_at
+           FROM core_content_derivative WHERE content_id = ? ORDER BY variant`
+      )
+      .all(contentId) as unknown as DerivativeRow[];
+    receiptDerivatives.push({ contentId, rows: derivatives });
+    for (const derivative of derivatives) {
+      if (derivative.sha256 !== null) shas.add(derivative.sha256);
+    }
+  }
   const partyIds = new Set<string>([
     ...members.map((row) => String(row.party_id)),
     ...expenses.map((row) => String(row.paid_by)),
@@ -127,6 +188,7 @@ export function readTallyGroupClosure(
       String(row.to_party),
     ]),
     ...recurring.map((row) => String(row.paid_by)),
+    ...lineAllocations.map((row) => String(row.party_id)),
   ]);
   const parties = [...partyIds].flatMap((partyId) => {
     const party = one(origin, "core_party", "party_id", partyId);
@@ -151,8 +213,13 @@ export function readTallyGroupClosure(
       settlements,
       recurring,
       exceptions,
+      receipts,
+      lineItems,
+      lineAllocations,
+      receiptContentItems,
+      receiptDerivatives,
     },
-    shas: [],
+    shas: [...shas],
   };
 }
 
@@ -212,12 +279,15 @@ export function projectCollection(
   let coverContentId: string | null = null;
   const originCover = nullableString(closure.row.cover_content_id);
   if (originCover) {
+    // Map the origin cover to the audience-side content id. After sha256
+    // dedupe, that id may differ from the origin content_id — inserting the
+    // origin id fails the cover_content_id foreign key.
     const cover = projectedEntries.find(
       ({ source }) =>
         source.closure.contentItem?.content_id === originCover ||
         source.closure.mediaAsset?.content_id === originCover
     );
-    coverContentId = cover?.source.closure.contentItem?.content_id ?? null;
+    coverContentId = cover?.result.contentId ?? null;
   }
   insert(audience, "core_collection", {
     ...closure.row,
@@ -339,6 +409,67 @@ export function projectTallyGroup(
   }
   for (const exception of closure.exceptions)
     insert(audience, "schedule_recurrence_exception", exception);
+
+  // Project receipt bytes + OCR structure so the audience ledger reconciles.
+  const contentIdMap = new Map<string, string>();
+  for (const content of closure.receiptContentItems) {
+    const existing = audience
+      .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
+      .get(content.sha256) as { content_id: string } | undefined;
+    if (existing) {
+      contentIdMap.set(content.content_id, existing.content_id);
+      continue;
+    }
+    const contentId = freeId(
+      audience,
+      "core_content_item",
+      "content_id",
+      content.content_id
+    );
+    contentIdMap.set(content.content_id, contentId);
+    insert(audience, "core_content_item", {
+      ...content,
+      content_id: contentId,
+      creator_party_id: null,
+      origin_device_id: null,
+    });
+  }
+  for (const pack of closure.receiptDerivatives) {
+    const audienceContentId = contentIdMap.get(pack.contentId);
+    if (!audienceContentId) continue;
+    for (const derivative of pack.rows) {
+      if (
+        one(
+          audience,
+          "core_content_derivative",
+          "derivative_id",
+          String(derivative.derivative_id)
+        )
+      ) {
+        continue;
+      }
+      insert(audience, "core_content_derivative", {
+        ...derivative,
+        content_id: audienceContentId,
+      });
+    }
+  }
+  for (const receipt of closure.receipts) {
+    const originContentId = String(receipt.content_id);
+    const audienceContentId = contentIdMap.get(originContentId);
+    if (!audienceContentId) continue;
+    insert(audience, "tally_expense_receipt", {
+      ...receipt,
+      content_id: audienceContentId,
+    });
+  }
+  for (const line of closure.lineItems)
+    insert(audience, "tally_expense_line_item", line);
+  for (const allocation of closure.lineAllocations)
+    insert(audience, "tally_expense_line_allocation", {
+      ...allocation,
+      party_id: mappedParty(partyIds, allocation.party_id),
+    });
   return { itemId: groupId, deduped: false };
 }
 

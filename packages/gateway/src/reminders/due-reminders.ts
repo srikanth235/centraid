@@ -7,19 +7,30 @@
 // caller (the desktop main process's poller) owns de-duplication — it
 // remembers which `key`s it already surfaced an OS notification for, the
 // same posture as gateway-monitor.ts's in-memory downtime-alert state.
+//
+// Tally recurring materialization previews and outstanding household pairing
+// tickets ride the same feed so mobile categories for those kinds can fire.
 
+import { expandRecurrence } from "@centraid/time-engine";
 import type { VaultDb } from "@centraid/vault";
 
 export interface DueReminder {
   /** Stable per-reminder id: de-dup key for the poller. */
   key: string;
-  kind: "task" | "event";
+  kind: "task" | "event" | "tally" | "invite";
   id: string;
   title: string;
   /** ISO instant the reminder is anchored to (due_at or dtstart). */
   at: string;
   /** Minutes before `at` this reminder was set to fire. */
   minutesBefore: number;
+}
+
+export interface PendingInvitation {
+  ticketId: string;
+  memberLabel: string;
+  createdAt: string;
+  expiresAt: number;
 }
 
 /** A reminder older than this (past its `at`) is stale — no longer surfaced. */
@@ -63,7 +74,8 @@ function parseReminders(json: string): { minutes_before: number }[] {
 export function computeDueReminders(
   db: VaultDb,
   nowIso: string,
-  staleAfterMinutes = DEFAULT_STALE_AFTER_MINUTES
+  staleAfterMinutes = DEFAULT_STALE_AFTER_MINUTES,
+  pendingInvitations: readonly PendingInvitation[] = []
 ): DueReminder[] {
   const now = Date.parse(nowIso);
   const out: DueReminder[] = [];
@@ -116,6 +128,84 @@ export function computeDueReminders(
         });
       }
     }
+  }
+
+  // Active recurring expense templates whose next occurrence is due (and not
+  // yet materialized) surface as Tally settle/review notifications.
+  const day = nowIso.slice(0, 10);
+  const rangeFrom = `${day}T00:00:00.000Z`;
+  const rangeTo = new Date(Date.parse(rangeFrom) + 86_400_000).toISOString();
+  const templates = db.vault
+    .prepare(
+      `SELECT template_id, description, rrule, anchor_start, time_zone,
+              last_materialized_start
+         FROM tally_recurring_expense
+        WHERE status = 'active'`
+    )
+    .all() as Array<{
+    template_id: string;
+    description: string;
+    rrule: string;
+    anchor_start: string;
+    time_zone: string;
+    last_materialized_start: string | null;
+  }>;
+  for (const template of templates) {
+    const next = expandRecurrence({
+      rrule: template.rrule,
+      start: template.anchor_start,
+      rangeFrom,
+      rangeTo,
+      timeZone: template.time_zone,
+      maxInstances: 2,
+    })[0];
+    if (!next) continue;
+    if (
+      template.last_materialized_start !== null &&
+      template.last_materialized_start >= next.originalStart
+    ) {
+      continue;
+    }
+    const spentOn = next.start.slice(0, 10);
+    const already = db.vault
+      .prepare(
+        `SELECT 1 AS n FROM tally_expense
+          WHERE recurring_template_id = ? AND spent_on = ? AND deleted_at IS NULL`
+      )
+      .get(template.template_id, spentOn);
+    if (already) continue;
+    const at = next.start.includes("T")
+      ? next.start.endsWith("Z") || /[+-]\d{2}:\d{2}$/u.test(next.start)
+        ? next.start
+        : `${next.start}Z`
+      : `${next.start}T09:00:00.000Z`;
+    const atMs = Date.parse(at);
+    if (Number.isNaN(atMs)) continue;
+    const staleAt = atMs + staleAfterMinutes * 60_000;
+    if (atMs <= now && now <= staleAt) {
+      out.push({
+        key: `tally:${template.template_id}:${next.originalStart}`,
+        kind: "tally",
+        id: template.template_id,
+        title: template.description,
+        at,
+        minutesBefore: 0,
+      });
+    }
+  }
+
+  for (const invite of pendingInvitations) {
+    if (invite.expiresAt <= now) continue;
+    out.push({
+      key: `invite:${invite.ticketId}`,
+      kind: "invite",
+      id: invite.ticketId,
+      title: invite.memberLabel
+        ? `Invite for ${invite.memberLabel}`
+        : "Household invitation",
+      at: invite.createdAt,
+      minutesBefore: 0,
+    });
   }
 
   return out.sort((a, b) => a.at.localeCompare(b.at));

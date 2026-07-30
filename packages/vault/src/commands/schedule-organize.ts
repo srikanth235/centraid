@@ -98,7 +98,10 @@ const EDIT_EVENT: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
+  // Same parking contract as schedule.reschedule_event: non-owner callers
+  // with the install-time grant must not move a shared commitment silently.
   risk: "medium",
+  confirm: true,
   handler: editEvent,
 };
 
@@ -240,7 +243,11 @@ const EDIT_OCCURRENCE: CommandDefinition = {
   ],
   postconditions: [],
   idempotency: "idempotent",
-  risk: "low",
+  // Series skip cancels the event; occurrence/future overrides restate times.
+  // Park like cancel_event / reschedule_event so agents cannot bypass owner
+  // confirmation with the newer agenda command surface.
+  risk: "medium",
+  confirm: true,
   handler: editOccurrence,
 };
 
@@ -256,13 +263,38 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
     description?: string;
   };
   if (input.scope === "series") {
+    // Series-wide skip is cancellation of the series identity — same terminal
+    // state as schedule.cancel_event, with SEQUENCE bump and audit cite.
+    if (input.action === "skip") {
+      const current = ctx.db
+        .prepare("SELECT sequence, status FROM core_event WHERE event_id = ?")
+        .get(input.event_id) as { sequence: number; status: string };
+      if (current.status === "cancelled") {
+        return { event_id: input.event_id, scope: input.scope };
+      }
+      const sequence = current.sequence + 1;
+      ctx.db
+        .prepare(
+          `UPDATE core_event
+              SET status = 'cancelled', sequence = ?, updated_at = ?
+            WHERE event_id = ?`
+        )
+        .run(sequence, ctx.now, input.event_id);
+      ctx.wrote("core.event", input.event_id);
+      queueProviderWriteback(ctx, "core.event", input.event_id, ["status"]);
+      ctx.cite({
+        claim: `cancelled series as revision ${sequence}`,
+        entityType: "core.event",
+        entityId: input.event_id,
+      });
+      return { event_id: input.event_id, scope: input.scope, sequence };
+    }
     const updates = [
       ["dtstart", input.dtstart],
       ["dtend", input.dtend],
       ["summary", input.summary],
       ["description", input.description],
     ].filter((entry): entry is [string, string] => entry[1] !== undefined);
-    if (input.action === "skip") updates.push(["status", "cancelled"]);
     if (updates.length > 0) {
       ctx.db
         .prepare(
@@ -453,6 +485,7 @@ const ORGANIZE_TASK: CommandDefinition = {
       project_id: STRING,
       section_id: STRING,
       clear_project: { type: "boolean", const: true },
+      clear_section: { type: "boolean", const: true },
       sort_order: { type: "integer" },
       recurrence_anchor: {
         type: "string",
@@ -479,21 +512,37 @@ function organizeTask(ctx: HandlerCtx): Record<string, unknown> {
     project_id?: string;
     section_id?: string;
     clear_project?: boolean;
+    clear_section?: boolean;
     sort_order: number;
     recurrence_anchor?: string;
     recurrence_tz?: string;
   };
+  // Placement columns are COALESCE'd: omitting project_id/section_id leaves
+  // the current filing in place. Explicit clear_* flags are the only NULL path
+  // so agents can retune recurrence without unfiling into Inbox.
+  const clearProject = input.clear_project === true;
+  const clearSection = clearProject || input.clear_section === true;
   ctx.db
     .prepare(
       `UPDATE schedule_task
-          SET project_id = ?, section_id = ?, sort_order = ?,
+          SET project_id = CASE
+                WHEN ? THEN NULL
+                ELSE COALESCE(?, project_id)
+              END,
+              section_id = CASE
+                WHEN ? THEN NULL
+                ELSE COALESCE(?, section_id)
+              END,
+              sort_order = ?,
               recurrence_anchor = COALESCE(?, recurrence_anchor),
               recurrence_tz = COALESCE(?, recurrence_tz)
         WHERE task_id = ?`
     )
     .run(
-      input.clear_project ? null : (input.project_id ?? null),
-      input.clear_project ? null : (input.section_id ?? null),
+      clearProject ? 1 : 0,
+      input.project_id ?? null,
+      clearSection ? 1 : 0,
+      input.section_id ?? null,
       input.sort_order,
       input.recurrence_anchor ?? null,
       input.recurrence_tz ?? null,

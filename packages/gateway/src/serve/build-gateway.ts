@@ -3869,7 +3869,7 @@ export async function buildGateway(
     // flagged "no time-based alerts, anywhere").
     forRoutePrefixes(
       ["/centraid/_reminders", "/centraid/_brief"],
-      makeRemindersRouteHandler(vaultRegistry)
+      makeRemindersRouteHandler(vaultRegistry, options.devicePairing)
     ),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
     // the desktop's Settings → Logs screen streams from.

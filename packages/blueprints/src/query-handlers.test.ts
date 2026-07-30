@@ -12,6 +12,7 @@ import {
   applyRecurrenceExceptions,
   describeRecurrence,
   expandRecurrence,
+  shiftTemporal,
 } from "@centraid/time-engine";
 import { describe, expect, it, vi } from "vitest";
 
@@ -35,6 +36,7 @@ function ctxOf(rowsByEntity: Record<string, unknown[]>) {
       applyRecurrenceExceptions,
       describeRecurrence,
       expandRecurrence,
+      shiftTemporal,
     },
     vault: {
       read: async ({ entity }: { entity: string }) => ({
@@ -43,6 +45,14 @@ function ctxOf(rowsByEntity: Record<string, unknown[]>) {
       resolve: async () => ({ cards: [] }),
       invoke: async () => ({ status: "executed", output: { items: [] } }),
       search: async () => ({ rows: rowsByEntity.__search__ ?? [] }),
+      // Companion/query tests default to an unlocked Locker; lock gates are
+      // covered by vault unit tests of LockerAuthentication.
+      authenticate: async () => ({
+        ok: true,
+        configured: false,
+        authenticated: false,
+        unlocked: true,
+      }),
     },
   };
 }
@@ -89,6 +99,25 @@ describe("Locker Companion queries (#462)", () => {
     ]);
     expect(JSON.stringify(result)).not.toContain("password");
     expect(JSON.stringify(result)).not.toContain("«sealed»");
+  });
+
+  it("refuses candidate enumeration while Locker is locked", async () => {
+    const { default: candidates } = await importQuery(
+      "../apps/locker/queries/autofill-candidates.ts"
+    );
+    const ctx = ctxOf({ "locker.item": [] });
+    ctx.vault.authenticate = async () => ({
+      ok: true,
+      configured: true,
+      authenticated: false,
+      unlocked: false,
+    });
+    const result = await candidates({ ctx });
+    expect(result).toMatchObject({
+      candidates: [],
+      authRequired: true,
+      configured: true,
+    });
   });
 
   it("reveals password with page context and asks only for a TOTP derivative", async () => {

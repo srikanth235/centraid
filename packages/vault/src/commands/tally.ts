@@ -903,6 +903,13 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
       spent_on?: string;
       category: string;
       splits: SplitInput[];
+      original_amount_minor?: number;
+      original_currency?: string;
+      settlement_currency?: string;
+      rate_scaled?: number;
+      rate_scale?: number;
+      rate_source?: string;
+      rate_date?: string;
       staged_sha: string;
       ocr_text: string;
       line_items: Array<{
@@ -941,6 +948,31 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
       }
     }
 
+    const originalCurrency = (
+      input.original_currency ?? baseCurrency(ctx)
+    ).toUpperCase();
+    const settlementCurrency = (
+      input.settlement_currency ?? baseCurrency(ctx)
+    ).toUpperCase();
+    const originalAmount = input.original_amount_minor ?? amountMinor;
+    const rateScale = input.rate_scale ?? 6;
+    const rateScaled =
+      input.rate_scaled ??
+      (originalCurrency === settlementCurrency ? 10 ** rateScale : undefined);
+    if (
+      rateScaled === undefined ||
+      (originalCurrency !== settlementCurrency &&
+        (!input.rate_source || !input.rate_date))
+    )
+      throw new Error(
+        "cross-currency expenses need a rate, source, and effective date"
+      );
+    if (
+      convertCurrencyMinor(originalAmount, rateScaled, rateScale) !==
+      amountMinor
+    )
+      throw new Error("settlement amount does not match the supplied rate");
+
     const minted = ctx.blobs.claimStaged(input.staged_sha, {
       title: `${input.description} receipt`,
     });
@@ -949,8 +981,9 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
       .prepare(
         `INSERT INTO tally_expense
           (expense_id, group_id, description, amount_minor, paid_by, spent_on,
-           category, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+           category, created_at, original_amount_minor, original_currency,
+           settlement_currency, rate_scaled, rate_scale, rate_source, rate_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         expenseId,
@@ -960,7 +993,14 @@ const ADD_RECEIPT_EXPENSE: CommandDefinition = {
         input.paid_by,
         input.spent_on ?? ctx.now.slice(0, 10),
         input.category,
-        ctx.now
+        ctx.now,
+        originalAmount,
+        originalCurrency,
+        settlementCurrency,
+        rateScaled,
+        rateScale,
+        input.rate_source ?? "identity",
+        input.rate_date ?? input.spent_on ?? ctx.now.slice(0, 10)
       );
     ctx.wrote("tally.expense", expenseId);
     writeSplits(
@@ -1065,6 +1105,13 @@ const EDIT_EXPENSE: CommandDefinition = {
       spent_on: { type: "string" },
       category: { type: "string", enum: CATEGORY_ENUM },
       splits: SPLIT_SCHEMA,
+      original_amount_minor: { type: "integer", minimum: 1 },
+      original_currency: { type: "string", pattern: "^[A-Za-z]{3}$" },
+      settlement_currency: { type: "string", pattern: "^[A-Za-z]{3}$" },
+      rate_scaled: { type: "integer", minimum: 1 },
+      rate_scale: { type: "integer", minimum: 0, maximum: 12 },
+      rate_source: { type: "string", minLength: 1 },
+      rate_date: { type: "string", minLength: 1 },
     },
   },
   outputSchema: {
@@ -1105,25 +1152,116 @@ const EDIT_EXPENSE: CommandDefinition = {
       rate_source?: string;
       rate_date?: string;
     };
-    const row = ctx.db
-      .prepare("SELECT group_id FROM tally_expense WHERE expense_id = ?")
-      .get(input.expense_id) as { group_id: string } | undefined;
-    if (!row) throw new Error("expense not found");
-    const originalCurrency = (
-      input.original_currency ?? baseCurrency(ctx)
-    ).toUpperCase();
-    const settlementCurrency = (
-      input.settlement_currency ?? baseCurrency(ctx)
-    ).toUpperCase();
-    const originalAmount = input.original_amount_minor ?? input.amount_minor;
-    const rateScale = input.rate_scale ?? 6;
-    const rateScaled =
-      input.rate_scaled ??
-      (originalCurrency === settlementCurrency ? 10 ** rateScale : undefined);
+    const existing = ctx.db
+      .prepare(
+        `SELECT group_id, original_amount_minor, original_currency,
+                settlement_currency, rate_scaled, rate_scale, rate_source, rate_date
+           FROM tally_expense WHERE expense_id = ?`
+      )
+      .get(input.expense_id) as
+      | {
+          group_id: string;
+          original_amount_minor: number | null;
+          original_currency: string | null;
+          settlement_currency: string | null;
+          rate_scaled: number | null;
+          rate_scale: number | null;
+          rate_source: string | null;
+          rate_date: string | null;
+        }
+      | undefined;
+    if (!existing) throw new Error("expense not found");
+    // Preserve live FX provenance unless the caller supplies a rate set.
+    // Previously undeclared FX keys were stripped by the schema, so every edit
+    // collapsed cross-currency rows to identity base currency.
+    const base = baseCurrency(ctx);
+    const hasFxInput =
+      input.original_amount_minor !== undefined ||
+      input.original_currency !== undefined ||
+      input.settlement_currency !== undefined ||
+      input.rate_scaled !== undefined ||
+      input.rate_scale !== undefined ||
+      input.rate_source !== undefined ||
+      input.rate_date !== undefined;
+    let originalCurrency: string;
+    let settlementCurrency: string;
+    let originalAmount: number;
+    let rateScale: number;
+    let rateScaled: number | undefined;
+    let rateSource: string | undefined;
+    let rateDate: string;
+    if (hasFxInput) {
+      originalCurrency = (
+        input.original_currency ??
+        existing.original_currency ??
+        base
+      ).toUpperCase();
+      settlementCurrency = (
+        input.settlement_currency ??
+        existing.settlement_currency ??
+        base
+      ).toUpperCase();
+      originalAmount =
+        input.original_amount_minor ??
+        existing.original_amount_minor ??
+        input.amount_minor;
+      rateScale = input.rate_scale ?? existing.rate_scale ?? 6;
+      rateScaled =
+        input.rate_scaled ??
+        existing.rate_scaled ??
+        (originalCurrency === settlementCurrency ? 10 ** rateScale : undefined);
+      rateSource =
+        input.rate_source ??
+        existing.rate_source ??
+        (originalCurrency === settlementCurrency ? "identity" : undefined);
+      rateDate =
+        input.rate_date ??
+        existing.rate_date ??
+        input.spent_on ??
+        ctx.now.slice(0, 10);
+    } else {
+      originalCurrency = (existing.original_currency ?? base).toUpperCase();
+      settlementCurrency = (existing.settlement_currency ?? base).toUpperCase();
+      rateScale = existing.rate_scale ?? 6;
+      const existingOriginal =
+        existing.original_amount_minor ?? input.amount_minor;
+      const existingScaled =
+        existing.rate_scaled ??
+        (originalCurrency === settlementCurrency ? 10 ** rateScale : undefined);
+      if (
+        existingScaled !== undefined &&
+        convertCurrencyMinor(existingOriginal, existingScaled, rateScale) ===
+          input.amount_minor
+      ) {
+        // Settlement amount still matches stored FX — keep provenance.
+        originalAmount = existingOriginal;
+        rateScaled = existingScaled;
+        rateSource =
+          existing.rate_source ??
+          (originalCurrency === settlementCurrency ? "identity" : undefined);
+        rateDate = existing.rate_date ?? input.spent_on ?? ctx.now.slice(0, 10);
+      } else if (originalCurrency === settlementCurrency) {
+        // Same-currency amount change — retarget the identity rate.
+        originalAmount = input.amount_minor;
+        rateScaled = 10 ** rateScale;
+        rateSource = "identity";
+        rateDate = input.spent_on ?? ctx.now.slice(0, 10);
+      } else {
+        throw new Error(
+          "cross-currency amount changes need a rate, source, and effective date"
+        );
+      }
+    }
     if (
       rateScaled === undefined ||
+      (originalCurrency !== settlementCurrency && !rateSource)
+    )
+      throw new Error(
+        "cross-currency expenses need a rate, source, and effective date"
+      );
+    if (
       convertCurrencyMinor(originalAmount, rateScaled, rateScale) !==
-        input.amount_minor
+      input.amount_minor
     )
       throw new Error("settlement amount does not match the supplied rate");
     const revision = recordExpenseRevision(ctx, input.expense_id, "edit");
@@ -1151,14 +1289,14 @@ const EDIT_EXPENSE: CommandDefinition = {
         settlement_currency: settlementCurrency,
         rate_scaled: rateScaled,
         rate_scale: rateScale,
-        rate_source: input.rate_source ?? "identity",
-        rate_date: input.rate_date ?? input.spent_on ?? ctx.now.slice(0, 10),
+        rate_source: rateSource ?? "identity",
+        rate_date: rateDate,
       });
     ctx.wrote("tally.expense", input.expense_id);
     writeSplits(
       ctx,
       input.expense_id,
-      row.group_id,
+      existing.group_id,
       Math.round(input.amount_minor),
       input.paid_by,
       input.splits

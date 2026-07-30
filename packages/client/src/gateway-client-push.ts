@@ -65,7 +65,7 @@ export async function disableWebPushWake(): Promise<void> {
 
 interface WebDueReminder {
   key: string;
-  kind: "task" | "event";
+  kind: "task" | "event" | "tally" | "invite";
   id: string;
   title: string;
   at: string;

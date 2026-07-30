@@ -227,7 +227,24 @@ export class Gateway {
     authentication: RevealRequest["authentication"],
     itemId: string
   ): void {
-    this.lockerAuthentication.consumeItemPermit(authentication, itemId);
+    this.lockerAuthentication.authorizeReveal(authentication, itemId, "ui");
+  }
+
+  /**
+   * Data-keyed Locker reveal gate (issue #630 review). Lives on the gateway
+   * so every reveal arm — app bridge, agent bridge, tests — hits the same
+   * lock, not only the locker HTTP path that previously special-cased fill.
+   */
+  private enforceLockerReveal(
+    request: RevealRequest,
+    entityId: string,
+    isFill: boolean
+  ): void {
+    this.lockerAuthentication.authorizeReveal(
+      request.authentication,
+      entityId,
+      isFill ? "fill" : "ui"
+    );
   }
 
   /**
@@ -636,6 +653,20 @@ export class Gateway {
       entityId = hit.item_id;
     }
     if (!entityId) return deny("reveal needs an entityId or alias");
+    // Locker lock is data-keyed: every reveal of locker.item consults the
+    // in-memory auth plane when credentials are configured. Fill needs an
+    // unlocked session; UI/agent reveals consume a one-time item permit.
+    if (request.entity === "locker.item") {
+      try {
+        this.enforceLockerReveal(request, entityId, context !== undefined);
+      } catch (error) {
+        return deny(
+          error instanceof Error
+            ? error.message
+            : "Locker authentication required"
+        );
+      }
+    }
     const consent = evaluateConsent(
       this.db.vault,
       identity,

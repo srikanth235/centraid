@@ -949,3 +949,31 @@ projection is a separate explicit unshare operation. -->
   exact-tip iOS run and then directed the agent not to pursue this PR failure.
   The implementation findings above remain PASS, but this evidence does not
   support a green final-proof verdict.
+
+## PR #638 review repairs
+
+Addressed the multi-agent review findings against `92319b5`:
+
+1. **Locker lock is data-keyed** — `gateway.reveal` enforces configured Locker
+   auth for every `locker.item` reveal (fill needs an unlocked session; UI needs
+   an item permit). Autofill candidates refuse enumeration while locked.
+2. **Agenda confirm parking** — `schedule.edit_event` and
+   `schedule.edit_event_occurrence` set `confirm: true`; series skip cancels
+   with SEQUENCE + cite like `cancel_event`.
+3. **Album cover FK** — projection surfaces audience `contentId`; cover maps
+   through sha256-deduped content, not origin ids.
+4. **expandRecurrence fast-forward** — period walk starts near `rangeFrom` so
+   multi-year monthly templates remain materializable.
+5. **edit_expense FX** — schema declares FX fields; live row provenance is
+   preserved unless a rate set is supplied. Receipt expenses write FX columns.
+6. **Tally share receipts** — group closure projects receipt/line/allocation
+   rows and content bytes.
+7. **Floating recurrence shift** — `shiftTemporal` keeps wall clocks out of
+   host TZ conversion for future-scope overrides and agenda ends.
+8. **organize_task placement** — COALESCE placement; `clear_project` /
+   `clear_section` are the only NULL paths.
+9. **Notes / People reads** — content and party queries bound by id lists.
+10. **Due reminders** — producers for tally recurring previews and outstanding
+    pairing invitations; mobile/desktop/web kinds widened.
+
+Minors: `COUNT=0` clamps to 1; status no longer slides unlock sessions.

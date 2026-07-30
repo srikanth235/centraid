@@ -152,6 +152,15 @@ export interface TallyGroupClosure {
   settlements: Array<Record<string, unknown>>;
   recurring: Array<Record<string, unknown>>;
   exceptions: Array<Record<string, unknown>>;
+  /** Receipt rows plus their OCR content items and per-line allocations. */
+  receipts: Array<Record<string, unknown>>;
+  lineItems: Array<Record<string, unknown>>;
+  lineAllocations: Array<Record<string, unknown>>;
+  receiptContentItems: ContentItemRow[];
+  receiptDerivatives: Array<{
+    contentId: string;
+    rows: DerivativeRow[];
+  }>;
 }
 
 const CONTENT_ITEM_COLUMNS = `content_id, media_type, content_uri, sha256, byte_size, title,
@@ -333,6 +342,12 @@ export interface ProjectionResult {
   itemId: string;
   /** True when the audience vault already held this item (idempotent re-share). */
   deduped: boolean;
+  /**
+   * Audience-side content id when this projection carries bytes. For a media
+   * asset, `itemId` is the asset id while `contentId` is the projected
+   * `core_content_item` — needed for album covers that FK content, not assets.
+   */
+  contentId?: string;
 }
 
 function projectContentItem(
@@ -417,7 +432,7 @@ function projectMediaAsset(
   const existing = audience
     .prepare("SELECT asset_id FROM media_media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;
-  if (existing) return { itemId: existing.asset_id, deduped: true };
+  if (existing) return { itemId: existing.asset_id, deduped: true, contentId };
   const assetId = freeId(
     audience,
     "media_media_asset",
@@ -448,7 +463,7 @@ function projectMediaAsset(
       row.deleted_at,
       row.purge_at
     );
-  return { itemId: assetId, deduped: false };
+  return { itemId: assetId, deduped: false, contentId };
 }
 
 function projectDocument(
@@ -536,10 +551,17 @@ export function projectShareClosure(
   const contentId = projectContentItem(audience, closure.contentItem);
   projectDerivatives(audience, contentId, closure.derivatives);
   if (closure.document !== null) {
-    return projectDocument(audience, contentId, closure.document);
+    return {
+      ...projectDocument(audience, contentId, closure.document),
+      contentId,
+    };
   }
   if (closure.mediaAsset === null) {
-    return { itemId: contentId, deduped: heldContent !== undefined };
+    return {
+      itemId: contentId,
+      deduped: heldContent !== undefined,
+      contentId,
+    };
   }
   return projectMediaAsset(audience, contentId, closure.mediaAsset);
 }

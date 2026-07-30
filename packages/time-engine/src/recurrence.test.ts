@@ -8,6 +8,45 @@ import {
 } from "./recurrence.js";
 
 describe(expandRecurrence, () => {
+  it("materializes a multi-year monthly series near the requested window", () => {
+    const instances = expandRecurrence({
+      rrule: "FREQ=MONTHLY",
+      start: "2022-01-05",
+      rangeFrom: "2026-03-05",
+      rangeTo: "2026-03-06",
+      semantics: "all-day",
+      maxInstances: 2,
+    });
+    expect(instances.map((instance) => instance.start)).toStrictEqual([
+      "2026-03-05",
+    ]);
+  });
+
+  it("preserves floating wall clocks under a future-scope override", () => {
+    const instances = expandRecurrence({
+      rrule: "FREQ=DAILY;COUNT=4",
+      start: "2026-07-01",
+      rangeFrom: "2026-07-01",
+      rangeTo: "2026-07-10",
+      semantics: "all-day",
+      maxInstances: 10,
+    });
+    const adjusted = applyRecurrenceExceptions(instances, [
+      {
+        originalStart: "2026-07-02",
+        action: "override",
+        scope: "future",
+        start: "2026-07-03",
+      },
+    ]);
+    expect(adjusted.map((instance) => instance.start)).toStrictEqual([
+      "2026-07-01",
+      "2026-07-03",
+      "2026-07-04",
+      "2026-07-05",
+    ]);
+  });
+
   it("preserves a Kolkata wall time while other regions enter DST", () => {
     const instances = expandRecurrence({
       rrule: "FREQ=WEEKLY;COUNT=4",

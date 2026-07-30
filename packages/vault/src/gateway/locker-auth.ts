@@ -63,6 +63,8 @@ export interface LockerAuthResult {
   ok: boolean;
   configured: boolean;
   authenticated?: boolean;
+  /** True when any unlock session is live on this gateway (not caller-specific). */
+  unlocked?: boolean;
   sessionToken?: string;
   itemToken?: string;
   credentialId?: string;
@@ -135,6 +137,45 @@ export class LockerAuthentication {
     }
   }
 
+  /** True once a passphrase or device credential has been configured. */
+  isConfigured(): boolean {
+    return this.configured();
+  }
+
+  /**
+   * True while any unlock session is still live on this gateway process.
+   * Companion fill and candidate listing use this so the locked state is
+   * data-keyed rather than caller-keyed at the HTTP layer.
+   */
+  isUnlocked(): boolean {
+    this.sweep();
+    return this.sessions.size > 0;
+  }
+
+  /**
+   * Gate every Locker sealed-column reveal when authentication is configured.
+   *
+   * - UI / agent reveals consume a one-time item permit bound to the session.
+   * - Companion fill only requires the vault to be unlocked (any live session);
+   *   the origin re-check still lives on the fill query. While locked, fill
+   *   cannot harvest passwords from a paired device.
+   */
+  authorizeReveal(
+    authentication: { sessionToken?: string; itemToken?: string } | undefined,
+    itemId: string,
+    mode: "ui" | "fill"
+  ): void {
+    this.sweep();
+    if (!this.configured()) return;
+    if (mode === "fill") {
+      if (this.sessions.size === 0) {
+        throw new Error("Locker is locked; authenticate before revealing.");
+      }
+      return;
+    }
+    this.consumeItemPermit(authentication, itemId);
+  }
+
   /**
    * Consume one item permit before plaintext leaves the vault. A permit is
    * bound to both the unlock session and item id, expires in 30 seconds, and
@@ -172,16 +213,20 @@ export class LockerAuthentication {
   }
 
   private status(sessionToken?: string): LockerAuthResult {
-    const authenticated = sessionToken
-      ? this.touchSession(sessionToken)
-      : false;
-    this.receipt("status", authenticated ? "allow" : "deny", null, {
+    // Status is a passive read — do not slide the session timeout, or any
+    // automation/device writing to locker.item (which triggers client refresh)
+    // would keep the unlock window open with nobody at the keyboard.
+    const authenticated = sessionToken ? this.peekSession(sessionToken) : false;
+    const unlocked = this.sessions.size > 0;
+    this.receipt("status", authenticated || unlocked ? "allow" : "deny", null, {
       configured: this.configured(),
+      unlocked,
     });
     return {
       ok: true,
       configured: this.configured(),
       authenticated,
+      unlocked,
       ...(authenticated
         ? { expiresAt: iso(this.sessions.get(sessionToken!)!.expiresAt) }
         : {}),
@@ -452,13 +497,20 @@ export class LockerAuthentication {
     return { sessionToken, expiresAt: iso(expiresAt) };
   }
 
-  private touchSession(sessionToken: string): boolean {
+  /** Read-only session check — does not extend expiry. */
+  private peekSession(sessionToken: string): boolean {
     const session = this.sessions.get(sessionToken);
     if (!session || session.expiresAt <= this.clock()) {
       this.sessions.delete(sessionToken);
       return false;
     }
-    session.expiresAt = this.clock() + LOCKER_SESSION_TIMEOUT_MS;
+    return true;
+  }
+
+  private touchSession(sessionToken: string): boolean {
+    if (!this.peekSession(sessionToken)) return false;
+    this.sessions.get(sessionToken)!.expiresAt =
+      this.clock() + LOCKER_SESSION_TIMEOUT_MS;
     return true;
   }
 

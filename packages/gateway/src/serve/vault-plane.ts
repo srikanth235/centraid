@@ -2113,25 +2113,8 @@ export class VaultPlane {
           case "reveal":
             // Sealed-column plaintext (issue #293) — takes the app's
             // explicit `reveal` scope; every allow is receipted per item.
-            // The Locker UI additionally consumes a host-memory, one-time
-            // item permit. Companion fill is an authenticated device gesture
-            // with an origin-bound context and remains on that separate path.
-            if (
-              appId === "locker" &&
-              (call.payload as unknown as RevealRequest).context?.kind !==
-                "fill"
-            ) {
-              const request = call.payload as unknown as RevealRequest;
-              if (!request.entityId)
-                throw new GatewayError(
-                  "identity",
-                  "Locker reveal authentication needs an item id"
-                );
-              this.gateway.authorizeLockerReveal(
-                request.authentication,
-                request.entityId
-              );
-            }
+            // Locker lock/permit enforcement is data-keyed inside
+            // `gateway.reveal` so fill, UI, and agent arms share one gate.
             return this.gateway.reveal(
               cred,
               call.payload as unknown as RevealRequest
