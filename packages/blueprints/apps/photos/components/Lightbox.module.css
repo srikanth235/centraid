@@ -15,7 +15,7 @@
   /* A theater stage, not a themed surface — same fixed dark backdrop as the
      slideshow (z-index 65) it opens into, in both themes. */
   background: hsl(var(--app-hue) 25% 4%);
-  color: #fff;
+  color: var(--on-accent);
 }
 .topbar {
   display: flex;
@@ -33,7 +33,7 @@
   border: none;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  color: var(--on-accent);
   flex-shrink: 0;
   text-decoration: none;
 }
@@ -42,7 +42,7 @@
 }
 .iconBtn[data-active="true"] {
   background: rgba(255, 255, 255, 0.22);
-  color: var(--ph-lb-accent, #fff);
+  color: var(--ph-lb-accent, var(--on-accent));
 }
 .heading {
   flex: 1;
@@ -137,7 +137,7 @@
   border: none;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  color: var(--on-accent);
   z-index: 2;
 }
 .nav:hover {
@@ -203,7 +203,7 @@
   opacity: 0.6;
 }
 .frame[data-active="true"] {
-  border-color: #fff;
+  border-color: var(--on-accent);
   opacity: 1;
 }
 .frame img {

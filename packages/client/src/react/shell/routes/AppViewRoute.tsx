@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX, ReactNode } from "react";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
@@ -48,6 +48,25 @@ export default function AppViewRoute({
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
     useShellActions();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"appearance" | "vault">(
+    "appearance"
+  );
+
+  useEffect(() => {
+    const openVaultSettings = (): void => {
+      setSettingsTab("vault");
+      setSettingsOpen(true);
+    };
+    window.addEventListener(
+      "centraid:open-app-vault-settings",
+      openVaultSettings
+    );
+    return () =>
+      window.removeEventListener(
+        "centraid:open-app-vault-settings",
+        openVaultSettings
+      );
+  }, []);
 
   // A bundled app-template id is RESERVED (issue #434) and an installed bundled
   // app keeps its blueprint id, so an app whose id is in the catalog serves in
@@ -161,7 +180,10 @@ export default function AppViewRoute({
           aria-label="App settings"
           aria-haspopup="dialog"
           data-open={settingsOpen ? "true" : undefined}
-          onClick={() => setSettingsOpen((open) => !open)}
+          onClick={() => {
+            setSettingsTab("appearance");
+            setSettingsOpen((open) => !open);
+          }}
           dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
         />
         <span className={chrome.tooltip}>App settings</span>
@@ -208,6 +230,7 @@ export default function AppViewRoute({
           <AppSettingsController
             app={app}
             appId={appId}
+            initialTab={settingsTab}
             {...(bundled ? { bundled: true } : {})}
             onClose={() => setSettingsOpen(false)}
             onOpenAutomations={() => {

@@ -5,6 +5,7 @@ import type { AppearancePrefs } from "../../../app-shell-context.js";
 import {
   deleteApp,
   deleteAutomation,
+  getDailyBrief,
   renameInstalledApp,
   runAutomationNow,
   updateAppMeta,
@@ -58,7 +59,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
     // `collectAutomationRuns` returns the automation rows it already fetched.
     // Asking for `listAutomations()` alongside it pulled the same list twice on
     // every Home visit — two round trips for one answer.
-    const [runs, appTemplates] = await Promise.all([
+    const [runs, appTemplates, dailyBrief] = await Promise.all([
       collectAutomationRuns().catch(() => ({
         rows: [] as CentraidAutomationRow[],
         entries: [] as AutomationFeedEntry[],
@@ -69,11 +70,13 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       // info; anything else is a code-store app (legacy clone) that keeps
       // Delete. Best-effort: an empty set degrades every app to code-store.
       loadAppTemplates().catch(() => []),
+      getDailyBrief().catch(() => undefined),
     ]);
     return {
       rows: runs.rows,
       entries: runs.entries,
       bundledIds: new Set(appTemplates.map((t) => t.id)),
+      dailyBrief,
     };
   });
 
@@ -300,6 +303,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
         dateLabel={heroDateLabel()}
         appItems={appItems}
         automationItems={automationItems}
+        dailyBrief={feed.status === "ready" ? feed.data.dailyBrief : undefined}
         counts={{
           all: apps.length + rows.length,
           apps: apps.length,

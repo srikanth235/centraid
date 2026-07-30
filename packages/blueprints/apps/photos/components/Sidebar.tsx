@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { displayText, safeBackgroundImage } from "../../_shared/untrusted.ts";
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "../constants.ts";
 import {
   AlbumsIcon,
@@ -78,11 +79,13 @@ function AlbumRow({
   onRenameCancel: () => void;
   onDelete: (album: Album) => void;
 }) {
+  const albumTitle = displayText(album.title ?? "Album");
+  const backgroundImage = safeBackgroundImage(cover);
   if (renaming) {
     return (
       <div className={`${styles.albumRow} ${styles.albumRowEditing}`}>
         <InlineInput
-          value={album.title ?? ""}
+          value={albumTitle}
           placeholder="Album name"
           label="Rename album"
           autoSelect
@@ -102,16 +105,16 @@ function AlbumRow({
       >
         <span
           className={styles.albumCover}
-          style={cover ? { backgroundImage: `url(${cover})` } : undefined}
+          style={backgroundImage ? { backgroundImage } : undefined}
         />
-        <span className={styles.navLabel}>{album.title ?? "Album"}</span>
+        <span className={styles.navLabel}>{albumTitle}</span>
         <span className={styles.navCount}>{album.count}</span>
       </button>
       <span className={styles.albumTools}>
         <button
           type="button"
           className="kit-icon-btn"
-          aria-label={`Rename ${album.title ?? "album"}`}
+          aria-label={`Rename ${albumTitle}`}
           onClick={(e) => {
             e.stopPropagation();
             onStartRename(album);
@@ -122,10 +125,15 @@ function AlbumRow({
         <button
           type="button"
           className="kit-icon-btn danger"
-          aria-label={`Delete ${album.title ?? "album"}`}
+          aria-label={`Delete ${albumTitle}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!armConfirm(e.currentTarget, { armedLabel: "×?" })) return;
+            if (
+              !armConfirm(e.currentTarget, {
+                armedLabel: `Delete ${albumTitle}?`,
+              })
+            )
+              return;
             onDelete(album);
           }}
         >

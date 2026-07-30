@@ -20,6 +20,7 @@ export {
   VAULT_PLANE_PREFIX,
   APPS_PLANE_PREFIX,
   WEB_PLANE_PREFIX,
+  BRIEF_PLANE_PREFIX,
   ROUTES,
   ROUTE_PATHS,
   vaultConnectionAuthorizePath,

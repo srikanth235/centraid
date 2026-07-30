@@ -737,8 +737,9 @@ function ConnectForm({
 }
 
 function scopeLabel(scope: string): string {
-  if (scope.endsWith("/calendar.readonly")) return "Read Google Calendar";
-  if (scope.endsWith("/contacts.readonly")) return "Read Google Contacts";
+  if (scope.endsWith("/calendar.events"))
+    return "Read and update Google Calendar events";
+  if (scope.endsWith("/contacts")) return "Read and update Google Contacts";
   if (scope.endsWith("/gmail.readonly")) return "Read Gmail";
   if (scope.endsWith("/gmail.send"))
     return "Send Gmail (owner approval still required)";

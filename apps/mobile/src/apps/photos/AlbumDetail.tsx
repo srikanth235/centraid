@@ -12,9 +12,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
+import { optimisticValues } from "../../lib/replica/optimistic";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import PhotoTimeline from "./PhotoTimeline";
@@ -28,7 +36,9 @@ export default function AlbumDetail({
   navigation,
 }: PhotosScreenProps<"AlbumDetail">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const replica = useReplica();
+  const { session } = replica;
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const timeline = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
@@ -40,6 +50,7 @@ export default function AlbumDetail({
   );
   const [selection, setSelection] = useState(new Set<string>());
   const [renameOpen, setRenameOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [name, setName] = useState("");
   const [keepOriginals, setKeepOriginals] = useState(false);
   // Which album's "keep originals" pin has finished hydrating. Derived rather
@@ -81,31 +92,59 @@ export default function AlbumDetail({
     const removeNext = async (index: number): Promise<void> => {
       const asset = selectedAssets[index];
       if (!asset) return;
-      await session?.write("photos", {
+      const entry = entries.rows.find(
+        (row) =>
+          row.collection_id === route.params.albumId &&
+          row.target_id === asset.assetId
+      );
+      if (!session) return;
+      const result = await session.write("photos", {
         action: "remove-from-album",
         input: { album_id: route.params.albumId, asset_id: asset.assetId! },
+        ...(entry
+          ? {
+              optimistic: [
+                {
+                  op: "delete" as const,
+                  entity: "core.collection_entry",
+                  rowId: String(entry.entry_id),
+                },
+              ],
+            }
+          : {}),
       });
+      surfaceWriteOutcome(result);
       return removeNext(index + 1);
     };
-    await removeNext(0);
-    setSelection(new Set());
+    try {
+      await removeNext(0);
+      setSelection(new Set());
+    } catch (error) {
+      surfaceWriteFailure(error, "Photos not removed");
+    }
   };
   const setCover = async (): Promise<void> => {
     const selected = assets.find((item) => selection.has(item.id));
     if (!selected?.assetId || !selected.contentId || !album || !session) return;
-    await session.write("photos", {
-      action: "set-album-cover",
-      input: { album_id: route.params.albumId, asset_id: selected.assetId },
-      optimistic: [
-        {
-          op: "upsert",
-          entity: "core.collection",
-          rowId: route.params.albumId,
-          values: { ...album, cover_content_id: selected.contentId },
-        },
-      ],
-    });
-    setSelection(new Set());
+    try {
+      const result = await session.write("photos", {
+        action: "set-album-cover",
+        input: { album_id: route.params.albumId, asset_id: selected.assetId },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.collection",
+            rowId: route.params.albumId,
+            values: optimisticValues(album, {
+              cover_content_id: selected.contentId,
+            }),
+          },
+        ],
+      });
+      if (surfaceWriteOutcome(result)) setSelection(new Set());
+    } catch (error) {
+      surfaceWriteFailure(error, "Album cover not changed");
+    }
   };
   const deleteAlbum = (): void =>
     Alert.alert("Delete album?", "Photos stay in the library.", [
@@ -113,23 +152,51 @@ export default function AlbumDetail({
       {
         text: "Delete",
         style: "destructive",
-        onPress: () =>
+        onPress: () => {
+          if (!session) return;
           void session
-            ?.write("photos", {
+            .write("photos", {
               action: "delete-album",
               input: { album_id: route.params.albumId },
+              optimistic: [
+                {
+                  op: "delete",
+                  entity: "core.collection",
+                  rowId: route.params.albumId,
+                },
+              ],
             })
-            .then(() => navigation.goBack()),
+            .then((result) => {
+              if (surfaceWriteOutcome(result)) navigation.goBack();
+            })
+            .catch((error: unknown) =>
+              surfaceWriteFailure(error, "Album not deleted")
+            );
+        },
       },
     ]);
   const rename = async (): Promise<void> => {
-    if (!name.trim()) return;
-    await session?.write("photos", {
-      action: "rename-album",
-      input: { album_id: route.params.albumId, title: name.trim() },
-    });
-    setRenameOpen(false);
-    setName("");
+    if (!name.trim() || !album || !session) return;
+    try {
+      const result = await session.write("photos", {
+        action: "rename-album",
+        input: { album_id: route.params.albumId, title: name.trim() },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.collection",
+            rowId: route.params.albumId,
+            values: optimisticValues(album, { name: name.trim() }),
+          },
+        ],
+      });
+      if (surfaceWriteOutcome(result)) {
+        setRenameOpen(false);
+        setName("");
+      }
+    } catch (error) {
+      surfaceWriteFailure(error, "Album not renamed");
+    }
   };
   return (
     <SafeAreaView
@@ -166,6 +233,15 @@ export default function AlbumDetail({
         ) : (
           <View style={styles.actions}>
             <Pressable
+              accessibilityLabel="Share album with household"
+              accessibilityRole="button"
+              onPress={() => setShareOpen(true)}
+            >
+              <Feather name="users" size={20} color={colors.accent} />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Rename album"
+              accessibilityRole="button"
               onPress={() => {
                 setName(String(album?.name ?? ""));
                 setRenameOpen(true);
@@ -173,12 +249,17 @@ export default function AlbumDetail({
             >
               <Feather name="edit-2" size={19} color={colors.accent} />
             </Pressable>
-            <Pressable onPress={deleteAlbum}>
+            <Pressable
+              accessibilityLabel="Delete album"
+              accessibilityRole="button"
+              onPress={deleteAlbum}
+            >
               <Feather name="trash-2" size={20} color={colors.danger} />
             </Pressable>
           </View>
         )}
       </View>
+      <ReplicaStatusBar />
       <View style={[styles.keepRow, { borderBottomColor: colors.line }]}>
         <View style={styles.copy}>
           <Text style={[styles.keepTitle, { color: colors.ink }]}>
@@ -202,6 +283,8 @@ export default function AlbumDetail({
           onOpen={(asset) =>
             navigation.navigate("PhotoLightbox", { assetId: asset.id })
           }
+          refreshing={refreshing}
+          onRefresh={refreshNow}
         />
       ) : (
         <View style={styles.empty}>
@@ -241,6 +324,16 @@ export default function AlbumDetail({
           </Pressable>
         </View>
       </Modal>
+      <AudiencePlacementSheet
+        visible={shareOpen}
+        itemType="core.collection"
+        itemId={route.params.albumId}
+        sourceVaultId={String(
+          album?.__centraidScopeId ?? replica.vaultId ?? ""
+        )}
+        noun="Album"
+        onClose={() => setShareOpen(false)}
+      />
     </SafeAreaView>
   );
 }

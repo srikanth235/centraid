@@ -210,6 +210,24 @@ export function stageBatchTx(
         mapped.content_hash === hash
           ? "unchanged since last import"
           : "changed upstream";
+      const localWrite = vault
+        .prepare(
+          `SELECT status FROM outbox_item
+            WHERE connection_id = ? AND target_type = ? AND target_id = ?
+              AND verb IN ('gcal.update_event','gcontacts.update_contact')
+              AND status IN ('pending','approved','failed')
+            ORDER BY staged_at DESC LIMIT 1`
+        )
+        .get(connectionId, mapped.entity_type, mapped.entity_id) as
+        | { status: string }
+        | undefined;
+      if (mapped.content_hash !== hash && localWrite) {
+        disposition = "merge-candidate";
+        note =
+          localWrite.status === "failed"
+            ? "provider changed while a local write-back failed; local values remain canonical"
+            : "provider changed while local write-back is pending; local values remain canonical";
+      }
     } else {
       const probe = publishers
         .get(candidate.entityType)
@@ -541,10 +559,13 @@ export function applyBatchTx(
         );
         markRow.run(row.target_entity_id, "updated", row.row_id);
       } else {
-        // skip and merge-candidate rows publish nothing, but an adopted
-        // row (probe hit) joins the map so the NEXT import syncs it.
+        // Neither skip nor merge-candidate writes canonical data. A plain
+        // skip (including an adopted probe hit) advances the source map; a
+        // merge candidate deliberately does not, so an unresolved provider
+        // conflict stays visible on the next pull instead of being silently
+        // acknowledged as if the local-vs-provider difference disappeared.
         skipped += 1;
-        if (row.target_entity_id) {
+        if (row.target_entity_id && row.disposition === "skip") {
           upsertMap.run(
             uuidv7(),
             batch.connection_id,

@@ -123,4 +123,81 @@ describe("import-routes", () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/no importer/u);
   });
+
+  test("hostile importer corpus fails closed without creating a draft", async () => {
+    const { base, plane } = await fixture();
+    const corpus = [
+      {
+        name: "malformed base64",
+        body: { filename: "bad.ics", base64: "not!base64" },
+        error: /base64 is malformed/u,
+      },
+      {
+        name: "mis-encoded text",
+        body: {
+          filename: "bad.vcf",
+          base64: Buffer.from([0xff, 0xfe, 0x41, 0]).toString("base64"),
+        },
+        error: /UTF-16 encoding/u,
+      },
+      {
+        name: "truncated ICS",
+        body: {
+          filename: "bad.ics",
+          text: "BEGIN:VEVENT\nUID:x\nSUMMARY:x\nDTSTART:20260729",
+        },
+        error: /truncated ICS/u,
+      },
+      {
+        name: "truncated vCard",
+        body: { filename: "bad.vcf", text: "BEGIN:VCARD\nFN:Meera" },
+        error: /truncated vCard/u,
+      },
+      {
+        name: "formula CSV",
+        body: {
+          filename: "bad.csv",
+          text: [
+            "Date,Description,Amount",
+            '2026-07-29,"=HYPERLINK(""https://evil"")",10',
+          ].join("\n"),
+        },
+        error: /spreadsheet formula marker/u,
+      },
+      {
+        name: "truncated archive",
+        body: {
+          filename: "bad.zip",
+          base64: Buffer.from("PK\u0003\u0004truncated").toString("base64"),
+        },
+        error: /not a zip file/u,
+      },
+      {
+        name: "empty valid calendar",
+        body: {
+          filename: "empty.ics",
+          text: "BEGIN:VCALENDAR\nEND:VCALENDAR",
+        },
+        error: /no valid records/u,
+      },
+    ];
+
+    await Promise.all(
+      corpus.map(async (vector) => {
+        const response = await fetch(base, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(vector.body),
+        });
+        expect(response.status, vector.name).toBe(400);
+        const body = (await response.json()) as { error: string };
+        expect(body.error, vector.name).toMatch(vector.error);
+      })
+    );
+
+    const drafts = plane.db.vault
+      .prepare("SELECT count(*) AS count FROM sync_import_batch")
+      .get() as { count: number };
+    expect(drafts.count).toBe(0);
+  });
 });

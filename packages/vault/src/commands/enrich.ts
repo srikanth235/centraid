@@ -74,19 +74,33 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
     text: string;
     variant?: "text" | "transcript";
   };
-  const variant = input.variant ?? "text";
+  return writeExtractedText(
+    ctx,
+    input.content_id,
+    input.text,
+    input.variant ?? "text"
+  );
+}
+
+/** Shared canonical derivative writer for reviewed local OCR and enrichers. */
+export function writeExtractedText(
+  ctx: HandlerCtx,
+  contentId: string,
+  text: string,
+  variant: "text" | "transcript" = "text"
+): Record<string, unknown> {
   const existing = ctx.db
     .prepare(
       `SELECT derivative_id FROM core_content_derivative WHERE content_id = ? AND variant = ?`
     )
-    .get(input.content_id, variant) as { derivative_id: string } | undefined;
-  const byteSize = Buffer.byteLength(input.text, "utf8");
+    .get(contentId, variant) as { derivative_id: string } | undefined;
+  const byteSize = Buffer.byteLength(text, "utf8");
   if (existing) {
     ctx.db
       .prepare(
         `UPDATE core_content_derivative SET text_content = ?, byte_size = ? WHERE derivative_id = ?`
       )
-      .run(input.text, byteSize, existing.derivative_id);
+      .run(text, byteSize, existing.derivative_id);
     ctx.wrote("core.content_derivative", existing.derivative_id);
   } else {
     const derivativeId = ctx.newId();
@@ -95,22 +109,15 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
         `INSERT INTO core_content_derivative (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
          VALUES (?, ?, ?, NULL, 'text/plain', ?, ?, ?)`
       )
-      .run(
-        derivativeId,
-        input.content_id,
-        variant,
-        byteSize,
-        input.text,
-        ctx.now
-      );
+      .run(derivativeId, contentId, variant, byteSize, text, ctx.now);
     ctx.wrote("core.content_derivative", derivativeId);
   }
   ctx.cite({
     claim: `${variant} (${byteSize} bytes) now feeds the content search index`,
     entityType: "core.content_item",
-    entityId: input.content_id,
+    entityId: contentId,
   });
-  return { content_id: input.content_id, replaced: existing ? 1 : 0 };
+  return { content_id: contentId, replaced: existing ? 1 : 0 };
 }
 
 const CONFIRM_FACE: CommandDefinition = {

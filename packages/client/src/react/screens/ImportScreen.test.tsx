@@ -55,17 +55,25 @@ function makeProps(over: Partial<ImportBridgeProps> = {}): ImportBridgeProps {
       .fn<ImportBridgeProps["loadData"]>()
       .mockResolvedValue(dataWithDraft),
     stage: vi.fn<ImportBridgeProps["stage"]>().mockResolvedValue(3),
+    exportPortable: vi
+      .fn<ImportBridgeProps["exportPortable"]>()
+      .mockResolvedValue({
+        blob: new Blob(["zip"]),
+        filename: "centraid-vault.zip",
+      }),
     loadRows: vi.fn<ImportBridgeProps["loadRows"]>().mockResolvedValue([
       {
         entityType: "event",
         externalId: "e1",
         disposition: "create",
+        mapping: "uid, summary → Calendar event",
         note: null,
       },
       {
         entityType: "event",
         externalId: "e2",
         disposition: "skip",
+        mapping: "uid, summary → Calendar event",
         note: "dup",
       },
     ]),

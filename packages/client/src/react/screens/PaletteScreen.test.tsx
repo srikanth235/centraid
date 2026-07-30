@@ -136,6 +136,16 @@ describe("screens/PaletteScreen", () => {
       expect(el.textContent).toContain("Build notes");
     });
 
+    it("renders an explicit no-results state", () => {
+      const el = mount(
+        makeProps({
+          buildGroups: () => [],
+        })
+      );
+      expect(el.querySelector("output")?.textContent).toContain("No results");
+      expect(rows(el)).toHaveLength(0);
+    });
+
     it("closes on Escape and on backdrop click", () => {
       const props = makeProps();
       const el = mount(props);

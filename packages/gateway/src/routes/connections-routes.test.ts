@@ -330,7 +330,7 @@ describe("connections-routes", () => {
         body: JSON.stringify({
           kind: "pull.gcal",
           label: "Google Calendar · Assist",
-          scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+          scopes: ["https://www.googleapis.com/auth/calendar.events"],
         }),
       })
     ).json()) as Record<string, unknown>;
@@ -401,7 +401,7 @@ describe("connections-routes", () => {
         receipt: "v1.callback-receipt",
         state: authorize.state,
         browser_binding: startFragment.get("browser_binding"),
-        scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+        scopes: ["https://www.googleapis.com/auth/calendar.events"],
       },
     });
     expect(JSON.stringify(workerRequests)).not.toContain("client_secret");

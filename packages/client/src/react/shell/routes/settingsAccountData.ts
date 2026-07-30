@@ -9,6 +9,7 @@ import {
   vaultImportRows,
   vaultImportsList,
   vaultImportStage,
+  vaultPortableExport,
   vaultStatus,
 } from "../../../gateway-client.js";
 import type {
@@ -142,6 +143,7 @@ export function importCallbacks(
 ): ImportBridgeProps {
   return {
     showToast,
+    exportPortable: vaultPortableExport,
     discard: (batchId) => vaultImportDiscard(batchId).then(() => undefined),
     loadData: async () => {
       const s = await vaultStatus().catch(() => undefined);
@@ -177,6 +179,7 @@ export function importCallbacks(
         disposition: r.disposition,
         entityType: r.entityType,
         externalId: r.externalId,
+        mapping: r.mapping,
         note: r.note,
       }));
     },

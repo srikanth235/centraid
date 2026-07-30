@@ -84,6 +84,26 @@
   border-top: 1px solid var(--line);
   flex-shrink: 0;
 }
+.profileForm,
+.profileTools {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 14px 0;
+}
+.profileForm label,
+.profileTools label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--ink-2);
+  font: var(--t-small);
+}
+.profileActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
 
 @keyframes dFade {
   from {

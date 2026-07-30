@@ -18,12 +18,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
+import { optimisticRowId } from "../../lib/replica/optimistic";
 import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";
 import { styles } from "./DocsHome.styles";
+import DocsItemActions from "./DocsItemActions";
 import { GridItem, ListItem } from "./DocsLibraryItems";
 import type { DriveItem } from "./DocsLibraryItems";
 import { useDocsLibrary } from "./useDocsLibrary";
@@ -64,6 +71,7 @@ export default function DocsHome({
   const [addOpen, setAddOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<DriveItem>();
   const refreshLibrary = async (): Promise<void> => {
     setRefreshing(true);
     try {
@@ -210,35 +218,68 @@ export default function DocsHome({
       });
       return uploadNext(index + 1);
     };
-    await uploadNext(0);
+    try {
+      await uploadNext(0);
+      Alert.alert(
+        "Import started",
+        "Files are in the durable transfer queue. iOS and Android can continue the upload during an OS background sync."
+      );
+    } catch (error) {
+      Alert.alert(
+        "Import needs attention",
+        error instanceof Error
+          ? error.message
+          : "The durable queue will retry after reconnecting."
+      );
+    }
   };
   const createFolder = async (): Promise<void> => {
     if (!session || !folderName.trim()) return;
     try {
+      const predictedFolderId = optimisticRowId("folder");
       const result = await session.write("docs", {
         action: "create-folder",
         input: { name: folderName.trim() },
+        ...(drive.folderSchemeId && drive.rootFolderId
+          ? {
+              optimistic: [
+                {
+                  op: "upsert" as const,
+                  entity: "core.concept",
+                  rowId: predictedFolderId,
+                  values: {
+                    concept_id: predictedFolderId,
+                    scheme_id: drive.folderSchemeId,
+                    notation: predictedFolderId,
+                    pref_label: folderName.trim(),
+                    alt_labels_json: null,
+                    broader_concept_id: drive.rootFolderId,
+                    definition: null,
+                  },
+                },
+              ],
+            }
+          : {}),
       });
       setFolderName("");
       setAddOpen(false);
-      if (result.status === "parked" || result.status === "queued") {
-        navigation.navigate("Settings", { screen: "Approvals" });
-      } else if (result.status === "denied" || result.status === "failed") {
-        Alert.alert(
-          "Folder not created",
-          result.reason ?? "The vault rejected this change."
-        );
-      } else {
+      if (
+        surfaceWriteOutcome(result, {
+          onParked: () =>
+            navigation.navigate("Settings", { screen: "Approvals" }),
+          queuedMessage:
+            "The folder will appear everywhere after the gateway reconnects.",
+          failureTitle: "Folder not created",
+        }) &&
+        result.status === "executed"
+      ) {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
       }
     } catch (error) {
       setAddOpen(false);
-      Alert.alert(
-        "Folder not created",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      surfaceWriteFailure(error, "Folder not created");
     }
   };
   const selectFilter = (next: LibraryFilter): void => {
@@ -386,7 +427,7 @@ export default function DocsHome({
 
       <FlatList
         key={view}
-        data={items}
+        data={drive.connection === "unavailable" ? [] : items}
         numColumns={view === "grid" ? 2 : 1}
         columnWrapperStyle={view === "grid" ? styles.gridRow : undefined}
         keyExtractor={(item) =>
@@ -400,36 +441,61 @@ export default function DocsHome({
         ]}
         refreshing={refreshing}
         onRefresh={() => void refreshLibrary()}
+        ListHeaderComponent={
+          <ReplicaStateCard
+            connection={drive.connection}
+            error={drive.error}
+            unavailableReason={drive.unavailableReason}
+            noun="Docs"
+            onRetry={() => void refreshLibrary()}
+          />
+        }
         ListEmptyComponent={
-          <View style={styles.emptyWrap}>
-            <Feather
-              name={filter === "trash" ? "trash-2" : "file-text"}
-              size={32}
-              color={colors.accent}
-            />
-            <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-              {drive.loading
-                ? "Opening your drive…"
-                : searchError
-                  ? searchError
-                  : query
-                    ? "No matching documents"
-                    : "Nothing here yet"}
-            </Text>
-            <Text style={[styles.empty, { color: colors.ink2 }]}>
-              {searchError
-                ? "Reconnect and try your search again."
-                : filter === "trash"
-                  ? "Deleted documents will remain recoverable here."
-                  : "Import a file or create a folder to get started."}
-            </Text>
-          </View>
+          drive.connection === "unavailable" || drive.error ? null : (
+            <View style={styles.emptyWrap}>
+              <Feather
+                name={filter === "trash" ? "trash-2" : "file-text"}
+                size={32}
+                color={colors.accent}
+              />
+              <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+                {drive.loading
+                  ? "Opening your drive…"
+                  : searchError
+                    ? searchError
+                    : query
+                      ? "No matching documents"
+                      : drive.connection === "offline"
+                        ? "No documents are cached here"
+                        : "Nothing here yet"}
+              </Text>
+              <Text style={[styles.empty, { color: colors.ink2 }]}>
+                {searchError
+                  ? "Reconnect and try your search again."
+                  : drive.connection === "offline"
+                    ? "Reconnect to check the vault or pull newer documents."
+                    : filter === "trash"
+                      ? "Deleted documents will remain recoverable here."
+                      : "Import a file or create a folder to get started."}
+              </Text>
+            </View>
+          )
         }
         renderItem={({ item }) =>
           view === "grid" ? (
-            <GridItem item={item} navigation={navigation} colors={colors} />
+            <GridItem
+              item={item}
+              navigation={navigation}
+              colors={colors}
+              onMenu={setSelectedItem}
+            />
           ) : (
-            <ListItem item={item} navigation={navigation} colors={colors} />
+            <ListItem
+              item={item}
+              navigation={navigation}
+              colors={colors}
+              onMenu={setSelectedItem}
+            />
           )
         }
       />
@@ -503,6 +569,23 @@ export default function DocsHome({
           )}
         </View>
       </Modal>
+      <DocsItemActions
+        key={
+          selectedItem?.kind === "folder"
+            ? `folder:${selectedItem.folder.id}`
+            : selectedItem?.kind === "document"
+              ? `document:${selectedItem.document.id}`
+              : "closed"
+        }
+        item={selectedItem}
+        folders={drive.folders}
+        rootFolderId={drive.rootFolderId}
+        onClose={() => setSelectedItem(undefined)}
+        onParked={() =>
+          navigation.navigate("Settings", { screen: "Approvals" })
+        }
+        onChanged={refreshLibrary}
+      />
     </SafeAreaView>
   );
 }

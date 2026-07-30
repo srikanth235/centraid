@@ -29,7 +29,7 @@ import {
   frameData,
 } from "@centraid/blueprints/kit/turn-stream.js";
 import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
-import { isGatewayCapabilities } from "@centraid/protocol";
+import { isGatewayCapabilities, ROUTES } from "@centraid/protocol";
 import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
 
 import {
@@ -43,6 +43,8 @@ import {
 
 export * from "./gateway-client-core.js";
 export * from "./gateway-client-automation-compile.js";
+export * from "./gateway-client-capture.js";
+export * from "./gateway-client-push.js";
 
 /** Feature flags advertised by the active gateway, or undefined if malformed. */
 export async function readGatewayCapabilities(): Promise<
@@ -242,6 +244,39 @@ export async function listTemplates(): Promise<TemplateMetaEntry[]> {
   });
   const out = await readJson<TemplateMetaEntry[]>(res, "list templates");
   return out ?? [];
+}
+
+export interface DailyBrief {
+  date: string;
+  events: Array<{ id: string; title: string; at: string }>;
+  tasks: Array<{ id: string; title: string; dueAt: string }>;
+  newPhotos: number;
+  balanceMinor: number;
+  currency: string;
+}
+
+/** Today's content-minimized cross-app summary in the renderer's local zone. */
+export async function getDailyBrief(now = new Date()): Promise<DailyBrief> {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const params = new URLSearchParams({
+    date: [
+      start.getFullYear(),
+      String(start.getMonth() + 1).padStart(2, "0"),
+      String(start.getDate()).padStart(2, "0"),
+    ].join("-"),
+    from: start.toISOString(),
+    to: end.toISOString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  });
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `${ROUTES.briefToday}?${params}`, {
+    method: "GET",
+    headers: authHeaders(token),
+  });
+  return readJson<DailyBrief>(res, "fetch daily brief");
 }
 
 // ---- Versions (git-store tag history) ----

@@ -52,7 +52,7 @@
 .memoryTitle {
   font: var(--t-body-strong);
   font-size: 13px;
-  color: #fff;
+  color: var(--on-accent);
   line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;

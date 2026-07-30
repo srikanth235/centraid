@@ -4,7 +4,6 @@ import React, { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -15,8 +14,16 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
+import AgendaCreateModal from "./AgendaCreateModal";
+import type { AgendaCreateInput } from "./AgendaCreateModal";
 import { styles } from "./AgendaHome.styles";
 import type { AgendaEventModel } from "./recurrence";
 import { useAgenda } from "./useAgenda";
@@ -45,17 +52,14 @@ export default function AgendaHome({
   navigation,
 }: AgendaScreenProps<"AgendaHome">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const { session, refresh } = useReplica();
   const [cursor, setCursor] = useState(new Date());
   const [mode, setMode] = useState<ViewMode>("agenda");
   const [createOpen, setCreateOpen] = useState(false);
-  const [summary, setSummary] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [hiddenCalendars, setHiddenCalendars] = useState(new Set<string>());
-  const [startPreset, setStartPreset] = useState<"next-hour" | "tomorrow">(
-    "next-hour"
-  );
   const range = useMemo(
     () =>
       mode === "month"
@@ -95,54 +99,57 @@ export default function AgendaHome({
     return rows;
   }, [visibleEvents]);
 
-  const create = async (): Promise<void> => {
-    if (!session || !summary.trim() || !calendarId) {
+  const create = async (input: AgendaCreateInput): Promise<boolean> => {
+    if (!session || !calendarId) {
       Alert.alert(
         "Calendar unavailable",
         "Sync a calendar before creating an event."
       );
-      return;
+      return false;
     }
-    const start = new Date();
-    if (startPreset === "tomorrow") {
-      start.setDate(start.getDate() + 1);
-      start.setHours(9, 0, 0, 0);
-    } else {
-      start.setMinutes(Math.ceil(start.getMinutes() / 30) * 30, 0, 0);
-      start.setHours(start.getHours() + 1);
-    }
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
     const rowId = `optimistic-${Date.now()}`;
-    const result = await session.write("agenda", {
-      action: "propose",
-      input: {
-        summary: summary.trim(),
-        dtstart: start.toISOString(),
-        dtend: end.toISOString(),
-        start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        calendar_id: calendarId,
-        reminders: [{ minutes_before: 15 }],
-      },
-      optimistic: [
-        {
-          op: "upsert",
-          entity: "core.event",
-          rowId,
-          values: {
-            event_id: rowId,
-            summary: summary.trim(),
-            dtstart: start.toISOString(),
-            dtend: end.toISOString(),
-            start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            status: "tentative",
+    try {
+      const result = await session.write("agenda", {
+        action: "propose",
+        input,
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.event",
+            rowId,
+            values: {
+              event_id: rowId,
+              summary: String(input.summary),
+              dtstart: String(input.dtstart),
+              dtend: String(input.dtend),
+              start_tz: String(input.start_tz),
+              end_tz: String(input.end_tz),
+              recurrence_semantics: String(input.recurrence_semantics),
+              rrule: input.rrule ?? null,
+              status: "tentative",
+            },
           },
-        },
-      ],
-    });
-    setSummary("");
-    setCreateOpen(false);
-    if (result.status === "parked" || result.status === "queued")
-      navigation.navigate("Settings", { screen: "Approvals" });
+        ],
+      });
+      return surfaceWriteOutcome(result, {
+        onParked: () =>
+          navigation.navigate("Settings", { screen: "Approvals" }),
+        queuedMessage:
+          "This event will sync automatically when the gateway reconnects.",
+        failureTitle: "Event not created",
+      });
+    } catch (error) {
+      surfaceWriteFailure(error, "Event not created");
+      return false;
+    }
+  };
+  const refreshAgenda = async (): Promise<void> => {
+    setRefreshing(true);
+    try {
+      await refresh?.();
+    } finally {
+      setRefreshing(false);
+    }
   };
   const move = (direction: number): void => {
     const next = new Date(cursor);
@@ -191,6 +198,7 @@ export default function AgendaHome({
           </Pressable>
         </View>
       </View>
+      <ReplicaStatusBar />
       {searchOpen ? (
         <View style={[styles.search, { backgroundColor: colors.bgSunken }]}>
           <Feather name="search" size={16} color={colors.ink2} />
@@ -312,15 +320,30 @@ export default function AgendaHome({
         <WeekStrip start={range[0]} events={visibleEvents} colors={colors} />
       ) : null}
       <FlatList
-        data={agendaRows}
+        data={agenda.connection === "unavailable" ? [] : agendaRows}
         keyExtractor={(row) => row.key}
         contentContainerStyle={styles.list}
+        refreshing={refreshing}
+        onRefresh={() => void refreshAgenda()}
+        ListHeaderComponent={
+          <ReplicaStateCard
+            connection={agenda.connection}
+            error={agenda.error}
+            unavailableReason={agenda.unavailableReason}
+            noun="Calendar"
+            onRetry={() => void refreshAgenda()}
+          />
+        }
         ListEmptyComponent={
-          <Text style={[styles.empty, { color: colors.ink2 }]}>
-            {agenda.loading
-              ? "Opening your calendar…"
-              : "Nothing scheduled in this range."}
-          </Text>
+          agenda.connection === "unavailable" || agenda.error ? null : (
+            <Text style={[styles.empty, { color: colors.ink2 }]}>
+              {agenda.loading
+                ? "Opening your calendar…"
+                : agenda.connection === "offline"
+                  ? "No cached events in this range. Reconnect to check the vault."
+                  : "Nothing scheduled in this range."}
+            </Text>
+          )
         }
         renderItem={({ item }) =>
           item.kind === "day" ? (
@@ -347,71 +370,16 @@ export default function AgendaHome({
           )
         }
       />
-      <Modal
-        transparent
-        animationType="fade"
-        visible={createOpen}
-        onRequestClose={() => setCreateOpen(false)}
-      >
-        <Pressable
-          style={styles.backdrop}
-          onPress={() => setCreateOpen(false)}
+      {createOpen ? (
+        <AgendaCreateModal
+          visible
+          calendars={agenda.calendars}
+          parties={agenda.parties}
+          defaultCalendarId={calendarId}
+          onClose={() => setCreateOpen(false)}
+          onCreate={create}
         />
-        <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
-            New event
-          </Text>
-          <Text style={[styles.dialogMeta, { color: colors.ink2 }]}>
-            1 hour · 15 minute local reminder
-          </Text>
-          <TextInput
-            autoFocus
-            value={summary}
-            onChangeText={setSummary}
-            placeholder="Event title"
-            placeholderTextColor={colors.ink3}
-            style={[
-              styles.input,
-              { borderColor: colors.lineStrong, color: colors.ink },
-            ]}
-          />
-          <View style={styles.startPresets}>
-            {(
-              [
-                ["next-hour", "Next hour"],
-                ["tomorrow", "Tomorrow · 9 AM"],
-              ] as const
-            ).map(([key, label]) => (
-              <Pressable
-                key={key}
-                onPress={() => setStartPreset(key)}
-                style={[
-                  styles.startPreset,
-                  {
-                    backgroundColor:
-                      startPreset === key ? colors.ink : colors.bgSunken,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.startPresetText,
-                    { color: startPreset === key ? colors.bg : colors.ink2 },
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable
-            style={[styles.create, { backgroundColor: colors.accent }]}
-            onPress={() => void create()}
-          >
-            <Text style={styles.createText}>Create tentative event</Text>
-          </Pressable>
-        </View>
-      </Modal>
+      ) : null}
     </SafeAreaView>
   );
 }

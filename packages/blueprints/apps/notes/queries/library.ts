@@ -26,6 +26,8 @@ interface NoteRow {
   created_at?: string;
   updated_at?: string;
   body_content_id?: string;
+  deleted_at?: string | null;
+  purge_at?: string | null;
 }
 
 interface CollectionRow {
@@ -206,7 +208,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // Pinned notes ride beside the window, not inside it — a pin is the
     // owner saying "always on top", which must survive the note aging out
     // of the recent slice.
-    const [recent, pinnedNotes, notebooks] = await Promise.all([
+    const [recent, pinnedNotes, trashedNotes, notebooks] = await Promise.all([
       ctx.vault.read({
         entity: "knowledge.note",
         // Trashed notes (issue #308: delete is reversible) stay out of the library.
@@ -225,6 +227,13 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         limit: 200,
         purpose,
       }),
+      ctx.vault.read({
+        entity: "knowledge.note",
+        where: [{ column: "deleted_at", op: "not-null" }],
+        orderBy: { column: "deleted_at", dir: "desc" },
+        limit: 200,
+        purpose,
+      }),
       // Notebooks are collections (issue #274) — the one curation mechanism.
       ctx.vault.read({ entity: "core.collection", purpose }),
     ]);
@@ -232,6 +241,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     for (const n of [
       ...((recent.rows ?? []) as unknown as NoteRow[]),
       ...((pinnedNotes.rows ?? []) as unknown as NoteRow[]),
+      ...((trashedNotes.rows ?? []) as unknown as NoteRow[]),
     ]) {
       byId.set(n.note_id, n);
     }
@@ -248,6 +258,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     if (windowed.length === 0) {
       return {
         notes: [],
+        trash: [],
         notebooks: books,
         tags: [],
         truncated: false,
@@ -259,41 +270,52 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // Joins are `in`-bounded by the window — placements, attachment edges,
     // live outbound links (issue #272), then one content pull covering both
     // bodies and attachment bytes.
-    const [placements, attachments, links, tags] = await Promise.all([
-      ctx.vault.read({
-        entity: "core.collection_entry",
-        where: [
-          { column: "target_type", op: "eq", value: "knowledge.note" },
-          { column: "target_id", op: "in", value: noteIds },
-        ],
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "core.attachment",
-        where: [
-          { column: "target_type", op: "eq", value: "knowledge.note" },
-          { column: "target_id", op: "in", value: noteIds },
-        ],
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "core.link",
-        where: [
-          { column: "from_type", op: "eq", value: "knowledge.note" },
-          { column: "from_id", op: "in", value: noteIds },
-          { column: "valid_to", op: "is-null" },
-        ],
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "core.tag",
-        where: [
-          { column: "target_type", op: "eq", value: "knowledge.note" },
-          { column: "target_id", op: "in", value: noteIds },
-        ],
-        purpose,
-      }),
-    ]);
+    const [placements, attachments, links, backlinks, tags] = await Promise.all(
+      [
+        ctx.vault.read({
+          entity: "core.collection_entry",
+          where: [
+            { column: "target_type", op: "eq", value: "knowledge.note" },
+            { column: "target_id", op: "in", value: noteIds },
+          ],
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "core.attachment",
+          where: [
+            { column: "target_type", op: "eq", value: "knowledge.note" },
+            { column: "target_id", op: "in", value: noteIds },
+          ],
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "core.link",
+          where: [
+            { column: "from_type", op: "eq", value: "knowledge.note" },
+            { column: "from_id", op: "in", value: noteIds },
+            { column: "valid_to", op: "is-null" },
+          ],
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "core.link",
+          where: [
+            { column: "to_type", op: "eq", value: "knowledge.note" },
+            { column: "to_id", op: "in", value: noteIds },
+            { column: "valid_to", op: "is-null" },
+          ],
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "core.tag",
+          where: [
+            { column: "target_type", op: "eq", value: "knowledge.note" },
+            { column: "target_id", op: "in", value: noteIds },
+          ],
+          purpose,
+        }),
+      ]
+    );
     const tagRows = (tags.rows ?? []) as unknown as TagRow[];
     const conceptIds = [...new Set(tagRows.map((t) => t.concept_id))];
     const concepts =
@@ -329,12 +351,16 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // linked in (resolvable-if-linked) — this app holds no media/finance/…
     // read scopes, and needs none to show the far end of its own links.
     const linkRows = (links.rows ?? []) as unknown as LinkRow[];
+    const backlinkRows = (backlinks.rows ?? []) as unknown as LinkRow[];
     const uniqueRefs = [
       ...new Map(
-        linkRows.map((l) => [
-          `${l.to_type}/${l.to_id}`,
-          { type: l.to_type, id: l.to_id },
-        ])
+        [
+          ...linkRows.map((l) => ({ type: l.to_type, id: l.to_id })),
+          ...backlinkRows.map((l) => ({
+            type: l.from_type,
+            id: l.from_id,
+          })),
+        ].map((ref) => [`${ref.type}/${ref.id}`, ref])
       ).values(),
     ];
     // Standoff anchors (issue #282): the inline locator a link may carry.
@@ -381,6 +407,21 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         card: cardByRef.get(`${l.to_type}/${l.to_id}`) ?? {
           type: l.to_type,
           id: l.to_id,
+          status: "unknown",
+          title: null,
+          subtitle: null,
+          thumbnail_content_id: null,
+        },
+      });
+    }
+    const backlinksByNote = new Map<string, Array<Record<string, unknown>>>();
+    for (const l of backlinkRows) {
+      if (!backlinksByNote.has(l.to_id)) backlinksByNote.set(l.to_id, []);
+      backlinksByNote.get(l.to_id)!.push({
+        link_id: l.link_id,
+        card: cardByRef.get(`${l.from_type}/${l.from_id}`) ?? {
+          type: l.from_type,
+          id: l.from_id,
           status: "unknown",
           title: null,
           subtitle: null,
@@ -438,6 +479,8 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           pinned: n.pinned,
           created_at: n.created_at,
           updated_at: n.updated_at,
+          deleted_at: n.deleted_at ?? null,
+          purge_at: n.purge_at ?? null,
           preview: previewOf(decoded),
           check: checkOf(decoded),
           notebook_ids: notebookIds,
@@ -446,6 +489,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           ),
           attachments: attByNote.get(n.note_id) ?? [],
           references: referencesByNote.get(n.note_id) ?? [],
+          backlinks: backlinksByNote.get(n.note_id) ?? [],
           tags: tagsByNote.get(n.note_id) ?? [],
         };
       })
@@ -459,11 +503,19 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // offers "Show more" (a re-read with a larger window) and search.
     const truncated =
       ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
-    return { notes: rows, notebooks: books, tags: allTags, truncated, window };
+    return {
+      notes: rows.filter((row) => row.deleted_at == null),
+      trash: rows.filter((row) => row.deleted_at != null),
+      notebooks: books,
+      tags: allTags,
+      truncated,
+      window,
+    };
   } catch (error) {
     const e = error as { code?: string; message?: string };
     return {
       notes: [],
+      trash: [],
       notebooks: [],
       vaultDenied: { code: e.code, message: e.message },
     };

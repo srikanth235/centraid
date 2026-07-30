@@ -208,6 +208,35 @@ describe("App suite", () => {
       expect(dialog?.textContent).not.toContain("Build a new app…");
     });
 
+    it("opens the command palette through the legacy shell bridge", async () => {
+      const el = await mount();
+      await act(async () => {
+        (
+          globalThis as unknown as {
+            Centraid: { openSearch: () => void };
+          }
+        ).Centraid.openSearch();
+      });
+      expect(el.querySelector('[aria-label="Command palette"]')).not.toBeNull();
+    });
+
+    it("keeps an actionable offline banner visible across the shell", async () => {
+      (
+        globalThis as unknown as {
+          CentraidApi: Record<string, unknown>;
+        }
+      ).CentraidApi.getGatewayRuntime = () =>
+        Promise.resolve({ status: "down" });
+      const el = await mount();
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const banner = el.querySelector("output");
+      expect(banner?.textContent).toContain("Offline");
+      expect(banner?.textContent).toContain("Check gateway");
+    });
+
     it("reveals builder entry points when builderEnabled is set (#434 builder on)", async () => {
       (
         globalThis as unknown as { CentraidApi: { getSettings: unknown } }

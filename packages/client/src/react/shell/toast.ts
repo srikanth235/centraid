@@ -19,6 +19,9 @@ export function showToast(message: string): void {
   const toast = document.createElement("div");
   toast.className = toastCss.toast ?? "";
   toast.dataset.globalToast = "true";
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
+  toast.setAttribute("aria-atomic", "true");
   const icon = document.createElement("span");
   icon.innerHTML = CHECK_SVG;
   const text = document.createElement("span");

@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 
-import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import {
+  combineReplicaQueryStates,
+  useReplicaQuery,
+} from "../../kit/hooks/useReplicaQuery";
 import { buildDrive } from "./docs-model";
 
 export function useDocsLibrary() {
@@ -28,9 +31,17 @@ export function useDocsLibrary() {
     "docs",
     useMemo(() => ({ entity: "blob.custody_state" }), [])
   );
-  return useMemo(
-    () => ({
-      ...buildDrive(
+  const queryState = combineReplicaQueryStates([
+    documents,
+    contents,
+    tags,
+    concepts,
+    schemes,
+    custody,
+  ]);
+  const drive = useMemo(
+    () =>
+      buildDrive(
         documents.rows,
         contents.rows,
         tags.rows,
@@ -38,20 +49,27 @@ export function useDocsLibrary() {
         schemes.rows,
         custody.rows
       ),
-      loading: documents.loading || contents.loading,
-      error: documents.error ?? contents.error,
-    }),
     [
       concepts.rows,
-      contents.error,
-      contents.loading,
       contents.rows,
       custody.rows,
-      documents.error,
-      documents.loading,
       documents.rows,
       schemes.rows,
       tags.rows,
     ]
   );
+  const folderMetadata = useMemo(() => {
+    const scheme = schemes.rows.find(
+      (row) => row.uri === "https://centraid.dev/schemes/folders"
+    );
+    const root = concepts.rows.find(
+      (row) =>
+        row.scheme_id === scheme?.scheme_id && String(row.notation) === "root"
+    );
+    return {
+      folderSchemeId: scheme?.scheme_id ? String(scheme.scheme_id) : undefined,
+      rootFolderId: root?.concept_id ? String(root.concept_id) : undefined,
+    };
+  }, [concepts.rows, schemes.rows]);
+  return { ...drive, ...folderMetadata, ...queryState };
 }

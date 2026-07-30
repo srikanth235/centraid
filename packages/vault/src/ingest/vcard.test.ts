@@ -70,4 +70,13 @@ describe("vcard", () => {
       parseVcards(["BEGIN:VCARD", "EMAIL:x@y.z", "END:VCARD"].join("\n"))
     ).toStrictEqual([]);
   });
+
+  test("parseVcards rejects a truncated or nested card", () => {
+    expect(() => parseVcards(["BEGIN:VCARD", "FN:Meera"].join("\n"))).toThrow(
+      /truncated vCard/u
+    );
+    expect(() =>
+      parseVcards(["BEGIN:VCARD", "BEGIN:VCARD"].join("\n"))
+    ).toThrow(/nested records/u);
+  });
 });

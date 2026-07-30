@@ -2,6 +2,7 @@
 // children) and the truncation footer (#windowFoot root).
 import type { CSSProperties, MouseEvent } from "react";
 
+import { displayText } from "../../_shared/untrusted.ts";
 import {
   fmtBytes,
   fmtDate,
@@ -47,6 +48,8 @@ export function ListRow({
 }) {
   const m = typeMeta(doc.media_type);
   const selected = selectedIds.has(doc.document_id);
+  const title = displayText(doc.title || "Untitled");
+  const where = displayText(folderName(doc.folder_id));
   return (
     <div className={styles.row} data-selected={String(selected)}>
       {/* The row can't be a <button> (it holds the select / preview / title /
@@ -57,7 +60,7 @@ export function ListRow({
       <button
         type="button"
         className={`kit-stretch-btn ${styles.rowOpen}`}
-        aria-label={`Open ${doc.title ?? "Untitled"} details`}
+        aria-label={`Open ${title} details`}
         onClick={() => onOpenDetails(doc.document_id)}
       />
       <Checkbox
@@ -67,13 +70,13 @@ export function ListRow({
           e.stopPropagation();
           onToggleSelect(doc.document_id, index, e.shiftKey);
         }}
-        label={`Select ${doc.title ?? "document"}`}
+        label={`Select ${title}`}
       />
       <button
         type="button"
         className={styles.badge}
         style={{ background: tintBg(m.cv, 16) }}
-        aria-label={`Preview ${doc.title ?? "document"}`}
+        aria-label={`Preview ${title}`}
         onClick={(e) => {
           e.stopPropagation();
           onOpenQuick(doc.document_id);
@@ -109,7 +112,7 @@ export function ListRow({
             onOpenQuick(doc.document_id);
           }}
         >
-          {doc.title ?? "Untitled"}
+          {title}
           {doc.starred ? (
             <span className={shared.starInd} aria-label="Starred">
               ★
@@ -122,17 +125,15 @@ export function ListRow({
         {narrow ? (
           <div className={styles.rowMeta}>
             {trashed
-              ? `from ${folderName(doc.folder_id)} · ${purgeCountdown(doc.purge_at)}`
+              ? `from ${where} · ${purgeCountdown(doc.purge_at)}`
               : search.trim()
-                ? `in ${folderName(doc.folder_id)}`
+                ? `in ${where}`
                 : `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`}
           </div>
         ) : null}
       </div>
       <span className={`${styles.cell} ${styles.where}`}>
-        {trashed
-          ? `from ${folderName(doc.folder_id)}`
-          : folderName(doc.folder_id)}
+        {trashed ? `from ${where}` : where}
       </span>
       <span className={`${styles.cell} ${styles.size}`}>
         {fmtBytes(doc.byte_size)}
@@ -160,7 +161,7 @@ export function ListRow({
             type="button"
             className="kit-icon-btn"
             style={{ "--kit-icon-btn-size": "1.875rem" } as CSSProperties}
-            aria-label={`Actions for ${doc.title ?? "document"}`}
+            aria-label={`Actions for ${title}`}
             aria-haspopup="menu"
             onClick={(e) => {
               e.stopPropagation();

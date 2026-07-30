@@ -16,6 +16,7 @@ import type * as TypeImport_13kqdum from "./templatesData.js";
 // the data-stays copy). A code-store app keeps Delete.
 
 const listAutomations = vi.fn<typeof TypeImport_1gl5zx7.listAutomations>();
+const getDailyBrief = vi.fn<typeof TypeImport_1gl5zx7.getDailyBrief>();
 const deleteApp = vi.fn<typeof TypeImport_1gl5zx7.deleteApp>();
 const deleteAutomation = vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>();
 const runAutomationNow = vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>();
@@ -24,6 +25,7 @@ const renameInstalledApp =
   vi.fn<typeof TypeImport_1gl5zx7.renameInstalledApp>();
 vi.mock(import("../../../gateway-client.js"), () => ({
   listAutomations: () => listAutomations(),
+  getDailyBrief: () => getDailyBrief(),
   deleteApp: (a) => deleteApp(a),
   deleteAutomation: (a) => deleteAutomation(a),
   runAutomationNow: (a) => runAutomationNow(a),
@@ -176,6 +178,14 @@ describe("HomeRoute", () => {
     ({ default: HomeRoute } = await import("./HomeRoute.js"));
     ({ ShellActionsProvider } = await import("../actions.js"));
     listAutomations.mockReset().mockResolvedValue([]);
+    getDailyBrief.mockReset().mockResolvedValue({
+      date: "2026-07-29",
+      events: [],
+      tasks: [],
+      newPhotos: 0,
+      balanceMinor: 0,
+      currency: "USD",
+    });
     loadAppTemplates.mockReset().mockResolvedValue([
       {
         id: "photos",

@@ -119,6 +119,15 @@ const SCHEMAS: Record<string, JsonSchema> = {
       title: { type: "string", minLength: 1 },
     },
   },
+  NotePayload: {
+    type: "object",
+    required: ["title", "body", "path"],
+    properties: {
+      title: { type: "string", minLength: 1 },
+      body: { type: "string" },
+      path: { type: "string", minLength: 1 },
+    },
+  },
   AnnotationPayload: {
     type: "object",
     required: ["target_type", "target_id", "body", "author_party_id"],

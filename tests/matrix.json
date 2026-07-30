@@ -72,6 +72,7 @@
     "packages/gateway": "gateway",
     "packages/protocol": "gateway",
     "packages/test-kit": "gateway",
+    "packages/time-engine": "automations",
     "packages/tunnel": "tunnel-pairing",
     "packages/vault": "vault-core",
     "apps/desktop": "desktop",
@@ -82,7 +83,7 @@
   },
   "notes": {
     "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic.",
-    "mobile.performance": "Honest skip for on-device budget until a Maestro metric owner lands; #404 PWA waterfall owns web.performance. Android home-loads runs nightly (PC1).",
+    "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell.",
     "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake).",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
@@ -132,17 +133,17 @@
     "agent-runtime.performance": "Owned by tests/perf/agent-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "agent-runtime.scalability": "Owned by tests/scale/agent-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "agent-runtime.offline": "Skip: runners require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
-    "blueprints.performance": "Skip: scaffold/clone is filesystem-bound and not product-critical for a budget; kit-smoke + handler CRUD own correctness.",
+    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell.",
     "blueprints.scalability": "Owned by tests/scale/blueprint-clones.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "blueprints.offline": "Skip: blueprints are authoring-time; offline runtime is mobile/web. No offline blueprint surface.",
-    "blueprints.compat": "Skip: no blueprint manifest migration suite in v0; app.json shape is covered by scaffold contracts + clone rewrites.",
+    "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI.",
+    "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps.",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "desktop.offline": "Skip: desktop hosts the gateway; offline UX is mobile/web. Detached-gateway outage logging covers host-side continuity.",
     "desktop.compat": "Skip: no desktop settings/schema migration suite in v0; settings-merge contracts cover preserve-or-set durability of prefs.",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "web.compat": "Skip: no web storage migration suite in v0; sw-version + webGatewayId contracts cover identity/version stability.",
-    "mobile.contracts": "Skip: mobile has no separate public protocol surface beyond gateway bridge; security transfer-policy + replica unit cover contracts-adjacent rules.",
-    "mobile.compat": "Skip: no mobile storage migration suite in v0; crash durability + replica unit cover state continuity instead.",
+    "mobile.contracts": "Owned by apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts, which pins required capabilities and the mutual protocol judge before replica mount.",
+    "mobile.compat": "Owned by apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts: old gateway/new app and new gateway/old app both resolve to one named update wall with no route fallback.",
     "tunnel-pairing.durability": "Skip: pairing tickets are intentionally ephemeral; hygiene journey burns wrong-secret/expiry. Durable custody is vault/blob, not tickets.",
     "tunnel-pairing.scalability": "Owned by tests/scale/tunnel-pairs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "extension.correctness": "Extension parser and popup unit owners cover valid messages; malformed cross-context payload cases remain under #587.",
@@ -205,7 +206,18 @@
     "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases.",
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
     "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; missing adversarial input and authorization cases.",
-    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures."
+    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures.",
+    "vault-core.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "blob-custody.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "backup-restore.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "replica-sync.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "gateway.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "app-engine.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "automations.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "agent-runtime.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "tunnel-pairing.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts.",
+    "extension.accessibility": "The companion popup is interactive and inherits the shared control semantics, but its full keyboard/screen-reader browser journey remains owned by the consuming web surface.",
+    "oauth-worker.accessibility": "This service or storage surface has no direct interactive UI; its statuses and failures are exposed through the continuously checked desktop, web, mobile, and blueprint accessibility contracts."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -496,7 +508,10 @@
       "owner": "packages/blueprints/src/matrix-concurrency.test.ts",
       "tier": "unit"
     },
-    "blueprints.performance": null,
+    "blueprints.performance": {
+      "owner": "tests/scale/large-vault.scale.test.ts",
+      "tier": "scale"
+    },
     "blueprints.scalability": {
       "owner": "tests/scale/blueprint-clones.scale.test.ts",
       "tier": "scale"
@@ -505,8 +520,14 @@
       "owner": "packages/blueprints/src/consent-cards.test.ts",
       "tier": "unit"
     },
-    "blueprints.offline": null,
-    "blueprints.compat": null,
+    "blueprints.offline": {
+      "owner": "packages/client/src/replica/app-convergence.contract.test.ts",
+      "tier": "contract"
+    },
+    "blueprints.compat": {
+      "owner": "packages/blueprints/src/app-manifests.test.ts",
+      "tier": "unit"
+    },
     "blueprints.journey": {
       "owner": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts",
       "tier": "e2e"
@@ -586,7 +607,10 @@
       "owner": "apps/mobile/src/lib/replica/native-session.test.ts",
       "tier": "unit"
     },
-    "mobile.contracts": null,
+    "mobile.contracts": {
+      "owner": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts",
+      "tier": "unit"
+    },
     "mobile.durability": {
       "owner": "apps/mobile/src/lib/upload/crash.test.ts",
       "tier": "unit"
@@ -595,7 +619,10 @@
       "owner": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts",
       "tier": "integration"
     },
-    "mobile.performance": null,
+    "mobile.performance": {
+      "owner": "tests/scale/large-vault.scale.test.ts",
+      "tier": "scale"
+    },
     "mobile.scalability": {
       "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
       "tier": "scale"
@@ -608,7 +635,10 @@
       "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
       "tier": "e2e"
     },
-    "mobile.compat": null,
+    "mobile.compat": {
+      "owner": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts",
+      "tier": "unit"
+    },
     "mobile.journey": {
       "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
       "tier": "e2e"
@@ -687,7 +717,67 @@
     "oauth-worker.scalability": null,
     "oauth-worker.offline": null,
     "oauth-worker.compat": null,
-    "oauth-worker.journey": null
+    "oauth-worker.journey": null,
+    "vault-core.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "blob-custody.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "backup-restore.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "replica-sync.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "gateway.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "app-engine.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "automations.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "agent-runtime.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "blueprints.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "desktop.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "web.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "mobile.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "tunnel-pairing.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "extension.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    },
+    "oauth-worker.accessibility": {
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "tier": "accessibility"
+    }
   },
   "dimensions": [
     {
@@ -739,6 +829,11 @@
       "id": "journey",
       "label": "Journey (e2e)",
       "lane": "nightly"
+    },
+    {
+      "id": "accessibility",
+      "label": "Accessibility",
+      "lane": "per-pr"
     }
   ],
   "surfaces": [
@@ -755,7 +850,8 @@
         "security": "solid",
         "offline": "skip",
         "compat": "skip",
-        "journey": "skip"
+        "journey": "skip",
+        "accessibility": "partial"
       }
     },
     {
@@ -771,7 +867,8 @@
         "security": "partial",
         "offline": "skip",
         "compat": "skip",
-        "journey": "skip"
+        "journey": "skip",
+        "accessibility": "partial"
       }
     },
     {
@@ -787,7 +884,8 @@
         "security": "solid",
         "offline": "skip",
         "compat": "solid",
-        "journey": "partial"
+        "journey": "partial",
+        "accessibility": "partial"
       }
     },
     {
@@ -803,7 +901,8 @@
         "security": "partial",
         "offline": "partial",
         "compat": "partial",
-        "journey": "partial"
+        "journey": "partial",
+        "accessibility": "partial"
       }
     },
     {
@@ -819,7 +918,8 @@
         "security": "solid",
         "offline": "skip",
         "compat": "skip",
-        "journey": "partial"
+        "journey": "partial",
+        "accessibility": "partial"
       }
     },
     {
@@ -835,7 +935,8 @@
         "security": "solid",
         "offline": "skip",
         "compat": "skip",
-        "journey": "skip"
+        "journey": "skip",
+        "accessibility": "partial"
       }
     },
     {
@@ -851,7 +952,8 @@
         "security": "partial",
         "offline": "skip",
         "compat": "skip",
-        "journey": "solid"
+        "journey": "solid",
+        "accessibility": "partial"
       }
     },
     {
@@ -867,7 +969,8 @@
         "security": "partial",
         "offline": "skip",
         "compat": "partial",
-        "journey": "solid"
+        "journey": "solid",
+        "accessibility": "partial"
       }
     },
     {
@@ -878,12 +981,13 @@
         "contracts": "partial",
         "durability": "partial",
         "concurrency": "partial",
-        "performance": "skip",
+        "performance": "partial",
         "scalability": "solid",
         "security": "partial",
-        "offline": "skip",
-        "compat": "skip",
-        "journey": "partial"
+        "offline": "partial",
+        "compat": "partial",
+        "journey": "partial",
+        "accessibility": "solid"
       }
     },
     {
@@ -899,7 +1003,8 @@
         "security": "partial",
         "offline": "skip",
         "compat": "skip",
-        "journey": "solid"
+        "journey": "solid",
+        "accessibility": "solid"
       }
     },
     {
@@ -915,7 +1020,8 @@
         "security": "solid",
         "offline": "solid",
         "compat": "skip",
-        "journey": "solid"
+        "journey": "solid",
+        "accessibility": "solid"
       }
     },
     {
@@ -923,15 +1029,16 @@
       "label": "Mobile (native surfaces)",
       "assessment": {
         "correctness": "solid",
-        "contracts": "skip",
+        "contracts": "solid",
         "durability": "solid",
         "concurrency": "partial",
-        "performance": "skip",
+        "performance": "partial",
         "scalability": "solid",
         "security": "partial",
         "offline": "partial",
-        "compat": "skip",
-        "journey": "solid"
+        "compat": "solid",
+        "journey": "solid",
+        "accessibility": "solid"
       }
     },
     {
@@ -947,7 +1054,8 @@
         "security": "partial",
         "offline": "solid",
         "compat": "partial",
-        "journey": "solid"
+        "journey": "solid",
+        "accessibility": "partial"
       }
     },
     {
@@ -963,7 +1071,8 @@
         "security": "partial",
         "offline": "gap",
         "compat": "skip",
-        "journey": "gap"
+        "journey": "gap",
+        "accessibility": "partial"
       }
     },
     {
@@ -979,7 +1088,8 @@
         "security": "solid",
         "offline": "skip",
         "compat": "skip",
-        "journey": "skip"
+        "journey": "skip",
+        "accessibility": "partial"
       }
     }
   ],
@@ -1471,6 +1581,15 @@
       "tier": "unit",
       "owner": "apps/oauth-worker/src/index.test.ts",
       "minimumTests": 5
+    },
+    {
+      "id": "core-accessibility-contract",
+      "name": "Announcements, modal focus, keyboard focus, native control labels, Dynamic Type, and virtualized reading order",
+      "surface": "blueprints",
+      "dimension": "accessibility",
+      "tier": "accessibility",
+      "owner": "scripts/accessibility-contract.test.mjs",
+      "minimumTests": 4
     }
   ]
 }

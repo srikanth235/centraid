@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import { vaultImportStage } from "../../gateway-client.js";
 import type { ConnectFlowResult } from "../shell/routes/connectFlow-core.js";
 import ConnectFlow from "../shell/routes/ConnectFlow.js";
 import { connectFreshLocalGateway } from "../shell/routes/connectFlowIO.js";
@@ -75,27 +76,20 @@ function initials(name: string): string {
 /**
  * First-run onboarding — connect → (local only) H5 OS service offer →
  * identity, and only when the household doesn't already know this person.
- *
- * Identity used to come FIRST and always. That asked every returning device
- * to re-introduce someone the gateway already has on its roster, and the
- * answer went nowhere: the name was written to device-local settings that
- * nothing rendered, while Household kept showing the placeholder "You". The
- * name now lands on the roster member (`profileData.ts`), so the step is only
- * worth showing when that member has no name yet.
- *
- * Styles in `OnboardingScreen.module.css`.
+ * Identity now lands on the roster member (`profileData.ts`), so returning
+ * devices no longer re-introduce someone the household already knows.
  */
 export default function OnboardingScreen({
   path,
   onComplete,
   onBack,
 }: OnboardingScreenProps): JSX.Element {
+  const [step, setStep] = useState<
+    "identity" | "connect" | "service" | "import"
+  >("connect");
   // The ticket path opens on the pairing field; the fresh path has no gateway
   // to join, so it connects to its own embedded one while showing the same
   // "connecting" card rather than asking a question it already knows.
-  const [step, setStep] = useState<"identity" | "connect" | "service">(
-    "connect"
-  );
   const [displayName, setDisplayName] = useState("");
   const [selfMemberId, setSelfMemberId] = useState<string | null>(null);
   const [avatarColor, setAvatarColor] = useState<string>(
@@ -111,15 +105,15 @@ export default function OnboardingScreen({
     null
   );
   const [keychainNote, setKeychainNote] = useState(false);
+  const [wantsImport, setWantsImport] = useState(false);
+  const [stagedCount, setStagedCount] = useState(0);
   const nameRef = useRef<HTMLInputElement>(null);
-  // The fresh path's connect effect must not re-run when a render produces a
-  // new `afterConnect` closure, so it reaches the continuation through a ref.
+  // Keep fresh-path dialing stable across new `afterConnect` closures.
   const afterConnectRef = useRef<(result: ConnectFlowResult) => void>(
     () => undefined
   );
 
-  // Where the OS keychain will prompt on the first secret write (dev/unsigned
-  // builds, some Linux keyrings — issue #603), say so before triggering it.
+  // Warn before first-write keychain prompts (dev/unsigned builds, #603).
   // The bridge method is desktop-only; a missing method means no prompt.
   useEffect(() => {
     const probe = window.CentraidApi.keychainPromptExpected;
@@ -172,17 +166,24 @@ export default function OnboardingScreen({
     })();
   };
 
+  const finishOrImport = (result: ConnectFlowResult): void => {
+    if (!wantsImport) {
+      finish(result);
+      return;
+    }
+    setPendingResult(result);
+    setSubmitting(false);
+    setStep("import");
+  };
+
   /**
    * Last gate before the shell: ask the roster who this device acts as. A
    * member that already has a name needs no introduction, so onboarding ends
    * here; anyone else gets the identity step.
    *
-   * "Anyone else" includes a roster this client cannot read at all — a gateway
-   * with no device plane answers 404. Skipping the question there would finish
-   * first run with an EMPTY name, which is both a worse product (nobody is
-   * ever asked) and an outright bug (the host then tries to rename the
-   * Personal vault to ""). Asking is always safe: a name we didn't need costs
-   * one screen, a name we never collected costs the identity.
+   * An unreadable roster also asks: one extra screen is safe, while skipping
+   * would finish with an empty identity and try to rename the Personal vault
+   * to an empty string.
    */
   const identityOrFinish = (result: ConnectFlowResult): void => {
     setSubmitting(true);
@@ -206,7 +207,7 @@ export default function OnboardingScreen({
   const continueFromIdentity = (): void => {
     if (!displayName.trim() || submitting || !pendingResult) return;
     setError(null);
-    finish(pendingResult);
+    finishOrImport(pendingResult);
   };
 
   /**
@@ -227,14 +228,12 @@ export default function OnboardingScreen({
     identityOrFinish(result);
   };
 
-  // Declared BEFORE the connect effect so mount order guarantees the ref is
-  // populated by the time that effect's promise can resolve.
+  // Populate the continuation ref before the connect effect can resolve.
   useEffect(() => {
     afterConnectRef.current = afterConnect;
   });
 
-  // The `fresh` path has nothing to paste: point this client at its own
-  // auto-founded gateway as soon as the screen mounts.
+  // A fresh client connects to its auto-founded gateway on mount.
   useEffect(() => {
     if (path !== "fresh") return;
     let cancelled = false;
@@ -343,7 +342,7 @@ export default function OnboardingScreen({
               decides which space you land in.
             </p>
           </>
-        ) : (
+        ) : step === "service" ? (
           <>
             <h1 className={styles.title}>
               Keep your vault <em>reachable</em>?
@@ -353,6 +352,16 @@ export default function OnboardingScreen({
               stays up when Centraid is closed — phones and other devices can
               still reach your vault. Default is off; we never install this
               without asking.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className={styles.title}>
+              Bring your data <em>home</em>.
+            </h1>
+            <p className={styles.sub}>
+              Stage an export from another calendar, contacts, notes, mail, or
+              finance app. You stay in control of the final publish.
             </p>
           </>
         )}
@@ -426,6 +435,20 @@ export default function OnboardingScreen({
                 </label>
               ))}
             </div>
+            <label className={styles.importChoice}>
+              <input
+                type="checkbox"
+                checked={wantsImport}
+                onChange={(event) => setWantsImport(event.target.checked)}
+              />
+              <span>
+                I have data to import
+                <small>
+                  Preview ICS, vCard, CSV, Markdown, MBOX, or Takeout after
+                  connecting.
+                </small>
+              </span>
+            </label>
             <button
               type="button"
               className={styles.cta}
@@ -492,7 +515,7 @@ export default function OnboardingScreen({
               </div>
             ) : null}
           </div>
-        ) : (
+        ) : step === "service" ? (
           <div className={styles.form}>
             <button
               type="button"
@@ -512,6 +535,82 @@ export default function OnboardingScreen({
               onClick={declineService}
             >
               <span>Not now</span>
+            </button>
+            {error ? (
+              <div className={styles.error} role="alert">
+                {error}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className={styles.form}>
+            <label className={styles.importPicker} htmlFor="cd-onb-import">
+              <span>
+                {stagedCount > 0
+                  ? `${stagedCount} row${stagedCount === 1 ? "" : "s"} staged`
+                  : "Choose an export file…"}
+              </span>
+              <input
+                id="cd-onb-import"
+                type="file"
+                accept=".ics,.vcf,.vcard,.mbox,.csv,.md,.markdown,.zip"
+                disabled={submitting}
+                className={a11y.srControl}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  setSubmitting(true);
+                  setError(null);
+                  const extension =
+                    file.name.split(".").at(-1)?.toLowerCase() ?? "";
+                  void (async () => {
+                    const textKinds = new Set([
+                      "ics",
+                      "vcf",
+                      "vcard",
+                      "mbox",
+                      "csv",
+                      "md",
+                      "markdown",
+                    ]);
+                    const payload = textKinds.has(extension)
+                      ? { filename: file.name, text: await file.text() }
+                      : {
+                          filename: file.name,
+                          base64: btoa(
+                            Array.from(
+                              new Uint8Array(await file.arrayBuffer()),
+                              (byte) => String.fromCharCode(byte)
+                            ).join("")
+                          ),
+                        };
+                    const staged = await vaultImportStage(payload);
+                    setStagedCount((count) => count + staged.total);
+                  })()
+                    .catch((caughtError: unknown) =>
+                      setError(
+                        caughtError instanceof Error
+                          ? caughtError.message
+                          : "Import staging failed"
+                      )
+                    )
+                    .finally(() => setSubmitting(false));
+                }}
+              />
+            </label>
+            <p className={styles.keychainNote}>
+              This is a dry run. You will review field mappings and conflicts
+              before publishing; failed validation cannot change your vault.
+            </p>
+            <button
+              type="button"
+              className={styles.cta}
+              disabled={submitting || !pendingResult}
+              onClick={() => pendingResult && finish(pendingResult)}
+            >
+              <span>
+                {stagedCount > 0 ? "Review in Centraid" : "Skip for now"}
+              </span>
             </button>
             {error ? (
               <div className={styles.error} role="alert">

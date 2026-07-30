@@ -148,7 +148,7 @@ describe("settingsConnectionsData", () => {
           oauthMode: null,
           principal: null,
           provider: "google",
-          scopes: "calendar.readonly",
+          scopes: "calendar.events",
           status: "needs-auth",
           tokenExpiresAt: null,
           trust: "staged",

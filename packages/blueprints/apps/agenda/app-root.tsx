@@ -59,6 +59,7 @@ export const CHANGE_TABLES = [
   "core.event",
   "schedule.event_ext",
   "schedule.attendee",
+  "schedule.recurrence_exception",
   "schedule.calendar",
   "core.party",
   "core.attachment",
@@ -114,6 +115,7 @@ function makeState(view: ViewKind): AppState {
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [loaded, setLoaded] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [sideOpen, setSideOpen] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -168,6 +170,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         data.calendars = [];
         data.calById = new Map();
         state.detailEventId = null;
+        setLoaded(true);
         bump();
         return;
       }
@@ -179,6 +182,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       );
       if (state.detailEventId && !logic.findEvent(state.detailEventId))
         state.detailEventId = null;
+      setLoaded(true);
       bump();
     };
 
@@ -242,6 +246,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       // A broken vault must not look like an empty one.
       readFailed(byId("noticeBanner"));
       state.readFailedShown = true;
+      setLoaded(true);
       return;
     }
     applyLoadedData(canvasData, miniData);
@@ -320,7 +325,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
   // ---- Overlays ----
   const openEventDetail = useCallback((ev: AgEvent) => {
-    stateRef.current.detailEventId = ev.event_id;
+    stateRef.current.detailEventId = ev.instance_key ?? ev.event_id;
     bump();
   }, []);
   const closeDrawer = useCallback(() => {
@@ -558,6 +563,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         pendingCancelIds={state.pendingCancelIds}
         search={state.search}
         onEventOpen={openEventDetail}
+        onEmptyAction={() => {
+          if (state.search) {
+            if (searchInputRef.current) searchInputRef.current.value = "";
+            logic.clearSearch();
+          } else {
+            openCreate(null);
+          }
+        }}
       />
     );
   }
@@ -567,15 +580,17 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     : null;
   const drawerNode = detailEv ? (
     <EventDrawer
-      key={detailEv.event_id}
+      key={detailEv.instance_key ?? detailEv.event_id}
       event={detailEv}
+      calendars={data.calendars}
       calendarName={data.calById.get(detailEv.calendar_id as string)?.name}
       color={logic.colorFor(detailEv.calendar_id)}
       pending={state.pendingIds.has(detailEv.event_id)}
       pendingCancel={state.pendingCancelIds.has(detailEv.event_id)}
       activity={state.activityLog.get(detailEv.event_id) ?? []}
       onClose={closeDrawer}
-      onReschedule={(id, s, e) => logic.rescheduleEvent(id, s, e)}
+      onEdit={(payload) => logic.editEvent(payload)}
+      onEditOccurrence={(payload) => logic.editOccurrence(payload)}
       onRsvp={(id, p, st) => logic.respondRsvp(id, p, st)}
       onAttach={(id) => {
         logic.setAttachTarget(id);
@@ -602,6 +617,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div ref={setRoot} className={styles.root}>
       <Chrome
         narrow={narrow}
+        loading={!loaded}
         sideOpen={sideOpen}
         onOpenSide={() => setSideOpen(true)}
         onCloseSide={() => setSideOpen(false)}

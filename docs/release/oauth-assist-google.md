@@ -34,7 +34,7 @@ ownership must be verified by a project owner/editor through Search Console.
       `https://oauth.centraid.dev/callback`.
 - [ ] Calendar API and People API are enabled.
 - [ ] Requested/verified standard scopes match the UI:
-      `calendar.readonly`, `contacts.readonly`.
+      `calendar.events`, `contacts`.
 - [ ] Verification demonstration covers the complete consent and user-facing
       capability flow.
 - [ ] Evidence reviewer/date: `________________`.

@@ -6,6 +6,11 @@
 #   (b) named as owner path prefix in tests/matrix.json, OR
 #   (c) listed in this directive's allowlist.txt
 #
+# The bundled blueprint runtime is intentionally co-located outside `src/`.
+# Treat its executable `apps/` and `kit/` trees as first-class scopes instead
+# of collapsing them into `packages/blueprints`, whose `src/` floor cannot
+# instrument either tree.
+#
 # Also: every coverage-floors.json path-scope must sit under packages/ or apps/.
 #
 # Bash 3.2 compatible (macOS /bin/bash) — no mapfile, no associative arrays.
@@ -66,10 +71,17 @@ for k, v in data.items():
 PY
 )"
 
-# Vitest coverage include must still instrument packages/*/src.
+# Vitest coverage include must still instrument the conventional source roots
+# plus both non-standard blueprint runtime roots.
 if [[ -f "$VITEST_CFG" ]]; then
     if ! grep -q "packages/\*/src/\*\*" "$VITEST_CFG" && ! grep -q 'packages/*/src/**' "$VITEST_CFG"; then
         violation "vitest.config.ts coverage.include must cover packages/*/src/** (floors would be unreachable)"
+    fi
+    if ! grep -Fq "packages/blueprints/apps/**" "$VITEST_CFG"; then
+        violation "vitest.config.ts coverage.include must cover packages/blueprints/apps/** (bundled app code would be invisible)"
+    fi
+    if ! grep -Fq "packages/blueprints/kit/**" "$VITEST_CFG"; then
+        violation "vitest.config.ts coverage.include must cover packages/blueprints/kit/** (shared blueprint runtime would be invisible)"
     fi
 fi
 
@@ -117,6 +129,19 @@ PKG_IDS="$(
         | grep -vE '\.(test|spec)\.(ts|tsx)$|\.d\.ts$' \
         | awk -F/ '{print $1"/"$2}' \
         | sort -u
+)"
+
+# Non-standard executable roots under packages/blueprints. Keep them separate:
+# a floor on packages/blueprints/src/** must not accidentally satisfy either.
+BLUEPRINT_SCOPE_IDS="$(
+    for scope in packages/blueprints/apps packages/blueprints/kit; do
+        if git -C "$REPO_ROOT" ls-files \
+            "$scope/**/*.ts" "$scope/**/*.tsx" "$scope/**/*.js" "$scope/**/*.mjs" \
+            "$scope/*.ts" "$scope/*.tsx" "$scope/*.js" "$scope/*.mjs" 2>/dev/null \
+            | grep -qvE '\.(test|spec)\.(ts|tsx|js|mjs)$|\.d\.ts$'; then
+            echo "$scope"
+        fi
+    done
 )"
 
 is_floored() {
@@ -168,5 +193,19 @@ while IFS= read -r pkg; do
     fi
     violation "$pkg - has src/ TypeScript but no coverage floor, matrix owner, or allowlist entry (add a floor, matrix flow, or allowlist.txt row)"
 done <<<"$PKG_IDS"
+
+while IFS= read -r scope; do
+    [[ -z "$scope" ]] && continue
+    if is_allowlisted "$scope"; then
+        continue
+    fi
+    if is_floored "$scope"; then
+        continue
+    fi
+    if has_matrix_owner "$scope"; then
+        continue
+    fi
+    violation "$scope - has executable blueprint code but no coverage floor, matrix owner, or allowlist entry (add a floor, matrix flow, or allowlist.txt row)"
+done <<<"$BLUEPRINT_SCOPE_IDS"
 
 directive_end

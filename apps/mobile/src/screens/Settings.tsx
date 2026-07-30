@@ -41,6 +41,7 @@ import {
 import type { TunnelStatus } from "../lib/phone-link";
 import type { SettingsScreenProps } from "../navigation";
 import AppearanceSection from "./settings/AppearanceSection";
+import AppLockSection from "./settings/AppLockSection";
 import SettingsSection from "./settings/SettingsSection";
 import SpaceSection from "./settings/SpaceSection";
 import YouSection from "./settings/YouSection";
@@ -187,6 +188,7 @@ export default function SettingsScreen({
       >
         <YouSection />
         <AppearanceSection />
+        <AppLockSection />
         <SpaceSection />
 
         <SettingsSection label="Desktop link">

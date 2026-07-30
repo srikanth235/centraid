@@ -46,6 +46,10 @@ function readMobilePackageVersion(): string {
 
 const VERSION = readMobilePackageVersion();
 const BUILD = nativeBuildNumber(VERSION);
+const EAS_PROJECT_ID =
+  process.env.EAS_PROJECT_ID?.trim() === ""
+    ? undefined
+    : process.env.EAS_PROJECT_ID?.trim();
 
 export default function createExpoConfig({
   config,
@@ -71,6 +75,13 @@ export default function createExpoConfig({
       buildNumber: String(BUILD),
       infoPlist: {
         UIBackgroundModes: ["processing", "remote-notification"],
+        ITSAppUsesNonExemptEncryption: false,
+        NSFaceIDUsageDescription:
+          "Centraid uses Face ID to protect the local vault replica and unlock Locker secrets.",
+        NSLocalNetworkUsageDescription:
+          "Centraid connects to the personal gateway you pair on your local network.",
+        NSMicrophoneUsageDescription:
+          "Centraid uses the microphone only when you choose to capture a video with sound.",
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: false,
           NSAllowsLocalNetworking: true,
@@ -88,15 +99,19 @@ export default function createExpoConfig({
     runtimeVersion: {
       policy: "appVersion",
     },
-    // J7 / #501 — dormant OTA hotfix lane only. No eas update in CI.
-    // Replace placeholder when Expo project is enrolled (EAS_PROJECT_ID secret).
-    updates: {
-      checkAutomatically: "ON_ERROR_RECOVERY",
-      url:
-        process.env.EAS_PROJECT_ID && process.env.EAS_PROJECT_ID !== ""
-          ? `https://u.expo.dev/${process.env.EAS_PROJECT_ID}`
-          : "https://u.expo.dev/placeholder-centraid-mobile",
-    },
+    // J7 / #501 — routine updates are store-only. The emergency OTA lane is
+    // explicitly disabled until the real Expo project id is enrolled; no
+    // placeholder endpoint or dormant native updater ships.
+    updates: EAS_PROJECT_ID
+      ? {
+          enabled: true,
+          checkAutomatically: "ON_ERROR_RECOVERY",
+          url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+        }
+      : {
+          enabled: false,
+          checkAutomatically: "NEVER",
+        },
     assetBundlePatterns: ["**/*"],
     plugins: [
       "expo-notifications",
@@ -127,23 +142,21 @@ export default function createExpoConfig({
         "expo-share-intent",
         {
           iosActivationRules: {
+            NSExtensionActivationSupportsText: true,
+            NSExtensionActivationSupportsWebURLWithMaxCount: 20,
             NSExtensionActivationSupportsImageWithMaxCount: 100,
             NSExtensionActivationSupportsMovieWithMaxCount: 20,
             NSExtensionActivationSupportsFileWithMaxCount: 100,
           },
-          androidIntentFilters: [
-            "image/*",
-            "video/*",
-            "audio/*",
-            "application/pdf",
-          ],
+          androidIntentFilters: ["text/*", "image/*", "video/*", "*/*"],
+          androidMultiIntentFilters: ["image/*", "video/*", "*/*"],
         },
       ],
       [
         "expo-camera",
         {
           cameraPermission:
-            "Centraid uses the camera to scan the pairing QR code shown on your desktop.",
+            "Centraid uses the camera to scan pairing QR codes, documents, cards, and receipts you choose to capture.",
         },
       ],
       "expo-video",
@@ -154,9 +167,8 @@ export default function createExpoConfig({
       recurrencePolicy: "bounded-local-expansion",
       // Expose for tests / tooling that cannot import version-core through Expo.
       nativeBuildNumber: BUILD,
-      eas: {
-        projectId: process.env.EAS_PROJECT_ID || "placeholder-centraid-mobile",
-      },
+      updateChannel: EAS_PROJECT_ID ? "eas-hotfix" : "store-only",
+      ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
     },
   };
 }

@@ -5,9 +5,10 @@
 // (needs-action → in-process → completed | cancelled), priority 0 means
 // unset and 1 is highest (RFC 5545 §3.8.1.9).
 
+import { nextOccurrence } from "@centraid/time-engine";
+
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
-import { nextOccurrence } from "../recurrence/rrule.js";
 
 const ADD_TASK: CommandDefinition = {
   name: "schedule.add_task",
@@ -197,7 +198,10 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { task_id: string; status: string };
   const previous = ctx.db
     .prepare(
-      "SELECT status, owner_party_id, title, description, priority, due_at, effort_min, parent_task_id, rrule, remind_before_min FROM schedule_task WHERE task_id = ?"
+      `SELECT status, owner_party_id, title, description, priority, due_at,
+              effort_min, parent_task_id, rrule, remind_before_min, project_id,
+              section_id, sort_order, recurrence_anchor, recurrence_tz
+         FROM schedule_task WHERE task_id = ?`
     )
     .get(input.task_id) as
     | {
@@ -211,6 +215,11 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
         parent_task_id: string | null;
         rrule: string | null;
         remind_before_min: number | null;
+        project_id: string | null;
+        section_id: string | null;
+        sort_order: number;
+        recurrence_anchor: "scheduled" | "completion";
+        recurrence_tz: string | null;
       }
     | undefined;
   if (!previous) throw new Error("task vanished between check and execute");
@@ -238,18 +247,25 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
   // "add" from the owner. A non-completion move (reopen, cancel) never
   // spawns; only the completed→next edge does.
   if (input.status === "completed" && previous.rrule && previous.due_at) {
-    const nextDue = nextOccurrence(
-      previous.rrule,
-      previous.due_at,
-      previous.due_at
-    );
+    const nextDue = nextOccurrence({
+      rrule: previous.rrule,
+      scheduledStart: previous.due_at,
+      after:
+        previous.recurrence_anchor === "completion" ? ctx.now : previous.due_at,
+      timeZone: previous.recurrence_tz ?? "Etc/UTC",
+      anchor: previous.recurrence_anchor,
+    });
     if (nextDue) {
       const nextTaskId = ctx.newId();
       ctx.db
         .prepare(
           `INSERT INTO schedule_task
-             (task_id, owner_party_id, title, description, status, priority, due_at, completed_at, effort_min, parent_task_id, rrule, remind_before_min)
-           VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?, ?)`
+             (task_id, owner_party_id, title, description, status, priority,
+              due_at, completed_at, effort_min, parent_task_id, rrule,
+              remind_before_min, project_id, section_id, sort_order,
+              recurrence_anchor, recurrence_tz)
+           VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?)`
         )
         .run(
           nextTaskId,
@@ -261,7 +277,12 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
           previous.effort_min,
           previous.parent_task_id,
           previous.rrule,
-          previous.remind_before_min
+          previous.remind_before_min,
+          previous.project_id,
+          previous.section_id,
+          previous.sort_order,
+          previous.recurrence_anchor,
+          previous.recurrence_tz
         );
       ctx.wrote("schedule.task", nextTaskId);
       ctx.cite({

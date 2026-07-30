@@ -3,8 +3,12 @@
 // and receipted end to end. Command implementations are domain-owned; the
 // gateway hosts and checks them (§10 negative space).
 
+import { canonicalizeRrule } from "@centraid/time-engine";
+
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import { queueProviderWriteback } from "./provider-writeback.js";
+import { registerScheduleOrganizeCommands } from "./schedule-organize.js";
 
 const PROPOSE_EVENT: CommandDefinition = {
   name: "schedule.propose_event",
@@ -19,6 +23,11 @@ const PROPOSE_EVENT: CommandDefinition = {
       dtstart: { type: "string", minLength: 1 },
       dtend: { type: "string", minLength: 1 },
       start_tz: { type: "string" },
+      end_tz: { type: "string" },
+      recurrence_semantics: {
+        type: "string",
+        enum: ["zoned", "floating", "all-day"],
+      },
       calendar_id: { type: "string", minLength: 1 },
       location_place_id: { type: "string" },
       attendee_party_ids: { type: "array", items: { type: "string" } },
@@ -78,7 +87,12 @@ const PROPOSE_EVENT: CommandDefinition = {
       // Full RFC 5545 parsing happens read-side (recurrence/rrule.ts); this
       // is only a fast, cheap reject of obvious garbage before it's stored.
       name: "rrule_looks_valid",
-      sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%') AS n",
+      // Accept bare FREQ=… and a legacy/Google RRULE:FREQ=… prefix.
+      // Build the RRULE: prefix with concat so the condition param binder
+      // (which scans for :name tokens case-insensitively) does not treat
+      // the "FREQ" inside the string literal as a named parameter — that
+      // mis-bind made every propose_event fail closed with this message.
+      sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%' OR :rrule LIKE ('RRULE:' || 'FREQ=%')) AS n",
       column: "n",
       op: "eq",
       value: 1,
@@ -113,6 +127,8 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
     dtstart: string;
     dtend: string;
     start_tz?: string;
+    end_tz?: string;
+    recurrence_semantics?: "zoned" | "floating" | "all-day";
     calendar_id: string;
     location_place_id?: string;
     attendee_party_ids?: string[];
@@ -124,9 +140,10 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO core_event
-         (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
-          location_place_id, organizer_party_id, sequence, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'tentative', ?, ?, 0, ?, ?)`
+         (event_id, ical_uid, summary, description, dtstart, dtend, start_tz,
+          rrule, status, location_place_id, organizer_party_id, sequence,
+          created_at, updated_at, end_tz, recurrence_semantics)
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'tentative', ?, ?, 0, ?, ?, ?, ?)`
     )
     .run(
       eventId,
@@ -135,11 +152,13 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       input.dtstart,
       input.dtend,
       input.start_tz ?? null,
-      input.rrule ?? null,
+      input.rrule ? canonicalizeRrule(input.rrule) : null,
       input.location_place_id ?? null,
       ctx.identity.partyId,
       ctx.now,
-      ctx.now
+      ctx.now,
+      input.end_tz ?? input.start_tz ?? null,
+      input.recurrence_semantics ?? "zoned"
     );
   ctx.wrote("core.event", eventId);
   const remindersJson =
@@ -255,6 +274,7 @@ function rescheduleEvent(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(input.dtstart, input.dtend, sequence, ctx.now, input.event_id);
   ctx.wrote("core.event", input.event_id);
+  queueProviderWriteback(ctx, "core.event", input.event_id, ["start", "end"]);
   ctx.cite({
     claim: `rescheduled to [${input.dtstart}, ${input.dtend}) as revision ${sequence}`,
     entityType: "core.event",
@@ -408,6 +428,7 @@ function cancelEvent(ctx: HandlerCtx): Record<string, unknown> {
     )
     .run(sequence, ctx.now, input.event_id);
   ctx.wrote("core.event", input.event_id);
+  queueProviderWriteback(ctx, "core.event", input.event_id, ["status"]);
   ctx.cite({
     claim: `event ${input.event_id} cancelled as revision ${sequence}`,
     entityType: "core.event",
@@ -422,4 +443,5 @@ export function registerScheduleCommands(gateway: Gateway): void {
   gateway.registerCommand(RESCHEDULE_EVENT);
   gateway.registerCommand(RESPOND_RSVP);
   gateway.registerCommand(CANCEL_EVENT);
+  registerScheduleOrganizeCommands(gateway);
 }

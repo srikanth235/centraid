@@ -71,6 +71,23 @@
   overflow-y: auto;
   padding: 0 0 6px;
 }
+.noResults {
+  min-height: 150px;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  padding: 24px;
+  color: var(--ink-3);
+  text-align: center;
+}
+.noResults strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.noResults span {
+  font-size: 12px;
+}
 .group {
   font-family: var(--font-mono);
   font-size: 10px;

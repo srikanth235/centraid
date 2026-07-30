@@ -25,6 +25,7 @@ import type { VaultRegistry } from "../serve/vault-registry.js";
 import { sendJson } from "./route-helpers.js";
 
 const PREFIX = "/centraid/_vault/demo";
+const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/time-engine");
 
 export interface DemoRouteDeps {
   /** Live code root (`<main worktree>/apps`) of the ACTIVE vault's store. */
@@ -100,6 +101,7 @@ export function makeDemoRouteHandler(
         args: { input: { seed: 1, now: new Date().toISOString() } },
         timeoutMs: 60_000,
         vault: vaults.demoBridgeFor(appId),
+        timeModuleUrl: TIME_ENGINE_MODULE_URL,
       });
       if (!outcome.ok) {
         sendJson(res, 500, {

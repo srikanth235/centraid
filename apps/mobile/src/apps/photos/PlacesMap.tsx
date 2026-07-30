@@ -5,6 +5,7 @@ import MapView, { Marker } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { family, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { usePhotoTimeline } from "./timeline-source";
@@ -68,7 +69,11 @@ export default function PlacesMap({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text style={[styles.title, { color: colors.ink }]}>Places</Text>
@@ -76,6 +81,7 @@ export default function PlacesMap({
           {points.length}
         </Text>
       </View>
+      <ReplicaStatusBar />
       <MapView initialRegion={region} style={styles.map}>
         {clusters.map((point) => (
           <Marker

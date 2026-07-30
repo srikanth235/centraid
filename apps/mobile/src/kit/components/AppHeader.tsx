@@ -25,7 +25,13 @@ export default function AppHeader({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.bar}>
-      <Pressable onPress={onBack} hitSlop={12} style={styles.backBtn}>
+      <Pressable
+        accessibilityLabel="Back"
+        accessibilityRole="button"
+        onPress={onBack}
+        hitSlop={12}
+        style={styles.backBtn}
+      >
         <Icon name="ArrowLeft" size={20} color={colors.ink} />
       </Pressable>
       <View style={[styles.iconWrap, { backgroundColor: color }]}>

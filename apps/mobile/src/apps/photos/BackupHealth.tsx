@@ -6,6 +6,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Switch,
   Text,
@@ -14,6 +15,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
 import { useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
@@ -38,6 +41,7 @@ import type { DeviceOriginal } from "./device-media";
 interface Rules {
   wifiOnly: boolean;
   allowMetered: boolean;
+  allowRoaming: boolean;
   chargerOnly: boolean;
   selectedAlbums: string[];
 }
@@ -45,6 +49,7 @@ const RULES_KEY = "photos.backupRules";
 const DEFAULT_RULES: Rules = {
   wifiOnly: true,
   allowMetered: false,
+  allowRoaming: false,
   chargerOnly: false,
   selectedAlbums: [],
 };
@@ -76,6 +81,7 @@ export default function BackupHealth({
 }: PhotosScreenProps<"BackupHealth">): React.JSX.Element {
   const { colors } = useTheme();
   const { gatewayBase, online, session, vaultId } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
   // Album titles are async getters in the Next API, so they are read once here
   // rather than during render. The asset count legacy albums carried has no
@@ -246,13 +252,23 @@ export default function BackupHealth({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text style={[styles.title, { color: colors.ink }]}>Backup health</Text>
         <View style={{ width: 26 }} />
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ReplicaStatusBar />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
+        }
+      >
         <View
           style={[
             styles.hero,
@@ -310,6 +326,13 @@ export default function BackupHealth({
           disabled={rules.wifiOnly}
         />
         <Rule
+          label="Allow roaming or unknown cellular status"
+          value={rules.allowRoaming}
+          onValueChange={(value) => update({ ...rules, allowRoaming: value })}
+          colors={colors}
+          disabled={rules.wifiOnly || !rules.allowMetered}
+        />
+        <Rule
           label="Only while charging"
           value={rules.chargerOnly}
           onValueChange={(value) => update({ ...rules, chargerOnly: value })}
@@ -343,6 +366,12 @@ export default function BackupHealth({
           );
         })}
         <Pressable
+          accessibilityLabel="Back up selected albums now"
+          accessibilityRole="button"
+          accessibilityState={{
+            busy: running,
+            disabled: running || rules.selectedAlbums.length === 0,
+          }}
           disabled={running || rules.selectedAlbums.length === 0}
           style={[
             styles.settings,
@@ -386,6 +415,8 @@ export default function BackupHealth({
           ))}
         {Platform.OS === "android" ? (
           <Pressable
+            accessibilityLabel="Open battery optimization settings"
+            accessibilityRole="button"
             style={[styles.settings, { borderColor: colors.line }]}
             onPress={() => void Linking.openSettings()}
           >

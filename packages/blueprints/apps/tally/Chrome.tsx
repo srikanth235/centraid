@@ -8,6 +8,8 @@
 // chrome) + the global kit-* vocabulary (kit.css, loaded once by the route host).
 import type { KeyboardEvent, ReactNode } from "react";
 
+import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+
 import styles from "./Chrome.module.css";
 
 export interface ChromeAvatar {
@@ -290,6 +292,7 @@ export function Chrome(props: ChromeProps): ReactNode {
           <div id="consentBanner" className={styles.banner}>
             <strong>No vault access yet.</strong>{" "}
             <span>{props.consent.message}</span>
+            <VaultAccessButton />
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,

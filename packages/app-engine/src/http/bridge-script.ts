@@ -214,7 +214,7 @@ function localVault(entry,guard,signal){
     },
     invoke:effect('invoke'),query:effect('query'),
     describe:effect('describe'),parked:effect('parked'),changes:effect('changes'),
-    resolve:effect('resolve'),reveal:effect('reveal'),content:effect('content')
+    resolve:effect('resolve'),reveal:effect('reveal'),authenticate:effect('authenticate'),content:effect('content')
   };
 }
 function queryModuleUrl(query){return new URL('./_query/'+encodeURIComponent(query)+'.mjs',opaqueBaseUrl||w.location.href).href;}

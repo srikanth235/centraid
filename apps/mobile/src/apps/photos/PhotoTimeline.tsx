@@ -260,6 +260,7 @@ const AssetCell = memo(
       >
         <Image
           source={imageSource(asset.uri)}
+          cachePolicy="memory-disk"
           placeholder={
             asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
           }

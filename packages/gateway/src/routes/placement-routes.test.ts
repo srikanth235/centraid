@@ -103,22 +103,33 @@ describe("placement-routes", () => {
 
     const parked = await post();
     expect(parked.status).toBe(202);
-    await expect(parked.json()).resolves.toMatchObject({
+    const parkedBody = (await parked.json()) as Record<string, unknown>;
+    expect(parkedBody).toMatchObject({
       linkToken: "move-link-1",
       status: "parked",
       targetState: "executed",
       sourceState: "queued",
     });
+    expect(parkedBody.accessReceiptId).toStrictEqual(expect.any(String));
     expect(countContent(source.db)).toBe(1);
     expect(countContent(target.db)).toBe(1);
 
     const replayed = await post();
     expect(replayed.status).toBe(200);
-    await expect(replayed.json()).resolves.toMatchObject({
+    const replayedBody = (await replayed.json()) as Record<string, unknown>;
+    expect(replayedBody).toMatchObject({
       status: "executed",
       targetState: "executed",
       sourceState: "executed",
     });
+    expect(replayedBody.accessReceiptId).toBe(parkedBody.accessReceiptId);
+    expect(
+      database.db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM share_access_receipts WHERE link_token = 'move-link-1'"
+        )
+        .get()
+    ).toMatchObject({ n: 1 });
     expect(countContent(source.db)).toBe(0);
     expect(countContent(target.db)).toBe(1);
     expect(move).toHaveBeenCalledTimes(2);

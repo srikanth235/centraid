@@ -330,6 +330,40 @@
     0 0 0 3.5px #f3f4fb;
 }
 
+.importChoice,
+.importPicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 11px 12px;
+  border: 0.5px solid color-mix(in srgb, white 12%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, white 4%, transparent);
+  color: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.importChoice input {
+  accent-color: var(--onb-accent);
+}
+.importChoice span {
+  display: grid;
+  gap: 2px;
+}
+.importChoice small {
+  color: color-mix(in srgb, currentColor 65%, transparent);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.importPicker {
+  min-height: 72px;
+  justify-content: center;
+  border-style: dashed;
+  color: color-mix(in srgb, var(--onb-accent) 70%, white 30%);
+  font-weight: 600;
+}
+
 /* The CTA. Gets the accent color as background so it's the loudest
    thing in the card; reads as a clear "press here next." */
 .cta {

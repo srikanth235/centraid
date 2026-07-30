@@ -150,8 +150,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       // below (google-gmail-send, google-calendar-invite-send); every
       // actual send still parks for the owner's approval regardless.
       "https://www.googleapis.com/auth/gmail.send",
-      "https://www.googleapis.com/auth/calendar.readonly",
-      "https://www.googleapis.com/auth/contacts.readonly",
+      "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/contacts",
       "https://www.googleapis.com/auth/drive.readonly",
     ].join(" "),
     allowedHosts: [
@@ -177,12 +177,12 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
       {
         templateId: "google-calendar-pull",
         kind: "pull.gcal",
-        scope: "https://www.googleapis.com/auth/calendar.readonly",
+        scope: "https://www.googleapis.com/auth/calendar.events",
       },
       {
         templateId: "google-contacts-pull",
         kind: "pull.gcontacts",
-        scope: "https://www.googleapis.com/auth/contacts.readonly",
+        scope: "https://www.googleapis.com/auth/contacts",
       },
       {
         templateId: "google-drive-pull",

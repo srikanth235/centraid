@@ -14,10 +14,14 @@
 // contract the served app relies on.
 import type { KeyboardEvent, ReactNode } from "react";
 
+import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
+import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+
 import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
+  loading: boolean;
   sideOpen: boolean;
   onOpenSide: () => void;
   onCloseSide: () => void;
@@ -214,6 +218,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             Ask the owner to approve this app&apos;s requested scopes in vault
             settings.
           </span>
+          <VaultAccessButton />
         </div>
         <output
           id="noticeBanner"
@@ -222,7 +227,9 @@ export function Chrome(props: ChromeProps): ReactNode {
           hidden
         />
 
-        <div className={styles.canvas}>{props.canvas}</div>
+        <div className={styles.canvas}>
+          {props.loading ? <LoadingSkeleton /> : props.canvas}
+        </div>
       </main>
 
       {props.drawer}

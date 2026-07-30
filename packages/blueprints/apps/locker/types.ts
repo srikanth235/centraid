@@ -112,6 +112,12 @@ export interface AppState {
   sideOpen: boolean;
   showList: boolean;
   locked: boolean;
+  authConfigured: boolean | null;
+  authSession: string | null;
+  authBusy: boolean;
+  authError: string;
+  pendingItemId: string | null;
+  reauthOpen: boolean;
   gen: boolean;
   genLen: number;
   genNum: boolean;

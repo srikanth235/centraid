@@ -61,6 +61,60 @@
 
 import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
+// Canonical receipt capture is a forward migration as well as part of the
+// fresh schema. The receipt owns the claimed content item; reviewed OCR rows
+// stay structured and each line allocation is explicit rather than inferred.
+export const TALLY_RECEIPT_DDL = `
+CREATE TABLE IF NOT EXISTS tally_expense_receipt (
+  receipt_id  TEXT PRIMARY KEY,
+  expense_id  TEXT NOT NULL UNIQUE REFERENCES tally_expense(expense_id) ON DELETE CASCADE,
+  content_id  TEXT NOT NULL UNIQUE REFERENCES core_content_item(content_id),
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS tally_expense_line_item (
+  line_item_id TEXT PRIMARY KEY,
+  receipt_id   TEXT NOT NULL REFERENCES tally_expense_receipt(receipt_id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL CHECK (kind IN ('item','tax','tip')),
+  description  TEXT NOT NULL,
+  amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),
+  sort_order   INTEGER NOT NULL CHECK (sort_order >= 0),
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS tally_expense_line_allocation (
+  line_item_id TEXT NOT NULL REFERENCES tally_expense_line_item(line_item_id) ON DELETE CASCADE,
+  party_id     TEXT NOT NULL REFERENCES core_party(party_id),
+  share_minor  INTEGER NOT NULL CHECK (share_minor >= 0),
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT},
+  PRIMARY KEY (line_item_id, party_id)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS tally_expense_line_receipt_idx
+  ON tally_expense_line_item(receipt_id, sort_order);
+CREATE INDEX IF NOT EXISTS tally_expense_line_allocation_party_idx
+  ON tally_expense_line_allocation(party_id);
+${touchUpdatedAt("tally_expense_receipt", "receipt_id").replace(
+  "CREATE TRIGGER",
+  "CREATE TRIGGER IF NOT EXISTS"
+)}
+${touchUpdatedAt("tally_expense_line_item", "line_item_id").replace(
+  "CREATE TRIGGER",
+  "CREATE TRIGGER IF NOT EXISTS"
+)}
+CREATE TRIGGER IF NOT EXISTS tally_expense_line_allocation_touch_updated_at
+AFTER UPDATE ON tally_expense_line_allocation
+WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+  UPDATE tally_expense_line_allocation
+     SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+   WHERE line_item_id = NEW.line_item_id AND party_id = NEW.party_id;
+END;
+`;
+
 export const TALLY_DDL = `
 CREATE TABLE tally_friend (
   friend_id    TEXT PRIMARY KEY,
@@ -162,4 +216,5 @@ BEGIN
      SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
    WHERE expense_id = NEW.expense_id AND party_id = NEW.party_id;
 END;
+${TALLY_RECEIPT_DDL}
 `;

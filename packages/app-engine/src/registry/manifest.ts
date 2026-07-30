@@ -121,6 +121,12 @@ export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
   readonly verbs: "read" | "read+act" | "act" | "reveal";
+  readonly rowFilter?: readonly {
+    readonly column: string;
+    readonly op: string;
+    readonly value?: unknown;
+  }[];
+  readonly fieldMask?: readonly string[];
 }
 
 /**
@@ -305,6 +311,7 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
           minItems: 1,
           items: {
             type: "object",
+            additionalProperties: false,
             required: ["schema", "verbs"],
             properties: {
               schema: { type: "string", minLength: 1 },
@@ -312,6 +319,25 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
               verbs: {
                 type: "string",
                 enum: ["read", "read+act", "act", "reveal"],
+              },
+              rowFilter: {
+                type: "array",
+                minItems: 1,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["column", "op"],
+                  properties: {
+                    column: { type: "string", minLength: 1 },
+                    op: { type: "string", minLength: 1 },
+                    value: {},
+                  },
+                },
+              },
+              fieldMask: {
+                type: "array",
+                minItems: 1,
+                items: { type: "string", minLength: 1 },
               },
             },
           },

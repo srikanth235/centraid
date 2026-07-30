@@ -35,7 +35,16 @@ const REPEAT_OPTIONS: { value: string; label: string }[] = [
   { value: "FREQ=WEEKLY", label: "Weekly" },
   { value: "FREQ=MONTHLY", label: "Monthly" },
   { value: "FREQ=YEARLY", label: "Yearly" },
+  { value: "custom", label: "Custom RRULE…" },
 ];
+
+function localTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "Etc/UTC";
+  }
+}
 
 export function CreateModal({
   calendars,
@@ -56,6 +65,13 @@ export function CreateModal({
   const [calendarId, setCalendarId] = useState(calendars[0]?.calendar_id ?? "");
   const [description, setDescription] = useState("");
   const [repeat, setRepeat] = useState("none");
+  const [customRepeat, setCustomRepeat] = useState("");
+  const [semantics, setSemantics] = useState<"zoned" | "floating" | "all-day">(
+    "zoned"
+  );
+  const [startTz, setStartTz] = useState(localTimeZone);
+  const [endTz, setEndTz] = useState(localTimeZone);
+  const [reminders, setReminders] = useState("10");
   const [conferencingUri, setConferencingUri] = useState("");
   // The invite directory (parties query), and the party ids currently invited.
   const [people, setPeople] = useState<PartyOption[]>([]);
@@ -64,9 +80,13 @@ export function CreateModal({
   const [queued, setQueued] = useState(false);
   const [formNotice, setFormNotice] = useState("");
   const titleRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
     titleRef.current?.focus();
+    return () => dialog?.close();
   }, []);
 
   // Load pickable guests once — you are the organizer, not a guest, so the
@@ -131,24 +151,26 @@ export function CreateModal({
       return;
     }
     setBusy(true);
-    let startTz: string | undefined;
-    try {
-      startTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      startTz = undefined;
-    }
+    const rrule = repeat === "custom" ? customRepeat.trim() : repeat;
     const outcome = await onSubmit({
       summary: title,
       dtstart,
       dtend,
       calendar_id: calendarId,
-      ...(startTz ? { start_tz: startTz } : {}),
+      start_tz: startTz,
+      end_tz: endTz,
+      recurrence_semantics: semantics,
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(invited.size ? { attendee_party_ids: [...invited] } : {}),
-      ...(repeat === "none" ? {} : { rrule: repeat }),
+      ...(rrule === "none" || !rrule ? {} : { rrule }),
       ...(conferencingUri.trim()
         ? { conferencing_uri: conferencingUri.trim() }
         : {}),
+      reminders: reminders
+        .split(",")
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isInteger(value) && value >= 0)
+        .map((minutes_before) => ({ minutes_before })),
     });
     setBusy(false);
     if (outcome?.status === "executed" || outcome?.status === "parked") {
@@ -174,7 +196,7 @@ export function CreateModal({
         onClick={onClose}
       />
       <dialog
-        open
+        ref={dialogRef}
         className={`kit-modal ${styles.createModal}`}
         aria-modal="true"
         aria-labelledby="createEventTitle"
@@ -233,6 +255,44 @@ export function CreateModal({
                 ))}
               </select>
             </label>
+            <label className="ag-field-row">
+              <span>Time</span>
+              <select
+                value={semantics}
+                onChange={(e) =>
+                  setSemantics(
+                    e.target.value as "zoned" | "floating" | "all-day"
+                  )
+                }
+              >
+                <option value="zoned">Zoned</option>
+                <option value="floating">Floating</option>
+                <option value="all-day">All day</option>
+              </select>
+            </label>
+          </div>
+          {repeat === "custom" ? (
+            <label className="ag-field-row">
+              <span>RRULE</span>
+              <input
+                value={customRepeat}
+                placeholder="FREQ=WEEKLY;BYDAY=MO,WE;COUNT=12"
+                onChange={(e) => setCustomRepeat(e.target.value)}
+              />
+            </label>
+          ) : null}
+          <div className={styles.createTimes}>
+            <label className="ag-field-row">
+              <span>Start zone</span>
+              <input
+                value={startTz}
+                onChange={(e) => setStartTz(e.target.value)}
+              />
+            </label>
+            <label className="ag-field-row">
+              <span>End zone</span>
+              <input value={endTz} onChange={(e) => setEndTz(e.target.value)} />
+            </label>
           </div>
           <div>
             <div className="ag-eyebrow-label">Calendar</div>
@@ -290,6 +350,16 @@ export function CreateModal({
               aria-label="Video call link"
               value={conferencingUri}
               onChange={(e) => setConferencingUri(e.target.value)}
+            />
+          </label>
+          <label className="ag-field-row">
+            <span>Reminders</span>
+            <input
+              inputMode="numeric"
+              placeholder="30, 10"
+              aria-label="Reminder minutes"
+              value={reminders}
+              onChange={(e) => setReminders(e.target.value)}
             />
           </label>
           <textarea

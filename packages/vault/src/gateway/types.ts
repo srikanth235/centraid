@@ -445,6 +445,11 @@ export interface RevealRequest {
   columns?: string[];
   /** Optional, non-secret reason attached to the evidence receipt. */
   context?: { kind: "fill"; origin: string };
+  /**
+   * Locker's memory-only user-presence proof. The host consumes a one-time
+   * item permit before a non-fill Locker reveal; it is never journaled.
+   */
+  authentication?: { sessionToken?: string; itemToken?: string };
   purpose?: string;
 }
 

@@ -427,6 +427,49 @@
   ],
   "queries": [
     {
+      "name": "auth",
+      "description": "Online-only Locker authentication control plane. Passphrases and memory-session tokens bypass the replica intent ledger and are never persisted in receipts.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "status",
+              "configure",
+              "unlock",
+              "authorize-item",
+              "lock",
+              "enroll-device",
+              "revoke-device"
+            ]
+          },
+          "sessionToken": { "type": "string" },
+          "secret": { "type": "string" },
+          "credentialId": { "type": "string" },
+          "itemId": { "type": "string" },
+          "label": { "type": "string" }
+        },
+        "required": ["operation"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": { "type": "boolean" },
+          "configured": { "type": "boolean" },
+          "authenticated": { "type": "boolean" },
+          "sessionToken": { "type": "string" },
+          "itemToken": { "type": "string" },
+          "credentialId": { "type": "string" },
+          "expiresAt": { "type": "string" },
+          "retryAfterMs": { "type": "integer" },
+          "code": { "type": "string" },
+          "message": { "type": "string" }
+        }
+      }
+    },
+    {
       "name": "autofill-candidates",
       "description": "Secret-free live login metadata for Companion origin matching. OTP presence is a boolean; no password or OTP seed is returned.",
       "input": {
@@ -472,7 +515,8 @@
             "type": "integer",
             "minimum": 20,
             "maximum": 2000
-          }
+          },
+          "auth_session": { "type": "string" }
         },
         "additionalProperties": false
       },
@@ -487,6 +531,12 @@
           },
           "window": {
             "type": "integer"
+          },
+          "authRequired": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
           },
           "vaultDenied": {
             "type": "object"
@@ -503,9 +553,11 @@
           "item_id": {
             "type": "string",
             "minLength": 1
-          }
+          },
+          "auth_session": { "type": "string", "minLength": 1 },
+          "item_token": { "type": "string", "minLength": 1 }
         },
-        "required": ["item_id"],
+        "required": ["item_id", "auth_session", "item_token"],
         "additionalProperties": false
       },
       "output": {
@@ -513,6 +565,12 @@
         "properties": {
           "item": {
             "type": ["object", "null"]
+          },
+          "authRequired": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
           },
           "vaultDenied": {
             "type": "object"

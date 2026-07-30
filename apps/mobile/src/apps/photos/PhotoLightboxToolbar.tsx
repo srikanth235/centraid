@@ -34,10 +34,20 @@ export function PhotoLightboxToolbar({
   );
   return (
     <View style={styles.toolbar}>
-      <Pressable onPress={onToggleSlideshow}>
+      <Pressable
+        accessibilityLabel={slideshow ? "Pause slideshow" : "Play slideshow"}
+        accessibilityRole="button"
+        accessibilityState={{ selected: slideshow }}
+        onPress={onToggleSlideshow}
+      >
         <Feather name={slideshow ? "pause" : "play"} size={22} color="#fff" />
       </Pressable>
       <Pressable
+        accessibilityLabel={
+          asset.favorite ? "Remove from favorites" : "Add to favorites"
+        }
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !writable, selected: asset.favorite }}
         onPress={() => {
           void Haptics.selectionAsync();
           void onWrite(
@@ -64,16 +74,30 @@ export function PhotoLightboxToolbar({
           color={writable ? (asset.favorite ? "#ff625f" : "#fff") : "#777"}
         />
       </Pressable>
-      <Pressable onPress={() => onExport(false)}>
+      <Pressable
+        accessibilityLabel="Share photo"
+        accessibilityRole="button"
+        onPress={() => onExport(false)}
+      >
         <Feather name="share" size={23} color="#fff" />
       </Pressable>
       <Pressable
+        accessibilityLabel="Add photo to another vault"
+        accessibilityRole="button"
+        accessibilityState={{
+          disabled: !asset.assetId || !asset.scopeIds?.length,
+        }}
         disabled={!asset.assetId || !asset.scopeIds?.length}
         onPress={() => onPlacement("add")}
       >
         <Feather name="copy" size={22} color="#fff" />
       </Pressable>
       <Pressable
+        accessibilityLabel="Move photo to another vault"
+        accessibilityRole="button"
+        accessibilityState={{
+          disabled: !writable || !asset.scopeIds?.length,
+        }}
         disabled={!writable || !asset.scopeIds?.length}
         onPress={() => onPlacement("move")}
       >
@@ -83,10 +107,19 @@ export function PhotoLightboxToolbar({
           color={writable ? "#fff" : "#777"}
         />
       </Pressable>
-      <Pressable onPress={() => onExport(true)}>
+      <Pressable
+        accessibilityLabel="Export original photo"
+        accessibilityRole="button"
+        onPress={() => onExport(true)}
+      >
         <Feather name="download" size={23} color="#fff" />
       </Pressable>
       <Pressable
+        accessibilityLabel={
+          asset.archived ? "Unarchive photo" : "Archive photo"
+        }
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !writable, selected: asset.archived }}
         disabled={!writable}
         onPress={() =>
           void onWrite(
@@ -111,6 +144,9 @@ export function PhotoLightboxToolbar({
         <Feather name="archive" size={23} color={writable ? "#fff" : "#777"} />
       </Pressable>
       <Pressable
+        accessibilityLabel="Move photo to trash"
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !writable }}
         disabled={!writable}
         onPress={() =>
           Alert.alert(

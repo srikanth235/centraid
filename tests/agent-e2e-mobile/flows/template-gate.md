@@ -25,7 +25,9 @@ phone is a regression this flow catches.
 
 **Steps (per template):**
 
-1. Clear state, redeem a fresh gateway ticket, and complete the test profile.
+1. Clear state, redeem a fresh gateway ticket, and prove the valid identity
+   exit: a named roster member goes directly to the personalized Done screen;
+   an unnamed member completes the profile form first.
 2. Up front: `POST /centraid/_apps/_install` with `{templateId}` for every
    gated UI template. Install, not clone: since #434 a bundled blueprint app is
    registered IN PLACE — a consent row plus grants, copying no code — and

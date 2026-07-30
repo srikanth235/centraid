@@ -191,6 +191,56 @@ describe("knowledge", () => {
     expect(revisesLinkCount()).toBe(1);
   });
 
+  test("restore_note_version accepts only this note's history and appends instead of rewriting", () => {
+    const { note_id, body_content_id: v1 } = createNote({
+      title: "Draft",
+      body_text: "v1",
+    });
+    const edited = invoke("knowledge.edit_note", {
+      note_id,
+      body_text: "v2",
+    });
+    expect(edited.status).toBe("executed");
+    const v2 = (edited as { output: { body_content_id: string } }).output
+      .body_content_id;
+    expect(
+      invoke("knowledge.restore_note_version", {
+        note_id,
+        content_id: v1,
+      }).status
+    ).toBe("executed");
+    const current = db.vault
+      .prepare("SELECT body_content_id FROM knowledge_note WHERE note_id = ?")
+      .get(note_id) as { body_content_id: string };
+    expect(current.body_content_id).toBe(v1);
+    const links = db.vault
+      .prepare(
+        `SELECT from_id, to_id FROM core_link l
+         JOIN core_concept c ON c.concept_id = l.relation_concept_id
+        WHERE c.notation = 'revises'
+        ORDER BY l.valid_from, l.link_id`
+      )
+      .all() as Array<{ from_id: string; to_id: string }>;
+    expect(links.map((row) => ({ ...row }))).toStrictEqual([
+      { from_id: v2, to_id: v1 },
+      { from_id: v1, to_id: v2 },
+    ]);
+
+    const outsider = createNote({ title: "Other", body_text: "outside" });
+    expect(
+      invoke("knowledge.restore_note_version", {
+        note_id,
+        content_id: outsider.body_content_id,
+      }).status
+    ).toBe("failed");
+    expect(
+      invoke("knowledge.restore_note_version", {
+        note_id,
+        content_id: v1,
+      }).status
+    ).toBe("failed");
+  });
+
   test("edit_note on an unknown note is refused by precondition", () => {
     const outcome = invoke("knowledge.edit_note", {
       note_id: "ghost",

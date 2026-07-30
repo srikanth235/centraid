@@ -1,3 +1,4 @@
+import { AudiencePlacement } from "../../_shared/AudiencePlacement.tsx";
 // `<section class="v-detail">` — back button + (watchtower | item | empty)
 // content. The React port of app.js's `LockerDetail` Lit component. The
 // item-view internals (field descriptors/rows, including the real-TOTP tick)
@@ -176,16 +177,25 @@ export function LockerDetail({
       {mode === "watch" ? (
         <WatchtowerPane watch={watch} onSelect={onSelect} />
       ) : mode === "item" ? (
-        <ItemPane
-          sel={detail}
-          reveal={reveal}
-          onToggleReveal={onToggleReveal}
-          onToggleFav={onToggleFav}
-          onEdit={onEdit}
-          onTrash={onTrash}
-          onRestore={onRestore}
-          onPurge={onPurge}
-        />
+        <>
+          <ItemPane
+            sel={detail}
+            reveal={reveal}
+            onToggleReveal={onToggleReveal}
+            onToggleFav={onToggleFav}
+            onEdit={onEdit}
+            onTrash={onTrash}
+            onRestore={onRestore}
+            onPurge={onPurge}
+          />
+          {detail && !detail.trashed ? (
+            <AudiencePlacement
+              itemType="locker.item"
+              itemId={detail.item_id}
+              label="Share family item"
+            />
+          ) : null}
+        </>
       ) : (
         <EmptyPane />
       )}

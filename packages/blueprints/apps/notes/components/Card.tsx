@@ -1,3 +1,4 @@
+import { displayText } from "../../_shared/untrusted.ts";
 import { checkStats, notebookColorVar, previewText } from "../format.ts";
 import { I } from "../icons.ts";
 // One note card in the masonry/list wall. `.card` (was `.nt-card`) stays a
@@ -25,14 +26,15 @@ export function Card({
   onTogglePin: (note: Note) => void;
 }) {
   const pinned = note.pinned === 1;
+  const title = displayText(note.title);
   // The list projection ships a `preview` + `check` tally (issue #404); older
   // payloads carried the full `body` — fall back to deriving from it so the
   // card renders either shape.
   const stats = note.check ?? checkStats(note.body);
-  const preview = note.preview ?? previewText(note.body);
+  const preview = displayText(note.preview ?? previewText(note.body));
   const hasChecks = stats.total > 0;
   const notebookId = note.notebook_ids?.[0];
-  const notebookName = note.notebook_names?.[0];
+  const notebookName = displayText(note.notebook_names?.[0]);
   const notebookColor = notebookId ? notebookColorVar(notebookId) : null;
 
   return (
@@ -44,12 +46,12 @@ export function Card({
       <button
         type="button"
         className={`kit-stretch-btn ${styles.cardOpen}`}
-        aria-label={`Open ${note.title?.trim() || "Untitled note"}`}
+        aria-label={`Open ${title.trim() || "Untitled note"}`}
         onClick={() => onOpen(note.note_id)}
       />
       <div className={styles.cardHead}>
         <div className={styles.cardTitle}>
-          <Highlighted text={note.title ?? ""} term={search} />
+          <Highlighted text={title} term={displayText(search)} />
         </div>
         <button
           type="button"
@@ -67,7 +69,7 @@ export function Card({
         </button>
       </div>
       <div className={styles.cardPreview}>
-        <Highlighted text={preview} term={search} />
+        <Highlighted text={preview} term={displayText(search)} />
       </div>
       {hasChecks ? (
         <div className={styles.cardProgress}>
@@ -91,7 +93,7 @@ export function Card({
               className={`${shared.tagChip} ${styles.tagChipStatic}`}
               key={t.tag_id}
             >
-              #{t.label}
+              #{displayText(t.label)}
             </span>
           ))}
         </div>

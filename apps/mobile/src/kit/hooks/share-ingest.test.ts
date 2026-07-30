@@ -118,7 +118,7 @@ describe("processShareIntent routing", () => {
 });
 
 describe("processShareIntent lifecycle", () => {
-  it("alerts honestly and resets on an unsupported (text) share, touching no producer", async () => {
+  it("guards its file-only contract and resets when called without files", async () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, {
       files: [],

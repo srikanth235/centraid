@@ -1,0 +1,87 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.title,
+.text,
+.select,
+.input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--ink);
+  font: var(--t-small);
+  padding: 8px 10px;
+}
+.title {
+  font: var(--t-body-strong);
+}
+.text {
+  min-height: 68px;
+  resize: vertical;
+}
+.title:focus-visible,
+.text:focus-visible,
+.select:focus-visible,
+.input:focus-visible {
+  border-color: var(--selb);
+  box-shadow: var(--kit-focus-ring);
+  outline: none;
+}
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-2);
+  font: var(--t-small);
+}
+.field > span {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.scope {
+  padding: 10px;
+  border-radius: 9px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+}
+.guestList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.guest {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-small);
+}
+.guest[aria-pressed="true"] {
+  border-color: var(--selb);
+  background: var(--accent-soft);
+  color: var(--accent-deep-fg);
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.notice {
+  margin: 0;
+}
+@media (max-width: 420px) {
+  .pair {
+    grid-template-columns: 1fr;
+  }
+}

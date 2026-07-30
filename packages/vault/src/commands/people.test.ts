@@ -112,27 +112,52 @@ describe("people", () => {
     expect(bad.predicate).toContain("list_exists_if_given");
   });
 
-  test("edit_person revises the name and profile fields", () => {
+  test("edit_person records a one-shot revision that restores the exact prior fields", () => {
     const partyId = addPerson();
-    expect(
+    const edited = out<{ revision_id: string; undo_until: string }>(
       invoke("people.edit_person", {
         party_id: partyId,
         display_name: "Maya C.",
         role: "Design lead",
         met: "Ceramics class, 2019",
-      }).status
-    ).toBe("executed");
-    const party = db.vault
-      .prepare("SELECT display_name FROM core_party WHERE party_id = ?")
-      .get(partyId) as { display_name: string };
-    expect(party.display_name).toBe("Maya C.");
-    const profile = db.vault
-      .prepare("SELECT role, met FROM people_profile WHERE party_id = ?")
-      .get(partyId) as { role: string; met: string };
-    expect(profile).toMatchObject({
+      })
+    );
+    const person = () =>
+      db.vault
+        .prepare(
+          `SELECT p.display_name, pr.role, pr.met
+             FROM core_party p
+             JOIN people_profile pr ON pr.party_id = p.party_id
+            WHERE p.party_id = ?`
+        )
+        .get(partyId) as {
+        display_name: string;
+        role: string | null;
+        met: string | null;
+      };
+    expect(person()).toMatchObject({
+      display_name: "Maya C.",
       role: "Design lead",
       met: "Ceramics class, 2019",
     });
+    expect(Date.parse(edited.undo_until)).toBeGreaterThan(Date.now());
+    out(
+      invoke("people.undo_person", {
+        party_id: partyId,
+        revision_id: edited.revision_id,
+      })
+    );
+    expect(person()).toMatchObject({
+      display_name: "Maya Chen",
+      role: null,
+      met: null,
+    });
+    expect(
+      invoke("people.undo_person", {
+        party_id: partyId,
+        revision_id: edited.revision_id,
+      }).status
+    ).toBe("failed");
   });
 
   test("set_cadence updates the keep-in-touch interval", () => {
@@ -145,6 +170,43 @@ describe("people", () => {
       .prepare("SELECT cadence_days FROM people_profile WHERE party_id = ?")
       .get(partyId) as { cadence_days: number };
     expect(profile.cadence_days).toBe(7);
+  });
+
+  test("trash_person is recoverable and undo refuses an expired revision", () => {
+    const partyId = addPerson({ role: "Friend" });
+    const trashed = out<{ revision_id: string }>(
+      invoke("people.trash_person", { party_id: partyId })
+    );
+    const lifecycle = () =>
+      db.vault
+        .prepare(
+          "SELECT deleted_at, purge_at FROM people_profile WHERE party_id = ?"
+        )
+        .get(partyId) as {
+        deleted_at: string | null;
+        purge_at: string | null;
+      };
+    expect(lifecycle().deleted_at).not.toBeNull();
+    expect(lifecycle().purge_at).not.toBeNull();
+    out(invoke("people.restore_person", { party_id: partyId }));
+    expect(lifecycle()).toMatchObject({ deleted_at: null, purge_at: null });
+
+    const second = out<{ revision_id: string }>(
+      invoke("people.trash_person", { party_id: partyId })
+    );
+    db.vault
+      .prepare(
+        "UPDATE core_entity_revision SET undo_until = ? WHERE revision_id = ?"
+      )
+      .run("2000-01-01T00:00:00.000Z", second.revision_id);
+    expect(
+      invoke("people.undo_person", {
+        party_id: partyId,
+        revision_id: second.revision_id,
+      }).status
+    ).toBe("failed");
+    expect(lifecycle().deleted_at).not.toBeNull();
+    expect(trashed.revision_id).toBeTruthy();
   });
 
   test("log_interaction records the touch and stamps last_contacted_at (clears overdue)", () => {

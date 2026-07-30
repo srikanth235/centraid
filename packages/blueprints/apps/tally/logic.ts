@@ -1,4 +1,11 @@
-import { first, resolveSplits, toCents, todayKey } from "./format.ts";
+import {
+  convertMinor,
+  first,
+  rateToScaled,
+  resolveSplits,
+  toCents,
+  todayKey,
+} from "./format.ts";
 // governance: allow-repo-hygiene file-size-limit (#408) pre-existing cohesive Tally business-logic module; the TS conversion only adds type annotations to the existing boundary and does not expand its behavior
 // Non-visual business logic: vault IO (write/act/read), navigation, the
 // people directory, and every modal's open/patch/save/close flow (expense,
@@ -217,6 +224,14 @@ export function createLogic({
       groupId: gid,
       desc: "",
       amount: "",
+      originalCurrency: dash.currency,
+      settlementCurrency: dash.currency,
+      rate: "1",
+      rateSource: "identity",
+      rateDate: todayKey(),
+      recurring: false,
+      rrule: "FREQ=MONTHLY",
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       paidBy: dash.me ?? "",
       method: "equal",
       category: "general",
@@ -243,6 +258,17 @@ export function createLogic({
       groupId: row.group_id,
       desc: row.description,
       amount: (row.amount_minor / 100).toFixed(2),
+      originalCurrency: row.original_currency ?? dash.currency,
+      settlementCurrency: row.settlement_currency ?? dash.currency,
+      rate:
+        row.rate_scaled && row.rate_scale != null
+          ? String(row.rate_scaled / 10 ** row.rate_scale)
+          : "1",
+      rateSource: row.rate_source ?? "identity",
+      rateDate: row.rate_date ?? row.spent_on ?? todayKey(),
+      recurring: false,
+      rrule: "FREQ=MONTHLY",
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       paidBy: row.paid_by,
       method: "exact", // edit lands on exact so the existing shares show
       category: row.category || "general",
@@ -315,9 +341,25 @@ export function createLogic({
 
   async function saveExpense() {
     const exp = state.expense!;
-    const cents = toCents(exp.amount);
+    const originalCents = toCents(exp.amount);
+    const originalCurrency = exp.originalCurrency.trim().toUpperCase();
+    const settlementCurrency = exp.settlementCurrency.trim().toUpperCase();
+    const rateScaled =
+      originalCurrency === settlementCurrency
+        ? 1_000_000
+        : rateToScaled(exp.rate);
+    const cents = convertMinor(originalCents, rateScaled);
     const splits = resolveSplits(exp, cents, state.modalMembers);
-    if (!exp.desc.trim() || cents <= 0 || !splits) return;
+    if (
+      !exp.desc.trim() ||
+      cents <= 0 ||
+      !splits ||
+      originalCurrency.length !== 3 ||
+      settlementCurrency.length !== 3 ||
+      (originalCurrency !== settlementCurrency &&
+        (!exp.rateSource.trim() || !exp.rateDate))
+    )
+      return;
     const base: ExpenseBase = {
       description: exp.desc.trim(),
       amount_minor: cents,
@@ -326,14 +368,58 @@ export function createLogic({
       spent_on: exp.spent_on,
       splits,
     };
+    const currencyFields = {
+      original_amount_minor: originalCents,
+      original_currency: originalCurrency,
+      settlement_currency: settlementCurrency,
+      rate_scaled: rateScaled,
+      rate_scale: 6,
+      rate_source:
+        originalCurrency === settlementCurrency
+          ? "identity"
+          : exp.rateSource.trim(),
+      rate_date: exp.rateDate || exp.spent_on,
+    };
+    if (exp.mode === "new" && exp.recurring) {
+      const anchorStart = new Date(`${exp.spent_on}T09:00:00`).toISOString();
+      const template = await act("save-recurring-expense", {
+        group_id: exp.groupId,
+        description: base.description,
+        paid_by: base.paid_by,
+        category: base.category,
+        splits: splits.map((split) => ({
+          party_id: split.party_id,
+          weight: Math.max(1, split.share_minor),
+        })),
+        rrule: exp.rrule,
+        anchor_start: anchorStart,
+        time_zone: exp.timeZone,
+        ...currencyFields,
+      });
+      if (!narrate(template)) return;
+      const templateId = String(template?.output?.template_id ?? "");
+      const materialized = await act("materialize-recurring-expense", {
+        template_id: templateId,
+        original_start: anchorStart,
+      });
+      if (!narrate(materialized)) return;
+      toast(
+        `${String(template?.output?.preview ?? "Recurring expense")} · first occurrence recorded`
+      );
+      closeExpense();
+      await refreshAll();
+      return;
+    }
     if (exp.mode === "edit") {
       // Edit is the cold path — patching a fetched row in place is not worth
       // the divergence risk, so it keeps the plain write→narrate→refresh flow.
       const outcome = await act("edit-expense", {
         expense_id: exp.expense_id,
         ...base,
+        ...currencyFields,
       });
       if (!narrate(outcome)) return;
+      armExpenseUndo(outcome, "Expense updated.");
       toast("Expense updated · receipted.");
       closeExpense();
       await refreshAll();
@@ -355,6 +441,7 @@ export function createLogic({
     const outcome = await act("add-expense", {
       group_id: exp.groupId,
       ...base,
+      ...currencyFields,
     });
     if (outcome?.status === "executed") {
       notice("");
@@ -376,6 +463,7 @@ export function createLogic({
   async function deleteExpense(expenseId: string) {
     const outcome = await act("delete-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
+    armExpenseUndo(outcome, "Expense moved to Trash.");
     toast("Expense deleted · receipted.");
     closeAllModals();
     // closeAllModals() only nulls the state — every other caller follows it
@@ -386,10 +474,114 @@ export function createLogic({
     await refreshAll();
   }
 
+  function armExpenseUndo(outcome: VaultOutcome | undefined, label: string) {
+    const revisionId = String(outcome?.output?.revision_id ?? "");
+    const expenseId = String(outcome?.output?.expense_id ?? "");
+    const until = String(outcome?.output?.undo_until ?? "");
+    if (!revisionId || !expenseId || !until) return;
+    state.expenseUndo = { expenseId, revisionId, until, label };
+    render();
+    const delay = Math.max(0, Date.parse(until) - Date.now());
+    setTimeout(() => {
+      if (state.expenseUndo?.revisionId !== revisionId) return;
+      state.expenseUndo = null;
+      render();
+    }, delay + 50);
+  }
+
+  async function undoExpense(expenseId: string, revisionId: string) {
+    const outcome = await act("undo-expense", {
+      expense_id: expenseId,
+      revision_id: revisionId,
+    });
+    if (!narrate(outcome)) return;
+    state.expenseUndo = null;
+    closeAllModals();
+    renderModals();
+    toast("Expense change undone · receipted.");
+    await refreshAll();
+  }
+
   async function restoreExpense(expenseId: string) {
     const outcome = await act("restore-expense", { expense_id: expenseId });
     if (!narrate(outcome)) return;
     toast("Expense restored · receipted.");
+    await refreshAll();
+  }
+
+  async function materializeRecurringExpense(
+    templateId: string,
+    originalStart: string
+  ): Promise<void> {
+    const outcome = await act("materialize-recurring-expense", {
+      template_id: templateId,
+      original_start: originalStart,
+    });
+    if (!narrate(outcome)) return;
+    toast(
+      outcome?.output?.status === "existing"
+        ? "Occurrence was already recorded."
+        : "Recurring expense recorded · receipt"
+    );
+    await refreshAll();
+  }
+
+  async function editRecurringExpense(
+    templateId: string,
+    originalStart: string,
+    scope: "occurrence" | "future" | "series",
+    action: "skip" | "override",
+    override?: Record<string, unknown>
+  ): Promise<void> {
+    const outcome = await act("edit-recurring-expense-occurrence", {
+      template_id: templateId,
+      original_start: originalStart,
+      scope,
+      action,
+      ...(override ? { override } : {}),
+    });
+    if (!narrate(outcome)) return;
+    toast(`Recurring ${scope} updated · receipt`);
+    await refreshAll();
+  }
+
+  // ---------- Group management ----------
+
+  async function renameGroup(groupId: string, name: string) {
+    const outcome = await act("rename-group", {
+      group_id: groupId,
+      name,
+    });
+    if (!narrate(outcome)) return;
+    toast("Group renamed · receipted.");
+    await refreshAll();
+  }
+
+  async function addGroupMember(groupId: string, partyId: string) {
+    const outcome = await act("add-group-member", {
+      group_id: groupId,
+      party_id: partyId,
+    });
+    if (!narrate(outcome)) return;
+    toast("Member added · receipted.");
+    await refreshAll();
+  }
+
+  async function removeGroupMember(groupId: string, partyId: string) {
+    const outcome = await act("remove-group-member", {
+      group_id: groupId,
+      party_id: partyId,
+    });
+    if (!narrate(outcome)) return;
+    toast("Member removed · receipted.");
+    await refreshAll();
+  }
+
+  async function deleteGroup(groupId: string) {
+    const outcome = await act("delete-group", { group_id: groupId });
+    if (!narrate(outcome)) return;
+    toast("Group deleted · receipted.");
+    setNav({ view: "dashboard", groupId: null, search: "" });
     await refreshAll();
   }
 
@@ -566,7 +758,14 @@ export function createLogic({
     setExpenseGroup,
     saveExpense,
     deleteExpense,
+    undoExpense,
     restoreExpense,
+    materializeRecurringExpense,
+    editRecurringExpense,
+    renameGroup,
+    addGroupMember,
+    removeGroupMember,
+    deleteGroup,
     openSettle,
     closeSettle,
     setSettle,

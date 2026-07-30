@@ -149,7 +149,7 @@ describe("connection-broker", () => {
         provider: "google",
         auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
         token_url: "https://oauth2.googleapis.com/token",
-        scopes: "https://www.googleapis.com/auth/calendar.readonly",
+        scopes: "https://www.googleapis.com/auth/calendar.events",
         client_id: "shared.apps.googleusercontent.com",
         allowed_hosts: ["www.googleapis.com", "oauth2.googleapis.com"],
       },
@@ -602,7 +602,7 @@ describe("connection-broker", () => {
     );
     expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
     expect(authorize.searchParams.get("scope")).toBe(
-      "https://www.googleapis.com/auth/calendar.readonly"
+      "https://www.googleapis.com/auth/calendar.events"
     );
     expect(ceremony.authUrl).not.toMatch(
       /openid|userinfo\.email|userinfo\.profile/u
@@ -639,7 +639,7 @@ describe("connection-broker", () => {
         redirect_uri: `${ASSIST_DEVELOPMENT_WORKER_ORIGIN}/callback`,
         state: ceremony.state,
         browser_binding: startFragment.get("browser_binding"),
-        scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+        scopes: ["https://www.googleapis.com/auth/calendar.events"],
       },
     });
     expect(String(requests[0]!.body.code_verifier)).toMatch(

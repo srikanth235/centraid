@@ -1,7 +1,9 @@
 // The expense detail popover: category/description header, amount, the
 // per-person split breakdown, and delete/close/edit actions.
+import { displayText, safeDocumentUrl } from "../../_shared/untrusted.ts";
 import { MS, cat, first, money, tint, todayKey } from "../format.ts";
 import type { Group, LedgerRow } from "../types.ts";
+import { History } from "./History.tsx";
 import { ArmedButton, KitAvatar, ModalBackdrop } from "./Shared.tsx";
 
 import shared from "./shared.module.css";
@@ -14,6 +16,7 @@ export function DetailModal({
   onClose,
   onEdit,
   onDelete,
+  onUndo,
 }: {
   row: LedgerRow;
   me: string | null;
@@ -22,6 +25,7 @@ export function DetailModal({
   onClose: () => void;
   onEdit: (row: LedgerRow) => void;
   onDelete: (expenseId: string) => void;
+  onUndo: (expenseId: string, revisionId: string) => void;
 }) {
   const c = cat(row.category);
   const d = new Date((row.spent_on || todayKey()) + "T12:00:00");
@@ -31,6 +35,7 @@ export function DetailModal({
       ? `You paid · ${when}`
       : `${first(row.paid_by_name)} paid · ${when}`;
   const groupName = groups.find((g) => g.group_id === row.group_id)?.name || "";
+  const receiptUrl = safeDocumentUrl(row.receipt?.content_uri);
 
   return (
     <ModalBackdrop onClose={onClose}>
@@ -101,6 +106,65 @@ export function DetailModal({
             </div>
           ))}
         </div>
+        {row.receipt ? (
+          <section style={{ marginTop: "18px" }}>
+            <div className={shared.flabel}>Receipt</div>
+            {receiptUrl ? (
+              <a
+                className="kit-btn"
+                href={receiptUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: "inline-flex",
+                  marginBottom: "10px",
+                  textDecoration: "none",
+                }}
+              >
+                Open canonical attachment
+              </a>
+            ) : null}
+            <div>
+              {row.receipt.lines.map((line) => (
+                <div
+                  key={line.line_item_id}
+                  style={{
+                    borderBottom: "1px solid var(--line)",
+                    padding: "8px 0",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                    }}
+                  >
+                    <span>
+                      {displayText(line.description)}
+                      {line.kind === "item" ? "" : ` · ${line.kind}`}
+                    </span>
+                    <span style={{ font: "var(--t-mono)" }}>
+                      {money(line.amount_minor, currency)}
+                    </span>
+                  </div>
+                  <div className="s-sub">
+                    {line.allocations
+                      .map(
+                        (allocation) =>
+                          `${displayText(allocation.name ?? "Member")} ${money(
+                            allocation.share_minor,
+                            currency
+                          )}`
+                      )
+                      .join(" · ")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        <History expenseId={row.expense_id} onUndo={onUndo} />
         <div className="kit-modal-foot">
           <ArmedButton
             className={`kit-btn danger ${shared.del}`}

@@ -122,6 +122,14 @@ describe("screens/AppSettingsPanel", () => {
       );
     });
 
+    it("opens directly on Vault for an in-app access recovery link", () => {
+      const el = mount(makeProps({ initialTab: "vault" }));
+      push(makeSnapshot({ vaultVisible: true }));
+      const panes = el.querySelectorAll<HTMLElement>(".settingsPane");
+      expect(panes[0]?.hidden).toBe(true);
+      expect(panes[2]?.hidden).toBe(false);
+    });
+
     it("renders appearance knobs and commits a change", () => {
       const props = makeProps();
       const el = mount(props);

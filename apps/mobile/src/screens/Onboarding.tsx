@@ -385,6 +385,8 @@ function PrimaryButton({
 }): React.JSX.Element {
   return (
     <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
     >

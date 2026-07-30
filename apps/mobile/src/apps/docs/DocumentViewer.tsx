@@ -10,8 +10,17 @@ import { WebView } from "react-native-webview";
 
 import OptionSheet from "../../kit/components/OptionSheet";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
 import { authHeader } from "../../lib/gateway";
+import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
+import {
+  optimisticRowId,
+  optimisticValues,
+} from "../../lib/replica/optimistic";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument } from "./docs-model";
 import { useDocsLibrary } from "./useDocsLibrary";
@@ -78,9 +87,53 @@ export default function DocumentViewer({
     )
       return;
     try {
+      const now = new Date().toISOString();
+      const optimistic: NativeOptimisticMutation[] =
+        name === "trash" && document.raw
+          ? [
+              {
+                op: "upsert",
+                entity: "core.document",
+                rowId: document.rawId ?? document.id,
+                values: optimisticValues(document.raw, {
+                  deleted_at: now,
+                  updated_at: now,
+                }),
+              },
+            ]
+          : name === "unstar" && document.starTag
+            ? [
+                {
+                  op: "delete",
+                  entity: "core.tag",
+                  rowId: String(document.starTag.tag_id),
+                },
+              ]
+            : name === "star" && document.starredConceptId
+              ? (() => {
+                  const tagId = optimisticRowId("star");
+                  return [
+                    {
+                      op: "upsert" as const,
+                      entity: "core.tag",
+                      rowId: tagId,
+                      values: {
+                        tag_id: tagId,
+                        target_type: "core.document",
+                        target_id: document.rawId ?? document.id,
+                        concept_id: document.starredConceptId,
+                        tagged_by_party_id: null,
+                        confidence: null,
+                        tagged_at: now,
+                      },
+                    },
+                  ];
+                })()
+              : [];
       const write = {
         action: name,
         input: { document_id: document.rawId ?? document.id },
+        optimistic,
       };
       const result = await session.writeTo(
         document.sourceVaultId,
@@ -90,19 +143,15 @@ export default function DocumentViewer({
       // A parked write (e.g. moving to trash is medium-risk) must surface for
       // Approve/Discard rather than silently vanish (M5); denials/failures are
       // shown, not swallowed.
-      if (result.status === "parked" || result.status === "queued") {
-        navigation.navigate("Settings", { screen: "Approvals" });
-      } else if (result.status === "denied" || result.status === "failed") {
-        Alert.alert(
-          "Not applied",
-          result.reason ?? "The vault rejected this change."
-        );
-      }
+      surfaceWriteOutcome(result, {
+        onParked: () =>
+          navigation.navigate("Settings", { screen: "Approvals" }),
+        queuedMessage:
+          "This change will sync automatically when the gateway reconnects.",
+        failureTitle: "Not applied",
+      });
     } catch (error) {
-      Alert.alert(
-        "Action failed",
-        error instanceof Error ? error.message : "Please try again."
-      );
+      surfaceWriteFailure(error, "Action failed");
     }
   };
   const place = async (targetVaultId: string): Promise<void> => {
@@ -142,19 +191,35 @@ export default function DocumentViewer({
       edges={["top", "bottom"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to documents"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text numberOfLines={1} style={[styles.title, { color: colors.ink }]}>
           {document.title}
         </Text>
-        <Pressable onPress={() => void share()}>
+        <Pressable
+          accessibilityLabel={`Share ${document.title}`}
+          accessibilityRole="button"
+          onPress={() => void share()}
+        >
           <Feather name="share" size={21} color={colors.accent} />
         </Pressable>
       </View>
       <Viewer document={document} url={url} />
       <View style={[styles.toolbar, { borderTopColor: colors.line }]}>
         <Pressable
+          accessibilityLabel={
+            document.starred ? "Remove document star" : "Star document"
+          }
+          accessibilityRole="button"
+          accessibilityState={{
+            disabled: document.canWrite !== true,
+            selected: document.starred,
+          }}
           disabled={document.canWrite !== true}
           onPress={() => void action(document.starred ? "unstar" : "star")}
         >
@@ -174,10 +239,17 @@ export default function DocumentViewer({
           {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
           · {document.custody ?? "local"}
         </Text>
-        <Pressable onPress={() => setPlacementKind("add")}>
+        <Pressable
+          accessibilityLabel="Add document to another vault"
+          accessibilityRole="button"
+          onPress={() => setPlacementKind("add")}
+        >
           <Feather name="copy" size={20} color={colors.accent} />
         </Pressable>
         <Pressable
+          accessibilityLabel="Move document to another vault"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: document.canWrite !== true }}
           disabled={document.canWrite !== true}
           onPress={() => setPlacementKind("move")}
         >
@@ -188,6 +260,9 @@ export default function DocumentViewer({
           />
         </Pressable>
         <Pressable
+          accessibilityLabel="Move document to trash"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: document.canWrite !== true }}
           disabled={document.canWrite !== true}
           onPress={() =>
             Alert.alert(

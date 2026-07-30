@@ -36,6 +36,41 @@
       },
       {
         "schema": "core",
+        "table": "link_entities",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "document",
+        "verbs": "read"
+      },
+      {
+        "schema": "schedule",
+        "table": "task",
+        "verbs": "read"
+      },
+      {
+        "schema": "tally",
+        "table": "expense",
+        "verbs": "read"
+      },
+      {
+        "schema": "media",
+        "table": "media_asset",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "collection",
         "verbs": "read"
       },
@@ -77,6 +112,16 @@
       {
         "schema": "knowledge",
         "table": "delete_note",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "restore_note",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "restore_note_version",
         "verbs": "act"
       },
       {
@@ -316,7 +361,7 @@
     {
       "name": "delete-notebook",
       "description": "Delete a notebook through knowledge.delete_notebook — member notes are unfiled, never destroyed (the outcome reports notes_unfiled); refuses while child notebooks exist.",
-      "confirmation": "none",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -346,7 +391,38 @@
     },
     {
       "name": "delete-note",
-      "description": "Delete a note through knowledge.delete_note — removes the note with its placements, annotations and attachment edges; the deduped body is released only when nothing else shares it.",
+      "description": "Move a note to the 30-day trash through knowledge.delete_note without removing placements, annotations or attachment edges.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-note",
+      "description": "Restore a trashed note in place through knowledge.restore_note.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -371,6 +447,69 @@
           "reason": {
             "type": "string"
           }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-note-version",
+      "description": "Restore one prior body from this note's append-only version chain.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id", "content_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "link",
+      "description": "Compile one reviewed CommonMark [[wikilink]] into a typed, temporal core.link reference with an optional text anchor.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": { "type": "string", "minLength": 1 },
+          "target_type": { "type": "string", "minLength": 1 },
+          "target_id": { "type": "string", "minLength": 1 },
+          "exact": { "type": "string", "minLength": 1 },
+          "prefix": { "type": "string" },
+          "suffix": { "type": "string" },
+          "start": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["note_id", "target_type", "target_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
@@ -530,6 +669,24 @@
   ],
   "queries": [
     {
+      "name": "link-targets",
+      "description": "FTS5 powerbox search across notes, people, events, tasks, expenses, photos and documents; returns secret-free entity-aware link targets.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string", "minLength": 1 }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "targets": { "type": "array" }
+        }
+      }
+    },
+    {
       "name": "library",
       "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, a short body preview (`preview`) and checklist tally (`check`), and tags (`[{tag_id, concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull, and never full bodies (the editor pulls those via `note`); `truncated` says older notes exist beyond the window.",
       "input": {
@@ -547,6 +704,9 @@
         "type": "object",
         "properties": {
           "notes": {
+            "type": "array"
+          },
+          "trash": {
             "type": "array"
           },
           "notebooks": {
@@ -591,7 +751,7 @@
             "type": "string"
           },
           "format": {
-            "type": "string"
+            "type": ["string", "null"]
           },
           "vaultDenied": {
             "type": "object"
@@ -616,6 +776,32 @@
         "type": "object",
         "properties": {
           "notes": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "history",
+      "description": "The selected note's append-only body version chain, newest first.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "versions": {
             "type": "array"
           },
           "vaultDenied": {

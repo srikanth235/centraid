@@ -15,12 +15,14 @@ type ItemProps = {
   item: DriveItem;
   navigation: DocsScreenProps<"DocsHome">["navigation"];
   colors: ReturnType<typeof useTheme>["colors"];
+  onMenu: (item: DriveItem) => void;
 };
 
 export function ListItem({
   item,
   navigation,
   colors,
+  onMenu,
 }: ItemProps): React.JSX.Element {
   if (item.kind === "folder") {
     return (
@@ -40,6 +42,13 @@ export function ListItem({
           <Text style={[styles.meta, { color: colors.ink2 }]}>Folder</Text>
         </View>
         <Feather name="chevron-right" size={18} color={colors.ink3} />
+        <Pressable
+          accessibilityLabel={`Actions for ${item.folder.name}`}
+          hitSlop={10}
+          onPress={() => onMenu(item)}
+        >
+          <Feather name="more-vertical" size={19} color={colors.ink2} />
+        </Pressable>
       </Pressable>
     );
   }
@@ -75,6 +84,13 @@ export function ListItem({
       {item.document.starred ? (
         <Feather name="star" size={16} color="#d99b18" />
       ) : null}
+      <Pressable
+        accessibilityLabel={`Actions for ${item.document.title}`}
+        hitSlop={10}
+        onPress={() => onMenu(item)}
+      >
+        <Feather name="more-vertical" size={19} color={colors.ink2} />
+      </Pressable>
     </Pressable>
   );
 }
@@ -83,6 +99,7 @@ export function GridItem({
   item,
   navigation,
   colors,
+  onMenu,
 }: ItemProps): React.JSX.Element {
   const document = item.kind === "document" ? item.document : undefined;
   return (
@@ -98,7 +115,18 @@ export function GridItem({
               documentId: item.document.id,
             })
       }
+      onLongPress={() => onMenu(item)}
     >
+      <Pressable
+        accessibilityLabel={`Actions for ${
+          item.kind === "folder" ? item.folder.name : item.document.title
+        }`}
+        hitSlop={10}
+        onPress={() => onMenu(item)}
+        style={styles.gridMenu}
+      >
+        <Feather name="more-vertical" size={18} color={colors.ink2} />
+      </Pressable>
       <View style={[styles.gridPreview, { backgroundColor: colors.bgSunken }]}>
         <Feather
           name={

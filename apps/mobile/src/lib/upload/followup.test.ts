@@ -190,4 +190,21 @@ describe("settled upload follow-ups", () => {
       { id: 1, reason: expect.stringMatching(/replica rejected/u) },
     ]);
   });
+
+  it("does not clear a denied canonical write as if it were accepted", async () => {
+    const denied = followupOf({ followupId: 1, intentId: "denied" });
+    const { queue, cleared, attempts } = fakeQueue([denied]);
+    const session = {
+      write: vi.fn<NativeReplicaSession["write"]>(async () => ({
+        intentId: "denied",
+        status: "denied",
+        reason: "Tally receipt scope was not granted",
+      })),
+    } as unknown as NativeReplicaSession;
+
+    await replaySettledUploadFollowups(queue, session, "http://gateway");
+
+    expect(cleared).toStrictEqual([]);
+    expect(attempts.get(1)).toBe(1);
+  });
 });

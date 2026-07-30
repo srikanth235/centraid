@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 
 import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
+import { ROUTES } from "@centraid/protocol";
 import {
   isShareableItemType,
   moveOutOfVault,
@@ -12,9 +13,10 @@ import type { RouteHandler } from "../serve/build-gateway.js";
 import { canWrite } from "../serve/enrollment-store.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
+import { recordShareAccessReceipt } from "../serve/share-access-receipts.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
-export const PLACEMENTS_PATH = "/centraid/_gateway/placements";
+export const PLACEMENTS_PATH = ROUTES.gatewayPlacements;
 
 type PlacementKind = "add" | "move";
 type PlacementStatus =
@@ -85,7 +87,9 @@ export function makePlacementRouteHandler(
         )
         .all(deviceId) as unknown as PlacementRow[];
       return sendJson(res, 200, {
-        placements: rows.map(placementWire),
+        placements: rows.map((row) =>
+          placementWire(row, receiptFor(deps.gatewayDatabase, row.link_token))
+        ),
       });
     }
     if ((req.method ?? "GET") !== "POST")
@@ -148,7 +152,11 @@ export function makePlacementRouteHandler(
         deps.share ?? shareToVault,
         deps.move ?? moveOutOfVault
       );
-      return sendJson(res, 200, placementWire(row));
+      return sendJson(
+        res,
+        200,
+        placementWire(row, receiptFor(deps.gatewayDatabase, row.link_token))
+      );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       deps.gatewayDatabase.run(
@@ -160,7 +168,11 @@ export function makePlacementRouteHandler(
         input.linkToken
       );
       row = readRow(deps.gatewayDatabase, input.linkToken)!;
-      return sendJson(res, 202, placementWire(row));
+      return sendJson(
+        res,
+        202,
+        placementWire(row, receiptFor(deps.gatewayDatabase, row.link_token))
+      );
     }
   };
 }
@@ -185,14 +197,26 @@ function reconcile(
       itemId: current.item_id,
       sharedByMember: current.member_id,
     });
-    db.run(
-      `UPDATE placement_intents
-          SET target_state = 'executed', target_item_id = ?, updated_at = ?
-        WHERE link_token = ?`,
-      result.itemId,
-      new Date().toISOString(),
-      current.link_token
-    );
+    db.transaction(() => {
+      db.run(
+        `UPDATE placement_intents
+            SET target_state = 'executed', target_item_id = ?, updated_at = ?
+          WHERE link_token = ?`,
+        result.itemId,
+        new Date().toISOString(),
+        current.link_token
+      );
+      recordShareAccessReceipt(db, {
+        linkToken: current.link_token,
+        memberId: current.member_id,
+        action: "share",
+        itemType: current.item_type,
+        originVaultId: current.source_vault_id,
+        originItemId: current.item_id,
+        audienceVaultId: current.target_vault_id,
+        audienceItemId: result.itemId,
+      });
+    });
   }
   current = readRow(db, current.link_token)!;
   if (current.kind === "move" && current.source_state !== "executed") {
@@ -277,7 +301,10 @@ function update(
   );
 }
 
-function placementWire(row: PlacementRow): Record<string, unknown> {
+function placementWire(
+  row: PlacementRow,
+  accessReceiptId?: string
+): Record<string, unknown> {
   return {
     linkToken: row.link_token,
     kind: row.kind,
@@ -290,9 +317,23 @@ function placementWire(row: PlacementRow): Record<string, unknown> {
     sourceState: row.source_state,
     status: row.status,
     ...(row.reason ? { reason: row.reason } : {}),
+    ...(accessReceiptId ? { accessReceiptId } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function receiptFor(
+  db: GatewayDatabase,
+  linkToken: string
+): string | undefined {
+  return (
+    db.db
+      .prepare(
+        "SELECT receipt_id FROM share_access_receipts WHERE link_token = ?"
+      )
+      .get(linkToken) as { receipt_id: string } | undefined
+  )?.receipt_id;
 }
 
 function parseInput(body: Record<string, unknown>): PlacementInput {

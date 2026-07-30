@@ -16,6 +16,7 @@ export const coverageProjects = [
   "packages/design-tokens",
   "packages/gateway",
   "packages/protocol",
+  "packages/time-engine",
   "packages/cli",
   "packages/tunnel",
   "packages/test-kit",
@@ -29,7 +30,14 @@ export const coverageProjects = [
 
 // What v8 instruments. Shared with the diff-coverage config so a scoped run
 // scores the same file set the full run would.
-export const coverageInclude = ["packages/*/src/**", "apps/*/src/**"];
+export const coverageInclude = [
+  "packages/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+  "apps/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+  // Bundled apps and their shared browser runtime are production code
+  // co-located outside packages/blueprints/src (issue #630 Wave 0).
+  "packages/blueprints/apps/**/*.{ts,tsx}",
+  "packages/blueprints/kit/**/*.{ts,js}",
+];
 
 export const coverageExclude = [
   "**/*.test.ts",

@@ -31,12 +31,18 @@ export const APPS_PLANE_PREFIX = "/centraid/_apps" as const;
 /** Browser session plane prefix. */
 export const WEB_PLANE_PREFIX = "/centraid/_web" as const;
 
+/** Daily summary feature-plane prefix. */
+export const BRIEF_PLANE_PREFIX = "/centraid/_brief" as const;
+
 export const ROUTES = {
   gatewayInfo: `${GATEWAY_PLANE_PREFIX}/info`,
   gatewayHealth: `${GATEWAY_PLANE_PREFIX}/health`,
   gatewayDevices: `${GATEWAY_PLANE_PREFIX}/devices`,
   gatewayReplicaChanges: `${GATEWAY_PLANE_PREFIX}/replica/changes`,
   gatewayPlacements: `${GATEWAY_PLANE_PREFIX}/placements`,
+  gatewayShare: `${GATEWAY_PLANE_PREFIX}/share`,
+  gatewayShareRemove: `${GATEWAY_PLANE_PREFIX}/share/remove`,
+  gatewayShareReceipts: `${GATEWAY_PLANE_PREFIX}/share/receipts`,
   gatewayScopedBlobs: `${GATEWAY_PLANE_PREFIX}/blobs`,
   vaultStatus: `${VAULT_PLANE_PREFIX}/status`,
   vaultErase: `${VAULT_PLANE_PREFIX}/vaults:erase`,
@@ -55,6 +61,7 @@ export const ROUTES = {
   appsList: APPS_PLANE_PREFIX,
   webSession: `${WEB_PLANE_PREFIX}/session`,
   webControl: `${WEB_PLANE_PREFIX}/control`,
+  briefToday: `${BRIEF_PLANE_PREFIX}/today`,
 } as const;
 
 export type RouteName = keyof typeof ROUTES;

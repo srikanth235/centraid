@@ -10,19 +10,22 @@ import PlayfairDisplay_600SemiBold from "@expo-google-fonts/playfair-display/600
 import PlayfairDisplay_600SemiBold_Italic from "@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf";
 import SpaceGrotesk_500Medium from "@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf";
 import SpaceGrotesk_600SemiBold from "@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf";
+import type { LinkingOptions } from "@react-navigation/native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
+import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { ShareIntentProvider } from "expo-share-intent";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect } from "react";
-import { Text, View, useColorScheme } from "react-native";
+import { Pressable, Text, View, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   SafeAreaProvider,
+  SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
@@ -33,6 +36,9 @@ import AutomationsScreen from "./src/apps/automations/Automations";
 import DocsHome from "./src/apps/docs/DocsHome";
 import DocumentViewer from "./src/apps/docs/DocumentViewer";
 import InsightsScreen from "./src/apps/insights/Insights";
+import LockerHome from "./src/apps/locker/LockerHome";
+import NotesHome from "./src/apps/notes/NotesHome";
+import PeopleHome from "./src/apps/people/PeopleHome";
 import AlbumDetail from "./src/apps/photos/AlbumDetail";
 import BackupHealth from "./src/apps/photos/BackupHealth";
 import DuplicateReview from "./src/apps/photos/DuplicateReview";
@@ -43,6 +49,8 @@ import PhotosLibrary from "./src/apps/photos/PhotosLibrary";
 import PhotosSearch from "./src/apps/photos/PhotosSearch";
 import PhotoStateView from "./src/apps/photos/PhotoStateView";
 import PlacesMap from "./src/apps/photos/PlacesMap";
+import TallyHome from "./src/apps/tally/TallyHome";
+import TasksHome from "./src/apps/tasks/TasksHome";
 import ErrorBoundary from "./src/ErrorBoundary";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
 import {
@@ -50,6 +58,7 @@ import {
   ReplicaProvider,
   useReplica,
 } from "./src/kit/replica/ReplicaProvider";
+import { AppLockProvider } from "./src/kit/security/AppLock";
 import {
   hydrateAppearance,
   navThemeFor,
@@ -58,8 +67,11 @@ import {
   useAppearance,
   useTheme,
 } from "./src/kit/theme";
+import { NotificationCoordinator } from "./src/lib/notifications";
 import { hydrateProfile, isOnboarded } from "./src/lib/profile";
+import { MOBILE_COMPATIBILITY_WALL_COPY } from "./src/lib/replica/mobile-gateway-compatibility-core";
 import { useUploadReconciliation } from "./src/lib/upload/boot";
+import { rootNavigationRef } from "./src/navigation";
 import type {
   AgendaStackParamList,
   DocsStackParamList,
@@ -69,10 +81,11 @@ import type {
 } from "./src/navigation";
 import AppDetailScreen from "./src/screens/AppDetail";
 import ApprovalsScreen from "./src/screens/Approvals";
+import CaptureScreen from "./src/screens/Capture";
 import HomeScreen from "./src/screens/Home";
-import MobileFallbackScreen from "./src/screens/MobileFallback";
 import OnboardingScreen from "./src/screens/Onboarding";
 import PhoneStorageScreen from "./src/screens/PhoneStorage";
+import ScanScreen from "./src/screens/Scan";
 import SettingsScreen from "./src/screens/Settings";
 
 // Keep the native splash up until fonts have loaded — avoids a flash of
@@ -111,6 +124,83 @@ const COVER_OPTIONS = {
   animation: "fade",
   presentation: "fullScreenModal",
 } as const;
+
+const LINKING: LinkingOptions<RootStackParamList> = {
+  prefixes: ["centraid://"],
+  async getInitialURL(): Promise<string | null> {
+    const url = await Linking.getInitialURL();
+    if (url) return url;
+    return notificationUrl(
+      await Notifications.getLastNotificationResponseAsync()
+    );
+  },
+  subscribe(listener): () => void {
+    const linking = Linking.addEventListener("url", ({ url }) => listener(url));
+    const notifications = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const url = notificationUrl(response);
+        if (url) listener(url);
+      }
+    );
+    return () => {
+      linking.remove();
+      notifications.remove();
+    };
+  },
+  config: {
+    screens: {
+      Capture: "capture",
+      Scan: {
+        path: "scan",
+        parse: {
+          plaintextSize: Number,
+          deleteSourceAfterSettle: (value: string) => value === "true",
+        },
+      },
+      Agenda: {
+        screens: {
+          AgendaHome: "agenda",
+          AgendaEvent: "agenda/event/:eventId",
+        },
+      },
+      Photos: {
+        screens: {
+          PhotosHome: "photos",
+          PhotoLightbox: "photos/:assetId",
+        },
+      },
+      Docs: {
+        screens: {
+          DocsHome: "docs",
+          DocumentViewer: "docs/:documentId",
+        },
+      },
+      Locker: "locker",
+      Tasks: "apps/tasks",
+      People: "apps/people",
+      Notes: "apps/notes",
+      Tally: "apps/tally",
+      AppDetail: "apps/:appId",
+      Assistant: "assistant",
+      Automations: "automations",
+      Insights: "insights",
+      Settings: "settings",
+      Home: "",
+    },
+  },
+};
+
+function notificationUrl(
+  response: Notifications.NotificationResponse | null
+): string | null {
+  if (!response) return null;
+  const value = (
+    response.notification.request.content.data as { url?: unknown }
+  ).url;
+  return typeof value === "string" && value.startsWith("centraid://")
+    ? value
+    : null;
+}
 
 function UploadReconciliation(): null {
   const { session } = useReplica();
@@ -202,10 +292,11 @@ function SettingsNavigator(): React.JSX.Element {
  * inset keeps that bar clear of the status bar instead of bleeding under it.
  */
 function ReplicaErrorBanner(): React.JSX.Element | null {
-  const { error, ready } = useReplica();
+  const { compatibility, error, ready } = useReplica();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  if (!ready || !error || error === REPLICA_UNPAIRED_MESSAGE) return null;
+  if (!ready || compatibility || !error || error === REPLICA_UNPAIRED_MESSAGE)
+    return null;
   return (
     <View
       style={{
@@ -221,6 +312,84 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
         {error}
       </Text>
     </View>
+  );
+}
+
+function ReplicaCompatibilityGate({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const { colors } = useTheme();
+  const { compatibility, refresh } = useReplica();
+  if (!compatibility) return <>{children}</>;
+  const copy = MOBILE_COMPATIBILITY_WALL_COPY[compatibility];
+  return (
+    <SafeAreaView
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.bg,
+        flex: 1,
+        justifyContent: "center",
+        paddingHorizontal: 28,
+      }}
+    >
+      <View
+        accessibilityRole="alert"
+        style={{
+          backgroundColor: colors.bgElev,
+          borderColor: colors.lineStrong,
+          borderRadius: 20,
+          borderWidth: 1,
+          maxWidth: 420,
+          padding: 24,
+          width: "100%",
+        }}
+      >
+        <Text
+          style={{
+            color: colors.ink,
+            fontFamily: "SpaceGrotesk_600SemiBold",
+            fontSize: 26,
+          }}
+        >
+          {copy.title}
+        </Text>
+        <Text
+          style={{
+            color: colors.ink2,
+            fontFamily: "Geist_400Regular",
+            fontSize: 16,
+            lineHeight: 23,
+            marginTop: 10,
+          }}
+        >
+          {copy.body}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void refresh?.()}
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.accent,
+            borderRadius: 12,
+            marginTop: 22,
+            paddingHorizontal: 16,
+            paddingVertical: 13,
+          }}
+        >
+          <Text
+            style={{
+              color: colors.inkInv,
+              fontFamily: "Geist_600SemiBold",
+              fontSize: 15,
+            }}
+          >
+            {copy.action}
+          </Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -279,86 +448,128 @@ export default function App(): React.JSX.Element | null {
             <ShareIntentProvider
               options={{ scheme: "centraid", resetOnBackground: false }}
             >
-              <ReplicaProvider>
-                <UploadReconciliation />
-                <ShareIntentIngest />
-                {/* The replica error banner is only meaningful inside the app
-                    shell — during onboarding the user hasn't paired yet, so a
-                    "couldn't open replica" banner would just be noise. */}
-                {onboarded ? <ReplicaErrorBanner /> : null}
-                {onboarded ? (
-                  <NavigationContainer theme={navThemeFor(scheme)}>
-                    <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-                    <RootStack.Navigator
-                      screenOptions={{ headerShown: false }}
-                      // `selection` haptic when a cover opens — preserves the
-                      // vocabulary the old tabPress listener gave, and the one
-                      // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
-                      // `closing` guards it to the open transition, not dismissal.
-                      screenListeners={{
-                        transitionStart: (e) => {
-                          if (!e.data.closing) void Haptics.selectionAsync();
-                        },
-                      }}
-                    >
-                      <RootStack.Screen name="Home" component={HomeScreen} />
-                      <RootStack.Screen
-                        name="Photos"
-                        component={PhotosNavigator}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="Docs"
-                        component={DocsNavigator}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="Agenda"
-                        component={AgendaNavigator}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="AppDetail"
-                        component={AppDetailScreen}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="Assistant"
-                        component={AssistantScreen}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="Automations"
-                        component={AutomationsScreen}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="Insights"
-                        component={InsightsScreen}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="Settings"
-                        component={SettingsNavigator}
-                        options={COVER_OPTIONS}
-                      />
-                      <RootStack.Screen
-                        name="MobileFallback"
-                        component={MobileFallbackScreen}
-                        options={{
-                          animation: "slide_from_bottom",
-                          presentation: "modal",
-                        }}
-                      />
-                    </RootStack.Navigator>
-                  </NavigationContainer>
-                ) : (
-                  <>
-                    <StatusBar style="light" />
-                    <OnboardingScreen onDone={() => setOnboarded(true)} />
-                  </>
-                )}
-              </ReplicaProvider>
+              <AppLockProvider>
+                <ReplicaProvider>
+                  <ReplicaCompatibilityGate>
+                    <UploadReconciliation />
+                    <ShareIntentIngest />
+                    <NotificationCoordinator />
+                    {/* The replica error banner is only meaningful inside the app
+                      shell — during onboarding the user hasn't paired yet, so a
+                      "couldn't open replica" banner would just be noise. */}
+                    {onboarded ? <ReplicaErrorBanner /> : null}
+                    {onboarded ? (
+                      <NavigationContainer
+                        ref={rootNavigationRef}
+                        linking={LINKING}
+                        theme={navThemeFor(scheme)}
+                      >
+                        <StatusBar
+                          style={scheme === "dark" ? "light" : "dark"}
+                        />
+                        <RootStack.Navigator
+                          screenOptions={{ headerShown: false }}
+                          // `selection` haptic when a cover opens — preserves the
+                          // vocabulary the old tabPress listener gave, and the one
+                          // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
+                          // `closing` guards it to the open transition, not dismissal.
+                          screenListeners={{
+                            transitionStart: (e) => {
+                              if (!e.data.closing)
+                                void Haptics.selectionAsync();
+                            },
+                          }}
+                        >
+                          <RootStack.Screen
+                            name="Home"
+                            component={HomeScreen}
+                          />
+                          <RootStack.Screen
+                            name="Capture"
+                            component={CaptureScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Scan"
+                            component={ScanScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Photos"
+                            component={PhotosNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Docs"
+                            component={DocsNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Agenda"
+                            component={AgendaNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Locker"
+                            component={LockerHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Tasks"
+                            component={TasksHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="People"
+                            component={PeopleHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Notes"
+                            component={NotesHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Tally"
+                            component={TallyHome}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="AppDetail"
+                            component={AppDetailScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Assistant"
+                            component={AssistantScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Automations"
+                            component={AutomationsScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Insights"
+                            component={InsightsScreen}
+                            options={COVER_OPTIONS}
+                          />
+                          <RootStack.Screen
+                            name="Settings"
+                            component={SettingsNavigator}
+                            options={COVER_OPTIONS}
+                          />
+                        </RootStack.Navigator>
+                      </NavigationContainer>
+                    ) : (
+                      <>
+                        <StatusBar style="light" />
+                        <OnboardingScreen onDone={() => setOnboarded(true)} />
+                      </>
+                    )}
+                  </ReplicaCompatibilityGate>
+                </ReplicaProvider>
+              </AppLockProvider>
             </ShareIntentProvider>
           </View>
         </SafeAreaProvider>

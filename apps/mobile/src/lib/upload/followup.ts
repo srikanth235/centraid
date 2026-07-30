@@ -62,10 +62,15 @@ export async function replaySettledUploadFollowups(
         input: followup.input as ReplicaValue,
         intentId: followup.intentId,
       };
-      if (followup.targetVaultId && session.writeTo) {
-        await session.writeTo(followup.targetVaultId, followup.shape, write);
-      } else {
-        await session.write(followup.shape, write);
+      const outcome =
+        followup.targetVaultId && session.writeTo
+          ? await session.writeTo(followup.targetVaultId, followup.shape, write)
+          : await session.write(followup.shape, write);
+      if (outcome.status === "denied" || outcome.status === "failed") {
+        throw new Error(
+          outcome.reason ??
+            `canonical ${followup.shape}.${followup.action} write was ${outcome.status}`
+        );
       }
       queue.clearFollowup(followup.followupId);
       if (followup.derivatives) cleanupDeviceDerivatives(followup.derivatives);

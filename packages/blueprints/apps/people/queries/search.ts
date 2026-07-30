@@ -110,7 +110,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     const [profiles, parties, tags, concepts, schemes] = await Promise.all([
       ctx.vault.read({
         entity: "people.profile",
-        where: [{ column: "party_id", op: "in", value: order }],
+        where: [
+          { column: "party_id", op: "in", value: order },
+          { column: "deleted_at", op: "is-null" },
+        ],
         purpose,
       }),
       ctx.vault.read({

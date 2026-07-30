@@ -60,6 +60,9 @@ function toPartyRow(person) {
           ? `${bday.year || "--"}-${String(bday.month).padStart(2, "0")}-${String(bday.day).padStart(2, "0")}`
           : null,
       identifiers,
+      providerVersion: person.etag || null,
+      providerUpdatedAt: person.metadata?.sources?.[0]?.updateTime || null,
+      providerFields: ["names", "emailAddresses", "phoneNumbers", "birthdays"],
     },
   };
 }

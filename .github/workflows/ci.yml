@@ -1,3 +1,5 @@
+# governance: allow-toolchain-config issue #637 — turbo-cache on mutation-pr;
+# setup-gradle on mobile-smoke (deps only; read-only off main).
 name: ci
 
 on:
@@ -73,10 +75,12 @@ jobs:
             web:
               - 'apps/web/**'
               - 'packages/client/**'
+              - 'packages/blueprints/**'
               - 'packages/design-tokens/**'
             desktop:
               - 'apps/desktop/**'
               - 'packages/client/**'
+              - 'packages/blueprints/**'
               - 'packages/design-tokens/**'
             # #496 E7 — gateway/app-engine changes break artifact boot without
             # client UI edits; boot-smoke must still run for those PRs.
@@ -86,6 +90,7 @@ jobs:
               - 'packages/gateway/**'
               - 'packages/app-engine/**'
               - 'packages/client/**'
+              - 'packages/blueprints/**'
               - 'packages/design-tokens/**'
             gateway:
               - 'packages/gateway/**'
@@ -132,6 +137,7 @@ jobs:
               - 'bun.lock'
               - 'apps/mobile/**'
               - 'packages/client/**'
+              - 'packages/blueprints/**'
               - 'packages/design-tokens/**'
               - '.github/workflows/ci.yml'
 
@@ -181,6 +187,7 @@ jobs:
       # named contract suite shrinks below its recorded floor. Offline and fast,
       # so it belongs on the per-PR loop next to lint/typecheck.
       - run: bun run test:matrix
+      - run: bun run test:accessibility
       # #545 A6–A8 — smoke + orphaned script lanes + protocol/css linters that
       # previously lived only in check:pr (no CI enforcement).
       - run: bun run test:report:smoke
@@ -397,6 +404,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+        with:
+          # #637 — this lane re-builds package dist for Stryker seeds.
+          turbo-cache: "true"
       - name: Fetch merge base for affected mutation
         run: git fetch --no-tags --depth=1 origin main 2>/dev/null || true
       # Workspace package entry points (dist/) must exist so vitest can resolve
@@ -425,6 +435,12 @@ jobs:
   gateway-package:
     needs: changes
     if: needs.changes.outputs.gateway == 'true' || needs.changes.outputs.all == 'true'
+    # #637 — lane-gateway-package requests packages: write for GHCR buildcache.
+    # Caller must grant it; otherwise the whole ci workflow fails at startup
+    # with packages: none (same pattern as release.yml → lane-release-gateway-image).
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/lane-gateway-package.yml
 
   # Required-check-capable mobile liveness gate (#587 E22–E23/F26–F29).
@@ -441,6 +457,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # #637 Phase 3 — dependency/wrapper cache only (not task-output cache).
+      # Writes only on the default branch by setup-gradle defaults; keeps the
+      # 431 compile tasks honest so this smoke lane still catches native breaks.
+      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Check Expo's compatibility map
         continue-on-error: true
         run: bun run --cwd apps/mobile ci:versions
@@ -536,6 +558,10 @@ jobs:
       # Extension unit suite + locker companion query handlers. Avoid full
       # blueprints app-boot (jsdom teardown noise unrelated to Companion).
       - run: bunx turbo run build test --filter=@centraid/extension
+      # The focused blueprint test imports the shared recurrence engine but
+      # intentionally bypasses Turbo's dependency graph, so build that package
+      # explicitly on a clean runner before invoking Vitest directly.
+      - run: bun run --filter @centraid/time-engine build
       - run: bun run --filter @centraid/blueprints test -- src/query-handlers.test.ts
 
   # #526 — stateless Assist ceremony edge. The protected production deploy of

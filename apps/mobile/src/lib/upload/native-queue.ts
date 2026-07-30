@@ -129,6 +129,10 @@ export class UploadQueue {
     return this.store.pendingFollowups();
   }
 
+  hasFollowupForItem(itemId: string): boolean {
+    return this.store.hasFollowupForItem(itemId);
+  }
+
   clearFollowup(followupId: number): void {
     this.store.clearFollowup(followupId);
   }

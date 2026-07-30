@@ -95,4 +95,15 @@ describe("ics", () => {
     ].join("\r\n");
     expect(parseIcs(ics)[0]).toMatchObject({ uid: "x", summary: "Meet" });
   });
+
+  test("parseIcs rejects a truncated or nested event", () => {
+    expect(() =>
+      parseIcs(
+        ["BEGIN:VEVENT", "UID:x", "SUMMARY:Meet", "DTSTART:20260101"].join("\n")
+      )
+    ).toThrow(/truncated ICS VEVENT/u);
+    expect(() => parseIcs(["BEGIN:VEVENT", "BEGIN:VEVENT"].join("\n"))).toThrow(
+      /nested VEVENT/u
+    );
+  });
 });

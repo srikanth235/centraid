@@ -14,7 +14,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { runFlow } from "../lib/harness.mjs";
+import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -55,7 +55,16 @@ async function gw(pathname, init = {}) {
 // Keep in sync with NATIVE_APPS. The sync is manual because that list lives in
 // TSX the flow cannot import; the cost of drift is a WebView app silently going
 // ungated, so treat this list as load-bearing.
-const NATIVE_ON_MOBILE = new Set(["photos", "docs", "agenda"]);
+const NATIVE_ON_MOBILE = new Set([
+  "photos",
+  "docs",
+  "agenda",
+  "tasks",
+  "notes",
+  "people",
+  "locker",
+  "tally",
+]);
 
 // UI templates only — automations have no index.html to open on the phone.
 async function uiTemplates() {
@@ -103,8 +112,15 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 await runFlow("template-gate", async (ctx) => {
   await ctx.configureGateway(GATEWAY_URL, GATEWAY_TOKEN);
   const templates = await uiTemplates();
-  if (templates.length === 0)
-    throw new Error("no UI templates found in blueprints index.json");
+  if (templates.length === 0) {
+    ctx.note(
+      "Every bundled blueprint has a native mobile cover; native-v0-resilience owns their journey coverage."
+    );
+    return {
+      pass: true,
+      notes: "no bundled WebView compatibility covers remain",
+    };
+  }
 
   const installed = [];
   const failures = [];
@@ -177,7 +193,7 @@ await runFlow("template-gate", async (ctx) => {
     clearState: false
 - extendedWaitUntil:
     visible:
-      text: "YOUR APPS"
+      text: "${HOME_READY_MARKER}"
     timeout: 30000
 # Home renders its eight tiles before the app registry answers, and an app that
 # is not installed yet publishes "<name>, on your desktop — tap to pair" instead

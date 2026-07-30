@@ -8,7 +8,7 @@ import {
 import type { Gateway, Credential, VaultDb } from "@centraid/vault";
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { computeDueReminders } from "./due-reminders.js";
+import { computeDueReminders, nextReminderFireAt } from "./due-reminders.js";
 
 let db: VaultDb;
 let gw: Gateway;
@@ -59,6 +59,22 @@ describe("due-reminders", () => {
       title: "Call the dentist",
       minutesBefore: 15,
     });
+  });
+
+  test("exposes the earliest future fire instant for the wake scheduler", () => {
+    invoke("schedule.add_task", {
+      title: "Later",
+      due_at: "2026-07-10T10:00:00.000Z",
+      remind_before_min: 15,
+    });
+    invoke("schedule.add_task", {
+      title: "Sooner",
+      due_at: "2026-07-10T09:00:00.000Z",
+      remind_before_min: 10,
+    });
+    expect(nextReminderFireAt(db, "2026-07-10T08:00:00.000Z")).toBe(
+      "2026-07-10T08:50:00.000Z"
+    );
   });
 
   test("a completed task never reminds even past its fire time", () => {

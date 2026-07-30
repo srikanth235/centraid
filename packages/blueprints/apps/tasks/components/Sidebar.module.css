@@ -37,6 +37,38 @@
   opacity: 0.6;
 }
 
+.projectLabel {
+  margin: 16px 10px 6px;
+  color: var(--ink-3);
+  font: var(--t-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.projectDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.projectForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 5px;
+  margin: 6px 8px;
+}
+
+.projectForm input,
+.projectForm button {
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--ink);
+}
+
 .progress {
   border: 1px solid var(--line);
   border-radius: 12px;

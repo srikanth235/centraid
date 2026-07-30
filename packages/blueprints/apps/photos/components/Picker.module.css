@@ -68,7 +68,7 @@
   height: 1.25rem;
   border-radius: 50%;
   background: var(--accent-deep);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 0.75rem;
   font-weight: 700;
   display: flex;

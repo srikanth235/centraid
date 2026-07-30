@@ -76,10 +76,11 @@ function isDeviceMedia(mimeType: string): boolean {
 }
 
 /**
- * Route each shared file to its producer, then ALWAYS reset the share intent.
- * A text/URL/empty share has no v0 backing contract, so it draws an honest
- * alert instead of silently latching (#431 F9). The durable queue owns anything
- * that was enqueued, so resetting on error only prevents an infinite re-fire.
+ * Route each user-confirmed shared file to its producer, then ALWAYS reset the
+ * share intent. Text and URL shares bypass this file-only core and open the
+ * preview-first Capture screen in `ShareIntentIngest.tsx`. The durable queue
+ * owns anything enqueued, so resetting on error only prevents an infinite
+ * re-fire.
  */
 export async function processShareIntent(
   ports: ShareIngestPorts,
@@ -93,7 +94,7 @@ export async function processShareIntent(
     if (files.length === 0) {
       ports.alert(
         "Can’t save this to Centraid",
-        "Centraid backs up photos, videos, audio, and documents. Links and plain text aren’t supported yet."
+        "This file ingest path only accepts photos, videos, audio, and documents. Text and links must open Quick capture for review."
       );
       return;
     }

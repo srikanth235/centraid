@@ -20,3 +20,29 @@ export const DISMISS_KEYBOARD_ONBOARDING = `- runFlow:
     commands:
       - tapOn: "^Continue$"
 `;
+
+/**
+ * Tap an animated React Native control without treating its press animation as
+ * proof that navigation happened.
+ *
+ * Maestro's built-in retry covers a completely unchanged hierarchy. A
+ * Pressable scale animation changes that hierarchy even when iOS ignores the
+ * accessibility action, so retry a bounded two more times only while the
+ * source control remains visible. Callers must still assert a destination
+ * marker after this snippet; these retries never turn a missing navigation
+ * into a pass.
+ */
+export function retryableTapCommands(selector, sourceSelector = selector) {
+  const conditionalRetry = `- runFlow:
+    when:
+      visible: "${sourceSelector}"
+    commands:
+      - tapOn:
+          text: "${selector}"
+          retryTapIfNoChange: true`;
+  return `- tapOn:
+    text: "${selector}"
+    retryTapIfNoChange: true
+${conditionalRetry}
+${conditionalRetry}`;
+}

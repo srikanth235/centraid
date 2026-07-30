@@ -22,13 +22,16 @@
  *      behind `install:`. 33 copies of one line is how a `--frozen-lockfile`
  *      that gets dropped in one lane goes unnoticed.
  *
- *   5. `ci.yml` is the ONLY workflow that may listen on `pull_request`. This is
- *      the load-bearing one. A second PR-triggered workflow is not just untidy:
+ *   5. `ci.yml` is the ONLY workflow that may listen on open-PR `pull_request`
+ *      events (opened/synchronize/reopened, or the bare default). This is the
+ *      load-bearing one. A second PR-triggered workflow is not just untidy:
  *      because it needs path filters to be affordable, it can never be a
  *      required check (a filtered-out workflow reports nothing, and a required
  *      check that never reports blocks the PR forever). Ten such workflows is
  *      how eight lanes ended up unable to gate a merge. As jobs inside ci.yml
  *      they skip cleanly and roll up through the required `check`.
+ *      Exception: `pull_request: types: [closed]` only — post-merge housekeeping
+ *      (e.g. cache cleanup) that never participates in open-PR required checks.
  *
  *   6. `release.yml` is the ONLY workflow that may listen on `push: tags`. Same
  *      shape, different trigger: four workflows watched the release tags
@@ -56,6 +59,55 @@ function exemptUses(ref) {
   // Container actions are pinned by image tag (actionlint validates the form).
   if (ref.startsWith("docker://")) return true;
   return false;
+}
+
+/**
+ * True when `pull_request:` only lists `types: [closed]` (optionally with a
+ * trailing comment). Bare `pull_request:` defaults to open/sync events and is
+ * not closed-only. Any other type re-introduces open-PR status reporting.
+ *
+ * @param {string[]} lines full workflow source split on newlines
+ * @param {number} pullRequestLineIndex zero-based index of the `pull_request:` line
+ */
+function isClosedOnlyPullRequestTrigger(lines, pullRequestLineIndex) {
+  let sawTypes = false;
+  let typesBlob = "";
+  for (let i = pullRequestLineIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    // Next key under `on:` (2 spaces) or top-level ends this block.
+    if (line.length === 0) continue;
+    if (/^ {0,2}\S/u.test(line)) break;
+    const typesMatch = /^ {4}types:\s*(?<rest>.*)$/u.exec(line);
+    if (typesMatch) {
+      sawTypes = true;
+      typesBlob = typesMatch.groups?.rest ?? "";
+      // YAML list form:
+      //   types:
+      //     - closed
+      if (typesBlob === "" || typesBlob.startsWith("#")) {
+        let j = i + 1;
+        const items = [];
+        while (j < lines.length && /^ {6}-\s+\S/u.test(lines[j])) {
+          items.push(
+            lines[j]
+              .replace(/^ {6}-\s+/u, "")
+              .replace(/\s+#.*$/u, "")
+              .trim()
+          );
+          j += 1;
+        }
+        typesBlob = `[${items.join(", ")}]`;
+      }
+      break;
+    }
+    // Any non-types key under pull_request (paths, branches, …) means this is
+    // an open-PR filter surface, not closed-only housekeeping.
+    if (/^ {4}\S/u.test(line)) return false;
+  }
+  if (!sawTypes) return false;
+  // Strip trailing comments, then require exactly [closed].
+  const normalized = typesBlob.replace(/\s+#.*$/u, "").replace(/\s+/gu, "");
+  return normalized === "[closed]";
 }
 
 export function lintWorkflowSource(name, source) {
@@ -133,13 +185,15 @@ export function lintWorkflowSource(name, source) {
       );
     }
 
-    // (5) Single PR entry point.
+    // (5) Single open-PR entry point. Closed-only listeners are housekeeping
+    // (cannot report a required status on an open PR) and are allowed.
     if (
       /^\s{2}pull_request:/u.test(line) &&
-      name !== ".github/workflows/ci.yml"
+      name !== ".github/workflows/ci.yml" &&
+      !isClosedOnlyPullRequestTrigger(lines, index)
     ) {
       found.push(
-        `${name}:${lineNo} listens on \`pull_request\` — only ci.yml may. Add a job there (gated on the \`changes\` filter) so it rolls up into the required \`check\`, or expose this workflow via \`workflow_call\` and invoke it from ci.yml`
+        `${name}:${lineNo} listens on \`pull_request\` — only ci.yml may (open PR events). Add a job there (gated on the \`changes\` filter) so it rolls up into the required \`check\`, or expose this workflow via \`workflow_call\` and invoke it from ci.yml. Post-merge-only listeners must use \`types: [closed]\``
       );
     }
 

@@ -1,3 +1,5 @@
+import { normalizeCommonMark } from "../commonmark.ts";
+
 /**
  * Create a note through the vault's typed command. The body is stored as a
  * canonical core.content_item (sha256-deduped data: URI) — the note row only
@@ -12,8 +14,8 @@ export default async function createNote({ body, ctx }: HandlerArgs) {
       command: "knowledge.create_note",
       input: {
         title: String(input.title ?? ""),
-        body_text: String(input.body_text ?? ""),
-        ...(input.format == null ? {} : { format: String(input.format) }),
+        body_text: normalizeCommonMark(input.body_text),
+        format: input.format == null ? "markdown" : String(input.format),
         ...(input.notebook_id == null
           ? {}
           : { notebook_id: String(input.notebook_id) }),

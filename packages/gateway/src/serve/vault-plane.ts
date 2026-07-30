@@ -118,6 +118,7 @@ import type {
   HostBootstrap,
   InvokeOutcome,
   InvokeRequest,
+  LockerAuthRequest,
   ParkedSummary,
   ReadRequest,
   RefRequest,
@@ -1991,6 +1992,7 @@ export class VaultPlane {
           case "changes":
           case "resolve":
           case "reveal":
+          case "authenticate":
           case "content":
             // The seed surface is read/search/invoke/describe only; every
             // other op is off-limits to a scenario generator. Listed
@@ -2111,9 +2113,21 @@ export class VaultPlane {
           case "reveal":
             // Sealed-column plaintext (issue #293) — takes the app's
             // explicit `reveal` scope; every allow is receipted per item.
+            // Locker lock/permit enforcement is data-keyed inside
+            // `gateway.reveal` so fill, UI, and agent arms share one gate.
             return this.gateway.reveal(
               cred,
               call.payload as unknown as RevealRequest
+            );
+          case "authenticate":
+            if (appId !== "locker") {
+              throw new GatewayError(
+                "identity",
+                "Locker authentication is available only to Locker"
+              );
+            }
+            return this.gateway.authenticateLocker(
+              call.payload as unknown as LockerAuthRequest
             );
           case "changes":
             throw new GatewayError(
@@ -2243,6 +2257,11 @@ export class VaultPlane {
             return this.gateway.reveal(
               cred,
               call.payload as unknown as RevealRequest
+            );
+          case "authenticate":
+            throw new GatewayError(
+              "consent",
+              "Locker authentication is an interactive app surface"
             );
           case "changes":
             // The consented provenance feed data triggers ride; also callable

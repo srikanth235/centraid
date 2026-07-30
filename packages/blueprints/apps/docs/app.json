@@ -46,7 +46,12 @@
           "data_uri": { "type": "string", "minLength": 6 },
           "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
           "title": { "type": "string", "minLength": 1 },
-          "folder_id": { "type": "string", "minLength": 1 }
+          "folder_id": { "type": "string", "minLength": 1 },
+          "extracted_text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000
+          }
         },
         "required": ["title"],
         "additionalProperties": false

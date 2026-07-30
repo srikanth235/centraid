@@ -20,6 +20,7 @@ const silentLogger = {
   warn: () => undefined,
   error: () => undefined,
 };
+const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/time-engine");
 
 const cleanups: Array<() => Promise<void> | void> = [];
 describe("demo-seed", () => {
@@ -62,6 +63,7 @@ describe("demo-seed", () => {
       args: { input: { seed: 1, now: new Date().toISOString() } },
       timeoutMs: 60_000,
       vault: plane.demoBridgeFor(appId),
+      timeModuleUrl: TIME_ENGINE_MODULE_URL,
     });
     expect(outcome.ok, `${appId} seed: ${outcome.error ?? ""}`).toBe(true);
   }

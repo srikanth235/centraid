@@ -37,6 +37,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "tag",
     "collection",
     "collection_entry",
+    // P5 pre-mutation snapshots. Grants row-filter this by entity_type.
+    "entity_revision",
     // Share-by-placement provenance (issue #599). Registered so a merged
     // multi-scope app view can read the audience + who-placed-it badge for a
     // projected row like any other table.
@@ -65,9 +67,19 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "condition",
   ],
   finance: ["txn_split", "budget", "holding", "recurring_series", "fx_rate"],
-  schedule: ["calendar", "event_ext", "attendee", "task", "availability_rule"],
+  schedule: [
+    "calendar",
+    "event_ext",
+    "attendee",
+    "task",
+    "project",
+    "section",
+    "recurrence_exception",
+    "availability_rule",
+  ],
   social: [
     "contact_card",
+    "contact_channel",
     "circle",
     "circle_member",
     "thread",
@@ -84,6 +96,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "meter_reading",
   ],
   business: ["client", "project", "time_entry", "invoice", "invoice_line"],
+  // `merge` was a soft people_merge residual; dropped after identity merge
+  // folded into core.merge_party (DROP_PEOPLE_MERGE_DDL).
   people: ["profile", "important_date"],
   locker: ["item"],
   sync: [
@@ -101,6 +115,10 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "group",
     "expense",
     "expense_split",
+    "expense_receipt",
+    "expense_line_item",
+    "expense_line_allocation",
+    "recurring_expense",
     "settlement",
     "obligation",
   ],

@@ -144,6 +144,82 @@
 .heroComposerWrap .heroSuggestions {
   margin-top: 0;
 }
+.brief {
+  width: min(880px, calc(100% - 48px));
+  margin: 32px auto 0;
+  padding: 20px;
+  border: 0.5px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg-elev);
+  box-sizing: border-box;
+}
+.briefHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  margin-bottom: 14px;
+}
+.briefHead h2 {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font: var(--t-heading);
+}
+.briefEyebrow,
+.briefDate {
+  color: var(--ink-3);
+  font: var(--t-small);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.briefGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.briefFact {
+  min-width: 0;
+  padding: 14px;
+  text-align: left;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+}
+.briefFact:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.briefFact:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.briefFact strong,
+.briefFactLabel,
+.briefFactDetail {
+  display: block;
+}
+.briefFact strong {
+  margin: 7px 0 4px;
+  font: var(--t-heading);
+}
+.briefFactLabel,
+.briefFactDetail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--t-small);
+}
+.briefFactLabel {
+  color: var(--ink-2);
+}
+.briefFactDetail {
+  color: var(--ink-3);
+}
+@media (max-width: 760px) {
+  .briefGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .hsec {
   width: 100%;
   /* The library shelf runs wider than the centered hero so the tile grid sits

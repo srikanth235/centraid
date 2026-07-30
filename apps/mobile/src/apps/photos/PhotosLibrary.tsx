@@ -7,6 +7,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -16,7 +17,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { useTheme } from "../../kit/theme";
+import { optimisticRowId } from "../../lib/replica/optimistic";
 import { sha256OfFile } from "../../lib/upload/enqueue";
 import { expoFileSource } from "../../lib/upload/expo-native";
 import { createNativeDigest } from "../../lib/upload/native-digest";
@@ -40,6 +48,7 @@ export default function PhotosLibrary({
 }: PhotosScreenProps<"PhotosLibrary">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
     "photos",
@@ -135,12 +144,42 @@ export default function PhotosLibrary({
 
   const createAlbum = async (): Promise<void> => {
     if (!session || !title.trim()) return;
-    await session.write("photos", {
-      action: "create-album",
-      input: { title: title.trim() },
-    });
-    setNewAlbum(false);
-    setTitle("");
+    const albumId = optimisticRowId("album");
+    const createdAt = new Date().toISOString();
+    try {
+      const result = await session.write("photos", {
+        action: "create-album",
+        input: { title: title.trim() },
+        optimistic: [
+          {
+            op: "upsert",
+            entity: "core.collection",
+            rowId: albumId,
+            values: {
+              collection_id: albumId,
+              owner_party_id: String(
+                collections.rows[0]?.owner_party_id ?? "local-owner"
+              ),
+              name: title.trim(),
+              cover_content_id: null,
+              parent_collection_id: null,
+              sort_order:
+                Math.max(
+                  0,
+                  ...collections.rows.map((row) => Number(row.sort_order ?? 0))
+                ) + 1,
+              created_at: createdAt,
+            },
+          },
+        ],
+      });
+      if (surfaceWriteOutcome(result)) {
+        setNewAlbum(false);
+        setTitle("");
+      }
+    } catch (error) {
+      surfaceWriteFailure(error, "Album not created");
+    }
   };
   // Re-hash the CURRENT bytes of one device copy. A photo edited in place after
   // backup keeps its ph:// id but holds new bytes; this is what catches that.
@@ -227,7 +266,19 @@ export default function PhotosLibrary({
     );
   };
   const requestEnrichment = async (): Promise<void> => {
-    await session?.write("photos", { action: "request-enrichment", input: {} });
+    if (!session) return;
+    try {
+      const result = await session.write("photos", {
+        action: "request-enrichment",
+        input: {},
+      });
+      surfaceWriteOutcome(result, {
+        queuedMessage:
+          "Enrichment will start automatically when the gateway reconnects.",
+      });
+    } catch (error) {
+      surfaceWriteFailure(error, "Enrichment not requested");
+    }
   };
 
   return (
@@ -236,19 +287,35 @@ export default function PhotosLibrary({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text style={[styles.title, { color: colors.ink }]}>Library</Text>
-        <Pressable onPress={() => setNewAlbum(true)}>
+        <Pressable
+          accessibilityLabel="Create album"
+          accessibilityRole="button"
+          onPress={() => setNewAlbum(true)}
+        >
           <Feather name="plus" size={23} color={colors.accent} />
         </Pressable>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ReplicaStatusBar />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
+        }
+      >
         <Text style={[styles.section, { color: colors.ink2 }]}>
           YOUR LIBRARY
         </Text>
         <Pressable
+          accessibilityLabel="Open favorite photos"
+          accessibilityRole="button"
           onPress={() =>
             navigation.navigate("PhotoStateView", { mode: "favorites" })
           }
@@ -261,6 +328,8 @@ export default function PhotosLibrary({
           />
         </Pressable>
         <Pressable
+          accessibilityLabel="Open archived photos"
+          accessibilityRole="button"
           onPress={() =>
             navigation.navigate("PhotoStateView", { mode: "archive" })
           }
@@ -273,6 +342,8 @@ export default function PhotosLibrary({
           />
         </Pressable>
         <Pressable
+          accessibilityLabel="Open photo trash"
+          accessibilityRole="button"
           onPress={() =>
             navigation.navigate("PhotoStateView", { mode: "trash" })
           }
@@ -284,7 +355,11 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate("FaceReview")}>
+        <Pressable
+          accessibilityLabel="Review proposed people"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate("FaceReview")}
+        >
           <Row
             icon="users"
             title="People"
@@ -292,7 +367,11 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate("DuplicateReview")}>
+        <Pressable
+          accessibilityLabel="Review possible duplicate photos"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate("DuplicateReview")}
+        >
           <Row
             icon="copy"
             title="Duplicates review"
@@ -300,7 +379,11 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate("PlacesMap")}>
+        <Pressable
+          accessibilityLabel="Open photo places map"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate("PlacesMap")}
+        >
           <Row
             icon="map-pin"
             title="Places"
@@ -313,6 +396,8 @@ export default function PhotosLibrary({
           <View style={styles.albumGrid}>
             {albumRows.map(({ album, cover, count }) => (
               <Pressable
+                accessibilityLabel={`Open album ${String(album.name ?? "Untitled")}, ${count} photos`}
+                accessibilityRole="button"
                 key={album.__rowId}
                 onPress={() =>
                   navigation.navigate("AlbumDetail", {
@@ -324,7 +409,9 @@ export default function PhotosLibrary({
                 {cover ? (
                   <Image
                     source={imageSource(cover.uri)}
+                    cachePolicy="memory-disk"
                     contentFit="cover"
+                    recyclingKey={cover.id}
                     style={styles.albumCover}
                   />
                 ) : (
@@ -355,7 +442,11 @@ export default function PhotosLibrary({
         <Text style={[styles.section, { color: colors.ink2 }]}>
           BACKUP & STORAGE
         </Text>
-        <Pressable onPress={() => navigation.navigate("BackupHealth")}>
+        <Pressable
+          accessibilityLabel="Open backup health"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate("BackupHealth")}
+        >
           <Row
             icon="cloud"
             title="Backup health"
@@ -363,7 +454,13 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable disabled={!pinsHydrated || freeing} onPress={freeSpace}>
+        <Pressable
+          accessibilityLabel="Free offline thumbnail space"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !pinsHydrated || freeing }}
+          disabled={!pinsHydrated || freeing}
+          onPress={freeSpace}
+        >
           <Row
             icon="hard-drive"
             title="Free up space"
@@ -377,7 +474,11 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => void requestEnrichment()}>
+        <Pressable
+          accessibilityLabel="Request photo enrichment"
+          accessibilityRole="button"
+          onPress={() => void requestEnrichment()}
+        >
           <Row
             icon="zap"
             title="Enrichment"
@@ -392,7 +493,12 @@ export default function PhotosLibrary({
         visible={newAlbum}
         onRequestClose={() => setNewAlbum(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setNewAlbum(false)} />
+        <Pressable
+          accessibilityLabel="Close create album dialog"
+          accessibilityRole="button"
+          style={styles.backdrop}
+          onPress={() => setNewAlbum(false)}
+        />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
           <Text style={[styles.dialogTitle, { color: colors.ink }]}>
             New album
@@ -409,6 +515,8 @@ export default function PhotosLibrary({
             ]}
           />
           <Pressable
+            accessibilityLabel="Create album"
+            accessibilityRole="button"
             style={[styles.create, { backgroundColor: colors.accent }]}
             onPress={() => void createAlbum()}
           >

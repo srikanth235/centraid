@@ -155,6 +155,8 @@ export interface RuntimeOptions {
    * Without it, `ctx.vault.*` calls fail closed with VAULT_UNAVAILABLE.
    */
   vaultFor?: (appId: string) => VaultBridge;
+  /** Host-resolved module URL mounted as deterministic handler `ctx.time`. */
+  timeModuleUrl?: string;
   /**
    * Optional ask-model picker backing (subsystem `ask`). When provided,
    * `GET`/`PUT /centraid/<id>/_turn/model` let the kit Ask panel's inline
@@ -359,6 +361,7 @@ export class Runtime {
         ? { codeDirOverride: this.codeDirOverride }
         : {}),
       ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
+      ...(opts.timeModuleUrl ? { timeModuleUrl: opts.timeModuleUrl } : {}),
     });
   }
 

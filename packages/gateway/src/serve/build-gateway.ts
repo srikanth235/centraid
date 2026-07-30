@@ -80,6 +80,7 @@ import {
   Runtime,
   changesSubscriberCount,
   cleanupDeregisteredApp,
+  classifyCaptureWithAgent,
   deriveTitle,
   generateConversationTitle,
   makeConversationRouteHandler,
@@ -115,6 +116,7 @@ import { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import { openStorageConnectionStore } from "../backup/storage-connections.js";
 import { makeStorageCredentialsResolver } from "../backup/storage-credentials.js";
 import { StorageUsagePoller } from "../backup/storage-usage.js";
+import { recognizeWithTesseract } from "../capture/tesseract-ocr.js";
 import {
   closeJournalConversationStores,
   journalConversationStore,
@@ -157,6 +159,7 @@ import {
 } from "../routes/automations-routes.js";
 import { makeBackupRouteHandler } from "../routes/backup-routes.js";
 import { makeBlobRouteHandler } from "../routes/blob-routes.js";
+import { makeCaptureRouteHandler } from "../routes/capture-routes.js";
 import { makeConnectionsRouteHandler } from "../routes/connections-routes.js";
 import { makeDataPlaneControlHandler } from "../routes/data-plane-control.js";
 import type { DataPlaneControlOptions } from "../routes/data-plane-control.js";
@@ -277,6 +280,8 @@ import { WebAppSessions } from "./web-app-sessions.js";
 import { WebControlSessionStore } from "./web-session-store.js";
 
 export type { DeviceAccess } from "./vault-context.js";
+
+const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/time-engine");
 
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */
@@ -3420,6 +3425,7 @@ export async function buildGateway(
     // Shared kit assets (kit.ts / kit.css) are served from the blueprints
     // package's canonical `kit/` dir; apps no longer ship per-app copies.
     sharedAssetsDir: KIT_DIR,
+    timeModuleUrl: TIME_ENGINE_MODULE_URL,
     userStore: prefs,
     conversationHistoryStore,
     conversationRunner: {
@@ -3603,6 +3609,23 @@ export async function buildGateway(
         /* fire-and-forget — a title miss never affects the turn */
       }
     })();
+  };
+
+  const classifyCapture = async (
+    text: string
+  ): Promise<Awaited<ReturnType<typeof classifyCaptureWithAgent>>> => {
+    if (turnLimiterForCurrentVault().atCapacity()) return undefined;
+    const runnerPrefs = await prefsLoader("assistant");
+    if (!runnerPrefs) return undefined;
+    const model = await resolveModel("assistant", undefined, runnerPrefs.kind);
+    return classifyCaptureWithAgent({
+      runTurn: accountedRunTurn,
+      runnerPrefs,
+      cwd: assistantCwd(vaultRegistry),
+      text,
+      ...(model ? { model } : {}),
+      timeoutMs: 20_000,
+    });
   };
 
   // Ask-register lens metadata (issue #286 phase 2): the app copilot's
@@ -3790,6 +3813,13 @@ export async function buildGateway(
       "/centraid/_gateway/resource",
       makeResourceRouteHandler(health, powerContext)
     ),
+    forRoutePrefixes(
+      "/centraid/_gateway/capture",
+      makeCaptureRouteHandler({
+        classify: classifyCapture,
+        recognizeOcr: recognizeWithTesseract,
+      })
+    ),
     // A single JSON document a user can save + hand to support: version,
     // health snapshot, log tail, vault sizes, and a redacted config
     // summary. Mounted right after health — same bearer gate, same
@@ -3838,8 +3868,8 @@ export async function buildGateway(
     // polls this to fire OS notifications (issue: Tasks/Agenda comparison
     // flagged "no time-based alerts, anywhere").
     forRoutePrefixes(
-      "/centraid/_reminders",
-      makeRemindersRouteHandler(vaultRegistry)
+      ["/centraid/_reminders", "/centraid/_brief"],
+      makeRemindersRouteHandler(vaultRegistry, options.devicePairing)
     ),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
     // the desktop's Settings → Logs screen streams from.
@@ -4129,6 +4159,7 @@ export async function buildGateway(
   // must not also be reachable through the in-scope chain.
   const shareHandler = makeShareRouteHandler({
     enrollments: enrollmentStore,
+    gatewayDatabase,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     ...(options.isHostCustody ? { isHostCustody: options.isHostCustody } : {}),
   });

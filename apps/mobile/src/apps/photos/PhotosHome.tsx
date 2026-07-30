@@ -15,8 +15,17 @@ import GlassBar from "../../kit/components/GlassBar";
 import HomeKey from "../../kit/components/HomeKey";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
+import {
+  optimisticRowId,
+  optimisticValues,
+} from "../../lib/replica/optimistic";
 import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
@@ -30,9 +39,7 @@ import {
 } from "./device-media";
 import type { DeviceOriginal } from "./device-media";
 import { imageSource } from "./media-source";
-import PhotosAskView from "./PhotosAskView";
 import PhotosCollectionsView from "./PhotosCollectionsView";
-import PhotosCreateView from "./PhotosCreateView";
 import PhotosDrawer from "./PhotosDrawer";
 import PhotoTimeline from "./PhotoTimeline";
 import { onThisDay } from "./timeline-model";
@@ -42,15 +49,15 @@ import { usePhotoTimeline } from "./timeline-source";
 // distinct from the theme's blue `accent` used elsewhere on this screen.
 const NAV_ACTIVE = "#B47B3F";
 
-type PhotosView = "photos" | "collections" | "create" | "ask";
+type PhotosView = "photos" | "collections";
 
 // Icon-only destinations inside the glass pill — the mini-app's OWN sections and
 // nothing else. Leaving Photos for the Centraid springboard is a separate,
 // system-tinted key detached to the LEFT of the pill (never a "home" tab in
 // here: in a super-app a house glyph is ambiguous — it reads as either this
 // app's home or the launcher's). The pill's first tab, `photos`, IS this app's
-// home (its full library); the active tab wears a raised disc. `create` is the
-// detached "+" FAB on the RIGHT — the screen's one primary action.
+// home (its full library); the active tab wears a raised disc. Search and
+// album creation are real routes, kept outside the section switcher.
 const PILL_ITEMS: Array<{
   key: string;
   icon: keyof typeof Feather.glyphMap;
@@ -64,7 +71,6 @@ const PILL_ITEMS: Array<{
     label: "Collections",
     view: "collections",
   },
-  { key: "ask", icon: "message-circle", label: "Ask", view: "ask" },
 ];
 
 export default function PhotosHome({
@@ -83,6 +89,10 @@ export default function PhotosHome({
   const collections = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.collection" }), [])
+  );
+  const entries = useReplicaQuery(
+    "photos",
+    useMemo(() => ({ entity: "core.collection_entry" }), [])
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
   const hero = memories[0];
@@ -242,23 +252,62 @@ export default function PhotosHome({
         text: String(album.name ?? "Album"),
         onPress: () =>
           void (async () => {
+            if (!session) return;
             const assets = timeline.assets.filter(
               (item) => selection.has(item.id) && item.assetId
             );
             const addNext = async (index: number): Promise<void> => {
               const asset = assets[index];
               if (asset === undefined) return;
-              await session?.write("photos", {
+              const albumId = String(album.collection_id);
+              const entryId = optimisticRowId("album-entry");
+              const position =
+                entries.rows.filter(
+                  (row) => String(row.collection_id) === albumId
+                ).length + index;
+              const result = await session.write("photos", {
                 action: "add-to-album",
                 input: {
-                  album_id: String(album.collection_id),
+                  album_id: albumId,
                   asset_id: asset.assetId!,
                 },
+                optimistic: [
+                  {
+                    op: "upsert",
+                    entity: "core.collection_entry",
+                    rowId: entryId,
+                    values: {
+                      entry_id: entryId,
+                      collection_id: albumId,
+                      target_type: "media.media_asset",
+                      target_id: asset.assetId!,
+                      position,
+                      added_at: new Date().toISOString(),
+                    },
+                  },
+                  ...(album.cover_content_id == null && asset.contentId
+                    ? [
+                        {
+                          op: "upsert" as const,
+                          entity: "core.collection",
+                          rowId: albumId,
+                          values: optimisticValues(album, {
+                            cover_content_id: asset.contentId,
+                          }),
+                        },
+                      ]
+                    : []),
+                ],
               });
+              surfaceWriteOutcome(result);
               return addNext(index + 1);
             };
-            await addNext(0);
-            setSelection(new Set());
+            try {
+              await addNext(0);
+              setSelection(new Set());
+            } catch (error) {
+              surfaceWriteFailure(error, "Photos not added");
+            }
           })(),
       })),
       { text: "Cancel", style: "cancel" as const },
@@ -317,8 +366,8 @@ export default function PhotosHome({
             </Text>
           </Pressable>
           <Pressable
-            accessibilityLabel="Ask about your photos"
-            onPress={() => setView("ask")}
+            accessibilityLabel="Search photos and moments"
+            onPress={() => navigation.navigate("PhotosSearch")}
             style={styles.sparkleBtn}
           >
             <Feather name="star" size={22} color={colors.accent} />
@@ -326,6 +375,13 @@ export default function PhotosHome({
         </View>
       )}
       <ReplicaStatusBar />
+      <ReplicaStateCard
+        connection={collections.connection}
+        error={collections.error ?? timeline.error}
+        unavailableReason={collections.unavailableReason}
+        noun="Photo vault"
+        onRetry={() => void refreshLibrary()}
+      />
 
       <View style={styles.body}>
         {view === "photos" ? (
@@ -339,7 +395,9 @@ export default function PhotosHome({
               >
                 <Image
                   source={imageSource(hero.uri)}
+                  cachePolicy="memory-disk"
                   contentFit="cover"
+                  recyclingKey={hero.id}
                   style={styles.heroImage}
                 />
                 <View style={styles.heroShade} />
@@ -395,11 +453,14 @@ export default function PhotosHome({
               <View style={styles.center}>
                 <Feather name="image" size={40} color={colors.accent} />
                 <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-                  Your library starts here
+                  {collections.connection === "offline"
+                    ? "No cached vault photos"
+                    : "Your library starts here"}
                 </Text>
                 <Text style={[styles.body2, { color: colors.ink2 }]}>
-                  Camera-roll photos appear instantly; long-press any item to
-                  back it up.
+                  {collections.connection === "offline"
+                    ? "Camera-roll photos remain available. Reconnect to check the vault."
+                    : "Camera-roll photos appear instantly; long-press any item to back it up."}
                 </Text>
               </View>
             ) : (
@@ -415,12 +476,8 @@ export default function PhotosHome({
               />
             )}
           </>
-        ) : view === "collections" ? (
-          <PhotosCollectionsView navigation={navigation} />
-        ) : view === "create" ? (
-          <PhotosCreateView />
         ) : (
-          <PhotosAskView navigation={navigation} />
+          <PhotosCollectionsView navigation={navigation} />
         )}
       </View>
 
@@ -479,16 +536,11 @@ export default function PhotosHome({
                 glass pill, echoing the reference's stand-alone "+". */}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Create"
-              accessibilityState={{ selected: view === "create" }}
-              onPress={() => setView("create")}
+              accessibilityLabel="Create album"
+              onPress={() => navigation.navigate("PhotosLibrary")}
               style={({ pressed }) => [
                 styles.fab,
                 { backgroundColor: colors.ink },
-                view === "create" && {
-                  borderColor: NAV_ACTIVE,
-                  borderWidth: 2,
-                },
                 pressed && styles.fabPressed,
               ]}
             >

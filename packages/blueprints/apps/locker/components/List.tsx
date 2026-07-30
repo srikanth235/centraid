@@ -1,3 +1,4 @@
+import { displayText } from "../../_shared/untrusted.ts";
 // `<section class="v-list">` — the search box + filtered/sorted row list for
 // the current nav. The React port of app.js's `LockerList` Lit component;
 // the search input is a controlled input driven by `search` (app.tsx calls
@@ -21,6 +22,7 @@ function ListRow({
   onSelect: (id: string) => void;
 }) {
   const wc = warnColor(item);
+  const title = displayText(item.title);
   return (
     <button
       type="button"
@@ -36,7 +38,7 @@ function ListRow({
       </span>
       <span className={shared.imain}>
         <span className={shared.ititle}>
-          {item.title}
+          {title}
           {item.favorite ? (
             <span className={styles.star}>
               <Icon
@@ -51,7 +53,7 @@ function ListRow({
             <span className={styles.warnDot} style={{ background: wc }} />
           ) : null}
         </span>
-        <span className={shared.isub}>{subOf(item) || "—"}</span>
+        <span className={shared.isub}>{displayText(subOf(item) || "—")}</span>
       </span>
     </button>
   );
@@ -67,6 +69,7 @@ export function LockerList({
   onSelect,
   onSearchInput,
   onClearSearch,
+  onNewItem,
 }: {
   pool: LockerRow[];
   listTitle: string;
@@ -77,6 +80,7 @@ export function LockerList({
   onSelect: (id: string) => void;
   onSearchInput: (value: string) => void;
   onClearSearch: () => void;
+  onNewItem: () => void;
 }) {
   return (
     <section className={styles.list}>
@@ -96,6 +100,7 @@ export function LockerList({
         <div className={styles.search}>
           <Icon name="search" sw={1.75} size={15} />
           <input
+            id="lockerSearchInput"
             type="search"
             placeholder={`Search ${allCount} items`}
             autoComplete="off"
@@ -112,22 +117,29 @@ export function LockerList({
       </div>
       <div className={styles.items}>
         {pool.length === 0 ? (
-          <div className={shared.listEmpty}>
-            <div className={shared.ic}>
+          <div className="kit-empty">
+            <div className="kit-empty-icon">
               <Icon
                 name={search.trim() ? "search" : "lock"}
                 sw={1.6}
                 size={20}
               />
             </div>
-            <div className={shared.listEmptyTitle}>
+            <div className="kit-empty-title">
               {search.trim() ? "No matches" : "Nothing here"}
             </div>
-            <div className={shared.listEmptySub}>
+            <div className="kit-empty-sub">
               {search.trim()
                 ? "Try a different search term."
                 : "Add a login, card, or note to get started."}
             </div>
+            <button
+              type="button"
+              className="kit-btn"
+              onClick={search.trim() ? onClearSearch : onNewItem}
+            >
+              {search.trim() ? "Clear search" : "Add item"}
+            </button>
           </div>
         ) : (
           pool.map((item) => (

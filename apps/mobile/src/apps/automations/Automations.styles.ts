@@ -9,6 +9,20 @@ import type { ThemeColors } from "../../kit/theme";
 // which mirrors the accent-glyph contrast used across the mobile apps.
 export const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    addBtn: {
+      alignItems: "center",
+      borderColor: colors.lineStrong,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      justifyContent: "center",
+      paddingHorizontal: 13,
+      paddingVertical: 8,
+    },
+    addBtnText: {
+      color: colors.accent,
+      fontFamily: family.sansMedium,
+      fontSize: 12,
+    },
     card: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
@@ -31,6 +45,10 @@ export const makeStyles = (colors: ThemeColors) =>
       paddingTop: 72,
       paddingHorizontal: spacing[4],
     },
+    gallery: { gap: spacing[3], marginTop: spacing[6] },
+    galleryHead: { gap: 3 },
+    gallerySubtitle: { ...t("small"), color: colors.ink2 },
+    galleryTitle: { ...t("title"), color: colors.ink },
     // Leading back key + title/status column, centered as one header row.
     header: {
       alignItems: "center",
@@ -64,6 +82,33 @@ export const makeStyles = (colors: ThemeColors) =>
       fontSize: 11,
     },
     subtitle: { ...t("small"), color: colors.ink2, marginTop: 3 },
+    templateCard: {
+      alignItems: "flex-start",
+      backgroundColor: colors.bgElev,
+      borderColor: colors.line,
+      borderRadius: radii.md,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: spacing[3],
+      padding: spacing[4],
+    },
+    templateCopy: { flex: 1, gap: 5, minWidth: 0 },
+    templateDesc: { ...t("small"), color: colors.ink2, lineHeight: 18 },
+    templateIcon: {
+      alignItems: "center",
+      backgroundColor: colors.bgSunken,
+      borderRadius: radii.md,
+      height: 34,
+      justifyContent: "center",
+      width: 34,
+    },
+    templateName: { ...t("bodyStrong"), color: colors.ink },
+    templateTrigger: {
+      color: colors.ink3,
+      fontFamily: family.monoMedium,
+      fontSize: 10,
+      textTransform: "uppercase",
+    },
     title: { color: colors.ink, fontFamily: family.serif, fontSize: 28 },
     togglePill: {
       alignItems: "center",

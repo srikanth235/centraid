@@ -72,11 +72,20 @@ export default async function itemHandler({
         entity: "locker.item",
         entityId: itemId,
         columns: SEALED_FIELDS,
+        authentication: {
+          sessionToken: String(input?.auth_session ?? ""),
+          itemToken: String(input?.item_token ?? ""),
+        },
         purpose,
       })) as { values?: Partial<Record<SealedField, string | null>> };
       for (const field of SEALED_FIELDS)
         row[field] = revealed.values?.[field] ?? null;
-    } catch {
+    } catch (error) {
+      // A Locker UI reveal always supplies both proofs. Authentication
+      // failures must stay visible so the app relocks instead of rendering a
+      // placeholder as if the item had no secret. Legacy/Companion callers
+      // without those fields retain the consent-placeholder behavior.
+      if (input?.auth_session || input?.item_token) throw error;
       // No reveal grant: the pane still renders, secrets stay placeholders.
     }
     const [tagsByItem, starredIds] = await Promise.all([

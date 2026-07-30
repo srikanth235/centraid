@@ -22,7 +22,7 @@ import type {
 // `installInlineCentraid` publishes it on `window.centraid` and returns a
 // teardown that restores whatever was there before. Only one inline app is
 // mounted at a time, so a single module-level install is still enough.
-import { appQueryPath } from "@centraid/protocol";
+import { appQueryPath, ROUTES } from "@centraid/protocol";
 
 import {
   auth,
@@ -99,6 +99,20 @@ export interface InlineCentraidClient {
     signal?: AbortSignal;
     scope?: string;
   }) => Promise<T>;
+  place: (opts: {
+    linkToken: string;
+    kind: "add" | "move";
+    itemType:
+      | "core.collection"
+      | "core.content_item"
+      | "core.document"
+      | "locker.item"
+      | "media.media_asset"
+      | "tally.group";
+    itemId: string;
+    sourceVaultId: string;
+    targetVaultId: string;
+  }) => Promise<Record<string, unknown>>;
   describe: () => Promise<unknown>;
   onChange: (cb: (detail: InlineChangeDetail) => void) => () => void;
   /** An authed `blob:` URL for a `/_vault/blobs/…` path in one scope. */
@@ -369,6 +383,28 @@ export function createInlineCentraidClient(
           : {}),
         ...(outcome.output === undefined ? {} : { output: outcome.output }),
       } as T;
+    },
+
+    async place(opts) {
+      bindingFor(opts.sourceVaultId);
+      const target = bindingFor(opts.targetVaultId);
+      if (!target.scope.canWrite) {
+        throw new InlineScopeError(
+          "SCOPE_READONLY",
+          `You can view ${target.scope.label}, but not add to it.`
+        );
+      }
+      if (!isOnline())
+        throw new Error(
+          "Placement needs a gateway connection on web; the native app queues it offline."
+        );
+      const { baseUrl, token } = await auth();
+      const response = await doFetch(baseUrl, ROUTES.gatewayPlacements, {
+        method: "POST",
+        headers: authHeaders(token, "application/json"),
+        body: JSON.stringify(opts),
+      });
+      return readJson<Record<string, unknown>>(response, "place item");
     },
 
     describe() {

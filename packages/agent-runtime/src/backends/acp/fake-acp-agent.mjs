@@ -19,6 +19,9 @@
  *   --mode=vault    dial the loopback MCP server the client passed in
  *                   `mcpServers` — unauthenticated probe, initialize,
  *                   tools/list, tools/call — and report what happened
+ *   --mode=vault-parity dial the same server and invoke one representative
+ *                   typed write for every native blueprint, including a
+ *                   high-risk command whose real runner can park it
  *   --mode=auth     reject session/new with ACP's AUTH_REQUIRED (-32000)
  *   --mode=auth-prompt accept session/new, then reject the diagnostic prompt
  *                   with an auth-ish Internal error (real Claude failure shape)
@@ -307,8 +310,98 @@ async function runVaultPrompt(reqId, sessionId) {
   respond(reqId, { stopReason: "end_turn" });
 }
 
+const BLUEPRINT_INVOKE_PLAN = [
+  {
+    blueprint: "photos",
+    command: "media.create_album",
+    input: { title: "Agent parity album" },
+  },
+  {
+    blueprint: "docs",
+    command: "core.create_folder",
+    input: { name: "Agent parity" },
+  },
+  {
+    blueprint: "agenda",
+    command: "schedule.propose_event",
+    input: {
+      summary: "Agent parity event",
+      dtstart: "2026-08-03T09:00:00+05:30",
+      dtend: "2026-08-03T09:30:00+05:30",
+      start_tz: "Asia/Kolkata",
+      end_tz: "Asia/Kolkata",
+      calendar_id: "calendar-agent-parity",
+    },
+  },
+  {
+    blueprint: "tasks",
+    command: "schedule.add_task",
+    input: { title: "Agent parity task" },
+  },
+  {
+    blueprint: "people",
+    command: "people.add_person",
+    input: { display_name: "Agent Parity", cadence_days: 30 },
+  },
+  {
+    blueprint: "notes",
+    command: "knowledge.create_note",
+    input: {
+      title: "Agent parity note",
+      body_text: "Created through vault_invoke.",
+      format: "plain",
+    },
+  },
+  {
+    blueprint: "tally",
+    command: "tally.create_group",
+    input: { name: "Agent parity", icon: "🧭", member_ids: [] },
+  },
+  {
+    blueprint: "locker",
+    command: "locker.purge_item",
+    input: { item_id: "locker-agent-parity" },
+  },
+];
+
+async function runVaultParityPrompt(reqId, sessionId) {
+  const out = { sawServer: Boolean(mcpServer), tools: [], invocations: [] };
+  if (mcpServer) {
+    await mcpCall("initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "fake-mcp-client", version: "0.0.1" },
+    });
+    out.tools = (
+      (await mcpCall("tools/list", {})).body?.result?.tools ?? []
+    ).map((tool) => tool.name);
+
+    out.invocations = await Promise.all(
+      BLUEPRINT_INVOKE_PLAN.map(async (planned) => {
+        const response = await mcpCall("tools/call", {
+          name: "vault_invoke",
+          arguments: { command: planned.command, input: planned.input },
+        });
+        return {
+          blueprint: planned.blueprint,
+          command: planned.command,
+          isError: response.body?.result?.isError ?? null,
+          text: response.body?.result?.content?.[0]?.text ?? null,
+        };
+      })
+    );
+  }
+  if (vaultMarker) writeFileSync(vaultMarker, JSON.stringify(out));
+  update(sessionId, {
+    sessionUpdate: "agent_message_chunk",
+    content: { type: "text", text: "blueprint parity done" },
+  });
+  respond(reqId, { stopReason: "end_turn" });
+}
+
 async function runPrompt(reqId, sessionId) {
   if (mode === "vault") return runVaultPrompt(reqId, sessionId);
+  if (mode === "vault-parity") return runVaultParityPrompt(reqId, sessionId);
   if (mode === "wedge") return;
   if (mode === "crash") process.exit(2);
 

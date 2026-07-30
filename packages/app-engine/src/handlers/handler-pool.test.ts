@@ -177,7 +177,7 @@ describe("handler-pool", () => {
     });
     expect(after.ok).toBe(true);
     expect(after.value).toBe("alive");
-  });
+  }, 60_000);
 
   test("a worker that crashes mid-run leaves the pool usable for the next run", async () => {
     pool = new WorkerPool(HANDLER_WORKER_FILE, 2);

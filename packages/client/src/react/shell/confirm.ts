@@ -3,10 +3,18 @@ import { cx } from "../ui/cx.js";
 import modalCss from "../styles/modal.module.css";
 import buttonCss from "../ui/Button.module.css";
 // Confirm dialog — a promise-based modal (backdrop + card + Cancel/Confirm,
-// Esc = cancel, Enter = confirm). It portals to document.body and resolves a
+// Esc = cancel, Enter = confirm for non-danger actions). It portals to document.body and resolves a
 // boolean, so it's imperatively awaitable from any route regardless of who
 // owns #root. Kept as a plain function (no React) because the promise/await
 // ergonomics are what callers want.
+//
+// Uses a non-modal <dialog open> (not showModal) so the custom backdrop sibling
+// stays clickable. Native showModal() top-layer would intercept pointer events
+// and break backdrop dismiss (desktop e2e 3.5c).
+//
+// Danger actions intentionally omit the document-level Enter→confirm shortcut
+// (accessibility contract). Confirm is still focused so a focused Enter
+// activates the native button click (desktop e2e 3.5d delete-via-Enter).
 
 const X_SVG =
   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
@@ -20,13 +28,19 @@ export interface ConfirmOpts {
 
 export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
   return new Promise((resolve) => {
+    const priorFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     let settled = false;
     const finish = (result: boolean): void => {
       if (settled) return;
       settled = true;
       document.removeEventListener("keydown", onKey);
       backdrop.remove();
+      if (card.open && typeof card.close === "function") card.close();
       card.remove();
+      priorFocus?.focus();
       resolve(result);
     };
 
@@ -35,10 +49,15 @@ export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
     backdrop.dataset.testid = "modal-backdrop";
     backdrop.addEventListener("click", () => finish(false));
 
-    const card = document.createElement("div");
+    const card = document.createElement("dialog");
     card.className = modalCss.card ?? "";
-    card.setAttribute("role", "dialog");
+    card.setAttribute("aria-modal", "true");
     card.setAttribute("aria-label", opts.title);
+    card.setAttribute("open", "");
+    card.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      finish(false);
+    });
 
     const closeBtn = document.createElement("button");
     closeBtn.className = cx(buttonCss.icon, modalCss.close);
@@ -73,7 +92,7 @@ export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
       if (e.key === "Escape") {
         e.preventDefault();
         finish(false);
-      } else if (e.key === "Enter") {
+      } else if (e.key === "Enter" && !opts.danger) {
         e.preventDefault();
         finish(true);
       }
@@ -81,6 +100,7 @@ export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
     document.addEventListener("keydown", onKey);
 
     document.body.append(backdrop, card);
+    // Always focus Confirm so Enter activates it natively (including danger).
     setTimeout(() => confirmBtn.focus(), 30);
   });
 }

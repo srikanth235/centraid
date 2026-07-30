@@ -16,6 +16,16 @@
         "verbs": "read"
       },
       {
+        "schema": "schedule",
+        "table": "project",
+        "verbs": "read"
+      },
+      {
+        "schema": "schedule",
+        "table": "section",
+        "verbs": "read"
+      },
+      {
         "schema": "core",
         "table": "content_item",
         "verbs": "read"
@@ -48,6 +58,21 @@
       {
         "schema": "schedule",
         "table": "edit_task",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "save_project",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "save_section",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "organize_task",
         "verbs": "act"
       },
       {
@@ -251,6 +276,88 @@
           "reason": {
             "type": "string"
           }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "save-project",
+      "description": "Create, rename, area-classify, color, or manually order a task project.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "area": { "type": "string" },
+          "color": { "type": "string" },
+          "sort_order": { "type": "integer" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "save-section",
+      "description": "Create, rename, or manually order a section within a task project.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "section_id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "sort_order": { "type": "integer" }
+        },
+        "required": ["project_id", "name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "organize-task",
+      "description": "Move a task into Inbox or a project/section and persist its manual order.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": "string", "minLength": 1 },
+          "project_id": { "type": "string" },
+          "section_id": { "type": "string" },
+          "clear_project": { "type": "boolean", "const": true },
+          "sort_order": { "type": "integer" },
+          "recurrence_anchor": {
+            "type": "string",
+            "enum": ["scheduled", "completion"]
+          },
+          "recurrence_tz": { "type": "string" }
+        },
+        "required": ["task_id", "sort_order"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []

@@ -9,6 +9,7 @@ import type { VaultDb } from "../db.js";
 import type { Identity } from "../gateway/types.js";
 import { parseCsvRows, parseTransactionsCsv } from "./csv.js";
 import { parseIcs } from "./ics.js";
+import { parseMarkdownNote } from "./markdown.js";
 import { parseMbox, threadKey } from "./mbox.js";
 import { isPasswordsCsvHeader, parsePasswordsCsv } from "./passwords-csv.js";
 import { PUBLISHERS } from "./publishers.js";
@@ -18,6 +19,7 @@ import type {
   MessagePayload,
   PartyPayload,
   TransactionPayload,
+  NotePayload,
 } from "./publishers.js";
 import { ensureConnection, stageCandidates } from "./staging.js";
 import type { StageCandidate, StageResult } from "./staging.js";
@@ -39,6 +41,58 @@ export interface StageFileResult extends StageResult {
   kind: string;
   /** Zip entries that matched no importer (reported, never silent). */
   unrouted: string[];
+}
+
+export const MAX_IMPORT_FILE_BYTES = 128 * 1024 * 1024;
+export const MAX_IMPORT_RECORDS = 100_000;
+
+export function assertImportFileSize(byteLength: number): void {
+  if (
+    !Number.isSafeInteger(byteLength) ||
+    byteLength < 0 ||
+    byteLength > MAX_IMPORT_FILE_BYTES
+  ) {
+    throw new Error(`import file exceeds ${MAX_IMPORT_FILE_BYTES} bytes`);
+  }
+}
+
+function fileBytes(data: Buffer | string, filename: string): Buffer {
+  if (Buffer.isBuffer(data)) {
+    assertImportFileSize(data.length);
+    return data;
+  }
+  if (extension(filename) === "zip") {
+    const compact = data.replace(/\s+/gu, "");
+    if (
+      compact.length === 0 ||
+      compact.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]*={0,2}$/u.test(compact)
+    ) {
+      throw new Error("zip import is not valid base64");
+    }
+    const decoded = Buffer.from(compact, "base64");
+    assertImportFileSize(decoded.length);
+    return decoded;
+  }
+  assertImportFileSize(Buffer.byteLength(data, "utf8"));
+  return Buffer.from(data, "utf8");
+}
+
+function decodeImportText(data: Buffer, filename: string): string {
+  if (
+    (data[0] === 0xff && data[1] === 0xfe) ||
+    (data[0] === 0xfe && data[1] === 0xff)
+  ) {
+    throw new Error(`unsupported UTF-16 encoding in ${filename}; use UTF-8`);
+  }
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    throw new Error(`invalid UTF-8 in ${filename}`);
+  }
+  if (text.includes("\0")) throw new Error(`NUL byte in ${filename}`);
+  return text.startsWith("\uFEFF") ? text.slice(1) : text;
 }
 
 function eventCandidates(text: string): StageCandidate[] {
@@ -162,6 +216,21 @@ function passwordCandidates(text: string): StageCandidate[] {
   }));
 }
 
+function markdownCandidates(filename: string, text: string): StageCandidate[] {
+  const note = parseMarkdownNote({ path: filename, text });
+  return [
+    {
+      entityType: "knowledge.note",
+      externalId: note.externalId,
+      payload: {
+        title: note.title,
+        body: note.body,
+        path: note.path,
+      } satisfies NotePayload as unknown as Record<string, unknown>,
+    },
+  ];
+}
+
 /** CSVs route by CONTENT: a password column means a password-manager export. */
 function csvCandidates(
   text: string,
@@ -208,6 +277,9 @@ function candidatesFor(
       return messageCandidates(db, text, opts.stagedShas);
     case "csv":
       return csvCandidates(text, opts);
+    case "md":
+    case "markdown":
+      return markdownCandidates(filename, text);
     default:
       return null;
   }
@@ -223,6 +295,7 @@ export function stageFile(
   importer: Identity,
   options: StageFileOptions
 ): StageFileResult {
+  const input = fileBytes(options.data, options.filename);
   const currency = options.currency ?? baseCurrency(db);
   const accountName = options.accountName ?? stem(options.filename);
   const unrouted: string[] = [];
@@ -234,15 +307,11 @@ export function stageFile(
 
   if (extension(options.filename) === "zip") {
     kind = "file.takeout";
-    const buffer =
-      typeof options.data === "string"
-        ? Buffer.from(options.data, "base64")
-        : options.data;
-    for (const entry of readZipEntries(buffer)) {
+    for (const entry of readZipEntries(input)) {
       const routed = candidatesFor(
         db,
         entry.name,
-        entry.data.toString("utf8"),
+        decodeImportText(entry.data, entry.name),
         {
           accountName: stem(entry.name),
           currency,
@@ -253,10 +322,7 @@ export function stageFile(
       else candidates.push(...routed);
     }
   } else {
-    const text =
-      typeof options.data === "string"
-        ? options.data
-        : options.data.toString("utf8");
+    const text = decodeImportText(input, options.filename);
     const routed = candidatesFor(db, options.filename, text, {
       accountName,
       currency,
@@ -264,12 +330,17 @@ export function stageFile(
     });
     if (routed === null) {
       throw new Error(
-        `no importer for "${options.filename}" — supported: .ics, .vcf, .mbox, .csv, .zip`
+        `no importer for "${options.filename}" — supported: .ics, .vcf, .mbox, .csv, .md, .zip`
       );
     }
     kind = `file.${extension(options.filename) === "vcard" ? "vcf" : extension(options.filename)}`;
     candidates.push(...routed);
   }
+
+  if (candidates.length === 0)
+    throw new Error(`import contained no valid records: ${options.filename}`);
+  if (candidates.length > MAX_IMPORT_RECORDS)
+    throw new Error(`import exceeds ${MAX_IMPORT_RECORDS} records`);
 
   const connectionId = ensureConnection(db, { kind, label: options.filename });
   const result = stageCandidates(

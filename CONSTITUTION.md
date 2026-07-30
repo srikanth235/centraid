@@ -67,6 +67,13 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - **Enforced by**: `.governance/packs/srikanth235/centraid/directives/data-runtime-sqlite-separation/check.sh`
 - **Exceptions**: per-line waiver `// governance: allow-data-runtime-sqlite-separation <reason>` on the offending line. No legitimate case is anticipated today.
 
+### coverage-scope-reachability
+
+- **Directive**: Every first-party TypeScript source tree and the co-located executable `packages/blueprints/apps` / `packages/blueprints/kit` runtime trees must be covered by an enforced coverage floor, own a product-matrix flow, or appear in the intentional-ungated allowlist; every floor must also be reachable from Vitest's instrumentation globs.
+- **Rationale**: Coverage ratchets cannot protect code the coverage runner never instruments. Issue #532 closed this blind spot for conventional `packages/*/src` and `apps/*/src` roots, but the issue #630 audit found the 41,821-line bundled blueprint runtime lived outside both the instrumentation globs and the reachability enumeration, so a large product surface could regress while every measurement remained green.
+- **Enforced by**: `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/check.sh`
+- **Exceptions**: Runtime trees that are intentionally journey-only may be listed by exact scope id in `.governance/packs/srikanth235/centraid/directives/coverage-scope-reachability/allowlist.txt` with a matching `TESTING.md` explanation. Line waivers are not supported because the policy applies to whole coverage scopes.
+
 ## governance-kit/foundation
 
 ### internal-doc-links
@@ -235,6 +242,7 @@ If a specific change cannot satisfy a directive, document the deviation in the P
 - 2026-06-10 — @srikanth235 — Kit update 0.3 → 0.3.5 + core pack 0.3.2 → 0.4.0. Adds `doc-integrity` (system-of-record documents declared in `.governance/integrity.conf` are append-only relative to the default-branch baseline) and `version-consistency` (every managed-file `kit-version=` marker must agree with `install.yaml`); updates `receipt-per-issue` to require a `## Decisions` section on newly added receipts (#232).
 - 2026-06-12 — @srikanth235 — Migrate off the retired monolithic `governance-kit/core` pack onto the 0.6.0 concern-scoped packs (foundation, security, docs, commits, audit) (#241). Renames `version-consistency`→`kit-version-sync` and `no-broken-internal-doc-links`→`internal-doc-links`; splits `workflows-hardened`→`pinned-dependencies`+`token-permissions`. Held back the 0.6.0 net-new / changed-model directives (`toolchain-config-protection`, `no-unjustified-suppressions`, and the receipts-based `agent-token-accounting`/`agent-steering-accounting`) for deliberate adoption; `COSTS.md`/`STEERING.md` kept append-only via the doc-integrity overlay.
 - 2026-06-13 — @srikanth235 — Modify `gateway-engine-mode-agnostic` + `handler-uses-ctx-primitives`: update the rationale wording from "same code, two modes" to "same code, three hosts" (desktop embed, centraid-gateway daemon, OpenClaw plugin), reflecting the standalone daemon as a third gateway host. Rules unchanged — rationale text only (#243).
+- 2026-07-29 — @srikanth235 — Modify `coverage-scope-reachability`: enumerate the co-located blueprint app and kit runtime roots, require matching Vitest instrumentation, and restore the directive's missing constitutional policy record (#630).
 
 ## Escape hatches
 

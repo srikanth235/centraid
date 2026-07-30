@@ -11,6 +11,11 @@ const PREFIX = "centraid.v1.";
 // after hydrateSecure().
 const cache = new Map<string, string>();
 
+/** Drop every decrypted credential from JS memory when the app locks. */
+export function clearSecureCache(): void {
+  cache.clear();
+}
+
 function storageKey(key: string): string {
   return PREFIX + key;
 }

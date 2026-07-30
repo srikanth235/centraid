@@ -226,7 +226,12 @@ function FolderRow({
           aria-label={`Delete ${f.name}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!armConfirm(e.currentTarget, { armedLabel: "×?" })) return;
+            if (
+              !armConfirm(e.currentTarget, {
+                armedLabel: `Delete ${f.name}?`,
+              })
+            )
+              return;
             onDeleteFolder(f);
           }}
         >

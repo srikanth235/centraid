@@ -169,6 +169,10 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     name: "Collection items",
     blurb: "What's inside each collection.",
   },
+  "core.entity_revision": {
+    name: "Entity history",
+    blurb: "Pre-mutation snapshots for version history and undo.",
+  },
   "core.share_origin": {
     name: "Shared with here",
     blurb: "Where an item placed in this space came from, and who placed it.",
@@ -223,6 +227,18 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     blurb: "Who's invited to each event.",
   },
   "schedule.task": { name: "Tasks", blurb: "Things to do, with due dates." },
+  "schedule.project": {
+    name: "Task projects",
+    blurb: "Ordered projects and areas for tasks.",
+  },
+  "schedule.section": {
+    name: "Task sections",
+    blurb: "Ordered sections within a task project.",
+  },
+  "schedule.recurrence_exception": {
+    name: "Recurrence changes",
+    blurb: "Skipped or changed instances in a recurring series.",
+  },
   "schedule.availability_rule": {
     name: "Availability",
     blurb: "When you're free to meet.",
@@ -231,6 +247,10 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
   "social.contact_card": {
     name: "Contact cards",
     blurb: "Address-book details for a person.",
+  },
+  "social.contact_channel": {
+    name: "Contact channels",
+    blurb: "Validated phone, email, address, and handle details.",
   },
   "social.circle": { name: "Circles", blurb: "Groups of people in your life." },
   "social.circle_member": {
@@ -316,6 +336,10 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
   "tally.friend": { name: "Friends", blurb: "People you split expenses with." },
   "tally.group": { name: "Groups", blurb: "Groups you share expenses in." },
   "tally.expense": { name: "Expenses", blurb: "Shared costs you've recorded." },
+  "tally.recurring_expense": {
+    name: "Recurring expenses",
+    blurb: "Expense templates scheduled for future materialization.",
+  },
   "tally.expense_split": {
     name: "Expense splits",
     blurb: "Who owes what on each expense.",

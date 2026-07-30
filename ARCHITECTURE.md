@@ -58,6 +58,24 @@ Automation instructions use `@[schema.table/id]` for stable entity references. T
 
 An app declares **queries** (bounded reads) and **actions** (typed writes) in its `app.json`; the dispatcher (`packages/app-engine/src/handlers/dispatcher.ts`) validates input against the per-handler JSON Schema with Ajv, then runs the handler in a worker thread. The handler holds no database — every data touch goes through `ctx.vault`, crosses to the host, walks the consent pipeline, and comes back `executed` / `denied` / `parked` with a receipt id (issue #286 deleted the per-app `data.sqlite`, the `_sql` escape hatch, and the old `centraid_describe`/`centraid_read`/`centraid_write` tool trio). Agents see exactly one tool family — the **vault register**: `vault_sql` (one read-only statement over the whole vault), `vault_invoke` (one typed command, including every app's declared handlers), `vault_content` (the text of one document). UI buttons and `vault_invoke` land on the same handler — one calling convention. See the Apps § agents and Data § assistant docs at `https://centraid.dev/docs/apps/#agents` and `https://centraid.dev/docs/data/#assistant`.
 
+Issue #630 makes that shared calling convention a release invariant for all
+eight bundled apps. `packages/blueprints/src/handler-reachability.test.ts`
+requires every manifested handler to have a web and native dispatch site or a
+named, rationale-bearing agent/extension/platform fallback. The same package
+owns behavioral handler CRUD, cold-read state honesty, untrusted rendering,
+and offline/convergence contracts. The agent parity integration test starts a
+real ACP subprocess, crosses the loopback MCP transport, and invokes one
+representative command per blueprint through `vault_invoke`; it asserts
+executed and parked consent outcomes plus their receipts.
+
+The compound home surfaces remain gateway/vault projections rather than a new
+application database. Vault FTS fans one search across the eight entity
+families; household sharing projects a complete domain closure into an
+independent audience vault; and `GET /centraid/_brief/today` computes a bounded
+events/tasks/photos/Tally summary from the current vault. Clients render these
+projections from the same replica/HTTP contracts, while morning notifications
+contain only an opaque route back to Home.
+
 The same journalled command path backs **Vault Atlas** (#441), the Operations screen that renders the model as **Kinds / Relations / Browse** (`packages/client/src/react/screens/AtlasScreen.tsx`): the Browse table editor dispatches `atlas.insert_row|update_row|delete_row` — never raw SQL, sealed columns refuse writes — and its dependent-aware deletes consult the **polymorphic-reference registry** (`packages/vault/src/schema/poly-refs.ts`), the one enumeration of every polymorphic `(type, id)` pointer with a cleanup policy, swept on purge and Browse-delete so orphaned `consent_share`/`enrich_embedding`/`sync_external_entity` rows (previously never cleaned) can no longer survive a hard delete.
 
 ## Connector pull runtime

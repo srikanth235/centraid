@@ -144,6 +144,30 @@ describe("documents", () => {
     expect(filedUnder(documentId)?.notation).toBe("root");
   });
 
+  test("reviewed local OCR becomes the scan's searchable text derivative", () => {
+    const { documentId, contentId } = addDocument({
+      data_uri: SCAN,
+      title: "Scanned receipt.png",
+      extracted_text: "Maya Cafe masala dosa 450",
+    });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT text_content FROM core_content_derivative
+            WHERE content_id = ? AND variant = 'text'`
+        )
+        .get(contentId)
+    ).toMatchObject({ text_content: "Maya Cafe masala dosa 450" });
+    expect(
+      db.vault
+        .prepare(
+          `SELECT document_id FROM fts_core_document
+            WHERE fts_core_document MATCH 'masala'`
+        )
+        .get()
+    ).toMatchObject({ document_id: documentId });
+  });
+
   test("two documents may share identical bytes (dedup is on content, not identity)", () => {
     const a = addDocument({ data_uri: PDF, title: "Original.pdf" });
     const b = addDocument({ data_uri: PDF, title: "Copy.pdf" });

@@ -162,31 +162,42 @@ gateway CLI suites use 60s); do not add a per-test `timeout` option that sits
 ## Product tiers and coverage gates
 
 The deeply gated engine is vault, client replica, gateway, app-engine,
-automation, backup, blueprints, agent-runtime, plus pure libraries
-design-tokens, tunnel, protocol, and cli. Renderer screens and mobile UI are
-covered by extracted logic plus journeys, not by a whole-surface line
-percentage. `packages/client/src/replica/**` is gated independently from
-`packages/client/src/react/**` for that reason.
+automation, backup, blueprints (including its co-located app and kit runtime),
+agent-runtime, plus pure libraries design-tokens, tunnel, protocol, and cli.
+Renderer screens and mobile UI are covered by extracted logic plus journeys,
+not by a whole-surface line percentage. `packages/client/src/replica/**` is
+gated independently from `packages/client/src/react/**` for that reason.
 
 Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and
-are consumed directly by the root Vitest config. Floors are a tight margin
-(~1pt) below the latest measured `bun run coverage` run (2026-07-23):
+are consumed directly by the root Vitest config. Floors are a conservative
+integer margin below the latest measured `bun run coverage` run (2026-07-29):
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
-| repo-wide (`lines`) | 71.89 / — | **71** / — |
-| `packages/vault/src/**` | 91.78 / 78.97 | **91** / 78 |
-| `packages/backup/src/**` | 90.79 / 79.18 | **90** / 78 |
-| `packages/blueprints/src/**` | 90.77 / 84.09 | **90** / 83 |
-| `packages/design-tokens/src/**` | 90.23 / 81.82 | **90** / **81** |
-| `packages/app-engine/src/**` | 85.64 / 79.86 | 84 / **79** |
-| `packages/gateway/src/**` | 80.55 / 74.67 | **80** / **74** |
-| `packages/client/src/replica/**` | 75.63 / 76.73 | **75** / **76** |
-| `packages/automation/src/**` | 73.80 / 78.94 | **73** / **78** |
-| `packages/tunnel/src/**` | 73.22 / 80.42 | **73** / **80** |
-| `packages/agent-runtime/src/**` | 72.89 / 85.88 | **72** / **85** |
-| `packages/cli/src/**` | 70.14 / 57.78 | **70** / **57** |
-| `packages/protocol/src/**` | 67.08 / 70.59 | **67** / **70** |
+| repo-wide (`lines`) | 63.05 / — | **62** / — |
+| `packages/vault/src/**` | 88.57 / 75.24 | **88** / **74** |
+| `packages/backup/src/**` | 90.03 / 77.63 | **90** / **74** |
+| `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |
+| `packages/blueprints/apps/**` | 17.81 / 12.34 | **17** / **12** |
+| `packages/blueprints/kit/**` | 49.56 / 37.27 | **49** / **37** |
+| `packages/design-tokens/src/**` | 99.03 / 71.42 | **98** / **70** |
+| `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
+| `packages/gateway/src/**` | 79.98 / 66.37 | **80** / **65** |
+| `packages/time-engine/src/**` | 75.15 / 57.54 | **74** / **56** |
+| `packages/client/src/replica/**` | 76.82 / 63.37 | **75** / **62** |
+| `packages/client/src/react/**` | 67.58 / 57.63 | **65** / **35** |
+| `packages/automation/src/**` | 84.36 / 77.52 | **72** / **75** |
+| `packages/tunnel/src/**` | 72.06 / 52.24 | **70** / **51** |
+| `packages/agent-runtime/src/**` | 85.97 / 76.29 | **72** / **75** |
+| `packages/cli/src/**` | 84.50 / 82.85 | **83** / **81** |
+| `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
+| `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **55** |
+
+The #630 denominator expansion is an approved measurement deviation: the old
+71% aggregate excluded 11,639 executable lines under
+`packages/blueprints/apps` and `packages/blueprints/kit`. Their initial floors
+record the first honest baseline; real handler contracts and platform journeys
+own correctness while the line/branch floors ratchet upward from here.
 
 `bun run test` prints the active floors after package tests so the local loop
 never hides the CI contract; `bun run coverage` measures and enforces them.
@@ -511,8 +522,9 @@ the `core` + `react` presets it already composed. Wiring and caveats:
 
 After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It
 intersects `git diff origin/main` added lines (instrumentable `packages/*` /
-`apps/*` sources only) with Istanbul/v8 `coverage/coverage-final.json`. Threshold
-is **80%** of changed instrumentable lines. Failures name uncovered hunks.
+`apps/*` sources plus the co-located blueprint app/kit runtimes) with
+Istanbul/v8 `coverage/coverage-final.json`. Threshold is **80%** of changed
+instrumentable lines. Failures name uncovered hunks.
 Waive with a non-empty `approvedDeviation` in
 `tests/diff-coverage-deviation.json` (constitutional exception — temporary).
 
@@ -569,9 +581,10 @@ use model-based / property tests across the load-bearing pure surfaces:
 ### Coverage-scope reachability (#532)
 
 Governance directive `coverage-scope-reachability` fails when a `packages/*` or
-`apps/*` tree has non-test TypeScript source but no coverage floor, matrix
-owner, or intentional allowlist entry — so a new engine package cannot land
-invisible to every floor.
+`apps/*` tree, or either co-located blueprint `apps` / `kit` runtime, has
+non-test executable source but no coverage floor, matrix owner, or intentional
+allowlist entry — so a new product surface cannot land invisible to every
+floor.
 
 ## Deliberately deferred
 

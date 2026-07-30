@@ -21,6 +21,7 @@ import { closeSync, openSync, readSync, rmSync } from "node:fs";
 import path from "node:path";
 
 import type { VaultDb } from "../db.js";
+import { asVaultDiskFullError } from "../errors.js";
 import { writeReceipt } from "./evidence.js";
 import { GatewayError } from "./types.js";
 
@@ -47,8 +48,16 @@ export function checkpointVault(db: VaultDb): {
   journal: string;
 } {
   requireDir(db, "checkpoint");
-  db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  try {
+    db.vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  } catch (error) {
+    throw asVaultDiskFullError("vault WAL checkpoint", error);
+  }
+  try {
+    db.journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  } catch (error) {
+    throw asVaultDiskFullError("journal WAL checkpoint", error);
+  }
   return { vault: "truncated", journal: "truncated" };
 }
 

@@ -69,6 +69,62 @@ describe(validateManifest, () => {
     expect(m.queries).toHaveLength(1);
   });
 
+  it("accepts and preserves a row-filtered, field-masked vault scope", () => {
+    const m = {
+      ...baseManifest(),
+      vault: {
+        purpose: "dpv:ServiceProvision",
+        why: "Read one domain's revision history.",
+        scopes: [
+          {
+            schema: "core",
+            table: "entity_revision",
+            verbs: "read",
+            rowFilter: [
+              {
+                column: "entity_type",
+                op: "eq",
+                value: "people.person",
+              },
+            ],
+            fieldMask: ["revision_id", "entity_id", "snapshot_json"],
+          },
+        ],
+      },
+    };
+    const out = validateManifest(m);
+    expect(out.vault?.scopes[0]).toMatchObject({
+      rowFilter: [
+        {
+          column: "entity_type",
+          op: "eq",
+          value: "people.person",
+        },
+      ],
+      fieldMask: ["revision_id", "entity_id", "snapshot_json"],
+    });
+  });
+
+  it("rejects unknown filtered-scope fields", () => {
+    const m = {
+      ...baseManifest(),
+      vault: {
+        purpose: "dpv:ServiceProvision",
+        why: "Malformed filter.",
+        scopes: [
+          {
+            schema: "core",
+            verbs: "read",
+            rowFilter: [
+              { column: "entity_type", op: "eq", value: "x", rawSql: "1=1" },
+            ],
+          },
+        ],
+      },
+    };
+    expect(() => validateManifest(m)).toThrow(ManifestError);
+  });
+
   it("rejects non-object input", () => {
     expect(() => validateManifest(null)).toThrow(ManifestError);
     expect(() => validateManifest("hi")).toThrow(ManifestError);

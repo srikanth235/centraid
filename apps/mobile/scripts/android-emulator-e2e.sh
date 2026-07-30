@@ -61,4 +61,13 @@ fi
 adb shell settings put global hide_error_dialogs 1 || true
 
 node scripts/test-report/prepare.mjs
-MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs
+# Non-short-circuit: every flow writes evidence even when an earlier journey
+# fails. template-gate covers the five WebView blueprints; native-v0-resilience
+# covers Photos, Docs, and Agenda, matching the iOS eight-app gate.
+set +e
+ec=0
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/template-gate.mjs || ec=$?
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
+set -e
+exit "$ec"

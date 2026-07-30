@@ -10,6 +10,13 @@ const KEYS = [
   "spent_on",
   "category",
   "splits",
+  "original_amount_minor",
+  "original_currency",
+  "settlement_currency",
+  "rate_scaled",
+  "rate_scale",
+  "rate_source",
+  "rate_date",
 ];
 export default async function addExpense({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

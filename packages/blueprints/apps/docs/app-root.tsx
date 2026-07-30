@@ -577,13 +577,42 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       : null;
   useEffect(() => {
     if (!emptyCfg || !emptyRef.current) return;
-    const action = emptyCfg.needsUpload
-      ? h(
-          "button",
-          { type: "button", onclick: () => uploadRef.current?.click() },
-          emptyCfg.needsUpload
-        )
-      : undefined;
+    const clearSearch = (): void => {
+      if (searchInputRef.current) searchInputRef.current.value = "";
+      state.search = "";
+      state.searchResults = null;
+      bump();
+    };
+    const action = h(
+      "button",
+      {
+        type: "button",
+        class: "kit-btn",
+        onclick: emptyCfg.needsUpload
+          ? () => uploadRef.current?.click()
+          : state.search.trim()
+            ? clearSearch
+            : state.type === "all"
+              ? state.nav.kind === "starred" || state.nav.kind === "trash"
+                ? () => {
+                    state.nav = { kind: "all" };
+                    bump();
+                  }
+                : () => uploadRef.current?.click()
+              : () => {
+                  state.type = "all";
+                  bump();
+                },
+      },
+      emptyCfg.needsUpload ??
+        (state.search.trim()
+          ? "Clear search"
+          : state.type === "all"
+            ? state.nav.kind === "starred" || state.nav.kind === "trash"
+              ? "View all documents"
+              : "Upload document"
+            : "Clear filter")
+    );
     emptyState(emptyRef.current, {
       icon: emptyCfg.icon,
       title: emptyCfg.title,

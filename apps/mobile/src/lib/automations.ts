@@ -53,6 +53,24 @@ export interface AutomationRow {
   description: string;
 }
 
+export interface AutomationTemplate {
+  id: string;
+  name: string;
+  desc: string;
+  triggerLabel?: string;
+}
+
+const V0_TEMPLATE_IDS = new Set([
+  "google-gmail-pull",
+  "google-calendar-pull",
+  "google-contacts-pull",
+  "google-drive-pull",
+  "obligation-extractor",
+  "renewal-reminders",
+  "screenshot-extractor",
+  "photo-captioner",
+]);
+
 /**
  * Friendly text for one cron expression. This is deliberately NOT a full cron
  * humanizer — it names the common shapes the automation templates emit and
@@ -154,6 +172,33 @@ export async function listAutomations(): Promise<AutomationRow[]> {
     method: "GET",
   });
   return (body.rows ?? []).map(toRow);
+}
+
+/** Curated automation starters from the same gateway catalog as desktop. */
+export async function listAutomationTemplates(): Promise<AutomationTemplate[]> {
+  const base = await requireGatewayBase();
+  const templates = await fetchJson<
+    Array<AutomationTemplate & { kind?: "app" | "automation" }>
+  >(`${base}/centraid/_templates`, {
+    headers: authHeader(),
+    method: "GET",
+  });
+  return templates.filter(
+    (template) =>
+      template.kind === "automation" && V0_TEMPLATE_IDS.has(template.id)
+  );
+}
+
+/** Publish an automation starter into the current vault. */
+export async function cloneAutomationTemplate(
+  templateId: string
+): Promise<void> {
+  const base = await requireGatewayBase();
+  await fetchJson<unknown>(`${base}/centraid/_apps/_clone`, {
+    body: JSON.stringify({ templateId, publish: true }),
+    headers: { "content-type": "application/json", ...authHeader() },
+    method: "POST",
+  });
 }
 
 /** Fire an automation now (fire-and-forget). Returns the minted native turn id. */

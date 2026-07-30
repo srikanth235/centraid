@@ -1,3 +1,4 @@
+import { displayText } from "../../_shared/untrusted.ts";
 // One expense row from a decorated ledger/search row (already carries
 // splits). Shared by Ledger.tsx (group/friend view) and Search.tsx —
 // `groupSuffix` folds the group name into the sub line for search results,
@@ -41,14 +42,17 @@ export function ExpenseRow({
     amt = money(row.your_amount_minor, currency);
     cls = "neg";
     sub =
-      first(row.paid_by_name) + " paid " + money(row.amount_minor, currency);
+      displayText(first(row.paid_by_name)) +
+      " paid " +
+      money(row.amount_minor, currency);
   } else {
     rLabel = "not involved";
     amt = money(row.amount_minor, currency);
     cls = "muted";
-    sub = first(row.paid_by_name) + " paid";
+    sub = displayText(first(row.paid_by_name)) + " paid";
   }
-  if (groupSuffix && row.group_name) sub = `${sub} · ${row.group_name}`;
+  if (groupSuffix && row.group_name)
+    sub = `${sub} · ${displayText(row.group_name)}`;
 
   // Optimistic / parked rows (issue #404): the kit's shared pending
   // treatment — accent rail on the row, spinning mono chip where the role
@@ -69,8 +73,11 @@ export function ExpenseRow({
         {c.icon}
       </span>
       <span className={styles.exmain}>
-        <span className={styles.exdesc}>{row.description}</span>
-        <span className={styles.exsub}>{sub}</span>
+        <span className={styles.exdesc}>{displayText(row.description)}</span>
+        <span className={styles.exsub}>
+          {sub}
+          {row.receipt ? " · receipt" : ""}
+        </span>
       </span>
       <span className={styles.exright}>
         {pending ? (

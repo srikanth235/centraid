@@ -14,7 +14,9 @@ import { ActivityFeed } from "./components/Activity.tsx";
 import { Dashboard } from "./components/Dashboard.tsx";
 import { DetailModal } from "./components/DetailModal.tsx";
 import { ExpenseModal } from "./components/ExpenseModal.tsx";
+import { ExpenseUndo } from "./components/ExpenseUndo.tsx";
 import { FriendModal } from "./components/FriendModal.tsx";
+import { GroupManager } from "./components/GroupManager.tsx";
 import { GroupModal } from "./components/GroupModal.tsx";
 import { Ledger } from "./components/Ledger.tsx";
 import { SearchResults } from "./components/Search.tsx";
@@ -44,6 +46,12 @@ import type {
 export const CHANGE_TABLES = [
   "tally.expense",
   "tally.expense_split",
+  "tally.expense_receipt",
+  "tally.expense_line_item",
+  "tally.expense_line_allocation",
+  "tally.recurring_expense",
+  "schedule.recurrence_exception",
+  "core.content_item",
   "tally.settlement",
   "tally.friend",
   "tally.group",
@@ -67,6 +75,7 @@ function makeState(): AppState {
     settle: null,
     newGroup: null,
     addFriend: null,
+    expenseUndo: null,
     modalMembers: [],
     pendingExpenses: [],
   };
@@ -79,6 +88,7 @@ function makeDash(): Dash {
     friends: [],
     groups: [],
     trash: [],
+    recurring: [],
     owe_total_minor: 0,
     owed_total_minor: 0,
   };
@@ -161,6 +171,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     dash.friends = merged.friends ?? [];
     dash.groups = merged.groups ?? [];
     dash.trash = merged.trash ?? [];
+    dash.recurring = merged.recurring ?? [];
     dash.owe_total_minor = merged.owe_total_minor;
     dash.owed_total_minor = merged.owed_total_minor;
     if (merged.me) dash.me = merged.me;
@@ -192,6 +203,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     closeNewGroup: handleCloseNewGroup,
     closeSettle: handleCloseSettle,
     deleteExpense: handleDeleteExpense,
+    deleteGroup: handleDeleteGroup,
+    addGroupMember: handleAddGroupMember,
     openAddExpense: handleOpenAddExpense,
     openAddFriend: handleOpenAddFriend,
     openDetail: handleOpenDetail,
@@ -199,6 +212,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     openNewGroup: handleOpenNewGroup,
     openSettle: handleOpenSettle,
     restoreExpense: handleRestoreExpense,
+    removeGroupMember: handleRemoveGroupMember,
+    renameGroup: handleRenameGroup,
     saveAddFriend: handleSaveAddFriend,
     saveExpense: handleSaveExpense,
     saveNewGroup: handleSaveNewGroup,
@@ -208,6 +223,9 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     setExpenseGroup: handleSetExpenseGroup,
     setNewGroup: handleSetNewGroup,
     setSettle: handleSetSettle,
+    undoExpense: handleUndoExpense,
+    materializeRecurringExpense: handleMaterializeRecurring,
+    editRecurringExpense: handleEditRecurring,
   } = logic;
 
   const setRoot = useCallback(
@@ -236,8 +254,30 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     });
     const stopFocus = onFocusRefresh(() => void refreshAll());
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== "Escape") return;
       const l = logicRef.current!;
+      const target = e.target;
+      const editing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (e.key === "/" && !editing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>("#searchInput")?.focus();
+        return;
+      }
+      if (
+        e.key.toLowerCase() === "n" &&
+        !editing &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !l.anyModalOpen()
+      ) {
+        e.preventDefault();
+        handleOpenAddExpense();
+        return;
+      }
+      if (e.key !== "Escape") return;
       if (l.anyModalOpen()) {
         l.closeAllModals();
         bump();
@@ -340,6 +380,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         search={q}
         currency={dash.currency}
         onOpenDetail={handleOpenDetail}
+        onClearSearch={() => logic.clearSearch()}
       />
     );
   } else if (state.view === "dashboard") {
@@ -353,6 +394,16 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         onOpenAddFriend={handleOpenAddFriend}
         onOpenNewGroup={handleOpenNewGroup}
         onRestoreExpense={handleRestoreExpense}
+        onMaterializeRecurring={handleMaterializeRecurring}
+        onEditRecurring={(template, scope, action, override) =>
+          handleEditRecurring(
+            template.template_id,
+            template.next_start ?? new Date().toISOString(),
+            scope,
+            action,
+            override
+          )
+        }
       />
     ) : (
       <KitSkeleton rows={4} />
@@ -363,6 +414,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         viewData={state.viewData}
         me={dash.me}
         currency={dash.currency}
+        onAddExpense={handleOpenAddExpense}
       />
     );
   } else if (state.view === "group" || state.view === "friend") {
@@ -377,12 +429,37 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
           }
         : state.viewData;
     content = (
-      <Ledger
-        view={state.view}
-        viewData={viewData}
-        currency={dash.currency}
-        onOpenDetail={handleOpenDetail}
-      />
+      <>
+        {state.view === "group" && viewData?.group ? (
+          <GroupManager
+            key={viewData.group.group_id}
+            group={viewData.group}
+            members={viewData.members ?? []}
+            friends={dash.friends}
+            me={dash.me}
+            onRename={handleRenameGroup}
+            onAddMember={handleAddGroupMember}
+            onRemoveMember={handleRemoveGroupMember}
+            onDelete={handleDeleteGroup}
+          />
+        ) : null}
+        <Ledger
+          view={state.view}
+          viewData={viewData}
+          currency={dash.currency}
+          onOpenDetail={handleOpenDetail}
+          onAddExpense={handleOpenAddExpense}
+        />
+      </>
+    );
+  }
+
+  if (state.expenseUndo) {
+    content = (
+      <>
+        <ExpenseUndo undo={state.expenseUndo} onUndo={handleUndoExpense} />
+        {content}
+      </>
     );
   }
 
@@ -398,6 +475,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         onClose={handleCloseDetail}
         onEdit={handleOpenEditExpense}
         onDelete={handleDeleteExpense}
+        onUndo={handleUndoExpense}
       />
     );
   } else if (state.expense) {

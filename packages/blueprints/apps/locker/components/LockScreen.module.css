@@ -20,10 +20,10 @@
   border-radius: 18px;
   background: linear-gradient(
     160deg,
-    color-mix(in oklab, var(--_accent) 78%, #fff),
+    color-mix(in oklab, var(--_accent) 78%, var(--on-accent, white)),
     var(--accd)
   );
-  color: #fff;
+  color: var(--on-accent, white);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -32,10 +32,19 @@
   font: var(--t-title);
   font-size: 22px;
 }
+.heading {
+  text-align: center;
+}
 .lockSub {
   font: var(--t-small);
   color: var(--ink-2);
   margin-top: -10px;
+}
+.label {
+  width: 280px;
+  margin-bottom: -13px;
+  font: var(--t-small);
+  color: var(--ink-2);
 }
 .lockIn {
   width: 280px;
@@ -46,21 +55,51 @@
   background: var(--bg-elev);
   font: var(--t-body);
   font-size: 15px;
-  outline: none;
   letter-spacing: 0.2em;
 }
-.lockIn:focus {
+.lockIn:focus-visible {
+  outline: none;
   border-color: var(--selb);
   box-shadow: var(--kit-focus-ring);
 }
+.error {
+  min-height: 18px;
+  max-width: 320px;
+  color: var(--danger);
+  font: var(--t-small);
+  text-align: center;
+}
+.actions {
+  display: flex;
+  gap: 10px;
+}
 .lockBtn {
-  width: 280px;
+  min-width: 180px;
   padding: 12px;
   border: none;
   border-radius: 11px;
   background: var(--accd);
-  color: #fff;
+  color: var(--on-accent, white);
   font: var(--t-strong);
+}
+.cancelBtn {
+  min-width: 90px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--bg-elev);
+  color: var(--ink);
+  font: var(--t-strong);
+}
+.lockBtn:focus-visible,
+.cancelBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+}
+.lockBtn:disabled,
+.cancelBtn:disabled,
+.lockIn:disabled {
+  opacity: 0.6;
 }
 
 @keyframes fade {

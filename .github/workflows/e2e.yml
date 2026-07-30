@@ -1,3 +1,5 @@
+# governance: allow-toolchain-config issue #637 — turbo-cache on build-bearing
+# nightly jobs; mobile-e2e-ios intentionally excluded (macOS native binary risk).
 name: e2e
 
 # Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
@@ -48,6 +50,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       # Electron + Playwright need host system libraries (libnss3, libgbm, …)
       # to start a Chromium-based renderer on headless Linux. `--with-deps`
       # apt-installs them; the chromium download itself is what carries the
@@ -114,6 +118,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       - run: bunx playwright install --with-deps chromium
         working-directory: apps/web
       - run: bun run build
@@ -147,6 +153,8 @@ jobs:
         with:
           node-version: "22"
       - uses: ./.github/actions/setup
+        # #637 — deliberately no turbo-cache: macOS is 1-of-1 and must not
+        # restore a Linux-built native/*.node even with RUNNER_OS in the hash.
       - name: Select Xcode 26.4 or newer
         run: |
           set -euo pipefail
@@ -238,7 +246,7 @@ jobs:
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
           echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
           for attempt in {1..90}; do
-            if curl -fsS http://127.0.0.1:18789/centraid/_apps; then exit 0; fi
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
             sleep 2
           done
           cat /tmp/centraid-mobile-gateway.log
@@ -397,11 +405,10 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # #496 PC1 — Android home-loads at least every nightly (macOS minutes free on
-  # public repos). Leaner than iOS: only home-loads; longer paths stay on iOS.
-  # Flake budget: one retry at the flow harness; job failure still reds nightly.
-  # macos-15 is Apple Silicon → arm64-v8a AVD (x86_64 will not boot without HAX).
-  # Metro must be up before Maestro (harness hard-fails without it; iOS job does this).
+  # #496 PC1 / #630 — Android runs the same eight native blueprint covers as
+  # iOS. Flake budget:
+  # one retry at the flow harness; job failure still reds nightly. Metro and the
+  # paired gateway must be up before Maestro.
   mobile-e2e-android:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android'
@@ -413,6 +420,8 @@ jobs:
         with:
           node-version: "22"
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       # ubuntu-latest exposes /dev/kvm; enable it so the x86_64 emulator gets
       # hardware acceleration. macos-15 runners have no Hypervisor.framework
       # (HVF error: HV_UNSUPPORTED), so the Android emulator could not boot there
@@ -450,6 +459,19 @@ jobs:
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Build mobile workspace (host, before emulator)
         run: bunx turbo run build --filter=@centraid/mobile...
+      - name: Build and start the tokenless mobile test gateway
+        run: |
+          bunx turbo run build --filter=@centraid/gateway
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
       - name: Start Metro
         working-directory: apps/mobile
         run: |
@@ -568,6 +590,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
@@ -596,6 +620,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
@@ -624,6 +650,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
@@ -658,6 +686,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       - run: bun run build
       # #545 A2 — mutation must fail the job (and thus nightly-failure-issue)
       # when floors/seeds go red. continue-on-error was silencing breaches.
@@ -691,6 +721,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       - name: Restore web waterfall evidence
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -756,6 +788,8 @@ jobs:
         with:
           node-version: "22"
       - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
       # Same-run evidence only (desktop/web/mobile/pairing). Pairing no longer
       # pulls artifacts from a separate scheduled workflow run.
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

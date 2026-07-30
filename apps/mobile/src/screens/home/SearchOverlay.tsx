@@ -8,7 +8,8 @@
 // Pressable, and the content layer is `box-none`, so a tap on empty space falls
 // through to close while taps on the input / a tile / Cancel are handled.
 
-import React, { useMemo, useState } from "react";
+import { BlurView } from "expo-blur";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -20,20 +21,23 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
 import { family, t, useTheme } from "../../kit/theme";
 import type { ThemeColors, Scheme } from "../../kit/theme";
+import { BLUEPRINT_SEARCH_TARGETS, searchBlueprints } from "./blueprint-search";
+import type { BlueprintSearchHit } from "./blueprint-search";
 import { filterLauncherItems } from "./catalog";
 import type { LauncherItem } from "./catalog";
 import LauncherGrid from "./LauncherGrid";
 
 const H_PADDING = 20;
 
-// Full-screen scrim. The original layered an expo-blur BlurView beneath this
-// film; that native module isn't wired into this build yet (deferred polish),
-// so the scrim runs near-opaque to stay legible over any content beneath it.
+// Full-screen live blur plus a translucent scheme film. expo-blur is a native
+// dependency of the shipped app (also used by GlassBar), so this surface
+// exercises the same compiled material instead of carrying a stale fallback.
 const TINT: Record<Scheme, string> = {
-  light: "rgba(241, 236, 225, 0.97)",
-  dark: "rgba(16, 19, 24, 0.97)",
+  light: "rgba(241, 236, 225, 0.82)",
+  dark: "rgba(16, 19, 24, 0.86)",
 };
 
 export interface SearchOverlayProps {
@@ -50,16 +54,66 @@ export default function SearchOverlay({
   const { colors, scheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+  const { session } = useReplica();
   const [query, setQuery] = useState("");
+  const [appFilter, setAppFilter] = useState<string>();
+  const [entitySearch, setEntitySearch] = useState<{
+    key: string;
+    hits: BlueprintSearchHit[];
+    searching: boolean;
+  }>();
 
   const matches = useMemo(
     () => filterLauncherItems(items, query),
     [items, query]
   );
   const trimmed = query.trim();
+  const searchKey = `${appFilter ?? "all"}:${trimmed}`;
+  const entityHits = entitySearch?.key === searchKey ? entitySearch.hits : [];
+  const searching =
+    Boolean(session && trimmed) &&
+    (entitySearch?.key !== searchKey || entitySearch.searching);
+  useEffect(() => {
+    if (!session || !trimmed) return;
+    let active = true;
+    const timeout = setTimeout(() => {
+      setEntitySearch({ key: searchKey, hits: [], searching: true });
+      void searchBlueprints(session, trimmed, appFilter)
+        .then((hits) => {
+          if (active)
+            setEntitySearch({ key: searchKey, hits, searching: false });
+        })
+        .finally(() => {
+          if (active)
+            setEntitySearch((current) =>
+              current?.key === searchKey
+                ? { ...current, searching: false }
+                : current
+            );
+        });
+    }, 160);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [appFilter, searchKey, session, trimmed]);
+  const openHit = (hit: BlueprintSearchHit): void => {
+    const item = items.find(
+      (candidate) =>
+        candidate.meta.id === hit.appId ||
+        (candidate.route.kind === "app" && candidate.route.appId === hit.appId)
+    );
+    if (item) onOpen(item);
+  };
 
   return (
     <View style={StyleSheet.absoluteFill}>
+      <BlurView
+        intensity={60}
+        tint={scheme === "dark" ? "dark" : "light"}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <View
         style={[StyleSheet.absoluteFill, { backgroundColor: TINT[scheme] }]}
         pointerEvents="none"
@@ -83,10 +137,11 @@ export default function SearchOverlay({
               strokeWidth={1.8}
             />
             <TextInput
+              accessibilityLabel="Search every app"
               autoFocus
               value={query}
               onChangeText={setQuery}
-              placeholder="Search your apps"
+              placeholder="Search everything"
               placeholderTextColor={colors.ink3}
               style={styles.input}
               returnKeyType="search"
@@ -109,6 +164,95 @@ export default function SearchOverlay({
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {trimmed ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filters}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: appFilter === undefined }}
+                onPress={() => setAppFilter(undefined)}
+                style={[
+                  styles.filter,
+                  appFilter ? undefined : { backgroundColor: colors.accent },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    { color: appFilter ? colors.ink2 : colors.bg },
+                  ]}
+                >
+                  All
+                </Text>
+              </Pressable>
+              {BLUEPRINT_SEARCH_TARGETS.map((target) => (
+                <Pressable
+                  key={target.appId}
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    selected: appFilter === target.appId,
+                  }}
+                  onPress={() => setAppFilter(target.appId)}
+                  style={[
+                    styles.filter,
+                    appFilter === target.appId && {
+                      backgroundColor: colors.accent,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      {
+                        color:
+                          appFilter === target.appId ? colors.bg : colors.ink2,
+                      },
+                    ]}
+                  >
+                    {target.appLabel}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+          {trimmed ? (
+            <View style={styles.entityResults}>
+              <Text style={styles.sectionLabel}>RESULTS IN YOUR VAULT</Text>
+              {entityHits.map((hit) => (
+                <Pressable
+                  key={`${hit.appId}:${hit.id}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${hit.label} in ${hit.appLabel}`}
+                  onPress={() => openHit(hit)}
+                  style={[styles.entityRow, { borderBottomColor: colors.line }]}
+                >
+                  <Icon
+                    name="Search"
+                    size={16}
+                    color={colors.accent}
+                    strokeWidth={1.8}
+                  />
+                  <View style={styles.entityCopy}>
+                    <Text numberOfLines={1} style={styles.entityLabel}>
+                      {hit.label}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.entityDetail}>
+                      {hit.appLabel}
+                      {hit.detail ? ` · ${hit.detail}` : ""}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+              {searching ? (
+                <Text style={styles.empty}>Searching your vault…</Text>
+              ) : entityHits.length === 0 ? (
+                <Text style={styles.empty}>No vault results.</Text>
+              ) : null}
+            </View>
+          ) : null}
           {matches.length ? (
             <LauncherGrid items={matches} onOpen={onOpen} />
           ) : (
@@ -125,8 +269,9 @@ export default function SearchOverlay({
               strokeWidth={1.7}
             />
             <Text style={styles.hintText}>
-              Deeper search — photos, docs and people — arrives once your
-              desktop is paired.
+              Results come from the encrypted local FTS5 replica. Confirmed
+              captions, OCR, people, and places appear only when their
+              enrichment setting is enabled.
             </Text>
           </View>
         </ScrollView>
@@ -144,6 +289,21 @@ const makeStyles = (colors: ThemeColors) =>
     },
     content: { flex: 1, paddingHorizontal: H_PADDING },
     empty: { ...t("small"), color: colors.ink2, paddingVertical: 8 },
+    entityCopy: { flex: 1 },
+    entityDetail: {
+      ...t("small"),
+      color: colors.ink2,
+      marginTop: 2,
+    },
+    entityLabel: { ...t("body"), color: colors.ink },
+    entityResults: { marginBottom: 22, marginTop: 18 },
+    entityRow: {
+      alignItems: "center",
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      flexDirection: "row",
+      gap: 10,
+      minHeight: 58,
+    },
     field: {
       alignItems: "center",
       backgroundColor: colors.bgElev,
@@ -166,5 +326,20 @@ const makeStyles = (colors: ThemeColors) =>
     hintText: { ...t("small"), color: colors.ink3, flex: 1, lineHeight: 18 },
     input: { ...t("body"), color: colors.ink, flex: 1, padding: 0 },
     results: { paddingTop: 22 },
+    filters: { gap: 7, paddingVertical: 10 },
+    filter: {
+      backgroundColor: colors.bgElev,
+      borderRadius: 999,
+      minHeight: 32,
+      paddingHorizontal: 12,
+      justifyContent: "center",
+    },
+    filterText: { ...t("small"), fontFamily: family.sansMedium },
+    sectionLabel: {
+      ...t("small"),
+      color: colors.ink3,
+      letterSpacing: 0.8,
+      marginBottom: 3,
+    },
     searchRow: { alignItems: "center", flexDirection: "row", gap: 12 },
   });

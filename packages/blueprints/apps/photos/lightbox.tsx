@@ -36,15 +36,24 @@ export function createLightbox({
   // bare `asset_id` would be ambiguous across scopes (issue #599).
   let openKey: string | null = null;
   let renderSeq = 0;
+  let priorFocus: HTMLElement | null = null;
 
   function closeLightbox() {
     openKey = null;
     const box = $("lightbox");
     box.hidden = true;
     lightboxRoot.render(null);
+    priorFocus?.focus();
+    priorFocus = null;
   }
 
   function openLightbox(key: string) {
+    if (openKey == null) {
+      priorFocus =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+    }
     openKey = key;
     renderLightbox();
   }
@@ -97,6 +106,9 @@ export function createLightbox({
       />
     );
     box.hidden = false;
+    queueMicrotask(() => {
+      box.querySelector<HTMLElement>('button[aria-label="Close"]')?.focus();
+    });
   }
 
   // A plain native listener directly on `#lightbox` (which doubles as this
@@ -112,6 +124,28 @@ export function createLightbox({
   // itself (never on a descendant) closes it, regardless of listener order.
   $("lightbox").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeLightbox();
+  });
+  $("lightbox").addEventListener("keydown", (event) => {
+    if (event.key !== "Tab") return;
+    const focusable = [
+      ...$("lightbox").querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ),
+    ].filter((element) => !element.hidden);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      $("lightbox").focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (
+      (event.shiftKey && document.activeElement === first) ||
+      (!event.shiftKey && document.activeElement === last)
+    ) {
+      event.preventDefault();
+      (event.shiftKey ? last : first)?.focus();
+    }
   });
 
   return {

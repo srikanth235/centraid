@@ -5,12 +5,18 @@
 //   ├─ Photos        → PhotosStack  (timeline, lightbox, library/search/backup)
 //   ├─ Docs          → DocsStack    (drive, viewer)
 //   ├─ Agenda        → AgendaStack  (calendar, event)
+//   ├─ Locker        → LockerHome   (native authenticated secrets cover)
+//   ├─ Tasks         → TasksHome    (native offline task organizer)
+//   ├─ People        → PeopleHome   (native offline contact organizer)
+//   ├─ Notes         → NotesHome    (native CommonMark + linked-data editor)
+//   ├─ Tally         → TallyHome    (native offline shared ledger)
 //   ├─ AppDetail     → AppDetailScreen (remote-app WebView cover)
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
+//   ├─ Capture       → CaptureScreen (preview-first universal quick add)
+//   ├─ Scan          → ScanScreen (camera/share OCR review)
 //   ├─ Automations   → AutomationsScreen (list + run the space's automations)
 //   ├─ Insights      → InsightsScreen (gateway health + limited usage insights)
-//   ├─ Settings      → SettingsStack (Settings, Approvals)
-//   └─ MobileFallback (desktop-builder fallback modal)
+//   └─ Settings      → SettingsStack (Settings, Approvals)
 //
 // There is no bottom-tab navigator: the apps are full-screen covers that slide
 // up over Home and dismiss with the native swipe-down gesture. Each nested-stack
@@ -23,6 +29,7 @@ import type {
   CompositeScreenProps,
   NavigatorScreenParams,
 } from "@react-navigation/native";
+import { createNavigationContainerRef } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 export type PhotosStackParamList = {
@@ -58,23 +65,47 @@ export type SettingsStackParamList = {
 
 export type RootStackParamList = {
   Home: undefined;
+  Capture: { text?: string } | undefined;
+  Scan:
+    | {
+        fileUri?: string;
+        fileName?: string;
+        mediaType?: string;
+        plaintextSize?: number;
+        deleteSourceAfterSettle?: boolean;
+      }
+    | undefined;
   Photos: NavigatorScreenParams<PhotosStackParamList>;
   Docs: NavigatorScreenParams<DocsStackParamList>;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
+  Locker: undefined;
+  Tasks: undefined;
+  People: undefined;
+  Notes: undefined;
+  Tally: undefined;
   AppDetail: { appId: string };
   Assistant: undefined;
   Automations: undefined;
   Insights: undefined;
   Settings: NavigatorScreenParams<SettingsStackParamList>;
-  MobileFallback: undefined;
 };
+
+export const rootNavigationRef =
+  createNavigationContainerRef<RootStackParamList>();
 
 export type RootScreenProps<T extends keyof RootStackParamList> =
   NativeStackScreenProps<RootStackParamList, T>;
 
 // Root-level screens (no nested stack of their own).
 export type HomeScreenProps = RootScreenProps<"Home">;
+export type CaptureScreenProps = RootScreenProps<"Capture">;
+export type ScanScreenProps = RootScreenProps<"Scan">;
 export type AppDetailScreenProps = RootScreenProps<"AppDetail">;
+export type LockerScreenProps = RootScreenProps<"Locker">;
+export type TasksScreenProps = RootScreenProps<"Tasks">;
+export type PeopleScreenProps = RootScreenProps<"People">;
+export type NotesScreenProps = RootScreenProps<"Notes">;
+export type TallyScreenProps = RootScreenProps<"Tally">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
 export type AutomationsScreenProps = RootScreenProps<"Automations">;
 export type InsightsScreenProps = RootScreenProps<"Insights">;

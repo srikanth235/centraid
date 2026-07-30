@@ -134,6 +134,57 @@
     );
   });
 
+  // Web Push carries only an opaque wake marker. An open client performs its
+  // authenticated replica pull; a closed PWA gets a generic notification that
+  // reveals no vault, entity, title, balance, or secret to the push service.
+  self.addEventListener('push', (event) => {
+    let wake = false;
+    try {
+      wake = event.data?.json()?.centraid === 'replica-wake';
+    } catch {
+      wake = false;
+    }
+    if (!wake) return;
+    event.waitUntil(
+      (async () => {
+        const clients = await self.clients.matchAll({
+          type: 'window',
+          includeUncontrolled: true,
+        });
+        for (const client of clients) {
+          // WindowClient.postMessage's second argument is a transfer list, not
+          // targetOrigin; the generic postMessage lint rule does not model the
+          // service-worker overload. (#630)
+          // eslint-disable-next-line unicorn/require-post-message-target-origin -- WindowClient has no targetOrigin argument (#630)
+          client.postMessage({ type: 'centraid:push-wake' });
+        }
+        if (clients.length === 0) {
+          await self.registration.showNotification('Centraid has updates', {
+            body: 'Open Centraid to sync your private reminders.',
+            tag: 'centraid-replica-wake',
+            data: { url: '/' },
+          });
+        }
+      })(),
+    );
+  });
+
+  self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const target = event.notification?.data?.url || '/';
+    event.waitUntil(
+      self.clients
+        .matchAll({ type: 'window', includeUncontrolled: true })
+        .then(async (clients) => {
+          const client = clients[0];
+          if (!client) return self.clients.openWindow(target);
+          await client.focus();
+          if ('navigate' in client) await client.navigate(target);
+          return client;
+        }),
+    );
+  });
+
   self.addEventListener('message', (event) => {
     // Sent by web-host.ts when the gateway is unpaired: the tunnel caches may
     // hold another gateway/vault's assets, so drop them. Shell cache is generic

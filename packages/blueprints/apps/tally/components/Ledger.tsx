@@ -39,11 +39,13 @@ export function Ledger({
   viewData,
   currency,
   onOpenDetail,
+  onAddExpense,
 }: {
   view: "group" | "friend";
   viewData: ViewData | null;
   currency: string;
   onOpenDetail: (row: LedgerRow) => void;
+  onAddExpense: () => void;
 }) {
   if (!viewData) return <ExplistSkeleton rows={5} />;
 
@@ -61,10 +63,14 @@ export function Ledger({
       ) : null}
 
       {ledger.length === 0 ? (
-        <div className={shared.explist}>
-          <div className={shared.emptyRow} style={{ padding: "40px 16px" }}>
-            No expenses yet. Add one to get started.
+        <div className="kit-empty">
+          <div className="kit-empty-title">No expenses yet</div>
+          <div className="kit-empty-sub">
+            Add the first expense to start this ledger.
           </div>
+          <button type="button" className="kit-btn" onClick={onAddExpense}>
+            Add expense
+          </button>
         </div>
       ) : (
         <div className={shared.explist}>

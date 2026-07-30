@@ -44,6 +44,8 @@
     <string>12.0</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSAppTransportSecurity</key>
     <dict>
       <key>NSAllowsArbitraryLoads</key>
@@ -52,11 +54,13 @@
       <true/>
     </dict>
     <key>NSCameraUsageDescription</key>
-    <string>Centraid uses the camera to scan the pairing QR code shown on your desktop.</string>
+    <string>Centraid uses the camera to scan pairing QR codes, documents, cards, and receipts you choose to capture.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Centraid uses Face ID to protect the local vault replica and unlock Locker secrets.</string>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Centraid connects to your desktop's gateway over your local Wi-Fi to load the apps you've built.</string>
+    <string>Centraid connects to the personal gateway you pair on your local network.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your microphone</string>
+    <string>Centraid uses the microphone only when you choose to capture a video with sound.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Centraid saves selected vault photos back to your library.</string>
     <key>NSPhotoLibraryUsageDescription</key>

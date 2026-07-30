@@ -112,6 +112,11 @@ describe("backup/recover", () => {
     appId: string;
     serverUrl: string;
     apiKey: string;
+    peoplePartyId: string;
+    peopleRevisionId: string;
+    receiptExpenseId: string;
+    receiptId: string;
+    sourceSealKeyDestroyed: boolean;
   }
 
   async function publishSeedApp(plane: VaultPlane): Promise<string> {
@@ -199,6 +204,56 @@ describe("backup/recover", () => {
 
     const { itemId, grantId } = seedSealedOutbox(plane);
 
+    // #630 P5 restore-after-erase canary: preserve both the new lifecycle
+    // columns and their durable pre-trash snapshot through kit/provider
+    // recovery after the source DEK file is destroyed.
+    const peoplePartyId = invoke(plane, "people.add_person", {
+      display_name: "Maya Chen",
+      role: "Design lead",
+      cadence_days: 14,
+    })["party_id"] as string;
+    const peopleRevisionId = invoke(plane, "people.trash_person", {
+      party_id: peoplePartyId,
+    })["revision_id"] as string;
+    const ownerPartyId = (
+      plane.db.vault
+        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+        .get() as { owner_party_id: string }
+    ).owner_party_id;
+    const receiptGroupId = invoke(plane, "tally.create_group", {
+      name: "Recovery receipt",
+      icon: "🧾",
+      member_ids: [],
+    })["group_id"] as string;
+    const receiptOutput = invoke(plane, "tally.add_receipt_expense", {
+      group_id: receiptGroupId,
+      description: "Recovery dinner",
+      amount_minor: 1_200,
+      paid_by: ownerPartyId,
+      category: "food",
+      splits: [{ party_id: ownerPartyId, share_minor: 1_200 }],
+      staged_sha: stage(
+        plane,
+        Buffer.from("receipt-recovery-canary"),
+        "receipt.jpg"
+      ),
+      ocr_text: "Dinner 10.00\nTax 2.00",
+      line_items: [
+        {
+          kind: "item",
+          description: "Dinner",
+          amount_minor: 1_000,
+          allocations: [{ party_id: ownerPartyId, share_minor: 1_000 }],
+        },
+        {
+          kind: "tax",
+          description: "Tax",
+          amount_minor: 200,
+          allocations: [{ party_id: ownerPartyId, share_minor: 200 }],
+        },
+      ],
+    });
+
     const appId = await publishSeedApp(plane);
 
     const replica = new ReplicaIndex(plane.db.vault);
@@ -213,6 +268,9 @@ describe("backup/recover", () => {
       await service.recoveryKitDocument(),
       KIT_PASSWORD
     );
+    const sourceSealKeyDestroyed = new KeyStore(
+      path.join(vaultRoot, "keys")
+    ).destroy(`${vaultId}.sealkey`);
 
     const casProvider = openRemoteBackupProvider({
       baseUrl: server.url,
@@ -244,6 +302,11 @@ describe("backup/recover", () => {
       appId,
       serverUrl: server.url,
       apiKey: server.apiKey,
+      peoplePartyId,
+      peopleRevisionId,
+      receiptExpenseId: receiptOutput["expense_id"] as string,
+      receiptId: receiptOutput["receipt_id"] as string,
+      sourceSealKeyDestroyed,
     };
   }
 
@@ -252,6 +315,7 @@ describe("backup/recover", () => {
     cleanups.push(() => server.close());
     const a = await seedMachineA(server);
     expect(a.oldGeneration).toBe(1);
+    expect(a.sourceSealKeyDestroyed).toBe(true);
 
     const dataDir = await tempDir("recover-blank");
     const layout = daemonLayoutFor(dataDir);
@@ -279,6 +343,67 @@ describe("backup/recover", () => {
             .get() as { n: number }
         ).n
       ).toBe(3);
+      const restoredPerson = restoredDb
+        .prepare(
+          `SELECT pr.role, pr.deleted_at, pr.purge_at, r.operation,
+                  r.entity_type, r.entity_id, r.snapshot_json
+             FROM people_profile pr
+             JOIN core_entity_revision r
+               ON r.revision_id = ?
+            WHERE pr.party_id = ?`
+        )
+        .get(a.peopleRevisionId, a.peoplePartyId) as {
+        role: string;
+        deleted_at: string | null;
+        purge_at: string | null;
+        operation: string;
+        entity_type: string;
+        entity_id: string;
+        snapshot_json: string;
+      };
+      expect(restoredPerson).toMatchObject({
+        role: "Design lead",
+        operation: "trash",
+        entity_type: "people.person",
+        entity_id: a.peoplePartyId,
+      });
+      expect(restoredPerson.deleted_at).not.toBeNull();
+      expect(restoredPerson.purge_at).not.toBeNull();
+      expect(JSON.parse(restoredPerson.snapshot_json)).toMatchObject({
+        role: "Design lead",
+        deleted_at: null,
+        purge_at: null,
+      });
+      expect(
+        restoredDb
+          .prepare(
+            `SELECT r.expense_id, d.text_content,
+                    count(DISTINCT l.line_item_id) AS line_count,
+                    count(a.party_id) AS allocation_count
+               FROM tally_expense_receipt r
+               JOIN core_content_derivative d
+                 ON d.content_id = r.content_id AND d.variant = 'text'
+               JOIN tally_expense_line_item l ON l.receipt_id = r.receipt_id
+               JOIN tally_expense_line_allocation a
+                 ON a.line_item_id = l.line_item_id
+              WHERE r.receipt_id = ?
+              GROUP BY r.expense_id, d.text_content`
+          )
+          .get(a.receiptId)
+      ).toMatchObject({
+        expense_id: a.receiptExpenseId,
+        text_content: "Dinner 10.00\nTax 2.00",
+        line_count: 2,
+        allocation_count: 2,
+      });
+      expect(
+        restoredDb
+          .prepare(
+            `SELECT role, is_primary FROM core_attachment
+              WHERE target_type = 'tally.expense' AND target_id = ?`
+          )
+          .get(a.receiptExpenseId)
+      ).toMatchObject({ role: "receipt", is_primary: 1 });
     } finally {
       restoredDb.close();
     }
@@ -393,13 +518,14 @@ describe("backup/recover", () => {
     expect({
       truncated: report.truncated,
       warmed: report.previews.warmed,
+      hasReason: !report.previews.warmed && report.previews.reason.length > 0,
     }).toStrictEqual({
       truncated: false,
       warmed: false,
+      hasReason: true,
     });
     if (report.previews.warmed)
       throw new Error("headless recovery must not pre-warm previews");
-    expect(report.previews.reason.length).toBeGreaterThan(0);
   }, 45_000);
 
   test("recovery refuses a snapshot written by newer software BEFORE any byte is fetched", async () => {

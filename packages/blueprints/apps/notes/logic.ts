@@ -183,7 +183,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   function findNote(noteId: string): Note | null {
-    return (data.notes ?? []).find((n) => n.note_id === noteId) ?? null;
+    return (
+      [...(data.notes ?? []), ...(data.trash ?? [])].find(
+        (n) => n.note_id === noteId
+      ) ?? null
+    );
   }
 
   function notebookName(notebookId: string): string {
@@ -302,14 +306,41 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function deleteNote(note: Note): Promise<VaultOutcome | undefined> {
     const outcome = await write("delete-note", { note_id: note.note_id });
     if (outcome?.status === "executed") {
-      // No restore/undelete command exists in the manifest — delete-note is
-      // the only lifecycle step there is. Offering a client-side "Undo" here
-      // would fake a vault state that was never asserted, so — unlike
-      // create's — this toast never carries one (see tasks/logic.js's
-      // cancelTask comment for the analogous case: schedule.task has no
-      // delete either, only the closest honest substitute).
       if (state.editorId === note.note_id) state.editorId = null;
-      toast(`Deleted “${String(note.title ?? "").slice(0, 40)}”`);
+      toast(`Moved “${String(note.title ?? "").slice(0, 40)}” to trash`, {
+        undoLabel: "Undo",
+        onUndo: () => void restoreNote(note.note_id),
+        duration: 10_000,
+      });
+    }
+    return outcome;
+  }
+
+  async function restoreNote(
+    noteId: string
+  ): Promise<VaultOutcome | undefined> {
+    const outcome = await write("restore-note", { note_id: noteId });
+    if (outcome?.status === "executed") {
+      if (state.nav.kind === "trash") state.nav = { kind: "all" };
+      toast("Note restored · receipt");
+      render();
+    }
+    return outcome;
+  }
+
+  async function restoreNoteVersion(
+    noteId: string,
+    contentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const outcome = await write("restore-note-version", {
+      note_id: noteId,
+      content_id: contentId,
+    });
+    if (outcome?.status === "executed") {
+      const note = findNote(noteId);
+      if (note) delete note.body;
+      toast("Earlier version restored · receipt");
+      await openEditor(noteId);
     }
     return outcome;
   }
@@ -435,6 +466,26 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
+  async function linkNote(
+    noteId: string,
+    target: { type: string; id: string },
+    anchor: {
+      exact: string;
+      prefix: string;
+      suffix: string;
+      start: number;
+    }
+  ): Promise<void> {
+    const outcome = await act("link", {
+      note_id: noteId,
+      target_type: target.type,
+      target_id: target.id,
+      ...anchor,
+    });
+    if (narrate(outcome) || outcome?.status === "denied") await refresh();
+    else render();
+  }
+
   // ---------- Search ----------
 
   let searchSeq = 0;
@@ -493,6 +544,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     togglePin,
     moveNote,
     deleteNote,
+    restoreNote,
+    restoreNoteVersion,
     createNotebook,
     renameNotebook,
     deleteNotebook,
@@ -501,6 +554,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     removeAttachment,
     addTag,
     removeTag,
+    linkNote,
     applySearchInput,
     clearSearch,
     clearPending,
@@ -518,6 +572,7 @@ export function sidebarCounts(data: AppData): SidebarCounts {
   return {
     all: notes.length,
     pinned: notes.filter((n) => n.pinned === 1).length,
+    trash: (data.trash ?? []).length,
     notebooks: (data.notebooks ?? []).length,
     checks: notes.reduce((sum, n) => {
       // The list projection ships a `check` tally (issue #404); fall back to
@@ -532,9 +587,12 @@ export function sidebarCounts(data: AppData): SidebarCounts {
  * while a term is active (the library copy is only the browse view), else
  * the library window — either narrowed to the active notebook/pinned scope. */
 export function scopedRows(data: AppData, state: AppState): Note[] {
-  let rows = state.search.trim()
-    ? (state.searchResults ?? [])
-    : (data.notes ?? []);
+  let rows =
+    state.nav.kind === "trash"
+      ? (data.trash ?? [])
+      : state.search.trim()
+        ? (state.searchResults ?? [])
+        : (data.notes ?? []);
   if (state.nav.kind === "pinned") rows = rows.filter((n) => n.pinned === 1);
   else if (state.nav.kind === "notebook") {
     const notebookId = state.nav.notebookId;
@@ -590,6 +648,9 @@ export function buildWall(data: AppData, state: AppState) {
     emptyTitle = "This notebook is empty";
     emptySub =
       "Take a note above — it lands filed straight into this notebook.";
+  } else if (state.nav.kind === "trash") {
+    emptyTitle = "Trash is empty";
+    emptySub = "Deleted notes stay recoverable here for 30 days.";
   }
 
   return {

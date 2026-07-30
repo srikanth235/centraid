@@ -24,7 +24,7 @@ The Connect screen requests only the capabilities selected at that moment.
 
 | Tier | Scopes | Release posture |
 | --- | --- | --- |
-| Standard Assist | `calendar.readonly`, `contacts.readonly` | Sensitive-scope verification; no CASA |
+| Standard Assist | `calendar.events`, `contacts` | Sensitive-scope verification; no CASA |
 | Restricted Assist | `gmail.readonly`, `gmail.send`, `drive.readonly` | Disabled until restricted-scope verification and CASA evidence are recorded |
 
 Centraid does not request every Google scope up front. Restricted options remain

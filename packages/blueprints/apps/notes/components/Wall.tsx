@@ -39,6 +39,7 @@ export function Wall({
   pendingNoteIds,
   footer,
   onShowMore,
+  onEmptyAction,
   onOpenNote,
   onTogglePin,
 }: {
@@ -56,6 +57,7 @@ export function Wall({
   pendingNoteIds: Set<string>;
   footer: { windowSize: number } | null;
   onShowMore: () => void;
+  onEmptyAction: () => void;
   onOpenNote: (noteId: string) => void;
   onTogglePin: (note: Note) => void;
 }) {
@@ -124,6 +126,9 @@ export function Wall({
           </div>
           <div className="kit-empty-title">{emptyTitle}</div>
           <div className="kit-empty-sub">{emptySub}</div>
+          <button type="button" className="kit-btn" onClick={onEmptyAction}>
+            {search.trim() ? "Clear search" : "New note"}
+          </button>
         </div>
       ) : null}
 

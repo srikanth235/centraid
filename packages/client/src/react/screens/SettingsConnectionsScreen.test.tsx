@@ -58,14 +58,14 @@ function makeProvider(
       },
       {
         kind: "pull.gcal",
-        scope: "calendar.readonly",
+        scope: "calendar.events",
         templateId: "google-calendar-pull",
       },
     ],
     credKind: "oauth2",
     id: "google",
     name: "Google (Gmail, Calendar, Contacts, Drive)",
-    scopes: "gmail.readonly calendar.readonly",
+    scopes: "gmail.readonly calendar.events",
     setup: ["Open https://console.cloud.google.com and create a project."],
     tokenUrl: "https://oauth2.googleapis.com/token",
     ...over,
@@ -346,7 +346,7 @@ describe("screens/SettingsConnectionsScreen", () => {
     });
 
     it("makes Centraid Assist primary, scopes it to the selected connector, and keeps BYO advanced", async () => {
-      const calendarScope = "https://www.googleapis.com/auth/calendar.readonly";
+      const calendarScope = "https://www.googleapis.com/auth/calendar.events";
       const gmailScope = "https://www.googleapis.com/auth/gmail.readonly";
       const props = makeProps({
         loadConnections: vi
@@ -401,7 +401,9 @@ describe("screens/SettingsConnectionsScreen", () => {
       const wizard = el.querySelector(
         '[data-testid="connector-assist-wizard"]'
       );
-      expect(wizard?.textContent).toContain("Read Google Calendar");
+      expect(wizard?.textContent).toContain(
+        "Read and update Google Calendar events"
+      );
       expect(wizard?.textContent).not.toContain("Read Gmail");
       expect(wizard?.textContent).toContain(
         "does not request Google identity scopes"

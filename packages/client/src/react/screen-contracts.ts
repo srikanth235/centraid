@@ -327,6 +327,7 @@ export interface ImportRowDTO {
   externalId: string;
   disposition: "create" | "update" | "skip" | "merge-candidate";
   note: string | null;
+  mapping: string;
 }
 export interface ImportData {
   vaultName: string;
@@ -334,9 +335,11 @@ export interface ImportData {
   connections: ImportConnectionDTO[];
 }
 export interface ImportStagePayload {
-  filename: string;
+  filename?: string;
   text?: string;
   base64?: string;
+  directoryName?: string;
+  files?: { path: string; text: string }[];
 }
 export interface ImportBridgeProps {
   /** Read the import surface. `null` = no vault plane mounted. */
@@ -351,6 +354,7 @@ export interface ImportBridgeProps {
     connectionId: string,
     status: "active" | "paused"
   ) => Promise<void>;
+  exportPortable: () => Promise<{ blob: Blob; filename: string }>;
   showToast?: (message: string) => void;
 }
 
@@ -1152,6 +1156,14 @@ export interface HomeAutoItemDTO {
   footOk: boolean;
   starred: boolean;
 }
+export interface HomeDailyBriefDTO {
+  date: string;
+  events: Array<{ id: string; title: string; at: string }>;
+  tasks: Array<{ id: string; title: string; dueAt: string }>;
+  newPhotos: number;
+  balanceMinor: number;
+  currency: string;
+}
 export interface HomeBridgeProps {
   /** Dev flag (issue #434, Phase 3) — when false the builder is hidden, so the
    *  "What should we build?" composer hero + its suggestions don't render and
@@ -1161,6 +1173,7 @@ export interface HomeBridgeProps {
   dateLabel: string;
   appItems: HomeAppItemDTO[];
   automationItems: HomeAutoItemDTO[];
+  dailyBrief?: HomeDailyBriefDTO;
   counts: { all: number; apps: number; automations: number };
   attention: number;
   onBuild: (prompt: string) => void;
@@ -1520,6 +1533,8 @@ export interface AppSettingsSnapshot {
   orders: AppOrderDTO[];
 }
 export interface AppSettingsBridgeProps {
+  /** Initial settings destination for direct recovery links from an app. */
+  initialTab?: "appearance" | "vault";
   onReady: (update: (s: AppSettingsSnapshot) => void) => void;
   onClose: () => void;
   onKnobCommit: (key: string, value: string) => void;

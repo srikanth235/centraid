@@ -48,6 +48,8 @@ import { deleteProjectedClosure } from "./removal.js";
 export interface ShareVaultRef {
   vault: DatabaseSync;
   blobs: { local: LocalBlobStore };
+  /** Per-vault DEK used only to re-seal a shared Locker item for its audience. */
+  sealKey?: Buffer;
 }
 
 export interface ShareToVaultInput {
@@ -177,7 +179,16 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
   const audience = input.audience.vault;
   audience.exec("BEGIN IMMEDIATE");
   try {
-    const projection = projectShareClosure(audience, closure);
+    const projection = projectShareClosure(
+      audience,
+      closure,
+      input.origin.sealKey && input.audience.sealKey
+        ? {
+            origin: input.origin.sealKey,
+            audience: input.audience.sealKey,
+          }
+        : undefined
+    );
     audience
       .prepare(
         `INSERT INTO core_share_origin

@@ -1,17 +1,16 @@
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  FIRST_LAUNCH_TIMEOUT_MS,
+  HOME_READY_MARKER,
+  runFlow,
+} from "../lib/harness.mjs";
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
-// "There is no bottom-tab navigator"). Photos, Docs and Agenda are full-screen
-// covers opened from Home's launcher tiles; Settings is opened from the glass
-// dock. So each surface is reached the way a user reaches it — by its tile's
-// accessibility label, `Open <name>` (LauncherGrid.tsx) — and asserted on a
-// string unique to the SCREEN it opens, never on the tile label, which is on
-// Home whether or not the tap did anything (issue #483, enforced by
-// scripts/lint-e2e-flows.mjs):
-//   Photos   → "Search photos"           (apps/mobile/src/apps/photos/PhotosHome.tsx)
-//   Docs     → "Add document or folder"  (apps/mobile/src/apps/docs/DocsHome.tsx)
-//   Agenda   → "Create event"            (apps/mobile/src/apps/agenda/AgendaHome.tsx)
-//   Settings → "APPEARANCE"             (section heading, Settings-unique)
+// "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
+// covers opened from Home's launcher tiles; Settings is opened from the space
+// drawer. Each destination is asserted on copy unique to the screen it opens,
+// never on the tile label that remains visible on Home (issue #483, enforced
+// by scripts/lint-e2e-flows.mjs).
 // Covers dismiss with a native swipe-down gesture that Maestro cannot drive
 // reliably, so each surface is entered from a fresh launch of the app rather
 // than by navigating back — React Navigation state is not persisted, so every
@@ -23,17 +22,40 @@ const SURFACES = [
   // "Search photos & moments" — a bare "Search photos" matches neither.
   {
     marker: "Search photos.*",
-    open: '- tapOn: "Open Photos"',
+    open: "Open Photos",
     name: "photos",
   },
   {
     marker: "Add document or folder",
-    open: '- tapOn: "Open Docs"',
+    open: "Open Docs",
     name: "docs",
   },
-  { marker: "Create event", open: '- tapOn: "Open Agenda"', name: "agenda" },
-  // The dock's Settings slot carries accessibilityLabel="Settings"
-  // (screens/home/GlassDock.tsx).
+  { marker: "Create event", open: "Open Agenda", name: "agenda" },
+  {
+    marker: "New task title",
+    open: "Open Tasks",
+    name: "tasks",
+  },
+  {
+    marker: "Person name",
+    open: "Open People",
+    name: "people",
+  },
+  {
+    marker: "Search notes",
+    open: "Open Notes",
+    name: "notes",
+  },
+  {
+    marker: "Fixed-point multi-currency ledger, available offline",
+    open: "Open Tally",
+    name: "tally",
+  },
+  {
+    marker: "Secrets stay online-only",
+    open: "Open Locker",
+    name: "locker",
+  },
   // Settings is opened from the Space drawer, not the dock. The dock sits at
   // the very bottom of the screen, exactly where the dev build's LogBox toast
   // ("Open debugger to view warnings.") parks itself — it reappears whenever
@@ -48,15 +70,15 @@ const SURFACES = [
   // it, so it proves arrival without a scroll.
   {
     marker: "APPEARANCE",
-    open: [
-      '- tapOn: "Open space menu"',
+    openCommands: [
+      retryableTapCommands("Open space menu"),
       // Wait for the drawer to finish opening before touching its rows.
       '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
       // The row's accessible name is ", Settings" (icon + label collapsed into
       // one element), but Maestro will not match a selector that starts with
       // the comma — `.*Settings` is what actually resolves, and with the modal
       // drawer open the dock underneath is not reachable anyway.
-      '- tapOn: ".*Settings"',
+      retryableTapCommands(".*Settings", "GO TO"),
     ].join("\n"),
     name: "settings",
   },
@@ -68,6 +90,8 @@ await runFlow("native-v0-resilience", async (ctx) => {
   const visitNext = async (index) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
+    const openCommands =
+      surface.openCommands ?? retryableTapCommands(surface.open);
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
@@ -75,9 +99,9 @@ await runFlow("native-v0-resilience", async (ctx) => {
 - launchApp:
     clearState: false
 - extendedWaitUntil:
-    visible: "YOUR APPS"
+    visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-${surface.open}
+${openCommands}
 - extendedWaitUntil:
     visible: "${surface.marker}"
     timeout: 20000
@@ -95,17 +119,18 @@ ${surface.open}
     `appId: ${ctx.state.appId}
 ---
 - extendedWaitUntil:
-    visible: "YOUR APPS"
+    visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: after-force-kill
 `,
     "after-force-kill"
   );
   ctx.note(
-    "Four native surfaces survived navigation and a process restart; complete the documented network matrix on this device."
+    "All eight native blueprint covers and Settings survived navigation and a process restart; complete the documented network matrix on this device."
   );
   return {
     pass: true,
-    notes: "springboard covers and process-restart smoke passed",
+    notes:
+      "all eight native blueprint covers, Settings, and process-restart smoke passed",
   };
 });

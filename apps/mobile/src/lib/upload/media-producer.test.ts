@@ -24,6 +24,7 @@ const H = vi.hoisted(() => {
     finalState: string;
     lastError?: string;
     pendingCount: number;
+    unfinishedFollowup: boolean;
     capturedInput?: Record<string, unknown>;
     capturedFollowup?: Record<string, unknown>;
     closed: boolean;
@@ -38,6 +39,7 @@ const H = vi.hoisted(() => {
     existing: undefined,
     finalState: "settled",
     pendingCount: 1,
+    unfinishedFollowup: false,
     closed: false,
   };
   const fgs = {
@@ -69,6 +71,7 @@ const H = vi.hoisted(() => {
     },
     pending: () => Array.from({ length: q.pendingCount }, () => ({})),
     drain: async () => ({ settled: 1, deduped: 0, failed: 0, halted: false }),
+    hasFollowupForItem: () => q.unfinishedFollowup,
     close: () => {
       q.closed = true;
     },
@@ -144,6 +147,7 @@ describe("media-producer", () => {
     q.finalState = "settled";
     q.lastError = undefined;
     q.pendingCount = 1;
+    q.unfinishedFollowup = false;
     q.capturedInput = undefined;
     q.capturedFollowup = undefined;
     q.closed = false;
@@ -291,6 +295,24 @@ describe("media-producer", () => {
         fgs.stop,
         "the service is still released on failure"
       ).toHaveBeenCalledOnce();
+    });
+
+    it("keeps the source and rejects when the canonical follow-up is unfinished", async () => {
+      q.unfinishedFollowup = true;
+      await expect(
+        backupDeviceMedia(session, "http://gw", {
+          localUri: "file://share/IMG.heic",
+          mediaType: "image/heic",
+          plaintextSize: 1_000,
+          kind: "photo",
+          deleteSourceAfterSettle: true,
+        })
+      ).rejects.toThrow(/canonical record was not accepted/u);
+      expect(
+        deletedFiles,
+        "durable bytes are not the same as a published blueprint record"
+      ).toStrictEqual([]);
+      expect(fgs.stop).toHaveBeenCalledOnce();
     });
   });
 });

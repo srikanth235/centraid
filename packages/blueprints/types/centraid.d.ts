@@ -122,13 +122,54 @@ interface VaultApi {
   resolve: (request: VaultResolveRequest) => Promise<VaultResolveResult>;
   /** Plaintext of one entity's sealed columns — receipted per item (#293). */
   reveal: (request: Record<string, unknown>) => Promise<unknown>;
+  /** Locker-only user-presence authentication; sessions stay host-memory-only (#630). */
+  authenticate: (request: Record<string, unknown>) => Promise<unknown>;
+  /** Size-bounded derivative content fetch. */
+  content: (request: Record<string, unknown>) => Promise<unknown>;
 }
 
-/** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault. */
+type RecurrenceSemantics = "zoned" | "floating" | "all-day";
+
+interface RecurrenceInstance {
+  originalStart: string;
+  start: string;
+  wallStart: string;
+  overlap: boolean;
+}
+
+interface RecurrenceException {
+  originalStart: string;
+  action: "skip" | "override";
+  scope?: "occurrence" | "future";
+  start?: string;
+}
+
+/** Deterministic shared time core exposed by the host worker. */
+interface TimeApi {
+  expandRecurrence: (input: {
+    rrule: string;
+    start: string;
+    rangeFrom: string;
+    rangeTo: string;
+    timeZone?: string;
+    semantics?: RecurrenceSemantics;
+    maxInstances?: number;
+  }) => RecurrenceInstance[];
+  applyRecurrenceExceptions: (
+    instances: readonly RecurrenceInstance[],
+    exceptions: readonly RecurrenceException[]
+  ) => RecurrenceInstance[];
+  describeRecurrence: (rrule: string) => string | null;
+  /** Shift a wall-clock or zoned instant without host-TZ conversion. */
+  shiftTemporal: (value: string, deltaMs: number) => string;
+}
+
+/** Per-handler `ctx` (see worker/runner.ts): fetch, abort, vault, and time. */
 interface HandlerCtx {
   fetch: (input: string, init?: RequestInit) => Promise<Response>;
   abortSignal: AbortSignal;
   vault: VaultApi;
+  time: TimeApi;
 }
 
 interface HandlerLog {
@@ -255,6 +296,26 @@ interface CentraidClient {
     /** Which mounted scope the write lands in; defaults to the primary. */
     scope?: string;
   }) => Promise<T>;
+  /** Place an entity into another mounted audience vault. */
+  place?: (opts: {
+    linkToken: string;
+    kind: "add" | "move";
+    itemType:
+      | "core.collection"
+      | "core.content_item"
+      | "core.document"
+      | "locker.item"
+      | "media.media_asset"
+      | "tally.group";
+    itemId: string;
+    sourceVaultId: string;
+    targetVaultId: string;
+  }) => Promise<{
+    status: string;
+    targetItemId?: string;
+    accessReceiptId?: string;
+    reason?: string;
+  }>;
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;

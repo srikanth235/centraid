@@ -35,6 +35,7 @@ import type {
   ReplicaValue,
 } from "@centraid/client/replica/native";
 
+import { MobileIntentIds } from "./mobile-intent-id";
 import { NativeReplicaStore } from "./native-replica-store";
 import { SqliteIntentStore } from "./sqlite-intent-store";
 import type { NativeIntentAttention } from "./sqlite-intent-store";
@@ -170,6 +171,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
   readonly #bootstrapWindow: number | undefined;
   readonly #progressiveBootstrap: boolean;
   readonly #intentStore: SqliteIntentStore;
+  readonly #intentIds: MobileIntentIds;
   readonly #onBootstrapProgress:
     | CreateNativeReplicaSessionOptions["onBootstrapProgress"]
     | undefined;
@@ -202,7 +204,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
       | "bootstrapWindow"
       | "progressiveBootstrap"
       | "onBootstrapProgress"
-    >
+    > & { idFactory: ReplicaIdFactory }
   ) {
     this.#coordinator = coordinator;
     this.#intentStore = intentStore;
@@ -214,6 +216,7 @@ export class NativeReplicaSession implements MobileReplicaSession {
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
     this.#retryDelayMs = options.retryDelayMs ?? 2_000;
+    this.#intentIds = new MobileIntentIds(options.idFactory);
     this.#bootstrapWindow = options.bootstrapWindow;
     this.#progressiveBootstrap = options.progressiveBootstrap ?? false;
     this.#onBootstrapProgress = options.onBootstrapProgress;
@@ -327,7 +330,12 @@ export class NativeReplicaSession implements MobileReplicaSession {
         }))
       );
     const intent = await this.#coordinator.enqueue({
-      ...(input.intentId ? { intentId: input.intentId } : {}),
+      intentId: this.#intentIds.forWrite(
+        appId,
+        input.action,
+        input.input,
+        input.intentId
+      ),
       appId,
       action: input.action,
       input: input.input,
@@ -782,7 +790,10 @@ export async function createNativeReplicaSession(
     },
     onRebootstrapRequired: () => session?.requireBootstrap(),
   });
-  session = new NativeReplicaSession(coordinator, intentStore, options);
+  session = new NativeReplicaSession(coordinator, intentStore, {
+    ...options,
+    idFactory,
+  });
   await session.start();
   return session;
 }

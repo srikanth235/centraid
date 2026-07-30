@@ -325,12 +325,47 @@ function installGatewaySchema(db: DatabaseSync): void {
     ) STRICT;
     CREATE INDEX IF NOT EXISTS placement_intents_device_status
       ON placement_intents(device_id, status, updated_at);
+    /*
+     * Durable household access audit. Member ids are deliberately not foreign
+     * keys: removing a member must revoke authority without erasing the fact
+     * that access was granted or removed. link_token makes offline placement
+     * replay exactly-once at this control-plane boundary.
+     */
+    CREATE TABLE IF NOT EXISTS share_access_receipts (
+      receipt_id TEXT PRIMARY KEY,
+      link_token TEXT UNIQUE,
+      member_id TEXT,
+      action TEXT NOT NULL CHECK (action IN ('share', 'unshare')),
+      item_type TEXT NOT NULL,
+      origin_vault_id TEXT,
+      origin_item_id TEXT,
+      audience_vault_id TEXT NOT NULL,
+      audience_item_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS share_access_receipts_audience_idx
+      ON share_access_receipts(audience_vault_id, created_at);
     CREATE TABLE IF NOT EXISTS push_registrations (
       device_id TEXT PRIMARY KEY REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       expo_token TEXT NOT NULL UNIQUE,
       platform TEXT NOT NULL CHECK (platform IN ('ios', 'android')),
       updated_at TEXT NOT NULL
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS web_push_vapid (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      public_key TEXT NOT NULL,
+      private_key TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS web_push_registrations (
+      endpoint TEXT PRIMARY KEY,
+      device_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS web_push_registrations_device_idx
+      ON web_push_registrations(device_id);
   `);
 }
 

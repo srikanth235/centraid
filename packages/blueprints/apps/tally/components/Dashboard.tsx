@@ -2,7 +2,13 @@
 // owe"/"you are owed" lists and the groups grid. Pure function of the
 // dashboard snapshot (`dash`) plus navigation/modal callbacks.
 import { balLabelGroup, money, tint } from "../format.ts";
-import type { Dash, Friend, Group, TrashedExpense } from "../types.ts";
+import type {
+  Dash,
+  Friend,
+  Group,
+  RecurringExpense,
+  TrashedExpense,
+} from "../types.ts";
 import { KitAvatar } from "./Shared.tsx";
 
 import styles from "./Dashboard.module.css";
@@ -129,6 +135,110 @@ function TrashShelf({
   );
 }
 
+function RecurringShelf({
+  templates,
+  onMaterialize,
+  onEdit,
+}: {
+  templates: RecurringExpense[];
+  onMaterialize: (templateId: string, originalStart: string) => void;
+  onEdit: (
+    template: RecurringExpense,
+    scope: "occurrence" | "future" | "series",
+    action: "skip" | "override",
+    override?: Record<string, unknown>
+  ) => void;
+}) {
+  if (templates.length === 0) return null;
+  return (
+    <>
+      <div className={styles.sectionTitle}>Recurring expenses</div>
+      <div className={styles.card} aria-label="Recurring expense templates">
+        {templates.map((template) => (
+          <div className={styles.trashRow} key={template.template_id}>
+            <span className={styles.trashMain}>
+              <span className={styles.trashName}>{template.description}</span>
+              <span className={styles.trashMeta}>
+                {template.preview} ·{" "}
+                {template.next_start
+                  ? `next ${new Date(template.next_start).toLocaleDateString()}`
+                  : template.status}
+                {template.rate_source
+                  ? ` · rate ${template.rate_source}${template.rate_date ? ` @ ${template.rate_date}` : ""}`
+                  : ""}
+              </span>
+            </span>
+            {template.next_start ? (
+              <>
+                <button
+                  type="button"
+                  className="kit-btn"
+                  onClick={() =>
+                    onMaterialize(template.template_id, template.next_start!)
+                  }
+                >
+                  Record next
+                </button>
+                <button
+                  type="button"
+                  className="kit-btn"
+                  onClick={() => onEdit(template, "occurrence", "skip")}
+                >
+                  Skip next
+                </button>
+                <button
+                  type="button"
+                  className="kit-btn"
+                  onClick={() => {
+                    const value = window.prompt(
+                      `New amount in ${template.original_currency} for this occurrence`,
+                      (template.original_amount_minor / 100).toFixed(2)
+                    );
+                    if (value == null) return;
+                    const minor = Math.round(Number(value) * 100);
+                    if (Number.isSafeInteger(minor) && minor > 0)
+                      onEdit(template, "occurrence", "override", {
+                        original_amount_minor: minor,
+                      });
+                  }}
+                >
+                  Edit next
+                </button>
+                <button
+                  type="button"
+                  className="kit-btn"
+                  onClick={() => {
+                    const value = window.prompt(
+                      `New amount in ${template.original_currency} from this occurrence forward`,
+                      (template.original_amount_minor / 100).toFixed(2)
+                    );
+                    if (value == null) return;
+                    const minor = Math.round(Number(value) * 100);
+                    if (Number.isSafeInteger(minor) && minor > 0)
+                      onEdit(template, "future", "override", {
+                        original_amount_minor: minor,
+                      });
+                  }}
+                >
+                  Edit future
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              className="kit-btn danger"
+              disabled={template.status === "ended"}
+              onClick={() => onEdit(template, "series", "skip")}
+            >
+              End series
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function Dashboard({
   dash,
   onOpenFriend,
@@ -136,6 +246,8 @@ export function Dashboard({
   onOpenAddFriend,
   onOpenNewGroup,
   onRestoreExpense,
+  onMaterializeRecurring,
+  onEditRecurring,
 }: {
   dash: Dash;
   onOpenFriend: (friendId: string) => void;
@@ -143,6 +255,13 @@ export function Dashboard({
   onOpenAddFriend: () => void;
   onOpenNewGroup: () => void;
   onRestoreExpense: (expenseId: string) => void;
+  onMaterializeRecurring: (templateId: string, originalStart: string) => void;
+  onEditRecurring: (
+    template: RecurringExpense,
+    scope: "occurrence" | "future" | "series",
+    action: "skip" | "override",
+    override?: Record<string, unknown>
+  ) => void;
 }) {
   const { friends, groups, currency } = dash;
 
@@ -239,24 +358,14 @@ export function Dashboard({
       </div>
       <div className={styles.sectionTitle}>Your groups</div>
       {groups.length === 0 ? (
-        <div className={styles.card}>
-          <div className={shared.emptyRow} style={{ padding: "28px 16px" }}>
-            No groups yet.
-            <button
-              type="button"
-              style={{
-                border: "none",
-                background: "none",
-                color: "var(--accd)",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-              onClick={onOpenNewGroup}
-            >
-              Create one
-            </button>
-            to start splitting.
+        <div className="kit-empty">
+          <div className="kit-empty-title">No groups yet</div>
+          <div className="kit-empty-sub">
+            Create one to start splitting shared expenses.
           </div>
+          <button type="button" className="kit-btn" onClick={onOpenNewGroup}>
+            Create group
+          </button>
         </div>
       ) : (
         <div className={styles.groupgrid}>
@@ -274,6 +383,11 @@ export function Dashboard({
         expenses={dash.trash}
         currency={currency}
         onRestore={onRestoreExpense}
+      />
+      <RecurringShelf
+        templates={dash.recurring}
+        onMaterialize={onMaterializeRecurring}
+        onEdit={onEditRecurring}
       />
     </>
   );

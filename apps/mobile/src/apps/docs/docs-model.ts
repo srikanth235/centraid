@@ -2,8 +2,12 @@ import type { ReplicaRow } from "@centraid/client/replica/native";
 
 export interface NativeFolder {
   id: string;
+  rawId?: string;
   name: string;
   parentId?: string;
+  sourceVaultId?: string;
+  canWrite?: boolean;
+  raw?: ReplicaRow;
 }
 export interface NativeDocument {
   id: string;
@@ -22,6 +26,10 @@ export interface NativeDocument {
   scopeIds?: string[];
   scopeLabels?: string[];
   canWrite?: boolean;
+  raw?: ReplicaRow;
+  folderTag?: ReplicaRow;
+  starTag?: ReplicaRow;
+  starredConceptId?: string;
 }
 
 const scalar = <T>(row: ReplicaRow, key: string): T | undefined =>
@@ -61,13 +69,23 @@ export function buildDrive(
       custodyRows.filter(within)
     );
     folders.push(
-      ...drive.folders.map((folder) => ({
-        ...folder,
-        id: scoped(scopeId, folder.id),
-        ...(folder.parentId
-          ? { parentId: scoped(scopeId, folder.parentId) }
-          : {}),
-      }))
+      ...drive.folders.map((folder) => {
+        const source = conceptRows.find(
+          (row) => scalar(row, "concept_id") === folder.id && within(row)
+        );
+        return {
+          ...folder,
+          rawId: folder.id,
+          id: scoped(scopeId, folder.id),
+          ...(folder.parentId
+            ? { parentId: scoped(scopeId, folder.parentId) }
+            : {}),
+          sourceVaultId: scopeId,
+          canWrite:
+            scalar<boolean>(source ?? {}, "__centraidCanWrite") ?? false,
+          raw: source,
+        };
+      })
     );
     for (const document of drive.documents) {
       const source = documentRows.find(
@@ -213,6 +231,17 @@ function buildScopeDrive(
       const contentId = scalar<string>(row, "current_content_id")!;
       const content = contentById.get(contentId) ?? {};
       const folder = folderByDocument.get(id);
+      const starredConceptId = scalar<string>(starred ?? {}, "concept_id");
+      const starTag = tagRows.find(
+        (tag) =>
+          scalar(tag, "target_id") === id &&
+          scalar(tag, "concept_id") === starredConceptId
+      );
+      const folderTag = tagRows.find(
+        (tag) =>
+          scalar(tag, "target_id") === id &&
+          folderIds.has(scalar(tag, "concept_id"))
+      );
       return {
         id,
         contentId,
@@ -233,6 +262,10 @@ function buildScopeDrive(
         starred: starredIds.has(id),
         trashed: Boolean(scalar(row, "deleted_at")),
         custody: custodyByContent.get(contentId),
+        raw: row,
+        ...(folderTag ? { folderTag } : {}),
+        ...(starTag ? { starTag } : {}),
+        ...(starredConceptId ? { starredConceptId } : {}),
       };
     }),
   };

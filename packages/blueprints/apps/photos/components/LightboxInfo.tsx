@@ -197,25 +197,60 @@ export function LightboxInfo({
           <div className={styles.chipRow}>
             {albumList.map((album) => {
               const member = asset.album_ids?.includes(album.album_id) ?? false;
+              const isCover =
+                member &&
+                !!asset.content_id &&
+                album.cover_content_id === asset.content_id;
               return (
-                <button
-                  key={album.album_id}
-                  type="button"
-                  className={styles.albumChip}
-                  data-active={member ? "true" : "false"}
-                  onClick={async () => {
-                    const outcome = await act(
-                      member ? "remove-from-album" : "add-to-album",
-                      { album_id: album.album_id, asset_id: asset.asset_id },
-                      asset.scope_id
-                    );
-                    if (narrate(outcome, noteRef.current)) await refresh();
-                  }}
-                >
-                  {member
-                    ? `✓ ${album.title ?? "Album"}`
-                    : (album.title ?? "Album")}
-                </button>
+                <span className={styles.albumChoice} key={album.album_id}>
+                  <button
+                    type="button"
+                    className={styles.albumChip}
+                    data-active={member ? "true" : "false"}
+                    onClick={async () => {
+                      const outcome = await act(
+                        member ? "remove-from-album" : "add-to-album",
+                        { album_id: album.album_id, asset_id: asset.asset_id },
+                        asset.scope_id
+                      );
+                      if (narrate(outcome, noteRef.current)) await refresh();
+                    }}
+                  >
+                    {member
+                      ? `✓ ${album.title ?? "Album"}`
+                      : (album.title ?? "Album")}
+                  </button>
+                  {member ? (
+                    <button
+                      type="button"
+                      className={styles.coverButton}
+                      disabled={isCover}
+                      aria-label={
+                        isCover
+                          ? `${album.title ?? "Album"} cover`
+                          : `Use this photo as the cover for ${album.title ?? "album"}`
+                      }
+                      onClick={async () => {
+                        const outcome = await act(
+                          "set-album-cover",
+                          {
+                            album_id: album.album_id,
+                            asset_id: asset.asset_id,
+                          },
+                          asset.scope_id
+                        );
+                        if (narrate(outcome, noteRef.current)) {
+                          toast(
+                            `Cover updated for ${album.title ?? "the album"}.`
+                          );
+                          await refresh();
+                        }
+                      }}
+                    >
+                      {isCover ? "Cover" : "Set cover"}
+                    </button>
+                  ) : null}
+                </span>
               );
             })}
           </div>

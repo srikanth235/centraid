@@ -12,6 +12,18 @@ export interface NoteTag {
   label: string;
 }
 
+export interface NoteReference {
+  link_id: string;
+  selector?: unknown;
+  card: {
+    type: string;
+    id: string;
+    status?: string;
+    title?: string | null;
+    subtitle?: string | null;
+  };
+}
+
 /**
  * A note list row (the `library`/`search` projections). `preview`/`check`
  * ride every row (issue #404); `body` is the canonical text, absent until the
@@ -29,10 +41,13 @@ export interface Note {
   notebook_ids?: string[];
   notebook_names?: string[];
   attachments?: Attachment[];
-  references?: unknown[];
+  references?: NoteReference[];
+  backlinks?: NoteReference[];
   tags?: NoteTag[];
   snippet?: string;
   body?: string;
+  deleted_at?: string | null;
+  purge_at?: string | null;
 }
 
 /** A notebook (a core.collection projected to the app's row shape). */
@@ -52,6 +67,7 @@ export interface SidebarTag {
 export type Nav =
   | { kind: "all" }
   | { kind: "pinned" }
+  | { kind: "trash" }
   | { kind: "notebook"; notebookId: string }
   | { kind: "tag"; conceptId: string };
 
@@ -68,6 +84,7 @@ export interface PendingCreate {
  */
 export interface AppData {
   notes: Note[];
+  trash: Note[];
   notebooks: Notebook[];
   tags: SidebarTag[];
   window: number;
@@ -101,6 +118,7 @@ export interface NotePatch {
 export interface SidebarCounts {
   all: number;
   pinned: number;
+  trash: number;
   notebooks: number;
   checks: number;
 }

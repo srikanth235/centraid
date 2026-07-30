@@ -13,6 +13,8 @@
  *     minute fires once even when absolute time revisits it.
  */
 
+import { isIanaTimeZone, wallWeekday, zonedParts } from "@centraid/time-engine";
+
 /** Device-prefs key for the gateway-wide default cron timezone. */
 export const CRON_DEFAULT_TIMEZONE_PREF = "automation.cron.defaultTimezone";
 
@@ -26,28 +28,12 @@ export type WallClockFields = {
   readonly weekday: number;
 };
 
-const WEEKDAY_SHORT: Record<string, number> = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-};
-
 /** True when `name` is a non-empty IANA zone known to this runtime's `Intl`. */
 export function isValidIanaTimeZone(name: string): boolean {
   if (typeof name !== "string") return false;
   const trimmed = name.trim();
   if (!trimmed) return false;
-  try {
-    // Throws RangeError on unknown zones (ECMA-402).
-    new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).format();
-    return true;
-  } catch {
-    return false;
-  }
+  return isIanaTimeZone(trimmed);
 }
 
 /**
@@ -88,29 +74,14 @@ export function wallClockFields(
       weekday: date.getDay(),
     };
   }
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    weekday: "short",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "numeric",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const pick = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((p) => p.type === type)?.value ?? "";
-  const weekdayName = pick("weekday");
-  // Some engines emit hour "24" at midnight under h23 — normalise to 0.
-  let hour = Number(pick("hour"));
-  if (hour === 24) hour = 0;
+  const parts = zonedParts(date, timeZone);
   return {
-    year: Number(pick("year")),
-    month: Number(pick("month")),
-    day: Number(pick("day")),
-    hour,
-    minute: Number(pick("minute")),
-    weekday: WEEKDAY_SHORT[weekdayName] ?? 0,
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: parts.hour,
+    minute: parts.minute,
+    weekday: wallWeekday(parts),
   };
 }
 

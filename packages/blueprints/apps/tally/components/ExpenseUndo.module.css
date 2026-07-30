@@ -1,0 +1,17 @@
+.notice {
+  align-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+}
+
+.notice span {
+  color: var(--ink-2);
+  font: var(--t-body);
+}

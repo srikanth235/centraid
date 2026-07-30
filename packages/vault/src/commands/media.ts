@@ -18,6 +18,11 @@ import {
 } from "../blob/mint.js";
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
+import {
+  loadEntityRevision,
+  markEntityRevisionUndone,
+  recordEntityRevision,
+} from "./entity-revisions.js";
 import { setStarred, starredExistsSql } from "./flags.js";
 import { assertInlineDataUriWithinBudget } from "./inline-body-guard.js";
 
@@ -1047,6 +1052,44 @@ function setAlbumCover(ctx: HandlerCtx): Record<string, unknown> {
   return input;
 }
 
+interface AlbumSnapshot {
+  album: {
+    owner_party_id: string;
+    name: string;
+    cover_content_id: string | null;
+    parent_collection_id: string | null;
+    sort_order: number;
+    created_at: string;
+  };
+  entries: Array<{
+    entry_id: string;
+    target_type: string;
+    target_id: string;
+    position: number;
+    added_at: string;
+  }>;
+}
+
+function albumSnapshot(ctx: HandlerCtx, albumId: string): AlbumSnapshot {
+  const album = ctx.db
+    .prepare(
+      `SELECT owner_party_id, name, cover_content_id, parent_collection_id,
+              sort_order, created_at
+         FROM core_collection WHERE collection_id = ?`
+    )
+    .get(albumId) as AlbumSnapshot["album"] | undefined;
+  if (!album) throw new Error("album not found");
+  const entries = ctx.db
+    .prepare(
+      `SELECT entry_id, target_type, target_id, position, added_at
+         FROM core_collection_entry
+        WHERE collection_id = ?
+        ORDER BY position, entry_id`
+    )
+    .all(albumId) as AlbumSnapshot["entries"];
+  return { album, entries };
+}
+
 const DELETE_ALBUM: CommandDefinition = {
   name: "media.delete_album",
   ownerSchema: "media",
@@ -1058,8 +1101,12 @@ const DELETE_ALBUM: CommandDefinition = {
   },
   outputSchema: {
     type: "object",
-    required: ["album_id"],
-    properties: { album_id: { type: "string" } },
+    required: ["album_id", "revision_id", "undo_until"],
+    properties: {
+      album_id: { type: "string" },
+      revision_id: { type: "string" },
+      undo_until: { type: "string" },
+    },
   },
   preconditions: [
     {
@@ -1091,12 +1138,18 @@ const DELETE_ALBUM: CommandDefinition = {
     },
   ],
   idempotency: "idempotent",
-  risk: "low",
+  risk: "medium",
   handler: deleteAlbum,
 };
 
 function deleteAlbum(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { album_id: string };
+  const revision = recordEntityRevision(ctx, {
+    entityType: "media.album",
+    entityId: input.album_id,
+    operation: "trash",
+    snapshot: albumSnapshot(ctx, input.album_id),
+  });
   ctx.db
     .prepare("DELETE FROM core_collection_entry WHERE collection_id = ?")
     .run(input.album_id);
@@ -1104,8 +1157,99 @@ function deleteAlbum(ctx: HandlerCtx): Record<string, unknown> {
     .prepare("DELETE FROM core_collection WHERE collection_id = ?")
     .run(input.album_id);
   ctx.wrote("core.collection", input.album_id);
-  return { album_id: input.album_id };
+  return {
+    album_id: input.album_id,
+    revision_id: revision.revisionId,
+    undo_until: revision.undoUntil,
+  };
 }
+
+const RESTORE_ALBUM: CommandDefinition = {
+  name: "media.restore_album",
+  ownerSchema: "media",
+  inputSchema: {
+    type: "object",
+    required: ["album_id", "revision_id"],
+    additionalProperties: false,
+    properties: {
+      album_id: { type: "string", minLength: 1 },
+      revision_id: { type: "string", minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["album_id", "revision_id"],
+    properties: {
+      album_id: { type: "string" },
+      revision_id: { type: "string" },
+    },
+  },
+  preconditions: [
+    {
+      name: "album_is_absent",
+      sql: "SELECT count(*) AS n FROM core_collection WHERE collection_id = :album_id",
+      column: "n",
+      op: "eq",
+      value: 0,
+    },
+  ],
+  postconditions: [
+    {
+      name: "album_restored",
+      sql: "SELECT count(*) AS n FROM core_collection WHERE collection_id = :album_id",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "once",
+  risk: "low",
+  handler: (ctx) => {
+    const input = ctx.input as { album_id: string; revision_id: string };
+    const revision = loadEntityRevision<AlbumSnapshot>(ctx, {
+      entityType: "media.album",
+      entityId: input.album_id,
+      revisionId: input.revision_id,
+    });
+    const album = revision.snapshot.album;
+    ctx.db
+      .prepare(
+        `INSERT INTO core_collection
+          (collection_id, owner_party_id, name, cover_content_id,
+           parent_collection_id, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        input.album_id,
+        album.owner_party_id,
+        album.name,
+        album.cover_content_id,
+        album.parent_collection_id,
+        album.sort_order,
+        album.created_at
+      );
+    const insert = ctx.db.prepare(
+      `INSERT INTO core_collection_entry
+        (entry_id, collection_id, target_type, target_id, position, added_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    for (const entry of revision.snapshot.entries)
+      insert.run(
+        entry.entry_id,
+        input.album_id,
+        entry.target_type,
+        entry.target_id,
+        entry.position,
+        entry.added_at
+      );
+    ctx.wrote("core.collection", input.album_id);
+    markEntityRevisionUndone(ctx, revision.revisionId);
+    return {
+      album_id: input.album_id,
+      revision_id: revision.revisionId,
+    };
+  },
+};
 
 const ADD_TO_ALBUM: CommandDefinition = {
   name: "media.add_to_album",
@@ -1284,6 +1428,7 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(RENAME_ALBUM);
   gateway.registerCommand(SET_ALBUM_COVER);
   gateway.registerCommand(DELETE_ALBUM);
+  gateway.registerCommand(RESTORE_ALBUM);
   gateway.registerCommand(ADD_TO_ALBUM);
   gateway.registerCommand(REMOVE_FROM_ALBUM);
 }

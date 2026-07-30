@@ -175,8 +175,14 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         : ((outcome?.output?.item_id as string | undefined) ?? null);
     toast(mode === "edit" ? "Saved · receipted." : "Item saved · receipted.");
     await refresh();
-    // Re-open the item we just wrote so its (possibly changed) secrets reload.
-    if (savedId) await selectItem(savedId);
+    // Do not retain or immediately re-fetch the secret-bearing detail. Opening
+    // the saved item is a fresh per-item user-presence gesture (#630).
+    if (savedId) {
+      state.selectedId = null;
+      state.detail = null;
+      state.showList = true;
+      render();
+    }
     return outcome;
   }
 
@@ -185,7 +191,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // Open an item: fetch its FULL fields (the only place secrets arrive) and
   // show the detail pane. Secrets stay in state.detail, never in the list
   // array.
-  async function selectItem(id: string) {
+  async function selectItem(
+    id: string,
+    authSession: string,
+    itemToken: string
+  ) {
     state.selectedId = id;
     state.detail = null;
     state.detailLoading = true;
@@ -200,7 +210,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         vaultDenied?: DeniedInfo;
       }>({
         query: "item",
-        input: { item_id: id },
+        input: {
+          item_id: id,
+          auth_session: authSession,
+          item_token: itemToken,
+        },
       });
     } catch {
       res = null;
@@ -345,8 +359,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 // holds the value we put there, never clobbering a later copy.
 const CLIP_CLEAR_S = 30;
 let clipClearTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSecretCopied: string | null = null;
 function scheduleClipboardClear(secret: string) {
   if (clipClearTimer) clearTimeout(clipClearTimer);
+  lastSecretCopied = secret;
   if (!navigator.clipboard || !navigator.clipboard.writeText) return;
   clipClearTimer = setTimeout(() => {
     clipClearTimer = null;
@@ -356,6 +372,7 @@ function scheduleClipboardClear(secret: string) {
           try {
             const current = await navigator.clipboard.readText();
             if (current === secret) await navigator.clipboard.writeText("");
+            if (lastSecretCopied === secret) lastSecretCopied = null;
           } catch {
             /* clipboard permissions changed — leave its current value alone */
           }
@@ -367,6 +384,30 @@ function scheduleClipboardClear(secret: string) {
       /* clipboard unavailable */
     }
   }, CLIP_CLEAR_S * 1000);
+}
+
+/** Lock-time hygiene: clear the exact secret Locker most recently copied. */
+export function clearSecretClipboard(): void {
+  if (clipClearTimer) {
+    clearTimeout(clipClearTimer);
+    clipClearTimer = null;
+  }
+  const secret = lastSecretCopied;
+  lastSecretCopied = null;
+  if (!secret || !navigator.clipboard?.readText) return;
+  void navigator.clipboard
+    .readText()
+    .then((current) =>
+      current === secret ? navigator.clipboard.writeText("") : undefined
+    )
+    .catch((error: unknown) => {
+      // Clipboard wipe is best-effort under missing permissions; still log so
+      // a policy denial is visible when debugging secret residual lifetime.
+      console.warn(
+        "locker clipboard wipe failed",
+        error instanceof Error ? error.message : error
+      );
+    });
 }
 
 export function copy(text: string, label?: string, secret?: boolean) {

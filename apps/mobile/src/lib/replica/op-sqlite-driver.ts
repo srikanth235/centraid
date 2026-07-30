@@ -9,6 +9,10 @@ import { open } from "@op-engineering/op-sqlite";
 import type { DB } from "@op-engineering/op-sqlite";
 
 import { ReplicaFts5UnavailableError } from "./replica-fts5-error";
+import {
+  asReplicaStorageError,
+  isReplicaStorageFullError,
+} from "./replica-storage-error";
 
 /** Drives the shared replica store core against an in-process op-sqlite handle. */
 export class OpSqliteDriver implements ReplicaSqliteDriver {
@@ -19,30 +23,48 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
    * per-app documents directory; pass one to override for tests or scoping.
    */
   static open(options: { name: string; location?: string }): OpSqliteDriver {
-    const db = open({
-      name: options.name,
-      ...(options.location === undefined ? {} : { location: options.location }),
-    });
-    return new OpSqliteDriver(db);
+    try {
+      const db = open({
+        name: options.name,
+        ...(options.location === undefined
+          ? {}
+          : { location: options.location }),
+      });
+      return new OpSqliteDriver(db);
+    } catch (error) {
+      throw asReplicaStorageError(error);
+    }
   }
 
   run(sql: string, bind: readonly ReplicaBindValue[] = []): void {
-    this.db.executeSync(sql, bind as ReplicaBindValue[]);
+    try {
+      this.db.executeSync(sql, bind as ReplicaBindValue[]);
+    } catch (error) {
+      throw asReplicaStorageError(error);
+    }
   }
 
   all<T extends object>(
     sql: string,
     bind: readonly ReplicaBindValue[] = []
   ): T[] {
-    return this.db.executeSync(sql, bind as ReplicaBindValue[]).rows as T[];
+    try {
+      return this.db.executeSync(sql, bind as ReplicaBindValue[]).rows as T[];
+    } catch (error) {
+      throw asReplicaStorageError(error);
+    }
   }
 
   exec(sql: string): void {
     // op-sqlite's synchronous path runs one statement per call; the store core
     // only passes multi-statement scripts to `exec` (DDL, PRAGMA blocks, tx
     // control), so split on `;` and skip blank fragments.
-    for (const statement of splitStatements(sql))
-      this.db.executeSync(statement);
+    try {
+      for (const statement of splitStatements(sql))
+        this.db.executeSync(statement);
+    } catch (error) {
+      throw asReplicaStorageError(error);
+    }
   }
 
   close(): void {
@@ -55,7 +77,8 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
         "CREATE VIRTUAL TABLE IF NOT EXISTS temp.__fts5_probe USING fts5(x)"
       );
       this.db.executeSync("DROP TABLE IF EXISTS temp.__fts5_probe");
-    } catch {
+    } catch (error) {
+      if (isReplicaStorageFullError(error)) throw asReplicaStorageError(error);
       throw new ReplicaFts5UnavailableError();
     }
   }

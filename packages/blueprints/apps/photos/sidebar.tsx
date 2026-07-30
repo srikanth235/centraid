@@ -98,7 +98,12 @@ export function createSidebar({
       const members = own.filter((a) =>
         (a.album_ids ?? []).includes(album.album_id)
       );
-      const cover = members[0];
+      const cover =
+        members.find(
+          (member) =>
+            !!album.cover_content_id &&
+            member.content_id === album.cover_content_id
+        ) ?? members[0];
       return {
         ...album,
         count: members.length,

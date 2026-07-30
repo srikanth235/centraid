@@ -8,12 +8,15 @@
 // route host).
 import type { KeyboardEvent, ReactNode } from "react";
 
+import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
+import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
 import type { AppState } from "./types.ts";
 
 import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
+  loading: boolean;
   sideOpen: boolean;
   view: AppState["view"];
   consent: { message: string } | null;
@@ -259,6 +262,7 @@ export function Chrome(props: ChromeProps): ReactNode {
           <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
             <strong>No vault access yet.</strong>{" "}
             <span>{props.consent.message}</span>
+            <VaultAccessButton />
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
@@ -273,7 +277,9 @@ export function Chrome(props: ChromeProps): ReactNode {
         <div aria-label="Active scope">{props.toolbar}</div>
 
         <div className={styles.scroll}>
-          <div aria-label="Notes">{props.wall}</div>
+          <div aria-label="Notes">
+            {props.loading ? <LoadingSkeleton /> : props.wall}
+          </div>
         </div>
       </main>
 

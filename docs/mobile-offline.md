@@ -110,6 +110,16 @@ its database, thumbnail, and pending-upload components.
 `Free thumbnail cache` removes only reproducible thumbnails. Replica rows and
 pending changes are not cache and are never removed by that action.
 
+Low disk fails closed and preserves the last readable projection. op-sqlite's
+`SQLITE_FULL`/errcode 13 and OS `ENOSPC` variants are normalized into one
+actionable screen error: sync pauses, replica rows and pending intents remain
+untouched, and the person can free the reproducible thumbnail cache or other
+phone storage before retrying. Centraid never evicts canonical replica rows or
+queued writes to manufacture free space. The device contract test pins that
+classification and copy; the vault custody test fault-injects the same
+SQLite-full condition during `wal_checkpoint(TRUNCATE)` and requires the
+gateway disk-health tracker to turn red.
+
 ## Durable path and at-rest decision
 
 Replica databases, pending intents, upload queues, and thumbnail packs live in
@@ -128,6 +138,20 @@ for at-rest protection. The projection is consent-minimal, backup-excluded, and
 contains no blob originals; a future stronger app-layer scheme must preserve
 cross-database search and publish measured cold/search costs before replacing
 this decision.
+
+An optional biometric app lock adds a user-presence layer before this read
+plane is mounted. Its gate is stored with SecureStore
+`requireAuthentication`; moving the app out of the foreground clears the
+decrypted credential cache, unmounts replica sessions, and paints an opaque
+switcher mask. This complements the OS at-rest controls above—it does not turn
+the replica into an independently encrypted database.
+
+Locker is stricter than the ordinary replica plane. Its native cover performs
+authentication and reveal through online-only app queries. Passphrases,
+biometric device secrets, memory-session tokens, one-shot item permits, and
+revealed fields never enter replica rows or durable intents. The local
+biometric secret is random, device-only SecureStore material; only a
+vault-key-peppered verifier reaches the gateway database.
 
 ## Performance guardrails
 

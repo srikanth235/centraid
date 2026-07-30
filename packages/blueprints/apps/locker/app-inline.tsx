@@ -7,6 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import authQuery from "./queries/auth.ts";
 import itemQuery from "./queries/item.ts";
 import itemsQuery from "./queries/items.ts";
 import searchQuery from "./queries/search.ts";
@@ -19,6 +20,7 @@ const lockerInlineApp: InlineAppModule = {
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
   // a compatible ctx at run time — inlineQueryCtx.ts).
   queries: {
+    auth: { default: authQuery },
     items: { default: itemsQuery },
     item: { default: itemQuery },
     search: { default: searchQuery },

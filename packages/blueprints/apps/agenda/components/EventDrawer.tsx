@@ -5,17 +5,24 @@
 // list — upcoming.ts/search.ts join schedule_attendee → core_party per event
 // (issue #337); the "You" row (is_you) gets RSVP controls, other guests show
 // their PARTSTAT.
-import { useEffect, useRef, useState } from "react";
-import type { ChangeEvent } from "react";
+import { useEffect, useRef } from "react";
 
-import { fmtRange, initials, toIsoUtc, toLocalInput } from "../format.ts";
+import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
+import { fmtRange, initials } from "../format.ts";
 import { I } from "../icons.ts";
-import { armConfirm, outcomeMessage, renderAttachments } from "../kit.ts";
-import type { ActivityEntry, AgEvent, Attendee } from "../types.ts";
+import { armConfirm, renderAttachments } from "../kit.ts";
+import type {
+  ActivityEntry,
+  AgEvent,
+  Attendee,
+  Calendar,
+  EventEditPayload,
+  OccurrenceEditPayload,
+} from "../types.ts";
+import { EventEditor } from "./EventEditor.tsx";
 import { CalDot, Icon } from "./Shared.tsx";
 
 import styles from "./EventDrawer.module.css";
-import shared from "./shared.module.css";
 
 const REPEAT_LABEL: Record<string, string> = {
   DAILY: "Repeats daily",
@@ -75,8 +82,10 @@ function GuestRow({
   }
   return (
     <div className={styles.guestRow}>
-      <span className={styles.guestAvatar}>{initials(attendee.name)}</span>
-      <span className={styles.guestName}>{attendee.name}</span>
+      <span className={styles.guestAvatar}>
+        {initials(displayText(attendee.name))}
+      </span>
+      <span className={styles.guestName}>{displayText(attendee.name)}</span>
       <span className={styles.guestStat} data-stat={attendee.partstat}>
         {PARTSTAT_LABEL[attendee.partstat] ?? "Invited"}
       </span>
@@ -108,29 +117,31 @@ function AttachStrip({
 
 export function EventDrawer({
   event,
+  calendars,
   calendarName,
   color,
   pending,
   pendingCancel,
   activity,
   onClose,
-  onReschedule,
+  onEdit,
+  onEditOccurrence,
   onRsvp,
   onAttach,
   onRemoveAttachment,
   onCancel,
 }: {
   event: AgEvent;
+  calendars: Calendar[];
   calendarName?: string;
   color: string | null;
   pending: boolean;
   pendingCancel: boolean;
   activity: ActivityEntry[];
   onClose: () => void;
-  onReschedule: (
-    id: string,
-    s: string,
-    e: string
+  onEdit: (payload: EventEditPayload) => Promise<VaultOutcome | undefined>;
+  onEditOccurrence: (
+    payload: OccurrenceEditPayload
   ) => Promise<VaultOutcome | undefined>;
   onRsvp: (id: string, partyId: string, partstat: string) => void;
   onAttach: (id: string) => void;
@@ -138,54 +149,7 @@ export function EventDrawer({
   onCancel: (id: string) => void;
 }) {
   const ev = event;
-  const [startVal, setStartVal] = useState(toLocalInput(ev.dtstart));
-  const [endVal, setEndVal] = useState(toLocalInput(ev.dtend ?? ev.dtstart));
-  const [saving, setSaving] = useState(false);
-  const [formNotice, setFormNotice] = useState("");
   const cancelRef = useRef<HTMLButtonElement>(null);
-
-  const handleStartChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const nextStr = e.target.value;
-    const prevStart = new Date(startVal);
-    const prevEnd = new Date(endVal);
-    const next = new Date(nextStr);
-    if (!Number.isNaN(next.getTime())) {
-      const dur =
-        !Number.isNaN(prevStart.getTime()) &&
-        !Number.isNaN(prevEnd.getTime()) &&
-        prevEnd > prevStart
-          ? prevEnd.getTime() - prevStart.getTime()
-          : 3600000;
-      setEndVal(toLocalInput(new Date(next.getTime() + dur)));
-    }
-    setStartVal(nextStr);
-  };
-
-  const submitReschedule = async () => {
-    const dtstart = toIsoUtc(startVal);
-    const dtend = toIsoUtc(endVal);
-    if (!dtstart || !dtend) {
-      setFormNotice("Pick both a start and an end.");
-      return;
-    }
-    if (dtend < dtstart) {
-      setFormNotice("The end must come after the start.");
-      return;
-    }
-    setSaving(true);
-    const outcome = await onReschedule(ev.event_id, dtstart, dtend);
-    setSaving(false);
-    if (
-      outcome?.status === "executed" ||
-      outcome?.status === "parked" ||
-      outcome?.status === "queued" ||
-      outcome?.status === "in-flight"
-    ) {
-      onClose();
-      return;
-    }
-    setFormNotice(outcomeMessage(outcome) ?? "Something went wrong.");
-  };
 
   const handleCancelClick = () => {
     if (pendingCancel) return;
@@ -202,6 +166,7 @@ export function EventDrawer({
       : "Confirmed";
   const attendees = ev.attendees ?? [];
   const repeats = repeatLabel(ev.rrule);
+  const conferencingUrl = safeExternalUrl(ev.conferencing_uri);
 
   return (
     <div className={styles.drawerBackdrop}>
@@ -213,7 +178,12 @@ export function EventDrawer({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className={pending ? `${styles.drawer} kit-pending` : styles.drawer}>
+      <dialog
+        open
+        className={pending ? `${styles.drawer} kit-pending` : styles.drawer}
+        aria-modal="true"
+        aria-labelledby="agenda-event-title"
+      >
         <div
           className={styles.drawerBar}
           style={{ background: color ?? undefined }}
@@ -221,7 +191,9 @@ export function EventDrawer({
         />
         <div className={styles.drawerHead}>
           <div className={styles.drawerHeadText}>
-            <h2 className={styles.drawerTitle}>{ev.summary}</h2>
+            <h2 className={styles.drawerTitle} id="agenda-event-title">
+              {displayText(ev.summary)}
+            </h2>
             <p className={styles.drawerRange}>{fmtRange(ev)}</p>
           </div>
           <button
@@ -235,7 +207,8 @@ export function EventDrawer({
         </div>
         <div className={styles.drawerMeta}>
           <span className={styles.drawerCal}>
-            <CalDot color={color} /> {calendarName ?? "No calendar"}
+            <CalDot color={color} />{" "}
+            {displayText(calendarName ?? "No calendar")}
           </span>
           <span
             className={styles.badge}
@@ -262,13 +235,13 @@ export function EventDrawer({
 
         <div className={styles.drawerBody}>
           {ev.description ? (
-            <p className={styles.drawerDesc}>{ev.description}</p>
+            <p className={styles.drawerDesc}>{displayText(ev.description)}</p>
           ) : null}
 
-          {ev.conferencing_uri ? (
+          {conferencingUrl ? (
             <a
               className={`kit-btn primary ${styles.flex} ag-join-btn`}
-              href={ev.conferencing_uri}
+              href={conferencingUrl}
               target="_blank"
               rel="noreferrer noopener"
             >
@@ -293,44 +266,14 @@ export function EventDrawer({
             </>
           ) : null}
 
-          <div className="ag-eyebrow-label">Reschedule</div>
-          {ev.rrule ? (
-            <p className="muted small">
-              Moving a repeating event shifts the whole series, not just this
-              occurrence.
-            </p>
-          ) : null}
-          <div className={styles.reschedule}>
-            <label className="ag-field-row">
-              <span>Start</span>
-              <input
-                type="datetime-local"
-                value={startVal}
-                onChange={handleStartChange}
-              />
-            </label>
-            <label className="ag-field-row">
-              <span>End</span>
-              <input
-                type="datetime-local"
-                value={endVal}
-                onChange={(e) => setEndVal(e.target.value)}
-              />
-            </label>
-            <button
-              type="button"
-              className={`kit-btn primary ${styles.rescheduleBtn}`}
-              disabled={saving}
-              onClick={submitReschedule}
-            >
-              Move event
-            </button>
-          </div>
-          {formNotice ? (
-            <output className={`${shared.formNotice} muted small`}>
-              {formNotice}
-            </output>
-          ) : null}
+          <div className="ag-eyebrow-label">Edit event</div>
+          <EventEditor
+            event={ev}
+            calendars={calendars}
+            onEdit={onEdit}
+            onEditOccurrence={onEditOccurrence}
+            onSaved={onClose}
+          />
 
           <div className="ag-eyebrow-label">Activity</div>
           <div className={styles.activity}>
@@ -378,7 +321,7 @@ export function EventDrawer({
             {pendingCancel ? "Cancellation pending" : "Ask to cancel"}
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

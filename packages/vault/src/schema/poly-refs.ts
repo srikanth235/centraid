@@ -106,6 +106,12 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
     note: "A margin note on a purged target dangles; previously cleaned ONLY for notes (issue #441 A1 — now for photos, documents, transactions…).",
   },
   {
+    table: "schedule_recurrence_exception",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "An occurrence exception has no meaning after its event or recurring-expense template is purged; deleting it prevents a future row that reuses the id from inheriting stale skips or overrides (issue #630 W4).",
+  },
+  {
     table: "enrich_embedding",
     pairs: [{ typeCol: "target_type", idCol: "target_id" }],
     policy: "delete",
@@ -151,6 +157,10 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
  * either the canonical shape would land in the scan and be forced to a decision.
  */
 export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
+  [
+    "core_entity_revision",
+    "Append-only P5 lifecycle history (issue #630). entity_type/entity_id names the row whose pre-mutation snapshot is retained for undo, audit, and export; it must survive soft delete and eventual purge rather than being treated as a live dangling pointer.",
+  ],
   [
     "consent_provenance",
     "journal.db, append-only audit stream (§03). The provenance trail of a purged row is exactly what must survive it — NEVER cleaned by design.",

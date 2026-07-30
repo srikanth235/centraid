@@ -1,3 +1,6 @@
+// governance: allow-repo-hygiene file-size-limit — provider writeback extends
+// the same end-to-end broker/executor harness so auth loss, reconnect, reviewed
+// outbox state, and emitted HTTP can be asserted as one lifecycle (#630).
 import http from "node:http";
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
@@ -143,6 +146,121 @@ describe("outbox-executor", () => {
       )
       .get() as { n: number };
     expect(receipts.n).toBe(1);
+  });
+
+  test("a locally edited Google event writes back and survives revoke/reconnect", async () => {
+    const plane = openPlane(await tempDir());
+    const configured = plane.gateway.invoke(plane.ownerCredential, {
+      command: "sync.configure_credential",
+      input: {
+        kind: "pull.gcal",
+        label: "personal",
+        cred_kind: "oauth2",
+        provider: "google",
+        auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
+        token_url: "https://oauth2.googleapis.com/token",
+        scopes: "https://www.googleapis.com/auth/calendar.events",
+        client_id: "client.apps.googleusercontent.com",
+        allowed_hosts: ["www.googleapis.com", "oauth2.googleapis.com"],
+      },
+    });
+    expect(configured.status).toBe("executed");
+    if (configured.status !== "executed") throw new Error(configured.status);
+    const connectionId = String(
+      (configured.output as Record<string, unknown>)["connection_id"]
+    );
+    const stored = plane.gateway.invoke(plane.ownerCredential, {
+      command: "sync.store_tokens",
+      input: {
+        connection_id: connectionId,
+        access_token: "token-before-revoke",
+      },
+    });
+    expect(stored.status).toBe("executed");
+    const staged = plane.gateway.invoke(plane.ownerCredential, {
+      command: "sync.stage_rows",
+      input: {
+        connection_id: connectionId,
+        rows: [
+          {
+            entity_type: "core.event",
+            external_id: "gcal:provider-event-1",
+            payload: {
+              uid: "provider-event-1@example.test",
+              summary: "Provider title",
+              description: null,
+              dtstart: "2026-08-01T09:00:00Z",
+              dtend: "2026-08-01T10:00:00Z",
+              startTz: "Asia/Kolkata",
+              rrule: null,
+              status: "confirmed",
+              providerVersion: '"provider-etag-1"',
+            },
+          },
+        ],
+      },
+    });
+    expect(staged.status).toBe("executed");
+    if (staged.status !== "executed") throw new Error(staged.status);
+    const batchId = String(
+      (staged.output as Record<string, unknown>)["batch_id"]
+    );
+    plane.gateway.publishImport(plane.ownerCredential, batchId);
+    const eventId = (
+      plane.db.vault
+        .prepare(
+          "SELECT target_id FROM sync_external_entity WHERE connection_id = ? AND external_id = 'gcal:provider-event-1'"
+        )
+        .get(connectionId) as { target_id: string }
+    ).target_id;
+    const edited = plane.gateway.invoke(plane.ownerCredential, {
+      command: "schedule.edit_event",
+      input: { event_id: eventId, summary: "Local title" },
+    });
+    expect(edited.status).toBe("executed");
+
+    const api = fetchDouble();
+    api.respond(403, '{"error":"insufficient_scope"}');
+    const revoked = await executorFor(plane, api).drain(plane);
+    expect(revoked).toMatchObject({ approved: 1, deferred: 1, sent: 0 });
+    expect(
+      (
+        plane.db.vault
+          .prepare("SELECT status FROM sync_connection WHERE connection_id = ?")
+          .get(connectionId) as { status: string }
+      ).status
+    ).toBe("needs-auth");
+    const writebackId = (
+      plane.db.vault
+        .prepare(
+          "SELECT item_id FROM outbox_item WHERE connection_id = ? AND verb = 'gcal.update_event'"
+        )
+        .get(connectionId) as { item_id: string }
+    ).item_id;
+    expect(itemRow(plane, writebackId).status).toBe("approved");
+
+    const reconnected = plane.gateway.invoke(plane.ownerCredential, {
+      command: "sync.store_tokens",
+      input: {
+        connection_id: connectionId,
+        access_token: "token-after-reconnect",
+      },
+    });
+    expect(reconnected.status).toBe("executed");
+    api.respond(200, '{"id":"provider-event-1"}');
+    const sent = await executorFor(plane, api).drain(plane);
+    expect(sent).toMatchObject({ sent: 1, deferred: 0 });
+    expect(api.calls).toHaveLength(2);
+    expect(api.calls[1]).toMatchObject({
+      method: "PATCH",
+      url: "https://www.googleapis.com/calendar/v3/calendars/primary/events/provider-event-1",
+      headers: {
+        authorization: "Bearer token-after-reconnect",
+        "if-match": '"provider-etag-1"',
+      },
+    });
+    expect(JSON.parse(api.calls[1]?.body ?? "{}").summary).toBe("Local title");
+    expect(itemRow(plane, writebackId).status).toBe("sent");
   });
 
   test("a pending item never drains — the owner decision is the gate", async () => {

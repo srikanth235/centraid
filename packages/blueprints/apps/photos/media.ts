@@ -1,3 +1,4 @@
+import { safeMediaUrl } from "../_shared/untrusted.ts";
 // Tile media: the once-per-mount fill (thumb image or placeholder) plus the
 // mount guard that makes it safe to call from a React callback ref on every
 // render. JSX-free by design — shared by every component that renders a tile
@@ -9,6 +10,10 @@ import {
 } from "./media-observer.ts";
 import { scopeAttr } from "./scopes.ts";
 import type { Asset } from "./types.ts";
+
+export function isRenderableUri(uri: unknown): boolean {
+  return safeMediaUrl(uri) !== null;
+}
 
 // The grid NEVER fetches a full original. Blob-backed assets carry a server
 // thumb variant (issue #296) — a few KB; a `data:` URI already rode inline
@@ -33,7 +38,7 @@ export const THUMB_EDGE = 360;
 // The cheap grid source for an asset, or null to render a placeholder. Video
 // paints its device-contributed poster; the original loads only on open.
 export function gridSrc(asset: Asset): string | null | undefined {
-  if (isVideoAsset(asset)) return asset.poster_uri ?? null;
+  if (isVideoAsset(asset)) return safeMediaUrl(asset.poster_uri);
   if (isAudioAsset(asset)) return null;
   if (typeof asset.thumb_uri === "string") {
     // Known-small blobs never get a thumb staged (upload only downsizes the
@@ -45,7 +50,7 @@ export function gridSrc(asset: Asset): string | null | undefined {
       asset.width != null &&
       asset.height != null &&
       Math.max(asset.width, asset.height) <= THUMB_EDGE;
-    return knownSmall ? asset.content_uri : asset.thumb_uri;
+    return safeMediaUrl(knownSmall ? asset.content_uri : asset.thumb_uri);
   }
   // A non-blob `data:` URI already travelled inline with the row — render it
   // directly (no network). Any other bare URI would be a full remote original,
@@ -54,7 +59,7 @@ export function gridSrc(asset: Asset): string | null | undefined {
     typeof asset.content_uri === "string" &&
     asset.content_uri.startsWith("data:")
   ) {
-    return asset.content_uri;
+    return safeMediaUrl(asset.content_uri);
   }
   return null;
 }

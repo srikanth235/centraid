@@ -73,6 +73,13 @@ export interface RunHandlerOptions {
    * capability behind it is the host's to mount.
    */
   vault?: VaultBridge;
+  /**
+   * Host-resolved module URL for the shared civil-time implementation. The
+   * stable app-engine layer only defines the structural capability; a runtime
+   * host mounts the implementation so this package does not reverse the
+   * dependency DAG.
+   */
+  timeModuleUrl?: string;
   /** Overridable for tests; production callers take the shared default (issue #351). */
   admission?: WorkerAdmission;
   /**
@@ -137,6 +144,7 @@ export async function runHandler(
       handlerFile: opts.handlerFile,
       handlerKind: opts.handlerKind,
       args: { ...opts.args, app: { id: opts.app.id, dir: opts.app.dir } },
+      ...(opts.timeModuleUrl ? { timeModuleUrl: opts.timeModuleUrl } : {}),
     },
   };
   // eslint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)

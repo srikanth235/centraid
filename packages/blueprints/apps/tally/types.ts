@@ -43,6 +43,14 @@ export interface TrashedExpense {
   purge_at?: string | null;
 }
 
+/** A still-live one-shot revision advertised by the 10-second undo surface. */
+export interface ExpenseUndo {
+  expenseId: string;
+  revisionId: string;
+  until: string;
+  label: string;
+}
+
 /** The group meta a group-view payload carries (no member_count). */
 export interface GroupMeta {
   group_id: string;
@@ -72,6 +80,14 @@ export interface LedgerRow {
   group_name?: string;
   description: string;
   amount_minor: number;
+  original_amount_minor?: number | null;
+  original_currency?: string | null;
+  settlement_currency?: string | null;
+  rate_scaled?: number | null;
+  rate_scale?: number | null;
+  rate_source?: string | null;
+  rate_date?: string | null;
+  recurring_template_id?: string | null;
   category: string;
   spent_on?: string;
   paid_by: string;
@@ -79,6 +95,24 @@ export interface LedgerRow {
   your_role: Role;
   your_amount_minor: number;
   splits: SplitEntry[];
+  receipt?: {
+    receipt_id: string;
+    content_id: string;
+    content_uri?: string;
+    media_type?: string;
+    lines: Array<{
+      line_item_id: string;
+      kind: "item" | "tax" | "tip";
+      description: string;
+      amount_minor: number;
+      sort_order: number;
+      allocations: Array<{
+        party_id: string;
+        name?: string;
+        share_minor: number;
+      }>;
+    }>;
+  };
   pending?: boolean;
   parked?: boolean;
 }
@@ -119,6 +153,7 @@ export interface Dash {
   friends: Friend[];
   groups: Group[];
   trash: TrashedExpense[];
+  recurring: RecurringExpense[];
   owe_total_minor: number;
   owed_total_minor: number;
 }
@@ -135,6 +170,7 @@ export interface DashboardPayload {
   friends: Friend[];
   groups: Group[];
   trash: TrashedExpense[];
+  recurring: RecurringExpense[];
   owe_total_minor: number;
   owed_total_minor: number;
   vaultDenied?: VaultDenied;
@@ -164,6 +200,14 @@ export interface ExpenseModel {
   groupId: string;
   desc: string;
   amount: string;
+  originalCurrency: string;
+  settlementCurrency: string;
+  rate: string;
+  rateSource: string;
+  rateDate: string;
+  recurring: boolean;
+  rrule: string;
+  timeZone: string;
   paidBy: string;
   method: "equal" | "exact" | "percent";
   category: string;
@@ -171,6 +215,21 @@ export interface ExpenseModel {
   include: Set<string>;
   exact: Record<string, string>;
   percent: Record<string, string>;
+}
+
+export interface RecurringExpense {
+  template_id: string;
+  group_id: string;
+  description: string;
+  original_amount_minor: number;
+  original_currency: string;
+  settlement_currency: string;
+  rate_source?: string | null;
+  rate_date?: string | null;
+  rrule: string;
+  preview: string;
+  next_start?: string | null;
+  status: "active" | "paused" | "ended";
 }
 
 /** The settle-up modal model (state.settle). */
@@ -213,6 +272,7 @@ export interface AppState {
   settle: SettleModel | null;
   newGroup: NewGroupModel | null;
   addFriend: AddFriendModel | null;
+  expenseUndo: ExpenseUndo | null;
   modalMembers: Member[];
   pendingExpenses: LedgerRow[];
 }

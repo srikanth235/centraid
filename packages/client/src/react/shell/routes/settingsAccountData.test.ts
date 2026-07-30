@@ -22,6 +22,7 @@ vi.mock(import("../../../gateway-client.js"), () => ({
   vaultImportPublish: vi.fn<typeof GatewayClient.vaultImportPublish>(),
   vaultImportRows: vi.fn<typeof GatewayClient.vaultImportRows>(),
   vaultImportStage: vi.fn<typeof GatewayClient.vaultImportStage>(),
+  vaultPortableExport: vi.fn<typeof GatewayClient.vaultPortableExport>(),
   vaultConnectionSetStatus:
     vi.fn<typeof GatewayClient.vaultConnectionSetStatus>(),
 }));

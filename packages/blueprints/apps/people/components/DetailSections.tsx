@@ -26,6 +26,7 @@ import {
   RelationshipAddRow,
   TaskAddRow,
 } from "./AddRows.tsx";
+import { ContactChannels } from "./ContactChannels.tsx";
 import type { DrawerCallbacks } from "./Details.tsx";
 import { Icon } from "./Shared.tsx";
 
@@ -172,6 +173,8 @@ export function Sections({
   onToggleGift,
   onAddDebt,
   onSettleDebt,
+  onSaveContact,
+  onDeleteContact,
 }: {
   dp: DetailPerson;
   color: string;
@@ -179,7 +182,6 @@ export function Sections({
 } & DrawerCallbacks) {
   const st = statusOf(dp);
   const days = daysSince(dp);
-  const contact = dp.contact ?? [];
   const rels = dp.relationships ?? [];
   const dates = dp.dates ?? [];
   const tasks = dp.tasks ?? [];
@@ -265,20 +267,11 @@ export function Sections({
         </>
       ) : null}
 
-      {contact.length > 0 ? (
-        <>
-          <div className={styles.detailLabel}>Contact</div>
-          <div className={styles.kv}>
-            {contact.map((c, i) => (
-              <div className={styles.kvRow} key={i}>
-                <Icon svg={c.kind === "phone" ? I.phone : I.mail} />
-                <span className={styles.kvV}>{c.value}</span>
-                <span className={styles.kvK}>{c.kind}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : null}
+      <ContactChannels
+        person={dp}
+        onSave={onSaveContact}
+        onDelete={onDeleteContact}
+      />
 
       <SectionLabel
         text="Relationships"

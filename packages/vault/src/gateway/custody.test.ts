@@ -9,11 +9,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { bootstrapVault } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { sharedDiskFullTracker, VaultDiskFullError } from "../errors.js";
 import { backupVault, checkpointVault, sha256File } from "./custody.js";
 
 let root: string;
@@ -82,5 +83,33 @@ describe("custody", () => {
     } finally {
       mem.close();
     }
+  });
+
+  test("SQLITE_FULL during a WAL checkpoint preserves the files and raises gateway disk health", () => {
+    sharedDiskFullTracker.clear();
+    const sqliteFull = Object.assign(new Error("database or disk is full"), {
+      code: "ERR_SQLITE_ERROR",
+      errcode: 13,
+      errstr: "database or disk is full",
+    });
+    const vaultExec = vi.fn<(sql: string) => void>(() => {
+      throw sqliteFull;
+    });
+    const journalExec = vi.fn<(sql: string) => void>();
+    const checkpointDb = {
+      dir: path.join(root, "checkpoint-full"),
+      vault: { exec: vaultExec },
+      journal: { exec: journalExec },
+    } as unknown as VaultDb;
+
+    expect(() => checkpointVault(checkpointDb)).toThrow(VaultDiskFullError);
+    expect(vaultExec).toHaveBeenCalledExactlyOnceWith(
+      "PRAGMA wal_checkpoint(TRUNCATE)"
+    );
+    expect(journalExec).not.toHaveBeenCalled();
+    expect(sharedDiskFullTracker.current()).toMatchObject({
+      context: "vault WAL checkpoint",
+    });
+    sharedDiskFullTracker.clear();
   });
 });

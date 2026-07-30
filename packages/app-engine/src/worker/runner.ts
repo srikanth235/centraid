@@ -62,6 +62,7 @@ interface WorkerRequest {
   handlerFile: string;
   handlerKind: "query" | "action";
   args: unknown;
+  timeModuleUrl?: string;
 }
 
 /** Parent → pooled-worker kickoff carrying the handler to run. */
@@ -82,7 +83,9 @@ interface VaultCallMessage {
     | "parked"
     | "changes"
     | "resolve"
-    | "reveal";
+    | "reveal"
+    | "authenticate"
+    | "content";
   payload: unknown;
 }
 
@@ -207,6 +210,14 @@ const vault = {
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
   },
+  /** Locker-only, memory-session user-presence authentication (#630). */
+  authenticate(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall("authenticate", request);
+  },
+  /** Size-bounded derivative content fetch. */
+  content(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall("content", request);
+  },
 };
 
 const log = {
@@ -219,7 +230,7 @@ const log = {
 };
 
 const abortController = new AbortController();
-const ctx = {
+const baseCtx = {
   fetch: (input: string, init?: RequestInit) =>
     fetch(input, { ...init, signal: abortController.signal }),
   abortSignal: abortController.signal,
@@ -229,6 +240,28 @@ const ctx = {
 function execute(req: WorkerRequest): void {
   void (async () => {
     try {
+      const unavailableTime = (): never => {
+        throw new Error("handler host did not mount the civil-time capability");
+      };
+      const timeModule = req.timeModuleUrl
+        ? ((await import(req.timeModuleUrl)) as {
+            applyRecurrenceExceptions: (...args: unknown[]) => unknown;
+            describeRecurrence: (...args: unknown[]) => unknown;
+            expandRecurrence: (...args: unknown[]) => unknown;
+            shiftTemporal: (...args: unknown[]) => unknown;
+          })
+        : {
+            applyRecurrenceExceptions: unavailableTime,
+            describeRecurrence: unavailableTime,
+            expandRecurrence: unavailableTime,
+            shiftTemporal: unavailableTime,
+          };
+      const time = Object.freeze({
+        applyRecurrenceExceptions: timeModule.applyRecurrenceExceptions,
+        describeRecurrence: timeModule.describeRecurrence,
+        expandRecurrence: timeModule.expandRecurrence,
+        shiftTemporal: timeModule.shiftTemporal,
+      });
       // A TS handler graph needs the esbuild loader hook before it can import
       // under plain Node; a JS handler skips this entirely.
       if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();
@@ -238,7 +271,11 @@ function execute(req: WorkerRequest): void {
       if (typeof mod.default !== "function") {
         throw new Error(`${req.handlerFile} has no default export`);
       }
-      const fullArgs = { ...(req.args as object), log, ctx };
+      const fullArgs = {
+        ...(req.args as object),
+        log,
+        ctx: { ...baseCtx, time },
+      };
       const value = await mod.default(fullArgs);
       port.postMessage({
         type: "result",

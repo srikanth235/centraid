@@ -13,6 +13,7 @@ export type Nav =
   | { kind: "reconnect" }
   | { kind: "upcoming" }
   | { kind: "starred" }
+  | { kind: "trash" }
   | { kind: "journal" }
   | { kind: "activity" }
   | { kind: "list"; listId: string };
@@ -36,6 +37,7 @@ export interface Person {
   list_id?: string | null;
   starred?: boolean;
   reminders?: Reminder[];
+  purge_at?: string | null;
   /** FTS snippet — present only on `search` query rows. */
   snippet?: string;
 }
@@ -49,8 +51,16 @@ export interface PersonList {
 // ---------- Full profile (the single `person` query) ----------
 
 export interface Contact {
-  kind: string;
+  channel_id?: string;
+  kind: "phone" | "email" | "address" | "handle";
+  label?: string | null;
   value: string;
+  normalized_value?: string;
+  preferred?: boolean;
+  provenance?: Record<string, unknown> | null;
+  duplicate_party_ids?: string[];
+  duplicate_names?: string[];
+  legacy?: boolean;
 }
 export interface Relationship {
   relationship_id?: string;
@@ -161,6 +171,7 @@ export type SortKey = "last" | "name" | "cadence";
 
 export interface AppData {
   people: Person[];
+  trash: Person[];
   lists: PersonList[];
 }
 

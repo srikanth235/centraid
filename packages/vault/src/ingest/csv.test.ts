@@ -92,4 +92,23 @@ describe("csv", () => {
       },
     ]);
   });
+
+  test.each(["=2+3", "+cmd|' /C calc'!A0", "-1+2", "@SUM(1,2)"])(
+    "rejects spreadsheet-formula descriptions: %s",
+    (description) => {
+      const csv = [
+        "Date,Amount,Description",
+        `2026-01-02,5,"${description}"`,
+      ].join("\n");
+      expect(() => parseTransactionsCsv(csv)).toThrow(
+        /spreadsheet formula marker/u
+      );
+    }
+  );
+
+  test("rejects an unterminated quoted field", () => {
+    expect(() => parseCsvRows('a,b\n"unfinished')).toThrow(
+      /unterminated quoted field/u
+    );
+  });
 });

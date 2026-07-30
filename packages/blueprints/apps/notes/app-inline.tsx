@@ -7,7 +7,9 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import historyQuery from "./queries/history.ts";
 import libraryQuery from "./queries/library.ts";
+import linkTargetsQuery from "./queries/link-targets.ts";
 import noteQuery from "./queries/note.ts";
 import searchQuery from "./queries/search.ts";
 
@@ -19,6 +21,8 @@ const notesInlineApp: InlineAppModule = {
   // a compatible ctx at run time — inlineQueryCtx.ts).
   queries: {
     library: { default: libraryQuery },
+    "link-targets": { default: linkTargetsQuery },
+    history: { default: historyQuery },
     note: { default: noteQuery },
     search: { default: searchQuery },
   } as unknown as InlineAppModule["queries"],

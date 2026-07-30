@@ -15,12 +15,20 @@ export interface Vcard {
   identifiers: VcardIdentifier[];
 }
 
+const MAX_VCARD_LINES = 500_000;
+const MAX_VCARD_LINE_CHARS = 1024 * 1024;
+
 function unfold(text: string): string[] {
-  return text
+  const lines = text
     .replace(/\r\n[ \t]/gu, "")
     .replace(/\n[ \t]/gu, "")
     .split(/\r?\n/u)
     .filter((line) => line.length > 0);
+  if (lines.length > MAX_VCARD_LINES)
+    throw new Error(`vCard exceeds ${MAX_VCARD_LINES} unfolded lines`);
+  if (lines.some((line) => line.length > MAX_VCARD_LINE_CHARS))
+    throw new Error(`vCard line exceeds ${MAX_VCARD_LINE_CHARS} characters`);
+  return lines;
 }
 
 /** Normalize a handle: lowercase emails, strip separators from tel. */
@@ -46,6 +54,7 @@ export function parseVcards(text: string): Vcard[] {
     const name = (rawName ?? "").replace(/^[^.]+\./u, "").toUpperCase();
     const params = paramParts.join(";").toUpperCase();
     if (name === "BEGIN" && value.toUpperCase() === "VCARD") {
+      if (current) throw new Error("vCard contains nested records");
       current = { fn: "", sortName: null, bday: null, identifiers: [] };
       continue;
     }
@@ -87,6 +96,7 @@ export function parseVcards(text: string): Vcard[] {
         break;
     }
   }
+  if (current) throw new Error("truncated vCard record");
   return cards;
 }
 

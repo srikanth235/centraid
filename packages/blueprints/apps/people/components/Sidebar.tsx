@@ -44,10 +44,12 @@ function NavItem({
 export function SmartNav({
   navKind,
   people,
+  trash,
   onSelectNav,
 }: {
   navKind: Nav["kind"];
   people: Person[];
+  trash: Person[];
   onSelectNav: (nav: Nav) => void;
 }) {
   const counts = {
@@ -86,6 +88,13 @@ export function SmartNav({
         active={navKind === "starred"}
         count={counts.starred}
         onClick={() => onSelectNav({ kind: "starred" })}
+      />
+      <NavItem
+        icon={I.del}
+        label="Trash"
+        active={navKind === "trash"}
+        count={trash.length}
+        onClick={() => onSelectNav({ kind: "trash" })}
       />
     </>
   );
@@ -241,7 +250,12 @@ function ListNavRow({
           aria-label={`Delete ${c.name}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!armConfirm(e.currentTarget, { armedLabel: "×?" })) return;
+            if (
+              !armConfirm(e.currentTarget, {
+                armedLabel: `Delete ${c.name}?`,
+              })
+            )
+              return;
             onDeleteList(c);
           }}
         >

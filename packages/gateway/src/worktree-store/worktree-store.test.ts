@@ -599,6 +599,16 @@ describe("worktree-store", () => {
         () => store.snapshotSessionAppDir("phantom", "todo"),
         "session_missing"
       );
+      await expect(store.sessionAppIds("phantom")).resolves.toStrictEqual([]);
+      await expectRejectsWithCode(
+        () =>
+          store.publish({
+            sessionId: "phantom",
+            appId: "todo",
+            message: "must not publish",
+          }),
+        "session_missing"
+      );
       // And no phantom dir was left behind.
       const phantomDir = path.join(root, "worktrees", "sessions", "phantom");
       const exists = await fs

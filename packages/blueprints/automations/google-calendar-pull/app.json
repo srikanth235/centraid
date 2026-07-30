@@ -3,7 +3,7 @@
   "id": "google-calendar-pull",
   "name": "Google Calendar sync",
   "kind": "automation",
-  "description": "Pulls your Google Calendar into the vault as events — read-only, incremental via syncToken, through your own Google OAuth client.",
+  "description": "Keeps Google Calendar and Agenda in sync — incremental pulls plus conflict-safe write-back of local edits through your OAuth connection.",
   "version": "0.1.0",
   "actions": [],
   "queries": []

@@ -19,6 +19,9 @@ type HydrateRulesTestSeam = (key: string, fallback: Rules) => Promise<Rules>;
 const network = { getNetworkStateAsync: vi.fn<NetworkStateTestSeam>() };
 const battery = { getBatteryStateAsync: vi.fn<BatteryStateTestSeam>() };
 const store = { hydrate: vi.fn<HydrateRulesTestSeam>() };
+const connectivity = {
+  getCellularRoamingStatus: vi.fn<() => Promise<boolean | null>>(),
+};
 
 vi.mock(import("expo-network") as Promise<unknown>, () => ({
   getNetworkStateAsync: () => network.getNetworkStateAsync(),
@@ -42,6 +45,12 @@ vi.mock(import("expo-battery"), () => ({
     FULL: 3,
   } as unknown as ExpoBattery["BatteryState"],
 }));
+vi.mock(
+  import("../../../modules/centraid-network-status") as Promise<unknown>,
+  () => ({
+    getCellularRoamingStatus: () => connectivity.getCellularRoamingStatus(),
+  })
+);
 vi.mock(import("../../storage") as Promise<unknown>, () => ({
   Store: {
     // Only `hydrate` is exercised here; `get`/`set` are implemented with the
@@ -56,6 +65,7 @@ vi.mock(import("../../storage") as Promise<unknown>, () => ({
 interface Rules {
   wifiOnly: boolean;
   allowMetered: boolean;
+  allowRoaming: boolean;
   chargerOnly: boolean;
 }
 
@@ -64,10 +74,12 @@ function scenario(opts: {
   connected?: boolean;
   type?: "WIFI" | "CELLULAR" | "OTHER";
   batteryState?: number;
+  roaming?: boolean | null;
 }): Promise<boolean> {
   store.hydrate.mockResolvedValue({
     wifiOnly: true,
     allowMetered: false,
+    allowRoaming: false,
     chargerOnly: false,
     ...opts.rules,
   });
@@ -76,6 +88,9 @@ function scenario(opts: {
     type: opts.type ?? "WIFI",
   });
   battery.getBatteryStateAsync.mockResolvedValue(opts.batteryState ?? 1);
+  connectivity.getCellularRoamingStatus.mockResolvedValue(
+    opts.roaming === undefined ? false : opts.roaming
+  );
   return Promise.resolve(nativeUploadPolicy().canTransfer());
 }
 
@@ -84,6 +99,7 @@ describe("native-policy", () => {
     store.hydrate.mockReset();
     network.getNetworkStateAsync.mockReset();
     battery.getBatteryStateAsync.mockReset();
+    connectivity.getCellularRoamingStatus.mockReset();
   });
 
   describe(nativeUploadPolicy, () => {
@@ -137,6 +153,42 @@ describe("native-policy", () => {
           rules: { wifiOnly: true, chargerOnly: true },
           type: "WIFI",
           batteryState: 3,
+        })
+      ).resolves.toBe(true);
+    });
+
+    it("blocks roaming or unknown cellular unless explicitly allowed", async () => {
+      await expect(
+        scenario({
+          rules: {
+            wifiOnly: false,
+            allowMetered: true,
+            allowRoaming: false,
+          },
+          type: "CELLULAR",
+          roaming: true,
+        })
+      ).resolves.toBe(false);
+      await expect(
+        scenario({
+          rules: {
+            wifiOnly: false,
+            allowMetered: true,
+            allowRoaming: false,
+          },
+          type: "CELLULAR",
+          roaming: null,
+        })
+      ).resolves.toBe(false);
+      await expect(
+        scenario({
+          rules: {
+            wifiOnly: false,
+            allowMetered: true,
+            allowRoaming: true,
+          },
+          type: "CELLULAR",
+          roaming: true,
         })
       ).resolves.toBe(true);
     });

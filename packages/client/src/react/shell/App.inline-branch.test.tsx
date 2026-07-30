@@ -104,8 +104,8 @@ describe("App.inline-branch", () => {
       ({ default: App } = await import("./App.js"));
     },
     // The affected-package gate transforms six packages concurrently. Keep the
-    // first App graph import bounded without inheriting Vitest's 10s hook ceiling.
-    20_000
+    // first App graph import bounded with enough headroom for that shared load.
+    60_000
   );
 
   afterEach(() => {

@@ -12,7 +12,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
+import {
+  surfaceWriteFailure,
+  surfaceWriteOutcome,
+} from "../../kit/replica/write-outcome";
 import { family, useTheme } from "../../kit/theme";
+import { optimisticValues } from "../../lib/replica/optimistic";
 import type { PhotosScreenProps } from "../../navigation";
 
 export default function FaceReview({
@@ -20,6 +27,7 @@ export default function FaceReview({
 }: PhotosScreenProps<"FaceReview">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
+  const { refreshing, refreshNow } = useReplicaRefresh();
   const faces = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "media.face_region" }), [])
@@ -50,10 +58,41 @@ export default function FaceReview({
     regionId: string,
     partyId?: string
   ): Promise<void> => {
-    await session?.write("photos", {
-      action,
-      input: { region_id: regionId, ...(partyId ? { party_id: partyId } : {}) },
-    });
+    const region = faces.rows.find((row) => String(row.region_id) === regionId);
+    if (!region) return;
+    if (!session) return;
+    try {
+      const result = await session.write("photos", {
+        action,
+        input: {
+          region_id: regionId,
+          ...(partyId ? { party_id: partyId } : {}),
+        },
+        optimistic:
+          action === "reject-face"
+            ? [
+                {
+                  op: "delete",
+                  entity: "media.face_region",
+                  rowId: regionId,
+                },
+              ]
+            : [
+                {
+                  op: "upsert",
+                  entity: "media.face_region",
+                  rowId: regionId,
+                  values: optimisticValues(region, {
+                    party_id: partyId ?? null,
+                    confirmed_by_party_id: partyId ?? null,
+                  }),
+                },
+              ],
+      });
+      surfaceWriteOutcome(result);
+    } catch (error) {
+      surfaceWriteFailure(error, "Face review not saved");
+    }
   };
   return (
     <SafeAreaView
@@ -61,7 +100,11 @@ export default function FaceReview({
       edges={["top"]}
     >
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+        >
           <Feather name="chevron-left" size={26} color={colors.ink} />
         </Pressable>
         <Text style={[styles.title, { color: colors.ink }]}>People review</Text>
@@ -69,10 +112,13 @@ export default function FaceReview({
           {proposals.length}
         </Text>
       </View>
+      <ReplicaStatusBar />
       <FlatList
         data={proposals}
         keyExtractor={(row) => row.__rowId}
         contentContainerStyle={styles.list}
+        refreshing={refreshing}
+        onRefresh={refreshNow}
         ListHeaderComponent={
           <View>
             <Text style={[styles.section, { color: colors.ink2 }]}>
@@ -148,6 +194,8 @@ export default function FaceReview({
               </View>
               {partyId ? (
                 <Pressable
+                  accessibilityLabel={`Confirm ${names.get(partyId) ?? "person"} for this face`}
+                  accessibilityRole="button"
                   onPress={() =>
                     void act("confirm-face", String(item.region_id), partyId)
                   }
@@ -156,6 +204,8 @@ export default function FaceReview({
                 </Pressable>
               ) : null}
               <Pressable
+                accessibilityLabel="Reject this face proposal"
+                accessibilityRole="button"
                 onPress={() => void act("reject-face", String(item.region_id))}
               >
                 <Feather name="x" size={21} color={colors.danger} />

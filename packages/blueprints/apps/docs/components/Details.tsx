@@ -1,6 +1,7 @@
 // Details drawer (#detailsRoot root).
 import { useRef, useState } from "react";
 
+import { AudiencePlacement } from "../../_shared/AudiencePlacement.tsx";
 import {
   custodyMeta,
   extOf,
@@ -220,6 +221,13 @@ export function Details({
               <ReplaceButton doc={doc} onReplace={onReplace} />
             )}
           </div>
+          {trashed ? null : (
+            <AudiencePlacement
+              itemType="core.document"
+              itemId={doc.document_id}
+              label="Share document"
+            />
+          )}
           <div className={styles.detailLabel}>Details</div>
           <dl className={styles.detailGrid}>
             <dt>Type</dt>

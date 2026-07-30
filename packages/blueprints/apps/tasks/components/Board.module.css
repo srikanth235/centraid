@@ -46,3 +46,20 @@
   flex-direction: column;
   gap: 2px;
 }
+
+.organizedRow {
+  position: relative;
+}
+
+.organizeSelect {
+  position: absolute;
+  top: 9px;
+  right: 44px;
+  max-width: 126px;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: var(--t-small);
+}

@@ -145,6 +145,8 @@ export interface DispatcherOptions {
    * absent, handler `ctx.vault.*` calls fail closed with VAULT_UNAVAILABLE.
    */
   readonly vaultFor?: (appId: string) => VaultBridge;
+  /** Host-resolved implementation mounted as handler `ctx.time`. */
+  readonly timeModuleUrl?: string;
 }
 
 /**
@@ -166,6 +168,7 @@ export class Dispatcher {
     appId: string
   ) => Promise<string | undefined>;
   private readonly vaultFor?: (appId: string) => VaultBridge;
+  private readonly timeModuleUrl?: string;
   private readonly manifestCache = new Map<string, ManifestCacheEntry>();
 
   constructor(opts: DispatcherOptions) {
@@ -174,6 +177,7 @@ export class Dispatcher {
     if (opts.onWriteFor) this.onWriteFor = opts.onWriteFor;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     if (opts.vaultFor) this.vaultFor = opts.vaultFor;
+    if (opts.timeModuleUrl) this.timeModuleUrl = opts.timeModuleUrl;
   }
 
   private get registry(): Registry {
@@ -398,6 +402,7 @@ export class Dispatcher {
               : this.vaultFor(appId),
           }
         : {}),
+      ...(this.timeModuleUrl ? { timeModuleUrl: this.timeModuleUrl } : {}),
     });
     if (!outcome.ok) {
       if (outcome.busy) {
@@ -498,6 +503,7 @@ export class Dispatcher {
       },
       timeoutMs: 10_000,
       ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
+      ...(this.timeModuleUrl ? { timeModuleUrl: this.timeModuleUrl } : {}),
     });
     if (!outcome.ok) {
       if (outcome.busy) {

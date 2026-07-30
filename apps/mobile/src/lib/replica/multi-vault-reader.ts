@@ -34,7 +34,13 @@ export interface MountedReplicaScope {
 export interface PlacementIntent {
   linkToken: string;
   kind: "add" | "move";
-  itemType: "core.document" | "core.content_item" | "media.media_asset";
+  itemType:
+    | "core.collection"
+    | "core.document"
+    | "core.content_item"
+    | "locker.item"
+    | "media.media_asset"
+    | "tally.group";
   itemId: string;
   sourceVaultId: string;
   targetVaultId: string;

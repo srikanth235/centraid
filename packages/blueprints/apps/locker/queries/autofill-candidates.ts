@@ -16,9 +16,40 @@ interface LoginRow {
   compromised?: number | boolean | null;
 }
 
-export default async function autofillCandidates({ ctx }: { ctx: HandlerCtx }) {
+export default async function autofillCandidates({
+  input,
+  ctx,
+}: {
+  input?: Record<string, unknown>;
+  ctx: HandlerCtx;
+}) {
   const purpose = "dpv:ServiceProvision";
   try {
+    // When Locker auth is configured, candidate enumeration requires the
+    // vault to be unlocked (any live session on this gateway) — same lock that
+    // gates fill/reveal. Without it a paired device could map every login's
+    // item_id + url while locked.
+    const authentication = (await ctx.vault.authenticate({
+      operation: "status",
+      ...(typeof input?.auth_session === "string" && input.auth_session
+        ? { sessionToken: String(input.auth_session) }
+        : {}),
+    })) as {
+      authenticated?: boolean;
+      configured?: boolean;
+      unlocked?: boolean;
+    };
+    if (
+      authentication.configured &&
+      !authentication.unlocked &&
+      !authentication.authenticated
+    ) {
+      return {
+        candidates: [],
+        authRequired: true,
+        configured: true,
+      };
+    }
     const [response, watchtower] = await Promise.all([
       ctx.vault.read({
         entity: "locker.item",

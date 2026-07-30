@@ -199,7 +199,12 @@ describe("backup", () => {
     bigBlobBytes: Buffer;
     lockerItemId: string;
     lockerPlaintext: string;
+    lockerPassphrase: string;
     outboxItemId: string;
+    peoplePartyId: string;
+    peopleRevisionId: string;
+    receiptExpenseId: string;
+    receiptId: string;
   }
 
   interface Harness {
@@ -349,8 +354,71 @@ describe("backup", () => {
       password: lockerPlaintext,
     });
     const lockerItemId = lockerOut["item_id"] as string;
+    const lockerPassphrase = "a second horse guards this vault";
+    const lockerAuth = h.plane.gateway.authenticateLocker({
+      operation: "configure",
+      secret: lockerPassphrase,
+    });
+    if (!lockerAuth.ok)
+      throw new Error(
+        `Locker auth setup failed: ${JSON.stringify(lockerAuth)}`
+      );
 
     const { itemId: outboxItemId } = seedApprovedOutboxItem(h.plane);
+
+    // #630 P5 preservation canary: the profile lifecycle columns and the
+    // exact pre-trash revision must both survive snapshot/adoption.
+    const peoplePartyId = invoke(h.plane, "people.add_person", {
+      display_name: "Maya Chen",
+      role: "Design lead",
+      cadence_days: 14,
+    })["party_id"] as string;
+    const peopleRevisionId = invoke(h.plane, "people.trash_person", {
+      party_id: peoplePartyId,
+    })["revision_id"] as string;
+
+    // #630 P1/P5 preservation canary: a canonical receipt is more than its
+    // blob. The expense, receipt link, reviewed OCR derivative, structured
+    // lines, allocations, and attachment must cross the same recovery plane.
+    const ownerPartyId = (
+      h.plane.db.vault
+        .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+        .get() as { owner_party_id: string }
+    ).owner_party_id;
+    const receiptGroupId = invoke(h.plane, "tally.create_group", {
+      name: "Backup receipt",
+      icon: "🧾",
+      member_ids: [],
+    })["group_id"] as string;
+    const stagedReceipt = h.plane.gateway.stageBlob(h.plane.ownerCredential, {
+      bytes: Buffer.from("receipt-backup-canary"),
+      filename: "receipt.jpg",
+      mediaType: "image/jpeg",
+    });
+    const receiptOutput = invoke(h.plane, "tally.add_receipt_expense", {
+      group_id: receiptGroupId,
+      description: "Backup dinner",
+      amount_minor: 1_200,
+      paid_by: ownerPartyId,
+      category: "food",
+      splits: [{ party_id: ownerPartyId, share_minor: 1_200 }],
+      staged_sha: stagedReceipt.sha256,
+      ocr_text: "Dinner 10.00\nTax 2.00",
+      line_items: [
+        {
+          kind: "item",
+          description: "Dinner",
+          amount_minor: 1_000,
+          allocations: [{ party_id: ownerPartyId, share_minor: 1_000 }],
+        },
+        {
+          kind: "tax",
+          description: "Tax",
+          amount_minor: 200,
+          allocations: [{ party_id: ownerPartyId, share_minor: 200 }],
+        },
+      ],
+    });
 
     h.seeded = {
       taskTitles,
@@ -360,7 +428,12 @@ describe("backup", () => {
       bigBlobBytes,
       lockerItemId,
       lockerPlaintext,
+      lockerPassphrase,
       outboxItemId,
+      peoplePartyId,
+      peopleRevisionId,
+      receiptExpenseId: receiptOutput["expense_id"] as string,
+      receiptId: receiptOutput["receipt_id"] as string,
     };
 
     // 2. First real backup — REAL assembleSourceEntries → REAL LocalBackupProvider.
@@ -553,6 +626,73 @@ describe("backup", () => {
       const titles = rows.map((r) => r.title);
       for (const t of h.seeded.taskTitles) expect(titles).toContain(t);
 
+      const restoredPerson = plane.db.vault
+        .prepare(
+          `SELECT pr.role, pr.deleted_at, pr.purge_at, r.operation,
+                  r.entity_type, r.entity_id, r.snapshot_json
+             FROM people_profile pr
+             JOIN core_entity_revision r
+               ON r.revision_id = ?
+            WHERE pr.party_id = ?`
+        )
+        .get(h.seeded.peopleRevisionId, h.seeded.peoplePartyId) as {
+        role: string;
+        deleted_at: string | null;
+        purge_at: string | null;
+        operation: string;
+        entity_type: string;
+        entity_id: string;
+        snapshot_json: string;
+      };
+      expect(restoredPerson).toMatchObject({
+        role: "Design lead",
+        operation: "trash",
+        entity_type: "people.person",
+        entity_id: h.seeded.peoplePartyId,
+      });
+      expect(restoredPerson.deleted_at).not.toBeNull();
+      expect(restoredPerson.purge_at).not.toBeNull();
+      expect(JSON.parse(restoredPerson.snapshot_json)).toMatchObject({
+        role: "Design lead",
+        deleted_at: null,
+        purge_at: null,
+      });
+
+      const restoredReceipt = plane.db.vault
+        .prepare(
+          `SELECT r.expense_id, d.text_content,
+                  count(DISTINCT l.line_item_id) AS line_count,
+                  count(a.party_id) AS allocation_count
+             FROM tally_expense_receipt r
+             JOIN core_content_derivative d
+               ON d.content_id = r.content_id AND d.variant = 'text'
+             JOIN tally_expense_line_item l ON l.receipt_id = r.receipt_id
+             JOIN tally_expense_line_allocation a
+               ON a.line_item_id = l.line_item_id
+            WHERE r.receipt_id = ?
+            GROUP BY r.expense_id, d.text_content`
+        )
+        .get(h.seeded.receiptId) as {
+        expense_id: string;
+        text_content: string;
+        line_count: number;
+        allocation_count: number;
+      };
+      expect(restoredReceipt).toMatchObject({
+        expense_id: h.seeded.receiptExpenseId,
+        text_content: "Dinner 10.00\nTax 2.00",
+        line_count: 2,
+        allocation_count: 2,
+      });
+      expect(
+        plane.db.vault
+          .prepare(
+            `SELECT role, is_primary FROM core_attachment
+              WHERE target_type = 'tally.expense' AND target_id = ?`
+          )
+          .get(h.seeded.receiptExpenseId)
+      ).toMatchObject({ role: "receipt", is_primary: 1 });
+
       // Byte-identical blob content via the real blob read path.
       const smallRead = await plane.db.blobs.open(h.seeded.smallBlobSha);
       expect(smallRead).not.toBeNull();
@@ -571,6 +711,27 @@ describe("backup", () => {
         lockerRow.password
       );
       expect(decrypted).toBe(h.seeded.lockerPlaintext);
+
+      // The #630 user-presence boundary is durable, while its capabilities
+      // are not: the verifier restores with the vault DEK, but the source
+      // gateway's live session was memory-only and must not survive.
+      expect(
+        plane.gateway.authenticateLocker({ operation: "status" })
+      ).toMatchObject({
+        ok: true,
+        configured: true,
+        authenticated: false,
+      });
+      expect(
+        plane.gateway.authenticateLocker({
+          operation: "unlock",
+          secret: h.seeded.lockerPassphrase,
+        })
+      ).toMatchObject({
+        ok: true,
+        configured: true,
+        authenticated: true,
+      });
     } finally {
       adoptedRegistry.stop();
     }

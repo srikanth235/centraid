@@ -12,8 +12,10 @@ import type { ReactNode } from "react";
 import {
   CAT_LIST,
   cat,
+  convertMinor,
   curSymbolFor,
   money,
+  rateToScaled,
   resolveSplits,
   splitSumInfo,
   toCents,
@@ -130,15 +132,29 @@ export function ExpenseModal({
   onSave: () => void;
   onDelete: (expenseId: string) => void;
 }) {
-  const amountCents = toCents(exp.amount);
+  const originalCents = toCents(exp.amount);
+  const rateScaled =
+    exp.originalCurrency === exp.settlementCurrency
+      ? 1_000_000
+      : rateToScaled(exp.rate);
+  const amountCents = convertMinor(originalCents, rateScaled);
   const parts = members.filter((m) => exp.include.has(m.party_id));
   const eqShare =
     parts.length && amountCents > 0 ? amountCents / parts.length : 0;
-  const sumInfo = splitSumInfo(exp, members, currency);
+  const splitModel = { ...exp, amount: String(amountCents / 100) };
+  const sumInfo = splitSumInfo(
+    splitModel,
+    members,
+    exp.settlementCurrency || currency
+  );
   const valid = Boolean(
     exp.desc.trim() &&
     amountCents > 0 &&
-    resolveSplits(exp, amountCents, members)
+    resolveSplits(exp, amountCents, members) &&
+    /^[A-Z]{3}$/u.test(exp.originalCurrency) &&
+    /^[A-Z]{3}$/u.test(exp.settlementCurrency) &&
+    (exp.originalCurrency === exp.settlementCurrency ||
+      (rateScaled > 0 && exp.rateSource.trim() && exp.rateDate))
   );
 
   return (
@@ -154,7 +170,9 @@ export function ExpenseModal({
         />
         <div className={shared.field}>
           <div className={shared.amtwrap}>
-            <span className={shared.cur}>{curSymbolFor(currency)}</span>
+            <span className={shared.cur}>
+              {curSymbolFor(exp.originalCurrency || currency)}
+            </span>
             <input
               className={shared.amt}
               value={exp.amount}
@@ -164,6 +182,82 @@ export function ExpenseModal({
             />
           </div>
         </div>
+        <div className={shared.row2}>
+          <label className={shared.field} style={{ flex: 1 }}>
+            <span className={shared.flabel}>Original currency</span>
+            <input
+              className={shared.in}
+              value={exp.originalCurrency}
+              maxLength={3}
+              pattern="[A-Za-z]{3}"
+              onChange={(event) =>
+                onPatch({
+                  originalCurrency: event.currentTarget.value.toUpperCase(),
+                })
+              }
+            />
+          </label>
+          <label className={shared.field} style={{ flex: 1 }}>
+            <span className={shared.flabel}>Settlement currency</span>
+            <input
+              className={shared.in}
+              value={exp.settlementCurrency}
+              maxLength={3}
+              pattern="[A-Za-z]{3}"
+              onChange={(event) =>
+                onPatch({
+                  settlementCurrency: event.currentTarget.value.toUpperCase(),
+                })
+              }
+            />
+          </label>
+        </div>
+        {exp.originalCurrency === exp.settlementCurrency ? null : (
+          <>
+            <div className={shared.row2}>
+              <label className={shared.field} style={{ flex: 1 }}>
+                <span className={shared.flabel}>Rate</span>
+                <input
+                  className={shared.in}
+                  value={exp.rate}
+                  inputMode="decimal"
+                  placeholder="1 original = rate settlement"
+                  onChange={(event) => onPatch({ rate: event.target.value })}
+                />
+              </label>
+              <label className={shared.field} style={{ flex: 1 }}>
+                <span className={shared.flabel}>Rate source</span>
+                <input
+                  className={shared.in}
+                  value={exp.rateSource}
+                  placeholder="ECB, bank, manual…"
+                  onChange={(event) =>
+                    onPatch({ rateSource: event.target.value })
+                  }
+                />
+              </label>
+              <label className={shared.field} style={{ flex: 1 }}>
+                <span className={shared.flabel}>Effective date</span>
+                <input
+                  className={shared.in}
+                  type="date"
+                  value={exp.rateDate}
+                  onChange={(event) =>
+                    onPatch({ rateDate: event.target.value })
+                  }
+                />
+              </label>
+            </div>
+            <output className={shared.flabel}>
+              {originalCents > 0 && amountCents > 0
+                ? `${money(originalCents, exp.originalCurrency)} → ${money(
+                    amountCents,
+                    exp.settlementCurrency
+                  )} (fixed-point, half-up)`
+                : "Enter an amount and exchange rate."}
+            </output>
+          </>
+        )}
         <div className={shared.field}>
           <div className={shared.flabel}>Category</div>
           <div className={shared.catrow}>
@@ -243,7 +337,7 @@ export function ExpenseModal({
                 exp={exp}
                 eqShare={eqShare}
                 me={me}
-                currency={currency}
+                currency={exp.settlementCurrency || currency}
                 onPatch={onPatch}
               />
             ))}
@@ -254,6 +348,57 @@ export function ExpenseModal({
             </div>
           </div>
         </div>
+        {exp.mode === "new" ? (
+          <div className={shared.field}>
+            <label className={styles.splitname}>
+              <input
+                type="checkbox"
+                checked={exp.recurring}
+                onChange={(event) =>
+                  onPatch({ recurring: event.currentTarget.checked })
+                }
+              />{" "}
+              Recurring expense
+            </label>
+            {exp.recurring ? (
+              <div className={shared.row2}>
+                <label className={shared.field} style={{ flex: 1 }}>
+                  <span className={shared.flabel}>Repeat</span>
+                  <select
+                    className={shared.select}
+                    value={exp.rrule}
+                    onChange={(event) =>
+                      onPatch({ rrule: event.currentTarget.value })
+                    }
+                  >
+                    <option value="FREQ=WEEKLY">Every week</option>
+                    <option value="FREQ=MONTHLY">Every month</option>
+                    <option value="FREQ=YEARLY">Every year</option>
+                  </select>
+                </label>
+                <label className={shared.field} style={{ flex: 1 }}>
+                  <span className={shared.flabel}>Time zone</span>
+                  <input
+                    className={shared.in}
+                    value={exp.timeZone}
+                    onChange={(event) =>
+                      onPatch({ timeZone: event.currentTarget.value })
+                    }
+                  />
+                </label>
+                <output className={shared.flabel}>
+                  Preview:{" "}
+                  {exp.rrule === "FREQ=WEEKLY"
+                    ? "every week"
+                    : exp.rrule === "FREQ=YEARLY"
+                      ? "every year"
+                      : "every month"}{" "}
+                  from {exp.spent_on}; creates instances only when materialized.
+                </output>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="kit-modal-foot">
           {exp.mode === "edit" ? (
             <ArmedButton

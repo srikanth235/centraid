@@ -1,3 +1,4 @@
+import { displayText, safeBackgroundImage } from "../../_shared/untrusted.ts";
 // The Albums overview: a responsive card grid (square cover pulled from each
 // album's newest photo, name, count) plus a dashed "New album" tile. Pure
 // view — `albums` already carries `count`/`coverUri` (computed once by
@@ -19,27 +20,27 @@ export function AlbumGridView({
 }) {
   return (
     <div className={styles.albumGrid}>
-      {albums.map((album) => (
-        <button
-          type="button"
-          key={album.album_id}
-          className={styles.albumCard}
-          onClick={() => onOpen(album.album_id)}
-        >
-          <span
-            className={styles.albumCardCover}
-            style={
-              album.coverUri
-                ? { backgroundImage: `url(${album.coverUri})` }
-                : undefined
-            }
-          />
-          <span className={styles.albumCardName}>{album.title ?? "Album"}</span>
-          <span className={styles.albumCardCount}>
-            {album.count} photo{album.count === 1 ? "" : "s"}
-          </span>
-        </button>
-      ))}
+      {albums.map((album) => {
+        const cover = safeBackgroundImage(album.coverUri);
+        const title = displayText(album.title ?? "Album");
+        return (
+          <button
+            type="button"
+            key={album.album_id}
+            className={styles.albumCard}
+            onClick={() => onOpen(album.album_id)}
+          >
+            <span
+              className={styles.albumCardCover}
+              style={cover ? { backgroundImage: cover } : undefined}
+            />
+            <span className={styles.albumCardName}>{title}</span>
+            <span className={styles.albumCardCount}>
+              {album.count} photo{album.count === 1 ? "" : "s"}
+            </span>
+          </button>
+        );
+      })}
       <button
         type="button"
         className={`${styles.albumCard} ${styles.albumCardNew}`}

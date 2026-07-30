@@ -23,13 +23,17 @@ import {
   defaultRunId,
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
-import { DISMISS_KEYBOARD_ONBOARDING } from "./first-run.mjs";
+import {
+  DISMISS_KEYBOARD_ONBOARDING,
+  retryableTapCommands,
+} from "./first-run.mjs";
 import {
   METRO_ORIGIN,
   METRO_PORT,
-  metroReachable,
   prewarmMetroBundle,
+  waitForMetroReachable,
 } from "./metro.mjs";
+import { spawnLive, spawnQuiet } from "./spawn.mjs";
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
@@ -64,6 +68,12 @@ const appIdForPlatform = (platform) =>
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
+export const HOME_READY_MARKER = "Your apps, ready";
+// An individual chunk owns one coherent user interaction. Fresh pairing is the
+// slowest legitimate chunk (~4 minutes on the reviewed CI runner); 12 minutes
+// leaves ample network/render headroom while still terminating a wedged
+// accessibility driver before the workflow's outer timeout destroys evidence.
+const MAESTRO_CHUNK_TIMEOUT_MS = 12 * 60_000;
 
 function spawnText(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -78,28 +88,6 @@ function spawnText(cmd, args, opts = {}) {
         reject(
           new Error(`${cmd} ${args.join(" ")} exited ${code}: ${err || out}`)
         );
-    });
-    p.on("error", reject);
-  });
-}
-
-function spawnLive(cmd, args, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { ...opts, stdio: "inherit" });
-    p.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${cmd} ${args.join(" ")} exited ${code}`));
-    });
-    p.on("error", reject);
-  });
-}
-
-function spawnQuiet(cmd, args, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { ...opts, stdio: "ignore" });
-    p.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${cmd} sensitive flow exited ${code}`));
     });
     p.on("error", reject);
   });
@@ -225,14 +213,15 @@ export async function setup({ runId } = {}) {
     );
   }
   if (device.platform === "android") {
-    // Must happen before metroReachable(): the dev client reaches Metro via
+    // Must happen before waitForMetroReachable(): the dev client reaches Metro via
     // the reverse forward, but the harness's own fetch goes directly.
     await ensureMetroReverseForAndroid(device.udid);
   }
-  if (!(await metroReachable())) {
+  if (!(await waitForMetroReachable())) {
     throw new Error(
-      `Metro bundler not reachable at ${METRO_ORIGIN}. The dev build needs it to ` +
-        "serve the JS bundle — start it with `cd apps/mobile && bun expo start --dev-client`."
+      `Metro bundler not reachable at ${METRO_ORIGIN} after the bounded readiness wait. ` +
+        "The dev build needs it to serve the JS bundle — start it with " +
+        "`cd apps/mobile && bun expo start --dev-client`."
     );
   }
   await prewarmMetroBundle(device.platform, appId);
@@ -294,6 +283,7 @@ async function runMaestroChunk(
       {
         cwd: state.screenshotsDir,
         env: { ...process.env, ...maestroEnv },
+        timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
       }
     );
   } finally {
@@ -329,7 +319,7 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway()  clear state, mint/redeem a ticket, and complete onboarding
+ *   ctx.configureGateway()  clear state, mint/redeem a ticket, and complete either valid identity branch
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
@@ -460,9 +450,11 @@ export async function runFlow(slug, fn) {
     const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
     // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket, then create its member profile. The
-    // gateway URL is used only by the host-side harness to mint that ticket;
-    // the phone reaches the gateway through the ticket's iroh endpoint.
+    // a real one-time pairing ticket. #634 made the profile step conditional:
+    // a named roster member goes straight to Done, while an unnamed member is
+    // asked for a profile. The gateway URL is used only by the host-side
+    // harness to mint that ticket; the phone reaches the gateway through the
+    // ticket's iroh endpoint.
     await ctx.run(
       `appId: ${state.appId}
 ---
@@ -496,31 +488,51 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 # Redemption dials the gateway over iroh; on a cold simulator that handshake is
 # the slowest step in the journey, so budget for the network, not the render.
 - extendedWaitUntil:
-    visible: "Who's using this phone?"
+    visible: "Who's using this phone[?]|You're all set, Mobile[.]"
     timeout: 90000
-- tapOn: "Your name"
-# e2e-lint-allow: unasserted-input — React Native TextInput values are not
-# reliably Maestro-matchable; the personalized done heading below proves the
-# submitted profile name end to end.
-- inputText: "Nightly"
-- hideKeyboard
-- tapOn: "Continue"
-- extendedWaitUntil:
-    visible: "You're all set, Nightly."
-    timeout: 60000
-- tapOn: "Enter Centraid"
-# The springboard Home has no tagline — "YOUR APPS" is the rail label above the
-# launcher grid (apps/mobile/src/screens/Home.tsx) and is the only Home-unique
-# string that survives every gateway state (the grid renders even with no apps).
-- extendedWaitUntil:
-    visible: "YOUR APPS"
-    timeout: 30000
 `,
       "configure-gateway",
       {
         maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
         sensitive: true,
       }
+    );
+
+    // A second, non-sensitive Maestro chunk keeps the pairing capability out
+    // of retained diagnostics while proving both legitimate identity paths.
+    // Tickets minted above deliberately name their member "Mobile E2E …", so
+    // the normal branch skips the form and greets "Mobile"; the conditional
+    // form path remains covered for gateways that return no roster name.
+    await ctx.run(
+      `appId: ${state.appId}
+---
+- runFlow:
+    when:
+      visible: "Who's using this phone[?]"
+    commands:
+      - tapOn: "Your name"
+# e2e-lint-allow: unasserted-input — React Native TextInput values are not
+# reliably Maestro-matchable; the personalized done heading below proves the
+# submitted profile name end to end.
+      - inputText: "Nightly"
+      - hideKeyboard
+      - tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "You're all set, (Nightly|Mobile)[.]"
+    timeout: 60000
+# iOS can acknowledge an accessibility tap before the RN Pressable is ready.
+# The button's press animation changes the hierarchy even if navigation was
+# ignored, so retry only while the source control remains visible. The Home
+# marker below remains mandatory and prevents a vacuous pass.
+${retryableTapCommands("Enter Centraid")}
+# The rail remains visible while Home loads, and the async Daily Brief can move
+# every tile when it arrives. Wait for its explicit settled accessibility label
+# so the next tap never uses coordinates captured before that layout shift.
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: 30000
+`,
+      "complete-onboarding"
     );
     ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
   };

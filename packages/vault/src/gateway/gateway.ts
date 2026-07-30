@@ -111,8 +111,12 @@ import {
   scalarPrimaryKeyColumn,
 } from "./filters.js";
 import { authenticate } from "./identity.js";
+import { LockerAuthentication } from "./locker-auth.js";
+import type { LockerAuthRequest, LockerAuthResult } from "./locker-auth.js";
 import { exportVault } from "./portability.js";
 import type { VaultExport } from "./portability.js";
+import { exportPortableVault } from "./portable-export.js";
+import type { PortableExport } from "./portable-export.js";
 import { searchEntity } from "./search.js";
 import { runReadOnlySql, VAULT_SQL_DEFAULT_ROWS } from "./sql.js";
 import type { VaultSqlRequest, VaultSqlResult } from "./sql.js";
@@ -203,12 +207,45 @@ export type InvocationBatchResult<T> =
 export class Gateway {
   /** Registered commands: handler + sealed-class declarations (issue #293). */
   private readonly commands = new Map<string, RegisteredCommand>();
+  private readonly lockerAuthentication: LockerAuthentication;
   private activeBatchInvocationIds: string[] | undefined;
 
   constructor(
     private readonly db: VaultDb,
     private readonly deps: GatewayDeps = {}
-  ) {}
+  ) {
+    this.lockerAuthentication = new LockerAuthentication(db);
+  }
+
+  /** Host-only Locker authentication plane; app bridges restrict the caller. */
+  authenticateLocker(request: LockerAuthRequest): LockerAuthResult {
+    return this.lockerAuthentication.handle(request);
+  }
+
+  /** Consume the one-time permit before a Locker UI reveal. */
+  authorizeLockerReveal(
+    authentication: RevealRequest["authentication"],
+    itemId: string
+  ): void {
+    this.lockerAuthentication.authorizeReveal(authentication, itemId, "ui");
+  }
+
+  /**
+   * Data-keyed Locker reveal gate (issue #630 review). Lives on the gateway
+   * so every reveal arm — app bridge, agent bridge, tests — hits the same
+   * lock, not only the locker HTTP path that previously special-cased fill.
+   */
+  private enforceLockerReveal(
+    request: RevealRequest,
+    entityId: string,
+    isFill: boolean
+  ): void {
+    this.lockerAuthentication.authorizeReveal(
+      request.authentication,
+      entityId,
+      isFill ? "fill" : "ui"
+    );
+  }
 
   /**
    * Run one short arrival window inside a shared vault + journal commit pair.
@@ -616,6 +653,20 @@ export class Gateway {
       entityId = hit.item_id;
     }
     if (!entityId) return deny("reveal needs an entityId or alias");
+    // Locker lock is data-keyed: every reveal of locker.item consults the
+    // in-memory auth plane when credentials are configured. Fill needs an
+    // unlocked session; UI/agent reveals consume a one-time item permit.
+    if (request.entity === "locker.item") {
+      try {
+        this.enforceLockerReveal(request, entityId, context !== undefined);
+      } catch (error) {
+        return deny(
+          error instanceof Error
+            ? error.message
+            : "Locker authentication required"
+        );
+      }
+    }
     const consent = evaluateConsent(
       this.db.vault,
       identity,
@@ -1888,6 +1939,14 @@ export class Gateway {
     if (owner.kind !== "owner-device")
       throw new GatewayError("consent", "only the owner exports the vault");
     return exportVault(this.db, owner);
+  }
+
+  /** Full portable bundle: canonical tables, readable adapters, blobs + hashes. */
+  async exportPortableVault(cred: Credential): Promise<PortableExport> {
+    const owner = this.identify(cred);
+    if (owner.kind !== "owner-device")
+      throw new GatewayError("consent", "only the owner exports the vault");
+    return exportPortableVault(this.db, owner);
   }
 
   listParked(): ParkedSummary[] {

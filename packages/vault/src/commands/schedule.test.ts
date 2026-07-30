@@ -106,6 +106,19 @@ describe("schedule", () => {
     expect(outcome.predicate).toContain("not recognized");
   });
 
+  test("propose_event accepts a legacy RRULE: prefix without false-param binding", () => {
+    // Regression: a LIKE 'RRULE:FREQ=%' literal made the condition binder
+    // extract :FREQ as a named param and fail every propose_event closed.
+    const outcome = invoke("schedule.propose_event", {
+      summary: "Legacy prefix standup",
+      dtstart: "2026-07-06T09:00:00Z",
+      dtend: "2026-07-06T09:15:00Z",
+      calendar_id: calendarId,
+      rrule: "RRULE:FREQ=WEEKLY;BYDAY=TU",
+    });
+    expect(outcome.status).toBe("executed");
+  });
+
   test("an iCalendar chair, when present, must be the event organizer", () => {
     const eventId = proposeEvent();
     const otherPartyId = uuidv7();

@@ -28,6 +28,7 @@
   "dependencies": {
     "@centraid/backup": "workspace:*",
     "@centraid/blob-format": "workspace:*",
+    "@centraid/time-engine": "workspace:*",
     "hash-wasm": "^4.12.0",
     "uuid": "^14.0.1"
   },
