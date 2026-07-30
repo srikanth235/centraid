@@ -510,8 +510,8 @@ W6.13 W6.14 W6.15 W6.16; E1 E2 E3 E4 E5.
   an unrelated Expo dependency migration. Native-state, dual-platform Metro
   export, Xcode-floor, and Android Kotlin compilation are the blocking gates.
 - Exact-HEAD mobile evidence is a release gate rather than a documented
-  boundary: the branch is published and the `mobile-e2e-ios` workflow is run
-  against the final commit before the receipt can pass audit.
+  boundary: the published branch passed `mobile-e2e-ios` at implementation
+  commit `8023936d744a218855b8a7b3bf2c7a64be1ec0cf`; the proof is linked below.
 - The cancelled 60-minute iOS diagnostic did not justify simply increasing the
   job timeout. Its retained artifacts showed a stale-coordinate product-layout
   race and a hung accessibility subprocess, while healthy work had substantial
@@ -547,7 +547,6 @@ bun run check:pr:full
 - `bun run typecheck` — 34/34 workspace tasks.
 - `bun run test:matrix` — 15 surfaces × 11 dimensions, 59 canonical flows;
   blueprint and native capability rows have no `gap`/`skip`.
-- `bun run lint:e2e-flows` — 54 non-vacuous Maestro steps across four flows.
 - `bun run test:accessibility` — 4/4 contracts.
 - `bun run test:scale` — 13/13 fixtures, including the issue #630 large vault.
 - `bun run --cwd apps/mobile ci:native-state` — Pod lock, project paths, and
@@ -609,6 +608,12 @@ bun run check:pr:full
   `kAXErrorInvalidUIElement` and remained alive until GitHub's 60-minute outer
   timeout cancelled the job. Those two diagnostics led to the settled Home
   marker, real stop/start loop, and bounded Maestro subprocess above.
+- [Exact-HEAD iOS proof run 30503161115](https://github.com/srikanth235/centraid/actions/runs/30503161115)
+  passed at `8023936d744a218855b8a7b3bf2c7a64be1ec0cf`.
+  `mobile-e2e-ios` completed in 47m01s: setup, native fingerprint validation,
+  cached app install, every committed mobile journey (including all native
+  cover gates and 20 real stop-and-relaunch cycles), sensitive-diagnostic
+  cleanup, and both evidence uploads were green.
 - Fresh-context audit — pending final re-audit below.
 
 ## Accounting
@@ -807,6 +812,7 @@ projection is a separate explicit unshare operation. -->
 | codex-019fad18-4c1-1785363563-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 141366 | 0 | 5158656 | 10885 | 152251 | 1.8064 | 9022587 | 0 | 414942464 | 1081166 | fix(mobile): retry animated onboarding exit (#630) |
 | codex-019fad18-4c1-1785366656-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 267202 | 0 | 15006976 | 13845 | 281047 | 4.6274 | 9289789 | 0 | 429949440 | 1095011 | fix(mobile): keep native covers Hermes compatible (#630) |
 | codex-019fad18-4c1-1785371213-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 419131 | 0 | 29714432 | 24900 | 444031 | 8.8499 | 9708920 | 0 | 459663872 | 1119911 | fix(mobile): stabilize exact-head journey evidence (#630) |
+| codex-019fad18-4c1-1785374654-1 | codex | 019fad18-4c1d-7e90-b40a-442d1a0c0c40 | #630 | gpt-5.6-sol | 268775 | 0 | 14503168 | 10430 | 279205 | 4.4542 | 9977695 | 0 | 474167040 | 1130341 | docs(receipt): record exact-head mobile proof (#630) |
 
 ## Steering
 
