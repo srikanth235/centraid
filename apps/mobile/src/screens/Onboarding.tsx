@@ -1,6 +1,7 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
+import type { LayoutChangeEvent } from "react-native";
 import {
   Platform,
   Pressable,
@@ -9,10 +10,13 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
-import { family } from "../kit/theme";
 import { readSelfMemberName } from "../lib/gateway";
 import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {
@@ -23,7 +27,21 @@ import {
   setProfileColor,
   setProfileName,
 } from "../lib/profile";
-import { BrandMark, DoneCheck, ForwardArrow, OrbitArt } from "./onboarding-art";
+import {
+  BrandMark,
+  DoneCheck,
+  ForwardArrow,
+  ScanTargetMark,
+} from "./onboarding-art";
+import { HOME_ART, HomeArt } from "./onboarding-home-art";
+import {
+  C,
+  HERO_GAP,
+  PAD_BOTTOM,
+  PAD_H,
+  PAD_TOP,
+  styles,
+} from "./onboarding-styles";
 
 // First-run onboarding — a self-contained, always-dark flow rendered ahead of
 // the tab shell (App.tsx gates on `profile.onboarded`).
@@ -36,25 +54,22 @@ import { BrandMark, DoneCheck, ForwardArrow, OrbitArt } from "./onboarding-art";
 
 type Step = "connect" | "profile" | "done";
 
-// Always-dark onboarding palette (independent of the OS theme). Settings'
-// ColorSwatchRow resolves against the OS scheme, so onboarding renders its own
-// swatch row here over the shared PROFILE_COLORS set.
-const C = {
-  bg: "#0b0e13",
-  panel: "rgba(255,255,255,.055)",
-  panelLine: "rgba(255,255,255,.12)",
-  fieldBg: "rgba(255,255,255,.06)",
-  fieldLine: "rgba(255,255,255,.14)",
-  ink: "#ffffff",
-  ink2: "rgba(255,255,255,.8)",
-  ink3: "rgba(255,255,255,.55)",
-  ink4: "rgba(255,255,255,.4)",
-  brand: BRAND_TEAL,
-};
-
 function defaultDeviceName(): string {
   return Platform.OS === "ios" ? "iPhone" : "Android phone";
 }
+
+// Every step must fit the device it runs on: the primary action is the whole
+// point of the screen, so it may never sit below the fold. A step's own content
+// is whatever its fields and buttons need, which leaves the decorative hero as
+// the one element that can give — so it does. Measure the two blocks around the
+// art and hand it whatever is left over, up to its natural size; on a short
+// phone it shrinks, and past HERO_MIN it stops earning its space and goes away
+// entirely. That re-runs whenever a step grows — revealing the pairing-code box
+// is the case that matters — so the art yields to real content on the spot. The
+// ScrollView stays as the last resort for what no shrinking fits (landscape,
+// huge type).
+const HERO_NATURAL = HOME_ART.height;
+const HERO_MIN = 96;
 
 export default function Onboarding({
   onDone,
@@ -64,6 +79,29 @@ export default function Onboarding({
   const [step, setStep] = useState<Step>("connect");
   const [deviceName, setDeviceName] = useState(defaultDeviceName());
   const [displayName, setDisplayName] = useState("");
+
+  // Hero sizing. Both measured blocks are siblings of the art, so their heights
+  // never depend on it — the fit converges in one pass instead of oscillating.
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [chromeHeight, setChromeHeight] = useState(0);
+  const [stepHeight, setStepHeight] = useState(0);
+  const measure = (set: (height: number) => void) => {
+    return (event: LayoutChangeEvent): void =>
+      set(event.nativeEvent.layout.height);
+  };
+
+  const spare =
+    windowHeight -
+    insets.top -
+    insets.bottom -
+    PAD_TOP -
+    PAD_BOTTOM -
+    chromeHeight -
+    stepHeight -
+    HERO_GAP * 2;
+  const heroHeight = Math.min(HERO_NATURAL, spare);
+  const showHero = heroHeight >= HERO_MIN;
 
   const saveProfile = (name: string, color: string): void => {
     setProfileName(name);
@@ -101,28 +139,32 @@ export default function Onboarding({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topRow}>
+        <View style={styles.topRow} onLayout={measure(setChromeHeight)}>
           <View style={styles.wordmark}>
             <BrandMark size={22} />
             <Text style={styles.wordmarkText}>CENTRAID</Text>
           </View>
         </View>
 
-        <View style={styles.hero}>
-          <OrbitArt />
-        </View>
+        {showHero ? (
+          <View style={styles.hero}>
+            <HomeArt width={windowWidth - PAD_H * 2} height={heroHeight} />
+          </View>
+        ) : null}
 
-        {step === "connect" ? (
-          <ConnectionStep
-            deviceName={deviceName}
-            onDeviceName={setDeviceName}
-            onPaired={afterPaired}
-          />
-        ) : step === "profile" ? (
-          <ProfileStep onSave={saveProfile} />
-        ) : (
-          <Done name={displayName} onEnter={enter} />
-        )}
+        <View onLayout={measure(setStepHeight)}>
+          {step === "connect" ? (
+            <ConnectionStep
+              deviceName={deviceName}
+              onDeviceName={setDeviceName}
+              onPaired={afterPaired}
+            />
+          ) : step === "profile" ? (
+            <ProfileStep onSave={saveProfile} />
+          ) : (
+            <Done name={displayName} onEnter={enter} />
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -140,22 +182,37 @@ function ConnectionStep({
 }): React.JSX.Element {
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
   const [code, setCode] = useState("");
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
 
-  useEffect(() => {
-    if (
-      scanning &&
-      permission &&
-      !permission.granted &&
-      permission.canAskAgain
-    ) {
-      void requestPermission();
-    }
-  }, [scanning, permission, requestPermission]);
+  /**
+   * Open the scanner, asking for the camera if we may. Resolving permission
+   * here rather than in an effect keeps the whole decision in the one place
+   * the person actually initiated it, and means a refusal has somewhere to go:
+   * when access is off for good, scanning can never succeed, so hand over the
+   * paste fallback with the reason instead of leaving a primary button that
+   * silently does nothing.
+   */
+  const startScan = (): void => {
+    if (pairing) return;
+    if (permission?.granted) return setScanning(true);
+    const run = async (): Promise<void> => {
+      const next =
+        permission?.canAskAgain === false
+          ? permission
+          : await requestPermission();
+      if (next.granted) return setScanning(true);
+      setShowPaste(true);
+      setError(
+        "Camera access is off for Centraid. Turn it on in Settings, or paste a code below."
+      );
+    };
+    void run();
+  };
 
   const submit = (payload: string): void => {
     if (scannedRef.current || !payload.trim()) return;
@@ -213,9 +270,18 @@ function ConnectionStep({
         Connect your <Text style={styles.h1Accent}>gateway</Text>.
       </Text>
       <Text style={styles.lede}>
-        Scan the QR from your desktop&apos;s Connect phone screen, or paste the
-        ticket printed by{" "}
-        <Text style={styles.ledeStrong}>centraid-gateway pair</Text>.
+        {showPaste ? (
+          <>
+            Paste the one-line ticket printed by{" "}
+            <Text style={styles.ledeStrong}>centraid-gateway pair</Text>.
+          </>
+        ) : (
+          <>
+            Your desktop is showing a QR code under{" "}
+            <Text style={styles.ledeStrong}>Connect phone</Text>. Point this
+            phone at it.
+          </>
+        )}
       </Text>
       <Text style={styles.fieldLabel}>DEVICE NAME</Text>
       <TextInput
@@ -224,18 +290,22 @@ function ConnectionStep({
         style={styles.input}
         maxLength={60}
       />
-      <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING CODE</Text>
-      <TextInput
-        value={code}
-        onChangeText={setCode}
-        placeholder="Paste the one-line ticket"
-        placeholderTextColor={C.ink4}
-        multiline
-        textAlignVertical="top"
-        style={styles.phrase}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
+      {showPaste ? (
+        <>
+          <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING CODE</Text>
+          <TextInput
+            value={code}
+            onChangeText={setCode}
+            placeholder="Paste the one-line ticket"
+            placeholderTextColor={C.ink4}
+            multiline
+            textAlignVertical="top"
+            style={styles.phrase}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </>
+      ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {available ? null : (
@@ -245,19 +315,51 @@ function ConnectionStep({
         </Text>
       )}
 
+      {/* Exactly one path is primary at a time, and scanning is the default
+          one. Pasting a ticket stays a keystroke away behind the quiet link,
+          but it does not get to occupy the screen until it is asked for — a
+          permanent 120pt code box outweighs any button label and makes typing
+          look like the job. */}
       {available ? (
-        <>
-          <PrimaryButton
-            label={pairing ? "Connecting…" : "Continue with pasted code"}
-            onPress={() => (pairing ? undefined : submit(code))}
-          />
-          <Pressable
-            onPress={() => (pairing ? undefined : setScanning(true))}
-            style={styles.textBtn}
-          >
-            <Text style={styles.textBtnLabel}>Scan QR instead</Text>
-          </Pressable>
-        </>
+        showPaste ? (
+          <>
+            <PrimaryButton
+              label={pairing ? "Connecting…" : "Connect"}
+              onPress={() => (pairing ? undefined : submit(code))}
+            />
+            <Pressable
+              onPress={() => (pairing ? undefined : setShowPaste(false))}
+              style={styles.textBtn}
+            >
+              <Text style={styles.textBtnLabel}>Scan the QR code instead</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable
+              accessibilityLabel="Scan the QR code"
+              accessibilityRole="button"
+              onPress={startScan}
+              style={({ pressed }) => [
+                styles.scanBtn,
+                pressed && styles.pressed,
+              ]}
+            >
+              <ScanTargetMark />
+              <Text style={styles.scanBtnLabel}>
+                {pairing ? "Connecting…" : "Scan the QR code"}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowPaste(true)}
+              style={styles.textBtn}
+            >
+              <Text style={styles.textBtnLabel}>
+                Can&apos;t scan? Paste a code instead
+              </Text>
+            </Pressable>
+          </>
+        )
       ) : null}
     </View>
   );
@@ -395,147 +497,3 @@ function PrimaryButton({
     </Pressable>
   );
 }
-
-const AVATAR = 52;
-const SWATCH = 34;
-
-const styles = StyleSheet.create({
-  avatar: {
-    alignItems: "center",
-    borderRadius: AVATAR / 2,
-    height: AVATAR,
-    justifyContent: "center",
-    width: AVATAR,
-  },
-  avatarInitial: { color: "#fff", fontFamily: family.sansBold, fontSize: 19 },
-  center: { alignItems: "center" },
-  doneBadge: {
-    alignItems: "center",
-    backgroundColor: C.brand,
-    borderRadius: 38,
-    height: 76,
-    justifyContent: "center",
-    marginBottom: 22,
-    width: 76,
-  },
-  error: {
-    color: "#E88",
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    marginTop: 14,
-  },
-  fieldLabel: {
-    color: C.ink4,
-    fontFamily: family.monoMedium,
-    fontSize: 11,
-    letterSpacing: 1,
-    marginBottom: 9,
-  },
-  fieldGap: { marginTop: 20 },
-  h1: {
-    color: C.ink,
-    fontFamily: family.displayBold,
-    fontSize: 31,
-    letterSpacing: -0.8,
-    lineHeight: 37,
-    marginBottom: 12,
-  },
-  h1Accent: { color: C.brand },
-  hero: { alignItems: "center", justifyContent: "center", paddingVertical: 18 },
-  identity: { alignItems: "center", flexDirection: "row", gap: 13 },
-  identityInput: { flex: 1 },
-  input: {
-    backgroundColor: C.fieldBg,
-    borderColor: C.fieldLine,
-    borderRadius: 13,
-    borderWidth: StyleSheet.hairlineWidth,
-    color: C.ink,
-    fontFamily: family.sansRegular,
-    fontSize: 16,
-    height: 52,
-    paddingHorizontal: 16,
-  },
-  lede: {
-    color: C.ink3,
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    lineHeight: 23,
-    marginBottom: 24,
-  },
-  ledeStrong: { color: C.ink2 },
-  note: {
-    color: C.ink3,
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 14,
-  },
-  phrase: {
-    backgroundColor: C.fieldBg,
-    borderColor: C.fieldLine,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    color: C.ink,
-    fontFamily: family.monoRegular,
-    fontSize: 15,
-    lineHeight: 26,
-    minHeight: 120,
-    padding: 15,
-  },
-  pressed: { opacity: 0.82 },
-  primary: {
-    alignItems: "center",
-    backgroundColor: C.brand,
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 8,
-    height: 52,
-    justifyContent: "center",
-    marginTop: 28,
-  },
-  primaryLabel: { color: "#fff", fontFamily: family.sansBold, fontSize: 16 },
-  safe: { backgroundColor: C.bg, flex: 1 },
-  scanFrame: {
-    aspectRatio: 1,
-    backgroundColor: "#000",
-    borderRadius: 22,
-    marginTop: 8,
-    overflow: "hidden",
-    width: "100%",
-  },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 26,
-    paddingTop: 20,
-    paddingBottom: 34,
-  },
-  swatch: {
-    alignItems: "center",
-    borderRadius: SWATCH / 2,
-    borderWidth: 2,
-    height: SWATCH,
-    justifyContent: "center",
-    width: SWATCH,
-  },
-  swatchMark: { color: "#fff", fontFamily: family.sansBold, fontSize: 14 },
-  swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  textBtn: {
-    alignItems: "center",
-    height: 48,
-    justifyContent: "center",
-    marginTop: 10,
-  },
-  textBtnLabel: { color: C.ink3, fontFamily: family.sansMedium, fontSize: 15 },
-  topRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
-  wordmarkText: {
-    color: C.ink3,
-    fontFamily: family.monoMedium,
-    fontSize: 11,
-    letterSpacing: 2,
-  },
-});
