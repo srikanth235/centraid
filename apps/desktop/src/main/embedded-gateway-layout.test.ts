@@ -155,7 +155,9 @@ describe("embedded-gateway-layout scenarios", () => {
         vaults?: Array<{ name?: string }>;
       };
       expect(
-        (body.vaults ?? []).map((vault) => vault.name).sort()
+        (body.vaults ?? [])
+          .map((vault) => vault.name)
+          .sort((a, b) => String(a).localeCompare(String(b)))
       ).toStrictEqual(["Personal", "Shared"]);
     } finally {
       await gateway.close();

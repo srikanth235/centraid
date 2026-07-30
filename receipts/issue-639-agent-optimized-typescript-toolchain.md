@@ -94,6 +94,26 @@
   must each emit against that live negative fixture. Its root override disables
   only the two ordinary equivalents whose intentional violations would
   otherwise duplicate the type-aware fixture signal.
+- Resolved the compatibility allowlist's concrete findings in a separate
+  correctness commit: explicit deterministic comparators in
+  `packages/agent-runtime/src/matrix-contracts.test.ts`,
+  `packages/gateway/src/routes/agents-routes.test.ts`,
+  `packages/gateway/src/backup/wal.integration.test.ts`,
+  `packages/vault/src/gateway/search.test.ts`,
+  `packages/vault/src/wal-shipper-detectors.test.ts`,
+  `packages/vault/src/enrich/clusters.test.ts`,
+  `apps/desktop/src/main/embedded-gateway-layout.test.ts`,
+  `apps/mobile/src/kit/theme/generate.test.ts`, and
+  `apps/mobile/src/lib/replica/multi-vault-reader.test.ts`; native `Error`
+  rejection and abort normalization in
+  `packages/backup/src/interop-clawgnition.test.ts`,
+  `packages/cli/src/cli.integration.test.ts`,
+  `packages/cli/src/client.test.ts`,
+  `packages/client/src/gateway-client-device-work-source.test.ts`,
+  `packages/client/src/replica/multi-writer.contract.test.ts`,
+  `packages/client/src/replica/coordinator.ts`,
+  `packages/gateway/src/serve/power-context.ts`, and
+  `packages/gateway/src/backup/backup-conflict-provider.ts`.
 
 ### Formatter sweep paths
 
@@ -626,3 +646,4 @@ PASS — fresh-context audit found no interrupt or correction after the initial 
 | codex-019fb2ae-33d-1785411915-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 11061 | 0 | 474112 | 2286 | 13347 | 0.1805 | 372592 | 0 | 21936896 | 40219 | chore(lint): remove stale suppressions (#639) |
 | codex-019fb2ae-33d-1785412101-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 26182 | 0 | 864000 | 3728 | 29910 | 0.3374 | 398774 | 0 | 22800896 | 43947 | fix(blueprints): satisfy executable handler lint (#639) |
 | codex-019fb2ae-33d-1785412814-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 99172 | 0 | 6229760 | 20535 | 119707 | 2.1134 | 497946 | 0 | 29030656 | 64482 | build(lint): enforce type-aware compatibility policy (#639) -m governance: allow |
+| codex-019fb2ae-33d-1785412888-1 | codex | 019fb2ae-33d0-7211-98ee-651403742929 | #639 | gpt-5.6-sol | 3810 | 0 | 573440 | 697 | 4507 | 0.1633 | 501756 | 0 | 29604096 | 65179 | fix(lint): satisfy type-aware compatibility rules (#639) |

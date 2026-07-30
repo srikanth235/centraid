@@ -23,7 +23,7 @@ describe("cli", () => {
     if (!server) return;
     await new Promise<void>((resolve, reject) => {
       server!.close((err) => {
-        if (err) reject(err);
+        if (err) reject(new Error(err.message, { cause: err }));
         else resolve();
       });
     });

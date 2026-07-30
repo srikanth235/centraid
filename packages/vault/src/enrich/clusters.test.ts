@@ -108,6 +108,8 @@ describe("clusters", () => {
       where: [{ column: "cluster_id", op: "not-null" }],
       purpose: "dpv:ServiceProvision",
     }).rows;
-    expect(rows.map((r) => r.asset_id).sort()).toStrictEqual([a, b].sort());
+    expect(
+      rows.map((r) => r.asset_id).sort((x, y) => x.localeCompare(y))
+    ).toStrictEqual([a, b].sort());
   });
 });

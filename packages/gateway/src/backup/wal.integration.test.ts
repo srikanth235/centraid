@@ -1100,8 +1100,8 @@ describe("wal", () => {
       f.shipper
         .pendingBases()
         .map((b) => b.generation)
-        .sort()
-    ).toStrictEqual([gen1, jgen1].sort());
+        .sort((a, b) => a - b)
+    ).toStrictEqual([gen1, jgen1].sort((a, b) => a - b));
     expect(f.logs.some((l) => /no manifest anchors/u.test(l))).toBe(true);
 
     // And the retry HEALS it: the moment a manifest names the pair, and only

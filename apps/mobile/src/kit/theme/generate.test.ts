@@ -153,7 +153,9 @@ describe(renderTokensModule, () => {
     const keys = [...block.matchAll(/^\s*(?<key>[A-Za-z0-9_$]+):/gmu)].map(
       (m) => m[1]
     );
-    expect(keys).toStrictEqual([...keys].sort());
+    expect(keys).toStrictEqual(
+      [...keys].sort((a, b) => String(a).localeCompare(String(b)))
+    );
     expect(keys.length).toBeGreaterThan(0);
   });
 

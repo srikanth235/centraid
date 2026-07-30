@@ -37,8 +37,10 @@ function caps(
 describe("agents-routes", () => {
   test("reports one entry per supported runner kind", async () => {
     const s = await readAgentsStatus();
-    expect(s.agents.map((a) => a.kind).sort()).toStrictEqual(
-      [...SUPPORTED_RUNNER_KINDS].sort()
+    expect(
+      s.agents.map((a) => a.kind).sort((a, b) => a.localeCompare(b))
+    ).toStrictEqual(
+      [...SUPPORTED_RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
     );
     // Every entry is self-describing: the client renders off these, never off a
     // local table keyed on kinds it happens to know.
@@ -86,7 +88,9 @@ describe("agents-routes", () => {
       },
     });
     // Every product-supported kind is offered the override, not just a known pair.
-    expect(seen.sort()).toStrictEqual([...SUPPORTED_RUNNER_KINDS].sort());
+    expect(seen.sort((a, b) => a.localeCompare(b))).toStrictEqual(
+      [...SUPPORTED_RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
+    );
   });
 
   test("defaults every agent to an empty model surface when no resolver is supplied", async () => {
@@ -111,7 +115,7 @@ describe("agents-routes", () => {
     });
     // Asked once per registered kind, and each answer landed on its own entry.
     expect(calls.map(([k]) => k).sort()).toStrictEqual(
-      [...SUPPORTED_RUNNER_KINDS].sort()
+      [...SUPPORTED_RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
     );
     const codex = s.agents.find((a) => a.kind === "codex");
     expect(codex?.models).toStrictEqual([

@@ -152,7 +152,13 @@ describe("gateway-client-device-work-source", () => {
       reader.addEventListener("load", () =>
         resolve(new Uint8Array(reader.result as ArrayBuffer))
       );
-      reader.addEventListener("error", () => reject(reader.error));
+      reader.addEventListener("error", () =>
+        reject(
+          new Error(reader.error?.message ?? "FileReader failed", {
+            cause: reader.error,
+          })
+        )
+      );
       // eslint-disable-next-line unicorn/prefer-blob-reading-methods -- jsdom's Blob lacks arrayBuffer(); governance: allow-no-unjustified-suppressions test-environment compatibility (#414)
       reader.readAsArrayBuffer(blob);
     });

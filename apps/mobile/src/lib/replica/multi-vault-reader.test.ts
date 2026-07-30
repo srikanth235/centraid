@@ -276,7 +276,9 @@ describe(MultiVaultReplicaReader, () => {
     });
     expect(results.rows).toHaveLength(2);
     expect(
-      results.rows.map((row) => row.values.__centraidScopeId).sort()
+      results.rows
+        .map((row) => row.values.__centraidScopeId)
+        .sort((a, b) => String(a).localeCompare(String(b)))
     ).toStrictEqual(["personal", "shared"]);
     const placement = reader.enqueuePlacement({
       linkToken: "placement-1",

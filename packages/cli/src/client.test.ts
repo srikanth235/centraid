@@ -67,7 +67,7 @@ function startMockGateway(): Promise<{
         close: () =>
           new Promise<void>((_resolve, _reject) => {
             server.close((err) => {
-              if (err) _reject(err);
+              if (err) _reject(new Error(err.message, { cause: err }));
               else _resolve();
             });
           }),

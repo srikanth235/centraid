@@ -30,7 +30,7 @@ describe("matrix-contracts", () => {
 
   test("unknown kind is not silently present in the registry table", () => {
     expect(Object.keys(RUNNER_BACKENDS).sort()).toStrictEqual(
-      [...RUNNER_KINDS].sort()
+      [...RUNNER_KINDS].sort((a, b) => a.localeCompare(b))
     );
   });
 });

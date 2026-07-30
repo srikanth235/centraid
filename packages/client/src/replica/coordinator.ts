@@ -223,8 +223,11 @@ export class ReplicaCoordinator {
   liveRead(request: ReplicaReadRequest): LiveQuery<ReplicaReadResult> {
     return this.#live.track(
       new LiveQuery(async (signal) => {
-        if (signal.aborted)
-          throw (signal as { reason?: unknown }).reason ?? new Error("aborted");
+        if (signal.aborted) {
+          const reason = (signal as { reason?: unknown }).reason;
+          if (reason instanceof Error) throw reason;
+          throw new Error("aborted", { cause: reason });
+        }
         const value = await this.read(request);
         return { value, dependencies: [value.dependency] };
       })

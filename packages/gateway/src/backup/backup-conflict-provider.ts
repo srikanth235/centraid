@@ -21,15 +21,14 @@ export function conflictAfterFirstCall(real: BackupProvider): BackupProvider {
     registerSnapshot: (...a) => {
       calls += 1;
       if (calls === 1) return real.registerSnapshot(...a);
-      return Promise.reject(
-        BackupProviderError.of(
-          "conflict_generation",
-          "another machine has taken over this vault",
-          {
-            currentGeneration: 5,
-          }
-        )
+      const conflict: Error = BackupProviderError.of(
+        "conflict_generation",
+        "another machine has taken over this vault",
+        {
+          currentGeneration: 5,
+        }
       );
+      return Promise.reject(conflict);
     },
     listSnapshots: (...a) => real.listSnapshots(...a),
     getSnapshot: (...a) => real.getSnapshot(...a),
