@@ -119,12 +119,17 @@ export function buildDailyBrief(
         ? settlement.amount_minor
         : -settlement.amount_minor;
   }
+  const currency =
+    typeof vault.base_currency === "string" &&
+    /^[A-Za-z]{3}$/u.test(vault.base_currency)
+      ? vault.base_currency.toUpperCase()
+      : "USD";
   return {
     date: input.date,
     events,
     tasks,
     newPhotos: photo.n,
     balanceMinor,
-    currency: vault.base_currency,
+    currency,
   };
 }

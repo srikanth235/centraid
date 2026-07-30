@@ -92,6 +92,27 @@ function RowsGlyph(): JSX.Element {
   );
 }
 
+function formatBriefBalance(
+  minor: number,
+  currency: string | undefined
+): string {
+  const value = minor / 100;
+  const code =
+    typeof currency === "string" && /^[A-Za-z]{3}$/u.test(currency)
+      ? currency.toUpperCase()
+      : "USD";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+    }).format(value);
+  } catch {
+    // Invalid ISO codes (or empty payloads from a misrouted brief mock) must
+    // not take down the whole Home shell.
+    return `${value.toFixed(2)} ${code}`;
+  }
+}
+
 function DailyBriefCard({
   brief,
   onOpenApp,
@@ -99,10 +120,7 @@ function DailyBriefCard({
   brief: HomeDailyBriefDTO;
   onOpenApp: (id: string) => void;
 }): JSX.Element {
-  const balance = new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: brief.currency,
-  }).format(brief.balanceMinor / 100);
+  const balance = formatBriefBalance(brief.balanceMinor, brief.currency);
   const facts = [
     {
       id: "agenda",

@@ -80,7 +80,7 @@ export interface MockState {
   prefs: Record<string, unknown>;
   /** GET /centraid/_insights/summary */
   insights: Record<string, unknown>;
-  /** GET /centraid/_brief/daily */
+  /** GET /centraid/_brief/today (legacy alias: /daily) */
   dailyBrief: Record<string, unknown>;
   /** GET /centraid/_turn/runner-status */
   runnerStatus: Record<string, unknown>;
@@ -539,8 +539,11 @@ async function route(
   if (p === "/centraid/_insights/summary" && method === "GET")
     return json(res, 200, s.insights);
 
-  // ---- home daily brief ----
-  if (p === "/centraid/_brief/daily" && method === "GET")
+  // ---- home daily brief (canonical plane: /centraid/_brief/today) ----
+  if (
+    (p === "/centraid/_brief/today" || p === "/centraid/_brief/daily") &&
+    method === "GET"
+  )
     return json(res, 200, s.dailyBrief);
 
   // ---- runner / agents ----

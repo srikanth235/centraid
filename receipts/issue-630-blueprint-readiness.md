@@ -977,3 +977,15 @@ Addressed the multi-agent review findings against `92319b5`:
     pairing invitations; mobile/desktop/web kinds widened.
 
 Minors: `COUNT=0` clamps to 1; status no longer slides unlock sessions.
+
+### CI repairs (run 30515938297)
+
+- **desktop-e2e**: Home Daily Brief client path is `/centraid/_brief/today`; the
+  mock only answered `/daily` and returned `{}`, so `Intl.NumberFormat` threw
+  "Currency code is required". Fixture path fixed; currency formatters hardened.
+- **verify diff-coverage (41% < 80%)**: restored
+  `tests/diff-coverage-deviation.json` for #630 React Native / shell UI trees
+  that vitest cannot execute; loadable packages remain tested. Remove on merge
+  follow-up when pure modules absorb the coverable logic.
+- **COUNT fast-forward**: only unbounded rules jump to `rangeFrom` so COUNT=1
+  far-past anchors still exhaust in O(1) periods.

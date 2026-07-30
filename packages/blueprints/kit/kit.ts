@@ -386,13 +386,17 @@ export function fmtMoney(
   currency?: string
 ): string {
   const value = Number(minor ?? 0) / 100;
+  const code =
+    typeof currency === "string" && /^[A-Za-z]{3}$/u.test(currency)
+      ? currency.toUpperCase()
+      : "USD";
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
-      currency,
+      currency: code,
     }).format(value);
   } catch {
-    return `${value.toFixed(2)} ${currency ?? ""}`.trim();
+    return `${value.toFixed(2)} ${code}`.trim();
   }
 }
 

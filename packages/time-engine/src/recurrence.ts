@@ -238,20 +238,16 @@ export function expandRecurrence(
   const limit = Math.max(1, Math.min(input.maxInstances ?? 366, 10_000));
   const results: RecurrenceInstance[] = [];
   // Fast-forward analytically to the first period that can intersect
-  // rangeFrom. Counting periods from the series anchor made long-lived
-  // monthly/daily templates permanently unmaterializable once the walk
-  // exhausted `limit * 16` periods before reaching the requested window.
-  let period = firstPeriodAtOrAfter(initial, rule, from, semantics);
+  // rangeFrom — but only for unbounded rules. A COUNT series must walk from
+  // the anchor so exhaustion is observed after a few periods (COUNT=1 on a
+  // 2000 anchor must not convert twenty-six years of civil time). Unbounded
+  // monthly/daily templates still need the jump so maxInstances:2 can land
+  // a 2026 occurrence of a 2022 series.
+  let period =
+    rule.count === undefined
+      ? firstPeriodAtOrAfter(initial, rule, from, semantics)
+      : 0;
   let emitted = 0;
-  if (rule.count !== undefined && period > 0) {
-    emitted = countEmittedBeforePeriod(
-      initial,
-      rule,
-      period,
-      semantics,
-      input.timeZone
-    );
-  }
   let guard = 0;
   while (results.length < limit && guard < limit * 16) {
     guard += 1;
@@ -349,31 +345,6 @@ function wallFromComparisonMs(
     second: date.getUTCSeconds(),
     millisecond: date.getUTCMilliseconds(),
   };
-}
-
-/** COUNT still measures from the series start — tally emissions before the jump. */
-function countEmittedBeforePeriod(
-  initial: WallTime,
-  rule: ParsedRrule,
-  period: number,
-  semantics: RecurrenceSemantics,
-  timeZone: string | undefined
-): number {
-  let emitted = 0;
-  for (let index = 0; index < period; index += 1) {
-    const walls =
-      rule.freq === "WEEKLY" && rule.byDay
-        ? weeklyCandidates(initial, rule, index)
-        : [stepAnchor(initial, rule, index)];
-    for (const wall of walls) {
-      if (wallEpoch(wall) < wallEpoch(initial)) continue;
-      const instance = resolveCandidate(wall, semantics, timeZone);
-      if (!instance) continue;
-      if (!withinUntil(instance, rule.until, semantics)) return emitted;
-      emitted += 1;
-    }
-  }
-  return emitted;
 }
 
 export function applyRecurrenceExceptions(
